@@ -15,12 +15,16 @@
 //! only adds a write.
 
 use super::tables::WRITE_LAST_PATH;
+use crate::paths;
 
 /// Programs that take GNU's `-t DIR` / `--target-directory` and `-T`.
 const TARGET_DIRECTORY_PROGRAMS: &[&str] = &["cp", "mv", "ln"];
 
 /// Words that name a directory whatever follows them.
 const DIRECTORY_WORDS: &[&str] = &["~", ".", "..", "$HOME", "${HOME}"];
+
+/// Programs to which `host:path` is on another machine (`scp f host:/tmp/`).
+const REMOTE_PROGRAMS: &[&str] = &["rsync", "scp"];
 
 /// Characters that hide the entry name: the shell expands the word into names
 /// it does not show, or `:` makes it a remote spec (`host:f`).
@@ -46,6 +50,9 @@ pub(super) fn destination<'a>(argv: &'a [String], program: &str) -> Option<Desti
     }
     let index = (1..argv.len()).rev().find(|&i| !argv[i].starts_with('-'))?;
     let word = argv[index].as_str();
+    if REMOTE_PROGRAMS.contains(&program) && is_remote(word) {
+        return None;
+    }
     let no_target = gnu && argv[1..index].iter().any(|a| is_no_target(a));
     let directory = !no_target
         && (word.ends_with('/')
@@ -111,6 +118,13 @@ fn target_option(argv: &[String]) -> Option<Destination<'_>> {
     None
 }
 
+/// A `:` before the first `/` names a host (`host:/tmp/`, `rsync://h/m`), unless
+/// it ends a drive letter (`C:/backup/`).
+fn is_remote(word: &str) -> bool {
+    let head = word.split('/').next().unwrap_or(word);
+    head.contains(':') && !paths::is_absolute(word)
+}
+
 /// `-T` / `--no-target-directory`: the destination is replaced even if it is a
 /// directory.
 fn is_no_target(arg: &str) -> bool {
@@ -161,5 +175,20 @@ mod tests {
         assert_eq!(writes("cp ~/"), ["~/"]);
         assert_eq!(writes("scp host:.zshrc notes ~/"), ["~/"]);
         assert!(destination(&["rm".into(), "~".into()], "rm").is_none());
+    }
+
+    #[test]
+    fn a_remote_destination_is_no_local_write() {
+        for cmd in [
+            "scp key host:/tmp/",
+            "scp key u@host:",
+            "rsync -a d host::m/",
+            "rsync d rsync://host/m",
+        ] {
+            let argv: Vec<String> = cmd.split(' ').map(str::to_owned).collect();
+            assert!(destination(&argv, &argv[0]).is_none(), "{cmd}");
+        }
+        assert_eq!(writes("scp f C:/backup/"), ["C:/backup/f"]);
+        assert_eq!(writes("cp f host:/tmp/"), ["host:/tmp/f"]);
     }
 }

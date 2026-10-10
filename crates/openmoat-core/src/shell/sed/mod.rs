@@ -2,8 +2,9 @@
 //!
 //! A script's words are not file operands (`sed -n '/a/,/b/p' f` reads only
 //! `f`). Files it reads or writes (`r FILE`, `w FILE`) become `fs` atoms. A
-//! script that runs a command or cannot be read, a script file (`-f`) and an
-//! unknown option become a `sed @<text>` atom, which `text-tools` excludes.
+//! script that runs a command or cannot be read, a script file (`-f`, itself a
+//! read) and an unknown option become a `sed @<text>` atom, which `text-tools`
+//! excludes.
 //!
 //! GNU sed lets options follow operands and takes the in-place suffix only
 //! attached (`-i.bak`); BSD sed stops at the first operand and takes a bare
@@ -87,9 +88,17 @@ pub(super) fn classify(
                     None => {}
                 }
             }
+            // The script is unknown, the file that holds it is read.
             Arg::Opt {
-                name: "f" | "file", ..
-            } => unproven(argv, "-f", sink)?,
+                name: "f" | "file",
+                value,
+                ..
+            } => {
+                unproven(argv, "-f", sink)?;
+                if let Some(file) = value {
+                    sink.read(ctx, file)?;
+                }
+            }
             Arg::Unknown(word) => unproven(argv, word, sink)?,
             Arg::Opt { .. } => {}
             Arg::Operand(at) => line.operands.push(at),

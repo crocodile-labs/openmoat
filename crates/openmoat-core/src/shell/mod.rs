@@ -164,6 +164,10 @@ pub(crate) enum ClassifyError {
     UnknownDirectory(String),
     #[error("`cd` may lead to more than {MAX_DIRS} directories")]
     TooManyDirectories,
+    #[error("unbalanced parentheses")]
+    UnbalancedParens,
+    #[error("the shell runs text from `{0}` that the command line does not show")]
+    UnknownStdin(String),
 }
 
 /// Accumulates atomic actions with de-duplication and a hard size bound.

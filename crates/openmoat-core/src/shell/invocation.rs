@@ -49,12 +49,18 @@ const BASH_LONG_FLAGS: &[&str] = &[
     "version",
 ];
 
-// `sh` is bash in POSIX mode on macOS and dash on Debian; dash rejects every
-// long option, so accepting bash's set for `sh` cannot hide a command.
 const BASH: Grammar = Grammar {
     short_values: "oO",
     long_values: &["rcfile", "init-file"],
     long_flags: Some(BASH_LONG_FLAGS),
+};
+// `sh` is bash in POSIX mode on macOS and dash on Debian. Only what both read
+// the same way is understood: dash rejects every long option, and bash's `-O`
+// takes a value, so `sh -O extglob -c X` still runs `X`.
+const SH: Grammar = Grammar {
+    short_values: "oO",
+    long_values: &[],
+    long_flags: Some(&[]),
 };
 const DASH: Grammar = Grammar {
     short_values: "o",
@@ -108,6 +114,7 @@ pub(super) fn parse<'a, S: AsRef<str>>(
     let grammar = match program {
         "fish" => return fish(&words),
         "zsh" => &ZSH,
+        "sh" => &SH,
         "dash" => &DASH,
         "ksh" => &KSH,
         _ => &BASH,
@@ -269,6 +276,7 @@ mod tests {
             "bash -cl X",
             "zsh -ic X",
             "sh -ec X",
+            "sh -O extglob -c X",
             "dash -xc X",
             "ksh -c X",
             "/bin/bash -lc X",
@@ -346,6 +354,8 @@ mod tests {
             "bash --frobnicate -c X",
             "bash --login=yes -c X",
             "dash --login -c X",
+            "sh --login -c X",
+            "sh --rcfile X -c Y",
             "ksh --login -c X",
             "bash -c",
             "bash -l%c X",

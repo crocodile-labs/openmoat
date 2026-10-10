@@ -108,3 +108,21 @@ fn data_piped_into_a_shell_is_its_program() {
         assert!(!has_read(&parsed(cmd), ssh), "{cmd}");
     }
 }
+
+#[test]
+fn piped_text_the_line_does_not_show_is_unparseable() {
+    for cmd in [
+        "printf '\\x63\\x61\\x74 .env' | sh",
+        "printf '%s' 'cat .env' | bash",
+        "echo -e '\\0143at .env' | sh",
+        "printf 'ls\\\\ncat .env' | sh",
+    ] {
+        let ParseOutcome::Unparseable { reason, .. } = classify(cmd, &ctx()) else {
+            panic!("`{cmd}` should be unparseable");
+        };
+        assert!(reason.contains("does not show"), "{cmd}: {reason}");
+    }
+    // The same text not run by a shell is only data.
+    parsed("printf '\\x63at .env' | grep cat");
+    parsed("printf '%s' x | sh x.sh");
+}
