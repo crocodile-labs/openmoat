@@ -15,6 +15,9 @@ view at the end of the file.
 - Unknown Cursor tools with a write-shaped name, indented Codex `apply_patch` headers and MCP paths in nested lists are now checked as the writes and reads they are ([#445](https://github.com/crocodile-labs/openmoat/pull/445)).
 - The shell classifier fails closed in five more places (#444, core audit 2026-10-09). A `)` with no matching `(`, or an unclosed `(`, makes the command unparseable instead of keeping the working directory. `printf` or `echo` text piped into a shell that reads stdin asks when it holds an escape other than `\n` or a `printf` format, so `printf '\x63\x61\x74 .env' | sh` no longer passes as harmless text. `sh` reads only the options bash and dash share, so `sh --rcfile rc -c …` asks. `sed -f FILE` is now an `fs.read` of FILE. A remote `scp`/`rsync` destination (`host:/tmp/`) is no longer recorded as a local write.
 
+### Changed
+- **Breaking** (openmoat-core, openmoat-hosts, openmoat-audit, openmoat-proxy): the public error enums (`PolicyError`, `LexError`, `HostError`, `StoreError`, `RequestError`, `HelloError`, `BrokerError`) and `Verdict`, `Kind`, `Action`, `AtomicAction`, `HookEvent`, `BreakKind`, `Refusal` and `Forbidden` are now `#[non_exhaustive]`, so a later variant is no longer a breaking change; a `match` on them outside their crate needs a `_` arm, which should fail closed ([#449](https://github.com/crocodile-labs/openmoat/pull/449)).
+
 ## [0.2.0] - 2026-10-10
 
 ### Security

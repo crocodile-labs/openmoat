@@ -116,6 +116,7 @@ impl Fields<'_> {
 /// Why the chain breaks at an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum BreakKind {
     /// The event's contents no longer match its hash: it was edited.
     Edited,

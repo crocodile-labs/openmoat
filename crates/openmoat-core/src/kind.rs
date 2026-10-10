@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 /// One kind of atomic action. Ordered as policy files list them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum Kind {
     /// A command or a whole pipeline.
     Shell,

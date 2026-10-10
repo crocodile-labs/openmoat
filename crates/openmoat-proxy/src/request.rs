@@ -76,6 +76,7 @@ impl Request {
 
 /// Why a request head is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum RequestError {
     /// Not HTTP/1.x, or a syntax error `httparse` reports.
     #[error("malformed request: {0}")]

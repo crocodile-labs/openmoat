@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 /// actions are combined, the strictest wins (docs/POLICY.md §4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Verdict {
     /// The action may run.
     Allow,

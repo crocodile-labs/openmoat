@@ -146,7 +146,8 @@ impl Summary {
             match event.verdict {
                 Verdict::Allow => summary.allowed += 1,
                 Verdict::Ask => summary.asked += 1,
-                Verdict::Deny => summary.denied += 1,
+                // `Deny`, and any verdict added to the core later.
+                _ => summary.denied += 1,
             }
             *summary.by_host.entry(event.host.clone()).or_insert(0) += 1;
             sessions.insert((event.host.clone(), event.session_id.clone()));

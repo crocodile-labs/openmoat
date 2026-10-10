@@ -53,6 +53,7 @@ pub const SUPPORTED_VERSION: u32 = 1;
 /// Messages include their cause, so no variant also exposes it as `source`:
 /// a chained report (`{:#}`) would print it twice.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PolicyError {
     /// The file is not valid YAML or does not fit the schema.
     #[error("policy parse error: {0}")]
