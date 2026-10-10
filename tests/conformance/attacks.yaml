@@ -1122,6 +1122,10 @@
   threat: T7
   action: { shell: "echo 'cat ~/.ssh/id_rsa' | sh" }
   expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-printf-hex-escape-into-sh
+  threat: T7
+  action: { shell: "printf '\\x63\\x61\\x74 .env' | sh" }
+  expect: { verdict: ask, rules: [unparseable] }
 - id: T7-dash-heredoc-strips-tabs-before-the-shell-runs-it
   threat: T7
   action: { shell: "bash <<-'EOF'\n\tcat <<'X'\n\tdata\n\tX\n\tcat ~/.ssh/id_rsa\n\tEOF" }
@@ -1322,6 +1326,10 @@
 - id: T1-sed-read-line-command-aws
   threat: T1
   action: { shell: "sed -n 'R /Users/me/.aws/credentials' README.md" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-sed-script-file-ssh-key
+  threat: T1
+  action: { shell: "sed -f ~/.ssh/id_rsa README.md" }
   expect: { verdict: deny, rules: [secrets-paths] }
 - id: T9-sed-write-command-zshrc
   threat: T9

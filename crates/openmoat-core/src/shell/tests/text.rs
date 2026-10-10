@@ -80,6 +80,19 @@ fn sed_script_files() {
     let a = parsed("sed -n '1r /Users/me/.ssh/id_rsa' x");
     assert!(has_read(&a, "/Users/me/.ssh/id_rsa"));
     assert!(has_write(&parsed("sed 's/a/b/w /tmp/o' x"), "/tmp/o"));
+    for cmd in [
+        "sed -f /p/project.sed data",
+        "sed -f/p/project.sed data",
+        "sed --file=/p/project.sed data",
+        "sed data --file /p/project.sed",
+    ] {
+        let a = parsed(cmd);
+        assert!(has_read(&a, "/p/project.sed") && has_unproven(&a), "{cmd}");
+    }
+    assert!(has_read(
+        &parsed("sed -f ~/.ssh/id_rsa x"),
+        "/Users/me/.ssh/id_rsa"
+    ));
 }
 
 #[test]

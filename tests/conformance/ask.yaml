@@ -44,6 +44,10 @@
   action: { shell: "cat notes[*" }
   files: ["/p/notes[1]"]
   expect: { verdict: ask, rules: [unparseable] }
+- id: ask-unbalanced-paren
+  threat: T7
+  action: { shell: "cd /tmp ) ; cat notes.txt" }
+  expect: { verdict: ask, rules: [unparseable] }
 - id: ask-unterminated-heredoc
   threat: T7
   action: { shell: "cat <<EOF\nno terminator" }
@@ -245,6 +249,10 @@
 - id: ask-shell-option-unknown
   threat: T7
   action: { shell: "bash --frobnicate -c 'cargo test'" }
+  expect: { verdict: ask, rules: [unparseable] }
+- id: ask-sh-bash-only-long-option
+  threat: T7
+  action: { shell: "sh --rcfile rc -c 'cargo test'" }
   expect: { verdict: ask, rules: [unparseable] }
 - id: ask-bash-option-value-is-not-a-script
   threat: T7

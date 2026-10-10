@@ -1,5 +1,7 @@
 //! From tokens to simple commands to atomic actions.
 
+mod piped;
+
 use super::tables::{
     ENV_BUILTINS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS, SHELLS, SOURCE_BUILTINS,
     WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS, WRAPPERS_WITH_VALUE,
@@ -12,6 +14,7 @@ use crate::action::AtomicAction;
 use crate::host;
 use crate::lexer::{self, Operator, Token, Word};
 use crate::paths;
+use piped::Piped;
 
 /// A simple command, or the opening or closing parenthesis of a subshell.
 #[derive(Debug)]
@@ -32,8 +35,8 @@ struct SimpleCommand {
     stdin: Vec<Word>,
     /// Here-document bodies with a quoted delimiter: taken literally.
     literal_stdin: Vec<String>,
-    /// Data the previous command of a pipe passes on (see [`piped_data`]).
-    piped: Vec<String>,
+    /// Data the previous command of a pipe passes on (`piped.rs`).
+    piped: Vec<Piped>,
 }
 
 impl SimpleCommand {
@@ -70,7 +73,11 @@ pub(super) fn classify_into(
     for item in group_commands(&tokens) {
         match item {
             Item::Open => saved.push(dirs.clone()),
-            Item::Close => dirs = saved.pop().unwrap_or(dirs),
+            // The shell refuses a `)` it did not open; so does the classifier.
+            Item::Close => match saved.pop() {
+                Some(outer) => dirs = outer,
+                None => sink.skip(ClassifyError::UnbalancedParens),
+            },
             Item::Command(cmd) => {
                 let here = ShellContext { cwd: &dirs, ..*ctx };
                 if let Err(e) = classify_simple(&cmd, &here, sink, depth) {
@@ -80,6 +87,9 @@ pub(super) fn classify_into(
                 cwd::merge(&mut dirs, moved)?;
             }
         }
+    }
+    if !saved.is_empty() {
+        sink.skip(ClassifyError::UnbalancedParens);
     }
     push_pipelines(&tokens, sink)?;
     decoders::push(&tokens, sink)
@@ -98,7 +108,7 @@ fn group_commands(tokens: &[Token]) -> Vec<Item> {
             Token::Operator(op) if op.is_separator() || op.is_grouping() => {
                 pending_redirect = None;
                 if !current.is_empty() {
-                    let piped = piped_data(&current).filter(|_| *op == Operator::Pipe);
+                    let piped = piped::data(&current).filter(|_| *op == Operator::Pipe);
                     commands.push(Item::Command(std::mem::take(&mut current)));
                     current.piped.extend(piped);
                 }
@@ -220,7 +230,7 @@ fn classify_simple(
         let run = invocation::parse(program, &argv)?;
         // `bash <<< 'cmd'`, `bash <<EOF` and `cat <<EOF | bash` run their stdin
         // as the program.
-        let piped = cmd.piped.iter().map(String::as_str);
+        let piped = cmd.piped.iter().filter_map(Piped::text);
         let stdin_code = cmd.stdin_texts().chain(piped).filter(|_| run.reads_stdin);
         for code in run.code.into_iter().chain(stdin_code) {
             classify_into(code, ctx, sink, depth + 1)?;
@@ -228,7 +238,10 @@ fn classify_simple(
         if let Some(script) = run.script {
             sink.read(ctx, script)?;
         }
-        return Ok(());
+        return match cmd.piped.iter().find_map(Piped::unknown) {
+            Some(program) if run.reads_stdin => Err(ClassifyError::UnknownStdin(program.into())),
+            _ => Ok(()),
+        };
     }
     if PACKAGE_RUNNERS.contains(&program)
         && let Some(payload) = flag_payload(&argv, &["-c", "--call"])
@@ -251,29 +264,6 @@ fn classify_simple(
         }
     }
     options::classify(&argv, program, ctx, sink, depth)
-}
-
-/// What a command writes to a pipe when that is known from the command line: a
-/// bare `cat` passes on its here-document or here-string, `echo` and `printf`
-/// their arguments (an approximation: escapes and formats are not expanded
-/// beyond `\n`). A shell reading stdin after the pipe runs it as its program,
-/// so `cat <<'EOF' | sh` is classified like `sh <<'EOF'`.
-fn piped_data(cmd: &SimpleCommand) -> Option<String> {
-    let argv: Vec<&str> = cmd.words.iter().map(|w| w.text.as_str()).collect();
-    match argv.as_slice() {
-        [cat] | [cat, "-"] if basename(cat) == "cat" && cmd.reads.is_empty() => {
-            Some(cmd.stdin_texts().collect::<Vec<_>>().join("\n"))
-        }
-        [program, operands @ ..] if matches!(basename(program), "echo" | "printf") => {
-            let printed: Vec<&str> = operands
-                .iter()
-                .copied()
-                .skip_while(|a| matches!(*a, "-n" | "-e" | "-E" | "--"))
-                .collect();
-            Some(printed.join(" ").replace("\\n", "\n"))
-        }
-        _ => None,
-    }
 }
 
 /// Classify a wrapper's inner argv (`sudo rm …` → `rm …`) as its own command.

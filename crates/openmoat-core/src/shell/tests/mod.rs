@@ -436,6 +436,8 @@ fn unparseable_inputs() {
         "echo $(unterminated",
         "bash --frobnicate -c 'cat x'",
         "nohup dash --login -c 'cat x'",
+        "echo a ) ; cat x",
+        "(cd /tmp && cat x",
     ] {
         assert!(
             matches!(classify(input, &ctx()), ParseOutcome::Unparseable { .. }),
