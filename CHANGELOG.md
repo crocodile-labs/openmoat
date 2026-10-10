@@ -8,15 +8,17 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-10
+
 ### Security
-- `moat guard` now denies calls to tools outside the policy and blocks every Claude Code settings change while a pinned file has drifted; `moat init` keeps the first backup of a host file instead of replacing it with an already edited copy ([#447](https://github.com/crocodile-labs/openmoat/pull/447)).
-- `moat proxy` now records a CONNECT whose `200` answer cannot be written to the client, puts the brokered value in place of a secret header that holds no placeholder (a value the client chose), no longer treats names such as `db.internal:5432` as naming an address, refuses zero or overflowing limits at start, and strips control bytes from refusals; the audit log now also redacts the host, session and call ids and the tool name before they are stored (#443).
-- A glob operand with a component OpenMoat cannot match the way the shell does (an unclosed `[` next to `*`, as in `cat notes[*`) now asks instead of being taken literally; a bare host with `_` in a subdomain label (`curl a_b.paste.example.org`) is now checked against network rules; `moat policy lint` warns when a `fetch` exclusion is still matched by a `net` pattern of the same rule and when an exclusion removes a positive pattern of its own list; and `Secret`/`BrokeredSecret` debug output names only the id (#446, core audit 2026-10-09).
-- Unknown Cursor tools with a write-shaped name, indented Codex `apply_patch` headers and MCP paths in nested lists are now checked as the writes and reads they are ([#445](https://github.com/crocodile-labs/openmoat/pull/445)).
-- The shell classifier fails closed in five more places (#444, core audit 2026-10-09). A `)` with no matching `(`, or an unclosed `(`, makes the command unparseable instead of keeping the working directory. `printf` or `echo` text piped into a shell that reads stdin asks when it holds an escape other than `\n` or a `printf` format, so `printf '\x63\x61\x74 .env' | sh` no longer passes as harmless text. `sh` reads only the options bash and dash share, so `sh --rcfile rc -c …` asks. `sed -f FILE` is now an `fs.read` of FILE. A remote `scp`/`rsync` destination (`host:/tmp/`) is no longer recorded as a local write.
+- `moat guard` denies calls to tools outside the policy while a pinned file has drifted, and blocks every Claude Code settings change then; `moat init` keeps the first backup of a host file ([#447](https://github.com/crocodile-labs/openmoat/pull/447)).
+- `moat proxy` records a CONNECT it cannot answer, replaces a secret header the client set itself, no longer reads names such as `db.internal:5432` as addresses, and refuses zero or overflowing limits; the audit log redacts host, session, call ids and tool names too ([#443](https://github.com/crocodile-labs/openmoat/pull/443)).
+- Glob operands the shell would match differently (`cat notes[*`) ask, hosts with `_` in a subdomain are checked against network rules, and `moat policy lint` warns about `fetch` exclusions a `net` pattern still matches ([#446](https://github.com/crocodile-labs/openmoat/pull/446)).
+- Unknown Cursor tools with a write-shaped name, indented Codex `apply_patch` headers and MCP paths in nested lists are checked as the writes and reads they are ([#445](https://github.com/crocodile-labs/openmoat/pull/445)).
+- The shell classifier fails closed on unbalanced parentheses, `printf`/`echo` text with escapes piped into a shell, `sh` long options and `sed -f FILE`; a remote `scp`/`rsync` destination is no longer a local write ([#444](https://github.com/crocodile-labs/openmoat/pull/444)).
 
 ### Changed
-- **Breaking** (openmoat-core, openmoat-hosts, openmoat-audit, openmoat-proxy): the public error enums (`PolicyError`, `LexError`, `HostError`, `StoreError`, `RequestError`, `HelloError`, `BrokerError`) and `Verdict`, `Kind`, `Action`, `AtomicAction`, `HookEvent`, `BreakKind`, `Refusal` and `Forbidden` are now `#[non_exhaustive]`, so a later variant is no longer a breaking change; a `match` on them outside their crate needs a `_` arm, which should fail closed ([#449](https://github.com/crocodile-labs/openmoat/pull/449)).
+- **Breaking** for the library crates: public error enums and `Verdict`, `Kind`, `Action`, `AtomicAction`, `HookEvent`, `BreakKind`, `Refusal` and `Forbidden` are `#[non_exhaustive]`; a `match` outside their crate needs a `_` arm, which should fail closed ([#449](https://github.com/crocodile-labs/openmoat/pull/449)).
 
 ## [0.2.0] - 2026-10-10
 
@@ -356,7 +358,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/crocodile-labs/openmoat/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/crocodile-labs/openmoat/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/crocodile-labs/openmoat/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/crocodile-labs/openmoat/compare/v0.1.0-alpha.7...v0.1.0
