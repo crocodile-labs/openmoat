@@ -61,6 +61,43 @@ fn no_file_in_any_crate_exceeds_the_size_budget() {
     );
 }
 
+/// AGENTS §4: a module with children is `foo.rs` + `foo/`, never `foo/mod.rs`,
+/// and no module is wired to a file through a `path` attribute.
+#[test]
+fn modules_use_one_file_style() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut offenders = Vec::new();
+    for entry in fs::read_dir(&crates).unwrap() {
+        let krate = entry.unwrap().path();
+        for dir in ["src", "tests"] {
+            let root = krate.join(dir);
+            if !root.is_dir() {
+                continue;
+            }
+            visit(&root, &mut |path| {
+                if path.file_name().is_some_and(|n| n == "mod.rs") {
+                    offenders.push(format!("{} is a mod.rs", path.display()));
+                }
+                for (n, line) in fs::read_to_string(path).unwrap().lines().enumerate() {
+                    let code = line.trim_start();
+                    // `path = "…"` alone on a line is a multi-line `cfg_attr`.
+                    if code.starts_with("#[path")
+                        || code.starts_with("path = \"")
+                        || (code.starts_with("#[cfg_attr(") && code.contains("path = \""))
+                    {
+                        offenders.push(format!("{}:{} sets a module path", path.display(), n + 1));
+                    }
+                }
+            });
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "use `foo.rs` + `foo/` and `cfg` on the `mod` line:\n{}",
+        offenders.join("\n")
+    );
+}
+
 const FORBIDDEN_IN_CORE: &[&str] = &[
     "std::fs",
     "std::env",

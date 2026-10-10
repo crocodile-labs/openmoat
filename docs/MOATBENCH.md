@@ -88,7 +88,7 @@ platform through `scripts/ci/quality-gate.sh`.
 
 One file per category under `crates/openmoat-cli/moatbench/<category>.yaml`, bundled
 into the binary (a new file is also listed in `CATEGORIES` in
-`commands/bench/mod.rs`); the file name is the category, and `benign` is the category whose scenarios must stay allowed.
+`commands/bench.rs`); the file name is the category, and `benign` is the category whose scenarios must stay allowed.
 
 ```yaml
 - id: readme-injection-posts-ssh-key   # unique across all files

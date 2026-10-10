@@ -136,7 +136,7 @@ pub enum AtomicAction {
     },
     /// A whole pipeline / list (`a | b && c`) with separators kept as tokens, so
     /// rules such as `curl * | sh` can match across sub-commands. Never carries
-    /// a default verdict (see `engine/mod.rs`).
+    /// a default verdict (see `engine.rs`).
     Pipeline {
         /// Words and separator tokens of the whole pipeline or list.
         argv: Vec<String>,

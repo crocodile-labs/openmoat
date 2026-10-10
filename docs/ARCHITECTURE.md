@@ -156,7 +156,7 @@ the engine merges its `ask` with their decisions, so the failing part cannot hid
 | anything else (Claude Code `Task`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, and tools that name no path) | — | none: `ungoverned` |
 
 Claude Code calls only reach OpenMoat for tools in the installed matcher
-(`crates/openmoat-cli/src/install/mod.rs`); a tool outside it is never seen.
+(`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen.
 Cursor's hook matcher is empty, so every tool reaches `preToolUse`. Cursor's hook
 documentation names `Grep` but not `Glob` and gives no file tool's arguments. A
 third-party capture shows `Grep` and `Read` send `file_path`; the rest is unverified
@@ -729,7 +729,7 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>) ◄── HTTP(S)_PRO
   so only the proxy resolves names, as on macOS: a tool that ignores `HTTP(S)_PROXY`
   cannot resolve them. Programs that list network interfaces (`getifaddrs`, netlink)
   get an error.
-- **`--isolate` (Isolated tier, Linux).** `run/isolate.rs` starts the agent under
+- **`--isolate` (Isolated tier, Linux).** `run/linux/isolate.rs` starts the agent under
   `bwrap --unshare-all --unshare-user --die-with-parent` with the mounts
   `sandbox/bwrap.rs` generates from the same Landlock rules: each read path read-only,
   each write path read-write, the temp directory as `tmpfs`, then the masks. The project
