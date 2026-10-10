@@ -85,7 +85,8 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
     }
     Some(match decision.verdict {
         Verdict::Allow | Verdict::Ask => Code::Ok,
-        Verdict::Deny => {
+        // `Deny`, and any verdict added to the core later, blocks the call.
+        _ => {
             eprintln!("{}", openmoat_hosts::reason_line(decision));
             Code::Deny
         }

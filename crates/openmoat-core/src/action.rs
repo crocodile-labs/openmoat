@@ -17,6 +17,7 @@ use crate::kind::Kind;
 /// these. Adapters never decide.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Action {
     /// A shell command string as the host would execute it.
     /// A shell command line, exactly as the host would run it.
@@ -126,6 +127,7 @@ impl Action {
 /// path it touches, every host it may contact, every env var it reads or sets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AtomicAction {
     /// Normalised argv of one (sub-)command.
     Shell {

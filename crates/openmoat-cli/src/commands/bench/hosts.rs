@@ -36,7 +36,8 @@ impl From<Verdict> for Answer {
         match verdict {
             Verdict::Allow => Self::Allow,
             Verdict::Ask => Self::Ask,
-            Verdict::Deny => Self::Deny,
+            // `Deny`, and any verdict added to the core later: the strictest.
+            _ => Self::Deny,
         }
     }
 }

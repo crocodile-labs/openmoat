@@ -42,6 +42,7 @@ impl std::fmt::Debug for Broker {
 
 /// A secret value the broker cannot use.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum BrokerError {
     /// The value is empty.
     #[error("secret `{0}` is empty")]

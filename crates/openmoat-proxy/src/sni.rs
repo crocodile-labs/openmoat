@@ -31,6 +31,7 @@ pub enum Hello {
 
 /// Why the start of a tunnel is not a `ClientHello` the proxy can check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum HelloError {
     /// The bytes are not a TLS handshake record.
     #[error("the tunnel does not start with a TLS handshake")]

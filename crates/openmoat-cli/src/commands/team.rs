@@ -132,14 +132,15 @@ impl TeamReport {
             match event.verdict {
                 Verdict::Allow => host.allowed += 1,
                 Verdict::Ask => host.asked += 1,
-                Verdict::Deny => host.denied += 1,
+                // `Deny`, and any verdict added to the core later.
+                _ => host.denied += 1,
             }
             for rule in &event.rules {
                 let counts = rules.entry(rule.clone()).or_default();
                 match event.verdict {
-                    Verdict::Ask => counts.0 += 1,
-                    Verdict::Deny => counts.1 += 1,
                     Verdict::Allow => {}
+                    Verdict::Ask => counts.0 += 1,
+                    _ => counts.1 += 1,
                 }
             }
             let approved = event.rules.iter().any(|r| r.starts_with(OVERLAY_PREFIX));
@@ -150,9 +151,11 @@ impl TeamReport {
                     candidate.asks += 1;
                     candidate.rules.extend(event.rules.iter().cloned());
                 }
-                Verdict::Deny => *denies.entry(action).or_default() += 1,
                 Verdict::Allow if approved => candidates.entry(action).or_default().approvals += 1,
                 Verdict::Allow => {}
+                // `Deny`, and any verdict added to the core later: never a
+                // candidate for an allow rule.
+                _ => *denies.entry(action).or_default() += 1,
             }
         }
         let mut by_rule: Vec<RuleCounts> = rules

@@ -135,6 +135,7 @@ pub enum Token {
 
 /// Why a command line could not be tokenised. Any of these makes the action `ask`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum LexError {
     #[error("unterminated single quote")]
     UnterminatedSingleQuote,

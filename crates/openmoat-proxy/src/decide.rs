@@ -103,6 +103,7 @@ pub fn forbidden(ip: IpAddr) -> Option<Forbidden> {
 
 /// The classes of address the proxy refuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Forbidden {
     /// This machine (`127.0.0.0/8`, `::1`), including the proxy itself.
     Loopback,

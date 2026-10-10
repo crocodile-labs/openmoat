@@ -283,6 +283,7 @@ impl fmt::Display for Host {
 
 /// Which hook fired. Drives the response format and the guard's handling.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum HookEvent {
     /// A tool is about to run.
     #[default]
@@ -323,6 +324,7 @@ pub struct HookRequest {
 /// Messages include their cause, so no variant also exposes it as `source`:
 /// a chained report (`{:#}`) would print it twice.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum HostError {
     /// `--host` named no supported host.
     #[error("unknown host `{0}`; supported: claude-code, codex, cursor")]

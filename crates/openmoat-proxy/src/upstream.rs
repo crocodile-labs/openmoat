@@ -31,6 +31,7 @@ impl Resolve for SystemResolver {
 
 /// Why no connection was made.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Refusal {
     /// A resolved address the proxy never connects to.
     Address(SocketAddr, Forbidden),

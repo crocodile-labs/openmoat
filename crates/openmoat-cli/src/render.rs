@@ -212,7 +212,8 @@ fn verdict_glyph(verdict: Verdict) -> &'static str {
     match verdict {
         Verdict::Allow => "✔",
         Verdict::Ask => "❓",
-        Verdict::Deny => "⛔",
+        // `Deny`, and any verdict added to the core later.
+        _ => "⛔",
     }
 }
 
@@ -224,6 +225,7 @@ fn kind_of(action: &Action) -> &'static str {
         Action::Net { .. } => "net",
         Action::Fetch { .. } => "fetch",
         Action::McpTool { .. } => "mcp",
+        _ => "other",
     }
 }
 
@@ -257,6 +259,7 @@ fn verdict_mark(verdict: Verdict) -> &'static str {
         Verdict::Allow => "✔ allow",
         Verdict::Ask => "❓ ask",
         Verdict::Deny => "⛔ deny",
+        _ => "⛔ unknown",
     }
 }
 
@@ -275,6 +278,7 @@ pub fn describe(event: &Event) -> String {
         Some(Action::Patch { writes }) => format!("patch {}", writes.join(", ")),
         Some(Action::ReadFiles { paths }) => format!("read {}", paths.join(", ")),
         Some(Action::McpTool { name, .. }) => name.clone(),
+        Some(_) => tool.clone(),
         None => format!("{tool} (ungoverned)"),
     }
 }

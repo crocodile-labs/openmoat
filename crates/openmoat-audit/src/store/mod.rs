@@ -30,6 +30,7 @@ const BUSY_TIMEOUT_MS: u64 = 2000;
 /// Messages include their cause, so no variant also exposes it as `source`:
 /// a chained report (`{:#}`) would print it twice.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum StoreError {
     /// `SQLite` failed (open, query, constraint).
     #[error("audit database: {0}")]
