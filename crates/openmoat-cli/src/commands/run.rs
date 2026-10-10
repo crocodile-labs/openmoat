@@ -7,18 +7,24 @@
 //! port alone, and the proxy refuses loopback destinations, so no other local
 //! service is reachable through it either.
 
-/// `confine(policy, ctx, grants, program) -> Confined` (Lightweight) and
-/// `isolate(…)` (Isolated), whose `command()` takes the agent's arguments and
-/// environment, `report()` lists the losses and allowances, and `status()`
-/// runs the agent in its sandbox; `inside(args)` is what `isolate` starts in
-/// its sandbox.
-#[cfg_attr(target_os = "macos", path = "run/macos.rs")]
-#[cfg_attr(target_os = "linux", path = "run/linux.rs")]
-#[cfg_attr(
-    not(any(target_os = "macos", target_os = "linux")),
-    path = "run/unsupported.rs"
-)]
-mod platform;
+// `platform` is this OS's module: `confine(policy, ctx, grants, program) ->
+// Confined` (Lightweight) and `isolate(…)` (Isolated), whose `command()` takes
+// the agent's arguments and environment, `report()` lists the losses and
+// allowances, and `status()` runs the agent in its sandbox; `inside(args)` is
+// what `isolate` starts in its sandbox.
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+mod unsupported;
+
+#[cfg(target_os = "linux")]
+use linux as platform;
+#[cfg(target_os = "macos")]
+use macos as platform;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+use unsupported as platform;
 
 use std::ffi::OsStr;
 use std::io::Write as _;

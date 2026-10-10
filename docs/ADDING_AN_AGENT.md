@@ -37,7 +37,7 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 |---|---|
 | `crates/openmoat-hosts/src/<agent>.rs` | `parse` (payload → `HookRequest`) and `render` (`Decision` → response), with unit tests |
 | `crates/openmoat-hosts/src/lib.rs` | `mod`, a `Host` variant, `id()`, `display_name()`, `Host::ALL`, the dispatch in `parse_request` and `render_response`, `answer` if the agent cannot ask, the host list in `HostError::UnknownHost` |
-| `crates/openmoat-cli/src/install/mod.rs` | a `HookSpec` list, `dir_variable`, the file name and `HookFormat` in `HostConfig::at` |
+| `crates/openmoat-cli/src/install.rs` | a `HookSpec` list, `dir_variable`, the file name and `HookFormat` in `HostConfig::at` |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
 | `crates/openmoat-cli/src/context.rs` | the config directory and its variable in `moved_dirs` |
 | `tests/fixtures/hosts/<agent>/` | captured payloads and a `README.md` naming each one's source |

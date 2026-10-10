@@ -26,13 +26,19 @@ pub mod plist;
 #[cfg(any(target_os = "linux", test))]
 pub mod unit;
 
-#[cfg_attr(target_os = "macos", path = "macos.rs")]
-#[cfg_attr(target_os = "linux", path = "linux.rs")]
-#[cfg_attr(
-    not(any(target_os = "macos", target_os = "linux")),
-    path = "unsupported.rs"
-)]
-mod platform;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+mod unsupported;
+
+#[cfg(target_os = "linux")]
+use linux as platform;
+#[cfg(target_os = "macos")]
+use macos as platform;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+use unsupported as platform;
 
 use std::path::PathBuf;
 

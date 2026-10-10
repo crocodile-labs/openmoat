@@ -3,7 +3,7 @@
 //! applied to a thread of its own that starts the agent. Both restrict the
 //! calling thread and what it starts, so OpenMoat's proxy thread stays
 //! unrestricted and keeps its audit log and its network. With `--isolate`
-//! (`isolate.rs`) the agent starts in bubblewrap, and `moat` inside it
+//! (`linux/isolate.rs`) the agent starts in bubblewrap, and `moat` inside it
 //! applies the same rules and filter.
 
 use std::path::Path;
@@ -25,7 +25,6 @@ use crate::sandbox::seccomp::SOCKET_ARGS;
 use crate::sandbox::{Grants, Report, landlock_rules};
 
 /// `moat run --isolate`: bubblewrap around the same rules.
-#[path = "isolate.rs"]
 mod isolate;
 
 /// The first ABI that restricts TCP connections (Linux 6.7). An older kernel
