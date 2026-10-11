@@ -1,5 +1,6 @@
 //! Human and machine output.
 
+use std::borrow::Cow;
 use std::io::{self, Write};
 
 use anyhow::Result;
@@ -97,12 +98,15 @@ pub fn decision_json(decision: &Decision) -> Result<()> {
 pub fn decision_text(decision: &Decision) -> Result<()> {
     let mut out = io::stdout().lock();
     writeln!(out, "{}", verdict_mark(decision.verdict))?;
-    writeln!(out, "   rules : {}", decision.rules.join(" · "))?;
+    line(
+        &mut out,
+        &format!("   rules : {}", decision.rules.join(" · ")),
+    )?;
     for reason in &decision.reasons {
-        writeln!(out, "   reason: {reason}")?;
+        line(&mut out, &format!("   reason: {reason}"))?;
     }
-    for line in &decision.context {
-        writeln!(out, "   also  : {line}")?;
+    for also in &decision.context {
+        line(&mut out, &format!("   also  : {also}"))?;
     }
     Ok(())
 }
@@ -118,8 +122,7 @@ pub fn event_table(events: &[Event]) -> Result<()> {
         "id     time (UTC) host         verdict rules          action"
     )?;
     for event in events {
-        writeln!(
-            out,
+        let row = format!(
             "{:<6} {:<10} {:<12} {:<7} {:<14} {}",
             event.id,
             clock(event.ts_ms),
@@ -127,7 +130,8 @@ pub fn event_table(events: &[Event]) -> Result<()> {
             event.verdict.as_str(),
             truncate(&event.rules.join(","), RULES_WIDTH),
             truncate(&describe(event), TABLE_ACTION_WIDTH),
-        )?;
+        );
+        line(&mut out, &row)?;
     }
     Ok(())
 }
@@ -143,8 +147,7 @@ pub fn replay(sessions: &[SessionSummary]) -> Result<()> {
         if i > 0 {
             writeln!(out)?;
         }
-        writeln!(
-            out,
+        let header = format!(
             "{} UTC  {}  {}  {}  {} decisions ({} denied, {} asked)",
             clock(session.first_ms),
             session.session_id,
@@ -153,19 +156,20 @@ pub fn replay(sessions: &[SessionSummary]) -> Result<()> {
             session.events.len(),
             session.count(Verdict::Deny),
             session.count(Verdict::Ask),
-        )?;
+        );
+        line(&mut out, &header)?;
         let last = session.events.len().saturating_sub(1);
         for (n, event) in session.events.iter().enumerate() {
             let branch = if n == last { "└─" } else { "├─" };
             let kind = event.action.as_ref().map_or("tool", kind_of);
-            writeln!(
-                out,
+            let row = format!(
                 "  {branch} {:<8} {:<52} {} {}",
                 kind,
                 truncate(&describe(event), REPLAY_ACTION_WIDTH),
                 verdict_glyph(event.verdict),
                 event.rules.join(", "),
-            )?;
+            );
+            line(&mut out, &row)?;
         }
     }
     Ok(())
@@ -197,12 +201,12 @@ pub fn report(summary: &Summary, window: &str) -> Result<()> {
             .iter()
             .map(|(h, n)| format!("{h} {n}"))
             .collect();
-        writeln!(out, "hosts: {}", hosts.join(" · "))?;
+        line(&mut out, &format!("hosts: {}", hosts.join(" · ")))?;
     }
     if !summary.top_rules.is_empty() {
         writeln!(out, "top rules (ask + deny):")?;
         for (rule, n) in &summary.top_rules {
-            writeln!(out, "  {n:>5}  {rule}")?;
+            line(&mut out, &format!("  {n:>5}  {rule}"))?;
         }
     }
     Ok(())
@@ -233,22 +237,22 @@ pub fn event_detail(event: &Event) -> Result<()> {
     let mut out = io::stdout().lock();
     writeln!(out, "{}  event {}", verdict_mark(event.verdict), event.id)?;
     writeln!(out, "   when    : {}", timestamp(event.ts_ms))?;
-    writeln!(
-        out,
-        "   host    : {}  session {}",
-        event.host, event.session_id
-    )?;
+    let host = format!("   host    : {}  session {}", event.host, event.session_id);
+    line(&mut out, &host)?;
     if let Some(call) = &event.call_id {
-        writeln!(out, "   call    : {call}")?;
+        line(&mut out, &format!("   call    : {call}"))?;
     }
     if let Some(cwd) = &event.cwd {
-        writeln!(out, "   cwd     : {cwd}")?;
+        line(&mut out, &format!("   cwd     : {cwd}"))?;
     }
-    writeln!(out, "   tool    : {}", event.tool)?;
-    writeln!(out, "   action  : {}", describe(event))?;
-    writeln!(out, "   rules   : {}", event.rules.join(" · "))?;
+    line(&mut out, &format!("   tool    : {}", event.tool))?;
+    line(&mut out, &format!("   action  : {}", describe(event)))?;
+    line(
+        &mut out,
+        &format!("   rules   : {}", event.rules.join(" · ")),
+    )?;
     for reason in &event.reasons {
-        writeln!(out, "   reason  : {reason}")?;
+        line(&mut out, &format!("   reason  : {reason}"))?;
     }
     writeln!(out, "   latency : {} µs", event.latency_us)?;
     Ok(())
@@ -283,6 +287,30 @@ pub fn describe(event: &Event) -> String {
     }
 }
 
+/// `text` with every control character (C0, DEL and C1) shown as `?`.
+///
+/// Commands, paths, reasons and ids come from what an agent sent; written raw,
+/// an escape sequence in one could set the terminal title or write the
+/// clipboard (OSC 52) when a person reads it. One character stays one, so
+/// column widths hold.
+pub fn clean(text: &str) -> Cow<'_, str> {
+    if text.chars().any(char::is_control) {
+        Cow::Owned(
+            text.chars()
+                .map(|c| if c.is_control() { '?' } else { c })
+                .collect(),
+        )
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
+/// One line of human output that may hold agent text, cleaned whole: a
+/// newline inside a field cannot start a row of its own.
+pub fn line(out: &mut impl Write, text: &str) -> io::Result<()> {
+    writeln!(out, "{}", clean(text))
+}
+
 pub fn truncate(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_owned();
@@ -299,5 +327,14 @@ mod tests {
     fn truncation_keeps_width() {
         assert_eq!(truncate("short", 10), "short");
         assert_eq!(truncate("a very long command line", 10), "a very lo…");
+    }
+
+    #[test]
+    fn control_characters_become_question_marks() {
+        assert!(matches!(clean("git status ✔"), Cow::Borrowed(_)));
+        assert_eq!(
+            clean("ls\x1b]0;title\x07\r\n\t\x7f\u{9b}2J"),
+            "ls?]0;title??????2J"
+        );
     }
 }

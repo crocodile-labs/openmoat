@@ -22,7 +22,7 @@ use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, INTEGRITY_RULE, Lock};
 use crate::realpath::FsPathResolver;
-use crate::{hangs, secrets, taint, time};
+use crate::{hangs, render, secrets, taint, time};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const UNGOVERNED_RULE: &str = "ungoverned";
@@ -88,7 +88,8 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
         Verdict::Allow | Verdict::Ask => Code::Ok,
         // `Deny`, and any verdict added to the core later, blocks the call.
         _ => {
-            eprintln!("{}", openmoat_hosts::reason_line(decision));
+            // Hosts may show hook stderr in a terminal; the reason quotes the call.
+            eprintln!("{}", render::clean(&openmoat_hosts::reason_line(decision)));
             Code::Deny
         }
     })

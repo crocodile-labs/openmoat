@@ -22,6 +22,7 @@ mod cursor;
 mod cursor_sandbox;
 mod differential;
 mod edit;
+mod escapes;
 mod export;
 mod guard;
 mod home_screen;

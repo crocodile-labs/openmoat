@@ -212,16 +212,14 @@ fn text(report: &TeamReport) -> Result<()> {
     }
     writeln!(out, "per host (allowed · asked · denied):")?;
     for (host, c) in &report.by_host {
-        writeln!(
-            out,
-            "  {host:<12} {} · {} · {}",
-            c.allowed, c.asked, c.denied
-        )?;
+        let row = format!("  {host:<12} {} · {} · {}", c.allowed, c.asked, c.denied);
+        render::line(&mut out, &row)?;
     }
     if !report.by_rule.is_empty() {
         writeln!(out, "per rule (asked · denied):")?;
         for r in &report.by_rule {
-            writeln!(out, "  {:<20} {} · {}", r.rule, r.asked, r.denied)?;
+            let row = format!("  {:<20} {} · {}", r.rule, r.asked, r.denied);
+            render::line(&mut out, &row)?;
         }
     }
     for (title, list) in [
@@ -232,7 +230,7 @@ fn text(report: &TeamReport) -> Result<()> {
             writeln!(out, "{title}:")?;
             for a in list {
                 let action = render::truncate(&a.action, ACTION_WIDTH);
-                writeln!(out, "  {:>5}  {action}", a.count)?;
+                render::line(&mut out, &format!("  {:>5}  {action}", a.count))?;
             }
         }
     }
@@ -243,14 +241,14 @@ fn text(report: &TeamReport) -> Result<()> {
         )?;
         for c in &report.false_positive_candidates {
             let rules: Vec<&str> = c.rules.iter().map(String::as_str).collect();
-            writeln!(
-                out,
+            let row = format!(
                 "  {} asks, {} approvals  {}  [{}]",
                 c.asks,
                 c.approvals,
                 render::truncate(&c.action, ACTION_WIDTH),
                 rules.join(", ")
-            )?;
+            );
+            render::line(&mut out, &row)?;
         }
     }
     Ok(())
