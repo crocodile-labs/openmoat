@@ -17,6 +17,7 @@ use crate::cli::DoctorArgs;
 use crate::exit::Code;
 use crate::home::Home;
 use crate::integrity::Lock;
+use crate::render;
 
 const MS_PER_DAY: i64 = 86_400_000;
 
@@ -64,13 +65,14 @@ pub fn run() -> Result<Code> {
         println!("`moat show` lists recent decisions; `moat --help` lists every command.");
         return Ok(Code::Ok);
     };
-    println!(
+    let asked = format!(
         "{} asked to {} (rule {}, session {})",
         host.display_name(),
         approvals::describe(&action),
         event.rules.join(", "),
         event.session_id
     );
+    println!("{}", render::clean(&asked));
     if !person {
         println!("A person can allow it at a terminal: `moat allow --last` for this session,");
         println!("`moat allow --last --always` for good.");

@@ -16,7 +16,7 @@ use crate::exit::Code;
 use crate::home::Home;
 use crate::integrity::{self, HookPins};
 use crate::realpath::FsPathResolver;
-use crate::render::Deferred;
+use crate::render::{self, Deferred};
 
 /// How many recent events `--last` searches for the newest `ask` it can approve.
 const LAST_ASK_SEARCH: usize = 200;
@@ -40,14 +40,14 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             let event = newest_ask(&home.open_audit()?)?
                 .context("no recent `ask` for a shell command or a file in the audit log")?;
             let action = asked(&event)?;
-            writeln!(
-                out,
+            let last = format!(
                 "last ask: {} on {} (session {}) wanted to {}",
                 event.id,
                 event.host,
                 event.session_id,
                 approvals::describe(&action)
-            )?;
+            );
+            render::line(&mut out, &last)?;
             (Some(event.host), Some(event.session_id), action)
         }
         _ => bail!("give a command, or --last to take the most recent ask"),
@@ -108,18 +108,15 @@ fn approve(
                 .allow_files(&spellings(reads), &spellings(writes))?
                 .clone()
         };
-        writeln!(out, "{}", will_allow(&rule))?;
+        render::line(&mut out, &will_allow(&rule))?;
         overlay.save(&path)?;
         if let Action::Shell { command } = action {
-            writeln!(
-                out,
-                "✔ permanent rule {} allows shell \"{command}\"",
-                rule.id
-            )?;
+            let added = format!("✔ permanent rule {} allows shell \"{command}\"", rule.id);
+            render::line(&mut out, &added)?;
         } else {
             writeln!(out, "✔ added to {}:", path.display())?;
             for line in serde_yaml_ng::to_string(&[&rule])?.lines() {
-                writeln!(out, "    {line}")?;
+                render::line(&mut out, &format!("    {line}"))?;
             }
             writeln!(
                 out,
@@ -138,12 +135,12 @@ fn approve(
         let now = crate::time::now_ms();
         grants.grant(&host, &session, action, now);
         grants.save(&path, now)?;
-        writeln!(
-            out,
+        let granted = format!(
             "✔ session {session} on {host} may {} for {}",
             approvals::describe(action),
             crate::time::duration(GRANT_TTL_MS)
-        )?;
+        );
+        render::line(&mut out, &granted)?;
         let resume = if host == openmoat_hosts::Host::ClaudeCode.id() {
             " (`claude --continue` resumes this one)"
         } else {
