@@ -58,6 +58,12 @@ impl Home {
         self.root.join("policy.yaml")
     }
 
+    /// The shipped default the policy was created from or last upgraded to,
+    /// which `moat policy upgrade` compares with this release's.
+    pub fn policy_base_path(&self) -> PathBuf {
+        self.root.join("policy.base.yaml")
+    }
+
     pub fn audit_path(&self) -> PathBuf {
         self.root.join("audit.db")
     }
@@ -107,6 +113,7 @@ impl Home {
             return Ok(false);
         }
         write_private(&path, DEFAULT_POLICY.as_bytes())?;
+        write_private(&self.policy_base_path(), DEFAULT_POLICY.as_bytes())?;
         Ok(true)
     }
 
