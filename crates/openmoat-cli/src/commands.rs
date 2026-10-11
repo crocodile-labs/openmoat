@@ -59,6 +59,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             PolicyCommand::Lint(args) => policy::lint(&args),
             PolicyCommand::Check(args) => policy::check(&args),
             PolicyCommand::Compile(args) => policy::compile(&args),
+            PolicyCommand::Upgrade(args) => policy::upgrade(&args),
         },
         Command::Bench(args) => bench::run(&args),
         Command::Sandbox { command } => match command {

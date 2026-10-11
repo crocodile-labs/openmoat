@@ -7,7 +7,7 @@ use openmoat_hosts::Host;
 
 mod policy;
 
-pub use policy::{ActionKind, CheckArgs, CompileArgs, LintArgs, PolicyCommand};
+pub use policy::{ActionKind, CheckArgs, CompileArgs, LintArgs, PolicyCommand, UpgradeArgs};
 
 #[derive(Debug, Parser)]
 #[command(

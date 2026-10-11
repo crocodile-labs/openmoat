@@ -122,7 +122,7 @@ fn open_editor(draft: &Path) -> Result<()> {
 }
 
 /// Ask a yes/no question; anything but `y` or `yes`, end of input included, is no.
-fn confirm(out: &mut Deferred, question: &str) -> Result<bool> {
+pub(super) fn confirm(out: &mut Deferred, question: &str) -> Result<bool> {
     write!(out, "{question}")?;
     out.flush()?;
     let mut answer = String::new();

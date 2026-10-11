@@ -25,7 +25,6 @@ mod taint;
 mod terminal;
 mod time;
 mod trust;
-#[expect(dead_code, reason = "`moat policy upgrade` uses it; it lands in the next change")]
 mod upgrade;
 
 use std::process::ExitCode;

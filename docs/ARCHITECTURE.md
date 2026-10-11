@@ -407,6 +407,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
   policy.yaml                  user policy (moat init writes the default once)
   policy.yaml.bak              the policy before the last `moat edit` applied a change
   policy.base.yaml             the shipped default the policy started from or was last upgraded to
+  policy.yaml.before-upgrade   the policy before the last `moat policy upgrade` (and the base's copy)
   policy.d/approved.yaml       permanent rules from `moat allow --always/--site/--dir`
   approvals.json               session grants from `moat allow` (24 h each)
   trust.json                   repository policies trusted with `moat trust`: root → SHA-256
