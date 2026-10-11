@@ -417,6 +417,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 ~/.codex/config.toml           Codex [permissions.moat] profile, default_permissions
 <file>.moat-backup             each hook file before OpenMoat's first hook edit
 <file>.moat-sandbox-backup     each host file before OpenMoat's first sandbox edit
+                               (both listed in hosts.json; uninstall deletes only those)
 ~/.cursor/hooks.json           Cursor hooks ($CURSOR_CONFIG_DIR overrides)
 ~/.cursor/sandbox.json         Cursor sandbox keys, next to hooks.json
 <project>/.moat/policy.yaml    repository policy, committed by the team (ADR-022)

@@ -135,6 +135,36 @@ fn uninstall_keeps_changes_made_since_init() {
     assert_eq!(left, serde_json::json!({"theme": "dark", "model": "opus"}));
 }
 
+/// A file of the user's at a backup's name is not OpenMoat's backup: `init`
+/// neither replaces nor lists it, and `uninstall` neither restores nor deletes it.
+#[test]
+fn a_users_file_at_a_backup_name_is_never_taken_or_deleted() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let settings = sb.home.join(".claude/settings.json");
+    let mine = sb.home.join(".claude/settings.json.moat-backup");
+    fs::write(&settings, "{\"theme\": \"dark\"}\n").unwrap();
+    fs::write(&mine, "my own notes\n").unwrap();
+    let out = sb.moat(&["init", "--yes", "--hosts", "claude-code"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        !stdout(&out).contains("settings.json.moat-backup"),
+        "{}",
+        text(&out)
+    );
+
+    let out = sb.moat_as_person(&["uninstall", "--hosts", "claude-code"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(fs::read_to_string(&mine).unwrap(), "my own notes\n");
+    let left: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+    assert_eq!(left, serde_json::json!({"theme": "dark"}));
+    assert!(
+        !stdout(&out).contains("settings.json.moat-backup"),
+        "not listed as a backup: {}",
+        text(&out)
+    );
+}
+
 #[test]
 fn uninstall_purge_deletes_the_state_directory() {
     let sb = Sandbox::bare(&[".claude"]);

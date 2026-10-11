@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::Host;
@@ -26,6 +26,10 @@ pub struct Recorded {
     /// so `moat uninstall` removes those and never a rule of the user's.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub claude_rules: Vec<String>,
+    /// The backups OpenMoat created, so `moat uninstall` deletes those and never
+    /// a file of the user's that has a backup's name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub backups: Vec<PathBuf>,
 }
 
 impl Recorded {
@@ -53,6 +57,11 @@ impl Recorded {
         self.version = VERSION;
         let text = serde_json::to_string_pretty(self)? + "\n";
         write_private(&home.hosts_path(), text.as_bytes())
+    }
+
+    /// Whether OpenMoat created the backup at `path`.
+    pub fn owns(&self, path: &Path) -> bool {
+        self.backups.iter().any(|b| b == path)
     }
 
     pub fn dir(&self, host: Host) -> Option<PathBuf> {
@@ -85,6 +94,7 @@ mod tests {
         let loaded = Recorded::load(&home).unwrap();
         assert_eq!(loaded.dir(Host::Codex), Some(PathBuf::from("/cfg/codex")));
         assert_eq!(loaded.dir(Host::ClaudeCode), None);
+        assert!(!loaded.owns(Path::new("/cfg/claude/settings.json.moat-backup")));
         fs::write(home.hosts_path(), r#"{"version":7,"dirs":{}}"#).unwrap();
         assert!(Recorded::load(&home).is_err());
     }
