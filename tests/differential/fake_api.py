@@ -8,7 +8,11 @@ Used by the differential suite's Claude Code layer (crates/openmoat-cli/tests/e2
 differential/claude.rs) and scripts/ci/differential.sh. Trimmed from the
 #119 sandbox spike.
 
-  fake_api.py --port 18090 --bash 'cat ~/.ssh/id_rsa'
+  fake_api.py --bash 'cat ~/.ssh/id_rsa'
+
+With no --port (or --port 0) the OS picks a free loopback port. Either way the
+bound port is printed as the first stdout line, once the socket is listening,
+so a caller reads it instead of guessing a port and racing for it.
 """
 import argparse
 import json
@@ -89,8 +93,10 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=18090)
+    ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--bash")
     a = ap.parse_args()
     BASH = a.bash
-    ThreadingHTTPServer(("127.0.0.1", a.port), H).serve_forever()
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), H)
+    print(server.server_address[1], flush=True)
+    server.serve_forever()

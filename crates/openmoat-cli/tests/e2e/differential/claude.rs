@@ -27,10 +27,11 @@
 //! rather than denying everything.
 
 use std::fmt::Write as _;
-use std::net::TcpListener;
+use std::io::{BufRead as _, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output};
-use std::time::{Duration, Instant};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use crate::common::{json, skip_without_host_binary, text};
 
@@ -81,24 +82,29 @@ struct FakeApi {
 }
 
 impl FakeApi {
+    /// Start the fake API on a port the OS picks and read that port from its
+    /// first stdout line, so no other process can take the port in between.
     fn start(python: &Path, script: &Path, command: &str) -> Self {
-        let port = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
-        let child = Command::new(python)
+        let mut child = Command::new(python)
             .arg("-I")
             .arg(script)
-            .args(["--port", &port.to_string(), "--bash", command])
+            .args(["--bash", command])
+            .stdout(Stdio::piped())
             .spawn()
             .expect("starting fake api");
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while TcpListener::bind(("127.0.0.1", port)).is_ok() {
-            assert!(Instant::now() < deadline, "fake api did not bind");
-            std::thread::sleep(Duration::from_millis(30));
-        }
-        Self { child, port }
+        let stdout = child.stdout.take().expect("fake api stdout");
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            let _ = BufReader::new(stdout).read_line(&mut line);
+            let _ = tx.send(line);
+        });
+        let line = rx.recv_timeout(Duration::from_secs(10));
+        let port = line.as_deref().ok().and_then(|l| l.trim().parse().ok());
+        let mut api = Self { child, port: 0 };
+        // On failure `api` drops here, which kills the child.
+        api.port = port.unwrap_or_else(|| panic!("fake api did not report its port: {line:?}"));
+        api
     }
 }
 
