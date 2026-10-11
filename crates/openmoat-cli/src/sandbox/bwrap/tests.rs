@@ -37,6 +37,8 @@ fn tree(home: &Path) {
         "proj/src",
         "proj/.env.d",
         "proj/.git/hooks",
+        "proj/vendor/lib/.git/hooks",
+        "proj/sub",
         "proj/.claude/worktrees",
         ".claude",
         ".cargo",
@@ -48,6 +50,7 @@ fn tree(home: &Path) {
         "proj/.env.example",
         "proj/src/.env.local",
         "proj/src/main.rs",
+        "proj/sub/.git",
         "proj/.env.d/inner",
         "proj/.claude/settings.json",
         ".claude/settings.json",
@@ -78,6 +81,9 @@ fn denied_paths_in_the_project_and_the_grants_are_masked() {
         hide("proj/.envrc"),
         hide("proj/.moat"),
         Mount::ReadOnly(p("proj/.git")),
+        // a nested repository's `.git`, directory or `gitdir:` file, is git's too
+        Mount::ReadOnly(p("proj/vendor/lib/.git")),
+        Mount::ReadOnly(p("proj/sub/.git")),
         Mount::ReadOnly(p("proj/.claude/settings.json")),
         // The node is pinned; Claude Code may still write its worktrees.
         Mount::ReadWrite(p("proj/.claude")),

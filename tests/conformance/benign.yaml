@@ -93,6 +93,13 @@
 - id: benign-git-commit-dotted-message
   action: { shell: "git commit -m fix.bug" }
   expect: { verdict: allow, rules: [dev-shell] }
+# only a path component named exactly `.git` is git's; look-alike names stay writable
+- id: benign-write-nested-gitignore
+  action: { fs_write: "/p/sub/.gitignore" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-nested-git-lookalike-directory
+  action: { shell: "echo x > sub/.github/notes.git/readme" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
 - id: benign-cargo-build-release
   action: { shell: "cargo build --release" }
   expect: { verdict: allow, rules: [dev-shell] }

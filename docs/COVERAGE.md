@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 16 | 3 | 0 |
 | T7 | Obfuscation and nested execution | 59 | 61 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 9 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 121 | 14 | 3 |
+| T9 | Hook / policy tampering by the agent | 125 | 14 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 15 | 2 | 0 |
 | T12 | Network to unknown hosts | 20 | 8 | 1 |
@@ -551,6 +551,10 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-echo-gitdir-file-at-root` (attacks): Ask [default]
 - `T9-printf-gitdir-file-at-root` (attacks): Ask [default]
 - `T9-write-tool-gitdir-file-at-root` (attacks): Ask [default]
+- `T9-echo-gitdir-file-in-subdirectory` (attacks): Ask [default]
+- `T9-write-tool-gitdir-file-in-subdirectory` (attacks): Ask [default]
+- `T9-plant-hook-in-nested-git-directory` (attacks): Ask [default]
+- `T9-write-tool-nested-git-config` (attacks): Ask [default]
 - `T9-rebase-todo-exec-line` (attacks): Ask [default]
 - `T9-write-tool-rebase-apply` (attacks): Ask [default]
 - `T9-rewrite-branch-ref` (attacks): Ask [default]

@@ -40,7 +40,7 @@ use openmoat_core::ir::{Access, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 use toml_edit::{Item, Table, value};
 
-use super::patterns::{Spot, domain, is_below, literal_tree, push_unique, split, spot};
+use super::patterns::{ANY_GIT, Spot, domain, is_below, literal_tree, push_unique, split, spot};
 use super::{PROJECT, Report};
 
 mod config;
@@ -301,6 +301,10 @@ impl Filesystem {
                 }
             }
             for pattern in excluded {
+                if mode == Mode::Write && spot(pattern) == Spot::Project(ANY_GIT) {
+                    nested_git(report);
+                    continue;
+                }
                 let read_only = write_only_target(pattern).is_some_and(|path| readable(&path));
                 self.deny(
                     pattern,
@@ -391,6 +395,20 @@ impl Filesystem {
         table.insert(":workspace_roots", Item::Table(workspace));
         table
     }
+}
+
+/// A glob has no read-only form, and denying `**/.git/**` would also hide every
+/// repository's `.git` from reads (`git status` fails), so a nested `.git` stays
+/// writable; Codex keeps the workspace roots' own `.git` read-only itself.
+fn nested_git(report: &mut Report) {
+    report.allowance(
+        Kind::FsWrite,
+        "codex.nested-git",
+        vec![ANY_GIT.to_owned()],
+        "a profile glob can only deny, which would also block reading every `.git`, so \
+         sandboxed commands may write a `.git` file (`gitdir: …`) or directory below a \
+         workspace root; Codex keeps the root's own `.git` read-only, and the hook asks",
+    );
 }
 
 /// The path a write-deny names when it names one literal path (`~/.zshrc`,

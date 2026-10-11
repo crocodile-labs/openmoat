@@ -48,7 +48,7 @@ fn default_policy_lowers_paths_and_hosts() {
     );
     assert_eq!(
         ir.fs.write.allow[0].patterns,
-        ["/p/**", "!/p/.git/**", "!/p/.moat/**"]
+        ["/p/**", "!/p/.git/**", "!/p/**/.git/**", "!/p/.moat/**"]
     );
     assert_eq!(
         ids(&ir.fs.write.deny),

@@ -201,7 +201,9 @@ allow:
   - id: project-fs
     # the root itself too: a search with no path reads the whole project
     fs.read: ["${project}", "${project}/**"]
-    fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**"]
+    # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted
+    # directory), so writing one asks like the root's own `.git`
+    fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**"]
   - id: dev-shell
     shell:
       - "git status*"
