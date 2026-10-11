@@ -58,6 +58,12 @@ pub enum Action {
         /// The URL as the tool gave it.
         url: String,
     },
+    /// A query a host's own web search tool (Claude Code and Cursor `WebSearch`)
+    /// sends to the host's search provider: judged by `defaults.web.search`.
+    WebSearch {
+        /// The query as the tool gave it.
+        query: String,
+    },
     /// A patch that edits several files in one call (Codex `apply_patch`):
     /// every path it adds, updates, deletes or moves to is written.
     /// Files changed by one multi-file patch (Codex `apply_patch`).
@@ -104,6 +110,7 @@ impl Action {
             Self::FsWrite { .. } | Self::Patch { .. } => Kind::FsWrite,
             Self::Net { .. } => Kind::Net,
             Self::Fetch { .. } => Kind::Fetch,
+            Self::WebSearch { .. } => Kind::WebSearch,
             Self::McpTool { .. } => Kind::Mcp,
         }
     }
@@ -162,6 +169,11 @@ pub enum AtomicAction {
         /// Lowercase host name.
         host: String,
     },
+    /// A web search query; no rule list names it, so `defaults` decide it.
+    WebSearch {
+        /// The query as the tool gave it.
+        query: String,
+    },
     /// An environment variable read (`$NAME`, `printenv NAME`).
     EnvRead {
         /// Variable name.
@@ -189,6 +201,7 @@ impl AtomicAction {
             Self::FsWrite { .. } => Kind::FsWrite,
             Self::Net { .. } => Kind::Net,
             Self::Fetch { .. } => Kind::Fetch,
+            Self::WebSearch { .. } => Kind::WebSearch,
             Self::EnvRead { .. } => Kind::EnvRead,
             Self::EnvSet { .. } => Kind::EnvSet,
             Self::McpTool { .. } => Kind::Mcp,
@@ -212,6 +225,7 @@ impl AtomicAction {
             Self::FsRead { path } | Self::FsWrite { path } => Some(path),
             Self::Net { host } | Self::Fetch { host } => Some(host),
             Self::EnvRead { name } | Self::EnvSet { name } | Self::McpTool { name } => Some(name),
+            Self::WebSearch { query } => Some(query),
         }
     }
 
@@ -225,6 +239,7 @@ impl AtomicAction {
             Self::FsWrite { path } => format!("write {path}"),
             Self::Net { host } => format!("net {host}"),
             Self::Fetch { host } => format!("fetch {host}"),
+            Self::WebSearch { query } => format!("web search \"{query}\""),
             Self::EnvRead { name } => format!("env read {name}"),
             Self::EnvSet { name } => format!("env set {name}"),
             Self::McpTool { name } => format!("mcp {name}"),

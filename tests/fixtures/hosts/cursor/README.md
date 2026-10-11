@@ -21,7 +21,8 @@ What each fixture is based on, so a guess is never mistaken for a capture.
 
 - No official source gives the `tool_input` keys of `Read`, `Write`, `Grep` or
   `Delete`. `file_path` for `Read` and `Grep` comes from the third-party capture above;
-  `file_path` for `Write` and `Delete` is assumed. A missing key is an adapter error,
+  `file_path` for `Write` and `Delete` is assumed, and so is `query` for `WebSearch`
+  (Claude Code's key). A missing key is an adapter error,
   so a deny.
 - `preToolUse-grep.json` (Grep with `path`) and `preToolUse-write.json` are not
   captures. The adapter reads every path key a search carries (`path`, `file_path`,

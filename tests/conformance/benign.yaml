@@ -399,6 +399,9 @@
 - id: benign-webfetch-registry
   action: { fetch: "https://crates.io/crates/serde" }
   expect: { verdict: allow, rules: [registries] }
+- id: benign-websearch-clean-session
+  action: { web_search: "serde derive rename_all" }
+  expect: { verdict: allow, rules: [default.web.search] }
 - id: benign-recursive-read-of-project-root
   threat: T1
   action: { shell: "grep -r TODO ." }

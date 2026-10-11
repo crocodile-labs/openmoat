@@ -325,6 +325,9 @@ pub fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec
                 atoms: Vec::new(),
             },
         },
+        Action::WebSearch { query } => ParseOutcome::Parsed(vec![AtomicAction::WebSearch {
+            query: query.clone(),
+        }]),
         Action::McpTool {
             name,
             reads,

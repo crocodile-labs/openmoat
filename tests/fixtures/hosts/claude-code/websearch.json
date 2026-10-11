@@ -1,0 +1,8 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "WebSearch",
+  "tool_input": { "query": "serde derive rename_all", "allowed_domains": ["docs.rs"] },
+  "tool_use_id": "toolu_07STU"
+}

@@ -128,6 +128,8 @@ unrecorded, and exits 2, since a host that times the hook out runs the call
   When deeper nesting stops the search, the adapter names the limit in `unchecked`, and
   the engine adds an `unparseable` ask to the decision.
 - **Fetch** (Claude Code `WebFetch`). A `fetch` atom for the URL's host (ADR-017).
+- **WebSearch** (Claude Code and Cursor `WebSearch`). A `web.search` atom for the query;
+  the host picks the search provider, so only `defaults` and session taint decide it.
 
 Anything the lexer or classifier cannot make sense of is `unparseable`, which the
 engine turns into `ask`, never `allow`. `ParseOutcome::Unparseable` carries the atoms
@@ -151,6 +153,7 @@ the engine merges its `ask` with their decisions, so the failing part cannot hid
 | Claude Code `Edit`, `Write`, `MultiEdit`; `NotebookEdit` | `file_path`; `notebook_path` | `FsWrite` |
 | Cursor `preToolUse` `Write`, `Edit`, `MultiEdit`, `StrReplace`, `Delete` | `file_path` | `FsWrite` |
 | Claude Code `WebFetch` | `url` | `Fetch` |
+| Claude Code, Cursor `preToolUse` `WebSearch` | `query` (`allowed_domains` and `blocked_domains` only filter results) | `WebSearch` |
 | Codex `apply_patch` | `command` (the patch envelope) | `Patch` |
 | `mcp__<server>__<tool>` (Claude Code, Codex); Cursor `beforeMCPExecution` | tool name and arguments (Cursor: `mcp_server_name`, `tool_name`, `tool_input`) | `McpTool` |
 | anything else (Claude Code `Task`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, and tools that name no path) | — | none: `ungoverned` |

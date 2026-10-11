@@ -29,7 +29,13 @@ pub const CLOUD_METADATA: [&str; 6] = [
 ];
 
 /// The kinds an OS layer can see; every other kind is decide-only.
-const DECIDE_ONLY: [Kind; 4] = [Kind::Shell, Kind::EnvRead, Kind::EnvSet, Kind::Mcp];
+const DECIDE_ONLY: [Kind; 5] = [
+    Kind::Shell,
+    Kind::WebSearch,
+    Kind::EnvRead,
+    Kind::EnvSet,
+    Kind::Mcp,
+];
 
 /// Lower `policy` for `ctx` to what OS layers enforce.
 ///

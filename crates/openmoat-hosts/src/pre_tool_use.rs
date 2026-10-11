@@ -69,6 +69,11 @@ fn map_tool(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Option<Actio
         },
         // `WebFetch` only GETs `url`; the agent cannot attach a body (ADR-017).
         "WebFetch" => Action::Fetch { url: field("url")? },
+        // `WebSearch` sends `query` to the host's search provider; `allowed_domains`
+        // and `blocked_domains` only filter the results it returns.
+        "WebSearch" => Action::WebSearch {
+            query: field("query")?,
+        },
         // Codex file edits: the patch text names every file it touches.
         "apply_patch" => Action::Patch {
             writes: crate::patch::writes(&field("command")?),
@@ -206,6 +211,11 @@ mod tests {
                 .is_err(),
             "a WebFetch without a url is malformed"
         );
+        let search = Host::ClaudeCode.parse_request(&fixture("claude-code", "websearch"));
+        let query = "serde derive rename_all".to_owned();
+        assert_eq!(search.unwrap().action, Some(Action::WebSearch { query }));
+        let no_query = r#"{"tool_name":"WebSearch","tool_input":{"allowed_domains":[]}}"#;
+        assert!(Host::ClaudeCode.parse_request(no_query).is_err());
         let mcp = Host::ClaudeCode
             .parse_request(&fixture("claude-code", "mcp"))
             .unwrap();

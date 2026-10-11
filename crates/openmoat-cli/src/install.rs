@@ -76,7 +76,7 @@ const _: () = assert!(GUARD_BUDGET_S < TOOL_HOOK_TIMEOUT_S);
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
-const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|mcp__.*";
+const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|mcp__.*";
 
 const CLAUDE_CODE_HOOKS: &[HookSpec] = &[
     HookSpec {

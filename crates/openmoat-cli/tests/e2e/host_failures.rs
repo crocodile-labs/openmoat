@@ -271,3 +271,33 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
         );
     }
 }
+
+/// An install from before a tool joined the matcher: the hook is out of date
+/// until `moat init` rewrites the matcher in place and re-pins the hook file.
+#[test]
+fn moat_init_adds_a_new_tool_to_an_installed_matcher() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let path = sb.home.join(".claude/settings.json");
+    let old = fs::read_to_string(&path).unwrap().replace("|WebSearch", "");
+    fs::write(&path, old).unwrap();
+    let status = json(&sb.moat(&["status", "--format", "json"]));
+    assert_eq!(
+        status["agents"][0]["reason"], "hook out of date",
+        "{status}"
+    );
+
+    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(0));
+    let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let matcher = settings["hooks"]["PreToolUse"][0]["matcher"]
+        .as_str()
+        .unwrap();
+    assert!(matcher.split('|').any(|m| m == "WebSearch"), "{matcher}");
+    let out = sb.guard("claude-code", &fixture("claude-code/websearch.json"));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "the re-pinned hook file: {}",
+        text(&out)
+    );
+    assert!(text(&out).contains("default.web.search"), "{}", text(&out));
+}
