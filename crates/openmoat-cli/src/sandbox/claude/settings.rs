@@ -6,12 +6,15 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use serde_json::{Map, Value, json};
 
+use super::deny_list::{deny_rules_in_sync, is_owned_rule, write_deny_rules};
 use super::owned::{OWNED, strip_stale};
 use super::{BLOCK_READS, Generated};
 
 /// Merge `generated` into the settings document `root`, keeping every key
-/// OpenMoat does not own. Returns whether anything changed.
-pub fn apply(root: &mut Value, generated: &Generated) -> Result<bool> {
+/// OpenMoat does not own. `owned` holds the `permissions.deny` rules an earlier
+/// apply added (`hosts.json`): they are replaced, and on return `owned` holds
+/// the rules this one added. Returns whether anything changed.
+pub fn apply(root: &mut Value, generated: &Generated, owned: &mut Vec<String>) -> Result<bool> {
     let Value::Object(top) = root else {
         bail!("the settings file is not a JSON object");
     };
@@ -34,25 +37,15 @@ pub fn apply(root: &mut Value, generated: &Generated) -> Result<bool> {
     if generated.block_reads {
         object_at(top, "permissions")?.insert(BLOCK_READS.into(), json!(true));
     }
-    if let Some(Value::Object(permissions)) = top.get_mut("permissions") {
-        strip_deny_rules(permissions);
-    }
-    if !generated.deny_rules.is_empty() {
-        let deny = object_at(top, "permissions")?
-            .entry("deny")
-            .or_insert_with(|| json!([]));
-        let Value::Array(deny) = deny else {
-            bail!("`permissions.deny` in the settings file is not an array");
-        };
-        deny.extend(generated.deny_rules.iter().map(|rule| json!(rule)));
-    }
+    write_deny_rules(top, generated, owned)?;
     Ok(*top != before)
 }
 
-/// Whether `rule` is spelled the way OpenMoat writes its `permissions.deny`
-/// rules: `Read(./**/…)`, `Edit(./<name>)` naming one working-directory entry,
-/// or `Edit(./.<dir>/<name>)` naming one entry of a hidden directory there.
-fn is_owned_rule(rule: &Value) -> bool {
+/// Whether `rule` is spelled the way earlier versions wrote their Linux
+/// `permissions.deny` rules: `Read(./**/…)`, `Edit(./<name>)` naming one
+/// working-directory entry, or `Edit(./.<dir>/<name>)` naming one entry of a
+/// hidden directory there.
+pub(super) fn is_linux_spelling(rule: &Value) -> bool {
     let entry = |name: &str| !name.is_empty() && !name.contains(['/', ')', '*', '?', '[', '{']);
     rule.as_str().is_some_and(|r| {
         r.starts_with("Read(./**/")
@@ -67,12 +60,12 @@ fn is_owned_rule(rule: &Value) -> bool {
 
 /// Remove OpenMoat's rules from `permissions.deny`, and the list when that
 /// empties it. Returns whether anything was removed.
-fn strip_deny_rules(permissions: &mut Map<String, Value>) -> bool {
+pub(super) fn strip_deny_rules(permissions: &mut Map<String, Value>, owned: &[String]) -> bool {
     let Some(Value::Array(deny)) = permissions.get_mut("deny") else {
         return false;
     };
     let before = deny.len();
-    deny.retain(|rule| !is_owned_rule(rule));
+    deny.retain(|rule| !is_owned_rule(rule, owned));
     let removed = deny.len() != before;
     if removed && deny.is_empty() {
         permissions.remove("deny");
@@ -80,21 +73,11 @@ fn strip_deny_rules(permissions: &mut Map<String, Value>) -> bool {
     removed
 }
 
-/// OpenMoat's rules in `permissions.deny`, in order.
-fn deny_rules(root: &Value) -> Vec<&str> {
-    root.pointer("/permissions/deny")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|rule| is_owned_rule(rule))
-        .filter_map(Value::as_str)
-        .collect()
-}
-
-/// The inverse of [`apply`]: remove every key OpenMoat writes, then the objects
-/// that leaves empty. Works without a policy, so `moat uninstall` never needs
-/// one. Returns whether anything was removed.
-pub fn remove(root: &mut Value) -> bool {
+/// The inverse of [`apply`]: remove every key OpenMoat writes and the
+/// `permissions.deny` rules it added (`owned`), then the objects that leaves
+/// empty. Works without a policy, so `moat uninstall` never needs one. Returns
+/// whether anything was removed.
+pub fn remove(root: &mut Value, owned: &[String]) -> bool {
     let Value::Object(top) = root else {
         return false;
     };
@@ -117,7 +100,7 @@ pub fn remove(root: &mut Value) -> bool {
     }
     if let Some(Value::Object(permissions)) = top.get_mut("permissions") {
         removed |= permissions.remove(BLOCK_READS).is_some();
-        removed |= strip_deny_rules(permissions);
+        removed |= strip_deny_rules(permissions, owned);
     }
     if removed {
         for key in ["sandbox", "permissions"] {
@@ -165,8 +148,9 @@ pub fn deny_write(generated: &mut Generated, paths: &[String]) {
     }
 }
 
-/// Whether every key OpenMoat owns in `root` has its generated value.
-pub fn in_sync(root: &Value, generated: &Generated) -> bool {
+/// Whether every key OpenMoat owns in `root` has its generated value, with
+/// `ours` the `permissions.deny` rules it recorded adding.
+pub fn in_sync(root: &Value, generated: &Generated, ours: &[String]) -> bool {
     let owned = generated.sandbox.iter().all(|(key, value)| match value {
         Value::Object(owned) => owned
             .iter()
@@ -175,7 +159,7 @@ pub fn in_sync(root: &Value, generated: &Generated) -> bool {
     });
     owned
         && (!generated.block_reads || block_reads_on(root))
-        && deny_rules(root) == generated.deny_rules
+        && deny_rules_in_sync(root, generated, ours)
 }
 
 fn block_reads_on(root: &Value) -> bool {
@@ -257,7 +241,10 @@ pub fn weaknesses(root: &Value, expect_block_reads: bool, proxy_port: Option<u16
     out
 }
 
-fn object_at<'a>(map: &'a mut Map<String, Value>, key: &str) -> Result<&'a mut Map<String, Value>> {
+pub(super) fn object_at<'a>(
+    map: &'a mut Map<String, Value>,
+    key: &str,
+) -> Result<&'a mut Map<String, Value>> {
     match map.entry(key).or_insert_with(|| Value::Object(Map::new())) {
         Value::Object(nested) => Ok(nested),
         _ => bail!("`{key}` in the settings file is not an object"),
@@ -274,6 +261,7 @@ mod tests {
 
     #[test]
     fn apply_keeps_user_keys_and_is_idempotent() {
+        let mut owned = Vec::new();
         let out = generated(DEFAULT_POLICY);
         let mut root = json!({
             "theme": "dark",
@@ -281,13 +269,13 @@ mod tests {
             "permissions": { "allow": ["Bash(ls)"] },
             "sandbox": { "autoAllowBashIfSandboxed": false, "network": { "allowUnixSockets": ["/x.sock"] } },
         });
-        assert!(!in_sync(&root, &out));
-        assert!(apply(&mut root, &out).unwrap());
+        assert!(!in_sync(&root, &out, &owned));
+        assert!(apply(&mut root, &out, &mut owned).unwrap());
         assert!(
-            !apply(&mut root, &out).unwrap(),
+            !apply(&mut root, &out, &mut owned).unwrap(),
             "second apply changes nothing"
         );
-        assert!(in_sync(&root, &out));
+        assert!(in_sync(&root, &out, &owned));
         assert_eq!(root["theme"], "dark");
         assert_eq!(root["permissions"]["allow"], json!(["Bash(ls)"]));
         assert_eq!(root["permissions"][BLOCK_READS], json!(true));
@@ -301,35 +289,38 @@ mod tests {
             "{:?}",
             weaknesses(&root, true, None)
         );
-        assert!(apply(&mut json!([]), &out).is_err());
-        assert!(apply(&mut json!({"sandbox": 1}), &out).is_err());
+        assert!(apply(&mut json!([]), &out, &mut Vec::new()).is_err());
+        assert!(apply(&mut json!({"sandbox": 1}), &out, &mut Vec::new()).is_err());
     }
 
     #[test]
     fn remove_undoes_apply_and_keeps_user_keys() {
+        let mut owned = Vec::new();
         let original = json!({
             "theme": "dark",
             "permissions": { "allow": ["Bash(ls)"] },
             "sandbox": { "autoAllowBashIfSandboxed": false, "network": { "allowUnixSockets": ["/x.sock"] } },
         });
         let mut root = original.clone();
-        apply(&mut root, &generated(DEFAULT_POLICY)).unwrap();
-        assert!(remove(&mut root));
+        apply(&mut root, &generated(DEFAULT_POLICY), &mut owned).unwrap();
+        assert!(remove(&mut root, &owned));
         assert_eq!(root, original);
-        assert!(!remove(&mut root));
+        assert!(!remove(&mut root, &owned));
 
         let mut root = json!({});
         apply(
             &mut root,
             &generated("version: 1\nsandbox:\n  proxy_port: 18555\n"),
+            &mut owned,
         )
         .unwrap();
-        assert!(remove(&mut root));
+        assert!(remove(&mut root, &owned));
         assert_eq!(root, json!({}), "every key apply writes is owned");
     }
 
     #[test]
     fn linux_deny_rules_join_the_user_deny_list_and_leave_with_uninstall() {
+        let mut owned = Vec::new();
         let out = generated_for(DEFAULT_POLICY, true);
         let user = [
             "Read(~/secret)",
@@ -341,9 +332,9 @@ mod tests {
         let mut deny = user.to_vec();
         deny.extend(["Read(./**/old)", "Edit(./old)", "Edit(./.old/hooks.json)"]);
         let mut root = json!({ "permissions": { "deny": deny } });
-        assert!(apply(&mut root, &out).unwrap());
-        assert!(!apply(&mut root, &out).unwrap(), "idempotent");
-        assert!(in_sync(&root, &out));
+        assert!(apply(&mut root, &out, &mut owned).unwrap());
+        assert!(!apply(&mut root, &out, &mut owned).unwrap(), "idempotent");
+        assert!(in_sync(&root, &out, &owned));
         let mut expected: Vec<Value> = user.iter().map(|r| json!(r)).collect();
         expected.extend(out.deny_rules.iter().map(|r| json!(r)));
         assert_eq!(
@@ -352,24 +343,32 @@ mod tests {
             "stale rules go"
         );
         assert!(
-            !in_sync(&root, &generated(DEFAULT_POLICY)),
+            !in_sync(&root, &generated(DEFAULT_POLICY), &owned),
             "rules macOS does not write"
         );
-        assert!(remove(&mut root));
+        assert!(remove(&mut root, &owned));
         assert_eq!(root, json!({ "permissions": { "deny": user } }));
 
         let mut root = json!({});
-        apply(&mut root, &out).unwrap();
-        assert!(remove(&mut root));
+        apply(&mut root, &out, &mut owned).unwrap();
+        assert!(remove(&mut root, &owned));
         assert_eq!(root, json!({}), "the deny list it created goes too");
-        assert!(apply(&mut json!({ "permissions": { "deny": {} } }), &out).is_err());
+        assert!(
+            apply(
+                &mut json!({ "permissions": { "deny": {} } }),
+                &out,
+                &mut Vec::new()
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn weaknesses_name_every_weakened_setting() {
+        let mut owned = Vec::new();
         let out = generated(DEFAULT_POLICY);
         let mut root = json!({});
-        apply(&mut root, &out).unwrap();
+        apply(&mut root, &out, &mut owned).unwrap();
         root["sandbox"]["enabled"] = json!(false);
         root["sandbox"]["failIfUnavailable"] = Value::Null;
         root["sandbox"]["allowUnsandboxedCommands"] = json!(true);
@@ -389,14 +388,15 @@ mod tests {
         ] {
             assert!(found.contains(key), "{key}: {found}");
         }
-        assert!(!in_sync(&root, &out));
+        assert!(!in_sync(&root, &out, &owned));
     }
 
     #[test]
     fn weaknesses_name_a_changed_or_missing_moat_proxy_port() {
+        let mut owned = Vec::new();
         let out = generated("version: 1\nsandbox:\n  proxy_port: 18555\n");
         let mut root = json!({});
-        apply(&mut root, &out).unwrap();
+        apply(&mut root, &out, &mut owned).unwrap();
         assert!(weaknesses(&root, false, Some(18555)).is_empty());
         root["sandbox"]["network"]["httpProxyPort"] = json!(8080);
         let network = root["sandbox"]["network"].as_object_mut().unwrap();
@@ -405,7 +405,7 @@ mod tests {
         for key in ["httpProxyPort is not 18555", "socksProxyPort is not 18555"] {
             assert!(found.contains(key), "{key}: {found}");
         }
-        assert!(!in_sync(&root, &out));
+        assert!(!in_sync(&root, &out, &owned));
     }
 
     #[test]
@@ -432,12 +432,13 @@ mod tests {
 
     #[test]
     fn apply_writes_credentials_and_tls_terminate_from_the_policy() {
+        let mut owned = Vec::new();
         let out = generated(WITH_SECRET);
         let aws = json!([{ "idName": "A", "secretName": "B" }]);
         let mut root = json!({ "sandbox": { "credentials": { "awsPairs": aws.clone() } } });
-        assert!(apply(&mut root, &out).unwrap());
-        assert!(!apply(&mut root, &out).unwrap(), "idempotent");
-        assert!(in_sync(&root, &out));
+        assert!(apply(&mut root, &out, &mut owned).unwrap());
+        assert!(!apply(&mut root, &out, &mut owned).unwrap(), "idempotent");
+        assert!(in_sync(&root, &out, &owned));
         assert_eq!(root["sandbox"]["network"]["tlsTerminate"], json!({}));
         let env = &root["sandbox"]["credentials"]["envVars"][0];
         assert_eq!(env["name"], json!("GITHUB_TOKEN"));
@@ -446,7 +447,7 @@ mod tests {
             root["sandbox"]["credentials"]["awsPairs"], aws,
             "user keys survive"
         );
-        assert!(remove(&mut root));
+        assert!(remove(&mut root, &owned));
         assert_eq!(
             root,
             json!({ "sandbox": { "credentials": { "awsPairs": aws } } })
@@ -455,18 +456,19 @@ mod tests {
 
     #[test]
     fn dropping_a_secret_strips_the_stale_mask_entry_and_tls_terminate() {
+        let mut owned = Vec::new();
         let with = generated(WITH_SECRET);
         let without = generated(DEFAULT_POLICY);
         let mut root = json!({});
-        apply(&mut root, &with).unwrap();
+        apply(&mut root, &with, &mut owned).unwrap();
         assert!(root["sandbox"].get("credentials").is_some());
         assert_eq!(root["sandbox"]["network"]["tlsTerminate"], json!({}));
         assert!(
-            apply(&mut root, &without).unwrap(),
+            apply(&mut root, &without, &mut owned).unwrap(),
             "removes the stale keys"
         );
         assert!(root["sandbox"].get("credentials").is_none());
         assert!(root["sandbox"]["network"].get("tlsTerminate").is_none());
-        assert!(in_sync(&root, &without));
+        assert!(in_sync(&root, &without, &owned));
     }
 }

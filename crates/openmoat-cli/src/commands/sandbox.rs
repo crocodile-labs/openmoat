@@ -44,7 +44,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     let mut codex_doc = DocumentMut::new();
     codex::apply(&mut codex_doc, &plan.codex)?;
     let mut claude_doc = json!({});
-    claude::apply(&mut claude_doc, &plan.claude)?;
+    claude::apply(&mut claude_doc, &plan.claude, &mut Vec::new())?;
     let hosts = [
         Shown {
             host: Host::ClaudeCode,
