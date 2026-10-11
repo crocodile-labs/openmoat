@@ -37,6 +37,7 @@ seccompiler.workspace = true
 
 [dev-dependencies]
 openmoat-audit = { workspace = true, features = ["test-support"] }
+globset.workspace = true
 tempfile.workspace = true
 
 [lints]
