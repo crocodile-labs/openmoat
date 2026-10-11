@@ -59,7 +59,9 @@ def main():
     env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "USERPROFILE": home}
     if "SYSTEMROOT" in os.environ:
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    subprocess.run([moat, "init"], env=env, check=True, capture_output=True)
+    # Started in the throwaway HOME, not this checkout: `moat init` refuses a
+    # binary inside the project of the current directory.
+    subprocess.run([moat, "init"], env=env, cwd=home, check=True, capture_output=True)
 
     rows, worst = [], 0.0
     for name, command, code in CASES:
@@ -75,7 +77,7 @@ def main():
         wall = []
         for i in range(WARMUP + runs):
             started = time.perf_counter()
-            out = subprocess.run(guard, input=payload, env=env, capture_output=True)
+            out = subprocess.run(guard, input=payload, env=env, cwd=home, capture_output=True)
             elapsed = (time.perf_counter() - started) * 1000
             if out.returncode != code:
                 sys.exit(f"{name}: exit {out.returncode}, expected {code}\n{out.stderr.decode()}")
