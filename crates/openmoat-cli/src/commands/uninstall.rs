@@ -4,7 +4,9 @@
 //! what is left equals one of the backups `init` took, that backup's bytes are
 //! written back, so an untouched file comes back byte for byte; when it is
 //! empty and no backup matches, `init` created the file and it is deleted.
-//! Otherwise the user changed the file since, and their changes stay.
+//! Otherwise the user changed the file since, and their changes stay. Only the
+//! backups `hosts.json` records as OpenMoat's are deleted: a file of the
+//! user's at a backup's name stays.
 
 use std::fs;
 use std::io::Write as _;
@@ -42,17 +44,18 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         // Claude Code keeps its sandbox block in the same file as its hooks.
         let sandbox_too = host == Host::ClaudeCode;
         let owned = &recorded.claude_rules;
+        let ours = &recorded.backups;
         let strip =
             |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root, owned));
         let path = &config.settings_path;
-        let mut files = vec![(path.clone(), undo_json(path, strip)?)];
+        let mut files = vec![(path.clone(), undo_json(path, ours, strip)?)];
         if host == Host::Codex {
             let path = codex_config_path()?;
-            files.push((path.clone(), undo_toml(&path)?));
+            files.push((path.clone(), undo_toml(&path, ours)?));
         }
         if host == Host::Cursor {
             let path = crate::sandbox::install::settings_path(host)?;
-            files.push((path.clone(), undo_json(&path, cursor::remove)?));
+            files.push((path.clone(), undo_json(&path, ours, cursor::remove)?));
         }
         if files.iter().all(|(_, done)| done.is_none()) {
             writeln!(out, "· {:<16} not set up", host.display_name())?;
@@ -78,8 +81,10 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
     if forgot_rules {
         recorded.claude_rules.clear();
     }
+    let backups_before = recorded.backups.len();
+    recorded.backups.retain(|b| b.exists());
     let mut rewritten = Vec::new();
-    if recorded.dirs.len() != before || forgot_rules {
+    if recorded.dirs.len() != before || forgot_rules || recorded.backups.len() != backups_before {
         recorded.save(&home)?;
         rewritten.push(home.hosts_path());
     }
@@ -138,8 +143,12 @@ impl std::fmt::Display for Undone {
 
 /// `strip` is run on the backups too: one it changes was taken between two
 /// OpenMoat edits (the sandbox backup of a file the hook edit created), so it
-/// is not the user's original.
-fn undo_json(path: &Path, strip: impl Fn(&mut Value) -> bool) -> Result<Option<Undone>> {
+/// is not the user's original. `ours` are the backups OpenMoat created.
+fn undo_json(
+    path: &Path,
+    ours: &[PathBuf],
+    strip: impl Fn(&mut Value) -> bool,
+) -> Result<Option<Undone>> {
     if !path.is_file() {
         return Ok(None);
     }
@@ -156,10 +165,10 @@ fn undo_json(path: &Path, strip: impl Fn(&mut Value) -> bool) -> Result<Option<U
     let original = originals.iter().find(|(_, v)| *v == root).map(|(b, _)| *b);
     let created = originals.is_empty() && root == json!({});
     let text = serde_json::to_string_pretty(&root)? + "\n";
-    finish(path, &backups, original, created, &text).map(Some)
+    finish(path, &owned(&backups, ours), original, created, &text).map(Some)
 }
 
-fn undo_toml(path: &Path) -> Result<Option<Undone>> {
+fn undo_toml(path: &Path, ours: &[PathBuf]) -> Result<Option<Undone>> {
     if !path.is_file() {
         return Ok(None);
     }
@@ -179,11 +188,21 @@ fn undo_toml(path: &Path) -> Result<Option<Undone>> {
         .find(|b| fs::read_to_string(b).is_ok_and(|t| t == text))
         .copied();
     let created = originals.is_empty() && text.trim().is_empty();
-    finish(path, &backups, original, created, &text).map(Some)
+    finish(path, &owned(&backups, ours), original, created, &text).map(Some)
+}
+
+/// The `backups` OpenMoat created: the only ones uninstall deletes or lists.
+fn owned(backups: &[PathBuf], ours: &[PathBuf]) -> Vec<PathBuf> {
+    backups
+        .iter()
+        .filter(|b| ours.contains(b))
+        .cloned()
+        .collect()
 }
 
 /// Write the undone file: the original backup's bytes; nothing when `init`
-/// `created` it; else `text`. Backups go once the file is back as it was.
+/// `created` it; else `text`. OpenMoat's backups go once the file is back as
+/// it was; `original` may be any file at a backup's name whose content matches.
 fn finish(
     path: &Path,
     backups: &[PathBuf],

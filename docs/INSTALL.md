@@ -73,7 +73,9 @@ Only the agents you accept get the hook and sandbox settings. The last lines nam
 backups and how to undo: `Undo anytime: moat uninstall`. `init` never overwrites an
 existing policy, never duplicates a hook and backs up a host file before editing it
 (`<file>.moat-backup` for hooks, `<file>.moat-sandbox-backup` for sandbox settings), so
-it is safe to run again.
+it is safe to run again. The backups it creates are listed in `~/.moat/hosts.json`;
+a file of yours that already has one of those names is left alone, and
+`moat uninstall` never deletes it.
 
 To choose without questions, name the agents: `moat init --hosts claude-code` (or
 `codex`, `cursor`, comma-separated). `moat init --yes` sets up every agent found, for

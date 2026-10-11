@@ -69,7 +69,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             lock.entries.len()
         )?;
         if !hosts.is_empty() {
-            backups(&hosts, &mut out)?;
+            backups(&home, &hosts, &mut out)?;
         }
         writeln!(out, "done. run `moat status` any time to verify.")?;
     }
@@ -149,11 +149,13 @@ fn state(home: &Home, dry_run: bool, out: &mut Deferred) -> Result<()> {
 }
 
 /// The backups `init` made of `hosts`' files, and how to undo.
-fn backups(hosts: &[Host], out: &mut Deferred) -> Result<()> {
+fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
+    let recorded = Recorded::load(home)?;
     let mut backups = Vec::new();
     for host in hosts {
         for file in host_files(&HostConfig::for_host(*host)?) {
-            backups.extend(crate::install::backups(&file));
+            let made = crate::install::backups(&file);
+            backups.extend(made.into_iter().filter(|b| recorded.owns(b)));
         }
     }
     let backups: Vec<String> = backups.iter().map(|p| p.display().to_string()).collect();

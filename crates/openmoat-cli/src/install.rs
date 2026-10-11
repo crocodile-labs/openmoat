@@ -15,7 +15,7 @@ pub use binary::{hook_binary, stale_hint};
 pub use dirs::Recorded;
 pub use hook_file::{HookState, Outcome, read_or_empty};
 
-use crate::home::user_home;
+use crate::home::{Home, user_home};
 
 /// Suffix of the copy of a host file taken before OpenMoat's hook edit changes it.
 pub const HOOK_BACKUP: &str = "moat-backup";
@@ -30,20 +30,25 @@ pub fn backup_path(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-/// Copy `path` to its `suffix` backup before OpenMoat edits it, unless that
-/// backup exists. The first one holds the file as it was before OpenMoat
-/// touched it; a later copy would replace it with an already edited file. A
-/// link at the backup's name counts as a backup, so the copy never follows it.
+/// Copy `path` to its `suffix` backup before OpenMoat edits it, unless
+/// something is at the backup's name, and record the copy in `hosts.json`.
+/// The first one holds the file as it was before OpenMoat touched it; a later
+/// copy would replace it with an already edited file. A file of the user's at
+/// that name is left alone, and a link there is never followed.
 pub fn back_up(path: &Path, suffix: &str) -> Result<()> {
     let backup = backup_path(path, suffix);
     if !path.exists() || fs::symlink_metadata(&backup).is_ok() {
         return Ok(());
     }
     fs::copy(path, &backup).with_context(|| format!("backing up {}", path.display()))?;
-    Ok(())
+    let home = Home::locate()?;
+    let mut recorded = Recorded::load(&home)?;
+    recorded.backups.push(backup);
+    recorded.save(&home)
 }
 
-/// The backups of `path` that exist, hook backup first.
+/// The files at `path`'s backup names, hook backup first. OpenMoat created
+/// only those [`Recorded::owns`]; any of them may still hold the original.
 pub fn backups(path: &Path) -> Vec<PathBuf> {
     [HOOK_BACKUP, SANDBOX_BACKUP]
         .into_iter()
