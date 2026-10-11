@@ -17,6 +17,9 @@ view at the end of the file.
 - Claude Code and Cursor `WebSearch` are checked and recorded as `web.search`: allowed in a clean session, asked after a secret read, and they mark the session untrusted; run `moat init` to update an installed hook ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
 - `git --git-dir=… <subcommand>` asks instead of riding on `dev-shell`, since git runs hooks and config programs from the directory it names ([#454](https://github.com/crocodile-labs/openmoat/pull/454)).
 
+### Fixed
+- `moat uninstall` removes only the Claude Code deny rules OpenMoat added, never a rule of the user's that is spelled the same ([#457](https://github.com/crocodile-labs/openmoat/pull/457)).
+
 ## [0.3.0] - 2026-10-10
 
 ### Security
