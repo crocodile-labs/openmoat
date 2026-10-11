@@ -368,6 +368,7 @@ fn remove_restores_the_users_text() {
         "",
         "# mine\nmodel = \"o3\"\n\n[features]\nweb_search = true\n",
         "[features.network_proxy]\nenabled = false\nport = 3128\n",
+        "[shell_environment_policy]\ninherit = \"core\"\n",
     ] {
         let mut doc: DocumentMut = original.parse().unwrap();
         apply(&mut doc, &out).unwrap();
@@ -377,4 +378,32 @@ fn remove_restores_the_users_text() {
         assert_eq!(doc.to_string(), expected, "after apply on {original:?}");
         assert!(!remove(&mut doc));
     }
+}
+
+#[test]
+fn git_safe_bare_repository_follows_the_users_entries_and_is_pinned() {
+    let out = generated(DEFAULT_POLICY);
+    let original = "[shell_environment_policy]\nset = { CI = \"1\", GIT_CONFIG_COUNT = \"1\", \
+                    GIT_CONFIG_KEY_0 = \"user.name\", GIT_CONFIG_VALUE_0 = \"me\" }\n";
+    let mut doc: DocumentMut = original.parse().unwrap();
+    apply(&mut doc, &out).unwrap();
+    let set = &doc["shell_environment_policy"]["set"];
+    let at = |key: &str| set.get(key).and_then(toml_edit::Item::as_str);
+    assert_eq!(at("GIT_CONFIG_COUNT"), Some("2"));
+    assert_eq!(at("GIT_CONFIG_KEY_1"), Some("safe.bareRepository"));
+    assert_eq!(at("GIT_CONFIG_VALUE_1"), Some("explicit"));
+    assert_eq!(at("CI"), Some("1"));
+    assert!(in_sync(&doc, &out));
+    let pinned = owned_part(&doc);
+    assert!(
+        pinned.contains("\"GIT_CONFIG_VALUE_1\"=\"explicit\""),
+        "{pinned}"
+    );
+    doc["shell_environment_policy"]["set"]["GIT_CONFIG_COUNT"] = toml_edit::value("1");
+    assert_ne!(owned_part(&doc), pinned, "dropping the entry is drift");
+    assert!(!in_sync(&doc, &out));
+    let mut doc: DocumentMut = original.parse().unwrap();
+    apply(&mut doc, &out).unwrap();
+    assert!(remove(&mut doc));
+    assert_eq!(doc.to_string(), original);
 }

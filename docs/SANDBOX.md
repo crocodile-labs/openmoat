@@ -138,6 +138,18 @@ on Linux only in the working directory's own repository, `info/attributes` and
 submodules aside (above).
 Codex keeps `.git` read-only: commit outside its sandbox (Codex asks to).
 
+git treats any directory holding `HEAD`, `objects/` and `refs/` as a bare repository
+and runs what its `config` names, so a script could plant one for a later `git status`
+in it. `moat init` therefore also sets git's `safe.bareRepository=explicit` for every
+command the agent starts (git 2.38 or later uses a bare repository only when
+`--git-dir` or `GIT_DIR` names it), through `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`
+and `GIT_CONFIG_VALUE_<n>` in Claude Code's `env` settings and Codex's
+`shell_environment_policy.set`, appended after the entries already there. Those
+values replace any the agent inherits from the shell, and Codex's `include_only` and
+`filters` can remove them. Cursor's `sandbox.json` has no key that sets a variable,
+so Cursor gets none. The hook denies the agent setting `GIT_*` (`env-poison`), but a
+script it runs can unset them.
+
 [EVIDENCE.md](EVIDENCE.md) lists what each agent's sandbox, configured this way, does
 to hostile project scripts on macOS and Linux. CI runs them on every pull request with
 pinned Claude Code and Codex binaries and no account: Claude Code headless against a
@@ -215,6 +227,9 @@ moat run --write ~/.claude --write ~/.claude.json -- claude
   the temp directory and the agent's own executable; never the keychain. They may
   write the project, the temp directory and each `--write` path (the agent's state).
   Deny rules still win (`~/.claude/settings.json` stays unwritable).
+- git uses a bare repository only when named: `moat run` (and `--isolate`) appends
+  `safe.bareRepository=explicit` to the agent's `GIT_CONFIG_COUNT` entries, keeping
+  the ones it inherits, and refuses to start when `GIT_CONFIG_COUNT` is not a number.
 - Network goes only to the proxy on a loopback port (`HTTP_PROXY`, `HTTPS_PROXY`),
   which allows the hosts the policy allows. A tool that ignores those variables has
   no network.

@@ -41,6 +41,7 @@
 
 mod credentials;
 mod deny_list;
+mod git_env;
 mod git_internals;
 mod owned;
 mod rules;
