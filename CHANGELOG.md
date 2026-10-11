@@ -10,6 +10,7 @@ view at the end of the file.
 
 ### Security
 - Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
+- Claude Code and Cursor `WebSearch` are checked and recorded as `web.search`: allowed in a clean session, asked after a secret read, and they mark the session untrusted; run `moat init` to update an installed hook ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
 
 ## [0.3.0] - 2026-10-10
 
