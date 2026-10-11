@@ -325,7 +325,7 @@ something OpenMoat claims to stop.
 - **Ungoverned tools.** Claude Code orchestration tools whose own calls are hooked;
   Codex web search (a hosted tool its hook never sees) and other hosted tools;
   Cursor `Shell` and `MCP:<tool>` under `preToolUse` (governed by `beforeShellExecution`
-  and `beforeMCPExecution` instead) and `Task`. Ungoverned calls that reach the hook are
+  and `beforeMCPExecution` instead), `Task`, and to-do tools (`TodoWrite`) that name no path. Ungoverned calls that reach the hook are
   allowed with rule `ungoverned` and recorded. Any other Cursor tool that names no path
   is `tool.unknown`, which asks by default. Claude Code and Cursor `WebSearch` are
   governed: `web.search` in `defaults` decides them, and a search after a secret read asks.

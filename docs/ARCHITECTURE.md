@@ -159,7 +159,7 @@ the engine merges its `ask` with their decisions, so the failing part cannot hid
 | Claude Code, Cursor `preToolUse` `WebSearch` | `query` (`allowed_domains` and `blocked_domains` only filter results) | `WebSearch` |
 | Codex `apply_patch` | `command` (the patch envelope) | `Patch` |
 | `mcp__<server>__<tool>` (Claude Code, Codex); Cursor `beforeMCPExecution` | tool name and arguments (Cursor: `mcp_server_name`, `tool_name`, `tool_input`) | `McpTool` |
-| any other Cursor `preToolUse` tool that names no path key | tool name | `UnknownTool` (`tool.unknown`) |
+| any other Cursor `preToolUse` tool that names no path key, except to-do tools (`TodoWrite`, `TodoRead`, `todo_write`: ungoverned) | tool name | `UnknownTool` (`tool.unknown`) |
 | anything else (Claude Code `Task`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`) | — | none: `ungoverned` |
 
 Claude Code calls only reach OpenMoat for tools in the installed matcher

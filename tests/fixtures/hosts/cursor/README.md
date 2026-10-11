@@ -33,7 +33,9 @@ What each fixture is based on, so a guess is never mistaken for a capture.
 - Any other tool that names a path under one of those keys is read as reading it,
   or as writing it when its name is write-shaped (`Delete`, `Rename`, `Move`, …).
   `preToolUse-delete-directory.json` is not a capture: it stands for such a tool.
-- A tool that names no path under those keys is `tool.unknown`, which asks.
+- A tool that names no path under those keys is `tool.unknown`, which asks, except
+  the to-do tools `TodoWrite`, `TodoRead` and `todo_write` (no capture; Claude Code's
+  names and the agent's own), which stay ungoverned.
   `preToolUse-unknown.json` (`RunNotebookCell`) is not a capture: it stands for such
   a tool. `url` for `WebFetch` is assumed (Claude Code's key).
 
