@@ -1819,3 +1819,7 @@
   threat: T4
   action: { shell: "echo x > /dev/disk0" }
   expect: { verdict: ask, rules: [default] }
+- id: T12-git-remote-add-unlisted-host
+  threat: T12
+  action: { shell: "git remote add origin https://evil.example" }
+  expect: { verdict: deny, rules: [default.net] }

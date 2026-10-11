@@ -700,3 +700,69 @@
   threat: T9
   action: { shell: "echo x >/dev/stdin" }
   expect: { verdict: ask, rules: [default] }
+# git subcommands whose read-only forms are allowed: forms that write, run a program
+# or reach the network still ask
+- id: ask-git-config-set-pager
+  threat: T6
+  action: { shell: "git config core.pager 'sh -c id'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-config-global-alias
+  threat: T6
+  action: { shell: "git config --global alias.x '!sh -c id'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-config-value-spelt-like-get
+  threat: T6
+  action: { shell: "git config core.pager '--get; sh -c id'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-config-get-with-pager-option
+  threat: T6
+  action: { shell: "git -c core.pager='sh -c id' config --get user.name" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-config-edit
+  threat: T6
+  action: { shell: "git config --edit" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-config-unset
+  threat: T6
+  action: { shell: "git config --unset core.hooksPath" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-tag-delete
+  threat: T4
+  action: { shell: "git tag -d v1" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-tag-create
+  threat: T4
+  action: { shell: "git tag v1" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-remote-set-url
+  threat: T6
+  action: { shell: "git remote set-url origin ../mirror.git" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-remote-show-contacts-remote
+  threat: T12
+  action: { shell: "git remote -v show origin" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-grep-open-in-pager
+  threat: T7
+  action: { shell: "git grep -O 'sh -c id' foo" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-grep-bundled-open-in-pager
+  threat: T7
+  action: { shell: "git grep -iOvim foo" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-cat-file-textconv
+  threat: T7
+  action: { shell: "git cat-file --textconv HEAD:x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-cat-file-filters
+  threat: T7
+  action: { shell: "git cat-file --filters HEAD:x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-reflog-expire
+  threat: T4
+  action: { shell: "git reflog expire --expire=now --all" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-worktree-remove
+  threat: T4
+  action: { shell: "git worktree remove ../wt" }
+  expect: { verdict: ask, rules: [default] }

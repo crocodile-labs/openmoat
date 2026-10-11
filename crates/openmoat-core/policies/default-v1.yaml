@@ -219,6 +219,38 @@ allow:
       - "git pull*"
       - "git rebase *"
       - "git stash*"
+      # read-only subcommands; only the forms that print are listed
+      - "git ls-files*"
+      - "git ls-tree *"
+      - "git rev-parse *"
+      - "git rev-list *"
+      - "git merge-base *"
+      - "git cat-file *"
+      - "git blame *"
+      - "git grep *"
+      - "git describe*"
+      - "git shortlog*"
+      - "git check-ignore *"
+      - "git worktree list*"
+      - "git reflog $"
+      - "git reflog show*"
+      # listing tags; a list option makes any further word a pattern, and git refuses
+      # to combine it with creating, deleting or verifying
+      - "git tag $"
+      - "git tag {-l,--list,--contains,--no-contains,--merged,--no-merged,--points-at}"
+      - "git tag -n*"
+      # `git remote show` and `git remote update` contact the remote
+      - "git remote $"
+      - "git remote {-v,--verbose} $"
+      - "git remote get-url *"
+      # reading config: git takes options only before the first name, so the read
+      # action must come first, after at most one scope option or the file it reads;
+      # git refuses a second action, so no write can follow
+      - "git config {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {--global,--local,--system,--worktree,--show-origin,--show-scope,--null,-z,--name-only,--includes} {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {-f,--file,--blob} ?* {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {--file=*,--blob=*} {--get,--get-all,--get-regexp,--list,-l}"
+      - "git config {get,list}"
       - "ls*"
       - "cat *"
       - "head *"
@@ -320,6 +352,16 @@ allow:
       - "!git rebase * --str*"
       - "!git rebase * -[ixs]*"
       - "!git rebase * -[!-]*[ixs]*"
+      # options that run a program: a pager to open matches in (`-O`), and the textconv
+      # or filter drivers that `--textconv` and `--filters` turn on; any prefix git
+      # accepts (`--op*`, `--te*`/`--t*`, `--fi*`)
+      - "!git grep * -O*"
+      - "!git grep * -[!-]*O*"
+      - "!git grep * --op*"
+      - "!git grep * --te*"
+      - "!git cat-file * --t*"
+      - "!git cat-file * --fi*"
+      - "!git blame * --t*"
       # venv `--clear` empties an existing directory, `--upgrade-deps` downloads
       # packages; argparse also takes a prefix of a long option
       - "!python* -m venv * --cl*"

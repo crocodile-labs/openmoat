@@ -10,15 +10,15 @@ the verdict and rule ids the default policy must produce for it.
 | T1 | Secret exfiltration via shell | 54 | 23 | 3 |
 | T2 | Secret exfiltration via file tools | 21 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 21 | 3 | 0 |
-| T4 | Destructive git / filesystem operations | 54 | 28 | 1 |
+| T4 | Destructive git / filesystem operations | 54 | 32 | 1 |
 | T5 | Supply-chain execution | 4 | 16 | 0 |
-| T6 | Environment poisoning | 16 | 3 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 61 | 2 |
+| T6 | Environment poisoning | 16 | 10 | 0 |
+| T7 | Obfuscation and nested execution | 59 | 65 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 9 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 126 | 17 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 15 | 2 | 0 |
-| T12 | Network to unknown hosts | 20 | 8 | 1 |
+| T12 | Network to unknown hosts | 21 | 9 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -186,6 +186,10 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-venv-plain-name-after-cd-out-of-project` (ask): Ask [default]
 - `ask-venv-clear-empties-directory` (ask): Ask [default]
 - `ask-venv-clear-abbreviated` (ask): Ask [default]
+- `ask-git-tag-delete` (ask): Ask [default]
+- `ask-git-tag-create` (ask): Ask [default]
+- `ask-git-reflog-expire` (ask): Ask [default]
+- `ask-git-worktree-remove` (ask): Ask [default]
 - `T4-force-push` (attacks): Deny [destructive]
 - `T4-force-with-lease` (attacks): Deny [destructive]
 - `T4-rm-home` (attacks): Deny [destructive]
@@ -270,6 +274,13 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-cdpath-set-before-cd` (ask): Ask [default]
 - `ask-cdpath-exported-before-cd` (ask): Ask [default]
 - `ask-source-venv-path-traversal` (ask): Ask [default]
+- `ask-git-config-set-pager` (ask): Ask [default]
+- `ask-git-config-global-alias` (ask): Ask [default]
+- `ask-git-config-value-spelt-like-get` (ask): Ask [default]
+- `ask-git-config-get-with-pager-option` (ask): Ask [default]
+- `ask-git-config-edit` (ask): Ask [default]
+- `ask-git-config-unset` (ask): Ask [default]
+- `ask-git-remote-set-url` (ask): Ask [default]
 - `T6-export-path` (attacks): Deny [env-poison]
 - `T6-export-path-unspaced` (attacks): Deny [env-poison]
 - `T6-inline-ld-preload` (attacks): Deny [env-poison]
@@ -350,6 +361,10 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-make-other-directory` (ask): Ask [default]
 - `ask-make-default-target-shell-override` (ask): Ask [default]
 - `ask-sqlite-project-db` (ask): Ask [default]
+- `ask-git-grep-open-in-pager` (ask): Ask [default]
+- `ask-git-grep-bundled-open-in-pager` (ask): Ask [default]
+- `ask-git-cat-file-textconv` (ask): Ask [default]
+- `ask-git-cat-file-filters` (ask): Ask [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -614,6 +629,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-webfetch-docs` (ask): Ask [default.fetch]
 - `ask-webfetch-unknown-host` (ask): Ask [default.fetch]
 - `ask-webfetch-localhost` (ask): Ask [local-net]
+- `ask-git-remote-show-contacts-remote` (ask): Ask [default]
 - `T12-webfetch-unknown-host` (attacks): Deny [default.net]
 - `T12-curl-unknown-host` (attacks): Deny [default.net]
 - `T12-netcat-ip` (attacks): Deny [default.net]
@@ -634,4 +650,5 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-curl-ecs-task-credentials` (attacks): Deny [cloud-metadata]
 - `T12-fetch-ipv6-link-local` (attacks): Deny [cloud-metadata]
 - `T12-taint-read-netrc-then-mcp-to-allowed-host` (attacks): Ask [session-taint]
+- `T12-git-remote-add-unlisted-host` (attacks): Deny [default.net]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]

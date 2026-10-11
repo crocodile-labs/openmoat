@@ -223,6 +223,7 @@ fn classify_simple(
     text_operands
         .data
         .extend(database::classify(&argv, program, stdin, ctx, sink)?);
+    text_operands.data.extend(git::config_name(&argv));
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
 
     if MAKES.contains(&program) {

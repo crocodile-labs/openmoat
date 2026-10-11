@@ -604,3 +604,85 @@
 - id: benign-dev-null-through-dot-dot
   action: { shell: "ls 2>/dev/../dev/null" }
   expect: { verdict: allow, rules: [dev-shell] }
+# read-only git subcommands: they print and change nothing
+- id: benign-git-ls-files
+  action: { shell: "git ls-files" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-ls-tree
+  action: { shell: "git ls-tree HEAD" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-rev-parse-head
+  action: { shell: "git rev-parse HEAD" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-rev-parse-toplevel
+  action: { shell: "git rev-parse --show-toplevel" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-blame
+  action: { shell: "git blame main.rs" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-tag-list
+  action: { shell: "git tag" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-tag-list-pattern
+  action: { shell: "git tag -l 'v1.*'" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-tag-contains
+  action: { shell: "git tag --contains HEAD" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-tag-lines
+  action: { shell: "git tag -n5" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-remote-verbose
+  action: { shell: "git remote -v" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-remote-get-url
+  action: { shell: "git remote get-url origin" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-list
+  action: { shell: "git config --list" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-show-origin-list
+  action: { shell: "git config --show-origin -l" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-get-user-name
+  action: { shell: "git config --get user.name" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-global-get-email
+  action: { shell: "git config --global --get user.email" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-get-regexp-file
+  action: { shell: "git config -f .gitmodules --get-regexp path" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-get-subcommand
+  action: { shell: "git config get user.name" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-describe-tags
+  action: { shell: "git describe --tags" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-shortlog
+  action: { shell: "git shortlog -sn" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-grep
+  action: { shell: "git grep foo" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-cat-file
+  action: { shell: "git cat-file -p HEAD" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-merge-base
+  action: { shell: "git merge-base main HEAD" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-rev-list-count
+  action: { shell: "git rev-list --count HEAD" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-reflog
+  action: { shell: "git reflog" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-reflog-show
+  action: { shell: "git reflog show main" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-worktree-list
+  action: { shell: "git worktree list" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-check-ignore
+  action: { shell: "git check-ignore x" }
+  expect: { verdict: allow, rules: [dev-shell] }
