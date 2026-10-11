@@ -40,6 +40,7 @@
 //! settings read-only itself, so `.claude` gets no rule.
 
 mod credentials;
+mod deny_list;
 mod git_internals;
 mod owned;
 mod settings;
@@ -71,11 +72,11 @@ pub struct Generated {
     pub sandbox: Map<String, Value>,
     /// Whether `permissions.blockReadsOutsideWorkingDirectories` must be on.
     pub block_reads: bool,
-    /// The `permissions.deny` rules OpenMoat owns (Linux only): every
+    /// The `permissions.deny` rules OpenMoat writes (Linux only): every
     /// `Read(./**/…)` rule, every `Edit(./<name>)` rule naming one entry of
     /// the working directory and every `Edit(./.<dir>/<name>)` rule naming one
-    /// entry of a hidden directory there, spellings no other writer is expected
-    /// to use.
+    /// entry of a hidden directory there. `hosts.json` records the ones it adds
+    /// (`deny_list.rs`).
     pub deny_rules: Vec<String>,
     /// Losses and allowances of this backend.
     pub report: Report,
