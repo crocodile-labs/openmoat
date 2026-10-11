@@ -140,14 +140,24 @@ pub fn protect(generated: &mut Generated, settings: &Path) {
     let Some(dir) = settings.parent() else {
         return;
     };
+    let paths: Vec<String> = ["settings.json", "settings.local.json"]
+        .iter()
+        .map(|name| crate::context::path_string(&dir.join(name)))
+        .collect();
+    deny_write(generated, &paths);
+}
+
+/// Add `paths` to `denyWrite` as written, after the generator's own passes
+/// (a directory here covers its subtree, which the `moat` binary's wants).
+pub fn deny_write(generated: &mut Generated, paths: &[String]) {
     let deny = generated
         .sandbox
         .get_mut("filesystem")
         .and_then(|f| f.get_mut("denyWrite"))
         .and_then(Value::as_array_mut);
     if let Some(deny) = deny {
-        for name in ["settings.json", "settings.local.json"] {
-            let path = json!(crate::context::path_string(&dir.join(name)));
+        for path in paths {
+            let path = json!(path);
             if !deny.contains(&path) {
                 deny.push(path);
             }
@@ -407,6 +417,12 @@ mod tests {
         let count = |p: &str| deny.as_array().unwrap().iter().filter(|v| *v == p).count();
         assert_eq!(count("/cfg/claude/settings.json"), 1, "once, however often");
         assert_eq!(count("/cfg/claude/settings.local.json"), 1);
+        let binary = ["/opt/t/moatd".to_owned(), "/opt/t".to_owned()];
+        deny_write(&mut out, &binary);
+        deny_write(&mut out, &binary);
+        let deny = &out.sandbox["filesystem"]["denyWrite"];
+        let count = |p: &str| deny.as_array().unwrap().iter().filter(|v| *v == p).count();
+        assert_eq!((count("/opt/t/moatd"), count("/opt/t")), (1, 1));
     }
 
     const WITH_SECRET: &str = "version: 1\n\

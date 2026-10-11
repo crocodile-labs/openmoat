@@ -75,7 +75,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         program: Some(path_string(&program)),
         writes: args.writes.iter().map(|w| resolved(w)).collect(),
     };
-    let policy = home.load_policy()?;
+    let mut policy = home.load_policy()?;
+    crate::install::self_paths::protect_recorded(&home, &mut policy)?;
     let mut agent = if args.isolate {
         platform::isolate(&policy, &ctx, grants, &program)?
     } else {

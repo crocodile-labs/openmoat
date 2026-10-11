@@ -10,6 +10,8 @@ mod allow;
 mod allow_files;
 mod approvals;
 mod audit;
+#[cfg(unix)]
+mod binary_path;
 mod canary;
 mod cli;
 mod closed_pipe;

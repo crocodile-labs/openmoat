@@ -22,6 +22,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let prefix = if dry_run { "would" } else { "✔" };
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
+    refuse_writable_binary(&home, &binary)?;
     let mut out = Deferred::default();
     // Asked before anything is written, so declining everything changes nothing
     // but OpenMoat's own state directory.
@@ -54,7 +55,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         )?;
     }
 
-    sandboxes(&home, &hosts, dry_run, &mut out)?;
+    sandboxes(&home, &binary, &hosts, dry_run, &mut out)?;
 
     if dry_run {
         writeln!(out, "would lock             {}", home.lock_path().display())?;
@@ -74,6 +75,23 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     }
     out.finish()?;
     Ok(Code::Ok)
+}
+
+/// Refuse, before anything is written, a binary an agent could replace; the
+/// sandboxes' writable directories come from the policy `init` will apply.
+fn refuse_writable_binary(home: &Home, binary: &std::path::Path) -> Result<()> {
+    let policy = if home.policy_path().exists() {
+        home.load_policy()
+    } else {
+        Ok(Policy::parse(DEFAULT_POLICY)?)
+    };
+    // A policy that does not lint is reported by `sandboxes`, which then
+    // writes no sandbox, so there are no sandbox grants to check.
+    let writable = policy
+        .and_then(|p| Plan::for_binary(&p, binary))
+        .map(|plan| plan.writable_dirs())
+        .unwrap_or_default();
+    crate::install::self_paths::refuse_writable(binary, &writable)
 }
 
 /// OpenMoat's own state: the directory, the default policy (kept when there is
@@ -277,7 +295,13 @@ fn record(home: &Home, hosts: &[Host]) -> Result<()> {
 /// Standard tier (ADR-018): each selected host's own sandbox, configured from
 /// the policy. A policy that does not lint is reported, not fatal, so `init`
 /// can still repair hooks; `moat sandbox sync` writes the sandboxes later.
-fn sandboxes(home: &Home, hosts: &[Host], dry_run: bool, out: &mut Deferred) -> Result<()> {
+fn sandboxes(
+    home: &Home,
+    binary: &std::path::Path,
+    hosts: &[Host],
+    dry_run: bool,
+    out: &mut Deferred,
+) -> Result<()> {
     let prefix = if dry_run { "would" } else { "✔" };
     let selected: Vec<Host> = sandbox::install::HOSTS
         .into_iter()
@@ -291,7 +315,7 @@ fn sandboxes(home: &Home, hosts: &[Host], dry_run: bool, out: &mut Deferred) -> 
     } else {
         Ok(Policy::parse(DEFAULT_POLICY)?)
     };
-    let plan = match policy.and_then(|p| Plan::new(&p)) {
+    let plan = match policy.and_then(|p| Plan::for_binary(&p, binary)) {
         Ok(plan) => plan,
         Err(e) => {
             writeln!(out, "✗ sandbox          not written: {e:#}")?;

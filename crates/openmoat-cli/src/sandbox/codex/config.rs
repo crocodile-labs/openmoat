@@ -66,6 +66,22 @@ pub fn protect(generated: &mut Generated, codex_home: &Path) {
     }
 }
 
+/// Keep commands from writing each of `paths` (the `moat` binary, its target
+/// and their directory): read-only where `readable` says the policy lets
+/// commands read it, denied otherwise, so nothing is opened that was closed.
+pub fn read_only(generated: &mut Generated, paths: &[String], readable: impl Fn(&str) -> bool) {
+    let filesystem = generated
+        .profile
+        .get_mut("filesystem")
+        .and_then(Item::as_table_mut);
+    if let Some(filesystem) = filesystem {
+        for path in paths {
+            let mode = if readable(path) { "read" } else { "deny" };
+            filesystem.insert(path, value(mode));
+        }
+    }
+}
+
 /// The part of a Codex config OpenMoat owns, in a canonical form that ignores
 /// formatting, comments, key order and every other key. Codex writes the file
 /// itself (trusted projects, notices, the model), so the lock pins this part

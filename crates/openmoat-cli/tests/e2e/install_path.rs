@@ -1,6 +1,7 @@
 //! Hooks name the stable install path, so a package-manager upgrade keeps them
 //! working (#90). A Homebrew layout is simulated: `<prefix>/bin/moat` is a link
-//! into `<prefix>/Cellar/moat/<version>/bin/moat`, a copy of the built binary.
+//! into `<prefix>/Cellar/moat/<version>/bin/moat`, a copy of the built binary,
+//! in a home outside the temp directory.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,6 +22,11 @@ fn brew_install(prefix: &Path, version: &str) {
     std::os::unix::fs::symlink(target, &link).unwrap();
 }
 
+/// A home outside the temp directory: `init` refuses a binary inside one.
+fn outside_temp() -> Sandbox {
+    Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[".claude"])
+}
+
 fn hook_command(sb: &Sandbox) -> String {
     let settings = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
     let settings: Value = serde_json::from_str(&settings).unwrap();
@@ -32,7 +38,7 @@ fn hook_command(sb: &Sandbox) -> String {
 
 #[test]
 fn hooks_survive_a_package_manager_upgrade() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = outside_temp();
     let prefix = sb.home.join("homebrew");
     brew_install(&prefix, "0.1.0");
     let moat = prefix.join("bin/moat");
@@ -76,7 +82,7 @@ fn hooks_survive_a_package_manager_upgrade() {
 
 #[test]
 fn doctor_and_status_name_a_missing_or_different_hook_binary() {
-    let sb = Sandbox::bare(&[".claude"]);
+    let sb = outside_temp();
     let prefix = sb.home.join("homebrew");
     brew_install(&prefix, "0.1.0");
     let moat = prefix.join("bin/moat");
