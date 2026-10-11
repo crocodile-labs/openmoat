@@ -8,22 +8,28 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-11
+
 ### Added
-- `moat doctor` warns about calls the guard denied because no decision came within 10 s, and, on Linux with Codex set up, when the kernel still allows typing into the terminal (`dev.tty.legacy_tiocsti`) ([#456](https://github.com/crocodile-labs/openmoat/pull/456)).
+- `moat doctor` warns about guard calls denied for taking over 10 s, and, with Codex on Linux, when the kernel lets a command type into the terminal ([#456](https://github.com/crocodile-labs/openmoat/pull/456)).
+
+### Changed
+- After upgrading, run `moat init` and `moat sandbox sync` so the installed hooks and sandbox settings pick up the changes below.
+- Claude Code and Cursor `WebSearch` are now governed as `web.search`; a `policy.yaml` without `web.search` under `defaults` asks for every search, so add `web.search: allow` to keep searches silent ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
+- Claude Code's file tools now refuse the paths the policy denies on every OS, including `.env.example`, which the hook would allow ([#459](https://github.com/crocodile-labs/openmoat/pull/459)).
+- Existing policies keep their `project-fs` rule; add `"!${project}/**/.git/**"` to its `fs.write` list (as new policies have) to ask before writes to nested `.git` ([#462](https://github.com/crocodile-labs/openmoat/pull/462)).
 
 ### Security
-- Writing a `.git` file or directory below the project root (`sub/.git` holding `gitdir: ../evil`, a planted `sub/.git/hooks`) asks like the root's `.git`, since git follows it on the next command run there; `moat run` on macOS keeps them unwritable too ([#462](https://github.com/crocodile-labs/openmoat/pull/462)).
-- Claude Code's file tools refuse to edit the recorded `moat` binary and its directory wherever it is installed, also when the hook does not run ([#465](https://github.com/crocodile-labs/openmoat/pull/465)).
-- The `moat` binary the hooks run is protected by its recorded path, its target and their directory wherever it is installed, not only as `bin/moat`, and `moat init` refuses a binary inside the project, a temp directory or a directory the agents' sandboxes may write ([#458](https://github.com/crocodile-labs/openmoat/pull/458)).
-- Claude Code's file tools keep refusing secrets and OpenMoat's own files when the hook is missing or killed: `moat init` writes matching `permissions.deny` rules on every OS, Windows included ([#459](https://github.com/crocodile-labs/openmoat/pull/459)).
-- Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
-- Claude Code and Cursor `WebSearch` are checked and recorded as `web.search`: allowed in a clean session, asked after a secret read, and they mark the session untrusted; run `moat init` to update an installed hook ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
-- git uses a bare repository a command planted (a directory with `HEAD`, `objects/` and `refs/`) only when named: `moat run` and, after `moat sandbox sync`, Claude Code's and Codex's commands get `safe.bareRepository=explicit` ([#464](https://github.com/crocodile-labs/openmoat/pull/464)).
-- `git --git-dir=… <subcommand>` asks instead of riding on `dev-shell`, since git runs hooks and config programs from the directory it names ([#454](https://github.com/crocodile-labs/openmoat/pull/454)).
-- `moat show`, `moat status`, `moat replay`, `moat policy check`, `moat allow` and the home screen show control characters in commands, paths and reasons as `?`, so a logged escape sequence can no longer drive the terminal ([#452](https://github.com/crocodile-labs/openmoat/pull/452)).
+- The `moat` binary is protected by its recorded path, link target and directory wherever it is installed, and `moat init` refuses one inside a project or temp directory ([#458](https://github.com/crocodile-labs/openmoat/pull/458)).
+- Claude Code's own deny rules keep secrets, OpenMoat's files and the `moat` binary out of its file tools even when the hook is missing or killed ([#459](https://github.com/crocodile-labs/openmoat/pull/459)) ([#465](https://github.com/crocodile-labs/openmoat/pull/465)).
+- Writing a `.git` file or directory below the project root asks, like the root's `.git` ([#462](https://github.com/crocodile-labs/openmoat/pull/462)).
+- `git --git-dir=…` asks, and git opens a planted bare repository only when named (`safe.bareRepository=explicit`) under `moat run`, Claude Code and Codex ([#454](https://github.com/crocodile-labs/openmoat/pull/454)) ([#464](https://github.com/crocodile-labs/openmoat/pull/464)).
+- `sqlite3` and `duckdb` count their database file as a write, so an agent cannot edit `~/.moat/audit.db` ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
+- Claude Code and Cursor `WebSearch` is checked and recorded, asks after a secret read and marks the session untrusted ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
+- OpenMoat's own output shows control characters in agent text as `?`, so a logged escape sequence cannot drive the terminal ([#452](https://github.com/crocodile-labs/openmoat/pull/452)).
 
 ### Fixed
-- `moat uninstall` removes only the Claude Code deny rules OpenMoat added, never a rule of the user's that is spelled the same ([#457](https://github.com/crocodile-labs/openmoat/pull/457)).
+- `moat uninstall` removes only the Claude Code deny rules OpenMoat added ([#457](https://github.com/crocodile-labs/openmoat/pull/457)).
 
 ## [0.3.0] - 2026-10-10
 
@@ -375,7 +381,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/crocodile-labs/openmoat/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/crocodile-labs/openmoat/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/crocodile-labs/openmoat/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/crocodile-labs/openmoat/compare/v0.1.0...v0.1.1
