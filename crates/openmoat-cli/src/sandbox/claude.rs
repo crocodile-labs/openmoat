@@ -43,6 +43,7 @@ mod credentials;
 mod deny_list;
 mod git_internals;
 mod owned;
+mod rules;
 mod settings;
 
 use anyhow::Result;
@@ -51,6 +52,7 @@ use openmoat_core::{AtomicAction, Kind};
 use serde_json::{Map, Value, json};
 
 use credentials::credentials;
+pub use deny_list::apply_rules;
 pub use settings::{apply, in_sync, protect, remove, weaknesses};
 
 use super::Report;
@@ -72,11 +74,10 @@ pub struct Generated {
     pub sandbox: Map<String, Value>,
     /// Whether `permissions.blockReadsOutsideWorkingDirectories` must be on.
     pub block_reads: bool,
-    /// The `permissions.deny` rules OpenMoat writes (Linux only): every
-    /// `Read(./**/…)` rule, every `Edit(./<name>)` rule naming one entry of
-    /// the working directory and every `Edit(./.<dir>/<name>)` rule naming one
-    /// entry of a hidden directory there. `hosts.json` records the ones it adds
-    /// (`deny_list.rs`).
+    /// The `permissions.deny` rules OpenMoat writes (`rules.rs`): on every OS a
+    /// `Read(//…)` or `Edit(//…)` rule per path a policy deny rule names, on
+    /// Linux also the `Read(./**/…)` and `Edit(./…)` rules for the working
+    /// directory.
     pub deny_rules: Vec<String>,
     /// Losses and allowances of this backend.
     pub report: Report,
@@ -88,13 +89,11 @@ pub struct Generated {
 pub fn generate(ir: &Enforcement, proxy_port: Option<u16>, linux: bool) -> Result<Generated> {
     let mut report = Report::default();
     let filesystem = Filesystem::build(ir, &mut report)?;
-    let deny_rules = if linux {
-        let mut rules = filesystem.read_rules(&mut report);
-        rules.extend(filesystem.edit_rules(&mut report));
-        rules
-    } else {
-        Vec::new()
-    };
+    let mut deny_rules = filesystem.static_rules(&mut report);
+    if linux {
+        deny_rules.extend(filesystem.read_rules(&mut report));
+        deny_rules.extend(filesystem.edit_rules(&mut report));
+    }
     let mut network = match proxy_port {
         None => network(&ir.egress.net, &mut report),
         Some(port) => through_moat_proxy(&ir.egress.net, port, &mut report),
@@ -154,6 +153,10 @@ struct Filesystem {
     nodes: Vec<String>,
     /// `denyWrite` entries that name a whole tree.
     trees: Vec<String>,
+    /// `denyRead` entries a policy deny rule produced, not an exception to an allow.
+    denied_read: Vec<String>,
+    /// `denyWrite` entries a policy deny rule produced, not an exception to an allow.
+    denied_write: Vec<String>,
 }
 
 impl Filesystem {
@@ -166,6 +169,8 @@ impl Filesystem {
         for rule in &ir.fs.write.deny {
             fs.deny_rule(rule, Kind::FsWrite, report);
         }
+        fs.denied_read.clone_from(&fs.deny_read);
+        fs.denied_write.clone_from(&fs.deny_write);
         fs.allow_rules(&ir.fs.read, Kind::FsRead, report);
         fs.allow_rules(&ir.fs.write, Kind::FsWrite, report);
         for allowance in ir.allowances.iter().filter(|a| a.kind == Kind::FsRead) {

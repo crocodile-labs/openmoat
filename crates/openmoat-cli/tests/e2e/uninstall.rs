@@ -211,3 +211,42 @@ fn kernel_self_covers_the_recorded_and_the_env_config_dir() {
         assert!(stdout(&out).contains("kernel-self"), "{}", text(&out));
     }
 }
+
+/// The deny rules `init` adds to Claude Code's settings on every OS hold when
+/// the hook does not run; uninstall takes exactly those, and a user's rule
+/// spelled like one of them stays.
+#[test]
+fn uninstall_takes_only_the_deny_rules_init_added() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let settings = sb.home.join(".claude/settings.json");
+    let user = serde_json::json!(["Read(//**/.env)", "Edit(//tmp/x)"]);
+    let original = serde_json::json!({ "permissions": { "deny": user } });
+    fs::write(&settings, original.to_string()).unwrap();
+    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    let mut doc: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+    let deny = doc["permissions"]["deny"].as_array().unwrap().clone();
+    for rule in [
+        "Edit(//**/bin/moat)",
+        "Edit(//**/.moat/**)",
+        "Read(//**/.envrc)",
+    ] {
+        assert!(deny.contains(&rule.into()), "{rule}: {deny:?}");
+    }
+    let env = deny.iter().filter(|r| *r == "Read(//**/.env)").count();
+    assert_eq!(env, 1, "the user's rule is not doubled: {deny:?}");
+
+    // A change since init keeps the file from being restored: the rules are stripped.
+    doc["model"] = "opus".into();
+    fs::write(&settings, doc.to_string()).unwrap();
+    let out = sb.moat_as_person(&["uninstall", "--hosts", "claude-code"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let left: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+    assert_eq!(
+        left,
+        serde_json::json!({ "permissions": { "deny": user }, "model": "opus" })
+    );
+    let hosts = fs::read_to_string(sb.home.join(".moat/hosts.json")).unwrap();
+    assert!(!hosts.contains("claude_rules"), "{hosts}");
+}

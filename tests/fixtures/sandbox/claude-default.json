@@ -10,6 +10,7 @@
     "fs.read `secrets-paths`: Claude Code would re-open the exceptions (**/.env.example, **/.env.sample, **/.env.template) outside the working directories too, so they are left out: denied for sandboxed commands",
     "fs.write `secrets-paths`: Claude Code would re-open the exceptions (**/.env.example, **/.env.sample, **/.env.template) outside the working directories too, so they are left out: denied for sandboxed commands",
     "fs.write `project-fs`: user settings cannot name the project, so `.moat/**` is denied in every directory",
+    "fs.read `claude-code.static-denies`: Claude Code's own deny rules for these paths hold for its file tools when the hook does not run, and refuse an exception the hook allows (such as `.env.example`) too",
     "fs.read `default`: Claude Code's file tools refuse reads outside the working directories (permissions.blockReadsOutsideWorkingDirectories) where the hook would ask; `/add-dir` adds a directory"
   ],
   "permissions": {
