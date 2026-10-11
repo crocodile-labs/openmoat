@@ -11,6 +11,7 @@ view at the end of the file.
 ### Fixed
 - A redirection to `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/fd/1` or `/dev/fd/2` (and from `/dev/null`, `/dev/stdin` or `/dev/fd/0`) is no longer a file write or read, so `ls 2>/dev/null` and `git status >/dev/null 2>&1` stop asking ([#471](https://github.com/crocodile-labs/openmoat/pull/471)).
 - The default policy allows read-only git commands (`git ls-files`, `rev-parse`, `blame`, `grep`, `cat-file`, `tag -l`, `remote -v`, `config --get`, …) and `git config --get user.name` is no longer denied as network; existing policies keep their `dev-shell` rule until the policy upgrade lands ([#473](https://github.com/crocodile-labs/openmoat/pull/473)).
+- `moat uninstall` deletes only the backups OpenMoat created, never a file of yours at a backup's name; backups from before this release are kept ([#478](https://github.com/crocodile-labs/openmoat/pull/478)).
 
 ## [0.4.0] - 2026-10-11
 
