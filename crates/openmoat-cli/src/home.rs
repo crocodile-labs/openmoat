@@ -82,6 +82,11 @@ impl Home {
         self.root.join("trust.json")
     }
 
+    /// Calls the guard denied because no decision came in time (`hangs.rs`).
+    pub fn hangs_path(&self) -> PathBuf {
+        self.root.join("guard-hangs.log")
+    }
+
     pub fn exists(&self) -> bool {
         self.root.is_dir()
     }
@@ -211,6 +216,15 @@ fn create_private_dir(path: &Path) -> Result<()> {
 fn private_file_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+}
+
+/// Options that append to a file, creating it owner-only (Unix).
+pub fn private_append_options() -> fs::OpenOptions {
+    let mut options = fs::OpenOptions::new();
+    options.append(true).create(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     options

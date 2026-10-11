@@ -219,6 +219,24 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
             text(&out)
         );
     }
+    // Not in the audit log, which may be what hangs: one line each in a side
+    // file, owner-only, which `moat doctor` reports without failing.
+    let log = sb.home.join(".moat/guard-hangs.log");
+    let lines = fs::read_to_string(&log).unwrap();
+    assert_eq!(lines.lines().count(), 4, "{lines}");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = fs::metadata(&log).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+    let doctor = sb.moat(&["doctor"]);
+    assert!(
+        text(&doctor).contains("! guard            4 call(s) denied with no decision within 10 s"),
+        "{}",
+        text(&doctor)
+    );
+    assert_eq!(doctor.status.code(), Some(0), "{}", text(&doctor));
 }
 
 /// The hook command names a binary that no longer exists (an upgrade removed

@@ -10,6 +10,7 @@ mod commands;
 mod context;
 mod environment;
 mod exit;
+mod hangs;
 mod home;
 mod install;
 mod integrity;

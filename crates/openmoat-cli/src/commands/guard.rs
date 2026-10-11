@@ -22,7 +22,7 @@ use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, INTEGRITY_RULE, Lock};
 use crate::realpath::FsPathResolver;
-use crate::{secrets, taint};
+use crate::{hangs, secrets, taint, time};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const UNGOVERNED_RULE: &str = "ungoverned";
@@ -43,9 +43,9 @@ pub fn run(args: &GuardArgs) -> Code {
 }
 
 /// A hook the host times out counts as failed, and most hosts then run the
-/// call, so after [`GUARD_BUDGET_S`] the guard denies on its own, unrecorded
-/// (what is stuck may be the audit log), in the default event's format; exit
-/// 2 denies whatever the event.
+/// call, so after [`GUARD_BUDGET_S`] the guard denies on its own, in the
+/// default event's format; exit 2 denies whatever the event. The deny goes to
+/// the side file of [`hangs`], not the audit log: what is stuck may be the log.
 fn deny_when_over_budget(host: Host) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(GUARD_BUDGET_S));
@@ -53,6 +53,7 @@ fn deny_when_over_budget(host: Host) {
             "no decision within {GUARD_BUDGET_S} s"
         )));
         if let Some(code) = answer_once(host, &HookEvent::default(), &decision) {
+            hangs::record(host, time::now_ms());
             std::process::exit(code as i32);
         }
     });

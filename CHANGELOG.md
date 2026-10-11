@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Added
+- `moat doctor` warns about calls the guard denied because no decision came within 10 s, and, on Linux with Codex set up, when the kernel still allows typing into the terminal (`dev.tty.legacy_tiocsti`) ([#456](https://github.com/crocodile-labs/openmoat/pull/456)).
+
 ### Security
 - Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
 - Claude Code and Cursor `WebSearch` are checked and recorded as `web.search`: allowed in a clean session, asked after a secret read, and they mark the session untrusted; run `moat init` to update an installed hook ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).

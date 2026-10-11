@@ -21,6 +21,8 @@ use crate::sandbox::{Plan, install as host_sandbox};
 
 use super::sandbox::write_report;
 
+mod warnings;
+
 /// What a check is about, so accepting changes clears exactly the problems a
 /// re-pin fixes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +141,11 @@ impl Report {
     fn note(&mut self, text: &str) {
         let _ = writeln!(self.out, "· {text}");
     }
+
+    /// A row that needs attention without being a problem: the exit code stays 0.
+    fn warn(&mut self, text: &str) {
+        let _ = writeln!(self.out, "! {text}");
+    }
 }
 
 pub fn run(args: &DoctorArgs) -> Result<Code> {
@@ -170,6 +177,12 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         sandboxes(&mut report, policy, lock.as_ref(), &recorded, args.verbose);
     }
     service(&mut report, &home);
+    let codex = HostConfig::for_host(Host::Codex)?.state(&binary) == HookState::Installed;
+    let tiocsti = warnings::tiocsti(codex, warnings::legacy_tiocsti().as_deref());
+    let hangs = warnings::hangs(&home, crate::time::now_ms());
+    for warning in [tiocsti, hangs].into_iter().flatten() {
+        report.warn(&warning);
+    }
     for agent in protection::report(&home, &binary)? {
         if let Some(summary) = agent.summary() {
             report.note(&format!("{:<16} protection: {summary}", agent.name));
