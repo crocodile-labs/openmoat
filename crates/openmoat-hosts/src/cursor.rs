@@ -13,6 +13,10 @@ use serde_json::Value;
 
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod pre_tool;
+
+use pre_tool::pre_tool_action;
+
 pub(crate) const EVENTS: &[&str] = &[
     "beforeShellExecution",
     "beforeMCPExecution",
@@ -107,104 +111,6 @@ fn event_kind(event: &str) -> HookEvent {
     match event {
         "beforeShellExecution" | "beforeMCPExecution" => HookEvent::PreToolUse,
         _ => HookEvent::PreToolUseNoAsk,
-    }
-}
-
-/// Keys that name a file or directory in a Cursor tool's input. `path` and
-/// `file_path` are seen in Cursor payloads; the `target_*` keys are the names
-/// Cursor's own search and list tools use, read so such a tool is never
-/// passed unchecked.
-const PATH_KEYS: &[&str] = &[
-    "path",
-    "file_path",
-    "target_file",
-    "target_directory",
-    "target_directories",
-];
-
-/// Shell commands are governed by `beforeShellExecution` and MCP tools by
-/// `beforeMCPExecution`, so `Shell` and `MCP:<tool>` here are deliberately
-/// ungoverned to avoid deciding and auditing the same call twice. `Task` runs a
-/// subagent whose own tool calls are hooked. `WebSearch` is a web search, as in
-/// Claude Code.
-///
-/// Cursor documents tool names but no file tool's arguments
-/// (`tests/fixtures/hosts/cursor/README.md`, #138). A search reads every path
-/// key it carries (a captured `Grep` sends `file_path`, not `path`). Any other
-/// tool that names a path is checked instead of passed: as writing it when its
-/// name is write-shaped (`DeleteDirectory`, `Rename`), else as reading it.
-fn pre_tool_action(
-    tool: &str,
-    input: &Value,
-    cwd: Option<&str>,
-) -> Result<Option<Action>, HostError> {
-    let field = |name: &'static str| crate::input_str(input, tool, name);
-    Ok(match tool {
-        "Shell" | "Task" => None,
-        name if name.starts_with("MCP:") => None,
-        "Write" | "Edit" | "MultiEdit" | "StrReplace" | "Delete" => Some(Action::FsWrite {
-            path: field("file_path")?,
-        }),
-        "Read" => Some(Action::FsRead {
-            path: field("file_path")?,
-        }),
-        // Cursor keeps Claude Code's `WebSearch` name; its `query` key is assumed.
-        "WebSearch" => Some(Action::WebSearch {
-            query: field("query")?,
-        }),
-        "Grep" | "Glob" => {
-            Some(reads(read_paths(tool, input)?).unwrap_or_else(|| crate::search_root(input, cwd)))
-        }
-        _ if is_write_shaped(tool) => writes(read_paths(tool, input)?),
-        _ => reads(read_paths(tool, input)?),
-    })
-}
-
-fn is_write_shaped(tool: &str) -> bool {
-    let tool = tool.to_ascii_lowercase();
-    crate::WRITE_VERBS.iter().any(|verb| tool.contains(verb))
-}
-
-/// Every non-empty path under [`PATH_KEYS`]. A path key holding anything but a
-/// string or a list of strings cannot be checked, so it is an error.
-fn read_paths(tool: &str, input: &Value) -> Result<Vec<String>, HostError> {
-    let malformed = || HostError::MalformedArguments {
-        tool: tool.to_owned(),
-        problem: "a path argument is not a string or a list of strings".to_owned(),
-    };
-    let mut paths = Vec::new();
-    for key in PATH_KEYS {
-        match input.get(key) {
-            None | Some(Value::Null) => {}
-            Some(Value::String(path)) => paths.push(path.clone()),
-            Some(Value::Array(list)) => {
-                for path in list {
-                    paths.push(path.as_str().ok_or_else(malformed)?.to_owned());
-                }
-            }
-            Some(_) => return Err(malformed()),
-        }
-    }
-    paths.retain(|p| !p.is_empty());
-    Ok(paths)
-}
-
-/// One path is an `FsRead`, several a `ReadFiles`, none no action.
-fn reads(mut paths: Vec<String>) -> Option<Action> {
-    match paths.len() {
-        0 => None,
-        1 => paths.pop().map(|path| Action::FsRead { path }),
-        _ => Some(Action::ReadFiles { paths }),
-    }
-}
-
-/// One path is an `FsWrite`; several a `Patch`, the action that writes many
-/// files at once; none no action.
-fn writes(mut paths: Vec<String>) -> Option<Action> {
-    match paths.len() {
-        0 => None,
-        1 => paths.pop().map(|path| Action::FsWrite { path }),
-        _ => Some(Action::Patch { writes: paths }),
     }
 }
 
@@ -373,8 +279,23 @@ mod tests {
                 writes: vec!["/p/a".into(), "/p/.env".into()]
             })
         );
+        let unknown = Host::Cursor.parse_request(&fixture("preToolUse-unknown"));
+        let (host, tool) = ("cursor".to_owned(), "RunNotebookCell".to_owned());
+        assert_eq!(
+            unknown.unwrap().action,
+            Some(Action::UnknownTool { host, tool })
+        );
+        let fetch = parse("WebFetch", r#"{"url":"https://docs.rs"}"#)
+            .unwrap()
+            .action;
+        let url = "https://docs.rs".to_owned();
+        assert_eq!(fetch, Some(Action::Fetch { url }));
         for (tool, input) in [
-            ("TodoWrite", r#"{"todos":[]}"#),
+            (
+                "TodoWrite",
+                r#"{"todos":[{"content":"x","status":"pending"}]}"#,
+            ),
+            ("todo_write", r#"{"todos":[]}"#),
             ("Task", r#"{"prompt":"read /Users/me/.ssh"}"#),
             ("MCP:read_file", r#"{"path":"/Users/me/.ssh/id_rsa"}"#),
         ] {

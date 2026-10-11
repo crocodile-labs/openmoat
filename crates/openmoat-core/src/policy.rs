@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Fallback verdicts when no rule matches: one verdict for everything, or a map
 /// from action kind (`shell`, `fs.read`, `fs.write`, `net`, `fetch`,
-/// `web.search`, `env.read`, `env.set`, `mcp`, or `"*"`) to a verdict; a `fetch`
+/// `web.search`, `tool.unknown`, `env.read`, `env.set`, `mcp`, or `"*"`) to a verdict; a `fetch`
 /// without its own entry takes the `net` one. This is how "outbound network is
 /// deny-by-default" is expressed, because deny rules are absolute and cannot
 /// be punched through by allow rules (ADR-002).
@@ -145,8 +145,9 @@ impl RuleGroup {
             Kind::FsWrite => &self.fs_write,
             Kind::Net => &self.net,
             Kind::Fetch => &self.fetch,
-            // A query names no host or path to match; only `defaults` decide it.
-            Kind::WebSearch => &[],
+            // A query or an unknown tool names no host or path to match; only
+            // `defaults` decide them.
+            Kind::WebSearch | Kind::UnknownTool => &[],
             Kind::EnvRead => &self.env_read,
             Kind::EnvSet => &self.env_set,
             Kind::Mcp => &self.mcp,

@@ -20,6 +20,9 @@ view at the end of the file.
 - The default policy allows in-project edits: `sed -i 's/a/b/' file`, `git merge`, `git restore <path>` and a recursive `rm` of a project subdirectory (`rm -rf build`); removing the project root, `.git`, every entry (`*`) or anything outside the project still asks or is denied ([#482](https://github.com/crocodile-labs/openmoat/pull/482)).
 - The default policy allows the build and test commands of more ecosystems (`mvn test`, `./gradlew test`, `dotnet build/test/run`, `bundle exec rspec`, `rake test`, `php artisan test`, `phpunit`, `cmake`, `ctest`, `terraform fmt/validate`, `uv run`, `go run .`, `swift run`, `python <script>.py`, `node <script>.js`, `docker build`); their forms that run code from the command line or reach outside the project still ask ([#483](https://github.com/crocodile-labs/openmoat/pull/483)).
 
+### Security
+- Cursor tools OpenMoat cannot classify ask (`tool.unknown` under `defaults`; set it to `allow` for the old behaviour), and Cursor `WebFetch` is checked as a fetch ([#472](https://github.com/crocodile-labs/openmoat/pull/472)).
+
 ## [0.4.0] - 2026-10-11
 
 ### Added

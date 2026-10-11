@@ -54,7 +54,12 @@ impl Checker {
             Kind::FsWrite => &self.write,
             Kind::Net => &self.net,
             Kind::Fetch => &self.fetch,
-            Kind::Shell | Kind::WebSearch | Kind::EnvRead | Kind::EnvSet | Kind::Mcp => {
+            Kind::Shell
+            | Kind::WebSearch
+            | Kind::UnknownTool
+            | Kind::EnvRead
+            | Kind::EnvSet
+            | Kind::Mcp => {
                 return None;
             }
         };

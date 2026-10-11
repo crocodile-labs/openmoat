@@ -137,7 +137,8 @@ fn payloads_guard_cannot_read_are_denied_in_each_hosts_format() {
 /// a deliberate choice: the installed matchers send Claude Code and Codex only
 /// the tools OpenMoat maps, so an unknown name reaches `guard` only through a
 /// matcher the lock pins. Cursor's `preToolUse` sends every tool, and there an
-/// unknown tool that names a path is checked as reading it.
+/// unknown tool that names a path is checked as reading it (one that names none
+/// asks, `cursor.rs`).
 #[test]
 fn an_unknown_tool_is_ungoverned_unless_cursor_sees_a_path() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);

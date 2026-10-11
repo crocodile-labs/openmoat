@@ -328,6 +328,12 @@ pub fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec
         Action::WebSearch { query } => ParseOutcome::Parsed(vec![AtomicAction::WebSearch {
             query: query.clone(),
         }]),
+        Action::UnknownTool { host, tool } => {
+            ParseOutcome::Parsed(vec![AtomicAction::UnknownTool {
+                host: host.clone(),
+                tool: tool.clone(),
+            }])
+        }
         Action::McpTool {
             name,
             reads,

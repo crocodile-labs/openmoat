@@ -98,10 +98,19 @@ struct FixtureAction {
     /// A query sent by a host search tool (`WebSearch`).
     web_search: Option<String>,
     mcp_tool: Option<McpFixture>,
+    /// A host tool the adapter cannot classify: `{ host, tool }`.
+    unknown_tool: Option<UnknownToolFixture>,
     /// Files a multi-file patch writes (Codex `apply_patch`).
     patch: Option<Vec<String>>,
     /// A command for a shell OpenMoat does not parse: `{ shell, command }`.
     foreign_shell: Option<ForeignShellFixture>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UnknownToolFixture {
+    host: String,
+    tool: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +155,10 @@ impl FixtureAction {
             self.fetch.map(|url| Action::Fetch { url }),
             self.web_search.map(|query| Action::WebSearch { query }),
             self.patch.map(|writes| Action::Patch { writes }),
+            self.unknown_tool.map(|u| Action::UnknownTool {
+                host: u.host,
+                tool: u.tool,
+            }),
             self.foreign_shell.map(|f| Action::ForeignShell {
                 shell: f.shell,
                 command: f.command,

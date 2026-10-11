@@ -26,6 +26,9 @@ pub enum Kind {
     /// provider. The agent chooses the words, not the host, so only `defaults`
     /// decide it; no rule list names it.
     WebSearch,
+    /// A host tool the adapter cannot classify, so what it touches is unknown.
+    /// Only `defaults` decide it; no rule list names it.
+    UnknownTool,
     /// An environment variable read.
     EnvRead,
     /// An environment variable set.
@@ -36,13 +39,14 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in policy-file order.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Shell,
         Self::FsRead,
         Self::FsWrite,
         Self::Net,
         Self::Fetch,
         Self::WebSearch,
+        Self::UnknownTool,
         Self::EnvRead,
         Self::EnvSet,
         Self::Mcp,
@@ -58,6 +62,7 @@ impl Kind {
             Self::Net => "net",
             Self::Fetch => "fetch",
             Self::WebSearch => "web.search",
+            Self::UnknownTool => "tool.unknown",
             Self::EnvRead => "env.read",
             Self::EnvSet => "env.set",
             Self::Mcp => "mcp",
@@ -76,6 +81,7 @@ impl Kind {
             Self::FsWrite => &[Self::FsWrite],
             Self::Net => &[Self::Net],
             Self::WebSearch => &[Self::WebSearch],
+            Self::UnknownTool => &[Self::UnknownTool],
             Self::EnvRead => &[Self::EnvRead],
             Self::EnvSet => &[Self::EnvSet],
             Self::Mcp => &[Self::Mcp],

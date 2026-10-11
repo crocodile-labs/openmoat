@@ -68,6 +68,7 @@ parser through `Host::wire`, as the Continue CLI does (`continue_cli.rs`).
 | fetches a URL with no request body | `Fetch { url }` | `WebFetch` (ADR-017) |
 | opens a connection that can send data | `Net { url }` | `Monitor` WebSocket |
 | calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `mcp.rs` finds path and URL arguments |
+| a tool the hook receives for every tool and cannot classify | `UnknownTool { host, tool }`: `defaults.tool.unknown` decides, `ask` by default | Cursor `preToolUse` |
 | anything else | `None`: allowed with rule `ungoverned` and recorded | `TodoWrite`, `Task` |
 
 Rules the existing adapters follow:
