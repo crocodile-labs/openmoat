@@ -33,5 +33,8 @@ What each fixture is based on, so a guess is never mistaken for a capture.
 - Any other tool that names a path under one of those keys is read as reading it,
   or as writing it when its name is write-shaped (`Delete`, `Rename`, `Move`, …).
   `preToolUse-delete-directory.json` is not a capture: it stands for such a tool.
+- A tool that names no path under those keys is `tool.unknown`, which asks.
+  `preToolUse-unknown.json` (`RunNotebookCell`) is not a capture: it stands for such
+  a tool. `url` for `WebFetch` is assumed (Claude Code's key).
 
 Replace these fixtures with a captured Cursor IDE payload once one is available.

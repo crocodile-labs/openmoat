@@ -125,14 +125,16 @@ const PATH_KEYS: &[&str] = &[
 /// Shell commands are governed by `beforeShellExecution` and MCP tools by
 /// `beforeMCPExecution`, so `Shell` and `MCP:<tool>` here are deliberately
 /// ungoverned to avoid deciding and auditing the same call twice. `Task` runs a
-/// subagent whose own tool calls are hooked. `WebSearch` is a web search, as in
-/// Claude Code.
+/// subagent whose own tool calls are hooked. `WebSearch` and `WebFetch` are a
+/// web search and a fetch, as in Claude Code.
 ///
 /// Cursor documents tool names but no file tool's arguments
 /// (`tests/fixtures/hosts/cursor/README.md`, #138). A search reads every path
 /// key it carries (a captured `Grep` sends `file_path`, not `path`). Any other
 /// tool that names a path is checked instead of passed: as writing it when its
-/// name is write-shaped (`DeleteDirectory`, `Rename`), else as reading it.
+/// name is write-shaped (`DeleteDirectory`, `Rename`), else as reading it. A
+/// tool that names no such path is an [`Action::UnknownTool`], which the policy
+/// decides (`ask` by default) instead of passing it unseen.
 fn pre_tool_action(
     tool: &str,
     input: &Value,
@@ -152,12 +154,23 @@ fn pre_tool_action(
         "WebSearch" => Some(Action::WebSearch {
             query: field("query")?,
         }),
+        // Cursor keeps Claude Code's `WebFetch` name; its `url` key is assumed.
+        "WebFetch" => Some(Action::Fetch { url: field("url")? }),
         "Grep" | "Glob" => {
             Some(reads(read_paths(tool, input)?).unwrap_or_else(|| crate::search_root(input, cwd)))
         }
-        _ if is_write_shaped(tool) => writes(read_paths(tool, input)?),
-        _ => reads(read_paths(tool, input)?),
+        _ if is_write_shaped(tool) => {
+            Some(writes(read_paths(tool, input)?).unwrap_or_else(|| unknown(tool)))
+        }
+        _ => Some(reads(read_paths(tool, input)?).unwrap_or_else(|| unknown(tool))),
     })
+}
+
+fn unknown(tool: &str) -> Action {
+    Action::UnknownTool {
+        host: Host::Cursor.id().to_owned(),
+        tool: tool.to_owned(),
+    }
 }
 
 fn is_write_shaped(tool: &str) -> bool {
@@ -373,8 +386,18 @@ mod tests {
                 writes: vec!["/p/a".into(), "/p/.env".into()]
             })
         );
+        let unknown = Host::Cursor.parse_request(&fixture("preToolUse-unknown"));
+        let (host, tool) = ("cursor".to_owned(), "RunNotebookCell".to_owned());
+        assert_eq!(
+            unknown.unwrap().action,
+            Some(Action::UnknownTool { host, tool })
+        );
+        let fetch = parse("WebFetch", r#"{"url":"https://docs.rs"}"#)
+            .unwrap()
+            .action;
+        let url = "https://docs.rs".to_owned();
+        assert_eq!(fetch, Some(Action::Fetch { url }));
         for (tool, input) in [
-            ("TodoWrite", r#"{"todos":[]}"#),
             ("Task", r#"{"prompt":"read /Users/me/.ssh"}"#),
             ("MCP:read_file", r#"{"path":"/Users/me/.ssh/id_rsa"}"#),
         ] {

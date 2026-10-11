@@ -334,6 +334,10 @@
   threat: T8
   action: { mcp_tool: "mcp__shell__run" }
   expect: { verdict: ask, rules: [default] }
+- id: T8-unknown-host-tool
+  threat: T8
+  action: { unknown_tool: { host: cursor, tool: RunNotebookCell } }
+  expect: { verdict: ask, rules: [default.tool.unknown] }
 
 # T9 kernel self-protection and persistence
 - id: T9-edit-claude-settings
@@ -1258,6 +1262,11 @@
   threat: T2
   session: [{ fs_read: "~/.ssh/id_rsa" }]
   action: { web_search: "b3BlbnNzaC1rZXktdjEAAAAABG5vbmU" }
+  expect: { verdict: ask, rules: [session-taint] }
+- id: T2-taint-read-ssh-key-then-unknown-tool
+  threat: T2
+  session: [{ fs_read: "~/.ssh/id_rsa" }]
+  action: { unknown_tool: { host: cursor, tool: RunNotebookCell } }
   expect: { verdict: ask, rules: [session-taint] }
 - id: T1-taint-cat-aws-credentials-then-mcp-call
   threat: T1

@@ -64,6 +64,15 @@ pub enum Action {
         /// The query as the tool gave it.
         query: String,
     },
+    /// A host tool the adapter cannot classify: it names no path or URL the
+    /// adapter knows to read, so what it touches is unknown. Judged by
+    /// `defaults.tool.unknown`, which the default policy sets to `ask`.
+    UnknownTool {
+        /// The host's id (`cursor`).
+        host: String,
+        /// The tool name as the host sent it.
+        tool: String,
+    },
     /// A patch that edits several files in one call (Codex `apply_patch`):
     /// every path it adds, updates, deletes or moves to is written.
     /// Files changed by one multi-file patch (Codex `apply_patch`).
@@ -111,6 +120,7 @@ impl Action {
             Self::Net { .. } => Kind::Net,
             Self::Fetch { .. } => Kind::Fetch,
             Self::WebSearch { .. } => Kind::WebSearch,
+            Self::UnknownTool { .. } => Kind::UnknownTool,
             Self::McpTool { .. } => Kind::Mcp,
         }
     }
@@ -174,6 +184,13 @@ pub enum AtomicAction {
         /// The query as the tool gave it.
         query: String,
     },
+    /// A host tool the adapter cannot classify; only `defaults` decide it.
+    UnknownTool {
+        /// The host's id.
+        host: String,
+        /// The tool name as the host sent it.
+        tool: String,
+    },
     /// An environment variable read (`$NAME`, `printenv NAME`).
     EnvRead {
         /// Variable name.
@@ -202,6 +219,7 @@ impl AtomicAction {
             Self::Net { .. } => Kind::Net,
             Self::Fetch { .. } => Kind::Fetch,
             Self::WebSearch { .. } => Kind::WebSearch,
+            Self::UnknownTool { .. } => Kind::UnknownTool,
             Self::EnvRead { .. } => Kind::EnvRead,
             Self::EnvSet { .. } => Kind::EnvSet,
             Self::McpTool { .. } => Kind::Mcp,
@@ -226,6 +244,7 @@ impl AtomicAction {
             Self::Net { host } | Self::Fetch { host } => Some(host),
             Self::EnvRead { name } | Self::EnvSet { name } | Self::McpTool { name } => Some(name),
             Self::WebSearch { query } => Some(query),
+            Self::UnknownTool { tool, .. } => Some(tool),
         }
     }
 
@@ -240,6 +259,7 @@ impl AtomicAction {
             Self::Net { host } => format!("net {host}"),
             Self::Fetch { host } => format!("fetch {host}"),
             Self::WebSearch { query } => format!("web search \"{query}\""),
+            Self::UnknownTool { host, tool } => format!("unknown {host} tool {tool}"),
             Self::EnvRead { name } => format!("env read {name}"),
             Self::EnvSet { name } => format!("env set {name}"),
             Self::McpTool { name } => format!("mcp {name}"),

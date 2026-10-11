@@ -29,9 +29,10 @@ pub const CLOUD_METADATA: [&str; 6] = [
 ];
 
 /// The kinds an OS layer can see; every other kind is decide-only.
-const DECIDE_ONLY: [Kind; 5] = [
+const DECIDE_ONLY: [Kind; 6] = [
     Kind::Shell,
     Kind::WebSearch,
+    Kind::UnknownTool,
     Kind::EnvRead,
     Kind::EnvSet,
     Kind::Mcp,

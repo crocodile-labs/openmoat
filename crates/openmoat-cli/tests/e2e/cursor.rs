@@ -213,6 +213,30 @@ fn pre_tool_use_unlisted_search_of_a_secret_is_denied() {
     );
 }
 
+/// A tool that names no path OpenMoat can check asks (`tool.unknown`), which
+/// Cursor's `preToolUse` receives as a deny, instead of passing as ungoverned.
+/// A policy that sets `tool.unknown: allow` lets it run.
+#[test]
+fn pre_tool_use_unknown_tool_without_a_path_asks() {
+    let sb = sandbox();
+    let (code, doc) = guard(&sb, &fixture("preToolUse-unknown.json"));
+    assert_eq!(code, Some(DENY), "{doc}");
+    let message = doc["user_message"].to_string();
+    assert!(message.contains("default.tool.unknown"), "{doc}");
+    assert!(message.contains("RunNotebookCell"), "{doc}");
+
+    std::fs::write(
+        sb.home.join(".moat/policy.yaml"),
+        "version: 1\ndefaults: { '*': ask, tool.unknown: allow }\n",
+    )
+    .unwrap();
+    let accept = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&accept).contains("re-pinned"), "{}", text(&accept));
+    let (code, doc) = guard(&sb, &fixture("preToolUse-unknown.json"));
+    assert_eq!(code, Some(OK), "{doc}");
+    assert_eq!(doc["permission"], "allow", "{doc}");
+}
+
 fn write_payload(sb: &Sandbox, path: &std::path::Path) -> String {
     let project = sb.project();
     serde_json::json!({

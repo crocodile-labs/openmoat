@@ -9,6 +9,7 @@ defaults:
   net: deny          # outbound network: only hosts listed under allow
   fetch: ask         # a host fetch tool (WebFetch) reading an unlisted URL: no request body, so ask (ADR-017)
   web.search: allow  # a host search tool (WebSearch): recorded; asks after a secret read (session taint)
+  tool.unknown: ask  # a host tool OpenMoat cannot classify (an unknown Cursor tool naming no path)
 
 deny:
   - id: secrets-paths
