@@ -726,6 +726,33 @@
 - id: benign-java-version
   action: { shell: "java -version" }
   expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-git
+  action: { shell: "git --version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-git-word
+  action: { shell: "git version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-node
+  action: { shell: "node -v" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-python3
+  action: { shell: "python3 --version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-cargo
+  action: { shell: "cargo --version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-rustc-short
+  action: { shell: "rustc -V" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-go-word
+  action: { shell: "go version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-docker
+  action: { shell: "docker --version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-version-uv
+  action: { shell: "uv --version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
 - id: benign-gofmt-list
   action: { shell: "gofmt -l ." }
   expect: { verdict: allow, rules: [dev-tools, project-fs] }
