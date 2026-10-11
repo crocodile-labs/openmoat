@@ -94,7 +94,7 @@ pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
 /// One line for `status` and `doctor` about the repository policy of the
 /// project around the current directory: its digest and which form applies.
 pub fn summary(home: &Home) -> Result<Option<String>> {
-    let Some(root) = context::eval_context(None, None)?.project else {
+    let Some(root) = context::eval_context(home, None, None)?.project else {
         return Ok(None);
     };
     let Some(found) = find(home, Path::new(&root))? else {

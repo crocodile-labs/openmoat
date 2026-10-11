@@ -31,9 +31,9 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     healthy &= lock(&mut out, &home, &binary)?;
     healthy &= approvals(&mut out, &home)?;
     let recorded = Recorded::load(&home).unwrap_or_default();
-    healthy &= hooks(&mut out, &binary, &recorded)?;
+    healthy &= hooks(&mut out, &home, &binary, &recorded)?;
     if let Ok(policy) = home.load_policy() {
-        healthy &= sandboxes(&mut out, &Plan::new(&policy)?, &home.lock_path(), &recorded)?;
+        healthy &= sandboxes(&mut out, &home, &Plan::new(&home, &policy)?, &recorded)?;
     }
     // Derived from the hook and sandbox lines above, so it leaves `healthy` alone.
     protection_lines(&mut out, &home, &binary)?;
@@ -106,7 +106,7 @@ fn lock(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
             writeln!(out, "lock             ✗ {d} (run `moat doctor`)")?;
         }
     }
-    let installed = integrity::installed_hook_files(binary)?;
+    let installed = integrity::installed_hook_files(home, binary)?;
     let gap = HookPinGap::new(&lock, home, &installed);
     for path in gap.unpinned {
         healthy = false;
@@ -152,10 +152,15 @@ fn approvals(out: &mut impl io::Write, home: &Home) -> Result<bool> {
 
 /// One line per host's hook, then the Continue CLI warning; `false` on any
 /// problem.
-fn hooks(out: &mut impl io::Write, binary: &Path, recorded: &Recorded) -> Result<bool> {
+fn hooks(
+    out: &mut impl io::Write,
+    home: &Home,
+    binary: &Path,
+    recorded: &Recorded,
+) -> Result<bool> {
     let mut healthy = true;
     for host in Host::ALL {
-        let config = HostConfig::for_host(host)?;
+        let config = HostConfig::for_host(home, host)?;
         let line = match config.state(binary) {
             HookState::Installed => "✔ installed".to_owned(),
             HookState::Missing if recorded.skipped(host) && config.host_present() => {
@@ -236,11 +241,11 @@ fn audit(out: &mut impl io::Write, home: &Home) -> Result<bool> {
 /// One line per present host's sandbox (Standard tier); `false` on any problem.
 fn sandboxes(
     out: &mut impl io::Write,
+    home: &Home,
     plan: &Plan,
-    lock_path: &Path,
     recorded: &Recorded,
 ) -> Result<bool> {
-    let lock = Lock::load(lock_path).ok();
+    let lock = Lock::load(&home.lock_path()).ok();
     let mut healthy = true;
     let mut present = false;
     for host in host_sandbox::HOSTS
@@ -248,7 +253,7 @@ fn sandboxes(
         .filter(|h| !recorded.skipped(*h))
     {
         let name = host.display_name();
-        let problems = host_sandbox::problems(host, plan, lock.as_ref());
+        let problems = host_sandbox::problems(home, host, plan, lock.as_ref());
         if let (Ok(Some(_)), Some(note)) = (&problems, host_sandbox::unavailable(host)) {
             writeln!(out, "{name:<16} · {note}")?;
             continue;

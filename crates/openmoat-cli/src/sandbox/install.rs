@@ -45,22 +45,23 @@ fn unavailable_on(host: Host, windows: bool) -> Option<&'static str> {
 }
 
 /// The file `host`'s sandbox settings live in.
-pub fn settings_path(host: Host) -> Result<PathBuf> {
+pub fn settings_path(home: &Home, host: Host) -> Result<PathBuf> {
     match host {
-        Host::Codex => codex_config_path(),
-        Host::Cursor => Ok(HostConfig::for_host(host)?
+        Host::Codex => codex_config_path(home),
+        Host::Cursor => Ok(HostConfig::for_host(home, host)?
             .settings_path
             .with_file_name("sandbox.json")),
-        _ => Ok(HostConfig::for_host(host)?.settings_path),
+        _ => Ok(HostConfig::for_host(home, host)?.settings_path),
     }
 }
 
 /// Merge the plan's settings for `host` into its file, or, where the host's
 /// sandbox is [`unavailable`], remove what an older version wrote (Cursor's
 /// file is left alone: no version wrote it there). Returns whether the file
-/// changed (or would, with `dry_run`).
-pub fn write(host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
-    let path = settings_path(host)?;
+/// changed (or would, with `dry_run`). `home`'s `hosts.json` records the
+/// backup and the Claude Code rules OpenMoat owns.
+pub fn write(home: &Home, host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
+    let path = settings_path(home, host)?;
     let changed;
     let text = if host == Host::Codex {
         let mut doc = read_toml(&path)?;
@@ -75,8 +76,7 @@ pub fn write(host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
             .with_context(|| format!("updating {}", path.display()))?;
         serde_json::to_string_pretty(&root)? + "\n"
     } else {
-        let home = Home::locate()?;
-        let mut recorded = Recorded::load(&home)?;
+        let mut recorded = Recorded::load(home)?;
         let mut owned = recorded.claude_rules.clone();
         let mut root = read_or_empty(&path)?;
         changed = if unavailable(host).is_some() {
@@ -87,7 +87,7 @@ pub fn write(host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
         .with_context(|| format!("updating {}", path.display()))?;
         if !dry_run && owned != recorded.claude_rules {
             recorded.claude_rules = owned;
-            recorded.save(&home)?;
+            recorded.save(home)?;
         }
         serde_json::to_string_pretty(&root)? + "\n"
     };
@@ -97,7 +97,7 @@ pub fn write(host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
     if dry_run {
         return Ok(true);
     }
-    crate::install::back_up(&path, SANDBOX_BACKUP)?;
+    crate::install::back_up(home, &path, SANDBOX_BACKUP)?;
     write_private(&path, text.as_bytes())?;
     Ok(true)
 }
@@ -113,8 +113,8 @@ pub fn report(host: Host, plan: &Plan) -> &Report {
 
 /// Codex config files under this shell's environment that carry OpenMoat's
 /// profile, which the lock pins by their owned part.
-pub fn codex_profile_files() -> Result<Vec<PathBuf>> {
-    let path = codex_config_path()?;
+pub fn codex_profile_files(home: &Home) -> Result<Vec<PathBuf>> {
+    let path = codex_config_path(home)?;
     if !path.is_file() {
         return Ok(Vec::new());
     }
@@ -125,8 +125,8 @@ pub fn codex_profile_files() -> Result<Vec<PathBuf>> {
 
 /// Cursor's `sandbox.json` under this shell's environment when it carries
 /// OpenMoat's keys, which the lock pins whole.
-pub fn cursor_sandbox_files() -> Result<Vec<PathBuf>> {
-    let path = settings_path(Host::Cursor)?;
+pub fn cursor_sandbox_files(home: &Home) -> Result<Vec<PathBuf>> {
+    let path = settings_path(home, Host::Cursor)?;
     if !path.is_file() {
         return Ok(Vec::new());
     }
@@ -143,8 +143,13 @@ pub fn codex_part_digest(path: &Path) -> Result<String> {
 
 /// Problems with `host`'s sandbox settings for `moat doctor` and `moat status`;
 /// `None` when the host is not on this machine.
-pub fn problems(host: Host, plan: &Plan, lock: Option<&Lock>) -> Result<Option<Vec<String>>> {
-    let path = settings_path(host)?;
+pub fn problems(
+    home: &Home,
+    host: Host,
+    plan: &Plan,
+    lock: Option<&Lock>,
+) -> Result<Option<Vec<String>>> {
+    let path = settings_path(home, host)?;
     if !path.parent().is_some_and(Path::is_dir) {
         return Ok(None);
     }
@@ -172,7 +177,7 @@ pub fn problems(host: Host, plan: &Plan, lock: Option<&Lock>) -> Result<Option<V
     } else {
         let root = read_or_empty(&path)?;
         let mut found = claude::weaknesses(&root, plan.claude.block_reads, plan.proxy_port);
-        let owned = Recorded::load(&Home::locate()?)?.claude_rules;
+        let owned = Recorded::load(home)?.claude_rules;
         if !claude::in_sync(&root, &plan.claude, &owned) {
             found.push(out_of_date);
         }

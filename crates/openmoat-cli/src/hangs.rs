@@ -25,12 +25,11 @@ const WRITE_WAIT: Duration = Duration::from_millis(200);
 
 /// Record that `host`'s call was denied at `now_ms` with no decision, waiting
 /// at most [`WRITE_WAIT`] for the line.
-pub fn record(host: Host, now_ms: i64) {
+pub fn record(home: &Home, host: Host, now_ms: i64) {
     let (done, written) = mpsc::channel();
+    let path = home.hangs_path();
     let writer = thread::Builder::new().spawn(move || {
-        if let Ok(home) = Home::locate() {
-            let _ = append(&home.hangs_path(), &format!("{now_ms} {}\n", host.id()));
-        }
+        let _ = append(&path, &format!("{now_ms} {}\n", host.id()));
         let _ = done.send(());
     });
     if writer.is_ok() {

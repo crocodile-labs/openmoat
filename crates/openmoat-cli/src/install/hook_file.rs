@@ -13,7 +13,7 @@ use anyhow::{Context as _, Result, bail};
 use serde_json::{Map, Value, json};
 
 use super::{HOOK_BACKUP, HookFormat, HookSpec, HostConfig};
-use crate::home::write_private;
+use crate::home::{Home, write_private};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Outcome {
@@ -33,7 +33,7 @@ pub enum HookState {
     Unreadable(String),
 }
 
-pub fn install(config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
+pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
     let path = &config.settings_path;
     let mut root = read_or_empty(path)?;
     let mut outcome = Outcome::Unchanged;
@@ -43,7 +43,7 @@ pub fn install(config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outc
     if outcome == Outcome::Unchanged || dry_run {
         return Ok(outcome);
     }
-    super::back_up(path, HOOK_BACKUP)?;
+    super::back_up(home, path, HOOK_BACKUP)?;
     let text = serde_json::to_string_pretty(&root)? + "\n";
     write_private(path, text.as_bytes())?;
     Ok(outcome)
@@ -238,6 +238,15 @@ mod tests {
     use super::*;
     use openmoat_hosts::Host;
 
+    /// [`super::install`] with the state directory next to the hook file.
+    fn install(config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
+        super::install(&state_home(config), config, binary, dry_run)
+    }
+
+    fn state_home(config: &HostConfig) -> Home {
+        Home::at(config.dir().join(".moat"))
+    }
+
     const SPECS: &[HookSpec] = &[
         HookSpec {
             event: "PreToolUse",
@@ -365,6 +374,8 @@ mod tests {
             original,
             "a later edit keeps the copy from before OpenMoat"
         );
+        let recorded = super::super::Recorded::load(&state_home(&cfg)).unwrap();
+        assert_eq!(recorded.backups, std::slice::from_ref(&backup));
 
         fs::remove_file(&backup).unwrap();
         let edited = fs::read_to_string(&cfg.settings_path).unwrap();

@@ -42,12 +42,13 @@ enum Area {
 /// then how many places the translation loses or widens (each one with `verbose`).
 fn sandboxes(
     report: &mut Report,
+    home: &Home,
     policy: &Policy,
     lock: Option<&Lock>,
     recorded: &Recorded,
     verbose: bool,
 ) {
-    let plan = match Plan::new(policy) {
+    let plan = match Plan::new(home, policy) {
         Ok(plan) => plan,
         Err(e) => {
             report.line(Area::Sandbox, false, format!("sandbox          {e:#}"));
@@ -60,7 +61,7 @@ fn sandboxes(
         .filter(|h| !recorded.skipped(*h))
     {
         let name = host.display_name();
-        let problems = host_sandbox::problems(host, &plan, lock);
+        let problems = host_sandbox::problems(home, host, &plan, lock);
         if let (Ok(Some(_)), Some(note)) = (&problems, host_sandbox::unavailable(host)) {
             report.note(&format!("{name:<16} {note}"));
             continue;
@@ -179,10 +180,17 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     }
     if let Some(policy) = &policy {
         let recorded = Recorded::load(&home).unwrap_or_default();
-        sandboxes(&mut report, policy, lock.as_ref(), &recorded, args.verbose);
+        sandboxes(
+            &mut report,
+            &home,
+            policy,
+            lock.as_ref(),
+            &recorded,
+            args.verbose,
+        );
     }
     service(&mut report, &home);
-    let codex = HostConfig::for_host(Host::Codex)?.state(&binary) == HookState::Installed;
+    let codex = HostConfig::for_host(&home, Host::Codex)?.state(&binary) == HookState::Installed;
     let tiocsti = warnings::tiocsti(codex, warnings::legacy_tiocsti().as_deref());
     let hangs = warnings::hangs(&home, crate::time::now_ms());
     for warning in [tiocsti, hangs].into_iter().flatten() {
@@ -385,7 +393,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
     let recorded = Recorded::load(home)?;
     let mut hook_files = Vec::new();
     for host in Host::ALL {
-        let config = HostConfig::for_host(host)?;
+        let config = HostConfig::for_host(home, host)?;
         let name = host.display_name();
         // Every command follows the record; a variable naming another directory
         // is reported rather than silently ignored or followed.

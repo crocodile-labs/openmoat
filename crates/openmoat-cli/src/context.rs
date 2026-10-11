@@ -45,7 +45,11 @@ pub fn read_policy(path: &Path) -> Result<String> {
 /// The project root defaults to the git root above `cwd` (`project::root_of`);
 /// an explicit `project` that could never be trusted is an error, not a
 /// silent change of meaning.
-pub fn eval_context(cwd: Option<&Path>, project: Option<&Path>) -> Result<EvalContext> {
+pub fn eval_context(
+    state: &home::Home,
+    cwd: Option<&Path>,
+    project: Option<&Path>,
+) -> Result<EvalContext> {
     let cwd = match cwd {
         Some(dir) => absolute(dir)?,
         None => std::env::current_dir().context("determining the current directory")?,
@@ -70,7 +74,7 @@ pub fn eval_context(cwd: Option<&Path>, project: Option<&Path>) -> Result<EvalCo
     Ok(EvalContext {
         real_home: real_root(&home),
         real_project: project.as_deref().and_then(real_root),
-        moved_dirs: moved_dirs()?,
+        moved_dirs: moved_dirs(state)?,
         home,
         project,
         cwd: path_string(&cwd),
@@ -91,8 +95,8 @@ pub fn home_spellings() -> Result<(String, Option<String>)> {
 /// (`hosts.json`), both when they differ, since an agent may run with either.
 /// Each as written and with its symlinks resolved, so rules naming the default
 /// directory (`kernel-self`) protect the moved ones too.
-pub fn moved_dirs() -> Result<Vec<(String, String)>> {
-    let recorded = crate::install::Recorded::load(&home::Home::locate()?)?;
+pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
+    let recorded = crate::install::Recorded::load(state)?;
     let mut out = Vec::new();
     let mut dirs = vec![(home::ENV, home::DIR_NAME, None)];
     for host in Host::ALL {

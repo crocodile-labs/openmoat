@@ -29,9 +29,10 @@ struct Shown<'a> {
 }
 
 pub fn show(args: &SandboxShowArgs) -> Result<Code> {
-    let policy = Home::locate()?.load_policy()?;
-    let plan = Plan::new(&policy)?;
-    let ctx = crate::context::eval_context(None, None)?;
+    let home = Home::locate()?;
+    let policy = home.load_policy()?;
+    let plan = Plan::new(&home, &policy)?;
+    let ctx = crate::context::eval_context(&home, None, None)?;
     let seatbelt = seatbelt_profile(&policy, &ctx, Grants::default())?;
     let landlock = landlock_rules(&policy, &ctx, Grants::default())?;
     // `moat run` in this directory, before it adds the agent, `--write` paths
@@ -48,19 +49,19 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     let hosts = [
         Shown {
             host: Host::ClaudeCode,
-            path: HostConfig::for_host(Host::ClaudeCode)?.settings_path,
+            path: HostConfig::for_host(&home, Host::ClaudeCode)?.settings_path,
             text: serde_json::to_string_pretty(&claude_doc)?,
             report: &plan.claude.report,
         },
         Shown {
             host: Host::Codex,
-            path: codex_config_path()?,
+            path: codex_config_path(&home)?,
             text: codex_doc.to_string(),
             report: &plan.codex.report,
         },
         Shown {
             host: Host::Cursor,
-            path: install::settings_path(Host::Cursor)?,
+            path: install::settings_path(&home, Host::Cursor)?,
             text: serde_json::to_string_pretty(&plan.cursor.settings)?,
             report: &plan.cursor.report,
         },
@@ -130,17 +131,17 @@ pub fn sync() -> Result<Code> {
     }
     let home = Home::locate()?;
     integrity::refuse_drift(&home, "sync")?;
-    let plan = Plan::new(&home.load_policy()?)?;
+    let plan = Plan::new(&home, &home.load_policy()?)?;
     let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
     let (mut files, mut codex_configs) = (Vec::new(), Vec::new());
     for host in install::HOSTS {
-        let path = install::settings_path(host)?;
+        let path = install::settings_path(&home, host)?;
         if !path.parent().is_some_and(std::path::Path::is_dir) {
             writeln!(out, "· {:<16} host not found", host.display_name())?;
             continue;
         }
-        let changed = install::write(host, &plan, false)?;
+        let changed = install::write(&home, host, &plan, false)?;
         if let Some(note) = install::unavailable(host) {
             if changed {
                 let removed = install::OLD_SANDBOX_REMOVED;

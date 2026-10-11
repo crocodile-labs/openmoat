@@ -49,17 +49,16 @@ pub fn check(args: &CheckArgs) -> Result<Code> {
     {
         return report(&decision, args.format);
     }
-    let ctx = context::eval_context(args.cwd.as_deref(), args.project.as_deref())?;
+    let home = Home::locate()?;
+    let ctx = context::eval_context(&home, args.cwd.as_deref(), args.project.as_deref())?;
     // The installed policy decides with the project's repository policy, as in `guard`.
     let policy = match &args.policy {
         Some(path) => context::load_policy(path)?,
-        None => crate::repo::effective_policy(&Home::locate()?, &ctx)?,
+        None => crate::repo::effective_policy(&home, &ctx)?,
     };
     // Decide the way `guard` would: symlinks resolved on this machine, and
     // programs resolved through the installation snapshot when one exists.
-    let snapshot = Home::locate()
-        .ok()
-        .and_then(|home| Snapshot::load(&home.environment_path()).ok());
+    let snapshot = Snapshot::load(&home.environment_path()).ok();
     let programs: &dyn ProgramResolver = match &snapshot {
         Some(snapshot) => snapshot,
         None => &NoResolver,
@@ -74,7 +73,11 @@ pub fn check(args: &CheckArgs) -> Result<Code> {
 
 pub fn compile(args: &CompileArgs) -> Result<Code> {
     let (policy, _) = load(args.policy.clone())?;
-    let ctx = context::eval_context(args.cwd.as_deref(), args.project.as_deref())?;
+    let ctx = context::eval_context(
+        &Home::locate()?,
+        args.cwd.as_deref(),
+        args.project.as_deref(),
+    )?;
     let ir = ir::lower(&policy, &ctx)?;
     match args.format {
         Format::Json => render::json(&ir)?,

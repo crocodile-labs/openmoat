@@ -53,7 +53,9 @@ fn deny_when_over_budget(host: Host) {
             "no decision within {GUARD_BUDGET_S} s"
         )));
         if let Some(code) = answer_once(host, &HookEvent::default(), &decision) {
-            hangs::record(host, time::now_ms());
+            if let Ok(home) = Home::locate() {
+                hangs::record(&home, host, time::now_ms());
+            }
             std::process::exit(code as i32);
         }
     });
@@ -165,7 +167,7 @@ fn evaluate(
         .map(std::path::PathBuf::from)
         .map_or_else(std::env::current_dir, Ok)
         .context("resolving working directory")?;
-    let ctx = context::eval_context(Some(&cwd), None)?;
+    let ctx = context::eval_context(&home, Some(&cwd), None)?;
     let policy = crate::repo::effective_policy(&home, &ctx)?;
     *known = secrets::known(&policy.secrets, &ctx.home)?;
     let snapshot = Snapshot::load(&home.environment_path())?;
