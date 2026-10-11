@@ -81,10 +81,8 @@ fn a_0_3_0_policy_gains_the_new_defaults_and_undo_restores_it() {
     let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
     let shown = text(&out);
     assert_eq!(out.status.code(), Some(OK), "{shown}");
-    assert!(
-        shown.contains("Policy update available: 2 changes"),
-        "{shown}"
-    );
+    // The count grows with every later default; the two 0.4.0 additions must be among them.
+    assert!(shown.contains("Policy update available: "), "{shown}");
     assert!(shown.contains("+  web.search: allow"), "{shown}");
     assert!(shown.contains(r#""!${project}/**/.git/**""#), "{shown}");
     assert!(shown.contains("OpenMoat 0.3.0 default"), "{shown}");
@@ -143,10 +141,7 @@ fn the_owners_changes_are_kept_and_a_conflicting_change_is_listed() {
 
     let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
     let shown = text(&out);
-    assert!(
-        shown.contains("Policy update available: 1 change "),
-        "{shown}"
-    );
+    assert!(shown.contains("Policy update available: "), "{shown}");
     assert!(
         shown.contains("Not applied: you changed the policy at line"),
         "{shown}"
@@ -186,17 +181,17 @@ fn a_policy_not_made_from_the_default_is_left_alone() {
 #[test]
 fn init_doctor_and_the_home_screen_offer_an_available_update() {
     let sb = older_home(V0_3_0);
-    let update = "2 changes from the OpenMoat";
+    let update = "changes from the OpenMoat";
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
-        text(&out).contains(&format!("! policy update    {update}")),
+        text(&out).contains("! policy update    ") && text(&out).contains(update),
         "{}",
         text(&out)
     );
     let out = sb.moat(&["init", "--yes"]);
     assert!(
-        text(&out).contains(&format!("! policy update    {update}")),
+        text(&out).contains("! policy update    ") && text(&out).contains(update),
         "{}",
         text(&out)
     );
@@ -204,7 +199,7 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
     let out = sb.moat(&[]);
     let shown = text(&out);
     assert!(
-        shown.contains(&format!("Policy update available: {update}")),
+        shown.contains("Policy update available: ") && shown.contains(update),
         "{shown}"
     );
     assert!(shown.contains("`moat policy upgrade`") && !shown.contains("Nothing needs you"));
@@ -213,7 +208,11 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
     let out = output(sb.command().env("MOAT_ASSUME_TTY", "1"), Some("y\ny\n"));
     let shown = text(&out);
     assert_eq!(out.status.code(), Some(OK), "{shown}");
-    assert!(shown.contains("See the changes? [y/N]") && shown.contains("Apply 2 changes? [y/N]"));
+    assert!(
+        shown.contains("See the changes? [y/N]")
+            && shown.contains("Apply ")
+            && shown.contains(" changes? [y/N]")
+    );
     assert_eq!(policy(&sb), default_lf());
     assert!(text(&sb.moat(&[])).contains("Nothing needs you."));
 }
