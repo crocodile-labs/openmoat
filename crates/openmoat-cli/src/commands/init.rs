@@ -117,6 +117,12 @@ fn state(home: &Home, dry_run: bool, out: &mut Deferred) -> Result<()> {
         )?;
     } else {
         writeln!(out, "✔ policy           {} (kept)", policy_path.display())?;
+        if let Some(update) = crate::upgrade::available(home) {
+            writeln!(
+                out,
+                "! policy update    {update}: `moat policy upgrade` shows them and asks"
+            )?;
+        }
     }
 
     if !dry_run {

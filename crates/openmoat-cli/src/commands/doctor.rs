@@ -162,6 +162,11 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         format!("state directory  {}", home.root().display()),
     );
     let policy = policies(&mut report, &home);
+    if let Some(update) = crate::upgrade::available(&home) {
+        report.warn(&format!(
+            "policy update    {update}: `moat policy upgrade` shows them and asks"
+        ));
+    }
     let lock = load_lock(&mut report, &home);
     let drift = lock
         .as_ref()

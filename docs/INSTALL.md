@@ -47,7 +47,8 @@ cargo install openmoat --locked --force                       # crates.io
 ```
 
 With the installers, run the installer of the new release. Hooks keep working after an
-upgrade in the same place; `moat doctor` confirms it.
+upgrade in the same place; `moat doctor` confirms it. Your policy is kept as it is;
+`moat policy upgrade` shows what the new default policy adds and asks before applying it.
 
 ## Set up with `moat init`
 

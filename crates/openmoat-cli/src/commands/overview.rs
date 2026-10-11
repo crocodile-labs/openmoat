@@ -13,7 +13,7 @@ use openmoat_core::{Action, Verdict};
 use openmoat_hosts::Host;
 
 use crate::approvals::{self, Grants, Overlay};
-use crate::cli::DoctorArgs;
+use crate::cli::{DoctorArgs, UpgradeArgs};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::integrity::Lock;
@@ -60,8 +60,17 @@ pub fn run() -> Result<Code> {
         }
     }
 
+    let update = crate::upgrade::available(&home);
+    if let Some(update) = &update
+        && let Some(code) = offer_upgrade(update, person)?
+    {
+        return Ok(code);
+    }
+
     let Some((event, host, action)) = pending_ask(&home, &store, today, now)? else {
-        println!("Nothing needs you.");
+        if update.is_none() {
+            println!("Nothing needs you.");
+        }
         println!("`moat show` lists recent decisions; `moat --help` lists every command.");
         return Ok(Code::Ok);
     };
@@ -88,6 +97,26 @@ pub fn run() -> Result<Code> {
     };
     // The exact ask shown, not `--last`: a newer ask may have arrived meanwhile.
     super::allow::run_for(&event.host, &event.session_id, &action, always)
+}
+
+/// Say when the default has changes the policy can take; at a terminal, offer
+/// `moat policy upgrade`, which shows the diff and asks again before writing.
+/// `Some` when the person went into it.
+fn offer_upgrade(update: &str, person: bool) -> Result<Option<Code>> {
+    println!("Policy update available: {update}.");
+    if !person {
+        println!("A person can review and apply it at a terminal: `moat policy upgrade`.");
+        return Ok(None);
+    }
+    if !matches!(answer("See the changes? [y/N] ")?.as_str(), "y" | "yes") {
+        return Ok(None);
+    }
+    super::policy::upgrade(&UpgradeArgs {
+        dry_run: false,
+        yes: false,
+        undo: false,
+    })
+    .map(Some)
 }
 
 /// Agents whose hook is installed, with their protection level, and today's decisions.

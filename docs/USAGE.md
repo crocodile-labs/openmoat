@@ -163,6 +163,21 @@ moat: deny [kernel-integrity] — /Users/you/.moat/policy.yaml was modified;
 for. The policy language, the full default policy and recipes are in
 [POLICY.md](POLICY.md).
 
+### After upgrading OpenMoat
+
+`moat init` keeps your policy, so a rule the new default gained is offered, not forced.
+`moat`, `moat init` and `moat doctor` say "policy update available: N changes"; at a
+terminal `moat` offers to show them. The same, explicitly:
+
+```bash
+moat policy upgrade --dry-run   # what the new default adds, as a diff; changes nothing
+moat policy upgrade             # shows the diff, asks, keeps a backup and re-pins
+moat policy upgrade --undo      # put the previous policy back
+```
+
+Lines you changed are never touched; a change that would overlap them is listed for you to
+make with `moat edit` if you want it.
+
 ## Share rules with your team
 
 Commit `.moat/policy.yaml` at the root of a repository. Its `deny` and `ask` rules
@@ -184,7 +199,7 @@ again. Repository rules apply in the hook, not in the host sandboxes
 
 | Command | Use it to |
 |---|---|
-| `moat` | see which agents are protected and today's decisions; answer drift or the last ask (terminal only) |
+| `moat` | see which agents are protected and today's decisions; answer drift, a policy update or the last ask (terminal only) |
 | `moat init [--hosts …] [--yes] [--dry-run]` | install policy, lock and audit log; asks before hooking each agent found (`--hosts`, `--yes` skip the questions) |
 | `moat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `moat status [--format json]` · `moat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists where each sandbox is stricter or wider than the policy) |
@@ -198,6 +213,7 @@ again. Repository rules apply in the hook, not in the host sandboxes
 | `moat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
 | `moat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes |
 | `moat policy lint` · `moat policy check "<cmd>"` · `moat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
+| `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `moat sandbox show` · `moat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them |
 | `moat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-moat-bench)) |
 | `moat run [--isolate] [--write PATH]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp ([SANDBOX.md](SANDBOX.md)) |

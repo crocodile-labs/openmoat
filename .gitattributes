@@ -1,2 +1,4 @@
 # Golden files are compared byte for byte; keep them LF on every OS.
 tests/fixtures/sandbox/* text eol=lf
+# The default a pre-upgrade policy is compared with; pinned by a checksum test.
+crates/openmoat-cli/src/upgrade/*.yaml text eol=lf

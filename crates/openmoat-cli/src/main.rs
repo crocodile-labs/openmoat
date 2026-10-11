@@ -25,6 +25,7 @@ mod taint;
 mod terminal;
 mod time;
 mod trust;
+mod upgrade;
 
 use std::process::ExitCode;
 
