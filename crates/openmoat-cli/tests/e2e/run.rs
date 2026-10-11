@@ -312,6 +312,44 @@ print("io_uring=" + str(ctypes.get_errno()))
     }
 
     #[test]
+    fn git_uses_a_planted_bare_repository_only_when_named() {
+        let (sb, project) = installed_with_secret();
+        let bare = Command::new("git")
+            .args(["init", "-q", "--bare", "evil"])
+            .current_dir(&project)
+            .status();
+        assert!(bare.is_ok_and(|s| s.success()));
+        let tmp = sb.home.with_file_name("tmp");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let out = output(
+            sb.command()
+                .current_dir(&project)
+                .env("TMPDIR", &tmp)
+                .env("GIT_CONFIG_COUNT", "1")
+                .env("GIT_CONFIG_KEY_0", "user.name")
+                .env("GIT_CONFIG_VALUE_0", "kept")
+                .args(["run", "--", "/bin/sh", "-c"])
+                .arg(
+                    "git config --get safe.bareRepository; git config --get user.name
+                     cd evil && git rev-parse --git-dir > /dev/null; echo \"bare=$?\"
+                     git --git-dir=. rev-parse --git-dir > /dev/null; echo \"named=$?\"",
+                ),
+            None,
+        );
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        assert!(stdout(&out).starts_with("explicit\nkept\n"), "{shown}");
+        assert!(stdout(&out).contains("named=0"), "{shown}");
+        // CI's git knows the key (2.38 or later); macOS 12's 2.37 ignores it.
+        if std::env::var_os("CI").is_some() {
+            assert!(stdout(&out).contains("bare=128"), "{shown}");
+            assert!(shown.contains("bare repository"), "{shown}");
+        }
+    }
+
+    #[test]
     fn a_failing_agent_exits_1() {
         let (sb, project) = installed_with_secret();
         let out = run_sh(&sb, &project, "exit 2");

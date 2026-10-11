@@ -4,13 +4,17 @@
 use std::path::Path;
 
 use anyhow::{Result, bail};
-use toml_edit::{DocumentMut, Item, Table, Value, value};
+use toml_edit::{DocumentMut, Item, Table, TableLike, Value, value};
 
 use super::{Generated, PROFILE};
+use crate::sandbox::git_env::{self, Change};
 
-/// Set `default_permissions`, replace `[permissions.moat]` and turn on the
-/// network proxy that enforces its domain rules. Returns whether anything
-/// changed.
+const SHELL_ENV: &str = "shell_environment_policy";
+
+/// Set `default_permissions`, replace `[permissions.moat]`, turn on the
+/// network proxy that enforces its domain rules and add git's
+/// `safe.bareRepository=explicit` to the commands' environment. Returns
+/// whether anything changed.
 pub fn apply(doc: &mut DocumentMut, generated: &Generated) -> Result<bool> {
     let before = doc.to_string();
     doc.insert("default_permissions", value(PROFILE));
@@ -26,11 +30,17 @@ pub fn apply(doc: &mut DocumentMut, generated: &Generated) -> Result<bool> {
             features.insert("network_proxy", value(true));
         }
     }
+    let set = env_set(doc)?;
+    let added = git_env::add(&lookup(set))?;
+    for (var, val) in added {
+        set.insert(&var, value(val));
+    }
     Ok(doc.to_string() != before)
 }
 
 /// The inverse of [`apply`]: remove `default_permissions` when it names the moat
-/// profile, `[permissions.moat]` and a plain `features.network_proxy = true`, then
+/// profile, `[permissions.moat]`, a plain `features.network_proxy = true` and the
+/// `safe.bareRepository` entry, then
 /// the tables that leaves empty. A `[features.network_proxy]` table has the
 /// user's own settings and stays. Returns whether anything was removed.
 pub fn remove(doc: &mut DocumentMut) -> bool {
@@ -51,7 +61,52 @@ pub fn remove(doc: &mut DocumentMut) -> bool {
             doc.remove(table);
         }
     }
+    remove_git_env(doc);
     doc.to_string() != before
+}
+
+/// `shell_environment_policy.set`, the variables Codex sets for every command
+/// it starts, sandboxed or not, after its exclusions. A value there replaces
+/// the same variable Codex inherits, so entries from the shell are not kept.
+fn env_set(doc: &mut DocumentMut) -> Result<&mut dyn TableLike> {
+    let policy = table_at(doc.as_table_mut(), SHELL_ENV)?;
+    let set = policy.entry("set").or_insert_with(|| {
+        let mut table = Table::new();
+        table.set_implicit(true);
+        Item::Table(table)
+    });
+    match set.as_table_like_mut() {
+        Some(set) => Ok(set),
+        None => bail!("`{SHELL_ENV}.set` in the Codex config is not a table"),
+    }
+}
+
+fn lookup(set: &dyn TableLike) -> impl Fn(&str) -> Option<String> + '_ {
+    |var| set.get(var).and_then(Item::as_str).map(str::to_owned)
+}
+
+/// Drop the `safe.bareRepository` entry, then `set` and the policy table when
+/// that empties them.
+fn remove_git_env(doc: &mut DocumentMut) {
+    let Some(policy) = doc.get_mut(SHELL_ENV).and_then(Item::as_table_like_mut) else {
+        return;
+    };
+    let Some(set) = policy.get_mut("set").and_then(Item::as_table_like_mut) else {
+        return;
+    };
+    let changes = git_env::remove(&lookup(set));
+    for change in changes {
+        match change {
+            Change::Set(var, val) => set.insert(&var, value(val)),
+            Change::Unset(var) => set.remove(&var),
+        };
+    }
+    if set.is_empty() {
+        policy.remove("set");
+    }
+    if policy.is_empty() {
+        doc.remove(SHELL_ENV);
+    }
 }
 
 /// Deny commands the Codex home (`$CODEX_HOME`: this config, `auth.json`,
@@ -115,8 +170,22 @@ fn nearest_listed_parent<'a>(filesystem: &'a Table, path: &str) -> Option<&'a st
 pub fn owned_part(doc: &DocumentMut) -> String {
     let permissions = doc.get("permissions").and_then(|p| p.get(PROFILE));
     let proxy = doc.get("features").and_then(|f| f.get("network_proxy"));
+    // Only when present, so a lock pinned before these entries existed still matches.
+    let set = doc.get(SHELL_ENV).and_then(|p| p.get("set"));
+    let git: Vec<(&str, String)> = set
+        .and_then(Item::as_table_like)
+        .into_iter()
+        .flat_map(|t| t.iter())
+        .filter(|(k, _)| k.starts_with("GIT_CONFIG_"))
+        .map(|(k, v)| (k, canon(Some(v))))
+        .collect();
+    let git = if git.is_empty() {
+        String::new()
+    } else {
+        format!("{SHELL_ENV}.set={}\n", canon_entries(git.into_iter()))
+    };
     format!(
-        "default_permissions={}\npermissions.{PROFILE}={}\nfeatures.network_proxy={}\n",
+        "default_permissions={}\npermissions.{PROFILE}={}\nfeatures.network_proxy={}\n{git}",
         canon(doc.get("default_permissions")),
         canon(permissions),
         canon(proxy)

@@ -7,13 +7,15 @@ use anyhow::{Result, bail};
 use serde_json::{Map, Value, json};
 
 use super::deny_list::{deny_rules_in_sync, is_owned_rule, write_deny_rules};
+use super::git_env;
 use super::owned::{OWNED, strip_stale};
 use super::{BLOCK_READS, Generated};
 
 /// Merge `generated` into the settings document `root`, keeping every key
 /// OpenMoat does not own. `owned` holds the `permissions.deny` rules an earlier
 /// apply added (`hosts.json`): they are replaced, and on return `owned` holds
-/// the rules this one added. Returns whether anything changed.
+/// the rules this one added. `env` also gets git's `safe.bareRepository=explicit`.
+/// Returns whether anything changed.
 pub fn apply(root: &mut Value, generated: &Generated, owned: &mut Vec<String>) -> Result<bool> {
     let Value::Object(top) = root else {
         bail!("the settings file is not a JSON object");
@@ -38,6 +40,7 @@ pub fn apply(root: &mut Value, generated: &Generated, owned: &mut Vec<String>) -
         object_at(top, "permissions")?.insert(BLOCK_READS.into(), json!(true));
     }
     write_deny_rules(top, generated, owned)?;
+    git_env::apply(top)?;
     Ok(*top != before)
 }
 
@@ -102,6 +105,7 @@ pub fn remove(root: &mut Value, owned: &[String]) -> bool {
         removed |= permissions.remove(BLOCK_READS).is_some();
         removed |= strip_deny_rules(permissions, owned);
     }
+    removed |= git_env::remove(top);
     if removed {
         for key in ["sandbox", "permissions"] {
             if top
@@ -160,6 +164,7 @@ pub fn in_sync(root: &Value, generated: &Generated, ours: &[String]) -> bool {
     owned
         && (!generated.block_reads || block_reads_on(root))
         && deny_rules_in_sync(root, generated, ours)
+        && git_env::in_sync(root)
 }
 
 fn block_reads_on(root: &Value) -> bool {

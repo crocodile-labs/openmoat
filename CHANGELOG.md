@@ -16,6 +16,7 @@ view at the end of the file.
 - Claude Code's file tools keep refusing secrets and OpenMoat's own files when the hook is missing or killed: `moat init` writes matching `permissions.deny` rules on every OS, Windows included ([#459](https://github.com/crocodile-labs/openmoat/pull/459)).
 - Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
 - Claude Code and Cursor `WebSearch` are checked and recorded as `web.search`: allowed in a clean session, asked after a secret read, and they mark the session untrusted; run `moat init` to update an installed hook ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
+- git uses a bare repository a command planted (a directory with `HEAD`, `objects/` and `refs/`) only when named: `moat run` and, after `moat sandbox sync`, Claude Code's and Codex's commands get `safe.bareRepository=explicit` ([#464](https://github.com/crocodile-labs/openmoat/pull/464)).
 - `git --git-dir=… <subcommand>` asks instead of riding on `dev-shell`, since git runs hooks and config programs from the directory it names ([#454](https://github.com/crocodile-labs/openmoat/pull/454)).
 
 ### Fixed

@@ -43,6 +43,7 @@ use crate::environment::find_in;
 use crate::exit::Code;
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
+use crate::sandbox::git_env;
 
 /// What a proxy-aware program reads to find its proxy.
 const PROXY_VARS: [&str; 6] = [
@@ -66,6 +67,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let (name, rest) = args.command.split_first().context("no agent to run")?;
     // The sandbox checks the file it starts, not a link to it.
     let program = resolve(name)?;
+    // A bare repository a command plants (no `.git` name) is used only when named.
+    let git = git_env::add(&|var| std::env::var(var).ok())?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .context("listening on a loopback port for the proxy")?;
     let port = listener.local_addr()?.port();
@@ -98,6 +101,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .command()
         .env_remove("NO_PROXY")
         .env_remove("no_proxy");
+    agent.command().envs(git);
     // Ctrl-C at the terminal reaches the agent and OpenMoat alike. The agent decides
     // what it means; OpenMoat keeps running, or the proxy would die under the agent.
     signal_hook::flag::register(
