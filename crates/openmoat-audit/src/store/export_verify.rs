@@ -23,6 +23,21 @@ pub struct ExportBreak {
     pub kind: BreakKind,
 }
 
+/// Whether the export reaches a head hash recorded earlier (the anchor).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnchorCheck {
+    /// No anchor was given: the chain can be intact while its newest events
+    /// were dropped, and nothing in the file shows it.
+    #[default]
+    NotAnchored,
+    /// A verified event carries the anchor.
+    Found,
+    /// No verified event carries the anchor: events up to it were rewritten or
+    /// dropped, or the export covers another log or window.
+    Missing,
+}
+
 /// The outcome of [`verify_export`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportReport {
@@ -39,18 +54,20 @@ pub struct ExportReport {
     /// Hash of the last verified event; record it elsewhere and pass it as the
     /// anchor when checking a later export.
     pub head: Option<String>,
-    /// A verified event has the anchor hash the caller passed.
-    pub anchor_found: bool,
+    /// Whether a verified event has the anchor hash the caller passed.
+    pub anchor: AnchorCheck,
     /// The first broken line, if any. Lines after it are not read.
     pub broken: Option<ExportBreak>,
 }
 
 /// Verify the text of an export, oldest line first, and stop at the first broken
 /// line. Blank lines are skipped. `anchor` is a head hash recorded earlier;
-/// [`ExportReport::anchor_found`] says whether a verified event carries it.
+/// [`ExportReport::anchor`] says whether a verified event carries it, and is
+/// [`AnchorCheck::NotAnchored`] without one.
 #[must_use]
 pub fn verify_export(text: &str, anchor: Option<&str>) -> ExportReport {
     let mut report = ExportReport::default();
+    let mut anchor_found = false;
     let mut previous: Option<ExportedEvent> = None;
     for (index, content) in text.lines().enumerate() {
         if content.trim().is_empty() {
@@ -73,9 +90,14 @@ pub fn verify_export(text: &str, anchor: Option<&str>) -> ExportReport {
             });
             break;
         }
-        report.anchor_found |= anchor == Some(event.hash.as_str());
+        anchor_found |= anchor == Some(event.hash.as_str());
         previous = Some(event);
     }
+    report.anchor = match anchor {
+        None => AnchorCheck::NotAnchored,
+        Some(_) if anchor_found => AnchorCheck::Found,
+        Some(_) => AnchorCheck::Missing,
+    };
     report
 }
 

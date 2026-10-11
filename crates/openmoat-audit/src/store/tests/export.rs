@@ -156,9 +156,19 @@ fn an_untouched_export_verifies_and_reports_its_head() {
     assert!(report.from_genesis);
     assert_eq!(report.gaps, 0);
     assert_eq!(report.head.as_deref(), Some(head.as_str()));
-    assert!(report.anchor_found);
+    assert_eq!(report.anchor, AnchorCheck::Found);
     let crlf = text.replace('\n', "\r\n") + "\n";
     assert_eq!(verify_export(&crlf, None).events, 3, "CRLF and blank lines");
+}
+
+#[test]
+fn verifying_without_an_anchor_says_the_export_is_not_anchored() {
+    let text = export_text(&seeded(), &ExportFilter::default());
+    let report = verify_export(&text, None);
+    assert_eq!(report.broken, None);
+    assert_eq!(report.anchor, AnchorCheck::NotAnchored);
+    let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(json["anchor"], "not_anchored");
 }
 
 #[test]
@@ -215,7 +225,11 @@ fn filtered_and_truncated_exports_verify_with_gaps_and_a_different_head() {
         report.broken, None,
         "dropping the newest events leaves a valid file"
     );
-    assert!(!report.anchor_found, "but the anchored head is missing");
+    assert_eq!(
+        report.anchor,
+        AnchorCheck::Missing,
+        "but the anchored head is missing"
+    );
 
     let later = ExportFilter {
         since_ms: 2_000,

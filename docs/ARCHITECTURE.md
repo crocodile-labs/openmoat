@@ -388,6 +388,8 @@ ids is a gap, which is counted and not failed: a filtered export has gaps, and s
 does deleting events. The first failing line is named and the command exits 64. The
 head is the last line's `hash`. `moat doctor` prints the database head. With
 `--anchor <hash>`, verify also fails unless a verified line carries that hash.
+Without one, the result says the export is not anchored (`"anchor": "not_anchored"`
+in JSON), and `--require-anchor` turns that into exit 64.
 
 **Team report** (`moat audit report <file>…`, `crates/openmoat-cli/src/commands/team.rs`).
 It verifies every file first and refuses (exit 64) if one fails. Events with the

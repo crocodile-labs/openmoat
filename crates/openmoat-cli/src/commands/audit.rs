@@ -3,7 +3,7 @@
 use std::io::{self, Write as _};
 
 use anyhow::{Context as _, Result};
-use openmoat_audit::{ExportFilter, ExportReport};
+use openmoat_audit::{AnchorCheck, ExportFilter, ExportReport};
 use openmoat_hosts::Host;
 
 use crate::cli::{ExportArgs, Format, VerifyArgs};
@@ -24,7 +24,8 @@ pub fn export(args: &ExportArgs) -> Result<Code> {
     Ok(Code::Ok)
 }
 
-/// Exit 0 when every line verifies (and the anchor, if given, is among them), else 64.
+/// Exit 0 when every line verifies and the anchor, if given, is among them, else 64.
+/// `--require-anchor` also fails a verify without an anchor.
 pub fn verify(args: &VerifyArgs) -> Result<Code> {
     let text = std::fs::read_to_string(&args.file)
         .with_context(|| format!("reading {}", args.file.display()))?;
@@ -32,9 +33,13 @@ pub fn verify(args: &VerifyArgs) -> Result<Code> {
     let report = openmoat_audit::verify_export(&text, anchor);
     match args.format {
         Format::Json => render::json(&report)?,
-        Format::Text => verify_text(&report, anchor)?,
+        Format::Text => verify_text(&report, args.require_anchor)?,
     }
-    let anchored = anchor.is_none() || report.anchor_found;
+    let anchored = match report.anchor {
+        AnchorCheck::Found => true,
+        AnchorCheck::NotAnchored => !args.require_anchor,
+        AnchorCheck::Missing => false,
+    };
     Ok(if report.broken.is_none() && anchored {
         Code::Ok
     } else {
@@ -42,7 +47,7 @@ pub fn verify(args: &VerifyArgs) -> Result<Code> {
     })
 }
 
-fn verify_text(report: &ExportReport, anchor: Option<&str>) -> Result<()> {
+fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {
     let mut out = io::stdout().lock();
     if let Some(broken) = &report.broken {
         let event = broken
@@ -67,9 +72,14 @@ fn verify_text(report: &ExportReport, anchor: Option<&str>) -> Result<()> {
     } else {
         format!("from event {first}, not the start of the log")
     };
+    let not_anchored = if report.anchor == AnchorCheck::NotAnchored {
+        ", not anchored"
+    } else {
+        ""
+    };
     writeln!(
         out,
-        "✔ {} events (ids {first}–{last}), hash chain intact {start}",
+        "✔ {} events (ids {first}–{last}), hash chain intact {start}{not_anchored}",
         report.events
     )?;
     if report.gaps > 0 {
@@ -80,15 +90,19 @@ fn verify_text(report: &ExportReport, anchor: Option<&str>) -> Result<()> {
         )?;
     }
     writeln!(out, "head {head}")?;
-    match anchor {
-        Some(_) if report.anchor_found => writeln!(out, "✔ anchor found")?,
-        Some(anchor) => writeln!(
+    match report.anchor {
+        AnchorCheck::Found => writeln!(out, "✔ anchor found")?,
+        AnchorCheck::Missing => writeln!(
             out,
-            "⛔ anchor {anchor} is not in this export: events up to it were rewritten or dropped, or the export covers another log or window"
+            "⛔ the anchor is not in this export: events up to it were rewritten or dropped, or the export covers another log or window"
         )?,
-        None => writeln!(
+        AnchorCheck::NotAnchored if require_anchor => writeln!(
             out,
-            "   record the head elsewhere and pass it as --anchor later: this file alone cannot show that its newest events were dropped"
+            "⛔ not anchored and --require-anchor was given: pass the head recorded earlier as --anchor"
+        )?,
+        AnchorCheck::NotAnchored => writeln!(
+            out,
+            "   not anchored: this file alone cannot show that its newest events were dropped; record the head elsewhere and pass it as --anchor later"
         )?,
     }
     Ok(())

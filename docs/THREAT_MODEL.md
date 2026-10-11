@@ -400,7 +400,9 @@ something OpenMoat claims to stop.
   links. It does not show that the export is complete. Dropping the newest lines,
   or exporting from a truncated log, leaves a file that verifies, and so does
   deleting a middle event, which looks like a filter gap. Only an anchored head
-  catches those: a recorded hash that the export must contain. The anchor does not
+  catches those: a recorded hash that the export must contain. Without `--anchor`,
+  `moat audit verify` reports the export as not anchored, and `--require-anchor`
+  makes that a failure for scripts. The anchor does not
   cover events after it. Anyone who can write the database can recompute every hash
   before exporting (the chain is unkeyed), so an export is evidence about the log
   as it was at export time, no more. Exported cells are the redacted store cells.
