@@ -9,7 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Added
-- `moat policy upgrade` adds what a new release's default policy changed to your policy, keeping every line you changed, after showing the diff and asking; `--undo` restores the previous policy.
+- `moat policy upgrade` adds what a new release's default policy changed to your policy, keeping every line you changed, after showing the diff and asking; `--undo` restores the previous policy ([#476](https://github.com/crocodile-labs/openmoat/pull/476)).
 
 ### Fixed
 - A redirection to `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/fd/1` or `/dev/fd/2` (and from `/dev/null`, `/dev/stdin` or `/dev/fd/0`) is no longer a file write or read, so `ls 2>/dev/null` and `git status >/dev/null 2>&1` stop asking ([#471](https://github.com/crocodile-labs/openmoat/pull/471)).
