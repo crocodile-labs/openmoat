@@ -15,27 +15,31 @@ const LEGACY_TIOCSTI: &str = "/proc/sys/dev/tty/legacy_tiocsti";
 /// How far back the hang row looks.
 const HANG_WINDOW_MS: i64 = 7 * 24 * 3_600_000;
 
-/// The contents of [`LEGACY_TIOCSTI`]; `None` off Linux and on kernels
-/// without the setting.
+/// The contents of [`LEGACY_TIOCSTI`] on Linux, empty on a kernel without the
+/// setting (before 6.2, where `TIOCSTI` is always allowed); `None` elsewhere.
 pub(super) fn legacy_tiocsti() -> Option<String> {
-    if cfg!(target_os = "linux") {
-        fs::read_to_string(LEGACY_TIOCSTI).ok()
-    } else {
-        None
-    }
+    cfg!(target_os = "linux").then(|| fs::read_to_string(LEGACY_TIOCSTI).unwrap_or_default())
 }
 
-/// With Codex set up, a warning when `setting` (the contents of
-/// [`LEGACY_TIOCSTI`]) is not `0`: Codex's Linux sandbox does not refuse
-/// `TIOCSTI`, so a sandboxed script could leave a command in the terminal's
-/// input that the user's shell runs after the session. Only the kernel stops it.
+/// With Codex set up, a warning when `setting` (see [`legacy_tiocsti`]) is not
+/// `0`: Codex's Linux sandbox does not refuse `TIOCSTI`, so a sandboxed script
+/// could leave a command in the terminal's input that the user's shell runs
+/// after the session. Only the kernel stops it.
 pub(super) fn tiocsti(codex: bool, setting: Option<&str>) -> Option<String> {
     let value = setting.map(str::trim).filter(|v| codex && *v != "0")?;
-    Some(format!(
-        "{:<16} dev.tty.legacy_tiocsti is {value}: Codex's sandbox cannot stop a command \
-         typing into your terminal (TIOCSTI); `sudo sysctl dev.tty.legacy_tiocsti=0` turns that off",
-        Host::Codex.display_name()
-    ))
+    let name = Host::Codex.display_name();
+    Some(if value.is_empty() {
+        format!(
+            "{name:<16} this kernel (before Linux 6.2) always lets a command type into your \
+             terminal (TIOCSTI), and Codex's sandbox cannot stop it; a 6.2+ kernel with \
+             dev.tty.legacy_tiocsti=0 does"
+        )
+    } else {
+        format!(
+            "{name:<16} dev.tty.legacy_tiocsti is {value}: Codex's sandbox cannot stop a command \
+             typing into your terminal (TIOCSTI); `sudo sysctl dev.tty.legacy_tiocsti=0` turns that off"
+        )
+    })
 }
 
 /// Calls the guard denied in the last week because no decision came in time.
@@ -63,7 +67,9 @@ mod tests {
             "{warning}"
         );
         assert_eq!(tiocsti(true, Some("0\n")), None);
-        assert_eq!(tiocsti(true, None), None);
+        assert_eq!(tiocsti(true, None), None, "not Linux");
+        let old_kernel = tiocsti(true, Some("")).unwrap();
+        assert!(old_kernel.contains("before Linux 6.2"), "{old_kernel}");
         assert_eq!(tiocsti(false, Some("1\n")), None);
     }
 
