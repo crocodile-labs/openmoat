@@ -139,3 +139,57 @@ fn an_unreadable_session_history_fails_closed() {
     assert!(reason.contains("kernel-error"), "{reason}");
     assert_eq!(ls("s2").0, "allow", "other sessions do not read that event");
 }
+
+/// Claude Code `WebSearch` runs and is recorded in a clean session, marks the
+/// session untrusted, and asks once the session read a secret.
+#[test]
+fn a_web_search_is_recorded_and_asks_after_a_secret_read() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let proj = sb.project();
+    let search = |session| {
+        let input = json!({"query": "serde derive rename_all", "allowed_domains": ["docs.rs"]});
+        decide(
+            &sb,
+            "claude-code",
+            &call(session, &proj, "WebSearch", &input),
+        )
+    };
+    let (verdict, reason) = search("s1");
+    assert_eq!(verdict, "allow", "{reason}");
+    assert!(reason.contains("default.web.search"), "{reason}");
+    let shown = text(&sb.moat(&["show", "--recent", "1"]));
+    assert!(
+        shown.contains("WebSearch") && !shown.contains("ungoverned"),
+        "{shown}"
+    );
+    let workflow = json!({"file_path": proj.join(".github/workflows/ci.yml").to_string_lossy()});
+    let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "Write", &workflow));
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(reason.contains("web search"), "{reason}");
+
+    // A policy that asks for secret reads instead of denying them, re-pinned by a person.
+    std::fs::write(
+        sb.home.join(".moat/policy.yaml"),
+        "version: 1\ndefaults: { '*': ask, net: deny, web.search: allow }\n\
+         ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
+    )
+    .unwrap();
+    let accept = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&accept).contains("re-pinned"), "{}", text(&accept));
+    assert_eq!(
+        sb.moat_as_person(&["sandbox", "sync"]).status.code(),
+        Some(OK)
+    );
+    let key = json!({"file_path": sb.home.join(".ssh/id_rsa").to_string_lossy()});
+    assert_eq!(
+        decide(&sb, "claude-code", &call("s2", &proj, "Read", &key)).0,
+        "ask"
+    );
+    let (verdict, reason) = search("s2");
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(
+        reason.contains("[session-taint]") && reason.contains(".ssh/id_rsa"),
+        "{reason}"
+    );
+    assert_eq!(search("s3").0, "allow", "taint belongs to one session");
+}

@@ -54,7 +54,9 @@ impl Checker {
             Kind::FsWrite => &self.write,
             Kind::Net => &self.net,
             Kind::Fetch => &self.fetch,
-            Kind::Shell | Kind::EnvRead | Kind::EnvSet | Kind::Mcp => return None,
+            Kind::Shell | Kind::WebSearch | Kind::EnvRead | Kind::EnvSet | Kind::Mcp => {
+                return None;
+            }
         };
         Some(access.effect(atom.subject()?))
     }

@@ -95,6 +95,8 @@ struct FixtureAction {
     net: Option<String>,
     /// A URL read by a host fetch tool (`WebFetch`).
     fetch: Option<String>,
+    /// A query sent by a host search tool (`WebSearch`).
+    web_search: Option<String>,
     mcp_tool: Option<McpFixture>,
     /// Files a multi-file patch writes (Codex `apply_patch`).
     patch: Option<Vec<String>>,
@@ -142,6 +144,7 @@ impl FixtureAction {
             self.fs_write.map(|path| Action::FsWrite { path }),
             self.net.map(|url| Action::Net { url }),
             self.fetch.map(|url| Action::Fetch { url }),
+            self.web_search.map(|query| Action::WebSearch { query }),
             self.patch.map(|writes| Action::Patch { writes }),
             self.foreign_shell.map(|f| Action::ForeignShell {
                 shell: f.shell,

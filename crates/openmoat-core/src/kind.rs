@@ -22,6 +22,10 @@ pub enum Kind {
     /// A host a read-only fetch tool (`WebFetch`) requests a URL from: a
     /// narrower kind of `net`, so `net` rules apply to it as well (ADR-017).
     Fetch,
+    /// A query a host's own web search tool (`WebSearch`) sends to its search
+    /// provider. The agent chooses the words, not the host, so only `defaults`
+    /// decide it; no rule list names it.
+    WebSearch,
     /// An environment variable read.
     EnvRead,
     /// An environment variable set.
@@ -32,12 +36,13 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in policy-file order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Shell,
         Self::FsRead,
         Self::FsWrite,
         Self::Net,
         Self::Fetch,
+        Self::WebSearch,
         Self::EnvRead,
         Self::EnvSet,
         Self::Mcp,
@@ -52,6 +57,7 @@ impl Kind {
             Self::FsWrite => "fs.write",
             Self::Net => "net",
             Self::Fetch => "fetch",
+            Self::WebSearch => "web.search",
             Self::EnvRead => "env.read",
             Self::EnvSet => "env.set",
             Self::Mcp => "mcp",
@@ -69,6 +75,7 @@ impl Kind {
             Self::FsRead => &[Self::FsRead],
             Self::FsWrite => &[Self::FsWrite],
             Self::Net => &[Self::Net],
+            Self::WebSearch => &[Self::WebSearch],
             Self::EnvRead => &[Self::EnvRead],
             Self::EnvSet => &[Self::EnvSet],
             Self::Mcp => &[Self::Mcp],

@@ -17,8 +17,9 @@ version: 1                          # required; only 1 is supported
 
 defaults:                           # verdict when no rule matches
   "*": ask                          #   one verdict for everything, or a map per kind
-  net: deny                         #   keys other than the eight kinds and "*" are accepted but never consulted
+  net: deny                         #   keys other than the nine kinds and "*" are accepted but never consulted
   fetch: ask                        #   unset, a fetch takes the `net` default
+  web.search: allow                 #   only `defaults` decide a web search; unset, it takes "*"
 
 deny:   [ <rule group>, … ]         # evaluated first; a match here is final
 allow:  [ <rule group>, … ]         # evaluated second
@@ -69,6 +70,7 @@ kind. One tool call usually produces several atomic actions (see §4).
 | `fs.read`, `fs.write` | the canonical absolute path | glob (§3.2) |
 | `net` | the host name only (no scheme, port or path), lowercase; also matches `fetch` actions | glob, case-insensitive |
 | `fetch` | the host of a URL a host's own fetch tool reads (Claude Code `WebFetch`), as for `net` | glob, case-insensitive |
+| `web.search` | a query a host's own search tool sends to the host's search provider (Claude Code and Cursor `WebSearch`); the agent chooses the words, not the host | none: no rule group lists it, so `defaults.web.search` (else `"*"`) decides it, and session taint (§7) tightens it |
 | `env.read`, `env.set` | the variable name | glob |
 | `mcp` | the full MCP tool name `mcp__<server>__<tool>` | glob |
 
@@ -200,8 +202,8 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
 
 | Once the session has… | …these atomic actions ask |
 |---|---|
-| read secret material: an `fs.read` that the group with id `secrets-paths` names, in whichever list it sits | `net` and `fetch` to every host except the secret's own, and every `mcp` call (OpenMoat cannot see an MCP server's hosts) |
-| read untrusted content: a `fetch`, or the result of an `mcp` call | `fs.write` to a protected path |
+| read secret material: an `fs.read` that the group with id `secrets-paths` names, in whichever list it sits | `net` and `fetch` to every host except the secret's own, and every `mcp` call and `web.search` (OpenMoat cannot see the hosts they reach) |
+| read untrusted content: a `fetch`, a `web.search`, or the result of an `mcp` call | `fs.write` to a protected path |
 
 `secrets-paths` is a **taint-significant rule id**: the engine recognises the base id in `deny`, `repo_ask`, `allow` and `ask`, and recognises `repo:secrets-paths` the same way (a repository policy's group is renamed to `repo:<id>` on merge, §10). Keep the id as `secrets-paths` on any `fs.read` group that names secret material; a rename hides those reads from taint and lets an approved secret read leave the session untainted (#398).
 
@@ -333,7 +335,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | ask | `installs` | `npm install/i/ci`, `pnpm add/install/dlx`, `yarn add/install/dlx`, `npx`, `npm exec`/`npm x` (they download a package they cannot find, like `npx`), `pip install`, `cargo add/install`, `brew install`, `gem install` |
 | ask | `local-net` | network to `localhost`, `127.0.0.1`, `::1`, fetches included (a local service may expose a control API) |
 | ask | `push` | `git push`, `npm/pnpm/yarn publish`, `cargo publish`, `gh release` |
-| defaults | `default`, `default.net`, `default.fetch` | everything else asks; outbound network to unlisted hosts is denied, except a `WebFetch` read of an unlisted URL, which asks (ADR-017) |
+| defaults | `default`, `default.net`, `default.fetch`, `default.web.search` | everything else asks; outbound network to unlisted hosts is denied, except a `WebFetch` read of an unlisted URL, which asks (ADR-017); a `WebSearch` is allowed and recorded, and asks once the session read secret material |
 
 MCP calls are judged by name **and** by what their arguments touch: adapters map path-like arguments (`path`, `paths`, `file_path`, `source`, `destination`, …) to `fs.read`/`fs.write` atoms (write for `write_*`, `edit_*`, `move_*`, `delete_*`-shaped tools and for `destination`/`target`) and URL-like arguments (`url`, `uri`, `endpoint`) to `net` atoms, so `mcp__filesystem__read_file {path: ~/.aws/credentials}` is denied by `secrets-paths` even though `safe-mcp` allows the tool name. Arguments are searched down to 8 levels of nesting (`{"options": {"path": …}}`), URL arguments count with or without a scheme, and arguments that cannot be read (a Cursor `tool_input` string that is not JSON, more than 1024 paths and URLs) deny the call instead of letting the name decide alone. Arguments nested deeper than 8 levels are not searched; they may name a file or host, so the call is at least `ask` (rule id `unparseable`, with the limit in the reason), and a `deny` from what was searched still wins.
 

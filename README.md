@@ -183,7 +183,7 @@ you export it.
   Linux only), is tested on every pull request: [docs/EVIDENCE.md](docs/EVIDENCE.md).
 - Hosts the policy allows (`api.github.com`, the registries) can receive data from an
   allowed or approved command.
-- Tools no hook exposes are not seen (Claude Code `WebSearch`, Codex web search).
+- Tools no hook exposes are not seen (Codex web search and hosted tools).
 - If the hook binary is missing or is killed, Claude Code and Codex run the call
   unchecked; `moat status` reports a missing hook.
 

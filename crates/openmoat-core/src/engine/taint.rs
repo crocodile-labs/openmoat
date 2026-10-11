@@ -73,7 +73,7 @@ pub(super) fn compile_protected(
 impl CompiledPolicy<'_> {
     /// What running `action` in `cwd` exposed its session to: secret material
     /// from a read the `secrets-paths` group names, untrusted content from a
-    /// fetch or an MCP result. The caller passes only calls that ran; the parts
+    /// fetch, a web search or an MCP result. The caller passes only calls that ran; the parts
     /// of an action that cannot be classified expose nothing they can name.
     #[must_use]
     pub fn exposure(&self, action: &Action, cwd: &str, paths: &dyn PathResolver) -> Taint {
@@ -94,7 +94,9 @@ impl CompiledPolicy<'_> {
                         untrusted: None,
                     });
                 }
-                AtomicAction::Fetch { .. } | AtomicAction::McpTool { .. } => {
+                AtomicAction::Fetch { .. }
+                | AtomicAction::WebSearch { .. }
+                | AtomicAction::McpTool { .. } => {
                     taint.untrusted.get_or_insert_with(|| atom.describe());
                 }
                 _ => {}
@@ -104,8 +106,8 @@ impl CompiledPolicy<'_> {
     }
 
     /// `decision` for `action`, tightened by `taint`: after secret material,
-    /// network to any host but the secret's own, and every MCP call (its
-    /// server's hosts are unknown), asks; after untrusted content, a write to
+    /// network to any host but the secret's own, and every MCP call and web
+    /// search (the hosts they reach are unknown), asks; after untrusted content, a write to
     /// a protected path asks. Merging keeps the strictest verdict, so this
     /// never loosens a decision.
     #[must_use]
@@ -141,7 +143,9 @@ impl CompiledPolicy<'_> {
                 })?;
                 secret_reason(secret, atom)
             }
-            AtomicAction::McpTool { .. } => secret_reason(taint.secrets.first()?, atom),
+            AtomicAction::McpTool { .. } | AtomicAction::WebSearch { .. } => {
+                secret_reason(taint.secrets.first()?, atom)
+            }
             AtomicAction::FsWrite { path } if any_match(&self.protected, path.as_str()) => {
                 format!(
                     "the session read untrusted content ({}); {} changes what runs or what the agent is told later",

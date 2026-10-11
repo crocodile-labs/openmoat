@@ -125,7 +125,8 @@ const PATH_KEYS: &[&str] = &[
 /// Shell commands are governed by `beforeShellExecution` and MCP tools by
 /// `beforeMCPExecution`, so `Shell` and `MCP:<tool>` here are deliberately
 /// ungoverned to avoid deciding and auditing the same call twice. `Task` runs a
-/// subagent whose own tool calls are hooked.
+/// subagent whose own tool calls are hooked. `WebSearch` is a web search, as in
+/// Claude Code.
 ///
 /// Cursor documents tool names but no file tool's arguments
 /// (`tests/fixtures/hosts/cursor/README.md`, #138). A search reads every path
@@ -146,6 +147,10 @@ fn pre_tool_action(
         }),
         "Read" => Some(Action::FsRead {
             path: field("file_path")?,
+        }),
+        // Cursor keeps Claude Code's `WebSearch` name; its `query` key is assumed.
+        "WebSearch" => Some(Action::WebSearch {
+            query: field("query")?,
         }),
         "Grep" | "Glob" => {
             Some(reads(read_paths(tool, input)?).unwrap_or_else(|| crate::search_root(input, cwd)))
@@ -370,12 +375,18 @@ mod tests {
         );
         for (tool, input) in [
             ("TodoWrite", r#"{"todos":[]}"#),
-            ("WebSearch", r#"{"query":"rust"}"#),
             ("Task", r#"{"prompt":"read /Users/me/.ssh"}"#),
             ("MCP:read_file", r#"{"path":"/Users/me/.ssh/id_rsa"}"#),
         ] {
             assert_eq!(parse(tool, input).unwrap().action, None, "{tool}");
         }
+        let query = "rust".to_owned();
+        let search = parse("WebSearch", r#"{"query":"rust"}"#).unwrap().action;
+        assert_eq!(search, Some(Action::WebSearch { query }));
+        assert!(
+            parse("WebSearch", "{}").is_err(),
+            "a search without a query"
+        );
     }
 
     #[test]
