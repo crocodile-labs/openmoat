@@ -10,7 +10,8 @@
 //! attached (`-i.bak`); BSD sed stops at the first operand and takes a bare
 //! `-i`'s suffix from the next word (`-i ''`). Every word either one could take
 //! for the script is read as one, and stays a file operand unless both agree.
-//! `-i` makes the file operands, and their backups, writes.
+//! `-i` makes the file operands, and their backups, writes. `sed -i SCRIPT FILE`
+//! is GNU's alone when BSD sed would stop before editing (`bsd_stops`).
 
 mod script;
 #[cfg(test)]
@@ -84,6 +85,7 @@ pub(super) fn classify(
                 match next.and_then(|at| argv.get(at + 1)).map(String::as_str) {
                     Some("") => line.empty_suffix = true,
                     Some(word) if word.starts_with('-') => line.suffixes.push(word),
+                    Some(_) if next.is_some_and(|at| bsd_stops(argv, at, &line)) => {}
                     Some(_) => unproven(argv, "-i", sink)?,
                     None => {}
                 }
@@ -117,6 +119,19 @@ pub(super) fn classify(
         in_place(argv, &line, &mut ops, ctx, sink)?;
     }
     Ok(ops)
+}
+
+/// `sed -i SCRIPT FILE` as the last words, with no script before them: GNU sed
+/// edits `FILE` with `SCRIPT`; BSD sed takes `SCRIPT` as the backup suffix and
+/// `FILE` as its script, is left with no file to edit and stops ("-i may not be
+/// used with stdin") before it reads any input. Until then it has only compiled
+/// `FILE`, and compiling opens nothing but the files `w` names, so a `FILE`
+/// without a `w` leaves the GNU reading as the only one that acts.
+fn bsd_stops(argv: &[String], at: usize, line: &Line<'_>) -> bool {
+    line.scripts.is_empty()
+        && argv.len() == at + 3
+        && !argv[at + 2].starts_with('-')
+        && !argv[at + 2].contains(['w', 'W'])
 }
 
 /// Operands that one implementation reads as the script, with true when the

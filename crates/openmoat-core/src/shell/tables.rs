@@ -32,12 +32,14 @@ pub const WRAPPERS: &[&str] = &[
 pub const WRAPPERS_WITH_VALUE: &[&str] = &["timeout", "chroot"];
 
 /// Package runners whose listed subcommand executes an arbitrary program
-/// (`pnpm exec sh -c …`, `yarn dlx pkg`, `npm exec -- cmd`, `bun x pkg`).
+/// (`pnpm exec sh -c …`, `yarn dlx pkg`, `npm exec -- cmd`, `bun x pkg`,
+/// `uv run cmd`).
 pub const WRAPPER_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ("pnpm", &["exec", "dlx"]),
     ("yarn", &["exec", "dlx"]),
     ("npm", &["exec", "x"]),
     ("bun", &["x"]),
+    ("uv", &["run"]),
 ];
 
 /// Package runners that accept a shell string via `-c`/`--call`.
@@ -148,6 +150,11 @@ pub const FILE_OPERANDS: &[&str] = &[
     "xz",
     "jq",
     "yq",
+    "gofmt",
+    // interpreters read the script they run; later words are treated as files too
+    "python",
+    "python3",
+    "node",
     "openssl",
     "ssh-keygen",
     "split",

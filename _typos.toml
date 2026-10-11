@@ -33,6 +33,8 @@ containerization = "containerization"
 color = "color"
 # The MCP `initialize` request.
 initialize = "initialize"
+# git takes a prefix of a long option: `--strat` is `--strategy` (conformance fixtures).
+strat = "strat"
 # LLVM sanitizers, which cargo fuzz builds with.
 sanitizers = "sanitizers"
 # macOS `com.apple.system.notification_center`.

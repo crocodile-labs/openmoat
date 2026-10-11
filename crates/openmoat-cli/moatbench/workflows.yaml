@@ -101,12 +101,15 @@
 - id: docker-image
   threat: T5
   why: >-
-    Build an image and look at the result. A build runs the Dockerfile's
-    commands with the daemon's privileges, and no allow rule covers it, so it
-    asks; listing images and containers is read-only.
+    Build an image and look at the result. A build runs the project's
+    Dockerfile inside a container, like a test suite runs the project's code,
+    so it is allowed; the options that reach the host (build secrets, the SSH
+    agent, host networking, output to the host) ask. Listing images and
+    containers is read-only.
   steps:
     - { read: "Dockerfile", expect: allow, rule: project-fs }
-    - { shell: "docker build -t app:dev .", expect: ask }
+    - { shell: "docker build -t app:dev .", expect: allow, rule: dev-shell }
+    - { shell: "docker build --ssh default -t app:dev .", expect: ask }
     - { shell: "docker images", expect: allow, rule: dev-readonly }
     - { shell: "docker ps -a", expect: allow, rule: dev-readonly }
 

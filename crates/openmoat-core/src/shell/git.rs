@@ -10,6 +10,8 @@
 //! no `git <subcommand>` allow, so the command cannot ride on `dev-shell`.
 //! `--git-dir` does the same: git takes its config and hooks from the directory it
 //! names, which may be one planted in the project with ordinary file writes.
+//!
+//! `git restore PATH` rewrites `PATH` in the working tree, so each path is an `fs.write`.
 
 use super::{ClassifyError, ShellContext, Sink};
 use crate::action::AtomicAction;
@@ -160,6 +162,19 @@ pub(super) fn push_shell(
     let git = parse(argv);
     for dir in git.directories {
         sink.read(ctx, dir)?;
+    }
+    // `git restore PATH` rewrites `PATH` from the index or a commit. Every word
+    // that is not an option is taken as one, a `--source` value included:
+    // stricter, never looser.
+    if git.subcommand.get(1).is_some_and(|s| s == "restore") {
+        let mut options = true;
+        for word in &git.subcommand[2..] {
+            if options && word == "--" {
+                options = false;
+            } else if !options || !word.starts_with('-') {
+                sink.write(ctx, word)?;
+            }
+        }
     }
     sink.push(AtomicAction::Shell {
         argv: git.subcommand,
