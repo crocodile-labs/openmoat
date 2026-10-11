@@ -24,10 +24,12 @@
   steps:
     - { shell: "rm -rf ~/", expect: deny, rule: destructive }
 
-- id: recursive-delete-in-project-asks
+- id: recursive-delete-of-project-root-asks
   threat: T4
   why: >-
-    Deleting a build directory is common but recursive removal cannot be undone, so a
+    Deleting a build directory is an ordinary project write and is allowed, but
+    removing the project root itself, `.git` with it, cannot be undone, so a
     person confirms it.
   steps:
-    - { shell: "rm -rf target", expect: ask }
+    - { shell: "rm -rf target", expect: allow, rule: dev-shell }
+    - { shell: "rm -rf .", expect: ask }
