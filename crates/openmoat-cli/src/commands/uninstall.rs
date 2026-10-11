@@ -41,7 +41,9 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         let config = HostConfig::for_host(host)?;
         // Claude Code keeps its sandbox block in the same file as its hooks.
         let sandbox_too = host == Host::ClaudeCode;
-        let strip = |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root));
+        let owned = &recorded.claude_rules;
+        let strip =
+            |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root, owned));
         let path = &config.settings_path;
         let mut files = vec![(path.clone(), undo_json(path, strip)?)];
         if host == Host::Codex {
@@ -72,8 +74,12 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
     recorded
         .dirs
         .retain(|id, _| !hosts.iter().any(|h| h.id() == id));
+    let forgot_rules = hosts.contains(&Host::ClaudeCode) && !recorded.claude_rules.is_empty();
+    if forgot_rules {
+        recorded.claude_rules.clear();
+    }
     let mut rewritten = Vec::new();
-    if recorded.dirs.len() != before {
+    if recorded.dirs.len() != before || forgot_rules {
         recorded.save(&home)?;
         rewritten.push(home.hosts_path());
     }

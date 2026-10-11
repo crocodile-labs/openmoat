@@ -9,8 +9,8 @@ use openmoat_hosts::Host;
 use toml_edit::DocumentMut;
 
 use super::{Plan, Report, claude, codex, codex_config_path, cursor};
-use crate::home::write_private;
-use crate::install::{HostConfig, SANDBOX_BACKUP, read_or_empty};
+use crate::home::{Home, write_private};
+use crate::install::{HostConfig, Recorded, SANDBOX_BACKUP, read_or_empty};
 use crate::integrity::Lock;
 
 /// Hosts with a sandbox backend, in the order OpenMoat writes them.
@@ -74,13 +74,22 @@ pub fn write(host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
             .with_context(|| format!("updating {}", path.display()))?;
         serde_json::to_string_pretty(&root)? + "\n"
     } else {
+        let home = Home::locate()?;
+        let mut recorded = Recorded::load(&home)?;
+        let mut owned = recorded.claude_rules.clone();
         let mut root = read_or_empty(&path)?;
         changed = if unavailable(host).is_some() {
-            claude::remove(&mut root)
+            let removed = claude::remove(&mut root, &owned);
+            owned.clear();
+            removed
         } else {
-            claude::apply(&mut root, &plan.claude)
+            claude::apply(&mut root, &plan.claude, &mut owned)
                 .with_context(|| format!("updating {}", path.display()))?
         };
+        if !dry_run && owned != recorded.claude_rules {
+            recorded.claude_rules = owned;
+            recorded.save(&home)?;
+        }
         serde_json::to_string_pretty(&root)? + "\n"
     };
     if !changed {
@@ -164,7 +173,8 @@ pub fn problems(host: Host, plan: &Plan, lock: Option<&Lock>) -> Result<Option<V
     } else {
         let root = read_or_empty(&path)?;
         let mut found = claude::weaknesses(&root, plan.claude.block_reads, plan.proxy_port);
-        if !claude::in_sync(&root, &plan.claude) {
+        let owned = Recorded::load(&Home::locate()?)?.claude_rules;
+        if !claude::in_sync(&root, &plan.claude, &owned) {
             found.push(out_of_date);
         }
         found

@@ -22,6 +22,10 @@ pub struct Recorded {
     pub version: u32,
     /// Host id → configuration directory.
     pub dirs: BTreeMap<String, PathBuf>,
+    /// The `permissions.deny` rules OpenMoat added to Claude Code's settings,
+    /// so `moat uninstall` removes those and never a rule of the user's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claude_rules: Vec<String>,
 }
 
 impl Recorded {
