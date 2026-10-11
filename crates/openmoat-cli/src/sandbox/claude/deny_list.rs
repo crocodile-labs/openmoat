@@ -65,5 +65,23 @@ pub(super) fn deny_rules_in_sync(root: &Value, generated: &Generated, owned: &[S
             .all(|rule| generated.deny_rules.iter().any(|g| *rule == g.as_str()))
 }
 
+/// [`apply`](super::apply) for a host without its sandbox (native Windows): only the
+/// `permissions.deny` rules, which Claude Code applies itself on every OS, and
+/// none of the sandbox keys an older version wrote. Returns whether anything
+/// changed.
+pub fn apply_rules(
+    root: &mut Value,
+    generated: &Generated,
+    owned: &mut Vec<String>,
+) -> Result<bool> {
+    let before = root.clone();
+    super::remove(root, owned);
+    let Value::Object(top) = root else {
+        bail!("the settings file is not a JSON object");
+    };
+    write_deny_rules(top, generated, owned)?;
+    Ok(*root != before)
+}
+
 #[cfg(test)]
 mod tests;

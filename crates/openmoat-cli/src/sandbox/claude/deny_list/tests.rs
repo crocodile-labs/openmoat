@@ -1,9 +1,10 @@
 use openmoat_core::DEFAULT_POLICY;
 use serde_json::{Value, json};
 
-use super::super::Generated;
 use super::super::settings::{apply, in_sync, remove};
 use super::super::tests::generated;
+use super::super::{BLOCK_READS, Generated};
+use super::apply_rules;
 
 /// The default policy's settings with `rules` as the `permissions.deny` rules.
 fn with_rules(rules: &[&str]) -> Generated {
@@ -50,4 +51,27 @@ fn a_rule_the_policy_dropped_goes_on_the_next_apply() {
         root["permissions"]["deny"],
         json!(["Bash(rm *)", "Edit(//Users/me/.moat)"])
     );
+}
+
+/// Native Windows has no Claude Code sandbox, but its deny rules still apply.
+#[test]
+fn apply_rules_writes_only_the_deny_rules() {
+    let out = generated(DEFAULT_POLICY);
+    let original = json!({ "theme": "dark", "permissions": { "allow": ["Bash(ls)"] } });
+    let mut root = original.clone();
+    let mut owned = Vec::new();
+    apply(&mut root, &out, &mut owned).unwrap();
+    assert!(apply_rules(&mut root, &out, &mut owned).unwrap());
+    assert!(
+        root.get("sandbox").is_none(),
+        "an older version's sandbox keys go"
+    );
+    assert!(root["permissions"].get(BLOCK_READS).is_none());
+    assert_eq!(owned, out.deny_rules);
+    assert!(
+        !apply_rules(&mut root, &out, &mut owned).unwrap(),
+        "idempotent"
+    );
+    assert!(remove(&mut root, &owned));
+    assert_eq!(root, original);
 }

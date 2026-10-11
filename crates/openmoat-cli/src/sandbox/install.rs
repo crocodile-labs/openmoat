@@ -25,10 +25,11 @@ pub fn unavailable(host: Host) -> Option<&'static str> {
     unavailable_on(host, cfg!(windows))
 }
 
-/// What `init` and `sandbox sync` print when [`write()`] removed the sandbox
-/// settings of an older version from a host whose sandbox is [`unavailable`].
-pub const OLD_SANDBOX_REMOVED: &str =
-    "removed the sandbox settings an older moat wrote, so Claude Code can start";
+/// What `init` and `sandbox sync` print when [`write()`] changed the settings
+/// of a host whose sandbox is [`unavailable`]: Claude Code's deny rules are
+/// written there, and the sandbox settings of an older version removed.
+pub const OLD_SANDBOX_REMOVED: &str = "deny rules written for Claude Code's file tools, without \
+     sandbox settings (an older moat's are removed), so Claude Code can start";
 
 fn unavailable_on(host: Host, windows: bool) -> Option<&'static str> {
     match host {
@@ -79,13 +80,11 @@ pub fn write(host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
         let mut owned = recorded.claude_rules.clone();
         let mut root = read_or_empty(&path)?;
         changed = if unavailable(host).is_some() {
-            let removed = claude::remove(&mut root, &owned);
-            owned.clear();
-            removed
+            claude::apply_rules(&mut root, &plan.claude, &mut owned)
         } else {
             claude::apply(&mut root, &plan.claude, &mut owned)
-                .with_context(|| format!("updating {}", path.display()))?
-        };
+        }
+        .with_context(|| format!("updating {}", path.display()))?;
         if !dry_run && owned != recorded.claude_rules {
             recorded.claude_rules = owned;
             recorded.save(&home)?;

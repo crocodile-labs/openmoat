@@ -20,7 +20,12 @@ command ends; the file on disk does not change (`contained` in
   `failIfUnavailable: true`, `allowUnsandboxedCommands: false`, `excludedCommands: []`,
   read and write lists, `network.allowedDomains` with `strictAllowlist`) and
   `permissions.blockReadsOutsideWorkingDirectories: true`. Claude Code's file tools
-  then refuse reads outside the working directories; `/add-dir` adds one. On Linux
+  then refuse reads outside the working directories; `/add-dir` adds one. On every
+  OS it also adds a `Read(//…)` or `Edit(//…)` rule to `permissions.deny` for each
+  path a policy deny rule names (secrets, OpenMoat's own files, shell start-up
+  files). Claude Code's file tools obey those without the hook, so they hold when
+  `moat` is missing or killed; on native Windows, where Claude Code has no sandbox,
+  only these rules are written, drive paths as `//c/…`. On Linux
   (and WSL2) it also adds `Read(./**/.env)`, `Read(./**/.env.*)` and
   `Read(./**/.envrc)` to `permissions.deny`. There, bubblewrap needs concrete paths,
   and Claude Code's sandbox expands a `denyRead` glob from its first literal directory
@@ -139,7 +144,7 @@ pinned Claude Code and Codex binaries and no account: Claude Code headless again
 local fake API, Codex through `codex sandbox -P moat`.
 
 To undo, delete the `sandbox` key, `permissions.blockReadsOutsideWorkingDirectories`
-and the `Read(./**/…)` and `Edit(./…)` rules in `permissions.deny` from Claude Code's settings,
+and the rules OpenMoat added to `permissions.deny` (listed in `~/.moat/hosts.json`) from Claude Code's settings,
 `default_permissions`, `[permissions.moat]` and `features.network_proxy` from Codex's
 `config.toml`, and `type`, `readBoundary`, `additionalReadPaths`,
 `additionalReadwritePaths` and `networkPolicy` from Cursor's `sandbox.json` (or restore

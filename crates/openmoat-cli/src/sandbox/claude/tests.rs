@@ -73,10 +73,11 @@ fn every_pattern_is_absolute() {
 #[test]
 fn linux_adds_working_directory_rules_for_wildcard_denies() {
     let mac = generated(DEFAULT_POLICY);
-    assert!(mac.deny_rules.is_empty(), "macOS keeps its settings");
     let linux = generated_for(DEFAULT_POLICY, true);
+    let (every_os, linux_only) = linux.deny_rules.split_at(mac.deny_rules.len());
+    assert_eq!(every_os, mac.deny_rules, "the rules of every OS come first");
     assert_eq!(
-        linux.deny_rules,
+        linux_only,
         [
             "Read(./**/.env)",
             "Read(./**/.env.*)",
@@ -126,7 +127,11 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
         "version: 1\ndeny:\n  - id: s\n    fs.read: ['~/.ssh/**']\n    fs.write: ['~/.ssh/**']\n",
         true,
     );
-    assert!(none.deny_rules.is_empty(), "absolute denies need no rule");
+    assert_eq!(
+        none.deny_rules,
+        ["Read(//Users/me/.ssh)", "Edit(//Users/me/.ssh)"],
+        "absolute denies need no working-directory rule"
+    );
     assert!(!none.report.losses.iter().any(|l| l.rule.contains("linux")));
     assert!(
         !none
