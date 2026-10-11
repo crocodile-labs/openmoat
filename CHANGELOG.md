@@ -17,6 +17,7 @@ view at the end of the file.
 - The default policy allows read-only git commands (`git ls-files`, `rev-parse`, `blame`, `grep`, `cat-file`, `tag -l`, `remote -v`, `config --get`, …) and `git config --get user.name` is no longer denied as network; existing policies keep their `dev-shell` rule until the policy upgrade lands ([#473](https://github.com/crocodile-labs/openmoat/pull/473)).
 - `moat uninstall` deletes only the backups OpenMoat created, never a file of yours at a backup's name; backups from before this release are kept ([#478](https://github.com/crocodile-labs/openmoat/pull/478)).
 - The default policy allows read-only utilities (`file`, `stat`, `du`, `printf`, `command -v`, `type`, `uname`, `date`, `fd`, `brew list`/`info`, `java -version`, `gofmt`) without asking; their forms that run a program, write outside the project or set the clock still ask ([#481](https://github.com/crocodile-labs/openmoat/pull/481)).
+- The default policy allows in-project edits: `sed -i 's/a/b/' file`, `git merge`, `git restore <path>` and a recursive `rm` of a project subdirectory (`rm -rf build`); removing the project root, `.git`, every entry (`*`) or anything outside the project still asks or is denied ([#482](https://github.com/crocodile-labs/openmoat/pull/482)).
 
 ## [0.4.0] - 2026-10-11
 

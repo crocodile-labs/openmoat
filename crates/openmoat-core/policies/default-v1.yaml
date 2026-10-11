@@ -218,6 +218,9 @@ allow:
       - "git fetch*"
       - "git pull*"
       - "git rebase *"
+      - "git merge *"
+      # each path is an fs.write atom, so `.git`, `.moat` and hook settings ask or deny
+      - "git restore *"
       - "git stash*"
       # read-only subcommands; only the forms that print are listed
       - "git ls-files*"
@@ -325,9 +328,15 @@ allow:
       - "make check*"
       - "make lint*"
       # options that run another program or write outside the command's own output (ADR-012)
-      # recursive removal, and checkouts that discard uncommitted work, stay at ask
-      - "!rm *-*r*"
-      - "!rm *-*R*"
+      # a recursive removal is judged by the paths it writes: a project subdirectory is
+      # allowed, `.git`, `~` and anything outside ask or deny. `project-fs` also allows
+      # the root itself, so a recursive removal asks for every spelling that may name
+      # it: `.`, an absolute or home path, a variable, `..`, and an unexpanded `*` or
+      # `.*` (every entry). Checkouts that discard uncommitted work stay at ask
+      - "!rm * -*[rR]* * {.,./,/*,~*,$*,*..*,[*],./[*],.[*],./.[*]}"
+      - "!rm * {.,./,/*,~*,$*,*..*,[*],./[*],.[*],./.[*]} * -*[rR]*"
+      - "!git restore * {.,./,[*],:*}"
+      - "!git restore * --pathspec-f*"
       - "!git checkout * ."
       - "!git checkout * -- *"
       - "!git checkout * -f*"
@@ -359,6 +368,10 @@ allow:
       - "!git rebase * --str*"
       - "!git rebase * -[ixs]*"
       - "!git rebase * -[!-]*[ixs]*"
+      # a merge strategy other than the built-in ones runs a `git-merge-<name>` program
+      - "!git merge * --str*"
+      - "!git merge * -s*"
+      - "!git merge * -[!-]*s*"
       # options that run a program: a pager to open matches in (`-O`), and the textconv
       # or filter drivers that `--textconv` and `--filters` turn on; any prefix git
       # accepts (`--op*`, `--te*`/`--t*`, `--fi*`)

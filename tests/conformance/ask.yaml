@@ -354,23 +354,44 @@
   action: { shell: "cd - && cat id_rsa" }
   expect: { verdict: ask, rules: [unparseable] }
 # Everyday file operations leave the project only by asking, and the destructive
-# spellings excluded from dev-shell keep asking
-- id: ask-recursive-remove-in-project
+# spellings excluded from dev-shell keep asking: removing the project root itself,
+# its `.git`, every entry at once (`*`) or anything outside it
+- id: ask-recursive-remove-project-root-dot
   threat: T4
-  action: { shell: "rm -rf node_modules" }
+  action: { shell: "rm -rf ." }
   expect: { verdict: ask, rules: [default] }
-- id: ask-recursive-remove-capital-r
+- id: ask-recursive-remove-project-root-slash
   threat: T4
-  action: { shell: "rm -Rf dist" }
+  action: { shell: "rm -rf ./" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-recursive-remove-project-root-absolute
+  threat: T4
+  action: { shell: "rm -rf /p" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-recursive-remove-project-root-traversal
+  threat: T4
+  action: { shell: "rm -rf src/.." }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-recursive-remove-every-entry
+  threat: T4
+  action: { shell: "rm -rf *" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-recursive-remove-every-entry-dotted
+  threat: T4
+  action: { shell: "rm -rf ./* .*" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-recursive-remove-sibling
+  threat: T4
+  action: { shell: "rm -rf ../other" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-recursive-remove-nested-git
+  threat: T4
+  action: { shell: "rm -rf vendor/lib/.git" }
   expect: { verdict: ask, rules: [default] }
 # a directory below the home is not the home: these stay at ask, not destructive
 - id: ask-recursive-remove-below-home
   threat: T4
   action: { shell: "rm -rf ~/tmp/build" }
-  expect: { verdict: ask, rules: [default] }
-- id: ask-recursive-remove-file-named-like-home
-  threat: T4
-  action: { shell: "rm -r ./~" }
   expect: { verdict: ask, rules: [default] }
 - id: ask-mkdir-below-home
   threat: T4
@@ -527,9 +548,10 @@
   threat: T7
   action: { shell: "sed p -e 'e id' src/lib.rs" }
   expect: { verdict: ask, rules: [default] }
+# BSD sed takes `s/a/b/` as the suffix and `e id` as its script, with `f` to edit
 - id: ask-sed-bare-in-place-suffix-is-ambiguous
   threat: T7
-  action: { shell: "sed -i 's/a/b/' 'e id'" }
+  action: { shell: "sed -i 's/a/b/' 'e id' f" }
   expect: { verdict: ask, rules: [default] }
 - id: ask-sed-in-place-outside-project
   threat: T4
@@ -822,4 +844,50 @@
 - id: ask-command-runs-the-command
   threat: T4
   action: { shell: "command rm -rf build" }
+  expect: { verdict: ask, rules: [default] }
+# In-project edits: what reaches outside the project, the whole tree or a
+# reading the classifier cannot prove still asks
+- id: ask-sed-bare-in-place-outside-project
+  threat: T4
+  action: { shell: "sed -i 's/a/b/' ../other/x.rs" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-sed-in-place-bsd-reads-a-script
+  threat: T4
+  action: { shell: "sed -i 's/a/b/' 'w /tmp/x' f" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-sed-in-place-bsd-compiles-a-write
+  threat: T4
+  action: { shell: "sed -i 's/a/b/' wlog" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-sed-in-place-two-files
+  threat: T4
+  action: { shell: "sed -i 's/a/b/' a.rs b.rs" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-restore-whole-tree
+  threat: T4
+  action: { shell: "git restore ." }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-restore-top-pathspec
+  threat: T4
+  action: { shell: "git restore :/" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-restore-every-file
+  threat: T4
+  action: { shell: "git restore '*'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-restore-pathspec-file
+  threat: T4
+  action: { shell: "git restore --pathspec-from-file=list.txt" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-restore-git-dir
+  threat: T9
+  action: { shell: "git restore .git/hooks/pre-commit" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-merge-strategy-program
+  threat: T5
+  action: { shell: "git merge -s evil x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-git-merge-strategy-long
+  threat: T5
+  action: { shell: "git merge --strat=evil x" }
   expect: { verdict: ask, rules: [default] }
