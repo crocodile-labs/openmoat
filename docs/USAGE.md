@@ -165,7 +165,9 @@ for. The policy language, the full default policy and recipes are in
 
 ### After upgrading OpenMoat
 
-`moat init` keeps your policy, so a rule the new default gained is offered, not forced:
+`moat init` keeps your policy, so a rule the new default gained is offered, not forced.
+`moat`, `moat init` and `moat doctor` say "policy update available: N changes"; at a
+terminal `moat` offers to show them. The same, explicitly:
 
 ```bash
 moat policy upgrade --dry-run   # what the new default adds, as a diff; changes nothing
@@ -197,7 +199,7 @@ again. Repository rules apply in the hook, not in the host sandboxes
 
 | Command | Use it to |
 |---|---|
-| `moat` | see which agents are protected and today's decisions; answer drift or the last ask (terminal only) |
+| `moat` | see which agents are protected and today's decisions; answer drift, a policy update or the last ask (terminal only) |
 | `moat init [--hosts …] [--yes] [--dry-run]` | install policy, lock and audit log; asks before hooking each agent found (`--hosts`, `--yes` skip the questions) |
 | `moat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `moat status [--format json]` · `moat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists where each sandbox is stricter or wider than the policy) |

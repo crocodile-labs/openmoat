@@ -70,6 +70,18 @@ impl Plan {
     }
 }
 
+/// "N changes from the OpenMoat X default", which `moat`, `moat init` and `moat
+/// doctor` show while the policy can take changes; `None` when it has none or
+/// cannot be read (the commands that load it report that themselves).
+pub fn available(home: &Home) -> Option<String> {
+    let count = Plan::for_home(home).ok()?.applicable();
+    (count > 0).then(|| {
+        let plural = if count == 1 { "" } else { "s" };
+        let version = env!("CARGO_PKG_VERSION");
+        format!("{count} change{plural} from the OpenMoat {version} default")
+    })
+}
+
 /// `text` with `like`'s line endings: a policy saved with CRLF still lines up
 /// with the shipped default, which is LF.
 fn line_endings_of(like: &str, text: &str) -> String {

@@ -3,7 +3,7 @@
 
 use serde_json::json;
 
-use crate::common::{ASK, OK, Sandbox, USAGE, text, verdict};
+use crate::common::{ASK, OK, Sandbox, USAGE, output, text, verdict};
 
 /// What `moat init` wrote from 0.1.1 to 0.3.0, before it recorded a base.
 const V0_3_0: &str = include_str!("../../src/upgrade/default-v0.3.0.yaml");
@@ -181,4 +181,39 @@ fn a_policy_not_made_from_the_default_is_left_alone() {
         text(&out)
     );
     assert_eq!(policy(&sb), own);
+}
+
+#[test]
+fn init_doctor_and_the_home_screen_offer_an_available_update() {
+    let sb = older_home(V0_3_0);
+    let update = "2 changes from the OpenMoat";
+    let out = sb.moat(&["doctor"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains(&format!("! policy update    {update}")),
+        "{}",
+        text(&out)
+    );
+    let out = sb.moat(&["init", "--yes"]);
+    assert!(
+        text(&out).contains(&format!("! policy update    {update}")),
+        "{}",
+        text(&out)
+    );
+
+    let out = sb.moat(&[]);
+    let shown = text(&out);
+    assert!(
+        shown.contains(&format!("Policy update available: {update}")),
+        "{shown}"
+    );
+    assert!(shown.contains("`moat policy upgrade`") && !shown.contains("Nothing needs you"));
+    assert_eq!(policy(&sb), V0_3_0);
+
+    let out = output(sb.command().env("MOAT_ASSUME_TTY", "1"), Some("y\ny\n"));
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(OK), "{shown}");
+    assert!(shown.contains("See the changes? [y/N]") && shown.contains("Apply 2 changes? [y/N]"));
+    assert_eq!(policy(&sb), default_lf());
+    assert!(text(&sb.moat(&[])).contains("Nothing needs you."));
 }
