@@ -297,10 +297,35 @@ fn a_write_grant_needs_the_read_and_a_root_inside_a_deny_is_refused() {
 #[test]
 fn read_only_never_grants_a_read_the_policy_denies() {
     let mut out = generated(DEFAULT_POLICY);
-    let paths = ["/opt/t/moatd".to_owned(), "/srv/t".to_owned()];
-    read_only(&mut out, &paths, |p| p.starts_with("/opt/"));
-    assert_eq!(mode(&out, &[], "/opt/t/moatd"), Some("read"));
+    let paths = ["/data/t/moatd".to_owned(), "/srv/t".to_owned()];
+    read_only(&mut out, &paths, |p| p.starts_with("/data/"));
+    assert_eq!(mode(&out, &[], "/data/t/moatd"), Some("read"));
     assert_eq!(mode(&out, &[], "/srv/t"), Some("deny"));
+}
+
+/// Codex on Linux masks a denied directory with a read-only tmpfs, so a file
+/// entry inside it would fail every command; the directory's entry covers it.
+#[test]
+fn read_only_leaves_out_a_path_its_listed_directory_covers() {
+    let mut out = generated(DEFAULT_POLICY);
+    let paths = [
+        "/srv/t/moat".to_owned(),
+        "/srv/t".to_owned(),
+        "/data/t/moat".to_owned(),
+        "/data/t".to_owned(),
+        "/Users/me/.cargo/bin/moat".to_owned(),
+        "/Users/me/.cargo/bin".to_owned(),
+    ];
+    read_only(&mut out, &paths, |p| p == "/data/t");
+    assert_eq!(mode(&out, &[], "/srv/t"), Some("deny"));
+    assert_eq!(mode(&out, &[], "/srv/t/moat"), None);
+    assert_eq!(mode(&out, &[], "/data/t"), Some("read"));
+    assert_eq!(mode(&out, &[], "/data/t/moat"), Some("deny"));
+    // `~/.cargo` is a read root already: read-only, nothing to add.
+    let mut out = generated(DEFAULT_POLICY);
+    read_only(&mut out, &paths[4..], |p| p.starts_with("/Users/me/.cargo"));
+    assert_eq!(mode(&out, &[], "/Users/me/.cargo/bin"), None);
+    assert_eq!(mode(&out, &[], "/Users/me/.cargo/bin/moat"), None);
 }
 
 #[test]

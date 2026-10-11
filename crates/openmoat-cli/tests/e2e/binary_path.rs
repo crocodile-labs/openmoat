@@ -53,19 +53,25 @@ fn a_binary_under_another_name_is_protected_by_its_recorded_path() {
         );
     }
     // Every host sandbox names the recorded path and its directory literally;
-    // the link's target, which an upgrade moves, is left to the hook.
+    // the link's target, which an upgrade moves, is left to the hook. Codex
+    // gets only the directory: its deny covers the file, and on Linux a file
+    // entry inside a denied directory makes bubblewrap fail every command.
     let settings = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
     let settings: serde_json::Value = serde_json::from_str(&settings).unwrap();
     let codex = fs::read_to_string(sb.home.join(".codex/config.toml")).unwrap();
-    for path in [link.clone(), real(link.parent().unwrap())] {
-        let path = path.to_string_lossy().into_owned();
+    let link_dir = real(link.parent().unwrap()).to_string_lossy().into_owned();
+    for path in [link.to_string_lossy().into_owned(), link_dir.clone()] {
         let deny = &settings["sandbox"]["filesystem"]["denyWrite"];
         assert!(deny.as_array().unwrap().contains(&json!(path)), "{path}");
-        assert!(
-            codex.contains(&format!("\"{path}\" = \"deny\"")),
-            "Codex: {path}\n{codex}"
-        );
     }
+    assert!(
+        codex.contains(&format!("\"{link_dir}\" = \"deny\"")),
+        "Codex: {link_dir}\n{codex}"
+    );
+    assert!(
+        !codex.contains(&format!("\"{}\" =", link.display())),
+        "Codex lists the file inside its denied directory:\n{codex}"
+    );
     let target = real(&target);
     let (link, target, dir) = (link.display(), target.display(), dir.display());
     for command in [

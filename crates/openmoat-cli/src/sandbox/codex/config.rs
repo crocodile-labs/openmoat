@@ -69,17 +69,43 @@ pub fn protect(generated: &mut Generated, codex_home: &Path) {
 /// Keep commands from writing each of `paths` (the `moat` binary, its target
 /// and their directory): read-only where `readable` says the policy lets
 /// commands read it, denied otherwise, so nothing is opened that was closed.
+///
+/// A path the nearest listed directory above it already covers (the same
+/// mode, or `deny`) is left out, also when the generator listed it. On Linux Codex hides a denied directory under
+/// a read-only tmpfs, and bubblewrap then fails every command trying to mount
+/// over a file in it (`Can't create file at …: Read-only file system`).
 pub fn read_only(generated: &mut Generated, paths: &[String], readable: impl Fn(&str) -> bool) {
     let filesystem = generated
         .profile
         .get_mut("filesystem")
         .and_then(Item::as_table_mut);
-    if let Some(filesystem) = filesystem {
-        for path in paths {
-            let mode = if readable(path) { "read" } else { "deny" };
+    let Some(filesystem) = filesystem else {
+        return;
+    };
+    let mut paths: Vec<&String> = paths.iter().collect();
+    paths.sort_by_key(|path| Path::new(path).components().count());
+    for path in paths {
+        let mode = if readable(path) { "read" } else { "deny" };
+        let covered = nearest_listed_parent(filesystem, path)
+            .is_some_and(|parent| parent == "deny" || parent == mode);
+        if covered {
+            // The generator lists `kernel-self`'s paths too.
+            filesystem.remove(path.as_str());
+        } else {
             filesystem.insert(path, value(mode));
         }
     }
+}
+
+/// The mode of the deepest literal path in `filesystem` strictly above `path`.
+fn nearest_listed_parent<'a>(filesystem: &'a Table, path: &str) -> Option<&'a str> {
+    let path = Path::new(path);
+    filesystem
+        .iter()
+        .filter(|(key, _)| !key.starts_with(':') && !key.contains(['*', '?', '[', '{']))
+        .filter(|(key, _)| Path::new(key) != path && path.starts_with(key))
+        .max_by_key(|(key, _)| Path::new(key).components().count())
+        .and_then(|(_, mode)| mode.as_str())
 }
 
 /// The part of a Codex config OpenMoat owns, in a canonical form that ignores
