@@ -13,7 +13,7 @@ view at the end of the file.
 
 ### Security
 - The `moat` binary the hooks run is protected by its recorded path, its target and their directory wherever it is installed, not only as `bin/moat`, and `moat init` refuses a binary inside the project, a temp directory or a directory the agents' sandboxes may write ([#458](https://github.com/crocodile-labs/openmoat/pull/458)).
-- Claude Code's file tools keep refusing secrets and OpenMoat's own files when the hook is missing or killed: `moat init` writes matching `permissions.deny` rules on every OS, Windows included ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- Claude Code's file tools keep refusing secrets and OpenMoat's own files when the hook is missing or killed: `moat init` writes matching `permissions.deny` rules on every OS, Windows included ([#459](https://github.com/crocodile-labs/openmoat/pull/459)).
 - Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
 - Claude Code and Cursor `WebSearch` are checked and recorded as `web.search`: allowed in a clean session, asked after a secret read, and they mark the session untrusted; run `moat init` to update an installed hook ([#455](https://github.com/crocodile-labs/openmoat/pull/455)).
 - `git --git-dir=… <subcommand>` asks instead of riding on `dev-shell`, since git runs hooks and config programs from the directory it names ([#454](https://github.com/crocodile-labs/openmoat/pull/454)).
