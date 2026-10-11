@@ -8,6 +8,8 @@
 //! open-ended, so any key not known to be inert, an `--exec-path=` and any option
 //! git does not document also keep the command line as written. That atom matches
 //! no `git <subcommand>` allow, so the command cannot ride on `dev-shell`.
+//! `--git-dir` does the same: git takes its config and hooks from the directory it
+//! names, which may be one planted in the project with ordinary file writes.
 
 use super::{ClassifyError, ShellContext, Sink};
 use crate::action::AtomicAction;
@@ -27,7 +29,8 @@ const FLAGS: &[&str] = &[
     "--noglob-pathspecs",
     "--icase-pathspecs",
 ];
-const DIRECTORIES: &[&str] = &["-C", "--git-dir", "--work-tree"];
+const GIT_DIR: &str = "--git-dir";
+const DIRECTORIES: &[&str] = &["-C", GIT_DIR, "--work-tree"];
 const CONFIG: &[&str] = &["-c", "--config-env"];
 const OTHER_VALUES: &[&str] = &["--namespace", "--super-prefix", "--attr-source"];
 
@@ -52,8 +55,8 @@ pub(crate) struct GitCommand<'a> {
     pub subcommand: Vec<String>,
     /// Values of `-C`, `--git-dir` and `--work-tree`.
     pub directories: Vec<&'a str>,
-    /// True when an option can run a program or is not understood: the command
-    /// line as written must be judged too.
+    /// True when an option can run a program, names the git directory or is not
+    /// understood: the command line as written must be judged too.
     pub keep_original: bool,
 }
 
@@ -85,6 +88,7 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
         i += usize::from(inline.is_none());
         if DIRECTORIES.contains(&name) {
             directories.push(value);
+            keep_original |= name == GIT_DIR;
         } else if CONFIG.contains(&name) {
             let key = value
                 .split_once('=')
@@ -120,4 +124,22 @@ pub(super) fn push_shell(
         })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    fn keeps_original(cmd: &str) -> bool {
+        let argv: Vec<String> = cmd.split(' ').map(str::to_owned).collect();
+        parse(&argv).keep_original
+    }
+
+    #[test]
+    fn a_named_git_directory_keeps_the_command_as_written() {
+        assert!(keeps_original("git --git-dir=evil status"));
+        assert!(keeps_original("git --git-dir evil log"));
+        assert!(!keeps_original("git -C sub status"));
+        assert!(!keeps_original("git --work-tree=sub status"));
+    }
 }
