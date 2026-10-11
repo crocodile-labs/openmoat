@@ -1,6 +1,7 @@
 //! The `.git` subtree exception: user settings cannot name the project, so
 //! the policy's `.git/**` write deny is lowered to the exec vectors below and
-//! the rest of `.git` becomes an allowance.
+//! the rest of `.git` becomes an allowance. On Linux, where the runtime drops
+//! those globs, the working directory's own vectors are also denied by path.
 
 use openmoat_core::Kind;
 
@@ -28,6 +29,16 @@ const GIT_EXEC_VECTORS: &[&str] = &[
     "/**/.git/modules/**/commondir",
 ];
 
+/// The vectors in the working directory's `.git` itself, which Linux denies by
+/// path (`Edit(./…)`). A linked worktree's `commondir` and the submodules'
+/// vectors sit below names host-wide settings cannot know, so they stay globs.
+const GIT_LITERALS: &[&str] = &[
+    ".git/hooks",
+    ".git/config",
+    ".git/config.worktree",
+    ".git/info/attributes",
+];
+
 impl Filesystem {
     /// The policy keeps the project's `.git` from writes, but user settings
     /// cannot name the project, and denying `.git` everywhere breaks `git commit`.
@@ -48,4 +59,30 @@ impl Filesystem {
              can still rewrite history, and the hook still asks for file-tool writes to `.git`",
         );
     }
+
+    /// On Linux, the `Edit(./.git/…)` rules for [`GIT_LITERALS`] when the
+    /// `.git` exception applies. The runtime mounts over a denied path's first
+    /// missing component, so in a working directory without `.git` none can be
+    /// created there; it denies `.git/hooks` and `.git/config` itself only when
+    /// `.git` is a directory, and skips a path below a file (a linked worktree's
+    /// `.git`).
+    pub(super) fn git_literals(&self, rules: &mut Vec<String>, report: &mut Report) {
+        if !self.deny_write.iter().any(|e| e == GIT_EXEC_VECTORS[0]) {
+            return;
+        }
+        for path in GIT_LITERALS {
+            push_unique(rules, format!("Edit(./{path})"));
+        }
+        report.loss(
+            Kind::FsWrite,
+            "claude-code.linux-git-rules",
+            "on Linux `.git` hooks, config, config.worktree and info/attributes are denied by path \
+             in the working directory, so where it has no `.git` yet sandboxed commands cannot \
+             create one there (`git init` in that directory fails)"
+                .into(),
+        );
+    }
 }
+
+#[cfg(test)]
+mod tests;

@@ -88,6 +88,10 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "Edit(./.cursor/hooks.json)",
             "Edit(./.cursor/sandbox.json)",
             "Edit(./.codex/hooks.json)",
+            "Edit(./.git/hooks)",
+            "Edit(./.git/config)",
+            "Edit(./.git/config.worktree)",
+            "Edit(./.git/info/attributes)",
         ],
         "another agent's hook file below a directory the policy denies writing \
          (`.cursor`, `.codex`) is denied by path (#434); Claude Code keeps its own \

@@ -45,11 +45,14 @@ command ends; the file on disk does not change (`contained` in
   also adds `Edit(./.cursor/hooks.json)`, `Edit(./.cursor/sandbox.json)` and
   `Edit(./.codex/hooks.json)`, so sandboxed commands cannot plant another agent's
   hooks there. A missing `.cursor` or `.codex` is read-only for the command, which
-  the policy denies creating anyway. Claude Code itself keeps the working directory's
-  `.git/hooks`, `.git/config` and `.claude` settings read-only. Everything else the
-  policy denies by a `**/` glob (a `.env` in a subdirectory, `.env.local`,
-  `.git/info/attributes`, submodule hooks, those hook files in a subdirectory,
-  `bin/moat`) stays writable for sandboxed commands on Linux; `moat sandbox show`
+  the policy denies creating anyway. `moat init` also adds `Edit(./.git/hooks)`,
+  `Edit(./.git/config)`, `Edit(./.git/config.worktree)` and
+  `Edit(./.git/info/attributes)`; in a working directory without `.git`, `git init`
+  there fails inside the sandbox. Claude Code itself keeps the `.claude` settings
+  read-only. Everything else the policy denies by a `**/` glob (a `.env` in a
+  subdirectory, `.env.local`, submodule hooks, a linked worktree's `commondir`,
+  those hook files in a subdirectory, `bin/moat`) stays writable for sandboxed
+  commands on Linux; `moat sandbox show`
   lists it (`claude-code.linux-write-globs`).
 - **Codex** (`config.toml`): a `[permissions.moat]` profile, `default_permissions =
   "moat"` and `features.network_proxy = true`. The `**/` denies (`.env` files) cover

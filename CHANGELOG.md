@@ -9,6 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
+- On Linux, sandboxed commands under Claude Code can no longer write the project's `.git/config.worktree` or `.git/info/attributes` (nor hooks and config), which macOS already denied ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 - Claude Code's file tools keep refusing secrets and OpenMoat's own files when the hook is missing or killed: `moat init` writes matching `permissions.deny` rules on every OS, Windows included ([#459](https://github.com/crocodile-labs/openmoat/pull/459)).
 - Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
 

@@ -349,7 +349,8 @@ impl Filesystem {
     }
 
     /// The `Edit(./<name>)` rules that make Linux deny each `/**/<name>` write
-    /// deny directly in the working directory, and what Linux leaves out.
+    /// deny directly in the working directory, the `.git` exception's rules
+    /// ([`Self::git_literals`]), and what Linux leaves out.
     fn edit_rules(&self, report: &mut Report) -> Vec<String> {
         // The single names the policy denies writing anywhere, as a node
         // (`/**/.cursor`) or a tree (`/**/.moat/**`).
@@ -377,17 +378,19 @@ impl Filesystem {
             }
             dropped.push(entry.clone());
         }
+        self.git_literals(&mut rules, report);
         if !dropped.is_empty() {
             report.allowance(
                 Kind::FsWrite,
                 "claude-code.linux-write-globs",
                 dropped,
                 "on Linux Claude Code drops every glob in denyWrite, so sandboxed commands may \
-                 write these, except a name directly in the session's working directory and \
-                 another agent's hook file there (`.cursor/hooks.json`, `.codex/hooks.json`), \
-                 which an `Edit(./…)` rule denies there (Claude Code's file tools obey it too), \
-                 and that directory's `.git` hooks and config and `.claude` settings, which \
-                 Claude Code keeps read-only itself",
+                 write these, except a name directly in the session's working directory, \
+                 another agent's hook file there (`.cursor/hooks.json`, `.codex/hooks.json`) \
+                 and that directory's `.git` hooks, config, config.worktree and \
+                 info/attributes, which an `Edit(./…)` rule denies there (Claude Code's file \
+                 tools obey it too), and its `.claude` settings, which Claude Code keeps \
+                 read-only itself; a linked worktree's `commondir` and submodules stay writable",
             );
         }
         rules
