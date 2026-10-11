@@ -240,7 +240,8 @@ it with `moat` or `moat allow --last`. Cursor's `preToolUse` and `beforeReadFile
 same treatment. The audit log keeps the `ask`, which is what `--last` finds
 (`Host::answer`); it approves a shell command or the exact files of a file action.
 
-The Continue CLI (`cn`) cannot ask either, and it runs the Claude Code hook: it merges
+The Continue CLI (`cn`) cannot ask either. The released `cn` (1.5.47) loads hooks but
+fires no event (THREAT_MODEL, "The Continue CLI"), so this adapter is ready for a release that does: `cn` merges
 hooks from `~/.claude/settings.json` and `.claude/settings.json` with its own files.
 Its runner (`extensions/cli/src/hooks/hookRunner.ts` in continuedev/continue) blocks
 only on exit 2, `decision: "block"` or `permissionDecision: "deny"`, so an `ask` would

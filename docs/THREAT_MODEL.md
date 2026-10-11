@@ -49,11 +49,11 @@ sandboxes and `moat run` add today, or the planned answer from the
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; recursive `rm` and discarding checkouts ask | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
 | T5 | Supply-chain execution (`curl … \| sh`, unknown installs) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; `installs` asks for package installs | Network only to allowed hosts (the registries) |
-| T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
+| T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`-c`, `GIT_CONFIG_*`) ask, and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable` and asks, while the parts around it are still decided, so a deny among them stands | The sandbox bounds what any spelling can reach |
 | T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels ask | *Planned:* MCP stdio proxy with description pinning (1.0) |
-| T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `moat allow\\|doctor\\|init\\|policy\\|trust\\|uninstall` and `moat sandbox sync`; the lock denies everything after drift; Claude Code `ConfigChange` blocks a drifted settings file; a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022) | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `moat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); *planned:* signed policy (1.0) |
-| T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/moat`; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
+| T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `moat allow\\|doctor\\|init\\|policy\\|trust\\|uninstall` and `moat sandbox sync`; the lock denies everything after drift; Claude Code `ConfigChange` blocks a drifted settings file; a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `moat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); *planned:* signed policy (1.0) |
+| T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/moat` and to the recorded binary, its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `moat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
 | T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts; `cloud-metadata` denies metadata and link-local services; `local-net` asks for localhost; `moat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host asks (ADR-017); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `moat run`, and host sandboxes with `sandbox.proxy_port`, go through `moat proxy` |
 
@@ -108,7 +108,7 @@ something OpenMoat claims to stop.
   own behaviour: Claude Code starts its commands without a terminal, Codex's macOS
   profile refuses `TIOCSTI`, and Codex's Linux sandbox does not, so only a kernel with
   `dev.tty.legacy_tiocsti` at 0 (`EIO`, as on CI's runner) stops a sandboxed script
-  there from typing a command into the terminal for the user's shell. Claude Code's file tools, `WebFetch`, MCP servers and hooks run
+  there from typing a command into the terminal for the user's shell; `moat doctor` warns on Linux with Codex set up when that setting allows it, or when the kernel (before 6.2) has none. Claude Code's file tools, `WebFetch`, MCP servers and hooks run
   outside its sandbox; only the hook governs them. Writes by a sandboxed command to
   the session's working directory are allowed even when the session started above
   the git root, and Claude Code leaves paths outside the user directories (`/Users`,
@@ -119,8 +119,8 @@ something OpenMoat claims to stop.
   and allowance; ADR-018 lists the open risks.
 - **Translation losses (stricter than the policy).** Neither host can re-allow
   `.env.example`, `.env.sample` or `.env.template` inside the `**/.env.*` deny, so
-  sandboxed commands cannot read them; on Linux Claude Code's file tools refuse them
-  too. Codex keeps `.git` read-only for sandboxed
+  sandboxed commands cannot read them; Claude Code's file tools refuse them too, by the
+  deny rules `moat init` writes on every OS so that they hold when the hook does not run. Codex keeps `.git` read-only for sandboxed
   commands and asks to run `git commit` outside. Claude Code's file tools refuse reads outside the
   working directories (`permissions.blockReadsOutsideWorkingDirectories`) where the
   hook would ask.
@@ -132,8 +132,11 @@ something OpenMoat claims to stop.
   `info/attributes` and submodules (#372). A script can still
   rewrite refs and objects (history tampering, which `git log`, signatures and review
   can show), write a rebase todo that a person later continues, or write a `.git`
-  *file* (`gitdir: …`) below the project, which the hook allows as well. The hook
-  still asks for file-tool writes to the project's `.git`.
+  *file* (`gitdir: …`) below the project. The hook asks for any write to a `.git`
+  file or directory in the project, nested ones included, and for `git --git-dir=…`;
+  `moat run` on macOS keeps a nested `.git` unwritable too. Git does not open a
+  directory that merely looks like a bare repository under `moat run`, Claude Code or
+  Codex (`safe.bareRepository=explicit`, git 2.38 or later; Cursor has no setting for it).
 - **The Lightweight tier (`moat run`) is weaker per command than the Standard tier.**
   It confines the agent process and everything it starts in one sandbox
   ([ARCHITECTURE.md](ARCHITECTURE.md) §14). What the agent needs, every script it runs
@@ -178,6 +181,8 @@ something OpenMoat claims to stop.
     Otherwise a script could leave a command in the terminal's input that the
     user's shell runs after the session, outside the sandbox (CVE-2017-5226). Output
     is not filtered: escape sequences a command prints reach the terminal emulator.
+    OpenMoat's own text output (`moat show`, `moat status`, `moat policy check`, the
+    guard's deny line) shows control characters in agent text as `?`.
 
   `moat run` prints each allowance before the agent starts. What it stops in an allowed
   project script, per operating system, and the gaps above, are executed in CI and
@@ -283,16 +288,18 @@ something OpenMoat claims to stop.
   | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks |
   | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
   | Ours: tool OpenMoat does not know | allow, rule `ungoverned`, recorded; the installed matcher sends only mapped tools | as Claude Code | a tool naming a path is checked as reading it; otherwise allow, `ungoverned` | as Claude Code |
-  | Ours: no decision within 10 s (`GUARD_BUDGET_S`) | deny, exit 2, not recorded | same | same | same |
+  | Ours: no decision within 10 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | not applicable: `cn` fires no hooks (below) |
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
   turns its own panics into a deny. A crash that bypasses that (killed, aborted, out of
   memory) or a missing binary leaves Claude Code, Codex and `cn` with no way to block:
-  none of them has a fail-closed setting. A `guard` that hangs denies after 10 s, well
+  none of them has a fail-closed setting; Claude Code's own deny rules for secrets and
+  OpenMoat's files, which `moat init` writes on every OS, still hold for its file tools
+  then. A `guard` that hangs denies after 10 s, well
   before any host timeout `moat init` sets, so the host never reaches the timeout that
-  would run the call; that deny is not recorded, because what hangs may be the audit
-  log.
+  would run the call; that deny goes to a side file (`~/.moat/guard-hangs.log`, which
+  `moat doctor` reports), not the audit log, because what hangs may be the audit log.
 
   [cc-hooks]: https://code.claude.com/docs/en/hooks
   [codex-hooks]: https://developers.openai.com/codex/hooks
@@ -300,13 +307,13 @@ something OpenMoat claims to stop.
   [codex-runner]: https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs
   [cursor-hooks]: https://cursor.com/docs/agent/hooks
   [cn-runner]: https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts
-- **The Continue CLI.** `cn` loads hooks from
-  `~/.claude/settings.json` and `.claude/settings.json`, so OpenMoat's Claude Code hook
-  also runs inside `cn`. `guard` recognises `cn` and sends it every `ask` as a deny
-  (ARCHITECTURE §5); on a hook failure `cn` runs the call (table above).
-  The released Continue CLI does not run hooks: `cn` 1.5.47 (continuedev/continue
+- **The Continue CLI.** The released Continue CLI does not run hooks: `cn` 1.5.47 (continuedev/continue
   `main` at `5522c6f`) loads them but fires no event (continuedev/continue#11043 closed
-  unmerged), so OpenMoat cannot check its tool calls today. Run `cn` under `moat run`.
+  unmerged), so OpenMoat cannot check its tool calls today. Run `cn` under `moat run`. When a
+  release fires them, `cn` will load OpenMoat's Claude Code hook from
+  `~/.claude/settings.json` and `.claude/settings.json`; `guard` already recognises
+  `cn` and sends it every `ask` as a deny (ARCHITECTURE §5), and the table above shows
+  what its hook runner does on a failure.
   `moat doctor` and `moat status` warn when `cn` is on the search path or its directory
   (`~/.continue`, or `CONTINUE_GLOBAL_DIR`) exists. `cn` names some tool arguments
   differently (`Read` `filepath`); those calls are denied as malformed.
@@ -315,11 +322,12 @@ something OpenMoat claims to stop.
   there as a deny. A file write or read that needs approval is blocked until a person
   approves that exact file with `moat` or `moat allow --last`, or a policy allow rule
   covers it.
-- **Ungoverned tools.** Claude Code `WebSearch` (server-side) and
-  orchestration tools whose own calls are hooked; Codex web search and hosted tools;
+- **Ungoverned tools.** Claude Code orchestration tools whose own calls are hooked;
+  Codex web search (a hosted tool its hook never sees) and other hosted tools;
   Cursor `Shell` and `MCP:<tool>` under `preToolUse` (governed by `beforeShellExecution`
-  and `beforeMCPExecution` instead), `Task`, and any tool that names no path. Ungoverned calls are
-  allowed with rule `ungoverned` and recorded.
+  and `beforeMCPExecution` instead), `Task`, and any tool that names no path. Ungoverned calls that reach the hook are
+  allowed with rule `ungoverned` and recorded. Claude Code and Cursor `WebSearch` are
+  governed: `web.search` in `defaults` decides them, and a search after a secret read asks.
 - **No settings veto outside Claude Code.** Codex and Cursor have no `ConfigChange`
   event, so a tampered hook file there is caught on the next tool call, not when it
   is written.
@@ -359,7 +367,10 @@ something OpenMoat claims to stop.
   widens only through a new file version, which drops back to tightening-only
   until someone trusts it again (ADR-022).
 - **The binary is pinned by path, not digest** (ADR-006, ADR-016). Whoever can replace
-  the file the stable link points at decides what the hooks run.
+  the file the stable link points at decides what the hooks run. The recorded path, its
+  directory and its link target are protected by literal path (`kernel-self`, every
+  host sandbox, Claude Code's deny rules); a digest check would add nothing, since a
+  replaced binary decides whether to run it.
 - **Claude Code's `theme` setting is not pinned** (#287). Claude Code writes it to
   `settings.json` itself; it changes only colours, and every other key stays pinned.
 - **`CLAUDE_CONFIG_DIR` must match for `init`.** `moat init` installs hooks where its
@@ -376,7 +387,8 @@ something OpenMoat claims to stop.
   log visible to `moat doctor`. It is unkeyed and lives in the file it protects, so
   whoever can write `~/.moat/audit.db` (the user's account, or an allowed command
   running as the user, see "Outside the sandboxes") can delete the newest events and leave a
-  valid shorter chain, or rewrite events and recompute every hash after them. Keeping
+  valid shorter chain (an agent's `sqlite3 ~/.moat/audit.db …` is a write that
+  `kernel-self` denies), or rewrite events and recompute every hash after them. Keeping
   the head hash or count elsewhere on the same machine would need a second write on
   every `guard` call and could be rewritten by the same attacker, so it is not done.
   Anchoring the head off the machine is left to the person: `moat doctor` and
@@ -427,6 +439,6 @@ something OpenMoat claims to stop.
   asserted. CI's `standard tier` job runs the host sandboxes with pinned Claude Code
   and Codex binaries, a local fake API and no account. [EVIDENCE.md](EVIDENCE.md) is
   the results table, generated from the same file; known gaps are listed there as gaps.
-- **Planned:** differential testing of the lexer against real `bash`, and the full
+- **Planned:** differential testing of the lexer against real `bash` (#461), and the full
   MoatBench, which measures attack success with and without OpenMoat across live agents ([ROADMAP.md](ROADMAP.md)). Prompt fatigue is measured
   today only by `moat report` (asks per active hour).
