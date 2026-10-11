@@ -74,11 +74,18 @@ command ends; the file on disk does not change (`contained` in
   `moat sandbox show` lists it (`codex.linux-write-globs`). Codex on Linux also runs its
   own executable inside the sandbox, so on Linux the profile lets commands read the
   executable `codex` on `PATH` starts (through npm's launcher, the platform binary),
-  listed as `codex.own-binary`. Run `moat sandbox sync` after installing or moving
-  Codex. When `codex` is not on `PATH`, `moat sandbox show` says so and Codex starts
-  commands only when installed under a read root. An executable inside a denied path,
-  such as the Codex home where Codex's standalone installer puts it, stays denied
-  (a deny wins), so Codex on Linux starts no command; `show` says that too.
+  listed as `codex.own-binary`. Run `moat sandbox sync` after installing, moving or
+  updating Codex. When `codex` is not on `PATH`, `moat sandbox show` says so and Codex
+  starts commands only when installed under a read root. Codex's standalone installer
+  puts the executable in the Codex home, which the profile denies, and Codex hides a
+  denied directory after the read paths inside it. When no read root or write grant
+  includes the Codex home, commands cannot read it anyway, so on Linux the profile
+  then denies the Codex home's login, config and conversations by name (`auth.json`,
+  `config.toml`, `history.jsonl`, `sessions`, `archived_sessions`, `log`) instead of
+  the whole directory, and commands may read the executable. Those names still apply
+  when Codex runs with the home directory as its project; other files there are then
+  readable. Otherwise, as for an executable inside any other denied path, nothing is
+  granted (a deny wins), so Codex on Linux starts no command; `show` says that too.
 - **Cursor** (`sandbox.json` next to `hooks.json`: `~/.cursor`, or `$CURSOR_CONFIG_DIR`):
   `type: "workspace_readwrite"`, `readBoundary: "workspace"`, `additionalReadPaths`
   (the read roots and read allow rules), `additionalReadwritePaths` (write allow rules

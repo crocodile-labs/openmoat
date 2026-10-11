@@ -217,7 +217,9 @@ impl Plan {
         claude::deny_write(&mut claude, &binary_paths);
         claude::deny_edit(&mut claude, &binary_paths);
         let mut codex = codex::generate(&ir, &homes, proxy_port)?;
-        if let Some(codex_home) = codex_config_path(state)?.parent() {
+        let codex_config = codex_config_path(state)?;
+        let codex_home = codex_config.parent();
+        if let Some(codex_home) = codex_home {
             codex::protect(&mut codex, codex_home);
         }
         let checker = ir.checker()?;
@@ -228,7 +230,7 @@ impl Plan {
             checker.check_os(&read) == Some(Effect::Allow)
         });
         if cfg!(target_os = "linux") {
-            codex::read_own_binary(&mut codex, codex::own_binary().as_deref());
+            codex::read_own_binary(&mut codex, codex::own_binary().as_deref(), codex_home);
             codex::deny_names(&mut codex);
         }
         Ok(Self {
