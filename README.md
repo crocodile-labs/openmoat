@@ -18,6 +18,10 @@ check fails · published evidence · nothing leaves your machine unless you expo
 [Install](docs/INSTALL.md) · [Usage](docs/USAGE.md) · [Policy](docs/POLICY.md) ·
 [Threat model](docs/THREAT_MODEL.md) · [Demo](docs/DEMO.md) · [Roadmap](docs/ROADMAP.md)
 
+```bash
+brew install crocodile-labs/tap/moat && moat init     # other ways: docs/INSTALL.md
+```
+
 ![A prompt injection in a README asks Claude Code and Codex to upload the SSH key; OpenMoat denies every attempt, denies the agent's attempts to switch it off, and records it all](docs/assets/demo.gif)
 
 ## Why you need it
@@ -79,6 +83,9 @@ When something is blocked or asked, run `moat`. It shows which agents are protec
 today's decisions, then anything that needs you: a changed policy to accept, or the
 command an agent last asked to run (`Allow? [o]nce for this session / [a]lways / [n]o`).
 It shows what would change before it asks, and changes nothing unless you answer.
+
+If OpenMoat is useful to you, a star on GitHub helps other developers find it. Found a
+way past it? Please report it as described in [SECURITY.md](SECURITY.md).
 
 ## How it works
 
