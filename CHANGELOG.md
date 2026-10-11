@@ -13,6 +13,7 @@ view at the end of the file.
 
 ### Security
 - Writing a `.git` file or directory below the project root (`sub/.git` holding `gitdir: ../evil`, a planted `sub/.git/hooks`) asks like the root's `.git`, since git follows it on the next command run there; `moat run` on macOS keeps them unwritable too ([#462](https://github.com/crocodile-labs/openmoat/pull/462)).
+- Claude Code's file tools refuse to edit the recorded `moat` binary and its directory wherever it is installed, also when the hook does not run ([#465](https://github.com/crocodile-labs/openmoat/pull/465)).
 - The `moat` binary the hooks run is protected by its recorded path, its target and their directory wherever it is installed, not only as `bin/moat`, and `moat init` refuses a binary inside the project, a temp directory or a directory the agents' sandboxes may write ([#458](https://github.com/crocodile-labs/openmoat/pull/458)).
 - Claude Code's file tools keep refusing secrets and OpenMoat's own files when the hook is missing or killed: `moat init` writes matching `permissions.deny` rules on every OS, Windows included ([#459](https://github.com/crocodile-labs/openmoat/pull/459)).
 - Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).

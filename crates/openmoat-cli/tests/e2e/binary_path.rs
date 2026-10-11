@@ -72,6 +72,15 @@ fn a_binary_under_another_name_is_protected_by_its_recorded_path() {
         !codex.contains(&format!("\"{}\" =", link.display())),
         "Codex lists the file inside its denied directory:\n{codex}"
     );
+    // Claude Code's own deny rules name them too, on every OS, and hosts.json
+    // records them, so `uninstall` removes exactly what was added.
+    let recorded = fs::read_to_string(sb.home.join(".moat/hosts.json")).unwrap();
+    for path in [link.clone(), real(link.parent().unwrap())] {
+        let rule = format!("Edit(/{})", path.display());
+        let rules = settings["permissions"]["deny"].as_array().unwrap();
+        assert!(rules.contains(&json!(rule)), "{rule}: {rules:?}");
+        assert!(recorded.contains(&rule), "{rule}: {recorded}");
+    }
     let target = real(&target);
     let (link, target, dir) = (link.display(), target.display(), dir.display());
     for command in [
