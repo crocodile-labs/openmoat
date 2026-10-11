@@ -22,6 +22,8 @@ view at the end of the file.
 
 ### Fixed
 - `moat uninstall` removes only the Claude Code deny rules OpenMoat added, never a rule of the user's that is spelled the same ([#457](https://github.com/crocodile-labs/openmoat/pull/457)).
+### Security
+- `moat show`, `moat status`, `moat replay`, `moat policy check`, `moat allow` and the home screen show control characters in commands, paths and reasons as `?`, so a logged escape sequence can no longer drive the terminal ([#452](https://github.com/crocodile-labs/openmoat/pull/452)).
 
 ## [0.3.0] - 2026-10-10
 
