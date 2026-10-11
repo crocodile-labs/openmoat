@@ -20,6 +20,9 @@ use crate::sandbox::patterns::is_below;
 
 const RULE: &str = "codex.own-binary";
 
+/// Where Codex's standalone installer unpacks each release, in the Codex home.
+const STANDALONE_RELEASES: &str = "packages/standalone/releases";
+
 /// What Codex keeps in its home that commands must not read: the login, the
 /// config (MCP server tokens) and the conversations.
 const CODEX_STATE: &[&str] = &[
@@ -120,13 +123,19 @@ pub fn read_own_binary(
         );
         return;
     }
-    if !filesystem.contains_key(&key) {
-        filesystem.insert(&key, value("read"));
+    let grant = match &home {
+        Some(_) => standalone_releases(&key).unwrap_or(key),
+        None => key,
+    };
+    if !filesystem.contains_key(&grant) {
+        filesystem.insert(&grant, value("read"));
     }
     let opened = home.map_or_else(String::new, |home| {
         format!(
             ". It is in the Codex home `{home}`, which no read root includes, so the profile \
-             denies the Codex home's {} instead of the whole directory",
+             denies the Codex home's {} instead of the whole directory; the standalone \
+             installer's `{STANDALONE_RELEASES}` holds only Codex's published releases, so \
+             commands may read all of it and an update needs no sync",
             CODEX_STATE.join(", ")
         )
     });
@@ -136,7 +145,18 @@ pub fn read_own_binary(
     );
     generated
         .report
-        .allowance(Kind::FsRead, RULE, vec![key], &message);
+        .allowance(Kind::FsRead, RULE, vec![grant], &message);
+}
+
+/// The standalone installer's releases directory above `binary`: one
+/// directory per published version (the executable, ripgrep, bubblewrap and
+/// the package manifest), unpacked from Codex's release archive. Granting it
+/// rather than the file keeps commands starting after Codex updates itself.
+fn standalone_releases(binary: &str) -> Option<String> {
+    Path::new(binary)
+        .ancestors()
+        .find(|dir| dir.ends_with(STANDALONE_RELEASES))
+        .map(crate::context::path_string)
 }
 
 /// The Codex home's deny entry, when `binary` is inside `home` (as listed or
@@ -230,7 +250,13 @@ mod tests {
         let mut out = generated(openmoat_core::DEFAULT_POLICY);
         let home = Path::new("/Users/me/.codex");
         read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home));
-        assert_eq!(mode(&out, STANDALONE), Some("read"));
+        let releases = "/Users/me/.codex/packages/standalone/releases";
+        assert_eq!(mode(&out, releases), Some("read"));
+        assert_eq!(
+            mode(&out, STANDALONE),
+            None,
+            "covered by the releases directory"
+        );
         assert_eq!(mode(&out, "/Users/me/.codex"), None);
         for name in CODEX_STATE {
             assert_eq!(
@@ -256,6 +282,10 @@ mod tests {
             let home = Path::new("/Users/me/.codex");
             read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home));
             assert_eq!(mode(&out, STANDALONE), None);
+            assert_eq!(
+                mode(&out, "/Users/me/.codex/packages/standalone/releases"),
+                None
+            );
             assert_eq!(mode(&out, "/Users/me/.codex"), Some("deny"));
             assert_eq!(mode(&out, "/Users/me/.codex/auth.json"), None);
             assert!(out.report.losses.iter().any(|l| l.rule == RULE));

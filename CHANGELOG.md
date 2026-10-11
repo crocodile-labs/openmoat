@@ -26,6 +26,7 @@ view at the end of the file.
 ### Security
 - Cursor tools OpenMoat cannot classify ask (`tool.unknown` under `defaults`; set it to `allow` for the old behaviour), and Cursor `WebFetch` is checked as a fetch ([#472](https://github.com/crocodile-labs/openmoat/pull/472)).
 - Codex installed by its standalone installer starts commands on Linux: the profile lets commands read its executable in the Codex home and denies the Codex home's login, config and conversations by name instead of the whole directory, which no read root includes ([#470](https://github.com/crocodile-labs/openmoat/pull/470)).
+- Codex installed by its standalone installer starts commands on Linux: the profile lets commands read the installer's releases directory in the Codex home, so updates keep working, and denies the Codex home's login, config and conversations by name instead of the whole directory, which no read root includes ([#470](https://github.com/crocodile-labs/openmoat/pull/470)).
 
 ## [0.4.0] - 2026-10-11
 

@@ -108,29 +108,43 @@ fn codex_from_the_standalone_installer_starts_commands() {
     // Outside the read roots (`/tmp`), as a home directory is.
     let sb = Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[".codex"]);
     let standalone = sb.home.join(".codex/packages/standalone");
-    let release = standalone.join("releases/0.160.1-x86_64-unknown-linux-musl");
-    fs::create_dir_all(release.join("bin")).unwrap();
-    fs::copy(&codex, release.join("bin/codex")).unwrap();
-    symlink(&release, standalone.join("current")).unwrap();
+    let install = |version: &str| {
+        let release = standalone.join(format!("releases/{version}-x86_64-unknown-linux-musl"));
+        fs::create_dir_all(release.join("bin")).unwrap();
+        fs::copy(&codex, release.join("bin/codex")).unwrap();
+        let current = standalone.join("current");
+        if fs::symlink_metadata(&current).is_ok() {
+            fs::remove_file(&current).unwrap();
+        }
+        symlink(&release, current).unwrap();
+    };
+    install("0.160.1");
     let bin = sb.home.join(".local/bin");
     fs::create_dir_all(&bin).unwrap();
-    symlink(standalone.join("current/bin/codex"), bin.join("codex")).unwrap();
+    let installed = bin.join("codex");
+    symlink(standalone.join("current/bin/codex"), &installed).unwrap();
     fs::write(sb.home.join(".codex/auth.json"), "FAKE-TOKEN").unwrap();
     init(&sb, &bin);
     let project = sb.project();
     fs::write(project.join("main.rs"), "fn main() {}").unwrap();
+    let starts = |when: &str| {
+        let main = cat_output(&installed, &sb, &project, "main.rs");
+        assert_eq!(
+            String::from_utf8_lossy(&main.stdout),
+            "fn main() {}",
+            "commands start {when}: {}",
+            text(&main)
+        );
+    };
 
-    let main = cat_output(&bin.join("codex"), &sb, &project, "main.rs");
-    assert_eq!(
-        String::from_utf8_lossy(&main.stdout),
-        "fn main() {}",
-        "commands start: {}",
-        text(&main)
-    );
+    starts("after `moat init`");
     let auth = sb.home.join(".codex/auth.json");
     assert_eq!(
-        cat(&codex, &sb, &project, &auth.to_string_lossy()),
+        cat(&installed, &sb, &project, &auth.to_string_lossy()),
         None,
         "the Codex home stays hidden"
     );
+    // Codex updates itself: a new release directory, `current` moved to it.
+    install("0.161.0");
+    starts("after an update, without `moat sandbox sync`");
 }

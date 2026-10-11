@@ -82,9 +82,12 @@ command ends; the file on disk does not change (`contained` in
   includes the Codex home, commands cannot read it anyway, so on Linux the profile
   then denies the Codex home's login, config and conversations by name (`auth.json`,
   `config.toml`, `history.jsonl`, `sessions`, `archived_sessions`, `log`) instead of
-  the whole directory, and commands may read the executable. Those names still apply
-  when Codex runs with the home directory as its project; other files there are then
-  readable. Otherwise, as for an executable inside any other denied path, nothing is
+  the whole directory. Commands may then read the installer's
+  `packages/standalone/releases` directory, which holds only Codex's published
+  releases (the executable, ripgrep, bubblewrap and the package manifest, one
+  directory per version), so Codex keeps starting commands after it updates itself
+  without `moat sandbox sync`. Those names still apply when Codex runs with the home
+  directory as its project; other files there are then readable. Otherwise, as for an executable inside any other denied path, nothing is
   granted (a deny wins), so Codex on Linux starts no command; `show` says that too.
 - **Cursor** (`sandbox.json` next to `hooks.json`: `~/.cursor`, or `$CURSOR_CONFIG_DIR`):
   `type: "workspace_readwrite"`, `readBoundary: "workspace"`, `additionalReadPaths`
