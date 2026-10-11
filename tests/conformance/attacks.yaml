@@ -1670,3 +1670,35 @@
   action: { shell: "cat .env x{1..300}" }
   expect: { verdict: deny, rules: [secrets-paths] }
 
+
+# Database shells open their file read-write: `sqlite3 FILE 'delete …'` is a write
+# of FILE, as are files its SQL or dot-commands name (`attach`, `.open`, `.output`),
+# so kernel-self keeps the audit log out of reach
+- id: T9-sqlite-deletes-audit-events
+  threat: T9
+  action: { shell: "sqlite3 ~/.moat/audit.db 'delete from events'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-sqlite-audit-db-after-cd
+  threat: T9
+  action: { shell: "cd ~/.moat && sqlite3 audit.db 'drop table events'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-sqlite-options-before-audit-db
+  threat: T9
+  action: { shell: "sqlite3 -batch -cmd 'pragma foreign_keys=off' ~/.moat/audit.db 'delete from events'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-sqlite-attach-audit-db
+  threat: T9
+  action: { shell: "sqlite3 /tmp/x.db \"attach '~/.moat/audit.db' as a; delete from a.events\"" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-sqlite-open-audit-db-on-stdin
+  threat: T9
+  action: { shell: "printf '.open ~/.moat/audit.db\\ndelete from events;\\n' | sqlite3" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-sqlite-uri-audit-db
+  threat: T9
+  action: { shell: "sqlite3 'file:~/.moat/audit.db?cache=shared' 'delete from events'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-duckdb-audit-db
+  threat: T9
+  action: { shell: "duckdb ~/.moat/audit.db -c 'delete from events'" }
+  expect: { verdict: deny, rules: [kernel-self] }

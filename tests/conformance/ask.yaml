@@ -679,3 +679,12 @@
   threat: T7
   action: { shell: "make SHELL=/tmp/evil" }
   expect: { verdict: ask, rules: [default] }
+# a database shell asks even read-only: dot-commands such as `.shell` run programs
+- id: ask-sqlite-readonly-audit-db
+  threat: T9
+  action: { shell: "sqlite3 -readonly ~/.moat/audit.db 'select count(*) from events'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-sqlite-project-db
+  threat: T7
+  action: { shell: "sqlite3 dev.db 'select 1'" }
+  expect: { verdict: ask, rules: [default] }

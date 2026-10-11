@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- Database shells (`sqlite3`, `duckdb`) count their database file, and any file their SQL opens, as a write, so `kernel-self` keeps `~/.moat/audit.db` out of reach ([#453](https://github.com/crocodile-labs/openmoat/pull/453)).
+
 ## [0.3.0] - 2026-10-10
 
 ### Security
