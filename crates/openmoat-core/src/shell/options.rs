@@ -1,10 +1,10 @@
 //! Options of ordinary programs that run another command or write a file.
 //!
 //! `find . -exec cmd {} \;` runs `cmd`; `git diff --output=FILE` writes `FILE`.
-//! `python -m venv dir` creates `dir`. None of these shows up as a separate
+//! `python -m venv dir` creates `dir`; `gofmt -w f.go` rewrites `f.go`. None of these shows up as a separate
 //! command or a path-looking token, so they are surfaced here: the `-exec`
 //! command is classified as a command of its own, and the `--output` value and
-//! the venv directory become `fs.write`s.
+//! the venv directory and the files `gofmt` rewrites become `fs.write`s.
 
 use super::commands::classify_wrapped;
 use super::{ClassifyError, ShellContext, Sink};
@@ -31,6 +31,9 @@ pub(super) fn classify(
         for dir in argv[3..].iter().filter(|a| !a.starts_with('-')) {
             sink.write(ctx, dir)?;
         }
+    }
+    if program == "gofmt" {
+        gofmt(argv, ctx, sink)?;
     }
     let mut i = 1;
     while let Some(arg) = argv.get(i) {
@@ -65,4 +68,84 @@ pub(super) fn classify(
         }
     }
     Ok(())
+}
+
+/// `fd` flags that take no value, so the word after them is still the pattern.
+const FD_FLAGS: &str = "HIuisgFalLp01q";
+const FD_LONG_FLAGS: &[&str] = &[
+    "--hidden",
+    "--no-ignore",
+    "--no-ignore-vcs",
+    "--unrestricted",
+    "--ignore-case",
+    "--case-sensitive",
+    "--glob",
+    "--regex",
+    "--fixed-strings",
+    "--absolute-path",
+    "--list-details",
+    "--follow",
+    "--full-path",
+    "--print0",
+    "--quiet",
+    "--prune",
+    "--show-errors",
+    "--one-file-system",
+];
+
+/// The index of `fd`'s pattern, its first operand: a regex such as `\.rs$`,
+/// not a path. Only when every word before it is a flag without a value; after
+/// any other option the word stays a possible path (stricter).
+pub(super) fn fd_pattern(argv: &[String], program: &str) -> Option<usize> {
+    if program != "fd" {
+        return None;
+    }
+    let at = argv.iter().skip(1).position(|a| !a.starts_with('-'))? + 1;
+    let flag = |a: &String| {
+        FD_LONG_FLAGS.contains(&a.as_str())
+            || a.strip_prefix('-')
+                .is_some_and(|f| !f.is_empty() && f.chars().all(|c| FD_FLAGS.contains(c)))
+    };
+    argv[1..at].iter().all(flag).then_some(at)
+}
+
+/// `command -v name` and `command -V name` print how the shell would find
+/// `name` and run nothing.
+pub(super) fn only_describes(argv: &[String], program: &str) -> bool {
+    program == "command"
+        && argv[1..]
+            .iter()
+            .take_while(|a| a.starts_with('-') && *a != "--")
+            .any(|a| a.contains(['v', 'V']))
+}
+
+/// `gofmt -w` rewrites every file operand in place, and `-cpuprofile FILE`
+/// writes `FILE`. Go's flag package takes `-name` and `--name`, with `=VALUE`
+/// or the next word. Any `-w` counts, `-w=false` included: stricter, never looser.
+fn gofmt(argv: &[String], ctx: &ShellContext<'_>, sink: &mut Sink) -> Result<(), ClassifyError> {
+    let rewrites = argv[1..].iter().any(|a| go_flag(a) == Some("w"));
+    let mut words = argv[1..].iter();
+    while let Some(arg) = words.next() {
+        match go_flag(arg) {
+            Some("cpuprofile") => {
+                let value = arg
+                    .split_once('=')
+                    .map(|(_, v)| v)
+                    .or_else(|| words.next().map(String::as_str));
+                if let Some(file) = value {
+                    sink.write(ctx, file)?;
+                }
+            }
+            None if rewrites => sink.write(ctx, arg)?,
+            Some(_) | None => {}
+        }
+    }
+    Ok(())
+}
+
+/// The name of a Go flag (`-w`, `--cpuprofile=f` → `w`, `cpuprofile`), or
+/// `None` for an operand.
+fn go_flag(arg: &str) -> Option<&str> {
+    let flag = arg.strip_prefix("--").or_else(|| arg.strip_prefix('-'))?;
+    Some(flag.split_once('=').map_or(flag, |(name, _)| name))
 }

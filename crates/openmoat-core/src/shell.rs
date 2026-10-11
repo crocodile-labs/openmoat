@@ -15,7 +15,7 @@
 //! | URLs with any host, bare dotted names under a known TLD, IPv4 literals (`crate::host`) | `Net` |
 //! | `$( … )`, backticks, `sh -c` (any option spelling, `invocation.rs`), `eval`, `xargs`, `sudo`, `env`, … | nested classification |
 //! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload |
-//! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE` (`options.rs`) | nested classification, `FsWrite` |
+//! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
 //! | `make --eval`, `-e`, `SHELL=`, `X!=cmd`, `$(shell …)` (`make.rs`) | `make <arg>` `Shell` atom + nested classification |
 //! | text tool options (`text.rs`): `sort -o FILE`, `uniq in out`; an unknown option | `FsWrite`; `<program> @<option>` `Shell` atom |
 //! | `sed` scripts (`sed/`): `r FILE`, `w FILE`; `e`, anything not understood | `FsRead`, `FsWrite`; `sed @<script>` `Shell` atom |

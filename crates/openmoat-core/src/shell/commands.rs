@@ -224,6 +224,9 @@ fn classify_simple(
         .data
         .extend(database::classify(&argv, program, stdin, ctx, sink)?);
     text_operands.data.extend(git::config_name(&argv));
+    text_operands
+        .data
+        .extend(options::fd_pattern(&argv, program));
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
 
     if MAKES.contains(&program) {
@@ -322,7 +325,7 @@ fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&'a [String]
         }
         return argv.get(i..).filter(|rest| !rest.is_empty());
     }
-    if !WRAPPERS.contains(&program) {
+    if !WRAPPERS.contains(&program) || options::only_describes(argv, program) {
         return None;
     }
     let options_with_value = WRAPPER_OPTIONS_WITH_VALUE

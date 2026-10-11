@@ -148,6 +148,7 @@ pub const FILE_OPERANDS: &[&str] = &[
     "xz",
     "jq",
     "yq",
+    "gofmt",
     "openssl",
     "ssh-keygen",
     "split",

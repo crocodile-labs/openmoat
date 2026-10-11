@@ -686,3 +686,49 @@
 - id: benign-git-check-ignore
   action: { shell: "git check-ignore x" }
   expect: { verdict: allow, rules: [dev-shell] }
+# Read-only utilities an agent runs to look around
+- id: benign-file-type
+  action: { shell: "file src/main.rs" }
+  expect: { verdict: allow, rules: [dev-readonly, project-fs] }
+- id: benign-stat
+  action: { shell: "stat README.md" }
+  expect: { verdict: allow, rules: [dev-readonly, project-fs] }
+- id: benign-du-project
+  action: { shell: "du -sh ." }
+  expect: { verdict: allow, rules: [dev-readonly, project-fs] }
+- id: benign-printf
+  action: { shell: "printf '%s\\n' a b" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-command-v
+  action: { shell: "command -v cargo" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-type
+  action: { shell: "type cargo" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-uname
+  action: { shell: "uname -a" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-date
+  action: { shell: "date" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-date-format
+  action: { shell: "date -u +%Y-%m-%dT%H:%M:%SZ" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-fd
+  action: { shell: "fd '\\.rs$'" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-brew-list
+  action: { shell: "brew list" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-brew-info
+  action: { shell: "brew info ripgrep" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-java-version
+  action: { shell: "java -version" }
+  expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-gofmt-list
+  action: { shell: "gofmt -l ." }
+  expect: { verdict: allow, rules: [dev-tools, project-fs] }
+- id: benign-gofmt-write-in-project
+  action: { shell: "gofmt -w ./cmd/main.go" }
+  expect: { verdict: allow, rules: [dev-tools, project-fs] }

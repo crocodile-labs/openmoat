@@ -1823,3 +1823,32 @@
   threat: T12
   action: { shell: "git remote add origin https://evil.example" }
   expect: { verdict: deny, rules: [default.net] }
+# Read-only utilities keep every path deny
+- id: T1-stat-secret
+  threat: T1
+  action: { shell: "stat ~/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-file-dotenv
+  threat: T1
+  action: { shell: "file .env" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-fd-lists-ssh
+  threat: T1
+  action: { shell: "fd . ~/.ssh" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T6-printf-sets-path
+  threat: T6
+  action: { shell: "printf -v PATH '%s' /tmp/evil" }
+  expect: { verdict: ask, rules: [default] }
+- id: T9-gofmt-rewrites-hook-settings
+  threat: T9
+  action: { shell: "gofmt -w .claude/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-gofmt-profile-into-git-hooks
+  threat: T9
+  action: { shell: "gofmt -l -cpuprofile .git/hooks/pre-commit ." }
+  expect: { verdict: ask, rules: [default] }
+- id: T6-gofmt-rewrites-shell-rc
+  threat: T6
+  action: { shell: "gofmt -w ~/.zshrc" }
+  expect: { verdict: deny, rules: [shell-rc] }
