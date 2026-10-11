@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Fixed
+- A redirection to `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/fd/1` or `/dev/fd/2` (and from `/dev/null`, `/dev/stdin` or `/dev/fd/0`) is no longer a file write or read, so `ls 2>/dev/null` and `git status >/dev/null 2>&1` stop asking ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+
 ## [0.4.0] - 2026-10-11
 
 ### Added

@@ -167,10 +167,10 @@ fn classify_simple(
         }
     }
     for r in &cmd.reads {
-        sink.read(ctx, r)?;
+        sink.redirect_read(ctx, r)?;
     }
     for w in &cmd.writes {
-        sink.write(ctx, w)?;
+        sink.redirect_write(ctx, w)?;
     }
 
     let mut idx = 0;

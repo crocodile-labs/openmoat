@@ -10,8 +10,8 @@
 //! | a decoder stage piped into an interpreter reading stdin (`decoders.rs`) | canonical `Pipeline { <decoder> -d \| <interpreter> }` |
 //! | leading `VAR=value`, `export`/`declare`/`set` assignments | `EnvSet` |
 //! | `$VAR` / `${VAR}` references, `printenv NAME` | `EnvRead` |
-//! | path-looking arguments, relative operands (`operands.rs`), `<` targets, `source`/`.` files | `FsRead`, one per directory `cd` may have moved to (`cwd.rs`); also listed as a glob when unquoted `* ? [` make the shell expand it (`crate::expand`) |
-//! | `>`/`>>`/`&>` targets, `tee`, destructive/destination args | `FsWrite` |
+//! | path-looking arguments, relative operands (`operands.rs`), `<` targets other than `/dev/null` and stdin, `source`/`.` files | `FsRead`, one per directory `cd` may have moved to (`cwd.rs`); also listed as a glob when unquoted `* ? [` make the shell expand it (`crate::expand`) |
+//! | `>`/`>>`/`&>` targets other than `/dev/null` and the standard streams (`tables::STREAM_SINKS`), `tee`, destructive/destination args | `FsWrite` |
 //! | URLs with any host, bare dotted names under a known TLD, IPv4 literals (`crate::host`) | `Net` |
 //! | `$( … )`, backticks, `sh -c` (any option spelling, `invocation.rs`), `eval`, `xargs`, `sudo`, `env`, … | nested classification |
 //! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload |
@@ -238,6 +238,49 @@ impl Sink {
         word: &str,
     ) -> Result<(), ClassifyError> {
         self.fs(ctx, word, |path| AtomicAction::FsWrite { path })
+    }
+
+    /// An `FsRead` for every path a `<` redirection from `word` may name,
+    /// except the empty source and standard input (`tables::STREAM_SOURCES`).
+    pub(crate) fn redirect_read(
+        &mut self,
+        ctx: &ShellContext<'_>,
+        word: &str,
+    ) -> Result<(), ClassifyError> {
+        self.redirect(ctx, word, tables::STREAM_SOURCES, |path| {
+            AtomicAction::FsRead { path }
+        })
+    }
+
+    /// An `FsWrite` for every path a `>` redirection to `word` may name,
+    /// except the data sink and standard output and error (`tables::STREAM_SINKS`).
+    pub(crate) fn redirect_write(
+        &mut self,
+        ctx: &ShellContext<'_>,
+        word: &str,
+    ) -> Result<(), ClassifyError> {
+        self.redirect(ctx, word, tables::STREAM_SINKS, |path| {
+            AtomicAction::FsWrite { path }
+        })
+    }
+
+    /// `fs` for a redirection target, skipped when it resolves to one of
+    /// `streams`. A glob is never skipped: the shell may expand it to a file.
+    fn redirect(
+        &mut self,
+        ctx: &ShellContext<'_>,
+        word: &str,
+        streams: &[&str],
+        atom: fn(String) -> AtomicAction,
+    ) -> Result<(), ClassifyError> {
+        let stream = !word.contains(['*', '?', '['])
+            && ctx
+                .paths(word)
+                .is_ok_and(|paths| paths.iter().all(|p| streams.contains(&p.as_str())));
+        if stream {
+            return Ok(());
+        }
+        self.fs(ctx, word, atom)
     }
 
     /// An atom for every path `word` may name, also kept as a glob when `word`
