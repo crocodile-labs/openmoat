@@ -80,6 +80,11 @@ fn reads_are_granted_exactly_and_secrets_win() {
         Some("read"),
         "an allow exclusion is read-only"
     );
+    assert_eq!(
+        mode(&out, &ws, "**/.git/**"),
+        None,
+        "a nested `.git` glob could only deny, which would hide every repository"
+    );
     assert_eq!(mode(&out, &ws, ".moat"), Some("read"));
     assert_eq!(mode(&out, &ws, "**/.claude/settings.json"), Some("deny"));
     assert_eq!(
@@ -112,6 +117,7 @@ fn losses_name_the_exceptions_and_git() {
         "codex.tmpdir",
         "codex.directory-nodes",
         "codex.outside-home",
+        "codex.nested-git",
     ] {
         assert!(rules.contains(&rule), "{rule}: {rules:?}");
     }

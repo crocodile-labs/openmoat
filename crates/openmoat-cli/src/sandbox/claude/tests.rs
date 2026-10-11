@@ -220,7 +220,7 @@ fn a_read_root_inside_a_deny_is_not_reopened() {
 fn git_is_writable_except_what_makes_it_run_code() {
     let out = generated(DEFAULT_POLICY);
     let deny = list(&out, "/filesystem/denyWrite");
-    for whole in ["/**/.git", "/**/.git/**"] {
+    for whole in ["/**/.git", "/**/.git/**", "/**/**/.git", "/**/**/.git/**"] {
         assert!(
             !deny.contains(&whole.to_owned()),
             "git commit needs {whole}"
@@ -239,12 +239,11 @@ fn git_is_writable_except_what_makes_it_run_code() {
     ] {
         assert!(deny.contains(&vector.to_owned()), "{vector}: {deny:?}");
     }
-    let allowance = out
-        .report
-        .allowances
-        .iter()
-        .find(|a| a.rule == "claude-code.git-internals");
-    assert!(allowance.is_some_and(|a| a.patterns == ["/**/.git/**"]));
+    // the root's `.git/**` and the nested `**/.git/**` exclusions lower to it once
+    let allowances: Vec<_> = (out.report.allowances.iter())
+        .filter(|a| a.rule == "claude-code.git-internals")
+        .collect();
+    assert!(matches!(allowances[..], [a] if a.patterns == ["/**/.git/**"]));
     assert!(
         !out.report.losses.iter().any(|l| l.message.contains(".git")),
         "{:?}",

@@ -137,6 +137,12 @@ write `.git/hooks`, `.git/config` or the other paths that make git run code (ADR
 on Linux only in the working directory's own repository, `info/attributes` and
 submodules aside (above).
 Codex keeps `.git` read-only: commit outside its sandbox (Codex asks to).
+A `.git` file or directory below the project root (`sub/.git` holding `gitdir: …`)
+is a repository git follows, so the hook asks before writing one. No host sandbox
+can deny it without also denying the root's `.git`, so it stays writable for sandboxed
+commands under Claude Code (on macOS its hooks and config aside), Codex
+(`codex.nested-git`) and Cursor. `moat run` keeps it unwritable on macOS, and
+`moat run --isolate` keeps one that exists when the session starts read-only.
 
 git treats any directory holding `HEAD`, `objects/` and `refs/` as a bare repository
 and runs what its `config` names, so a script could plant one for a later `git status`

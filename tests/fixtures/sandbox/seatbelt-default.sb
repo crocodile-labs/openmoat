@@ -72,6 +72,7 @@
       (subpath "/Users/me/proj"))
     (require-not (require-any
       (subpath "/Users/me/proj/.git")
+      (regex "^/Users/me/proj/(.*/)?\\.git(/.*)?$")
       (subpath "/Users/me/proj/.moat")))))
 ; seatbelt.tmpdir
 (allow file-read* file-write*

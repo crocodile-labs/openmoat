@@ -57,7 +57,9 @@ pub use deny_list::apply_rules;
 pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
 use super::Report;
-use super::patterns::{Spot, domain, has_glob, is_below, literal_tree, push_unique, split, spot};
+use super::patterns::{
+    ANY_GIT, Spot, domain, has_glob, is_below, literal_tree, push_unique, split, spot,
+};
 
 /// Claude Code's own directory, whose settings it keeps read-only in the
 /// working directory itself (the sandbox runtime's `.claude/settings.json`,
@@ -254,7 +256,7 @@ impl Filesystem {
                     Spot::Project(rest) => Some(rest),
                     _ => None,
                 };
-                if kind == Kind::FsWrite && project == Some(".git/**") {
+                if kind == Kind::FsWrite && matches!(project, Some(".git/**" | ANY_GIT)) {
                     self.git_internals(report);
                     continue;
                 }

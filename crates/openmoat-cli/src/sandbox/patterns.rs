@@ -33,6 +33,11 @@ pub fn spot(pattern: &str) -> Spot<'_> {
     }
 }
 
+/// The project-relative write exclusion for a `.git` at any depth below the
+/// project (a `gitdir:` file or a planted directory in a subdirectory), which
+/// git follows like the root's own `.git`.
+pub const ANY_GIT: &str = "**/.git/**";
+
 pub fn has_glob(pattern: &str) -> bool {
     pattern.contains(['*', '?', '[', ']', '{', '}'])
 }
