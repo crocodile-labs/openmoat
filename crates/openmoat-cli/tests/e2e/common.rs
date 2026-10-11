@@ -80,9 +80,12 @@ impl Sandbox {
         self.configure(Command::new(program))
     }
 
-    /// `cmd` with [`Sandbox::command`]'s environment.
+    /// `cmd` with [`Sandbox::command`]'s environment, started in the home
+    /// directory: the test's own directory is inside this repository, which
+    /// holds the built binary, and `init` refuses a binary inside the project.
     pub fn configure(&self, mut cmd: Command) -> Command {
-        cmd.env_clear()
+        cmd.current_dir(&self.home)
+            .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home);

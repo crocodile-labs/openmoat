@@ -47,7 +47,7 @@ mod config;
 mod names;
 mod own_binary;
 
-pub use config::{apply, in_sync, owned_part, protect, remove, weaknesses};
+pub use config::{apply, in_sync, owned_part, protect, read_only, remove, weaknesses};
 pub use names::deny_names;
 pub use own_binary::{own_binary, read_own_binary};
 

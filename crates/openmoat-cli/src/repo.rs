@@ -73,10 +73,11 @@ pub fn trust(home: &Home) -> Result<Trust> {
     Trust::load(&path)
 }
 
-/// The user policy with the project's repository policy merged in, as `guard`
-/// decides with it.
+/// The user policy with the recorded `moat` binary's paths in `kernel-self`
+/// and the project's repository policy merged in, as `guard` decides with it.
 pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
-    let user = home.load_policy()?;
+    let mut user = home.load_policy()?;
+    crate::install::self_paths::protect_recorded(home, &mut user)?;
     let Some(root) = &ctx.project else {
         return Ok(user);
     };

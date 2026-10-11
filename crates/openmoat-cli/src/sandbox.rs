@@ -179,9 +179,20 @@ pub fn codex_config_beside(hooks: &std::path::Path) -> std::path::PathBuf {
 }
 
 impl Plan {
-    /// Generate every backend for `policy` and the current user's home.
+    /// Generate every backend for `policy` and the current user's home, for
+    /// the `moat` binary the lock recorded.
     pub fn new(policy: &Policy) -> anyhow::Result<Self> {
-        let (policy, default_read_roots) = with_read_roots(policy)?;
+        let home = crate::home::Home::locate()?;
+        Self::for_binary(policy, &crate::install::self_paths::recorded_binary(&home)?)
+    }
+
+    /// [`Plan::new`] for hooks that run `binary`, whose paths every backend
+    /// keeps from writes (`moat init` passes the binary it is about to record).
+    pub fn for_binary(policy: &Policy, binary: &std::path::Path) -> anyhow::Result<Self> {
+        let binary_paths = crate::install::self_paths::sandbox_paths(binary);
+        let mut policy = policy.clone();
+        crate::install::self_paths::protect(&mut policy, &binary_paths);
+        let (policy, default_read_roots) = with_read_roots(&policy)?;
         let (home, real_home) = crate::context::home_spellings()?;
         let homes: Vec<String> = std::iter::once(home.clone())
             .chain(real_home.clone())
@@ -197,10 +208,18 @@ impl Plan {
         let mut claude = claude::generate(&ir, proxy_port, cfg!(target_os = "linux"))?;
         let claude_settings = install::settings_path(openmoat_hosts::Host::ClaudeCode)?;
         claude::protect(&mut claude, &claude_settings);
+        claude::deny_write(&mut claude, &binary_paths);
         let mut codex = codex::generate(&ir, &homes, proxy_port)?;
         if let Some(codex_home) = codex_config_path()?.parent() {
             codex::protect(&mut codex, codex_home);
         }
+        let checker = ir.checker()?;
+        codex::read_only(&mut codex, &binary_paths, |path| {
+            let read = openmoat_core::AtomicAction::FsRead {
+                path: path.to_owned(),
+            };
+            checker.check_os(&read) == Some(Effect::Allow)
+        });
         if cfg!(target_os = "linux") {
             codex::read_own_binary(&mut codex, codex::own_binary().as_deref());
             codex::deny_names(&mut codex);
@@ -212,6 +231,38 @@ impl Plan {
             codex,
             cursor: cursor::generate(&ir, proxy_port)?,
         })
+    }
+}
+
+impl Plan {
+    /// The absolute directories the host sandboxes let commands write besides
+    /// the project and the temp directory: Claude Code's `allowWrite`, Codex's
+    /// `write` paths and Cursor's `additionalReadwritePaths`.
+    pub fn writable_dirs(&self) -> Vec<String> {
+        let strings = |value: Option<&serde_json::Value>| -> Vec<String> {
+            value
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        };
+        let claude = self.claude.sandbox.get("filesystem");
+        let mut dirs = strings(claude.and_then(|f| f.get("allowWrite")));
+        dirs.extend(strings(
+            self.cursor.settings.get("additionalReadwritePaths"),
+        ));
+        let codex = self
+            .codex
+            .profile
+            .get("filesystem")
+            .and_then(|f| f.as_table());
+        for (key, mode) in codex.into_iter().flat_map(toml_edit::Table::iter) {
+            if !key.starts_with(':') && mode.as_str() == Some("write") {
+                dirs.push(key.to_owned());
+            }
+        }
+        dirs
     }
 }
 

@@ -50,7 +50,7 @@ use openmoat_core::{AtomicAction, Kind};
 use serde_json::{Map, Value, json};
 
 use credentials::credentials;
-pub use settings::{apply, in_sync, protect, remove, weaknesses};
+pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
 use super::Report;
 use super::patterns::{Spot, domain, has_glob, is_below, literal_tree, push_unique, split, spot};

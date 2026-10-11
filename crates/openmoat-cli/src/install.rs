@@ -3,6 +3,7 @@
 mod binary;
 mod dirs;
 mod hook_file;
+pub mod self_paths;
 
 use std::fs;
 use std::path::{Path, PathBuf};

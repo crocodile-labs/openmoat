@@ -292,6 +292,17 @@ fn a_write_grant_needs_the_read_and_a_root_inside_a_deny_is_refused() {
     );
 }
 
+/// The `moat` binary's paths are kept from writes without opening a read the
+/// policy closes: read-only where readable, denied elsewhere.
+#[test]
+fn read_only_never_grants_a_read_the_policy_denies() {
+    let mut out = generated(DEFAULT_POLICY);
+    let paths = ["/opt/t/moatd".to_owned(), "/srv/t".to_owned()];
+    read_only(&mut out, &paths, |p| p.starts_with("/opt/"));
+    assert_eq!(mode(&out, &[], "/opt/t/moatd"), Some("read"));
+    assert_eq!(mode(&out, &[], "/srv/t"), Some("deny"));
+}
+
 #[test]
 fn protect_denies_the_codex_home_and_in_sync_ignores_other_keys() {
     let mut out = generated(DEFAULT_POLICY);

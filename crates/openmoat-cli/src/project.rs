@@ -37,7 +37,7 @@ pub fn trusted(root: &Path, home: &Path) -> bool {
 }
 
 /// `dir` is `path` or one of its ancestors, after removing `.` and `..`.
-fn contains(dir: &Path, path: &Path) -> bool {
+pub fn contains(dir: &Path, path: &Path) -> bool {
     let fold = |p: &Path| {
         let s = path_string(&absolute(p).unwrap_or_else(|_| p.to_path_buf()));
         let s = s.trim_end_matches('/').to_owned();
