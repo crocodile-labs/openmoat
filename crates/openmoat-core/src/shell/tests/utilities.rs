@@ -55,3 +55,13 @@ fn command_v_runs_nothing() {
     assert!(has_shell(&parsed("command -p rm -rf x"), "rm -rf x"));
     assert!(has_shell(&parsed("command -- cargo -v"), "cargo -v"));
 }
+
+#[test]
+fn git_restore_paths_are_writes() {
+    let atoms = parsed("git restore --staged src/main.rs README.md");
+    assert!(has_write(&atoms, "/p/src/main.rs"));
+    assert!(has_write(&atoms, "/p/README.md"));
+    assert!(!has_write(&atoms, "/p/--staged"));
+    assert!(has_write(&parsed("git restore -- -odd"), "/p/-odd"));
+    assert!(!has_any_write(&parsed("git status src/main.rs")));
+}

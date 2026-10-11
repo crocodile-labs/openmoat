@@ -144,8 +144,11 @@ fn sed_forms_that_may_do_more_are_reported() {
         "sed 's/.*/id/e' x",
         "sed -f prog.sed x",
         "sed -l 5 p x",
-        // BSD reads `s/a/b/` as the suffix and `x` as the script
-        "sed -i s/a/b/ x",
+        // BSD reads `s/a/b/` as the suffix, `x` as the script and edits `y`
+        "sed -i s/a/b/ x y",
+        // BSD compiles `wx`, which opens `x`, before it finds no file to edit
+        "sed -i s/a/b/ wx",
+        "sed -e p -i s/a/b/ x",
         "sed -i'/tmp/*' s/a/b/ x",
         // BSD stops at `p`: `-e` and `e id` are files, but GNU runs `e id`
         "sed p -e 'e id' x",
@@ -153,4 +156,17 @@ fn sed_forms_that_may_do_more_are_reported() {
     ] {
         assert!(has_unproven(&parsed(cmd)), "{cmd}");
     }
+}
+
+#[test]
+fn bare_in_place_with_one_file_is_the_gnu_reading() {
+    // BSD takes `s/a/b/` as the suffix and `src/lib.rs` as its script, then
+    // stops: there is no file left to edit.
+    let atoms = parsed("sed -i 's/a/b/' src/lib.rs");
+    assert!(!has_unproven(&atoms));
+    assert!(has_write(&atoms, "/p/src/lib.rs"));
+    assert!(has_write(
+        &parsed("sed -n -i 's/a/b/' ~/.zshrc"),
+        "/Users/me/.zshrc"
+    ));
 }

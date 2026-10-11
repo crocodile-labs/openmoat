@@ -1852,3 +1852,36 @@
   threat: T6
   action: { shell: "gofmt -w ~/.zshrc" }
   expect: { verdict: deny, rules: [shell-rc] }
+# In-project edits keep every path deny
+- id: T6-sed-in-place-shell-rc
+  threat: T6
+  action: { shell: "sed -i 's/a/b/' ~/.zshrc" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: T1-sed-in-place-dotenv
+  threat: T1
+  action: { shell: "sed -i 's/a/b/' .env" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T9-sed-in-place-hook-settings
+  threat: T9
+  action: { shell: "sed -i 's/moat/true/' .claude/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-git-restore-hook-settings
+  threat: T9
+  action: { shell: "git restore .claude/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-recursive-remove-moat-dir
+  threat: T9
+  action: { shell: "rm -rf .moat" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T4-recursive-remove-build-and-home
+  threat: T4
+  action: { shell: "rm -rf build ~" }
+  expect: { verdict: deny, rules: [destructive] }
+- id: T4-recursive-remove-flags-after-operand-home
+  threat: T4
+  action: { shell: "rm build -rf ~/" }
+  expect: { verdict: deny, rules: [destructive] }
+- id: T4-recursive-remove-parent-of-project-at-root
+  threat: T4
+  action: { shell: "rm -rf .." }
+  expect: { verdict: deny, rules: [destructive] }
