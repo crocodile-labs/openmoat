@@ -80,9 +80,12 @@ command ends; the file on disk does not change (`contained` in
   puts the executable in the Codex home, which the profile denies, and Codex hides a
   denied directory after the read paths inside it. When no read root or write grant
   includes the Codex home, commands cannot read it anyway, so on Linux the profile
-  then denies the Codex home's login, config and conversations by name (`auth.json`,
-  `config.toml`, `history.jsonl`, `sessions`, `archived_sessions`, `log`) instead of
-  the whole directory. Commands may then read the installer's
+  then denies by name what Codex keeps there instead of the whole directory: logins
+  and tokens (`auth.json`, `.credentials.json`, `secrets`, `proxy`), config
+  (`config.toml`, `managed_config.toml`, `hooks.json`), conversations
+  (`history.jsonl`, `sessions`, `archived_sessions`, `log`, `shell_snapshots`), your
+  own content (`memories`, `rules`, `skills`, `AGENTS.md`) and its SQLite databases
+  (`**/*.sqlite*`, which Codex expands to the files present when a command starts). Commands may then read the installer's
   `packages/standalone/releases` directory, which holds only Codex's published
   releases (the executable, ripgrep, bubblewrap and the package manifest, one
   directory per version), so Codex keeps starting commands after it updates itself

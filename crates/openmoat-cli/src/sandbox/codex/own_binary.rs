@@ -23,16 +23,36 @@ const RULE: &str = "codex.own-binary";
 /// Where Codex's standalone installer unpacks each release, in the Codex home.
 const STANDALONE_RELEASES: &str = "packages/standalone/releases";
 
-/// What Codex keeps in its home that commands must not read: the login, the
-/// config (MCP server tokens) and the conversations.
+/// What Codex 0.160 keeps in its home that commands must not read: logins and
+/// tokens (`auth.json`, MCP OAuth's `.credentials.json`, `secrets`, the
+/// network proxy's CA key in `proxy`), config (`config.toml`,
+/// `managed_config.toml`, `hooks.json`), conversations (`history.jsonl`,
+/// `sessions`, `archived_sessions`, `log`, `shell_snapshots` with the shell's
+/// environment) and the user's own content (`memories`, `rules`, `skills`,
+/// `AGENTS.md`).
 const CODEX_STATE: &[&str] = &[
     "auth.json",
+    ".credentials.json",
+    "secrets",
+    "proxy",
     "config.toml",
+    "managed_config.toml",
+    "hooks.json",
     "history.jsonl",
     "sessions",
     "archived_sessions",
     "log",
+    "shell_snapshots",
+    "memories",
+    "rules",
+    "skills",
+    "AGENTS.md",
 ];
+
+/// Codex's `SQLite` databases in its home, versioned (`state_5.sqlite`,
+/// `logs_2.sqlite`) and with their `-wal` and `-shm` files: a glob, which Codex
+/// on Linux expands to the files present when each command starts.
+const CODEX_DATABASES: &str = "**/*.sqlite*";
 
 /// The executable `codex` on `PATH` runs, symlinks resolved.
 pub fn own_binary() -> Option<PathBuf> {
@@ -73,7 +93,8 @@ fn native(found: &Path) -> Option<PathBuf> {
 /// denies stays denied (Codex applies deny masks last), and that, like Codex
 /// missing from `PATH`, is reported as stricter. The exception is the Codex
 /// home `codex_home` when no read or write grant includes it: commands cannot
-/// read it then anyway, so its deny gives way to denies of [`CODEX_STATE`],
+/// read it then anyway, so its deny gives way to denies of [`CODEX_STATE`]
+/// and [`CODEX_DATABASES`],
 /// which still apply when a workspace root includes it.
 pub fn read_own_binary(
     generated: &mut Generated,
@@ -133,9 +154,9 @@ pub fn read_own_binary(
     let opened = home.map_or_else(String::new, |home| {
         format!(
             ". It is in the Codex home `{home}`, which no read root includes, so the profile \
-             denies the Codex home's {} instead of the whole directory; the standalone \
-             installer's `{STANDALONE_RELEASES}` holds only Codex's published releases, so \
-             commands may read all of it and an update needs no sync",
+             denies the Codex home's {} and `{CODEX_DATABASES}` instead of the whole \
+             directory; the standalone installer's `{STANDALONE_RELEASES}` holds only Codex's \
+             published releases, so commands may read all of it and an update needs no sync",
             CODEX_STATE.join(", ")
         )
     });
@@ -176,6 +197,7 @@ fn denied_home_above(filesystem: &Table, binary: &str, home: &Path) -> Option<St
 }
 
 /// Replace the deny of the Codex home `home` with denies of [`CODEX_STATE`]
+/// and [`CODEX_DATABASES`]
 /// below it, unless a read or write grant (`:tmpdir` included) covers `home`:
 /// commands could then read the rest of it. Whether that happened.
 fn open_codex_home(filesystem: &mut Table, home: &str) -> bool {
@@ -194,7 +216,7 @@ fn open_codex_home(filesystem: &mut Table, home: &str) -> bool {
         return false;
     }
     filesystem.remove(home);
-    for name in CODEX_STATE {
+    for name in CODEX_STATE.iter().chain([&CODEX_DATABASES]) {
         filesystem.insert(&format!("{home}/{name}"), value("deny"));
     }
     true
@@ -266,6 +288,41 @@ mod tests {
         }
         let allowance = out.report.allowances.iter().find(|a| a.rule == RULE);
         assert!(allowance.is_some_and(|a| a.message.contains("auth.json")));
+    }
+
+    /// Whether a deny entry of `out` covers `path`: a directory covers its
+    /// subtree, and Codex matches globs with `globset` (`*` within one
+    /// component).
+    fn denied(out: &Generated, path: &str) -> bool {
+        out.profile["filesystem"]
+            .as_table()
+            .unwrap()
+            .iter()
+            .filter(|(_, mode)| mode.as_str() == Some("deny"))
+            .any(|(key, _)| {
+                is_below(path, key)
+                    || globset::GlobBuilder::new(key)
+                        .literal_separator(true)
+                        .build()
+                        .unwrap()
+                        .compile_matcher()
+                        .is_match(path)
+            })
+    }
+
+    #[test]
+    fn the_codex_databases_stay_denied_by_a_glob() {
+        let mut out = generated(openmoat_core::DEFAULT_POLICY);
+        let home = Path::new("/Users/me/.codex");
+        read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home));
+        for db in ["state_5.sqlite", "state_5.sqlite-wal", "logs_2.sqlite-shm"] {
+            assert!(denied(&out, &format!("/Users/me/.codex/{db}")), "{db}");
+        }
+        assert!(denied(
+            &out,
+            "/Users/me/.codex/sessions/2026/10/rollout.jsonl"
+        ));
+        assert!(!denied(&out, STANDALONE), "the executable stays readable");
     }
 
     #[test]

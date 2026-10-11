@@ -123,7 +123,10 @@ fn codex_from_the_standalone_installer_starts_commands() {
     fs::create_dir_all(&bin).unwrap();
     let installed = bin.join("codex");
     symlink(standalone.join("current/bin/codex"), &installed).unwrap();
-    fs::write(sb.home.join(".codex/auth.json"), "FAKE-TOKEN").unwrap();
+    let state = ["auth.json", "state_5.sqlite"].map(|name| sb.home.join(".codex").join(name));
+    for file in &state {
+        fs::write(file, "FAKE-STATE").unwrap();
+    }
     init(&sb, &bin);
     let project = sb.project();
     fs::write(project.join("main.rs"), "fn main() {}").unwrap();
@@ -138,12 +141,14 @@ fn codex_from_the_standalone_installer_starts_commands() {
     };
 
     starts("after `moat init`");
-    let auth = sb.home.join(".codex/auth.json");
-    assert_eq!(
-        cat(&installed, &sb, &project, &auth.to_string_lossy()),
-        None,
-        "the Codex home stays hidden"
-    );
+    for file in &state {
+        assert_eq!(
+            cat(&installed, &sb, &project, &file.to_string_lossy()),
+            None,
+            "the Codex home stays hidden: {}",
+            file.display()
+        );
+    }
     // Codex updates itself: a new release directory, `current` moved to it.
     install("0.161.0");
     starts("after an update, without `moat sandbox sync`");
