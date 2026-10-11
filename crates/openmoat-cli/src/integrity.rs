@@ -96,9 +96,9 @@ pub fn repin_with(
     }
     // Without a lock there is nothing to keep, so this environment's hooks it is.
     if hooks == HookPins::Adopt || !had_lock {
-        paths.extend(installed_hook_files(binary)?);
-        profiles.extend(crate::sandbox::install::codex_profile_files()?);
-        paths.extend(crate::sandbox::install::cursor_sandbox_files()?);
+        paths.extend(installed_hook_files(home, binary)?);
+        profiles.extend(crate::sandbox::install::codex_profile_files(home)?);
+        paths.extend(crate::sandbox::install::cursor_sandbox_files(home)?);
     }
     let mut lock = Lock::pin(binary, &paths)?;
     for path in profiles.iter().filter(|p| p.is_file()) {
@@ -122,10 +122,10 @@ fn state_files(home: &Home) -> Vec<PathBuf> {
 }
 
 /// Hook files with a current `moat` hook under this shell's environment.
-pub fn installed_hook_files(binary: &Path) -> Result<Vec<PathBuf>> {
+pub fn installed_hook_files(home: &Home, binary: &Path) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for host in openmoat_hosts::Host::ALL {
-        let config = HostConfig::for_host(host)?;
+        let config = HostConfig::for_host(home, host)?;
         if config.state(binary) == HookState::Installed {
             paths.push(config.settings_path);
         }
@@ -146,7 +146,7 @@ impl HookPinGap {
     pub fn new(lock: &Lock, home: &Home, installed: &[PathBuf]) -> Self {
         // This shell's Cursor `sandbox.json` is pinned whole, but is no hook file.
         let mut state = state_files(home);
-        state.extend(crate::sandbox::install::cursor_sandbox_files().unwrap_or_default());
+        state.extend(crate::sandbox::install::cursor_sandbox_files(home).unwrap_or_default());
         let state: Vec<String> = state.iter().map(|p| key(p)).collect();
         let here: Vec<String> = installed.iter().map(|p| key(p)).collect();
         Self {

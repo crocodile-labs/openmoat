@@ -169,8 +169,9 @@ pub fn bwrap_mounts(
 }
 
 /// Codex's `config.toml`, next to the hook file (`$CODEX_HOME` or `~/.codex`).
-pub fn codex_config_path() -> anyhow::Result<std::path::PathBuf> {
-    let hooks = crate::install::HostConfig::for_host(openmoat_hosts::Host::Codex)?.settings_path;
+pub fn codex_config_path(home: &crate::home::Home) -> anyhow::Result<std::path::PathBuf> {
+    let hooks =
+        crate::install::HostConfig::for_host(home, openmoat_hosts::Host::Codex)?.settings_path;
     Ok(codex_config_beside(&hooks))
 }
 
@@ -182,14 +183,18 @@ pub fn codex_config_beside(hooks: &std::path::Path) -> std::path::PathBuf {
 impl Plan {
     /// Generate every backend for `policy` and the current user's home, for
     /// the `moat` binary the lock recorded.
-    pub fn new(policy: &Policy) -> anyhow::Result<Self> {
-        let home = crate::home::Home::locate()?;
-        Self::for_binary(policy, &crate::install::self_paths::recorded_binary(&home)?)
+    pub fn new(home: &crate::home::Home, policy: &Policy) -> anyhow::Result<Self> {
+        let binary = crate::install::self_paths::recorded_binary(home)?;
+        Self::for_binary(home, policy, &binary)
     }
 
     /// [`Plan::new`] for hooks that run `binary`, whose paths every backend
     /// keeps from writes (`moat init` passes the binary it is about to record).
-    pub fn for_binary(policy: &Policy, binary: &std::path::Path) -> anyhow::Result<Self> {
+    pub fn for_binary(
+        state: &crate::home::Home,
+        policy: &Policy,
+        binary: &std::path::Path,
+    ) -> anyhow::Result<Self> {
         let binary_paths = crate::install::self_paths::sandbox_paths(binary);
         let mut policy = policy.clone();
         crate::install::self_paths::protect(&mut policy, &binary_paths);
@@ -202,17 +207,17 @@ impl Plan {
             &policy,
             &home,
             real_home,
-            crate::context::moved_dirs()?,
+            crate::context::moved_dirs(state)?,
             crate::context::CASE_INSENSITIVE_PATHS,
         )?;
         let proxy_port = proxy_port(&policy);
         let mut claude = claude::generate(&ir, proxy_port, cfg!(target_os = "linux"))?;
-        let claude_settings = install::settings_path(openmoat_hosts::Host::ClaudeCode)?;
+        let claude_settings = install::settings_path(state, openmoat_hosts::Host::ClaudeCode)?;
         claude::protect(&mut claude, &claude_settings);
         claude::deny_write(&mut claude, &binary_paths);
         claude::deny_edit(&mut claude, &binary_paths);
         let mut codex = codex::generate(&ir, &homes, proxy_port)?;
-        if let Some(codex_home) = codex_config_path()?.parent() {
+        if let Some(codex_home) = codex_config_path(state)?.parent() {
             codex::protect(&mut codex, codex_home);
         }
         let checker = ir.checker()?;

@@ -57,7 +57,7 @@ const PROXY_VARS: [&str; 6] = [
 
 pub fn run(args: &RunArgs) -> Result<Code> {
     let home = proxy::installed()?;
-    let ctx = context::eval_context(None, None)?;
+    let ctx = context::eval_context(&home, None, None)?;
     if ctx.project.is_none() {
         bail!(
             "`moat run` confines the agent to a project: start it in the project, not in \

@@ -26,7 +26,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let mut out = Deferred::default();
     // Asked before anything is written, so declining everything changes nothing
     // but OpenMoat's own state directory.
-    let hosts = choose_hosts(args, &mut out)?;
+    let hosts = choose_hosts(&home, args, &mut out)?;
 
     state(&home, dry_run, &mut out)?;
     if !dry_run {
@@ -36,8 +36,8 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         record(&home, &hosts)?;
     }
     for host in hosts.iter().copied() {
-        let config = HostConfig::for_init(host)?;
-        let outcome = config.install(&binary, dry_run)?;
+        let config = HostConfig::for_init(&home, host)?;
+        let outcome = config.install(&home, &binary, dry_run)?;
         let verb = match outcome {
             Outcome::Installed => "installed",
             Outcome::Updated => "updated",
@@ -88,7 +88,7 @@ fn refuse_writable_binary(home: &Home, binary: &std::path::Path) -> Result<()> {
     // A policy that does not lint is reported by `sandboxes`, which then
     // writes no sandbox, so there are no sandbox grants to check.
     let writable = policy
-        .and_then(|p| Plan::for_binary(&p, binary))
+        .and_then(|p| Plan::for_binary(home, &p, binary))
         .map(|plan| plan.writable_dirs())
         .unwrap_or_default();
     crate::install::self_paths::refuse_writable(binary, &writable)
@@ -159,7 +159,7 @@ fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
     let recorded = Recorded::load(home)?;
     let mut backups = Vec::new();
     for host in hosts {
-        for file in host_files(&HostConfig::for_host(*host)?) {
+        for file in host_files(&HostConfig::for_host(home, *host)?) {
             let made = crate::install::backups(&file);
             backups.extend(made.into_iter().filter(|b| recorded.owns(b)));
         }
@@ -180,14 +180,14 @@ fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
 /// The hosts to set up: `--hosts` as given; else every host found, each confirmed
 /// at the terminal (all of them with `--yes` or `--dry-run`, none without a
 /// terminal, so a script never changes an agent's files unasked).
-fn choose_hosts(args: &InitArgs, out: &mut Deferred) -> Result<Vec<Host>> {
+fn choose_hosts(home: &Home, args: &InitArgs, out: &mut Deferred) -> Result<Vec<Host>> {
     if let Some(explicit) = &args.hosts {
         return Ok(explicit.clone());
     }
     let mut found = Vec::new();
     for config in Host::ALL
         .into_iter()
-        .filter_map(|h| HostConfig::for_init(h).ok())
+        .filter_map(|h| HostConfig::for_init(home, h).ok())
     {
         if config.host_present() {
             found.push(config);
@@ -292,7 +292,7 @@ fn host_files(config: &HostConfig) -> Vec<PathBuf> {
 fn record(home: &Home, hosts: &[Host]) -> Result<()> {
     let mut recorded = Recorded::load(home)?;
     for host in hosts {
-        let config = HostConfig::for_init(*host)?;
+        let config = HostConfig::for_init(home, *host)?;
         recorded
             .dirs
             .insert(host.id().to_owned(), config.dir().to_path_buf());
@@ -323,7 +323,7 @@ fn sandboxes(
     } else {
         Ok(Policy::parse(DEFAULT_POLICY)?)
     };
-    let plan = match policy.and_then(|p| Plan::for_binary(&p, binary)) {
+    let plan = match policy.and_then(|p| Plan::for_binary(home, &p, binary)) {
         Ok(plan) => plan,
         Err(e) => {
             writeln!(out, "✗ sandbox          not written: {e:#}")?;
@@ -331,7 +331,7 @@ fn sandboxes(
         }
     };
     for host in selected {
-        let changed = sandbox::install::write(host, &plan, dry_run)?;
+        let changed = sandbox::install::write(home, host, &plan, dry_run)?;
         if let Some(note) = sandbox::install::unavailable(host) {
             if changed {
                 writeln!(
@@ -350,7 +350,7 @@ fn sandboxes(
             out,
             "{prefix} {:<16} {} (sandbox {verb}; {} stricter, {} wider than the policy: `moat sandbox show`)",
             host.display_name(),
-            sandbox::install::settings_path(host)?.display(),
+            sandbox::install::settings_path(home, host)?.display(),
             report.losses.len(),
             report.allowances.len()
         )?;

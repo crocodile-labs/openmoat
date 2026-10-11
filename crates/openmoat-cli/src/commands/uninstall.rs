@@ -33,14 +33,14 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         Some(explicit) => explicit.clone(),
         None => Host::ALL
             .into_iter()
-            .filter(|h| HostConfig::for_host(*h).is_ok())
+            .filter(|h| HostConfig::for_host(&home, *h).is_ok())
             .collect(),
     };
     let mut out = Deferred::default();
     let mut undone = Vec::new();
     let mut recorded = Recorded::load(&home)?;
     for host in hosts.iter().copied() {
-        let config = HostConfig::for_host(host)?;
+        let config = HostConfig::for_host(&home, host)?;
         // Claude Code keeps its sandbox block in the same file as its hooks.
         let sandbox_too = host == Host::ClaudeCode;
         let owned = &recorded.claude_rules;
@@ -50,11 +50,11 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         let path = &config.settings_path;
         let mut files = vec![(path.clone(), undo_json(path, ours, strip)?)];
         if host == Host::Codex {
-            let path = codex_config_path()?;
+            let path = codex_config_path(&home)?;
             files.push((path.clone(), undo_toml(&path, ours)?));
         }
         if host == Host::Cursor {
-            let path = crate::sandbox::install::settings_path(host)?;
+            let path = crate::sandbox::install::settings_path(&home, host)?;
             files.push((path.clone(), undo_json(&path, ours, cursor::remove)?));
         }
         if files.iter().all(|(_, done)| done.is_none()) {

@@ -22,8 +22,11 @@ pub struct Home {
 }
 
 impl Home {
-    /// Locate the state directory without creating it.
+    /// Locate the state directory without creating it. Only command entry
+    /// points call this; everything below them takes a `&Home`.
     pub fn locate() -> Result<Self> {
+        #[cfg(test)]
+        refuse_in_unit_tests();
         match std::env::var_os(ENV).filter(|v| !v.is_empty()) {
             Some(custom) => Ok(Self {
                 root: PathBuf::from(custom),
@@ -195,6 +198,19 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
         let _ = fs::remove_file(&tmp);
     }
     written
+}
+
+/// Unit tests run in-process with the developer's or CI runner's real
+/// environment, so a `Home::locate` there would read and write the real
+/// `~/.moat`. They pass a [`Home::at`] a temporary directory instead.
+#[cfg(test)]
+fn refuse_in_unit_tests() {
+    let in_temp = std::env::var_os(ENV)
+        .is_some_and(|dir| PathBuf::from(dir).starts_with(std::env::temp_dir()));
+    assert!(
+        in_temp,
+        "unit tests must pass a Home; Home::locate reads the real home"
+    );
 }
 
 pub fn user_home() -> Result<PathBuf> {

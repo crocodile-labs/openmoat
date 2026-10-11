@@ -75,18 +75,21 @@ impl Protection {
 
 /// Every supported agent's protection, in [`Host::ALL`] order.
 pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
-    let plan = home.load_policy().ok().and_then(|p| Plan::new(&p).ok());
+    let plan = home
+        .load_policy()
+        .ok()
+        .and_then(|p| Plan::new(home, &p).ok());
     let lock = Lock::load(&home.lock_path()).ok();
     let recorded = Recorded::load(home).unwrap_or_default();
     Host::ALL
         .into_iter()
         .map(|host| {
-            let config = HostConfig::for_host(host)?;
+            let config = HostConfig::for_host(home, host)?;
             let (level, reason) = level(
                 &config.state(binary),
                 config.host_present(),
                 recorded.skipped(host),
-                || sandbox(host, plan.as_ref(), lock.as_ref()),
+                || sandbox(home, host, plan.as_ref(), lock.as_ref()),
             );
             Ok(Protection {
                 host: host.id(),
@@ -123,7 +126,12 @@ fn level(
 
 /// `Ok` when OpenMoat's sandbox for `host` is in place and matches the policy;
 /// otherwise which of it is missing, off or drifted.
-fn sandbox(host: Host, plan: Option<&Plan>, lock: Option<&Lock>) -> Result<(), String> {
+fn sandbox(
+    home: &Home,
+    host: Host,
+    plan: Option<&Plan>,
+    lock: Option<&Lock>,
+) -> Result<(), String> {
     if !host_sandbox::HOSTS.contains(&host) {
         return Err(format!(
             "no OS sandbox from OpenMoat; `moat run` covers the {} CLI (docs/SANDBOX.md)",
@@ -134,7 +142,7 @@ fn sandbox(host: Host, plan: Option<&Plan>, lock: Option<&Lock>) -> Result<(), S
         return Err(note.to_owned());
     }
     let plan = plan.ok_or("the policy does not load, so the sandbox cannot be checked")?;
-    match host_sandbox::problems(host, plan, lock) {
+    match host_sandbox::problems(home, host, plan, lock) {
         Ok(Some(problems)) => match problems.as_slice() {
             [] => Ok(()),
             [only] => Err(format!("sandbox: {only}")),

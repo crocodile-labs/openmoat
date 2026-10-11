@@ -49,7 +49,7 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
     let listen = args.listen.unwrap_or_else(|| {
         SocketAddr::from((Ipv4Addr::LOCALHOST, hosts_port.unwrap_or(DEFAULT_PORT)))
     });
-    let exit = Exit::open(&home, policy, context::eval_context(None, None)?)?;
+    let exit = Exit::open(&home, policy, context::eval_context(&home, None, None)?)?;
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     let addr = listener
         .local_addr()

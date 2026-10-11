@@ -35,16 +35,15 @@ pub fn backup_path(path: &Path, suffix: &str) -> PathBuf {
 /// The first one holds the file as it was before OpenMoat touched it; a later
 /// copy would replace it with an already edited file. A file of the user's at
 /// that name is left alone, and a link there is never followed.
-pub fn back_up(path: &Path, suffix: &str) -> Result<()> {
+pub fn back_up(home: &Home, path: &Path, suffix: &str) -> Result<()> {
     let backup = backup_path(path, suffix);
     if !path.exists() || fs::symlink_metadata(&backup).is_ok() {
         return Ok(());
     }
     fs::copy(path, &backup).with_context(|| format!("backing up {}", path.display()))?;
-    let home = Home::locate()?;
-    let mut recorded = Recorded::load(&home)?;
+    let mut recorded = Recorded::load(home)?;
     recorded.backups.push(backup);
-    recorded.save(&home)
+    recorded.save(home)
 }
 
 /// The files at `path`'s backup names, hook backup first. OpenMoat created
@@ -170,17 +169,17 @@ pub fn env_config_dir(host: Host) -> Result<Option<PathBuf>> {
 impl HostConfig {
     /// `host`'s configuration where `moat init` recorded it (`hosts.json`), else
     /// where this shell's environment or the default puts it.
-    pub fn for_host(host: Host) -> Result<Self> {
-        let recorded = Recorded::load(&crate::home::Home::locate()?)?;
+    pub fn for_host(home: &Home, host: Host) -> Result<Self> {
+        let recorded = Recorded::load(home)?;
         Self::at(host, recorded.dir(host).or(env_config_dir(host)?))
     }
 
     /// For `moat init`: this shell's environment wins over the record, so a
     /// person moves an agent by running `init` with its variable set.
-    pub fn for_init(host: Host) -> Result<Self> {
+    pub fn for_init(home: &Home, host: Host) -> Result<Self> {
         match env_config_dir(host)? {
             Some(dir) => Self::at(host, Some(dir)),
-            None => Self::for_host(host),
+            None => Self::for_host(home, host),
         }
     }
 
@@ -215,8 +214,9 @@ impl HostConfig {
             .is_some_and(std::path::Path::is_dir)
     }
 
-    pub fn install(&self, binary: &std::path::Path, dry_run: bool) -> Result<Outcome> {
-        hook_file::install(self, binary, dry_run)
+    /// Install the hook, recording any backup in `home`'s `hosts.json`.
+    pub fn install(&self, home: &Home, binary: &Path, dry_run: bool) -> Result<Outcome> {
+        hook_file::install(home, self, binary, dry_run)
     }
 
     pub fn state(&self, binary: &std::path::Path) -> HookState {
