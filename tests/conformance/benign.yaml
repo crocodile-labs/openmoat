@@ -568,3 +568,39 @@
 - id: benign-brace-parameter-is-not-a-brace
   action: { shell: "echo ${HOME}" }
   expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-stderr-to-dev-null
+  action: { shell: "ls 2>/dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-both-streams-to-dev-null
+  action: { shell: "git status >/dev/null 2>&1" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-stdout-to-dev-null-after-dup
+  action: { shell: "cargo test 2>&1 >/dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-ampersand-redirect-to-dev-null
+  action: { shell: "npm test &>/dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-redirect-to-dev-stderr
+  action: { shell: "cat a.txt 2>/dev/stderr" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-redirect-to-dev-stdout
+  action: { shell: "echo hi >/dev/stdout" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-which-stdout-to-dev-null
+  action: { shell: "which rg >/dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-which-to-dev-null
+  action: { shell: "which cargo 2>/dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-find-to-dev-null
+  action: { shell: "find . -name main.rs 2>/dev/null" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-redirect-to-dev-fd-2
+  action: { shell: "echo oops >/dev/fd/2" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-stdin-from-dev-null
+  action: { shell: "cargo test </dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-dev-null-through-dot-dot
+  action: { shell: "ls 2>/dev/../dev/null" }
+  expect: { verdict: allow, rules: [dev-shell] }

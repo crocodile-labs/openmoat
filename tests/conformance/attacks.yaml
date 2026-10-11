@@ -1800,3 +1800,22 @@
   threat: T4
   action: { shell: "git --work-tree=../other checkout main" }
   expect: { verdict: ask, rules: [default] }
+
+# A redirection to /dev/null or a standard stream is no file write, but never
+# hides the rest of the command.
+- id: T9-shell-rc-with-stderr-to-dev-null
+  threat: T9
+  action: { shell: "echo x > ~/.zshrc 2>/dev/null" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: T1-ssh-key-with-stderr-to-dev-null
+  threat: T1
+  action: { shell: "cat ~/.ssh/id_rsa 2>/dev/null" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T4-destructive-with-both-streams-to-dev-null
+  threat: T4
+  action: { shell: "rm -rf ~/* >/dev/null 2>&1" }
+  expect: { verdict: deny, rules: [destructive] }
+- id: T4-redirect-to-disk-device
+  threat: T4
+  action: { shell: "echo x > /dev/disk0" }
+  expect: { verdict: ask, rules: [default] }

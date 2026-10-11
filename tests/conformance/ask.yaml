@@ -688,3 +688,15 @@
   threat: T7
   action: { shell: "sqlite3 dev.db 'select 1'" }
   expect: { verdict: ask, rules: [default] }
+- id: ask-redirect-to-terminal
+  threat: T9
+  action: { shell: "echo x >/dev/tty" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-redirect-to-other-descriptor-path
+  threat: T9
+  action: { shell: "echo x >/dev/fd/3" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-stdin-path-as-output
+  threat: T9
+  action: { shell: "echo x >/dev/stdin" }
+  expect: { verdict: ask, rules: [default] }

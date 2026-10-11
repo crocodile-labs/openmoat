@@ -210,3 +210,19 @@ pub const FILE_EXTENSIONS: &[&str] = &[
     "sqlite", "wasm", "so", "dylib", "dll", "exe", "bin", "o", "a", "class", "jar", "war", "plist",
     "conf", "pem", "key", "crt",
 ];
+
+/// Output redirection targets that are no file: the data sink and the
+/// command's own standard output and error (`2>/dev/null`, `>&2` spelt as a
+/// path). Compared with the resolved path; `/dev/tty`, `/dev/fd/3` and every
+/// other device stay writes.
+pub const STREAM_SINKS: &[&str] = &[
+    "/dev/null",
+    "/dev/stdout",
+    "/dev/stderr",
+    "/dev/fd/1",
+    "/dev/fd/2",
+];
+
+/// Input redirection sources that are no file: the empty source and the
+/// command's own standard input (`</dev/null`).
+pub const STREAM_SOURCES: &[&str] = &["/dev/null", "/dev/stdin", "/dev/fd/0"];
