@@ -3,14 +3,13 @@
 
 use serde_json::json;
 
-use crate::common::{ASK, OK, Sandbox, USAGE, hook_output, text};
+use crate::common::{ASK, OK, Sandbox, USAGE, text, verdict};
 
 /// What `moat init` wrote from 0.1.1 to 0.3.0, before it recorded a base.
 const V0_3_0: &str = include_str!("../../src/upgrade/default-v0.3.0.yaml");
 const DEFAULT: &str = include_str!("../../../openmoat-core/policies/default-v1.yaml");
 
-/// The shipped default with LF line ends: the upgrade writes the policy's own
-/// (LF here), whatever a Windows checkout made of the default.
+/// The shipped default with the policy's LF line ends, whatever a Windows checkout made of it.
 fn default_lf() -> String {
     DEFAULT.replace("\r\n", "\n")
 }
@@ -43,11 +42,7 @@ fn web_search(sb: &Sandbox) -> String {
         "session_id": "s1", "cwd": proj.to_string_lossy(), "hook_event_name": "PreToolUse",
         "tool_name": "WebSearch", "tool_input": {"query": "serde rename_all"}, "tool_use_id": "t1"
     });
-    let out = sb.guard("claude-code", &payload.to_string());
-    hook_output(&out)["permissionDecision"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned()
+    verdict(&sb.guard("claude-code", &payload.to_string()))
 }
 
 /// Exit code of `moat policy check` for writing a `.git` below the project root.
