@@ -210,6 +210,7 @@ impl Plan {
         let claude_settings = install::settings_path(openmoat_hosts::Host::ClaudeCode)?;
         claude::protect(&mut claude, &claude_settings);
         claude::deny_write(&mut claude, &binary_paths);
+        claude::deny_edit(&mut claude, &binary_paths);
         let mut codex = codex::generate(&ir, &homes, proxy_port)?;
         if let Some(codex_home) = codex_config_path()?.parent() {
             codex::protect(&mut codex, codex_home);

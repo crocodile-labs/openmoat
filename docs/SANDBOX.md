@@ -23,7 +23,8 @@ command ends; the file on disk does not change (`contained` in
   then refuse reads outside the working directories; `/add-dir` adds one. On every
   OS it also adds a `Read(//…)` or `Edit(//…)` rule to `permissions.deny` for each
   path a policy deny rule names (secrets, OpenMoat's own files, shell start-up
-  files). Claude Code's file tools obey those without the hook, so they hold when
+  files), and an `Edit(//…)` rule for the recorded `moat` binary and its directory.
+  Claude Code's file tools obey those without the hook, so they hold when
   `moat` is missing or killed; on native Windows, where Claude Code has no sandbox,
   only these rules are written, drive paths as `//c/…`. On Linux
   (and WSL2) it also adds `Read(./**/.env)`, `Read(./**/.env.*)` and

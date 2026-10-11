@@ -54,6 +54,7 @@ use serde_json::{Map, Value, json};
 
 use credentials::credentials;
 pub use deny_list::apply_rules;
+pub use rules::deny_edit;
 pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
 use super::Report;

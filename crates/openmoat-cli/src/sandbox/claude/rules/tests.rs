@@ -2,7 +2,7 @@ use openmoat_core::{DEFAULT_POLICY, Policy};
 
 use super::super::tests::generated;
 use super::super::{Generated, generate};
-use super::rule_path;
+use super::{deny_edit, rule_path};
 use crate::sandbox::lower_for_hosts;
 
 /// The default policy lowered for a Windows home (`C:/Users/me`).
@@ -96,4 +96,28 @@ fn rule_paths_anchor_at_the_filesystem_root() {
         "no documented UNC spelling"
     );
     assert_eq!(rule_path("relative"), None);
+}
+
+/// The `moat` binary's literal paths join the rules once, on every OS, in the
+/// same spelling as the policy's.
+#[test]
+fn the_binary_paths_become_edit_rules_once() {
+    let mut mac = generated(DEFAULT_POLICY);
+    let paths = ["/opt/tools/moatd".to_owned(), "/opt/tools".to_owned()];
+    let before = mac.deny_rules.len();
+    deny_edit(&mut mac, &paths);
+    deny_edit(&mut mac, &paths);
+    assert_eq!(mac.deny_rules.len(), before + 2, "{:?}", mac.deny_rules);
+    assert!(has(&mac, "Edit(//opt/tools/moatd)") && has(&mac, "Edit(//opt/tools)"));
+
+    let mut windows = generated_on_windows();
+    deny_edit(
+        &mut windows,
+        &[
+            "C:/Tools/moat/moat.exe".to_owned(),
+            "//server/share/moat.exe".to_owned(),
+        ],
+    );
+    assert!(has(&windows, "Edit(//c/Tools/moat/moat.exe)"));
+    assert!(!windows.deny_rules.iter().any(|r| r.contains("server")));
 }

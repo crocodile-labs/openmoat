@@ -15,7 +15,7 @@
 
 use openmoat_core::Kind;
 
-use super::{Filesystem, Report};
+use super::{Filesystem, Generated, Report};
 use crate::sandbox::patterns::push_unique;
 
 impl Filesystem {
@@ -45,6 +45,17 @@ impl Filesystem {
             );
         }
         rules
+    }
+}
+
+/// Add an `Edit(//…)` rule for each of `paths`, the `moat` binary's literal
+/// paths ([`sandbox_paths`](crate::install::self_paths::sandbox_paths)): the
+/// `**/bin/moat` globs miss a binary installed under another name or prefix.
+/// Like every rule here, `hosts.json` records the ones added, so `uninstall`
+/// removes exactly those.
+pub fn deny_edit(generated: &mut Generated, paths: &[String]) {
+    for path in paths.iter().filter_map(|p| rule_path(p)) {
+        push_unique(&mut generated.deny_rules, format!("Edit({path})"));
     }
 }
 
