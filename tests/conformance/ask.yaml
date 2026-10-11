@@ -1006,3 +1006,17 @@
   threat: T5
   action: { shell: "npx eslint ." }
   expect: { verdict: ask, rules: [installs] }
+# only the named toolchains answer a version query silently: a program in the project,
+# or a version flag followed by more words, is a command like any other
+- id: ask-version-of-a-project-program
+  threat: T7
+  action: { shell: "./node --version" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-version-flag-with-more-words
+  threat: T7
+  action: { shell: "node --version -e 'require(\"child_process\")'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-bare-git-with-a-program-running-option
+  threat: T6
+  action: { shell: "git -c core.fsmonitor=/tmp/x --version" }
+  expect: { verdict: ask, rules: [default] }

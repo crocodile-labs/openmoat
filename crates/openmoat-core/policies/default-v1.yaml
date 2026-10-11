@@ -457,6 +457,15 @@ allow:
       - "date {-u,--utc} +* $"
       - "brew {list,ls,info,search,config,--version}"
       - "java {-version,--version} $"
+      # a toolchain's version, the first thing an agent checks; only these names, so a
+      # program the agent wrote (`./tool --version`) still asks
+      - "{git,node,npm,pnpm,yarn,deno,bun,python,python3,pip,pip3,uv,ruby,gem,bundle,cargo,rustc,rustup,go,gcc,g++,clang,cmake,make,docker,kubectl,terraform,dotnet,mvn,gradle,swift,php,composer,perl} {--version,-V} $"
+      - "{node,npm,pnpm,yarn,deno,bun} -v $"
+      - "{git,go,docker,dotnet} version $"
+      # git's own options are parsed away (`git --version` is also seen as `git`); a bare
+      # `git` prints its usage, and an option that changes what git runs keeps the
+      # command as written, which must match on its own (shell/git.rs)
+      - "git $"
       - "docker ps*"
       - "docker images*"
       - "docker logs *"

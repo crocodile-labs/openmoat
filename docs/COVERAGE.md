@@ -12,8 +12,8 @@ the verdict and rule ids the default policy must produce for it.
 | T3 | Secret exfiltration via environment | 22 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 57 | 53 | 2 |
 | T5 | Supply-chain execution | 4 | 29 | 0 |
-| T6 | Environment poisoning | 19 | 10 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 77 | 2 |
+| T6 | Environment poisoning | 19 | 11 | 0 |
+| T7 | Obfuscation and nested execution | 59 | 79 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 131 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
@@ -336,6 +336,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-config-edit` (ask): Ask [default]
 - `ask-git-config-unset` (ask): Ask [default]
 - `ask-git-remote-set-url` (ask): Ask [default]
+- `ask-bare-git-with-a-program-running-option` (ask): Ask [default]
 - `T6-export-path` (attacks): Deny [env-poison]
 - `T6-export-path-unspaced` (attacks): Deny [env-poison]
 - `T6-inline-ld-preload` (attacks): Deny [env-poison]
@@ -435,6 +436,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-uv-run-inline-code` (ask): Ask [default]
 - `ask-python-inline-code` (ask): Ask [default]
 - `ask-node-inline-code` (ask): Ask [default]
+- `ask-version-of-a-project-program` (ask): Ask [default]
+- `ask-version-flag-with-more-words` (ask): Ask [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
