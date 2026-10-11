@@ -13,9 +13,9 @@ the verdict and rule ids the default policy must produce for it.
 | T4 | Destructive git / filesystem operations | 51 | 28 | 1 |
 | T5 | Supply-chain execution | 4 | 16 | 0 |
 | T6 | Environment poisoning | 12 | 3 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 60 | 2 |
+| T7 | Obfuscation and nested execution | 59 | 61 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 9 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 103 | 13 | 3 |
+| T9 | Hook / policy tampering by the agent | 110 | 14 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 15 | 2 | 0 |
 | T12 | Network to unknown hosts | 20 | 8 | 1 |
@@ -340,6 +340,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-make-other-makefile` (ask): Ask [default]
 - `ask-make-other-directory` (ask): Ask [default]
 - `ask-make-default-target-shell-override` (ask): Ask [default]
+- `ask-sqlite-project-db` (ask): Ask [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -429,6 +430,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-moat-status-is-not-kernel-self` (ask): Ask [default]
 - `ask-mkdir-outside-project` (ask): Ask [default]
 - `ask-venv-into-git-directory` (ask): Ask [default]
+- `ask-sqlite-readonly-audit-db` (ask): Ask [default]
 - `T9-edit-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-project-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-moat-policy` (attacks): Deny [kernel-self]
@@ -532,6 +534,13 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-script-wraps-any-moat-command` (attacks): Deny [kernel-self]
 - `T9-repo-trusted-allow-moat-trust` (attacks): Deny [kernel-self]
 - `T9-venv-replaces-moat-home` (attacks): Deny [kernel-self]
+- `T9-sqlite-deletes-audit-events` (attacks): Deny [kernel-self]
+- `T9-sqlite-audit-db-after-cd` (attacks): Deny [kernel-self]
+- `T9-sqlite-options-before-audit-db` (attacks): Deny [kernel-self]
+- `T9-sqlite-attach-audit-db` (attacks): Deny [kernel-self]
+- `T9-sqlite-open-audit-db-on-stdin` (attacks): Deny [kernel-self]
+- `T9-sqlite-uri-audit-db` (attacks): Deny [kernel-self]
+- `T9-duckdb-audit-db` (attacks): Deny [kernel-self]
 - `benign-move-project-file` (benign): Allow [dev-shell]
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
 - `benign-ci-workflow-edit-in-a-clean-session` (benign): Allow [project-fs]

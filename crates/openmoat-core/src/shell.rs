@@ -45,6 +45,7 @@ mod awk;
 mod commands;
 mod copy;
 mod cwd;
+mod database;
 mod decoders;
 pub(crate) mod git;
 mod invocation;

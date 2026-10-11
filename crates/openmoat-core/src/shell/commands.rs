@@ -9,7 +9,7 @@ use super::tables::{
 };
 use super::tokens::{assignment_name, basename, env_refs, flag_payload, strip_at, word_env_refs};
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
-use super::{copy, cwd, decoders, git, invocation, make, operands, options, text};
+use super::{copy, cwd, database, decoders, git, invocation, make, operands, options, text};
 use crate::action::AtomicAction;
 use crate::host;
 use crate::lexer::{self, Operator, Token, Word};
@@ -216,7 +216,13 @@ fn classify_simple(
     {
         sink.read(ctx, file)?;
     }
-    let text_operands = text::classify(&argv, program, ctx, sink)?;
+    let mut text_operands = text::classify(&argv, program, ctx, sink)?;
+    let stdin = cmd
+        .stdin_texts()
+        .chain(cmd.piped.iter().filter_map(Piped::text));
+    text_operands
+        .data
+        .extend(database::classify(&argv, program, stdin, ctx, sink)?);
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
 
     if MAKES.contains(&program) {
