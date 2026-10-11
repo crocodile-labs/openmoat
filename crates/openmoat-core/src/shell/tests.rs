@@ -3,6 +3,7 @@ mod quotes;
 mod redirects;
 mod stdin;
 mod text;
+mod utilities;
 mod venv;
 
 use super::tokens::env_refs;

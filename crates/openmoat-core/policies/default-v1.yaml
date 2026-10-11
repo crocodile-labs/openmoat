@@ -261,6 +261,11 @@ allow:
       - "pwd"
       - "echo *"
       - "which *"
+      - "printf *"
+      # `command -v`/`-V` and `type` only print how a name resolves
+      - "command -v *"
+      - "command -V *"
+      - "type *"
       - "true"
       - "jq *"
       # moving around and everyday file operations; every path operand is also an
@@ -327,6 +332,8 @@ allow:
       - "!git checkout * -- *"
       - "!git checkout * -f*"
       - "!git checkout * --force*"
+      # `printf -v NAME` assigns a variable instead of printing
+      - "!printf -v*"
       - "!find * -exec*"
       - "!find * -ok*"
       - "!find * -delete*"
@@ -372,6 +379,19 @@ allow:
       - "wc *"
       - "diff *"
       - "tree*"
+      # their operands are fs.read atoms, so outside the project these ask
+      - "file *"
+      - "stat *"
+      - "du *"
+      - "fd *"
+      - "uname"
+      # printing the date; setting the clock (`date -s`, `date MMDDhhmm`) asks
+      - "date $"
+      - "date +* $"
+      - "date {-u,--utc} $"
+      - "date {-u,--utc} +* $"
+      - "brew {list,ls,info,search,config,--version}"
+      - "java {-version,--version} $"
       - "docker ps*"
       - "docker images*"
       - "docker logs *"
@@ -387,6 +407,14 @@ allow:
       - "gh repo view*"
       - "!* --output*"
       - "!* -o *"
+      # `fd -x/-X/--exec*` run a program per match; `file -C` writes a compiled
+      # magic file and `file -f` reads the names to check from a file
+      - "!fd * -[xX]*"
+      - "!fd * -[!-]*[xX]*"
+      - "!fd * --exec*"
+      - "!file * -[Cf]*"
+      - "!file * -[!-]*[Cf]*"
+      - "!file * --{c,f}*"
     env.read: ["PATH", "HOME", "USER", "SHELL", "PWD", "LANG", "TERM", "TMPDIR", "EDITOR"]
   - id: dev-tools
     shell:
@@ -401,6 +429,8 @@ allow:
       - "black *"
       - "mypy *"
       - "golangci-lint*"
+      # `gofmt -w` rewrites its operands and `-cpuprofile` writes a file: fs.write atoms
+      - "gofmt *"
   - id: text-tools
     reason: read-only text tools; the classifier reads their options and scripts (shell/text.rs)
     shell:

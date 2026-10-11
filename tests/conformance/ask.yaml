@@ -766,3 +766,60 @@
   threat: T4
   action: { shell: "git worktree remove ../wt" }
   expect: { verdict: ask, rules: [default] }
+# Read-only utilities: the forms that write, run a program or change the machine ask
+- id: ask-date-sets-clock
+  threat: T4
+  action: { shell: "date -s '2020-01-01'" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-date-bsd-sets-clock
+  threat: T4
+  action: { shell: "date 0101000020" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-fd-exec
+  threat: T7
+  action: { shell: "fd -e sh -x sh" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-fd-exec-long
+  threat: T7
+  action: { shell: "fd . --exec-batch rm" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-fd-exec-bundled
+  threat: T7
+  action: { shell: "fd -HX rm" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-fd-below-home
+  threat: T1
+  action: { shell: "fd . ~/Documents" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-file-compile-magic
+  threat: T4
+  action: { shell: "file -C -m magic" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-file-names-from-list
+  threat: T1
+  action: { shell: "file -f names.txt" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-stat-outside-project
+  threat: T1
+  action: { shell: "stat ~/Documents/plan.txt" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-brew-upgrade
+  threat: T5
+  action: { shell: "brew upgrade" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-brew-install
+  threat: T5
+  action: { shell: "brew install ripgrep" }
+  expect: { verdict: ask, rules: [installs] }
+- id: ask-java-runs-a-class
+  threat: T5
+  action: { shell: "java -version -jar /tmp/x.jar" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-gofmt-write-outside-project
+  threat: T4
+  action: { shell: "gofmt -w ~/go/src/x/main.go" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-command-runs-the-command
+  threat: T4
+  action: { shell: "command rm -rf build" }
+  expect: { verdict: ask, rules: [default] }
