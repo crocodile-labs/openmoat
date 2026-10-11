@@ -18,6 +18,7 @@ view at the end of the file.
 - `moat uninstall` deletes only the backups OpenMoat created, never a file of yours at a backup's name; backups from before this release are kept ([#478](https://github.com/crocodile-labs/openmoat/pull/478)).
 - The default policy allows read-only utilities (`file`, `stat`, `du`, `printf`, `command -v`, `type`, `uname`, `date`, `fd`, `brew list`/`info`, `java -version`, `gofmt`) without asking; their forms that run a program, write outside the project or set the clock still ask ([#481](https://github.com/crocodile-labs/openmoat/pull/481)).
 - The default policy allows in-project edits: `sed -i 's/a/b/' file`, `git merge`, `git restore <path>` and a recursive `rm` of a project subdirectory (`rm -rf build`); removing the project root, `.git`, every entry (`*`) or anything outside the project still asks or is denied ([#482](https://github.com/crocodile-labs/openmoat/pull/482)).
+- The default policy allows the build and test commands of more ecosystems (`mvn test`, `./gradlew test`, `dotnet build/test/run`, `bundle exec rspec`, `rake test`, `php artisan test`, `phpunit`, `cmake`, `ctest`, `terraform fmt/validate`, `uv run`, `go run .`, `swift run`, `python <script>.py`, `node <script>.js`, `docker build`); their forms that run code from the command line or reach outside the project still ask ([#483](https://github.com/crocodile-labs/openmoat/pull/483)).
 
 ## [0.4.0] - 2026-10-11
 

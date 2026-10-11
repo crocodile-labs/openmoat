@@ -327,6 +327,31 @@ allow:
       - "make build*"
       - "make check*"
       - "make lint*"
+      # other ecosystems' build and test commands run the project's own code, like
+      # `cargo test`; paths in their arguments are fs atoms, so outside the project
+      # these ask
+      - "mvn {test,compile,package,verify}"
+      - "{./gradlew,gradle} {test,build,check}"
+      - "dotnet {build,test,run}"
+      - "bundle exec rspec"
+      - "rspec"
+      - "rake test"
+      - "php artisan test"
+      - "phpunit"
+      - "cmake {-B,-S}*"
+      - "cmake --build *"
+      - "ctest"
+      - "terraform {fmt,validate}"
+      - "swift run*"
+      # a module path or version (`go run x@latest`) downloads code: only local packages
+      - "go run {.,./*,*.go}"
+      # a project script: the script is an fs.read atom, resolved through symlinks
+      - "{python,python3} *.py"
+      - "node *.{js,mjs,cjs}"
+      # the wrapped command is classified on its own (`uv run pytest` is also `pytest`)
+      - "uv run *"
+      # the build runs in a container; the options that reach the host are excluded
+      - "docker build *"
       # options that run another program or write outside the command's own output (ADR-012)
       # a recursive removal is judged by the paths it writes: a project subdirectory is
       # allowed, `.git`, `~` and anything outside ask or deny. `project-fs` also allows
@@ -356,6 +381,32 @@ allow:
       - "!go * -toolexec*"
       - "!go * -vettool*"
       - "!cargo * --config*"
+      # a `plugin:goal` (`exec:exec`, `antrun:run`) runs what the command line names
+      - "!mvn * *:*"
+      # msbuild switches written `-switch:value` load loggers or write files the
+      # command line does not show as paths; `@file` reads more switches from a file
+      - "!dotnet * -*:*"
+      - "!dotnet * @*"
+      # `-e`/`-p`/`--execute*` run Ruby from the command line; `-g`/`--system` load ~/.rake
+      - "!rake * -[eEpg]*"
+      - "!rake * -[!-]*[eEpg]*"
+      - "!rake * --e*"
+      - "!rake * --sy*"
+      # `cmake -E` runs a built-in command (`cmake -E rm -rf …`), `-P` a script; words
+      # after `--` go to the native build tool (`make --eval`)
+      - "!cmake * -[EP]*"
+      - "!cmake * --"
+      # dashboards submit results over the network; scripts and `--build-and-test` run commands
+      - "!ctest * -[DMTS]*"
+      - "!ctest * --{dashboard,build-*,test-command,script*,extra-submit,submit-index}*"
+      - "!go run * *@*"
+      # `--with` installs more packages into the run
+      - "!uv run * --with*"
+      # build secrets, the SSH agent, host networking and entitlements, output written
+      # to the host, extra build contexts, and pushes reach beyond the container
+      - "!docker build * --{secret,ssh,build-context,net,allow,security-opt,output,push,cache-to}*"
+      - "!docker build * -o*"
+      - "!docker build * -[!-]*o*"
       # rebase options that run commands (`--exec`, `-x`), open the todo list
       # (`--interactive`, `-i`, `--edit-todo`), resume a todo list that may hold `exec`
       # lines (`--continue`, `--skip`) or run a `git-merge-<name>` program (`--strategy`,

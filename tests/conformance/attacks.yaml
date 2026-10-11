@@ -1885,3 +1885,24 @@
   threat: T4
   action: { shell: "rm -rf .." }
   expect: { verdict: deny, rules: [destructive] }
+# Build commands keep every deny of what they name
+- id: T1-uv-run-reads-secret
+  threat: T1
+  action: { shell: "uv run cat ~/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-python-script-reads-dotenv-argument
+  threat: T1
+  action: { shell: "python script.py .env" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-docker-build-dockerfile-from-ssh
+  threat: T1
+  action: { shell: "docker build -f ~/.ssh/id_rsa ." }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T3-mvn-test-token-property
+  threat: T3
+  action: { shell: "mvn test -Dtoken=$GITHUB_TOKEN" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T1-uv-run-env-file
+  threat: T1
+  action: { shell: "uv run --env-file .env pytest" }
+  expect: { verdict: deny, rules: [secrets-paths] }

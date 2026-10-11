@@ -65,3 +65,23 @@ fn git_restore_paths_are_writes() {
     assert!(has_write(&parsed("git restore -- -odd"), "/p/-odd"));
     assert!(!has_any_write(&parsed("git status src/main.rs")));
 }
+
+#[test]
+fn uv_run_classifies_the_wrapped_command() {
+    let atoms = parsed("uv run pytest -x");
+    assert!(has_shell(&atoms, "uv run pytest -x"));
+    assert!(has_shell(&atoms, "pytest -x"));
+    assert!(has_read(
+        &parsed("uv run cat ~/.ssh/id_rsa"),
+        "/Users/me/.ssh/id_rsa"
+    ));
+    // `uv sync` runs no command of its own.
+    assert!(!has_shell(&parsed("uv sync"), "sync"));
+}
+
+#[test]
+fn interpreter_scripts_are_reads() {
+    assert!(has_read(&parsed("python script.py"), "/p/script.py"));
+    assert!(has_read(&parsed("cd /tmp && python3 x.py"), "/tmp/x.py"));
+    assert!(has_read(&parsed("node build.js"), "/p/build.js"));
+}

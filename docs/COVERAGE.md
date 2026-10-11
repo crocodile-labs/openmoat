@@ -7,18 +7,18 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 58 | 26 | 3 |
+| T1 | Secret exfiltration via shell | 62 | 30 | 3 |
 | T2 | Secret exfiltration via file tools | 21 | 1 | 1 |
-| T3 | Secret exfiltration via environment | 21 | 3 | 0 |
-| T4 | Destructive git / filesystem operations | 57 | 50 | 2 |
-| T5 | Supply-chain execution | 4 | 21 | 0 |
+| T3 | Secret exfiltration via environment | 22 | 3 | 0 |
+| T4 | Destructive git / filesystem operations | 57 | 53 | 2 |
+| T5 | Supply-chain execution | 4 | 29 | 0 |
 | T6 | Environment poisoning | 19 | 10 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 68 | 2 |
+| T7 | Obfuscation and nested execution | 59 | 77 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 9 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 131 | 18 | 3 |
+| T9 | Hook / policy tampering by the agent | 131 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
-| T11 | Time-of-check / time-of-use, symlinks | 15 | 2 | 0 |
-| T12 | Network to unknown hosts | 21 | 9 | 1 |
+| T11 | Time-of-check / time-of-use, symlinks | 15 | 3 | 0 |
+| T12 | Network to unknown hosts | 21 | 13 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -48,6 +48,10 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-fd-below-home` (ask): Ask [default]
 - `ask-file-names-from-list` (ask): Ask [default]
 - `ask-stat-outside-project` (ask): Ask [default]
+- `ask-docker-build-secret` (ask): Ask [default]
+- `ask-docker-build-ssh-agent` (ask): Ask [default]
+- `ask-docker-build-context-outside-project` (ask): Ask [default]
+- `ask-docker-build-home-as-context` (ask): Ask [default]
 - `T1-cat-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-curl-upload-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-substitution-exfil` (attacks): Deny [secrets-paths]
@@ -106,6 +110,10 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-file-dotenv` (attacks): Deny [secrets-paths]
 - `T1-fd-lists-ssh` (attacks): Deny [secrets-paths]
 - `T1-sed-in-place-dotenv` (attacks): Deny [secrets-paths]
+- `T1-uv-run-reads-secret` (attacks): Deny [secrets-paths]
+- `T1-python-script-reads-dotenv-argument` (attacks): Deny [secrets-paths]
+- `T1-docker-build-dockerfile-from-ssh` (attacks): Deny [secrets-paths]
+- `T1-uv-run-env-file` (attacks): Deny [secrets-paths]
 - `benign-cd-src-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-cd-crate-then-ls` (benign): Allow [dev-shell]
 - `benign-recursive-read-of-project-root` (benign): Allow [dev-shell, project-fs]
@@ -162,6 +170,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-here-string-feeds-token-to-curl` (attacks): Deny [env-secrets]
 - `T3-heredoc-feeds-token-to-curl` (attacks): Deny [env-secrets]
 - `T3-awk-environ-token` (attacks): Ask [default]
+- `T3-mvn-test-token-property` (attacks): Deny [env-secrets]
 
 ## T4: Destructive git / filesystem operations
 
@@ -215,6 +224,9 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-restore-top-pathspec` (ask): Ask [default]
 - `ask-git-restore-every-file` (ask): Ask [default]
 - `ask-git-restore-pathspec-file` (ask): Ask [default]
+- `ask-cmake-command-mode` (ask): Ask [default]
+- `ask-terraform-apply` (ask): Ask [default]
+- `ask-docker-build-output-to-host` (ask): Ask [default]
 - `T4-force-push` (attacks): Deny [destructive]
 - `T4-force-with-lease` (attacks): Deny [destructive]
 - `T4-rm-home` (attacks): Deny [destructive]
@@ -289,7 +301,6 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-npm-ci` (ask): Ask [installs]
 - `ask-pip-install-editable` (ask): Ask [installs]
 - `ask-go-mod-tidy-resolves-new-modules` (ask): Ask [default]
-- `ask-docker-build-runs-the-dockerfile` (ask): Ask [default]
 - `ask-npm-exec-like-npx` (ask): Ask [installs]
 - `ask-npm-x-like-npx` (ask): Ask [installs]
 - `ask-venv-upgrade-deps-downloads` (ask): Ask [default]
@@ -298,6 +309,15 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-java-runs-a-class` (ask): Ask [default]
 - `ask-git-merge-strategy-program` (ask): Ask [default]
 - `ask-git-merge-strategy-long` (ask): Ask [default]
+- `ask-mvn-settings-outside-project` (ask): Ask [default]
+- `ask-mvn-install` (ask): Ask [default]
+- `ask-gradle-init-script-outside-project` (ask): Ask [default]
+- `ask-dotnet-logger` (ask): Ask [default]
+- `ask-uv-run-with-package` (ask): Ask [default]
+- `ask-python-script-outside-project` (ask): Ask [default]
+- `ask-node-script-outside-project` (ask): Ask [default]
+- `ask-go-run-remote-module` (ask): Ask [default]
+- `ask-npx-project-tool` (ask): Ask [installs]
 - `T5-curl-pipe-sh` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-bash-unspaced` (attacks): Deny [pipe-to-shell]
 - `T5-wget-pipe-sh-with-args` (attacks): Deny [pipe-to-shell]
@@ -405,6 +425,15 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-fd-exec` (ask): Ask [default]
 - `ask-fd-exec-long` (ask): Ask [default]
 - `ask-fd-exec-bundled` (ask): Ask [default]
+- `ask-mvn-plugin-goal` (ask): Ask [default]
+- `ask-dotnet-response-file` (ask): Ask [default]
+- `ask-rake-execute` (ask): Ask [default]
+- `ask-rake-execute-long` (ask): Ask [default]
+- `ask-cmake-native-tool-arguments` (ask): Ask [default]
+- `ask-ctest-test-command` (ask): Ask [default]
+- `ask-uv-run-inline-code` (ask): Ask [default]
+- `ask-python-inline-code` (ask): Ask [default]
+- `ask-node-inline-code` (ask): Ask [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -489,7 +518,6 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-tmux-ordinary-command` (ask): Ask [default]
 - `ask-osascript-mentions-moat` (ask): Ask [default]
 - `ask-absolute-script-recording-ordinary-command` (ask): Ask [default]
-- `ask-python-test-file-named-after-moat` (ask): Ask [default]
 - `ask-bare-moat-is-not-kernel-self` (ask): Ask [default]
 - `ask-moat-status-is-not-kernel-self` (ask): Ask [default]
 - `ask-mkdir-outside-project` (ask): Ask [default]
@@ -633,6 +661,7 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-move-project-file` (benign): Allow [dev-shell]
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
 - `benign-ci-workflow-edit-in-a-clean-session` (benign): Allow [project-fs]
+- `benign-python-test-file-named-after-moat` (benign): Allow [dev-shell, project-fs]
 
 ## T10: Hook supply chain (trojaned hook binary)
 
@@ -649,6 +678,7 @@ the verdict and rule ids the default policy must produce for it.
 
 - `ask-create-symlink-and-read-through-it` (ask): Ask [default]
 - `ask-linked-project-read-through-link-outside` (ask): Ask [default]
+- `ask-python-script-through-link-outside-project` (ask): Ask [default]
 - `T11-read-key-through-symlinked-dir` (attacks): Deny [secrets-paths]
 - `T11-plant-authorized-key-through-symlink` (attacks): Deny [secrets-paths]
 - `T11-file-tool-read-through-symlink` (attacks): Deny [secrets-paths]
@@ -676,6 +706,10 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-webfetch-unknown-host` (ask): Ask [default.fetch]
 - `ask-webfetch-localhost` (ask): Ask [local-net]
 - `ask-git-remote-show-contacts-remote` (ask): Ask [default]
+- `ask-ctest-dashboard-submit` (ask): Ask [default]
+- `ask-terraform-plan` (ask): Ask [default]
+- `ask-docker-build-host-network` (ask): Ask [default]
+- `ask-docker-compose-up` (ask): Ask [default]
 - `T12-webfetch-unknown-host` (attacks): Deny [default.net]
 - `T12-curl-unknown-host` (attacks): Deny [default.net]
 - `T12-netcat-ip` (attacks): Deny [default.net]
