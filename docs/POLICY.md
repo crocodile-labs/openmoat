@@ -472,6 +472,20 @@ warnings and a unified diff and asks `Apply? [y/N]`; only `y` writes the policy,
 previous one in `~/.moat/policy.yaml.bak` and re-pins. Like `moat allow` it needs a
 terminal, refuses over a drifted lock, and is denied to agents by `kernel-self`.
 
+`moat init` never replaces an existing policy, so a release whose default gained a rule
+reaches an installed policy through `moat policy upgrade`. It merges the changes between
+the default the policy was made from (`~/.moat/policy.base.yaml`, written with the policy)
+and this release's default into the policy, line by line as `diff3` does: a change is
+applied only where the policy still has the old default's lines, so a rule you changed or
+removed stays as you left it, and a change next to or over your edit is listed instead of
+applied. A policy made by 0.4.0 or earlier has no recorded base and is compared with the
+0.3.0 default (0.1.1 to 0.3.0 installed it; the changes 0.4.0 made count as already
+there); one that shares under half of its lines was
+not made from a default, and nothing is offered. The upgraded policy must lint; the
+command shows the diff, asks `[y/N]` (`--yes` skips the question, not the terminal), keeps
+the previous policy in `~/.moat/policy.yaml.before-upgrade` and re-pins. `--undo` puts
+that file back byte for byte; `--dry-run` only shows the changes and needs no terminal.
+
 ## 9. Host sandboxes (`sandbox:`)
 
 `moat init` and `moat sandbox sync` compile the policy into each host's own sandbox

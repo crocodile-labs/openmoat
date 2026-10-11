@@ -14,6 +14,10 @@ pub enum PolicyCommand {
     Check(CheckArgs),
     /// Print what OS layers enforce for a policy: the compiled IR and its losses.
     Compile(CompileArgs),
+    /// Add what this release's default policy changed to ~/.moat/policy.yaml, keeping every
+    /// line you changed; shows the diff and asks first. Refused unless run from an
+    /// interactive terminal, except with --dry-run.
+    Upgrade(UpgradeArgs),
 }
 
 #[derive(Debug, Args)]
@@ -76,4 +80,19 @@ pub enum ActionKind {
     /// A URL read by a host fetch tool (`WebFetch`).
     Fetch,
     Mcp,
+}
+
+#[derive(Debug, Args)]
+pub struct UpgradeArgs {
+    /// Show the changes without writing anything; needs no terminal.
+    #[arg(long, conflicts_with = "undo")]
+    pub dry_run: bool,
+
+    /// Apply without asking (still only from a terminal).
+    #[arg(long, short = 'y')]
+    pub yes: bool,
+
+    /// Restore the policy the last upgrade replaced, byte for byte.
+    #[arg(long)]
+    pub undo: bool,
 }

@@ -16,6 +16,10 @@ use crate::integrity;
 use crate::realpath::FsPathResolver;
 use crate::render;
 
+mod upgrade;
+
+pub use upgrade::run as upgrade;
+
 pub fn lint(args: &LintArgs) -> Result<Code> {
     let (policy, path) = load(args.file.clone())?;
     let warnings = openmoat_core::lint::warnings(&policy);
