@@ -54,3 +54,22 @@ Status: accepted · Date: 2026-10-06 · Decided by the owner
   and `moat doctor` and the audit log make it visible.
 - The broker and proxy are security-critical services on the host. They get fuzzing (request
   parsing), the "never widens" property tests from ADR-019, and their own threat-model section.
+
+## Note (2026-10-11): the placeholder in a body sent to its own host
+
+This note explains the accepted decision above; it does not change it.
+
+A plain-HTTP request to a secret's own host may carry the placeholder in its body.
+`moat proxy` neither replaces it with the value there nor refuses the request, and both
+are deliberate:
+
+- **Not substituted.** Writing the value into a body would let the server send it back:
+  an API that echoes the request, an error page that quotes it, or a search index that
+  stores it. The agent would then read the real secret in the response, which is what
+  the broker exists to prevent. The value goes into the secret's header only.
+- **Not refused.** The agent already holds the placeholder, so the request tells the
+  owner nothing the agent could not send anyway, and the placeholder alone does not
+  authenticate anywhere. Refusing it would break ordinary requests that mention it, for
+  example a script that posts its own configuration, without protecting the value.
+
+A placeholder or value in a request to any other host is still refused and recorded.

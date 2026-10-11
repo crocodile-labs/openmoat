@@ -391,6 +391,11 @@ pub struct VerifyArgs {
     #[arg(long)]
     pub anchor: Option<String>,
 
+    /// Fail when no `--anchor` is given: without one, an export whose newest
+    /// events were dropped still verifies.
+    #[arg(long)]
+    pub require_anchor: bool,
+
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,

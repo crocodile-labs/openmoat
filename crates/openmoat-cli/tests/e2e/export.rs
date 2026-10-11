@@ -109,6 +109,34 @@ fn verify_checks_an_export_offline_and_anchors_its_head() {
 }
 
 #[test]
+fn verify_without_an_anchor_says_so_and_can_be_required() {
+    let sb = seeded();
+    let export = stdout(&sb.moat(&["audit", "export"]));
+
+    let plain = verify(&sb, &export, &[]);
+    assert_eq!(plain.status.code(), Some(OK), "{}", text(&plain));
+    assert!(
+        stdout(&plain).contains("hash chain intact from the start of the log, not anchored"),
+        "{}",
+        text(&plain)
+    );
+    let report = json(&verify(&sb, &export, &["--format", "json"]));
+    assert_eq!(report["anchor"], "not_anchored");
+
+    let required = verify(&sb, &export, &["--require-anchor"]);
+    assert_eq!(required.status.code(), Some(USAGE), "{}", text(&required));
+    assert!(
+        stdout(&required).contains("not anchored"),
+        "{}",
+        text(&required)
+    );
+
+    let head = doctor_head(&sb);
+    let anchored = verify(&sb, &export, &["--require-anchor", "--anchor", &head]);
+    assert_eq!(anchored.status.code(), Some(OK), "{}", text(&anchored));
+}
+
+#[test]
 fn verify_names_the_edited_line() {
     let sb = seeded();
     let export = stdout(&sb.moat(&["audit", "export"]));

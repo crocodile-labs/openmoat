@@ -18,6 +18,6 @@ pub mod testing;
 pub use query::{SessionSummary, Summary};
 pub use redact::{KnownSecrets, MIN_SECRET_LEN, redact, redact_value};
 pub use store::{
-    BreakKind, ChainBreak, ChainReport, Event, EventId, ExportBreak, ExportFilter, ExportFormat,
-    ExportReport, ExportedEvent, GENESIS, NewEvent, Store, StoreError, verify_export,
+    AnchorCheck, BreakKind, ChainBreak, ChainReport, Event, EventId, ExportBreak, ExportFilter,
+    ExportFormat, ExportReport, ExportedEvent, GENESIS, NewEvent, Store, StoreError, verify_export,
 };
