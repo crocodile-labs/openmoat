@@ -211,7 +211,8 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
     assert!(stdout(&init).contains(note), "{}", text(&init));
     let claude = settings(&sb);
     assert!(claude.get("sandbox").is_none(), "{claude}");
-    assert!(claude.get("permissions").is_none(), "{claude}");
+    let permissions = claude["permissions"].as_object().unwrap();
+    assert_eq!(permissions.keys().collect::<Vec<_>>(), ["deny"], "{claude}");
     assert!(claude["hooks"]["PreToolUse"].is_array(), "{claude}");
     let read = sb.guard("claude-code", &fixture("claude-code/read.json"));
     assert_eq!(verdict(&read), "allow", "{}", text(&read));
@@ -238,7 +239,8 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
 }
 
 /// #327: on native Windows `init` removes the sandbox settings an older version
-/// wrote, which stopped Claude Code from starting, and keeps the user's own.
+/// wrote, which stopped Claude Code from starting, and keeps the user's own;
+/// Claude Code's deny rules are written there all the same.
 #[cfg(windows)]
 #[test]
 fn native_windows_init_removes_an_old_claude_code_sandbox() {
@@ -252,16 +254,23 @@ fn native_windows_init_removes_an_old_claude_code_sandbox() {
     let init = sb.moat(&["init", "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert!(
-        stdout(&init).contains("removed the sandbox settings an older moat wrote"),
+        stdout(&init).contains("an older moat's are removed"),
         "{}",
         text(&init)
     );
     let claude = settings(&sb);
     assert!(claude.get("sandbox").is_none(), "{claude}");
     assert_eq!(
-        claude["permissions"],
-        serde_json::json!({"allow": ["Bash(ls)"]})
+        claude["permissions"]["allow"],
+        serde_json::json!(["Bash(ls)"])
     );
+    assert!(
+        claude["permissions"]
+            .get("blockReadsOutsideWorkingDirectories")
+            .is_none()
+    );
+    let deny = claude["permissions"]["deny"].as_array().unwrap();
+    assert!(deny.contains(&"Edit(//**/bin/moat.exe)".into()), "{claude}");
     assert_eq!(claude["theme"], "dark");
     assert!(claude["hooks"]["PreToolUse"].is_array(), "{claude}");
     let doctor = sb.moat(&["doctor"]);
