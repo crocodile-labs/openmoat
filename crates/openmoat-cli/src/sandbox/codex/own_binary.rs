@@ -193,6 +193,7 @@ fn open_codex_home(filesystem: &mut Table, home: &str) -> bool {
     if covered {
         return false;
     }
+    filesystem.remove(home);
     for name in CODEX_STATE {
         filesystem.insert(&format!("{home}/{name}"), value("deny"));
     }
