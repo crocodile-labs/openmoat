@@ -1078,3 +1078,16 @@
   threat: T7
   action: { shell: "git diff -O/tmp/order" }
   expect: { verdict: ask, rules: [default] }
+- id: ask-grep-attached-pattern-file-outside
+  threat: T7
+  action: { shell: "grep -f/tmp/patterns src/app.js" }
+  expect: { verdict: ask, rules: [default] }
+# `tr` is not allowed, but a set attached to its option is no write of `/`
+- id: ask-tr-delete-slashes
+  threat: T4
+  action: { shell: "tr -d/ < notes.txt" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-tr-slash-to-underscore
+  threat: T4
+  action: { shell: "tr '/' '_' < notes.txt" }
+  expect: { verdict: ask, rules: [default] }

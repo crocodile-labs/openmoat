@@ -30,6 +30,9 @@ struct Tool {
     reads: &'static str,
     writes: &'static str,
     code: &'static str,
+    /// Short options whose attached value is data, a pattern or a character set
+    /// (`grep -e/api/v1`, `tr -d/`), never a path.
+    data: &'static str,
     /// Whole words that are flags, though they start with a valued option
     /// (`mvn -fae` is not `-f ae`).
     flags: &'static str,
@@ -43,6 +46,7 @@ const NONE: Tool = Tool {
     reads: "",
     writes: "",
     code: "",
+    data: "",
     flags: "",
     go: false,
 };
@@ -104,6 +108,30 @@ const TOOLS: &[Tool] = &[
         writes: "--target-dir --artifact-dir --out-dir",
         // `--config` can set `build.rustc-wrapper` and other programs to run
         code: "--config",
+        ..NONE
+    },
+    Tool {
+        programs: &["grep", "egrep", "fgrep"],
+        reads: "-f --file",
+        data: "-e",
+        ..NONE
+    },
+    Tool {
+        programs: &["rg"],
+        reads: "-f --file --ignore-file",
+        data: "-e -g -t -T -r -M -E",
+        ..NONE
+    },
+    Tool {
+        programs: &["ag"],
+        reads: "-p --path-to-ignore",
+        data: "-G",
+        ..NONE
+    },
+    // `tr` takes no option values; `tr -d/` deletes slashes
+    Tool {
+        programs: &["tr"],
+        data: "-c -C -d -s -t",
         ..NONE
     },
     Tool {
@@ -179,7 +207,8 @@ pub(super) fn classify(
 ) -> Result<(), ClassifyError> {
     let end = argv.iter().position(|a| a == "--").unwrap_or(argv.len());
     let (name, start) = subject(argv, program);
-    if let Some(tool) = TOOLS.iter().find(|t| t.programs.contains(&name)) {
+    let tool = TOOLS.iter().find(|t| t.programs.contains(&name));
+    if let Some(tool) = tool {
         let mut i = start;
         while i < end {
             let found = (!ops.data.contains(&i)).then(|| option_value(tool, argv, i));
@@ -197,8 +226,13 @@ pub(super) fn classify(
     if NO_FILE_OPERANDS.contains(&program) {
         return Ok(());
     }
+    let data = |arg: &str| {
+        tool.into_iter()
+            .flat_map(|t| t.data.split_whitespace())
+            .any(|o| arg.len() > o.len() && arg.starts_with(o))
+    };
     for (i, arg) in argv.iter().enumerate().take(end).skip(1) {
-        if let Some(path) = attached_path(arg).filter(|_| !ops.data.contains(&i)) {
+        if let Some(path) = attached_path(arg).filter(|_| !ops.data.contains(&i) && !data(arg)) {
             sink.read(ctx, path)?;
             sink.write(ctx, path)?;
         }
@@ -289,7 +323,7 @@ fn apply(
 
 /// The path attached to a short option (`-B/tmp/x`, `-o~/bin/app`,
 /// `-I=../include`). A bare `~` is a backup suffix (`sed -i~`, `perl -i~`),
-/// not the home directory.
+/// not the home directory, and a bare `/` is a separator or a set.
 fn attached_path(arg: &str) -> Option<&str> {
     if arg.starts_with("--") {
         return None;
@@ -298,5 +332,6 @@ fn attached_path(arg: &str) -> Option<&str> {
     chars.next()?;
     let rest = chars.as_str();
     let rest = rest.strip_prefix('=').unwrap_or(rest);
-    (rest != "~" && paths::looks_like_path(rest)).then_some(rest)
+    let bare = rest == "~" || rest.chars().all(|c| c == '/');
+    (!bare && paths::looks_like_path(rest)).then_some(rest)
 }

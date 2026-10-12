@@ -10,10 +10,10 @@ the verdict and rule ids the default policy must produce for it.
 | T1 | Secret exfiltration via shell | 63 | 30 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 22 | 3 | 0 |
-| T4 | Destructive git / filesystem operations | 58 | 53 | 2 |
+| T4 | Destructive git / filesystem operations | 58 | 55 | 2 |
 | T5 | Supply-chain execution | 4 | 29 | 0 |
 | T6 | Environment poisoning | 19 | 11 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 93 | 2 |
+| T7 | Obfuscation and nested execution | 59 | 94 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 135 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
@@ -229,6 +229,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-cmake-command-mode` (ask): Ask [default]
 - `ask-terraform-apply` (ask): Ask [default]
 - `ask-docker-build-output-to-host` (ask): Ask [default]
+- `ask-tr-delete-slashes` (ask): Ask [default]
+- `ask-tr-slash-to-underscore` (ask): Ask [default]
 - `T4-force-push` (attacks): Deny [destructive]
 - `T4-force-with-lease` (attacks): Deny [destructive]
 - `T4-rm-home` (attacks): Deny [destructive]
@@ -454,6 +456,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-pytest-plugin` (ask): Ask [unparseable]
 - `ask-rspec-require` (ask): Ask [unparseable]
 - `ask-git-diff-attached-orderfile-outside` (ask): Ask [default]
+- `ask-grep-attached-pattern-file-outside` (ask): Ask [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]

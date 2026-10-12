@@ -893,3 +893,10 @@
 - id: benign-pytest-disable-plugin
   action: { shell: "pytest -p no:cacheprovider tests" }
   expect: { verdict: allow, rules: [dev-shell] }
+# a pattern attached to a short option is not a path
+- id: benign-grep-attached-pattern
+  action: { shell: "grep -e/api/v1 src/app.js" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-rg-attached-pattern
+  action: { shell: "rg -e/api src" }
+  expect: { verdict: allow, rules: [dev-shell] }

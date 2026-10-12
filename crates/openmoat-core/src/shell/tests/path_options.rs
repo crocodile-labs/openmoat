@@ -26,6 +26,7 @@ fn option_values_are_reads_or_writes_in_every_spelling() {
         assert!(has_write(&atoms, path) == write, "{cmd}: {atoms:?}");
         assert!(has_read(&atoms, path) != write, "{cmd}: {atoms:?}");
     }
+    assert!(has_read(&parsed("grep -f/tmp/p x"), "/tmp/p"));
     // `-fae` is a flag of its own, not `-f ae`.
     assert!(!has_read(&parsed("mvn test -fae"), "/p/ae"));
 }
@@ -65,6 +66,10 @@ fn a_path_attached_to_any_short_option_is_read_and_written() {
         "cc -O2 -Wall -DFOO=1 x",
         "xargs sed -i~ s/a/b/",
         "echo -n/x",
+        "xargs tr -d/",
+        "foo -t/",
+        "grep -e/api/v1 src/app.js",
+        "rg -g/docs/** x",
     ] {
         let atoms = parsed(cmd);
         let outside = |a: &AtomicAction| matches!(a, AtomicAction::FsWrite { path } if !path.starts_with("/p/"));
