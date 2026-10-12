@@ -281,3 +281,106 @@ fn native_windows_init_removes_an_old_claude_code_sandbox() {
         text(&doctor)
     );
 }
+
+/// The files in `dir` whose names end in OpenMoat's backup suffix.
+fn sandbox_backups(dir: &std::path::Path) -> Vec<String> {
+    fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.contains("moat-sandbox-backup"))
+        .collect()
+}
+
+/// An agent `init` left out keeps its files byte for byte: `sync` writes only
+/// the agents that are set up and says how to add the others.
+#[test]
+fn sync_leaves_agents_init_left_out_untouched() {
+    let sb = Sandbox::bare(&[".claude", ".codex", ".cursor"]);
+    let mine = "# my settings\nmodel = \"o3\"\n";
+    fs::write(codex_config(&sb), mine).unwrap();
+    let init = sb.moat(&["init", "--hosts", "claude-code", "--yes"]);
+    assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
+    assert_eq!(fs::read_to_string(codex_config(&sb)).unwrap(), mine);
+
+    let sync = sb.moat_as_person(&["sandbox", "sync"]);
+    assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
+    let shown = stdout(&sync);
+    for line in [
+        "· Codex            not set up (`moat init --hosts codex` adds it)",
+        "· Cursor           not set up (`moat init --hosts cursor` adds it)",
+        "Claude Code",
+    ] {
+        assert!(shown.contains(line), "{line}: {shown}");
+    }
+    assert_eq!(fs::read_to_string(codex_config(&sb)).unwrap(), mine);
+    assert!(sandbox_backups(&sb.home.join(".codex")).is_empty());
+    assert!(!sb.home.join(".cursor/sandbox.json").exists());
+    let lock = fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
+    assert!(!lock.contains(".codex"), "{lock}");
+    assert!(!lock.contains(".cursor"), "{lock}");
+}
+
+#[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
+#[test]
+fn sync_updates_every_agent_init_set_up() {
+    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let init = sb.moat(&["init", "--hosts", "claude-code,codex", "--yes"]);
+    assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
+    let mut claude = settings(&sb);
+    claude["sandbox"]["enabled"] = Value::Bool(false);
+    fs::write(claude_settings(&sb), claude.to_string()).unwrap();
+    let weakened = fs::read_to_string(codex_config(&sb)).unwrap().replace(
+        "default_permissions = \"moat\"",
+        "default_permissions = \":workspace\"",
+    );
+    fs::write(codex_config(&sb), weakened).unwrap();
+    let accepted = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(
+        stdout(&accepted).contains("lock re-pinned"),
+        "{}",
+        text(&accepted)
+    );
+
+    let sync = sb.moat_as_person(&["sandbox", "sync"]);
+    assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
+    let shown = stdout(&sync);
+    assert_eq!(shown.matches("(sandbox updated)").count(), 2, "{shown}");
+    assert_eq!(settings(&sb)["sandbox"]["enabled"], Value::Bool(true));
+    let codex = fs::read_to_string(codex_config(&sb)).unwrap();
+    assert!(codex.contains("default_permissions = \"moat\""), "{codex}");
+}
+
+/// Every file below the agents' directories, by path.
+fn agent_files(sb: &Sandbox) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    [".claude", ".codex", ".cursor"]
+        .iter()
+        .flat_map(|dir| fs::read_dir(sb.home.join(dir)).unwrap())
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.is_file())
+        .map(|p| (p.clone(), fs::read(p).unwrap()))
+        .collect()
+}
+
+/// After a full `moat uninstall` no agent is set up, so `sync` writes none of
+/// them and pins none of their files, though their folders are all there.
+#[test]
+fn sync_after_a_full_uninstall_writes_no_agent() {
+    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
+    let uninstall = sb.moat_as_person(&["uninstall"]);
+    assert_eq!(uninstall.status.code(), Some(OK), "{}", text(&uninstall));
+    let before = agent_files(&sb);
+
+    let sync = sb.moat_as_person(&["sandbox", "sync"]);
+    assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
+    let shown = stdout(&sync);
+    assert_eq!(
+        shown.matches("not set up (`moat init --hosts").count(),
+        3,
+        "{shown}"
+    );
+    assert_eq!(agent_files(&sb), before);
+    let lock = fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
+    for dir in [".claude", ".codex", ".cursor"] {
+        assert!(!lock.contains(dir), "{dir}: {lock}");
+    }
+}

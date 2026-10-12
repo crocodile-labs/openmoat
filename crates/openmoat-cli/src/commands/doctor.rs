@@ -45,7 +45,7 @@ fn sandboxes(
     home: &Home,
     policy: &Policy,
     lock: Option<&Lock>,
-    recorded: &Recorded,
+    binary: &Path,
     verbose: bool,
 ) {
     let plan = match Plan::new(home, policy) {
@@ -58,7 +58,7 @@ fn sandboxes(
     let mut present = false;
     for host in host_sandbox::HOSTS
         .into_iter()
-        .filter(|h| !recorded.skipped(*h))
+        .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
     {
         let name = host.display_name();
         let problems = host_sandbox::problems(home, host, &plan, lock);
@@ -179,13 +179,12 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         hook_pins(&mut report, lock, &home, &hook_files);
     }
     if let Some(policy) = &policy {
-        let recorded = Recorded::load(&home).unwrap_or_default();
         sandboxes(
             &mut report,
             &home,
             policy,
             lock.as_ref(),
-            &recorded,
+            &binary,
             args.verbose,
         );
     }

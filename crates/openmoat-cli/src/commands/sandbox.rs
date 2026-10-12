@@ -11,7 +11,7 @@ use toml_edit::DocumentMut;
 use crate::cli::{Format, SandboxShowArgs};
 use crate::exit::Code;
 use crate::home::Home;
-use crate::install::HostConfig;
+use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
 use crate::sandbox::{
@@ -120,8 +120,9 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     Ok(Code::Ok)
 }
 
-/// `moat sandbox sync`: write every present host's sandbox settings from the
-/// current policy and re-pin them. A re-pin accepts what it pins, so like
+/// `moat sandbox sync`: write the sandbox settings of every host that is set up
+/// ([`HostConfig::set_up`]) from the current policy and re-pin them; any other
+/// host's files are left as they are. A re-pin accepts what it pins, so like
 /// `moat allow` it refuses over a drifted lock (#163) and without a person.
 pub fn sync() -> Result<Code> {
     if !crate::terminal::interactive() {
@@ -139,6 +140,16 @@ pub fn sync() -> Result<Code> {
         let path = install::settings_path(&home, host)?;
         if !path.parent().is_some_and(std::path::Path::is_dir) {
             writeln!(out, "· {:<16} host not found", host.display_name())?;
+            continue;
+        }
+        let config = HostConfig::for_host(&home, host)?;
+        if !config.set_up(&binary) {
+            let why = match config.state(&binary) {
+                HookState::Missing => "not set up",
+                _ => "hook out of date or unreadable; `moat init` repairs it",
+            };
+            let (name, id) = (host.display_name(), host.id());
+            writeln!(out, "· {name:<16} {why} (`moat init --hosts {id}` adds it)")?;
             continue;
         }
         let changed = install::write(&home, host, &plan, false)?;

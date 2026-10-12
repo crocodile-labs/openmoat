@@ -144,7 +144,9 @@ and `moat sandbox show` names each dropped id (#401).
 Other settings and comments are kept, and each file is copied to
 `<file>.moat-sandbox-backup` before moat changes it. `moat sandbox show` prints what
 the policy compiles to, with every place a host is stricter or wider than the policy;
-`moat sandbox sync` rewrites them after you edit the policy and re-pins them. Editing
+`moat sandbox sync` rewrites them after you edit the policy and re-pins them; it
+writes only the agents whose OpenMoat hook is installed and leaves the files of any
+other agent as they are. Editing
 the generated parts by hand is drift (`kernel-integrity`), and `moat doctor` names any
 weakened setting. Under Claude Code, sandboxed commands can run `git commit` but cannot
 write `.git/hooks`, `.git/config` or the other paths that make git run code (ADR-021);

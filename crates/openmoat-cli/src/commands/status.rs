@@ -33,7 +33,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     let recorded = Recorded::load(&home).unwrap_or_default();
     healthy &= hooks(&mut out, &home, &binary, &recorded)?;
     if let Ok(policy) = home.load_policy() {
-        healthy &= sandboxes(&mut out, &home, &Plan::new(&home, &policy)?, &recorded)?;
+        healthy &= sandboxes(&mut out, &home, &Plan::new(&home, &policy)?, &binary)?;
     }
     // Derived from the hook and sandbox lines above, so it leaves `healthy` alone.
     protection_lines(&mut out, &home, &binary)?;
@@ -239,18 +239,13 @@ fn audit(out: &mut impl io::Write, home: &Home) -> Result<bool> {
 }
 
 /// One line per present host's sandbox (Standard tier); `false` on any problem.
-fn sandboxes(
-    out: &mut impl io::Write,
-    home: &Home,
-    plan: &Plan,
-    recorded: &Recorded,
-) -> Result<bool> {
+fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) -> Result<bool> {
     let lock = Lock::load(&home.lock_path()).ok();
     let mut healthy = true;
     let mut present = false;
     for host in host_sandbox::HOSTS
         .into_iter()
-        .filter(|h| !recorded.skipped(*h))
+        .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
     {
         let name = host.display_name();
         let problems = host_sandbox::problems(home, host, plan, lock.as_ref());
