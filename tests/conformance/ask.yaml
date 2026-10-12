@@ -1091,3 +1091,9 @@
   threat: T4
   action: { shell: "tr '/' '_' < notes.txt" }
   expect: { verdict: ask, rules: [default] }
+# A call in interpreter code is not a host (`.run` is a top-level domain): the
+# program asks like any other inline code instead of meeting `default.net`.
+- id: ask-interpreter-call-named-like-a-host
+  threat: T7
+  action: { shell: "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['ls'])\nEOF" }
+  expect: { verdict: ask, rules: [default] }
