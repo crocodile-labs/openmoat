@@ -9,7 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Fixed
-- `moat sandbox sync` writes only the agents whose OpenMoat hook is installed: it no longer added OpenMoat's sandbox to an agent you left out (such as Codex after `moat init --hosts claude-code`) or removed with `moat uninstall`, and says `not set up` for it instead; `moat status` and `moat doctor` check the sandbox of those agents only.
+- `moat sandbox sync` writes only the agents whose OpenMoat hook is installed: it no longer added OpenMoat's sandbox to an agent you left out (such as Codex after `moat init --hosts claude-code`) or removed with `moat uninstall`, and says `not set up` for it instead; `moat status` and `moat doctor` check the sandbox of those agents only ([#493](https://github.com/crocodile-labs/openmoat/pull/493)).
 
 ## [0.5.0-rc.1] - 2026-10-12
 
