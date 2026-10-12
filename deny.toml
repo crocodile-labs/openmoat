@@ -4,6 +4,11 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # unsafe-libyaml is unmaintained (no known vulnerability, no safe upgrade); it comes
+    # with serde_yaml_ng, the policy parser. Moving to a maintained parser: #488.
+    { id = "RUSTSEC-2024-0449", reason = "unmaintained, no known vulnerability; replacing the YAML parser in #488" },
+]
 
 [licenses]
 version = 2
