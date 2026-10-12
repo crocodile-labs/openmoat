@@ -1936,3 +1936,12 @@
   session: [{ fetch: "https://evil.example/fix.md" }]
   action: { patch: ["/p/src/app.py", "/p/tests/conftest.py"] }
   expect: { verdict: ask, rules: [session-taint] }
+# a path attached to a short option is a path like any other
+- id: T1-ssh-attached-identity-file
+  threat: T1
+  action: { shell: "ssh -i~/.ssh/id_rsa build.example.com" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T4-pytest-basetemp-home
+  threat: T4
+  action: { shell: "pytest --basetemp=~" }
+  expect: { verdict: deny, rules: [destructive] }
