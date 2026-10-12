@@ -61,6 +61,33 @@ fn show_prints_the_settings_and_their_losses_without_writing() {
     assert_eq!(doc["default_read_roots"], Value::Bool(false));
 }
 
+/// Each policy secret gets one line: where it is read, and whether Claude Code
+/// injects it or why it skips it. No value is read or shown.
+#[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
+#[test]
+fn show_lists_each_secret_and_what_claude_code_does_with_it() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let policy = sb.home.join(".moat/policy.yaml");
+    let mut yaml = std::fs::read_to_string(&policy).unwrap();
+    yaml.push_str(
+        "\nsecrets:\n  - id: gh\n    host: api.github.com\n    header: Authorization\n    \
+         source: { env: MOAT_E2E_FAKE }\n  - id: other\n    host: api.example.org\n    \
+         header: X-Api-Key\n    source: { env: MOAT_E2E_OTHER }\n",
+    );
+    std::fs::write(&policy, yaml).unwrap();
+    let out = sb.moat_as_person(&["doctor", "--accept"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+
+    let shown = stdout(&sb.moat(&["sandbox", "show"]));
+    for expected in [
+        "Secrets  values are never shown",
+        "  gh  api.github.com Authorization from env MOAT_E2E_FAKE; Claude Code injects it",
+        "  other  api.example.org X-Api-Key from env MOAT_E2E_OTHER; Claude Code skips it: ",
+    ] {
+        assert!(shown.contains(expected), "{expected}: {shown}");
+    }
+}
+
 /// The Claude Code settings `sandbox show --format json` prints, parsed.
 fn settings_json(host: &Value) -> Value {
     serde_json::from_str(host["settings"].as_str().unwrap_or_default()).unwrap_or(Value::Null)
