@@ -83,6 +83,8 @@ When something is blocked or asked, run `moat`. It shows which agents are protec
 today's decisions, then anything that needs you: a changed policy to accept, or the
 command an agent last asked to run (`Allow? [o]nce for this session / [a]lways / [n]o`).
 It shows what would change before it asks, and changes nothing unless you answer.
+If OpenMoat ever blocks work you need, [USAGE.md](docs/USAGE.md#if-openmoat-gets-in-your-way)
+has the one command for each case, including turning it off with `moat uninstall`.
 
 If OpenMoat is useful to you, a star on GitHub helps other developers find it. Found a
 way past it? Please report it as described in [SECURITY.md](SECURITY.md).

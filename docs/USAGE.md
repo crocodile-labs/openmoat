@@ -195,6 +195,27 @@ Any later change to the file drops it back to deny and ask only, until you trust
 again. Repository rules apply in the hook, not in the host sandboxes
 ([POLICY.md](POLICY.md) §10).
 
+## If OpenMoat gets in your way
+
+OpenMoat blocks when it is unsure, so a wrong decision stops work rather than letting
+something through. Each of these takes one command in your own terminal (agents are
+denied all of them):
+
+- **Every call is denied** with rule `integrity`: a pinned file (the policy, a hook, an
+  agent's settings) changed behind OpenMoat's back. Run `moat`; it shows the change and
+  asks whether to accept it (`moat doctor --accept` does the same).
+- **A command you need keeps asking or is denied**: `moat allow --last` for this session,
+  `moat allow --last --always` for good, or `moat edit` for a wider rule. Please also
+  report it with the "False positive" issue template, so the default policy stops doing it.
+- **You need OpenMoat off right now**: `moat uninstall` takes OpenMoat out of every agent it
+  set up and puts each settings file back as it was; restart the agent afterwards. Your
+  policy and audit log stay in `~/.moat` (add `--purge` to delete them too). For one agent
+  only: `moat uninstall --hosts claude-code`. `moat init` sets it up again.
+- **The `moat` binary is missing or broken**: Claude Code and Codex then run tool calls
+  without the hook ("When the hook fails" in [THREAT_MODEL.md](THREAT_MODEL.md)), and Cursor
+  blocks them. Reinstall it (`brew reinstall crocodile-labs/tap/moat`, or the installer in
+  [INSTALL.md](INSTALL.md)), then run `moat uninstall` if you want it off.
+
 ## Commands
 
 | Command | Use it to |
