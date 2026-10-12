@@ -13,7 +13,7 @@ the verdict and rule ids the default policy must produce for it.
 | T4 | Destructive git / filesystem operations | 58 | 55 | 2 |
 | T5 | Supply-chain execution | 4 | 29 | 0 |
 | T6 | Environment poisoning | 19 | 11 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 94 | 2 |
+| T7 | Obfuscation and nested execution | 59 | 95 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 135 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
@@ -457,6 +457,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-rspec-require` (ask): Ask [unparseable]
 - `ask-git-diff-attached-orderfile-outside` (ask): Ask [default]
 - `ask-grep-attached-pattern-file-outside` (ask): Ask [default]
+- `ask-interpreter-call-named-like-a-host` (ask): Ask [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]

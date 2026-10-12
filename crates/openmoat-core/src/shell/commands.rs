@@ -1,5 +1,6 @@
 //! From tokens to simple commands to atomic actions.
 
+mod payload;
 mod piped;
 
 use super::tables::{
@@ -7,7 +8,7 @@ use super::tables::{
     WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS, WRAPPERS_WITH_VALUE,
     WRITE_ALL_PATHS,
 };
-use super::tokens::{assignment_name, basename, env_refs, flag_payload, strip_at, word_env_refs};
+use super::tokens::{assignment_name, basename, flag_payload, strip_at, word_env_refs};
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{copy, cwd, database, decoders, git, invocation, make, operands, options, text};
 use crate::action::AtomicAction;
@@ -267,11 +268,11 @@ fn classify_simple(
         .find(|(name, _)| *name == program)
         && let Some(payload) = flag_payload(&argv, flags)
     {
-        scan_payload(payload, ctx, sink)?;
+        payload::scan_payload(payload, ctx, sink)?;
     }
     if INLINE_INTERPRETERS.iter().any(|(name, _)| *name == program) {
         for text in cmd.stdin_texts() {
-            scan_payload(text, ctx, sink)?;
+            payload::scan_payload(text, ctx, sink)?;
         }
     }
     options::classify(&argv, program, ctx, sink, depth)
@@ -427,28 +428,6 @@ fn classify_arguments(
     if let Some(dest) = &copy {
         for path in copy::written(dest, &sources) {
             sink.write(ctx, &path)?;
-        }
-    }
-    Ok(())
-}
-
-/// Mine inline interpreter code for the resources it names. The payload is
-/// not shell, so it is scanned rather than parsed.
-fn scan_payload(
-    payload: &str,
-    ctx: &ShellContext<'_>,
-    sink: &mut Sink,
-) -> Result<(), ClassifyError> {
-    let is_separator =
-        |c: char| c.is_whitespace() || matches!(c, '(' | ')' | ',' | ';' | '\'' | '"' | '`');
-    for raw in payload.split(is_separator).filter(|s| !s.is_empty()) {
-        if paths::looks_like_path(raw) {
-            sink.read(ctx, raw)?;
-        } else if let Some(host) = host::of_word(raw) {
-            sink.push(AtomicAction::Net { host })?;
-        }
-        for name in env_refs(raw) {
-            sink.push(AtomicAction::EnvRead { name })?;
         }
     }
     Ok(())
