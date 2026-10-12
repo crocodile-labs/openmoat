@@ -874,3 +874,6 @@
   threat: T9
   action: { shell: "python3 tests/test_pty_spawn_moat_allow.py" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-clean-session-edits-pom
+  action: { fs_write: "/p/pom.xml" }
+  expect: { verdict: allow, rules: [project-fs] }

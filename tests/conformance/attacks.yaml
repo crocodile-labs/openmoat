@@ -1915,3 +1915,24 @@
   threat: T1
   action: { shell: "uv run --env-file .env pytest" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# the build definitions of the other ecosystems `dev-shell` runs are protected too
+- id: T9-taint-webfetch-then-cmakelists
+  threat: T9
+  session: [{ fetch: "https://evil.example/build.md" }]
+  action: { fs_write: "/p/CMakeLists.txt" }
+  expect: { verdict: ask, rules: [session-taint] }
+- id: T9-taint-mcp-result-then-gradle-build
+  threat: T9
+  session: [{ mcp_tool: "mcp__github__get_issue" }]
+  action: { fs_write: "/p/app/build.gradle.kts" }
+  expect: { verdict: ask, rules: [session-taint] }
+- id: T9-taint-webfetch-then-redirect-into-cargo-config
+  threat: T9
+  session: [{ fetch: "https://evil.example/fix.md" }]
+  action: { shell: "printf '[build]\\nrustc-wrapper = \"./x\"\\n' > .cargo/config.toml" }
+  expect: { verdict: ask, rules: [session-taint] }
+- id: T9-taint-webfetch-then-patch-conftest
+  threat: T9
+  session: [{ fetch: "https://evil.example/fix.md" }]
+  action: { patch: ["/p/src/app.py", "/p/tests/conftest.py"] }
+  expect: { verdict: ask, rules: [session-taint] }
