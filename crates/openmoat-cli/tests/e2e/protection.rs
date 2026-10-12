@@ -47,7 +47,11 @@ fn each_agent_reports_its_level_and_gaps() {
     assert_eq!(claude["level"], "hook-and-os-sandbox", "{claude}");
     assert_eq!(claude["reason"], Value::Null, "{claude}");
     assert_eq!(claude["name"], "Claude Code");
-    assert!(claude["gaps"].as_str().unwrap().contains("WebSearch"));
+    let gaps = claude["gaps"].as_str().unwrap();
+    assert!(
+        gaps.contains("MCP servers") && !gaps.contains("WebSearch"),
+        "{gaps}"
+    );
     let cursor = agent(&sb, "cursor");
     assert_eq!(cursor["level"], "hook-and-os-sandbox", "{cursor}");
 
