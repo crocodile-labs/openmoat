@@ -73,7 +73,7 @@ fn fixtures() -> Vec<Fixture> {
     files
         .iter()
         .flat_map(|f| {
-            serde_yaml_ng::from_str::<Vec<Fixture>>(&fs::read_to_string(f).unwrap())
+            openmoat_core::yaml::from_str::<Vec<Fixture>>(&fs::read_to_string(f).unwrap())
                 .unwrap_or_else(|e| panic!("{}: {e}", f.display()))
         })
         .collect()

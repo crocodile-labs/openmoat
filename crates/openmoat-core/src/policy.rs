@@ -57,7 +57,7 @@ pub const SUPPORTED_VERSION: u32 = 1;
 pub enum PolicyError {
     /// The file is not valid YAML or does not fit the schema.
     #[error("policy parse error: {0}")]
-    Parse(serde_yaml_ng::Error),
+    Parse(crate::yaml::Error),
     /// The `version` key names a schema this build does not know.
     #[error("unsupported policy version {found}; this build supports {supported}")]
     Version {
@@ -294,7 +294,7 @@ fn default_verdict() -> Defaults {
 impl Policy {
     /// Parse and lint a policy document. Pure: takes the YAML text.
     pub fn parse(yaml: &str) -> Result<Self, PolicyError> {
-        let policy: Self = serde_yaml_ng::from_str(yaml).map_err(PolicyError::Parse)?;
+        let policy: Self = crate::yaml::from_str(yaml).map_err(PolicyError::Parse)?;
         policy.lint()?;
         Ok(policy)
     }

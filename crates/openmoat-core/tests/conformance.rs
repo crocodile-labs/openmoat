@@ -209,7 +209,7 @@ fn load_fixtures(dir: &Path) -> Vec<(String, Fixture)> {
         let name = file.file_name().unwrap().to_string_lossy().into_owned();
         let text = fs::read_to_string(&file).unwrap();
         let parsed: Vec<Fixture> =
-            serde_yaml_ng::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            openmoat_core::yaml::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
         for fixture in parsed {
             assert!(
                 seen.insert(fixture.id.clone()),

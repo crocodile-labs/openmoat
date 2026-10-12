@@ -124,7 +124,7 @@ fn suite() -> Suite {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/differential/scenarios.yaml");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    serde_yaml_ng::from_str(&text).expect("scenarios.yaml")
+    openmoat_core::yaml::from_str(&text).expect("scenarios.yaml")
 }
 
 /// The scenario file, attacks first.

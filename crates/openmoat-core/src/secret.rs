@@ -39,7 +39,6 @@ pub struct Secret {
     /// The request header the secret goes in (`Authorization`, `X-Api-Key`).
     pub header: String,
     /// Where OpenMoat reads the value, written `{ env: NAME }` and so on.
-    #[serde(with = "serde_yaml_ng::with::singleton_map")]
     pub source: Source,
     /// Also inject into plain-HTTP requests, which carry the value in clear
     /// text. Off unless set: without it a plain-HTTP request keeps the

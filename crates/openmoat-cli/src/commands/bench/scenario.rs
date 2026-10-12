@@ -128,8 +128,8 @@ pub fn scenarios() -> Result<Vec<(&'static str, Scenario)>> {
     let mut ids = BTreeSet::new();
     let mut all = Vec::new();
     for (category, text) in CATEGORIES {
-        let list: Vec<Scenario> =
-            serde_yaml_ng::from_str(text).with_context(|| format!("moatbench/{category}.yaml"))?;
+        let list: Vec<Scenario> = openmoat_core::yaml::from_str(text)
+            .with_context(|| format!("moatbench/{category}.yaml"))?;
         for s in list {
             let threat = s
                 .threat
