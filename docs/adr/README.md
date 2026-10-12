@@ -30,7 +30,7 @@ each ADR records the outcome it needs.
 | [020](ADR-020-egress-proxy-and-secrets-broker.md) | `moat proxy` is the only network exit; the secrets broker injects credentials so the agent never holds them; minimal session taint | accepted |
 | [021](ADR-021-os-layer-allowances.md) | An OS layer may be wider than the hook only by listed allowances: `sandbox.read_roots` and what a host needs to run, each printed by `moat sandbox show` | accepted |
 | [022](ADR-022-repository-policy-and-trust.md) | `<project>/.moat/policy.yaml` adds deny and ask rules by itself; its allow rules apply only after `moat trust` pins that exact file by hash; hook only | accepted |
-| [023](ADR-023-isolated-tier-macos.md) | Isolated tier on macOS: a Linux guest booted through Apple's `containerization` toolchain; virtiofs mounts and vsock proxy relay; bubblewrap, Landlock and seccomp nest inside, as on Linux | accepted; refines ADR-018 for macOS |
+| [023](ADR-023-isolated-tier-macos.md) | Isolated tier on macOS: a Linux guest booted through Apple's `containerization` toolchain; virtiofs mounts and vsock proxy relay; bubblewrap, Landlock and seccomp nest inside, as on Linux | accepted; refines ADR-018 for macOS; a note (2026-10-12) corrects its facts about Apple's `container` and leaves open questions |
 
 ## Names in older ADRs
 

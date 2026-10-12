@@ -165,7 +165,7 @@ something OpenMoat claims to stop.
   - The profile leaves every file's existence, size and times visible.
   - On Linux, Landlock only grants. Secrets inside a granted tree stay readable and
     writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`
-    in a read root, the project's `.git`. The hook still denies them for the agent's
+    in a read root, the project's `.git`; `.envrc` and `.moat` can be created. The hook still denies them for the agent's
     tool calls. `moat run --isolate` closes this where bubblewrap runs (below).
   - Also on Linux, the proxy's port is reachable on any host.
   - On Linux a seccomp filter allows only IPv4 and IPv6 TCP sockets, so the user's

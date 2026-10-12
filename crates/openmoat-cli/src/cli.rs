@@ -71,7 +71,8 @@ pub enum Command {
     },
     /// Run an agent in a sandbox generated from the policy, its network only through
     /// OpenMoat's proxy (Lightweight tier, ADR-018; macOS, Linux; `--isolate`: Isolated
-    /// tier, Linux). The agent's own sandbox must be off.
+    /// tier, Linux). The agent's own sandbox must be off. On Linux without `--isolate`,
+    /// files inside the project (`.env`, `.git`, `.moat`) are not protected.
     Run(RunArgs),
     /// What `moat run --isolate` starts inside its sandbox (not for people).
     #[command(hide = true)]
