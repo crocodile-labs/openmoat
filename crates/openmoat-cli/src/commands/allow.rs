@@ -115,7 +115,7 @@ fn approve(
             render::line(&mut out, &added)?;
         } else {
             writeln!(out, "✔ added to {}:", path.display())?;
-            for line in serde_yaml_ng::to_string(&[&rule])?.lines() {
+            for line in openmoat_core::yaml::to_string(&[&rule])?.lines() {
                 render::line(&mut out, &format!("    {line}"))?;
             }
             writeln!(
@@ -230,7 +230,7 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
         return Err(error.context(format!("{} left unchanged", path.display())));
     }
     writeln!(out, "✔ {verb} {}:", path.display())?;
-    for line in serde_yaml_ng::to_string(&[&rule])?.lines() {
+    for line in openmoat_core::yaml::to_string(&[&rule])?.lines() {
         writeln!(out, "    {line}")?;
     }
     if args.remove.is_none() {

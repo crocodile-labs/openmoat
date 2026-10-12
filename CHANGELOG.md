@@ -30,6 +30,7 @@ view at the end of the file.
 - After a web fetch or MCP result, editing the build and test definitions of the other ecosystems the default policy runs asks, as `package.json` and `Makefile` already did: `CMakeLists.txt`, `pom.xml`, `build.gradle`, `*.csproj`, `Rakefile`, `Gemfile`, `composer.json`, `conftest.py`, `pyproject.toml`, `Cargo.toml`, `.cargo/config.toml`, `go.mod`, `Dockerfile`, `.npmrc` and more ([#491](https://github.com/crocodile-labs/openmoat/pull/491)).
 - A build or output directory given as an option value outside the project asks in every spelling (`cmake -B/tmp/x`, `go build -o /tmp/x`, `dotnet build -o/tmp/x`) and counts as a write; options that load code from a file (`cmake -C`, `gradle -I`, `pytest -p`, `rspec -r`) ask ([#PR1](https://github.com/crocodile-labs/openmoat/pull/PR1)).
 - A build or output directory given as an option value outside the project asks in every spelling (`cmake -B/tmp/x`, `go build -o /tmp/x`, `dotnet build -o/tmp/x`) and counts as a write; options that load code from a file (`cmake -C`, `gradle -I`, `pytest -p`, `rspec -r`) ask ([#490](https://github.com/crocodile-labs/openmoat/pull/490)).
+- Policies are parsed by a maintained pure-Rust YAML parser instead of one built on `unsafe-libyaml` (RUSTSEC-2024-0449); a mapping that repeats a key, a merge key (`<<`) or an unknown tag (`!env`) is now an error, and `yes`/`no`/`on`/`off` are still not booleans ([#PRNUM](https://github.com/crocodile-labs/openmoat/pull/PRNUM)).
 
 ## [0.4.0] - 2026-10-11
 

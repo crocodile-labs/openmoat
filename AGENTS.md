@@ -43,7 +43,7 @@ Each `crates/openmoat-<name>` directory holds the package `openmoat-<name>`; `cr
 4. **Fail closed.** Every error path in `moat guard` yields a `deny` response and exit 2 (ADR-004).
 5. **Exit codes:** 0 allow/ok, 1 the agent `moat run` started failed, 2 deny, 3 unresolved ask (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
 6. **No secrets in the audit log.** Everything persisted passes `openmoat_audit::redact`.
-7. **Pure core.** `openmoat-core` depends only on `serde`, `serde_yaml_ng`, `globset`, `thiserror`. Anything that needs the filesystem (program resolution, hashing) is injected from the CLI through a trait (`ProgramResolver`, `PathResolver`).
+7. **Pure core.** `openmoat-core` depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Anything that needs the filesystem (program resolution, hashing) is injected from the CLI through a trait (`ProgramResolver`, `PathResolver`).
 8. **Idempotent install.** `moat init` never overwrites a policy, never duplicates a hook, always backs up before editing a host file.
 9. **Lock before decide.** `moat guard` verifies `policy.lock` first; drift ⇒ `deny` (`kernel-integrity`). A Claude Code `ConfigChange` for a pinned file that no longer matches the lock is blocked for the session. Only a person may re-pin: `moat init`, or `moat doctor --accept` from an interactive terminal.
 

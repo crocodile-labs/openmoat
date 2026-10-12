@@ -19,7 +19,7 @@ fuzz_target!(|data: &[u8]| {
     let Ok(pattern) = literal_shell_pattern(command) else {
         return;
     };
-    // Built as values, the way the overlay is (`serde_yaml_ng` escapes what
+    // Built as values, the way the overlay is (the YAML writer escapes what
     // YAML cannot hold raw), so only the pattern itself is under test.
     let policy = Policy {
         version: 1,

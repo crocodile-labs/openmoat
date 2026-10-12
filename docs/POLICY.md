@@ -47,6 +47,11 @@ call's working directory (§3.2).
 Unknown keys are rejected. Rule ids must be unique across all three lists and must
 not be empty; a rule group must contain at least one pattern.
 
+The file is YAML 1.2, read strictly (ADR-024): a key repeated in one mapping, a merge key
+(`<<`) and a tag OpenMoat does not know (`!env`) are errors, only `true` and `false` are
+booleans (`yes`, `no`, `on`, `off` are text), and anchors and aliases (`&paths`, `*paths`)
+work as usual.
+
 ## 2. Rule groups
 
 ```yaml

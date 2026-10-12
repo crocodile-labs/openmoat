@@ -175,7 +175,7 @@ impl Overlay {
         }
         let text =
             fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let overlay: Self = serde_yaml_ng::from_str(&text)
+        let overlay: Self = openmoat_core::yaml::from_str(&text)
             .with_context(|| format!("parsing {}", path.display()))?;
         if overlay.version != OVERLAY_VERSION {
             bail!(
@@ -202,7 +202,7 @@ impl Overlay {
         let text = format!(
             "# Permanent allow rules added with `moat allow`. Remove one with\n\
              # `moat allow --remove <id>`, or edit freely, then run `moat doctor --accept`.\n{}",
-            serde_yaml_ng::to_string(self)?
+            openmoat_core::yaml::to_string(self)?
         );
         write_private(path, text.as_bytes())
     }

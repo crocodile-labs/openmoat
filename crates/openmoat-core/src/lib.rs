@@ -34,6 +34,7 @@ mod secret;
 mod shell;
 mod taint;
 mod verdict;
+pub mod yaml;
 
 pub use action::{Action, AtomicAction};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart

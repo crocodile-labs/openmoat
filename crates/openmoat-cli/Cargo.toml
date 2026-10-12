@@ -23,7 +23,6 @@ clap.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml_ng.workspace = true
 sha2.workspace = true
 signal-hook.workspace = true
 toml_edit.workspace = true

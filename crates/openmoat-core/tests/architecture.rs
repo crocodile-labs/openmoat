@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::Path;
 
-const ALLOWED_DEPENDENCIES: &[&str] = &["serde", "serde_yaml_ng", "globset", "thiserror"];
+const ALLOWED_DEPENDENCIES: &[&str] = &["serde", "serde-saphyr", "globset", "thiserror"];
 
 #[test]
 fn core_depends_only_on_pure_crates() {

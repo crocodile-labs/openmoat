@@ -12,7 +12,7 @@ categories.workspace = true
 
 [dependencies]
 serde.workspace = true
-serde_yaml_ng.workspace = true
+serde-saphyr.workspace = true
 globset.workspace = true
 thiserror.workspace = true
 
