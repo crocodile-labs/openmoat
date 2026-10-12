@@ -88,8 +88,20 @@ pub struct Generated {
 /// user whose home directory is spelled as in `homes`. With `proxy_port`,
 /// Codex's proxy may hand allowed traffic to `moat proxy` there.
 pub fn generate(ir: &Enforcement, homes: &[String], proxy_port: Option<u16>) -> Result<Generated> {
+    generate_with(ir, homes, proxy_port, |path| {
+        std::path::Path::new(path).is_file()
+    })
+}
+
+/// [`generate`]; `is_file` names granted files (`~/.gitconfig`), which get no `**/` denies.
+fn generate_with(
+    ir: &Enforcement,
+    homes: &[String],
+    proxy_port: Option<u16>,
+    is_file: fn(&str) -> bool,
+) -> Result<Generated> {
     let mut report = Report::default();
-    let fs = Filesystem::build(ir, homes, &mut report)?;
+    let fs = Filesystem::build(ir, homes, is_file, &mut report)?;
     let denied_dirs = names::denied_dirs(ir);
     let mut profile = Table::new();
     profile.insert(
@@ -129,6 +141,8 @@ struct Filesystem {
     workspace: Vec<(String, Mode)>,
     /// The home directory's spellings.
     homes: Vec<String>,
+    /// Whether a granted path is a file rather than a directory.
+    is_file: Option<fn(&str) -> bool>,
     /// Directories inside the home reads are granted in, for `**/` read denies.
     roots: Vec<String>,
     /// Directories inside the home writes are granted in, for `**/` write denies.
@@ -160,7 +174,12 @@ fn widen(list: &mut Vec<(String, Mode)>, key: String, mode: Mode) {
 }
 
 impl Filesystem {
-    fn build(ir: &Enforcement, homes: &[String], report: &mut Report) -> Result<Self> {
+    fn build(
+        ir: &Enforcement,
+        homes: &[String],
+        is_file: fn(&str) -> bool,
+        report: &mut Report,
+    ) -> Result<Self> {
         let checker = ir.checker()?;
         let readable = |path: &str| {
             checker.check_os(&AtomicAction::FsRead {
@@ -169,6 +188,7 @@ impl Filesystem {
         };
         let mut fs = Self {
             homes: homes.to_vec(),
+            is_file: Some(is_file),
             ..Self::default()
         };
         grant(&mut fs.paths, ":minimal".into(), Mode::Read);
@@ -255,6 +275,9 @@ impl Filesystem {
         widen(&mut self.paths, path.to_owned(), mode);
         if !self.homes.iter().any(|h| path == h || is_below(path, h)) {
             push_unique(&mut self.outside_home, path.to_owned());
+            return;
+        }
+        if self.is_file.is_some_and(|is_file| is_file(path)) {
             return;
         }
         push_unique(&mut self.roots, path.to_owned());

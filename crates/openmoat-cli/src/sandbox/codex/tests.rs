@@ -7,10 +7,12 @@ use crate::sandbox::{assert_golden, lower_for_hosts};
 pub(super) fn generated(yaml: &str) -> Generated {
     let policy = Policy::parse(yaml).expect("test policy lints");
     let ir = lower_for_hosts(&policy, "/Users/me", None, Vec::new(), false).expect("lowers");
-    generate(
+    // The test home does not exist: name its one file, as on a real machine.
+    generate_with(
         &ir,
         &["/Users/me".into()],
         crate::sandbox::proxy_port(&policy),
+        |path| path == "/Users/me/.gitconfig",
     )
     .expect("generates")
 }
@@ -60,6 +62,12 @@ fn reads_are_granted_exactly_and_secrets_win() {
         mode(&out, &[], "/Users/me/.cargo/**/.env"),
         Some("deny"),
         "**/ below a root"
+    );
+    assert_eq!(mode(&out, &[], "/Users/me/.gitconfig"), Some("read"));
+    assert_eq!(
+        mode(&out, &[], "/Users/me/.gitconfig/**/.env"),
+        None,
+        "a file root has nothing below it"
     );
     for system in ["/usr/**/.env", "/etc/**/.env", "/tmp/**/.env.*"] {
         assert_eq!(
