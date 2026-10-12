@@ -223,6 +223,13 @@ impl HostConfig {
         hook_file::state(self, binary)
     }
 
+    /// Whether the host is set up: OpenMoat's hook for `binary` is installed
+    /// there. Only then do `moat sandbox sync`, `status` and `doctor` deal with
+    /// its sandbox settings; the files of any other host are never touched.
+    pub fn set_up(&self, binary: &std::path::Path) -> bool {
+        self.state(binary) == HookState::Installed
+    }
+
     /// Remove OpenMoat's hook entries from the parsed hook file `root`.
     pub fn remove(&self, root: &mut serde_json::Value) -> bool {
         hook_file::remove(root, self)

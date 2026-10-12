@@ -11,7 +11,7 @@ use toml_edit::DocumentMut;
 use crate::cli::{Format, SandboxShowArgs};
 use crate::exit::Code;
 use crate::home::Home;
-use crate::install::{HostConfig, Recorded};
+use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
 use crate::sandbox::{
@@ -121,7 +121,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
 }
 
 /// `moat sandbox sync`: write the sandbox settings of every host that is set up
-/// ([`Recorded::set_up`]) from the current policy and re-pin them; any other
+/// ([`HostConfig::set_up`]) from the current policy and re-pin them; any other
 /// host's files are left as they are. A re-pin accepts what it pins, so like
 /// `moat allow` it refuses over a drifted lock (#163) and without a person.
 pub fn sync() -> Result<Code> {
@@ -134,7 +134,6 @@ pub fn sync() -> Result<Code> {
     integrity::refuse_drift(&home, "sync")?;
     let plan = Plan::new(&home, &home.load_policy()?)?;
     let binary = crate::install::hook_binary()?;
-    let recorded = Recorded::load(&home)?;
     let mut out = Deferred::default();
     let (mut files, mut codex_configs) = (Vec::new(), Vec::new());
     for host in install::HOSTS {
@@ -143,14 +142,14 @@ pub fn sync() -> Result<Code> {
             writeln!(out, "· {:<16} host not found", host.display_name())?;
             continue;
         }
-        let hook = HostConfig::for_host(&home, host)?.state(&binary);
-        if !recorded.set_up(host, &hook) {
-            writeln!(
-                out,
-                "· {:<16} not set up (`moat init --hosts {}` adds it)",
-                host.display_name(),
-                host.id()
-            )?;
+        let config = HostConfig::for_host(&home, host)?;
+        if !config.set_up(&binary) {
+            let why = match config.state(&binary) {
+                HookState::Missing => "not set up",
+                _ => "hook out of date or unreadable; `moat init` repairs it",
+            };
+            let (name, id) = (host.display_name(), host.id());
+            writeln!(out, "· {name:<16} {why} (`moat init --hosts {id}` adds it)")?;
             continue;
         }
         let changed = install::write(&home, host, &plan, false)?;

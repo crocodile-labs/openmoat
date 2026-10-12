@@ -349,3 +349,38 @@ fn sync_updates_every_agent_init_set_up() {
     let codex = fs::read_to_string(codex_config(&sb)).unwrap();
     assert!(codex.contains("default_permissions = \"moat\""), "{codex}");
 }
+
+/// Every file below the agents' directories, by path.
+fn agent_files(sb: &Sandbox) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    [".claude", ".codex", ".cursor"]
+        .iter()
+        .flat_map(|dir| fs::read_dir(sb.home.join(dir)).unwrap())
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.is_file())
+        .map(|p| (p.clone(), fs::read(p).unwrap()))
+        .collect()
+}
+
+/// After a full `moat uninstall` no agent is set up, so `sync` writes none of
+/// them and pins none of their files, though their folders are all there.
+#[test]
+fn sync_after_a_full_uninstall_writes_no_agent() {
+    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
+    let uninstall = sb.moat_as_person(&["uninstall"]);
+    assert_eq!(uninstall.status.code(), Some(OK), "{}", text(&uninstall));
+    let before = agent_files(&sb);
+
+    let sync = sb.moat_as_person(&["sandbox", "sync"]);
+    assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
+    let shown = stdout(&sync);
+    assert_eq!(
+        shown.matches("not set up (`moat init --hosts").count(),
+        3,
+        "{shown}"
+    );
+    assert_eq!(agent_files(&sb), before);
+    let lock = fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
+    for dir in [".claude", ".codex", ".cursor"] {
+        assert!(!lock.contains(dir), "{dir}: {lock}");
+    }
+}

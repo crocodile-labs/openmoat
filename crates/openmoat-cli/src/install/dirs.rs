@@ -13,7 +13,6 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::Host;
 use serde::{Deserialize, Serialize};
 
-use super::HookState;
 use crate::home::{Home, write_private};
 
 const VERSION: u32 = 1;
@@ -76,14 +75,6 @@ impl Recorded {
     pub fn skipped(&self, host: Host) -> bool {
         !self.dirs.is_empty() && self.dir(host).is_none()
     }
-
-    /// Whether `host` is set up, as `moat status` and `moat doctor` tell it:
-    /// its hook (in state `hook`) is there, or `moat init` did not leave it out.
-    /// Only these get their sandbox settings written by `moat sandbox sync`;
-    /// the files of an agent that is not set up are never touched.
-    pub fn set_up(&self, host: Host, hook: &HookState) -> bool {
-        !matches!(hook, HookState::Missing) || !self.skipped(host)
-    }
 }
 
 #[cfg(test)]
@@ -117,21 +108,5 @@ mod tests {
             .insert("claude-code".into(), PathBuf::from("/cfg/claude"));
         assert!(recorded.skipped(Host::Codex));
         assert!(!recorded.skipped(Host::ClaudeCode));
-    }
-
-    #[test]
-    fn set_up_means_hooked_or_not_left_out() {
-        let mut recorded = Recorded::default();
-        assert!(recorded.set_up(Host::Codex, &HookState::Missing));
-        recorded
-            .dirs
-            .insert("claude-code".into(), PathBuf::from("/cfg/claude"));
-        assert!(recorded.set_up(Host::ClaudeCode, &HookState::Missing));
-        assert!(!recorded.set_up(Host::Codex, &HookState::Missing));
-        assert!(recorded.set_up(Host::Codex, &HookState::Installed));
-        let stale = HookState::Stale {
-            command: "old".into(),
-        };
-        assert!(recorded.set_up(Host::Codex, &stale));
     }
 }
