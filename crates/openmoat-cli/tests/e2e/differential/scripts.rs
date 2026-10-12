@@ -172,14 +172,14 @@ fn script_list_is_well_formed() {
 }
 
 /// `docs/EVIDENCE.md` is the table generated from the script list. Regenerate
-/// with `MOAT_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`.
+/// with `OPENMOAT_TEST_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`.
 #[test]
 fn evidence_table_is_current() {
     let mut doc = String::from(
         "# OS enforcement evidence\n\n\
          Generated from the `scripts` list in `tests/differential/scenarios.yaml` by the\n\
          differential suite; do not edit. Regenerate with\n\
-         `MOAT_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`.\n\n\
+         `OPENMOAT_TEST_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`.\n\n\
          The hook allows project scripts (`npm test`, `make test`) and cannot see what they\n\
          do ([THREAT_MODEL.md](THREAT_MODEL.md) §5). Each row is such a script: the payload is\n\
          the project's test script, started as `npm test` in a throwaway home with fake secrets,\n\
@@ -262,14 +262,14 @@ fn evidence_table_is_current() {
          machine has.\n",
     );
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/EVIDENCE.md");
-    if std::env::var_os("MOAT_UPDATE_EVIDENCE").is_some() {
+    if std::env::var_os("OPENMOAT_TEST_UPDATE_EVIDENCE").is_some() {
         std::fs::write(&path, &doc).unwrap();
     }
     let current = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(
         current.replace("\r\n", "\n") == doc,
         "docs/EVIDENCE.md is out of date; run \
-         `MOAT_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`"
+         `OPENMOAT_TEST_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`"
     );
 }
 

@@ -1,7 +1,7 @@
 # Threat coverage
 
 Generated from `tests/conformance/*.yaml` by the conformance suite; do not edit.
-Regenerate with `MOAT_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
+Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
 Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and
 the verdict and rule ids the default policy must produce for it.
 
