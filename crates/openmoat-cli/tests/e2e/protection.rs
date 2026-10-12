@@ -24,7 +24,7 @@ fn each_agent_reports_its_level_and_gaps() {
     let status = stdout(&sb.moat(&["status"]));
     for line in [
         "Claude Code      ✔ protection: hook + OS sandbox",
-        "Claude Code      · known gaps: WebSearch is not hooked",
+        "Claude Code      · known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox",
         "Codex            ✔ protection: hook + OS sandbox",
         "Codex            · known gaps: web search and hosted tools are not hooked; asks become denies",
         "Cursor           ✔ protection: hook + OS sandbox",
