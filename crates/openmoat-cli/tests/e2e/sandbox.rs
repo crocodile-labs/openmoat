@@ -75,10 +75,11 @@ fn show_lists_each_secret_and_what_claude_code_does_with_it() {
          header: X-Api-Key\n    source: { env: MOAT_E2E_OTHER }\n",
     );
     std::fs::write(&policy, yaml).unwrap();
-    let out = sb.moat_as_person(&["doctor", "--accept"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
 
-    let shown = stdout(&sb.moat(&["sandbox", "show"]));
+    // `show` compiles the policy as it is; it needs no re-pin.
+    let out = sb.moat(&["sandbox", "show"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = stdout(&out);
     for expected in [
         "Secrets  values are never shown",
         "  gh  api.github.com Authorization from env MOAT_E2E_FAKE; Claude Code injects it",
