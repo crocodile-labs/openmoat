@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Fixed
+- `moat sandbox sync` writes only the agents you set up with `moat init`: it no longer added OpenMoat's sandbox to an agent you left out (such as Codex after `moat init --hosts claude-code`), and says `not set up` for it instead.
+
 ## [0.5.0-rc.1] - 2026-10-12
 
 A release candidate for testing; not a stable release.
