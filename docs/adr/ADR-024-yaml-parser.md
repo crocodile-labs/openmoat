@@ -16,7 +16,7 @@ found in it later would not be fixed.
 - The core parses and writes YAML with `serde-saphyr`: pure Rust,
   `#![forbid(unsafe_code)]`, on the maintained `granit-parser` YAML 1.2
   parser, MIT OR Apache-2.0. The other candidates and why they lost are in
-  pull request #488's description.
+  pull request #492's description.
 - Every caller goes through `openmoat_core::yaml::{from_str, to_string}`; no
   other code names the parser crate, so the next change of parser is one file.
 - That module keeps parsing strict: only `true` and `false` are booleans
