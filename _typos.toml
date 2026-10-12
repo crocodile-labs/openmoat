@@ -11,6 +11,7 @@ extend-exclude = [
 locale = "en-gb"
 extend-ignore-re = [
     "\\[o\\]nce",  # the `Allow? [o]nce` prompt
+    "--artifacts?-(path|dir)",  # option names of dotnet and cargo, spelt as the tools spell them
     "\\$!ba;",     # a sed branch to label `a`
 ]
 

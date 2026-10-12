@@ -1020,3 +1020,74 @@
   threat: T6
   action: { shell: "git -c core.fsmonitor=/tmp/x --version" }
   expect: { verdict: ask, rules: [default] }
+# path-valued options in every spelling (`-Bdir`, `-B dir`, `--opt=dir`); an
+# option that loads code asks (`shell/path_options.rs`)
+- id: ask-cmake-attached-build-dir-outside
+  threat: T7
+  action: { shell: "cmake -B/tmp/outside-build" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-cmake-attached-source-and-build-outside
+  threat: T7
+  action: { shell: "cmake -S/tmp/x -Bbuild" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-cmake-spaced-build-dir-outside
+  threat: T7
+  action: { shell: "cmake -B /tmp/outside-build" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-cmake-initial-cache-script-in-project
+  threat: T7
+  action: { shell: "cmake -B build -C init.cmake" }
+  expect: { verdict: ask, rules: [unparseable] }
+- id: ask-go-build-attached-output-outside
+  threat: T7
+  action: { shell: "go build -o/tmp/x ." }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-dotnet-build-attached-output-outside
+  threat: T7
+  action: { shell: "dotnet build -o/tmp/x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-gradle-init-script
+  threat: T7
+  action: { shell: "./gradlew build -I init.gradle" }
+  expect: { verdict: ask, rules: [unparseable] }
+- id: ask-gradle-attached-project-dir-outside
+  threat: T7
+  action: { shell: "gradle build -p/tmp/x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-cargo-target-dir-outside
+  threat: T7
+  action: { shell: "cargo build --target-dir /tmp/target" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-make-attached-directory-outside
+  threat: T7
+  action: { shell: "make test -C/tmp/x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-npm-prefix-outside
+  threat: T7
+  action: { shell: "npm test --prefix /tmp/x" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-pytest-plugin
+  threat: T7
+  action: { shell: "pytest -p evil_plugin" }
+  expect: { verdict: ask, rules: [unparseable] }
+- id: ask-rspec-require
+  threat: T7
+  action: { shell: "bundle exec rspec -r ./spec/evil.rb" }
+  expect: { verdict: ask, rules: [unparseable] }
+- id: ask-git-diff-attached-orderfile-outside
+  threat: T7
+  action: { shell: "git diff -O/tmp/order" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-grep-attached-pattern-file-outside
+  threat: T7
+  action: { shell: "grep -f/tmp/patterns src/app.js" }
+  expect: { verdict: ask, rules: [default] }
+# `tr` is not allowed, but a set attached to its option is no write of `/`
+- id: ask-tr-delete-slashes
+  threat: T4
+  action: { shell: "tr -d/ < notes.txt" }
+  expect: { verdict: ask, rules: [default] }
+- id: ask-tr-slash-to-underscore
+  threat: T4
+  action: { shell: "tr '/' '_' < notes.txt" }
+  expect: { verdict: ask, rules: [default] }

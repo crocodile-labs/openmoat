@@ -52,6 +52,7 @@ mod invocation;
 mod make;
 mod operands;
 mod options;
+mod path_options;
 mod sed;
 pub(crate) mod tables;
 #[cfg(test)]
@@ -161,6 +162,8 @@ pub(crate) enum ClassifyError {
     TooManyActions,
     #[error("cannot interpret `{option}` for `{program}`")]
     ShellOption { program: String, option: String },
+    #[error("`{program} {option}` runs code from a file or module the command line names")]
+    LoadsCode { program: String, option: String },
     #[error("`{0}` names a path relative to a directory that is not known")]
     UnknownDirectory(String),
     #[error("`cd` may lead to more than {MAX_DIRS} directories")]

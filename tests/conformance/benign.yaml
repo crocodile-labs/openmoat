@@ -877,3 +877,26 @@
 - id: benign-clean-session-edits-pom
   action: { fs_write: "/p/pom.xml" }
   expect: { verdict: allow, rules: [project-fs] }
+# path-valued options inside the project: in-project writes cost nothing
+- id: benign-cmake-attached-build-dir
+  action: { shell: "cmake -Bbuild" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-go-build-output-in-project
+  action: { shell: "go build -o bin/app ." }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-dotnet-build-output-in-project
+  action: { shell: "dotnet build -o out" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-make-test-jobs
+  action: { shell: "make test -j4" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-pytest-disable-plugin
+  action: { shell: "pytest -p no:cacheprovider tests" }
+  expect: { verdict: allow, rules: [dev-shell] }
+# a pattern attached to a short option is not a path
+- id: benign-grep-attached-pattern
+  action: { shell: "grep -e/api/v1 src/app.js" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-rg-attached-pattern
+  action: { shell: "rg -e/api src" }
+  expect: { verdict: allow, rules: [dev-shell] }

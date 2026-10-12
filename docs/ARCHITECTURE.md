@@ -112,9 +112,9 @@ unrecorded, and exits 2, since a host that times the hook out runs the call
   through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs and hosts, and `env.*` atoms
   for assignments and `$VAR` reads. Shell options are read per shell
   (`invocation.rs`), git's global options are unwrapped (`git.rs`), `make` arguments
-  that run code (`make.rs`), options that run programs (`options.rs`) and decoder
-  pipelines (`decoders.rs`) are surfaced. Inline interpreter code (`python -c`,
-  `node -e`) is scanned for paths, hosts and variable names, not parsed. Output is
+  that run code (`make.rs`), options that run programs (`options.rs`), option values
+  that name files in every spelling (`path_options.rs`) and decoder pipelines
+  (`decoders.rs`) are surfaced. Inline interpreter code (`python -c`, `node -e`) is scanned for paths, hosts and variable names, not parsed. Output is
   capped at 2048 atoms.
 - **ForeignShell** (Claude Code `PowerShell`). Always `ask` with rule `unparseable`;
   there is no PowerShell parser.
