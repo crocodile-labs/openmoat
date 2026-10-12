@@ -237,6 +237,13 @@ moat run --write ~/.claude --write ~/.claude.json -- claude
   macOS 15 runners (`macos-15-intel`) did not show it.
 - **Linux 6.7 or later:** Landlock rules, plus a seccomp filter that allows only TCP
   sockets (no UDP, Unix sockets or `ptrace`). Windows refuses.
+- **What Linux does not protect.** Landlock can only grant access to whole directory
+  trees, so inside the project the policy's deny rules do not hold for the agent's
+  commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
+  and add files under `.git/hooks`. The same goes for secrets inside a read root
+  (`~/.cargo/credentials.toml`). [EVIDENCE.md](EVIDENCE.md) marks each as a gap. The
+  hook still decides the agent's own tool calls on them. `moat run --isolate` covers
+  these paths where bubblewrap runs (below).
 - **The terminal.** The agent runs in the terminal it was started in. Neither it nor
   a command it starts may type into that terminal: Seatbelt denies `ioctl(TIOCSTI)`,
   and the seccomp filter (also inside `--isolate`) denies `TIOCSTI` and `TIOCLINUX`,
@@ -259,12 +266,16 @@ moat run --write ~/.claude --write ~/.claude.json -- claude
   an API key or `apiKeyHelper`.
 - Before the agent starts, `moat run` prints how many places the sandbox is stricter
   or wider than the policy; `moat run --verbose` lists each one (`moat sandbox show`
-  prints the same for the current directory). Linux is wider than macOS (secrets inside the project stay
-  readable, and the proxy's port is reachable on any host; `--isolate` closes both,
-  below); see [THREAT_MODEL.md](THREAT_MODEL.md).
+  prints the same for the current directory). Linux is wider than macOS (the paths inside
+  the project above, and the proxy's port is reachable on any host; `--isolate` closes
+  both, below); see [THREAT_MODEL.md](THREAT_MODEL.md).
 
 It is weaker per command than the Standard tier: the agent and its scripts share one
-sandbox, so whatever the agent needs, `npm test` gets too.
+sandbox, so whatever the agent needs, `npm test` gets too. On macOS and Linux alike,
+data can still leave through the hosts the policy allows: the proxy checks the host,
+and the secrets broker blocks a brokered secret it can see, but it cannot read inside
+HTTPS, and connections through it do not count towards session taint
+([THREAT_MODEL.md](THREAT_MODEL.md) §5).
 
 [EVIDENCE.md](EVIDENCE.md) lists what `moat run` does to hostile project scripts on
 macOS and Linux (reading keys and credentials, writing outside the project, direct
@@ -309,7 +320,8 @@ macOS: tracked in [ADR-023](adr/ADR-023-isolated-tier-macos.md), first stub ship
 here. On macOS `moat run --isolate` refuses with exit 64 and names what is missing:
 Apple's `container` CLI if the toolchain is not installed (install hint included),
 or "not yet implemented, see ADR-023" when it is. The ADR picks Apple's
-`containerization` toolchain for the implementation and lists the follow-up PRs
+`containerization` toolchain for the implementation (its note of 2026-10-12 corrects
+what it assumed about that toolchain and lists open questions) and lists the follow-up PRs
 under [#175](https://github.com/crocodile-labs/openmoat/issues/175). Never a silent
 fallback to the Lightweight tier.
 

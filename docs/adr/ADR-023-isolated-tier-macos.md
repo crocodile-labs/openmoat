@@ -200,3 +200,86 @@ half-work:
 The next milestone (its own PR under #175) is the virtiofs mount lowering:
 reuse `sandbox::bwrap`'s mount list, point it at the `container` runtime
 spec, and prove the executing differential fixtures still agree.
+
+## Note (2026-10-12): what Apple's `container` runs and where its kernel comes from
+
+This note corrects facts the decision above relies on. It does not change the
+decision; the questions at the end are for the owner. The facts were checked on
+2026-10-12 against [`apple/container`](https://github.com/apple/container) release
+1.5.0 and its `main` branch, and [`apple/containerization`](https://github.com/apple/containerization)
+`main`.
+
+What is true:
+
+- **`container` runs background services.** The CLI talks over XPC to
+  `container-apiserver`, a launchd launch agent that `container system start`
+  starts and `container system stop` ends. The apiserver starts two XPC helpers,
+  `container-core-images` (images and the local content store) and
+  `container-network-vmnet` (the virtual network), and one `container-runtime-linux`
+  per container ([technical overview](https://github.com/apple/container/blob/main/docs/technical-overview.md)).
+- **Apple does not build or sign the guest kernel.** The default kernel is a file
+  (`vmlinux-6.18.35-197-debug` in 1.5.0) inside a Kata Containers release archive
+  (`kata-static-3.32.0-arm64.tar.zst`) that `container` downloads from GitHub. It
+  checks the archive against a SHA-256 digest written in its own source before it
+  installs the kernel (`KernelConfig` in
+  [`ContainerSystemConfig.swift`](https://github.com/apple/container/blob/1.5.0/Sources/ContainerPersistence/ContainerSystemConfig.swift),
+  documented in [container-system-config.md](https://github.com/apple/container/blob/main/docs/container-system-config.md)).
+  What Apple signs is the installer package for `container` itself
+  ([README](https://github.com/apple/container/blob/main/README.md)). We found no
+  signature check on the kernel, and no source for "fails closed on an unsigned image".
+- **Custom kernels are supported.** `container system kernel set` installs a kernel
+  from a remote archive (a digest is required), from a local archive (a digest is
+  optional) or from a local kernel file (no digest is checked)
+  ([`KernelSet.swift`](https://github.com/apple/container/blob/main/Sources/ContainerCommands/System/Kernel/KernelSet.swift)).
+  The `[kernel]` section of the system configuration changes the default archive,
+  path and digest. `Containerization` allows user-provided kernels and per-container
+  kernel choice ([README](https://github.com/apple/containerization/blob/main/README.md#linux-kernel)).
+  So the kernel a VM boots depends on the machine's configuration, not only on the
+  `container` release.
+- **The guest's init comes from an image.** The default configuration names
+  `ghcr.io/apple/containerization/vminit` by tag, not by digest.
+- **Other details.** `container` was first released in June 2025 (0.1.0), not at
+  WWDC 2026. It supports macOS 26 and runs with limits on macOS 15; there is no
+  macOS 16 to 25, so "macOS 25 and earlier" above means macOS 15 and earlier. Both
+  projects are Apache-2.0. "Sub-second" start-up is Apple's own claim
+  ([`containerization` README](https://github.com/apple/containerization/blob/main/README.md)).
+- **The cited measurements are not available.** No `spikes/vz/` directory exists in
+  this repository's history or in the maintainers' private notes repository, which
+  holds the spikes moved out in #442. The ~0.8 s and ~1.0–1.5 s cold-start figures
+  above cannot be reproduced from anything published and should be treated as
+  unmeasured.
+
+Which reasons in the decision no longer hold:
+
+1. **"Apple owns the kernel"** does not hold. The kernel is a Kata Containers build;
+   Apple chooses which one and pins its archive by digest, and a user can replace it.
+2. **"No daemon"** does not hold for `container`. The apiserver and its helpers are
+   long-running user processes that create the VM, its mounts and its network.
+   No system extension is mentioned in Apple's documentation; we did not check
+   further.
+3. **"Fastest cold start"** rests on the unavailable measurements above. Apple's
+   "sub-second" claim stands as Apple's.
+
+The trust assumptions the implementation must state instead:
+
+- `policy.lock` pins the SHA-256 of the kernel file the VM boots (and the archive URL
+  and digest it came from), not a version string. A kernel changed through
+  `container system kernel set` or the `[kernel]` configuration is drift and denies
+  the session.
+- `container-apiserver`, its helpers and `container-runtime-linux` are part of the
+  trusted base, as `container` is. Their binaries are pinned like `container`'s.
+- The `vminit` image is pinned by digest.
+- Kata Containers' kernel build and release process is part of the trusted base.
+
+Open questions for the owner (not decided here):
+
+- With reasons 1 and 2 weakened, does option (c) still beat option (a)? Under both,
+  OpenMoat now pins the kernel itself; (a) has no apiserver.
+- Does calling the `Containerization` Swift package directly, the later step the
+  decision already names, avoid the apiserver and helpers? Not checked.
+- Can `container` start a VM with no vmnet network interface, so that vsock to the
+  proxy is the guest's only route? Not checked; the composition above assumes it.
+- Use the default Kata kernel pinned by digest, or build one from
+  `Containerization`'s kernel configuration and host it next to the release?
+- Cold start needs measuring again, with the method and results recorded where the
+  owner decides.

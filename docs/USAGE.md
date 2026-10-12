@@ -216,7 +216,7 @@ again. Repository rules apply in the hook, not in the host sandboxes
 | `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `moat sandbox show` · `moat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them |
 | `moat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-moat-bench)) |
-| `moat run [--isolate] [--write PATH]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp ([SANDBOX.md](SANDBOX.md)) |
+| `moat run [--isolate] [--write PATH]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; on Linux it does not protect `.env`, `.git` or `.moat` inside the project); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp ([SANDBOX.md](SANDBOX.md)) |
 | `moat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own |
 | `moat proxy install` · `uninstall` · `status [--format json]` | run `moat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. Not supported on Windows yet (#272) |
 | `moat guard --host <id>` | the hook entry point; agents call it, you do not |

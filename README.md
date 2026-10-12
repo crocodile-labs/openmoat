@@ -185,11 +185,14 @@ you export it.
   agent but is weaker per command.
 - Allowed scripts (`npm test`, `make test`) run whatever they contain; the sandbox
   bounds them, OpenMoat does not inspect them. What `moat run` and the agents' own
-  sandboxes stop in such a script, and what they do not (on Linux, `moat run` leaves
-  `.env` in the project readable; `moat run --isolate` hides it, with bubblewrap,
-  Linux only), is tested on every pull request: [docs/EVIDENCE.md](docs/EVIDENCE.md).
+  sandboxes stop in such a script, and what they do not, is tested on every pull
+  request: [docs/EVIDENCE.md](docs/EVIDENCE.md). On Linux, `moat run` does not protect
+  anything inside the project: a script can read and write `.env`, create `.envrc`,
+  write `.moat` and add `.git` hooks. `moat run --isolate` (bubblewrap, Linux only)
+  covers them.
 - Hosts the policy allows (`api.github.com`, the registries) can receive data from an
-  allowed or approved command.
+  allowed or approved command, under `moat run` too: the proxy checks the host, not
+  what is sent inside HTTPS.
 - Tools no hook exposes are not seen (Codex web search and hosted tools).
 - If the hook binary is missing or is killed, Claude Code and Codex run the call
   unchecked; `moat status` reports a missing hook.

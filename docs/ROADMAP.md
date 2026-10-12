@@ -26,7 +26,9 @@ crates.io (README, Install). What exists:
 - Standard tier: Claude Code's, Codex's and Cursor's own sandboxes configured and
   pinned from the policy (ADR-018), and a protection level per agent in `moat status`.
 - Lightweight tier: `moat run` with a generated Seatbelt profile (macOS), or Landlock
-  rules and a seccomp filter (Linux), around the whole agent.
+  rules and a seccomp filter (Linux), around the whole agent. On Linux it does not
+  protect paths inside the project (`.env`, `.git`, `.moat`); `moat run --isolate`
+  does.
 - `moat proxy`: default-deny egress with an SNI check, its own DNS and an audit row
   per connection, and a secrets broker that blocks a brokered secret on its way to the
   wrong host (ADR-020). HTTPS injection is not built yet (#247).
