@@ -12,8 +12,8 @@ view at the end of the file.
 - The Codex sandbox profile no longer lists `**/` denies below a file it grants (`~/.gitconfig/**/.env`); they could match nothing ([#496](https://github.com/crocodile-labs/openmoat/pull/496)).
 - A function call in interpreter code, such as Python's `subprocess.run(`, is no longer taken for a host name, so the command asks instead of being denied as network access ([#495](https://github.com/crocodile-labs/openmoat/pull/495)).
 - `moat sandbox sync` writes only the agents whose OpenMoat hook is installed: it no longer added OpenMoat's sandbox to an agent you left out (such as Codex after `moat init --hosts claude-code`) or removed with `moat uninstall`, and says `not set up` for it instead; `moat status` and `moat doctor` check the sandbox of those agents only ([#493](https://github.com/crocodile-labs/openmoat/pull/493)).
-- `moat status` no longer lists Claude Code `WebSearch` as a known gap: it has been checked as `web.search` since 0.5.0-rc.1.
-- `moat show`, `audit`, `report` and the other audit readers say the audit log cannot be read, not that it is missing and `moat init` should run, when an agent's sandbox blocks `~/.moat`.
+- `moat status` no longer lists Claude Code `WebSearch` as a known gap: it has been checked as `web.search` since 0.5.0-rc.1 ([#494](https://github.com/crocodile-labs/openmoat/pull/494)).
+- `moat show`, `audit`, `report` and the other audit readers say the audit log cannot be read, not that it is missing and `moat init` should run, when an agent's sandbox blocks `~/.moat` ([#494](https://github.com/crocodile-labs/openmoat/pull/494)).
 
 ## [0.5.0-rc.1] - 2026-10-12
 
