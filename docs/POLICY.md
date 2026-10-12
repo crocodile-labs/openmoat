@@ -218,10 +218,23 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   the read, the session is tainted.
 - Protected paths are files whose change runs code or steers the agent later. The built-in
   list (`taint.rs`) is CI (`.github/workflows/**`, `.gitlab-ci.yml`, `.circleci/**`), git
-  hooks (`.husky/**`, `.githooks/**`), editor tasks (`.vscode/**`), build scripts the
-  allowed dev commands run (`package.json`, `Makefile`, `build.rs`), and agent instructions
-  and settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.codex/**`, `.cursor/**`,
-  `.cursorrules`, `.mcp.json`), at any depth.
+  hooks (`.husky/**`, `.githooks/**`), editor tasks (`.vscode/**`), the build and test
+  definitions of every ecosystem whose commands the default policy runs: JavaScript
+  (`package.json`, `.npmrc`, `.yarnrc`, `.yarnrc.yml`, `pnpm-workspace.yaml`), make, just
+  and task (`Makefile`, `makefile`, `GNUmakefile`, `*.mk`, `justfile`, `Taskfile.yml`),
+  Rust (`build.rs`, `Cargo.toml`, `.cargo/config.toml`), Go (`go.mod`, `go.work`), CMake
+  (`CMakeLists.txt`, `*.cmake`, `CMakePresets.json`), Maven (`pom.xml`, `.mvn/**`, `mvnw`),
+  Gradle (`*.gradle`, `*.gradle.kts`, `gradle.properties`, `gradlew`, `gradle/wrapper/**`),
+  .NET (`*.csproj`, `*.fsproj`, `*.vbproj`, `*.props`, `*.targets`, `global.json`,
+  `NuGet.config`), Ruby (`Rakefile`, `*.rake`, `Gemfile`, `*.gemspec`, `.rspec`), PHP
+  (`composer.json`, `artisan`, `phpunit.xml`), Python (`conftest.py`, `pytest.ini`,
+  `pyproject.toml`, `setup.py`, `setup.cfg`, `tox.ini`, `noxfile.py`) and containers
+  (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`), and agent instructions and
+  settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.codex/**`, `.cursor/**`,
+  `.cursorrules`, `.mcp.json`), at any depth. Source and test files are not protected,
+  test-runner configs written in JavaScript (`jest.config.js`) included: they are code the
+  run executes like any other file, and the command that runs them is named in a
+  protected file.
 - `taint: { protected_writes: [<glob>, …] }` adds path globs (§3.2, `~` and `${project}`
   included) to that list. It only extends: a policy cannot remove a built-in path, and
   `moat policy lint` rejects a `!` exclusion as well as a glob that does not compile.

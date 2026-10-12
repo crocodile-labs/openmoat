@@ -8,19 +8,96 @@ use crate::pattern::GlobPattern;
 use crate::policy::PolicyError;
 
 /// Files whose change runs code or steers the agent later, beyond the edit
-/// itself: CI, git hooks, editor tasks, build scripts the allowed dev commands
-/// run, and agent instructions and settings. Writing them is ordinary work,
-/// until the session has read content an attacker may control.
-const PROTECTED_WRITES: [&str; 16] = [
+/// itself: CI, git hooks, editor tasks, the build and test definitions of every
+/// ecosystem whose commands the default policy runs, and agent instructions and
+/// settings. Writing them is ordinary work, until the session has read content an
+/// attacker may control. Source and test files, including test-runner configs
+/// written in JavaScript (`jest.config.js`), are not listed: they are code the run
+/// executes like any other file, and the command that runs them is named in a
+/// listed file (`package.json`).
+const PROTECTED_WRITES: [&str; 76] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
     "**/.husky/**",
     "**/.githooks/**",
     "**/.vscode/**",
+    // JavaScript: scripts, and package-manager settings that pick the script shell
     "**/package.json",
+    "**/.npmrc",
+    "**/.yarnrc",
+    "**/.yarnrc.yml",
+    "**/pnpm-workspace.yaml",
+    // make, just, task
     "**/Makefile",
+    "**/makefile",
+    "**/GNUmakefile",
+    "**/*.mk",
+    "**/justfile",
+    "**/Justfile",
+    "**/.justfile",
+    "**/Taskfile.yml",
+    "**/Taskfile.yaml",
+    // Rust: build scripts, `[build]`/`runner` settings
     "**/build.rs",
+    "**/Cargo.toml",
+    "**/.cargo/config",
+    "**/.cargo/config.toml",
+    // Go: a `toolchain` line downloads and runs another Go
+    "**/go.mod",
+    "**/go.work",
+    // CMake
+    "**/CMakeLists.txt",
+    "**/*.cmake",
+    "**/CMakePresets.json",
+    "**/CMakeUserPresets.json",
+    // Maven
+    "**/pom.xml",
+    "**/.mvn/**",
+    "**/mvnw",
+    "**/mvnw.cmd",
+    // Gradle
+    "**/*.gradle",
+    "**/*.gradle.kts",
+    "**/gradle.properties",
+    "**/gradlew",
+    "**/gradlew.bat",
+    "**/gradle/wrapper/**",
+    // .NET: projects and the MSBuild files they import
+    "**/*.csproj",
+    "**/*.fsproj",
+    "**/*.vbproj",
+    "**/*.props",
+    "**/*.targets",
+    "**/global.json",
+    "**/NuGet.config",
+    "**/nuget.config",
+    // Ruby
+    "**/Rakefile",
+    "**/*.rake",
+    "**/Gemfile",
+    "**/*.gemspec",
+    "**/.rspec",
+    // PHP
+    "**/composer.json",
+    "**/artisan",
+    "**/phpunit.xml",
+    "**/phpunit.xml.dist",
+    // Python: pytest loads `conftest.py` and its config before any test
+    "**/conftest.py",
+    "**/pytest.ini",
+    "**/pyproject.toml",
+    "**/setup.py",
+    "**/setup.cfg",
+    "**/tox.ini",
+    "**/noxfile.py",
+    // containers
+    "**/Dockerfile",
+    "**/docker-compose*.yml",
+    "**/docker-compose*.yaml",
+    "**/compose*.yml",
+    "**/compose*.yaml",
+    // agents
     "**/CLAUDE.md",
     "**/AGENTS.md",
     "**/.claude/**",
