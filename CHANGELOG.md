@@ -9,7 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Added
-- `moat sandbox show` starts with a `Secrets` list: each policy secret's host, header and source (never the value), and whether Claude Code injects it or why it skips it.
+- `moat sandbox show` starts with a `Secrets` list: each policy secret's host, header and source (never the value), and whether Claude Code injects it or why it skips it ([#498](https://github.com/crocodile-labs/openmoat/pull/498)).
 
 ### Fixed
 - The Codex sandbox profile no longer lists `**/` denies below a file it grants (`~/.gitconfig/**/.env`); they could match nothing ([#496](https://github.com/crocodile-labs/openmoat/pull/496)).
