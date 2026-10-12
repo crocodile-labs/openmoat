@@ -21,9 +21,6 @@ const SHELL_VARS: &[&str] = &["SHELL", "MAKESHELL"];
 /// Single-letter options that take no value, as GNU make documents them.
 const NO_VALUE_SHORT: &str = "bBdeiknpqrsStvw";
 
-/// Long options whose value names a file or directory make will read.
-const PATH_OPTIONS: &[&str] = &["--file=", "--makefile=", "--directory=", "--include-dir="];
-
 pub(super) fn classify(
     argv: &[String],
     ctx: &ShellContext<'_>,
@@ -64,8 +61,6 @@ pub(super) fn classify(
             for call in shell_calls(value) {
                 classify_into(call, ctx, sink, depth + 1)?;
             }
-        } else if let Some(path) = PATH_OPTIONS.iter().find_map(|p| arg.strip_prefix(p)) {
-            sink.read(ctx, path)?;
         }
     }
     Ok(())

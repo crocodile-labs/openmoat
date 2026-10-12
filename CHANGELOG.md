@@ -28,6 +28,7 @@ view at the end of the file.
 - Cursor tools OpenMoat cannot classify ask (`tool.unknown` under `defaults`; set it to `allow` for the old behaviour), and Cursor `WebFetch` is checked as a fetch ([#472](https://github.com/crocodile-labs/openmoat/pull/472)).
 - Codex installed by its standalone installer starts commands on Linux: the profile lets commands read the installer's releases directory in the Codex home, so updates keep working, and denies the Codex home's credentials, config, conversations, memories, rules, skills and SQLite databases by name instead of the whole directory, which no read root includes ([#470](https://github.com/crocodile-labs/openmoat/pull/470)).
 - After a web fetch or MCP result, editing the build and test definitions of the other ecosystems the default policy runs asks, as `package.json` and `Makefile` already did: `CMakeLists.txt`, `pom.xml`, `build.gradle`, `*.csproj`, `Rakefile`, `Gemfile`, `composer.json`, `conftest.py`, `pyproject.toml`, `Cargo.toml`, `.cargo/config.toml`, `go.mod`, `Dockerfile`, `.npmrc` and more ([#491](https://github.com/crocodile-labs/openmoat/pull/491)).
+- A build or output directory given as an option value outside the project asks in every spelling (`cmake -B/tmp/x`, `go build -o /tmp/x`, `dotnet build -o/tmp/x`) and counts as a write; options that load code from a file (`cmake -C`, `gradle -I`, `pytest -p`, `rspec -r`) ask ([#PR1](https://github.com/crocodile-labs/openmoat/pull/PR1)).
 
 ## [0.4.0] - 2026-10-11
 

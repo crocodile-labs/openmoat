@@ -1,4 +1,5 @@
 mod database;
+mod path_options;
 mod quotes;
 mod redirects;
 mod stdin;
