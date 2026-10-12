@@ -8,29 +8,31 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.0-rc.1] - 2026-10-12
+
+A release candidate for testing; not a stable release.
+
 ### Added
-- `moat policy upgrade` adds what a new release's default policy changed to your policy, keeping every line you changed, after showing the diff and asking; `--undo` restores the previous policy ([#476](https://github.com/crocodile-labs/openmoat/pull/476)).
-- `moat`, `moat init` and `moat doctor` say when the new default policy has changes your policy can take, and `moat` offers to show and apply them ([#477](https://github.com/crocodile-labs/openmoat/pull/477)).
+- `moat policy upgrade` brings a new release's default-policy changes into your policy: it keeps every line you changed, shows the diff, asks, and `--undo` restores the old file; `moat`, `moat init` and `moat doctor` say when an update is available ([#477](https://github.com/crocodile-labs/openmoat/pull/477)).
+- docs/USAGE.md "If OpenMoat gets in your way": one command for each way it can block work, including turning it off with `moat uninstall` ([#486](https://github.com/crocodile-labs/openmoat/pull/486)).
 
 ### Changed
-- **Breaking** for openmoat-audit: `ExportReport::anchor_found` is now `anchor` (`AnchorCheck`, also in `moat audit verify --format json`); `moat audit verify` without `--anchor` says the export is not anchored, and `--require-anchor` fails it ([#469](https://github.com/crocodile-labs/openmoat/pull/469)).
+- After upgrading, run `moat policy upgrade` (the default-policy fixes below) and `moat sandbox sync`.
+- A policy that repeats a key in one mapping, or uses `<<` merge keys, no longer loads (the old parser kept the last value silently); `moat policy lint` names the line, `moat edit` fixes it ([#492](https://github.com/crocodile-labs/openmoat/pull/492)).
+- **Breaking** for openmoat-audit: `ExportReport::anchor_found` is now `anchor` (`AnchorCheck`); `moat audit verify` says when an export is not anchored, and `--require-anchor` fails then ([#469](https://github.com/crocodile-labs/openmoat/pull/469)).
+- **Breaking** for the library crates: `Kind`, `Action` and `AtomicAction` gain `UnknownTool` ([#472](https://github.com/crocodile-labs/openmoat/pull/472)).
+- Docs state plainly that `moat run` on Linux does not protect `.env`, `.git` or `.moat` inside the project (use `--isolate`), and ADR-023 has a correction note on Apple's container tooling ([#487](https://github.com/crocodile-labs/openmoat/pull/487)).
 
 ### Fixed
-- Version checks of common toolchains (`git --version`, `node -v`, `python3 --version`, `cargo --version`, `go version` …) no longer ask ([#484](https://github.com/crocodile-labs/openmoat/pull/484)).
-- A redirection to `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/fd/1` or `/dev/fd/2` (and from `/dev/null`, `/dev/stdin` or `/dev/fd/0`) is no longer a file write or read, so `ls 2>/dev/null` and `git status >/dev/null 2>&1` stop asking ([#471](https://github.com/crocodile-labs/openmoat/pull/471)).
-- The default policy allows read-only git commands (`git ls-files`, `rev-parse`, `blame`, `grep`, `cat-file`, `tag -l`, `remote -v`, `config --get`, …) and `git config --get user.name` is no longer denied as network; existing policies keep their `dev-shell` rule until the policy upgrade lands ([#473](https://github.com/crocodile-labs/openmoat/pull/473)).
-- `moat uninstall` deletes only the backups OpenMoat created, never a file of yours at a backup's name; backups from before this release are kept ([#478](https://github.com/crocodile-labs/openmoat/pull/478)).
-- The default policy allows read-only utilities (`file`, `stat`, `du`, `printf`, `command -v`, `type`, `uname`, `date`, `fd`, `brew list`/`info`, `java -version`, `gofmt`) without asking; their forms that run a program, write outside the project or set the clock still ask ([#481](https://github.com/crocodile-labs/openmoat/pull/481)).
-- The default policy allows in-project edits: `sed -i 's/a/b/' file`, `git merge`, `git restore <path>` and a recursive `rm` of a project subdirectory (`rm -rf build`); removing the project root, `.git`, every entry (`*`) or anything outside the project still asks or is denied ([#482](https://github.com/crocodile-labs/openmoat/pull/482)).
-- The default policy allows the build and test commands of more ecosystems (`mvn test`, `./gradlew test`, `dotnet build/test/run`, `bundle exec rspec`, `rake test`, `php artisan test`, `phpunit`, `cmake`, `ctest`, `terraform fmt/validate`, `uv run`, `go run .`, `swift run`, `python <script>.py`, `node <script>.js`, `docker build`); their forms that run code from the command line or reach outside the project still ask ([#483](https://github.com/crocodile-labs/openmoat/pull/483)).
+- Normal work no longer asks: redirections to `/dev/null` and the standard streams ([#471](https://github.com/crocodile-labs/openmoat/pull/471)), read-only git commands (and `git config --get user.name`, which was denied as a host) ([#473](https://github.com/crocodile-labs/openmoat/pull/473)), read-only utilities, in-project edits (`sed -i`, `git merge`, `git restore`, `rm -rf build`) and the build and test commands of more ecosystems ([#483](https://github.com/crocodile-labs/openmoat/pull/483)), and toolchain version checks ([#484](https://github.com/crocodile-labs/openmoat/pull/484)).
+- `moat uninstall` deletes only the backups OpenMoat created, never a file of yours at a backup's name ([#478](https://github.com/crocodile-labs/openmoat/pull/478)).
 
 ### Security
-- Cursor tools OpenMoat cannot classify ask (`tool.unknown` under `defaults`; set it to `allow` for the old behaviour), and Cursor `WebFetch` is checked as a fetch ([#472](https://github.com/crocodile-labs/openmoat/pull/472)).
-- Codex installed by its standalone installer starts commands on Linux: the profile lets commands read the installer's releases directory in the Codex home, so updates keep working, and denies the Codex home's credentials, config, conversations, memories, rules, skills and SQLite databases by name instead of the whole directory, which no read root includes ([#470](https://github.com/crocodile-labs/openmoat/pull/470)).
-- After a web fetch or MCP result, editing the build and test definitions of the other ecosystems the default policy runs asks, as `package.json` and `Makefile` already did: `CMakeLists.txt`, `pom.xml`, `build.gradle`, `*.csproj`, `Rakefile`, `Gemfile`, `composer.json`, `conftest.py`, `pyproject.toml`, `Cargo.toml`, `.cargo/config.toml`, `go.mod`, `Dockerfile`, `.npmrc` and more ([#491](https://github.com/crocodile-labs/openmoat/pull/491)).
-- A build or output directory given as an option value outside the project asks in every spelling (`cmake -B/tmp/x`, `go build -o /tmp/x`, `dotnet build -o/tmp/x`) and counts as a write; options that load code from a file (`cmake -C`, `gradle -I`, `pytest -p`, `rspec -r`) ask ([#PR1](https://github.com/crocodile-labs/openmoat/pull/PR1)).
-- A build or output directory given as an option value outside the project asks in every spelling (`cmake -B/tmp/x`, `go build -o /tmp/x`, `dotnet build -o/tmp/x`) and counts as a write; options that load code from a file (`cmake -C`, `gradle -I`, `pytest -p`, `rspec -r`) ask ([#490](https://github.com/crocodile-labs/openmoat/pull/490)).
-- Policies are parsed by a maintained pure-Rust YAML parser instead of one built on `unsafe-libyaml` (RUSTSEC-2024-0449); a mapping that repeats a key, a merge key (`<<`) or an unknown tag (`!env`) is now an error, and `yes`/`no`/`on`/`off` are still not booleans ([#492](https://github.com/crocodile-labs/openmoat/pull/492)).
+- An output or build directory given as an option value outside the project asks in every spelling (`cmake -B/tmp/x`, `go build -o/tmp/x`), and options that load code (`cmake -C`, `cargo --config`, `pytest -p`) ask ([#490](https://github.com/crocodile-labs/openmoat/pull/490)).
+- After a web fetch or MCP result, editing the build definitions of every ecosystem the default policy runs asks (`CMakeLists.txt`, `pom.xml`, `build.gradle`, `*.csproj`, `Rakefile`, `.cargo/config.toml` and more) ([#491](https://github.com/crocodile-labs/openmoat/pull/491)).
+- Policies are parsed by a maintained pure-Rust YAML parser instead of one built on the unmaintained `unsafe-libyaml` (RUSTSEC-2024-0449) ([#492](https://github.com/crocodile-labs/openmoat/pull/492)).
+- Cursor tools OpenMoat cannot classify ask (`tool.unknown`), and Cursor `WebFetch` is checked as a fetch ([#472](https://github.com/crocodile-labs/openmoat/pull/472)).
+- Codex from its standalone installer works on Linux and keeps working across updates, while its credentials, conversations and databases stay unreadable to commands ([#470](https://github.com/crocodile-labs/openmoat/pull/470)).
 
 ## [0.4.0] - 2026-10-11
 
@@ -405,7 +407,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.1...HEAD
+[0.5.0-rc.1]: https://github.com/crocodile-labs/openmoat/compare/v0.4.0...v0.5.0-rc.1
 [0.4.0]: https://github.com/crocodile-labs/openmoat/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/crocodile-labs/openmoat/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/crocodile-labs/openmoat/compare/v0.1.1...v0.2.0
