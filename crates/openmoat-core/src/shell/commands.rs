@@ -441,10 +441,18 @@ fn scan_payload(
 ) -> Result<(), ClassifyError> {
     let is_separator =
         |c: char| c.is_whitespace() || matches!(c, '(' | ')' | ',' | ';' | '\'' | '"' | '`');
-    for raw in payload.split(is_separator).filter(|s| !s.is_empty()) {
+    let mut rest = payload;
+    while let Some(start) = rest.find(|c: char| !is_separator(c)) {
+        let tail = &rest[start..];
+        let end = tail.find(is_separator).unwrap_or(tail.len());
+        let raw = &tail[..end];
+        rest = &tail[end..];
+        // A word followed by `(` is a call (`subprocess.run(`, `app.dev(`), never a
+        // host: a host in code is a string, so a quote or an operator follows it.
+        let called = rest.starts_with('(');
         if paths::looks_like_path(raw) {
             sink.read(ctx, raw)?;
-        } else if let Some(host) = host::of_word(raw) {
+        } else if let Some(host) = host::of_word(raw).filter(|_| !called) {
             sink.push(AtomicAction::Net { host })?;
         }
         for name in env_refs(raw) {
