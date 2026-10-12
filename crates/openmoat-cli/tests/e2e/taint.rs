@@ -51,6 +51,33 @@ fn fetched_content_makes_a_later_workflow_write_ask() {
     assert_eq!(verdict, "allow", "ordinary files stay allowed");
 }
 
+/// After untrusted content, the build definitions the allowed build commands run ask.
+#[test]
+fn fetched_content_makes_later_build_definition_writes_ask() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let proj = sb.project();
+    let write = |session, file: &str| {
+        let input = json!({"file_path": proj.join(file).to_string_lossy(), "content": "x"});
+        decide(&sb, "claude-code", &call(session, &proj, "Write", &input))
+    };
+    let fetch = json!({"url": "https://crates.io/crates/serde", "prompt": "summarise"});
+    let (verdict, _) = decide(&sb, "claude-code", &call("s1", &proj, "WebFetch", &fetch));
+    assert_eq!(verdict, "allow");
+    for file in [
+        "CMakeLists.txt",
+        "pom.xml",
+        "build.gradle",
+        "src/App/App.csproj",
+        "Rakefile",
+        ".cargo/config.toml",
+    ] {
+        let (verdict, reason) = write("s1", file);
+        assert_eq!(verdict, "ask", "{file}: {reason}");
+        assert!(reason.contains("[session-taint]"), "{file}: {reason}");
+        assert_eq!(write("s2", file).0, "allow", "{file} in a clean session");
+    }
+}
+
 #[test]
 fn an_approved_secret_read_makes_later_network_ask() {
     let sb = Sandbox::installed(&[".claude"]);

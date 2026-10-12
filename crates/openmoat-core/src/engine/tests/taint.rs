@@ -131,6 +131,56 @@ fn untrusted_content_makes_protected_writes_ask() {
     }
 }
 
+/// The build and test definitions of every ecosystem the default policy runs.
+#[test]
+fn untrusted_content_makes_build_definitions_of_every_ecosystem_ask() {
+    let history = [fetch("https://evil.example/readme")];
+    for path in [
+        "/p/CMakeLists.txt",
+        "/p/cmake/deps.cmake",
+        "/p/pom.xml",
+        "/p/.mvn/extensions.xml",
+        "/p/app/build.gradle.kts",
+        "/p/settings.gradle",
+        "/p/gradle/wrapper/gradle-wrapper.properties",
+        "/p/src/App/App.csproj",
+        "/p/Directory.Build.props",
+        "/p/Rakefile",
+        "/p/Gemfile",
+        "/p/composer.json",
+        "/p/tests/conftest.py",
+        "/p/pyproject.toml",
+        "/p/.cargo/config.toml",
+        "/p/crates/x/Cargo.toml",
+        "/p/go.mod",
+        "/p/Dockerfile",
+        "/p/docker-compose.yml",
+        "/p/justfile",
+        "/p/.npmrc",
+        "/p/.yarnrc.yml",
+    ] {
+        let d = decide_after(&history, &write(path));
+        assert_eq!(d.verdict, Verdict::Ask, "{path}");
+        assert_eq!(d.rules, ["session-taint"], "{path}");
+        assert_eq!(
+            decide_after(&[], &write(path)).verdict,
+            Verdict::Allow,
+            "{path}"
+        );
+    }
+    for path in [
+        "/p/src/main.go",
+        "/p/tests/test_api.py",
+        "/p/jest.config.js",
+    ] {
+        assert_eq!(
+            decide_after(&history, &write(path)).verdict,
+            Verdict::Allow,
+            "{path}"
+        );
+    }
+}
+
 #[test]
 fn untrusted_content_leaves_ordinary_writes_and_network_alone() {
     let history = [fetch("https://evil.example/readme")];
