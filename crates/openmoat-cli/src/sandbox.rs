@@ -326,14 +326,14 @@ impl Report {
     }
 }
 
-/// Compare `actual` with `tests/fixtures/sandbox/<name>`; `MOAT_UPDATE_GOLDEN=1`
+/// Compare `actual` with `tests/fixtures/sandbox/<name>`; `OPENMOAT_TEST_UPDATE_GOLDEN=1`
 /// rewrites the file instead.
 #[cfg(test)]
 pub fn assert_golden(name: &str, actual: &str) {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/sandbox")
         .join(name);
-    if std::env::var_os("MOAT_UPDATE_GOLDEN").is_some() {
+    if std::env::var_os("OPENMOAT_TEST_UPDATE_GOLDEN").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual).unwrap();
     }
@@ -341,7 +341,7 @@ pub fn assert_golden(name: &str, actual: &str) {
     assert_eq!(
         actual,
         expected,
-        "MOAT_UPDATE_GOLDEN=1 updates {}",
+        "OPENMOAT_TEST_UPDATE_GOLDEN=1 updates {}",
         path.display()
     );
 }
