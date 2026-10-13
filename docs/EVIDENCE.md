@@ -2,7 +2,7 @@
 
 Generated from the `scripts` list in `tests/differential/scenarios.yaml` by the
 differential suite; do not edit. Regenerate with
-`MOAT_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`.
+`OPENMOAT_TEST_UPDATE_EVIDENCE=1 cargo test -p openmoat --test e2e differential`.
 
 The hook allows project scripts (`npm test`, `make test`) and cannot see what they
 do ([THREAT_MODEL.md](THREAT_MODEL.md) §5). Each row is such a script: the payload is

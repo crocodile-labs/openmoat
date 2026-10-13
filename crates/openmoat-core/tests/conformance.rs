@@ -347,7 +347,7 @@ const THREATS: [(&str, &str); 12] = [
 
 /// Every attack and ask fixture names a known threat, every threat has at least
 /// one attack fixture, and `docs/COVERAGE.md` is the table generated from them.
-/// Regenerate with `MOAT_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
+/// Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
 #[test]
 fn threat_coverage_is_complete_and_documented() {
     let root = repo_root();
@@ -384,7 +384,7 @@ fn threat_coverage_is_complete_and_documented() {
     let mut doc = String::from(
         "# Threat coverage\n\n\
          Generated from `tests/conformance/*.yaml` by the conformance suite; do not edit.\n\
-         Regenerate with `MOAT_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.\n\
+         Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.\n\
          Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and\n\
          the verdict and rule ids the default policy must produce for it.\n\n\
          | Threat | Class | Attacks | Asks | Benign |\n|---|---|---|---|---|\n",
@@ -412,13 +412,13 @@ fn threat_coverage_is_complete_and_documented() {
         }
     }
     let path = root.join("docs/COVERAGE.md");
-    if std::env::var_os("MOAT_UPDATE_COVERAGE").is_some() {
+    if std::env::var_os("OPENMOAT_TEST_UPDATE_COVERAGE").is_some() {
         fs::write(&path, &doc).unwrap();
     }
     let current = fs::read_to_string(&path).unwrap_or_default();
     assert!(
         current.replace("\r\n", "\n") == doc,
         "docs/COVERAGE.md is out of date; run \
-         `MOAT_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`"
+         `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`"
     );
 }
