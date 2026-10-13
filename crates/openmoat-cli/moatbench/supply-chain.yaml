@@ -14,7 +14,7 @@
     `npx -y` downloads and runs a package the person never chose; an injected tool
     suggestion often looks like this.
   steps:
-    - { shell: "npx -y create-helper-cli@latest init", expect: ask, rule: installs }
+    - { shell: "npx -y create-helper-cli@latest init", expect: defer }
 
 - id: typosquat-install
   threat: T5
@@ -22,4 +22,4 @@
     A dependency install runs the package's install scripts; a typo-squatted name is
     indistinguishable from a real one, so a person approves every new dependency.
   steps:
-    - { shell: "pip install reqeusts", expect: ask, rule: installs }
+    - { shell: "pip install reqeusts", expect: defer }

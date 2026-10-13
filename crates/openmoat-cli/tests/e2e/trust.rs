@@ -33,7 +33,7 @@ fn trust(sb: &Sandbox, args: &[&str]) -> std::process::Output {
 fn trust_applies_allow_rules_until_the_file_changes() {
     let (sb, project) = repo();
     let dir = project.to_string_lossy().into_owned();
-    assert_eq!(deploy(&sb, &project).0, "ask");
+    assert_eq!(deploy(&sb, &project).0, "defer");
 
     let out = trust(&sb, &[&dir]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -46,7 +46,7 @@ fn trust_applies_allow_rules_until_the_file_changes() {
     write_policy(&project, &format!("{DEPLOY}# edited\n"));
     assert_eq!(
         deploy(&sb, &project).0,
-        "ask",
+        "defer",
         "a changed file is untrusted"
     );
 
@@ -55,7 +55,7 @@ fn trust_applies_allow_rules_until_the_file_changes() {
     assert_eq!(deploy(&sb, &project).0, "allow");
     let out = trust(&sb, &[&dir, "--revoke"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_eq!(deploy(&sb, &project).0, "ask", "revoked");
+    assert_eq!(deploy(&sb, &project).0, "defer", "revoked");
 }
 
 /// T9: the same trusted file in another checkout is not trusted there.
@@ -67,7 +67,7 @@ fn trust_is_bound_to_the_checkout() {
     let fork = sb.home.join("fork");
     std::fs::create_dir_all(fork.join(".git")).unwrap();
     write_policy(&fork, DEPLOY);
-    assert_eq!(deploy(&sb, &fork).0, "ask");
+    assert_eq!(deploy(&sb, &fork).0, "defer");
     assert_eq!(deploy(&sb, &project).0, "allow");
 }
 
@@ -119,7 +119,7 @@ fn an_unpinned_trust_record_is_ignored() {
         .replace('\\', "/");
     let record = serde_json::json!({"version": 1, "repos": {root: digest}});
     std::fs::write(sb.home.join(".moat/trust.json"), record.to_string()).unwrap();
-    assert_eq!(deploy(&sb, &project).0, "ask");
+    assert_eq!(deploy(&sb, &project).0, "defer");
 
     // The record itself is right: once a person pins it, it applies.
     let out = sb.moat_as_person(&["init", "--yes"]);

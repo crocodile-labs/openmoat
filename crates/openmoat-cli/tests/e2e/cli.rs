@@ -307,7 +307,9 @@ fn compile_prints_the_enforcement_ir_and_its_losses() {
     let text = stdout(&out);
     assert!(text.contains("  fetch: default deny"), "{text}");
     assert!(
-        text.contains("fetch `default.fetch`: no rule matches: the hook asks, OS layers deny"),
+        text.contains(
+            "fetch `default.fetch`: no rule matches: the hook leaves it to the agent, OS layers deny"
+        ),
         "{text}"
     );
     assert!(text.contains("  fs.read `sandbox.read_roots`:"), "{text}");

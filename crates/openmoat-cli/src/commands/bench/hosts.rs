@@ -66,13 +66,13 @@ impl Answer {
 /// The answer a host must end up with for `verdict` on `call`: Codex cannot ask,
 /// nor can Cursor's `beforeReadFile` and `preToolUse` (file reads and writes), so
 /// there an `ask` has to arrive as a blocking `deny`. Cursor's hooks have no "no
-/// decision", so a `defer` is Cursor's own prompt, or an allow for file tools.
+/// decision", so a `defer` is Cursor's own prompt, or OpenMoat's ask for file tools.
 pub fn seen(host: Host, call: &Call, verdict: Verdict) -> Answer {
     let file_tool = matches!(call, Call::Read(_) | Call::Write(_) | Call::Edit(_));
     match (host, verdict) {
         (Host::Codex, Verdict::Ask) => Answer::Deny,
-        (Host::Cursor, Verdict::Ask) if file_tool => Answer::Deny,
-        (Host::Cursor, Verdict::Defer) if file_tool => Answer::Allow,
+        // a `defer` there is OpenMoat's ask (`Host::decided`), and the ask arrives as a deny
+        (Host::Cursor, Verdict::Ask | Verdict::Defer) if file_tool => Answer::Deny,
         (Host::Cursor, Verdict::Defer) => Answer::Ask,
         (_, other) => other.into(),
     }

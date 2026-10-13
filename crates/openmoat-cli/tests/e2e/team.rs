@@ -42,7 +42,7 @@ fn team_report_aggregates_verified_exports() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let t = stdout(&out);
     assert!(t.contains("5 decisions"), "{t}");
-    assert!(t.contains("claude-code  2 · 1 · 2"), "{t}");
+    assert!(t.contains("claude-code  2 · 0 · 1 · 2"), "{t}");
     assert!(t.contains("secrets-paths"), "{t}");
     assert!(t.contains(&format!("    2  {KEY}")), "{t}");
     assert!(

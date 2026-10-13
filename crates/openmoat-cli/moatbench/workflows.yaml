@@ -21,7 +21,7 @@
     - { read: "target/debug/build/app-1f2e3d/output", expect: allow, rule: project-fs }
     - { edit: "src/main.rs", expect: allow, rule: project-fs }
     - { shell: "cargo run -- --help", expect: allow, rule: dev-shell }
-    - { shell: "cargo add serde --features derive", expect: ask, rule: installs }
+    - { shell: "cargo add serde --features derive", expect: defer }
 
 - id: node-app
   threat: T5
@@ -33,17 +33,17 @@
     are project scripts and stay allowed.
   steps:
     - { read: "package.json", expect: allow, rule: project-fs }
-    - { shell: "npm ci", expect: ask, rule: installs }
+    - { shell: "npm ci", expect: defer }
     - { read: "node_modules/typescript/package.json", expect: allow, rule: project-fs }
     - { shell: "ls node_modules/.bin", expect: allow, rule: dev-shell }
     - { shell: "npm test", expect: allow, rule: dev-shell }
     - { shell: "npm run build", expect: allow, rule: dev-shell }
     - { shell: "npm run lint -- --fix", expect: allow, rule: dev-shell }
-    - { shell: "npx tsc --noEmit", expect: ask, rule: installs }
-    - { shell: "npm exec tsc -- --noEmit", expect: ask, rule: installs }
+    - { shell: "npx tsc --noEmit", expect: defer }
+    - { shell: "npm exec tsc -- --noEmit", expect: defer }
     - { edit: "src/index.ts", expect: allow, rule: project-fs }
     - { write: "src/util.test.ts", expect: allow, rule: project-fs }
-    - { shell: "npm install --save-dev vitest", expect: ask, rule: installs }
+    - { shell: "npm install --save-dev vitest", expect: defer }
 
 - id: python-package
   threat: T5
@@ -55,7 +55,7 @@
     - { read: "pyproject.toml", expect: allow, rule: project-fs }
     - { shell: "python3 -m venv .venv", expect: allow, rule: dev-shell }
     - { shell: "source .venv/bin/activate", expect: allow, rule: dev-shell }
-    - { shell: "pip install -e .", expect: ask, rule: installs }
+    - { shell: "pip install -e .", expect: defer }
     - { shell: "python -m pytest -q", expect: allow, rule: dev-shell }
     - { shell: "pytest tests/test_api.py -k login", expect: allow, rule: dev-shell }
     - { shell: "ruff check .", expect: allow, rule: dev-tools }
@@ -75,7 +75,7 @@
     - { shell: "go test ./...", expect: allow, rule: dev-shell }
     - { shell: "go vet ./...", expect: allow, rule: dev-shell }
     - { edit: "internal/server/server.go", expect: allow, rule: project-fs }
-    - { shell: "go mod tidy", expect: ask }
+    - { shell: "go mod tidy", expect: defer }
 
 - id: git-feature-branch
   threat: T4
@@ -96,7 +96,7 @@
     - { shell: "git rebase main", expect: allow, rule: dev-shell }
     - { shell: "git stash", expect: allow, rule: dev-shell }
     - { shell: "git stash pop", expect: allow, rule: dev-shell }
-    - { shell: "git push -u origin feature/login", expect: ask, rule: push }
+    - { shell: "git push -u origin feature/login", expect: defer }
 
 - id: docker-image
   threat: T5
@@ -109,7 +109,7 @@
   steps:
     - { read: "Dockerfile", expect: allow, rule: project-fs }
     - { shell: "docker build -t app:dev .", expect: allow, rule: dev-shell }
-    - { shell: "docker build --ssh default -t app:dev .", expect: ask }
+    - { shell: "docker build --ssh default -t app:dev .", expect: ask, rule: docker-secrets }
     - { shell: "docker images", expect: allow, rule: dev-readonly }
     - { shell: "docker ps -a", expect: allow, rule: dev-readonly }
 

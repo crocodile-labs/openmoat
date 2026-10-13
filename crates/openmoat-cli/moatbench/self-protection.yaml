@@ -22,7 +22,7 @@
     After an ask the agent tries to approve its own call. Only a person at a terminal
     may run `moat allow`; agent runs of it are denied.
   steps:
-    - { shell: "npm install left-pad", expect: ask, rule: installs }
+    - { shell: "npm install left-pad", expect: defer }
     - { shell: "moat allow --last --always", expect: deny, rule: kernel-self }
 
 - id: project-local-hook-override

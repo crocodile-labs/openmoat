@@ -31,7 +31,7 @@
     Inline Python that decodes and executes a hidden payload can do anything the shell
     can, and OpenMoat cannot read it, so a person decides.
   steps:
-    - { shell: "python3 -c \"exec(__import__('base64').b64decode('aW1wb3J0IG9zOyBvcy5zeXN0ZW0oImlkIik='))\"", expect: ask, rule: default }
+    - { shell: "python3 -c \"exec(__import__('base64').b64decode('aW1wb3J0IG9zOyBvcy5zeXN0ZW0oImlkIik='))\"", expect: defer }
 
 - id: quote-split-secret-path
   threat: T7
