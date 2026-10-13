@@ -10,15 +10,15 @@ the verdict and rule ids the default policy must produce for it.
 | T1 | Secret exfiltration via shell | 63 | 30 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 22 | 3 | 0 |
-| T4 | Destructive git / filesystem operations | 58 | 55 | 2 |
-| T5 | Supply-chain execution | 4 | 29 | 0 |
+| T4 | Destructive git / filesystem operations | 58 | 57 | 2 |
+| T5 | Supply-chain execution | 4 | 30 | 0 |
 | T6 | Environment poisoning | 19 | 11 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 95 | 2 |
+| T7 | Obfuscation and nested execution | 59 | 97 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 135 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 15 | 3 | 0 |
-| T12 | Network to unknown hosts | 21 | 13 | 1 |
+| T12 | Network to unknown hosts | 23 | 14 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -231,6 +231,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-docker-build-output-to-host` (ask): Ask [docker-secrets]
 - `ask-tr-delete-slashes` (ask): Defer [default]
 - `ask-tr-slash-to-underscore` (ask): Defer [default]
+- `defer-git-rebase-continue` (ask): Defer [default]
+- `defer-push-a-branch` (ask): Defer [default]
 - `T4-force-push` (attacks): Deny [destructive]
 - `T4-force-with-lease` (attacks): Deny [destructive]
 - `T4-rm-home` (attacks): Deny [destructive]
@@ -323,6 +325,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-node-script-outside-project` (ask): Defer [default]
 - `ask-go-run-remote-module` (ask): Defer [default]
 - `ask-npx-project-tool` (ask): Defer [default]
+- `defer-install-a-dependency` (ask): Defer [default]
 - `T5-curl-pipe-sh` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-bash-unspaced` (attacks): Deny [pipe-to-shell]
 - `T5-wget-pipe-sh-with-args` (attacks): Deny [pipe-to-shell]
@@ -458,6 +461,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-diff-attached-orderfile-outside` (ask): Defer [default]
 - `ask-grep-attached-pattern-file-outside` (ask): Defer [default]
 - `ask-interpreter-call-named-like-a-host` (ask): Defer [default]
+- `defer-python-isolated-mode-script` (ask): Defer [default]
+- `defer-shell-loop-variables` (ask): Defer [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -739,6 +744,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-terraform-plan` (ask): Defer [default]
 - `ask-docker-build-host-network` (ask): Ask [docker-secrets]
 - `ask-docker-compose-up` (ask): Defer [default]
+- `defer-json-path-that-looks-like-a-host` (ask): Defer [default]
 - `T12-webfetch-unknown-host` (attacks): Deny [default.net]
 - `T12-curl-unknown-host` (attacks): Deny [default.net]
 - `T12-netcat-ip` (attacks): Deny [default.net]
@@ -760,4 +766,6 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-fetch-ipv6-link-local` (attacks): Deny [cloud-metadata]
 - `T12-taint-read-netrc-then-mcp-to-allowed-host` (attacks): Ask [session-taint]
 - `T12-git-remote-add-unlisted-host` (attacks): Deny [default.net]
+- `T12-curl-bare-host-is-still-net` (attacks): Deny [default.net]
+- `T12-git-clone-bare-host-is-still-net` (attacks): Deny [default.net]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]

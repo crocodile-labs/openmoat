@@ -1,4 +1,6 @@
-# Actions that must pause for human approval.
+# Actions that are not allowed outright. Most defer: the agent's own permission prompt
+# decides them (ADR-025). The rest ask: OpenMoat's own `ask` groups, for effects that
+# outlive the sandbox or the session, and session taint.
 # Evaluation context: home=/Users/me, project=/p, cwd=/p.
 
 - id: ask-npm-install
@@ -1097,3 +1099,31 @@
   threat: T7
   action: { shell: "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['ls'])\nEOF" }
   expect: { verdict: defer, rules: [default] }
+
+# The first dogfood day (2026-10-12): calls the agent made in normal work that matched
+# no rule. They defer, so OpenMoat shows no prompt of its own (ADR-025).
+- id: defer-python-isolated-mode-script
+  threat: T7
+  action: { shell: "python3 -I scripts/gh-rest.py GET repos/o/r/pulls" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-shell-loop-variables
+  threat: T7
+  action: { shell: "for sha in a1 b2; do git log -1 $sha; done" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-json-path-that-looks-like-a-host
+  threat: T12
+  action: { shell: "python3 x.py --get check_runs.0.id" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-git-rebase-continue
+  threat: T4
+  action: { shell: "git rebase --continue" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-install-a-dependency
+  threat: T5
+  action: { shell: "npm install left-pad" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-push-a-branch
+  threat: T4
+  action: { shell: "git push origin feature" }
+  expect: { verdict: defer, rules: [default] }
+

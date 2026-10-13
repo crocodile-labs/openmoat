@@ -1,3 +1,4 @@
+mod defer;
 mod fetch;
 mod glob;
 mod moved_dirs;
