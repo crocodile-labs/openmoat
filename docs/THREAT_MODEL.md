@@ -48,7 +48,7 @@ sandboxes and `moat run` add today, or the planned answer from the
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, and MCP path arguments | Only under `moat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; recursive `rm` and discarding checkouts ask | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
-| T5 | Supply-chain execution (`curl … \| sh`, unknown installs) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; `installs` asks for package installs | Network only to allowed hosts (the registries) |
+| T5 | Supply-chain execution (`curl … \| sh`, unknown installs) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; package installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries) |
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`-c`, `GIT_CONFIG_*`) ask, and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable` and asks, while the parts around it are still decided, so a deny among them stands | The sandbox bounds what any spelling can reach |
 | T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels ask | *Planned:* MCP stdio proxy with description pinning (1.0) |
@@ -329,14 +329,16 @@ something OpenMoat claims to stop.
   Cursor `Shell` and `MCP:<tool>` under `preToolUse` (governed by `beforeShellExecution`
   and `beforeMCPExecution` instead), `Task`, and to-do tools (`TodoWrite`) that name no path. Ungoverned calls that reach the hook are
   allowed with rule `ungoverned` and recorded. Any other Cursor tool that names no path
-  is `tool.unknown`, which asks by default. Claude Code and Cursor `WebSearch` are
+  is `tool.unknown`, which the default policy defers; Cursor's `preToolUse` cannot
+  prompt, so there OpenMoat asks (POLICY.md §5). Claude Code and Cursor `WebSearch` are
   governed: `web.search` in `defaults` decides them, and a search after a secret read asks.
 - **No settings veto outside Claude Code.** Codex and Cursor have no `ConfigChange`
   event, so a tampered hook file there is caught on the next tool call, not when it
   is written.
-- **PowerShell is not parsed.** Claude Code `PowerShell` always asks. A PowerShell
-  line given to a POSIX shell tool is lexed as POSIX and usually falls through to the
-  `ask` default.
+- **PowerShell is not parsed.** Claude Code `PowerShell` is always `unparseable`, which
+  the default policy defers to Claude Code's own prompt (and an `ask` catch-all asks). A
+  PowerShell line given to a POSIX shell tool is lexed as POSIX and usually falls through
+  to the catch-all default.
 - **Pattern lists are incomplete by nature.** Pseudo-terminal routes to `moat allow`
   (ADR-011, ADR-014), environment dumps through interpreters (`python -c
   'print(os.environ)'`, ADR-010), and options that run programs (ADR-012) are matched

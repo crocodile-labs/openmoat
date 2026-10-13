@@ -39,12 +39,19 @@ The protection does not depend on those asks:
    of one call are combined, the strictest still wins (ADR-002 is unchanged).
 2. **The default policy defers what it does not know.** It sets `defaults: "*": defer`,
    and also `fetch: defer` and `tool.unknown: defer`. `net: deny` stays: an unlisted host
-   is still denied. The `installs`, `push` and `local-net` ask groups are removed, so
-   those calls fall to `defer`. `ask` stays valid everywhere. A policy that wants the old
-   behaviour writes `defaults: "*": ask`.
+   is still denied. The `installs` and `push` ask groups are removed, so those calls fall
+   to `defer`. A new `defer:` rule list (evaluated after `ask`) holds `local-net`, which
+   would otherwise meet `net: deny`. `ask` stays for OpenMoat's own asks, kept only where
+   the effect outlives the sandbox or the session: `git-internals` (`.git` writes,
+   `git config`/`remote`/`-c`), `persistence` (LaunchAgents, `~/.gitconfig`, autostart,
+   systemd user units, `crontab`), `home-sweep` (reading `~` or `~/.config` itself),
+   `opaque-code` (awk/sed/text-tool programs the classifier cannot read, `printf -v`,
+   `CDPATH`, and `<shell> @stdin`, text piped into a shell that the line does not show)
+   and `docker-secrets`. `destructive` also denies writes to raw disks (`/dev/disk*`,
+   `/dev/sd*`, …). A policy that wants the old behaviour writes `defaults: "*": ask`.
 3. **`unparseable` follows the policy.** Input that cannot be classified gets the
-   policy's catch-all default, raised to `defer` if it is `allow`. It is never `allow`, and
-   it is `ask` again under a policy whose default is `ask`.
+   verdict `defer` when the catch-all is `allow` or `defer`, and `ask` when it is `ask` or
+   `deny`. It is never `allow`, and never a deny that no rule named.
 4. **A word that only looks like a host is not network evidence.** A host found in a
    shell word with no scheme, outside the arguments of a program that names hosts
    (`curl`, `wget`, `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `netcat`, `telnet`, `ftp`,
@@ -65,7 +72,7 @@ The protection does not depend on those asks:
    |---|---|
    | Claude Code, Codex, Continue CLI | no decision: exit 0, empty stdout, so the host's normal permission flow runs |
    | Cursor `beforeShellExecution`, `beforeMCPExecution` | `ask` (Cursor's own prompt) |
-   | Cursor `preToolUse`, `beforeReadFile` | `allow`: these events have no "no decision" and cannot prompt; Cursor's own settings and sandbox still apply |
+   | Cursor `preToolUse`, `beforeReadFile` | recorded and answered as `ask` (a deny that says how to approve): these events cannot prompt, and Cursor's file tools run outside its sandbox |
 
 6. **OS layers treat `defer` as not allowed**, exactly as they treat `ask` (ADR-019,
    lowering never widens). The generated sandboxes do not change.
@@ -94,8 +101,10 @@ The protection does not depend on those asks:
   default-policy change. Library users who match on `Verdict` already need a wildcard
   arm (`#[non_exhaustive]`).
 - Conformance fixtures whose expected verdict was `ask` with rule `default`, `default.*`
-  or `unparseable` move to `defer`, and those for `installs`, `push` and `local-net`
-  move to `defer` with rule `default`. Attacks and denies do not change.
+  or `unparseable` move to `defer`, or to the new ask groups where they describe an
+  attack; those for `installs`, `push` and `local-net` move to `defer`. No deny becomes
+  weaker; two attacks become stricter (`/dev/disk0` is denied, a hidden script piped into
+  `sh` asks).
 
 ## Not decided here
 
