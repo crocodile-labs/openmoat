@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::process::Output;
 
-use crate::common::{ASK, DENY, OK, Sandbox, USAGE, output, stderr, stdout};
+use crate::common::{DENY, OK, Sandbox, USAGE, output, stderr, stdout};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -167,7 +167,9 @@ fn exit_codes_follow_verdicts() {
     for (command, code, rule) in [
         ("cat ~/.ssh/id_rsa", 2, "secrets-paths"),
         ("git status --short", 0, "dev-shell"),
-        ("npm install left-pad-pro", 3, "installs"),
+        // ADR-025: no rule names an install, so the agent's own prompt decides (exit 0)
+        ("npm install left-pad-pro", 0, "default"),
+        ("git config core.pager less", 3, "git-internals"),
     ] {
         let out = check(&sb, command, &[]);
         assert_eq!(out.status.code(), Some(code), "{command}: {}", stdout(&out));
@@ -220,7 +222,7 @@ fn non_shell_kinds() {
             .code(),
         Some(OK)
     );
-    for (kind, code) in [("fetch", 3), ("net", 2)] {
+    for (kind, code) in [("fetch", 0), ("net", 2)] {
         assert_eq!(
             check(&sb, "https://docs.rs/serde", &["--kind", kind])
                 .status
@@ -233,7 +235,7 @@ fn non_shell_kinds() {
         check(&sb, "mcp__shell__run", &["--kind", "mcp"])
             .status
             .code(),
-        Some(ASK)
+        Some(OK)
     );
 }
 

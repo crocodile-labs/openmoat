@@ -34,6 +34,7 @@ fuzz_target!(|data: &[u8]| {
             ..RuleGroup::default()
         }],
         ask: Vec::new(),
+        defer: Vec::new(),
         approval: None,
         executables: BTreeMap::new(),
         sandbox: None,
