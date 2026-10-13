@@ -3,12 +3,18 @@
 
 use std::path::Path;
 
-use crate::common::{Sandbox, USAGE, bash_payload, hook_output, stderr, verdict_and_reason};
+use crate::common::{
+    Sandbox, USAGE, bash_payload, hook_output, stderr, stdout, verdict_and_reason,
+};
 
 fn assert_verdict(sb: &Sandbox, cwd: &Path, command: &str, expected: &str, rule: &str) {
     let out = sb.guard("claude-code", &bash_payload("s-paths", cwd, command));
-    let (verdict, reason) = verdict_and_reason(&out);
+    let (verdict, mut reason) = verdict_and_reason(&out);
     assert!(!verdict.is_empty(), "{command}: {}", stderr(&out));
+    if verdict == "defer" {
+        // ADR-025: nothing is written for the agent; the rule is in the audit log.
+        reason = stdout(&sb.moat(&["show", "--recent", "1"]));
+    }
     assert_eq!(verdict, expected, "{command}: {reason}");
     assert!(reason.contains(rule), "{command}: {reason}");
 }
@@ -26,10 +32,10 @@ fn a_session_in_home_has_no_project() {
     for command in [
         "echo x > Library/LaunchAgents/evil.plist",
         "echo x > ~/.gitconfig",
-        "cat notes.txt",
     ] {
-        assert_verdict(&sb, &home, command, "ask", "default");
+        assert_verdict(&sb, &home, command, "ask", "persistence");
     }
+    assert_verdict(&sb, &home, "cat notes.txt", "defer", "default");
     let project = sb.project();
     assert_verdict(&sb, &project, "echo x > notes.txt", "allow", "project-fs");
 }
@@ -42,7 +48,7 @@ fn a_repository_in_home_is_not_the_project() {
     std::fs::create_dir_all(sb.home.join(".git")).unwrap();
     let app = sb.home.join("code/app");
     std::fs::create_dir_all(&app).unwrap();
-    assert_verdict(&sb, &sb.home, "echo x > ~/.gitconfig", "ask", "default");
+    assert_verdict(&sb, &sb.home, "echo x > ~/.gitconfig", "ask", "persistence");
     assert_verdict(&sb, &app, "echo x > notes.txt", "allow", "project-fs");
 }
 
@@ -74,8 +80,14 @@ fn tilde_user_paths_are_home_directories() {
         "deny",
         "secrets-paths",
     );
-    assert_verdict(&sb, &project, "cat ~alice/notes.txt", "ask", "unparseable");
-    assert_verdict(&sb, &project, "cat ~-/notes.txt", "ask", "unparseable");
+    assert_verdict(
+        &sb,
+        &project,
+        "cat ~alice/notes.txt",
+        "defer",
+        "unparseable",
+    );
+    assert_verdict(&sb, &project, "cat ~-/notes.txt", "defer", "unparseable");
 }
 
 /// An unquoted glob operand is checked as the files the shell expands it to
@@ -159,7 +171,7 @@ fn relative_operands_are_resolved_through_symlinks() {
     for command in ["cat src/main.rs", "ls src", "git status", "echo s/id_rsa"] {
         assert_verdict(&sb, &project, command, "allow", "dev-shell");
     }
-    assert_verdict(&sb, &project, "npm install left-pad", "ask", "installs");
+    assert_verdict(&sb, &project, "npm install left-pad", "defer", "default");
 }
 
 /// `path` with its links resolved, in slash form: on macOS the sandbox sits
@@ -205,13 +217,13 @@ fn a_project_under_a_symlinked_directory_is_the_project() {
         assert_verdict(&sb, &project, &command, "allow", "project-fs");
     }
     let hook = format!("echo x > {real}/.git/hooks/pre-commit");
-    assert_verdict(&sb, &project, &hook, "ask", "default");
+    assert_verdict(&sb, &project, &hook, "ask", "git-internals");
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     std::fs::write(sb.home.join(".ssh/id_rsa"), "key").unwrap();
     std::os::unix::fs::symlink(sb.home.join(".ssh"), project.join("s")).unwrap();
     std::os::unix::fs::symlink("/etc", project.join("e")).unwrap();
     assert_verdict(&sb, &project, "cat s/id_rsa", "deny", "secrets-paths");
-    assert_verdict(&sb, &project, "cat e/hosts", "ask", "default");
+    assert_verdict(&sb, &project, "cat e/hosts", "defer", "default");
 }
 
 /// A Claude Code `Glob` whose pattern is absolute searches the pattern's own

@@ -123,6 +123,10 @@ fn decide_and_respond(installed_for: Host) -> Code {
         Err(error) => (None, kernel_error(&error)),
     };
 
+    // Where the host has no flow of its own for `defer`, OpenMoat asks (ADR-025).
+    if let Some(r) = &request {
+        decision = host.decided(&r.event, decision);
+    }
     // The audit log is part of the decision: a call that cannot be recorded
     // is not allowed, so a missing or unwritable log cannot hide activity.
     if let Err(error) = record(host, request.as_ref(), &decision, started, known) {

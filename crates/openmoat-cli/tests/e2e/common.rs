@@ -55,6 +55,20 @@ impl Sandbox {
         Self::installed_in(&std::env::temp_dir(), host_dirs)
     }
 
+    /// [`Sandbox::installed`] with the policy's catch-all set back to `ask`, re-pinned
+    /// as a person would: the strict choice ADR-025 keeps, under which a call no rule
+    /// matches asks. The approval tests use it to reach `moat allow` and the home screen.
+    pub fn installed_asking(host_dirs: &[&str]) -> Self {
+        let sb = Self::installed(host_dirs);
+        let policy = sb.home.join(".moat/policy.yaml");
+        let text_now = std::fs::read_to_string(&policy).unwrap();
+        assert!(text_now.contains("\"*\": defer"), "{text_now}");
+        std::fs::write(&policy, text_now.replacen("\"*\": defer", "\"*\": ask", 1)).unwrap();
+        let out = sb.moat_as_person(&["doctor", "--accept"]);
+        assert!(text(&out).contains("re-pinned"), "{}", text(&out));
+        sb
+    }
+
     /// [`Sandbox::installed`] in a temporary directory below `parent`.
     pub fn installed_in(parent: &Path, host_dirs: &[&str]) -> Self {
         let sb = Self::bare_in(parent, host_dirs);
@@ -241,8 +255,13 @@ pub fn json(out: &Output) -> Value {
     serde_json::from_str(stdout(out).trim()).unwrap_or(Value::Null)
 }
 
-/// `hookSpecificOutput` of a Claude Code or Codex hook response.
+/// `hookSpecificOutput` of a Claude Code or Codex hook response. No output and
+/// exit 0 is `defer` (ADR-025): the host's own permission flow decides, and the
+/// reason is only in the audit log.
 pub fn hook_output(out: &Output) -> Value {
+    if out.status.code() == Some(0) && stdout(out).trim().is_empty() {
+        return serde_json::json!({"permissionDecision": "defer", "permissionDecisionReason": ""});
+    }
     json(out)["hookSpecificOutput"].clone()
 }
 

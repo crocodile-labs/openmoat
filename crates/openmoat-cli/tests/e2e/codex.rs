@@ -1,6 +1,6 @@
 //! Codex: its `PreToolUse` cannot ask, so an `ask` must still stop the call.
 
-use crate::common::{DENY, OK, Sandbox, fixture, hook_output, stderr};
+use crate::common::{DENY, OK, Sandbox, fixture, hook_output, stderr, stdout};
 
 fn shell(session: &str, command: &str) -> String {
     serde_json::json!({
@@ -24,13 +24,14 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     std::fs::create_dir_all(sb.home.join(".codex")).unwrap();
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
 
-    let command = "npm install left-pad";
+    // still an `ask` under ADR-025: a pager is a program git runs later
+    let command = "git config core.pager less";
     let out = sb.guard("codex", &shell("codex-s1", command));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     let d = hook_output(&out);
     assert_eq!(d["permissionDecision"], "deny", "{d}");
     let reason = d["permissionDecisionReason"].as_str().unwrap();
-    assert!(reason.contains("[installs]"), "{reason}");
+    assert!(reason.contains("[git-internals]"), "{reason}");
     assert!(reason.contains("moat allow --last"), "{reason}");
 
     let allow = sb.moat_as_person(&["allow", "--last"]);
@@ -48,6 +49,12 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     let out = sb.guard("claude-code", &claude.to_string());
     assert_eq!(out.status.code(), Some(OK));
     assert_eq!(hook_output(&out)["permissionDecision"], "ask");
+
+    // A call no rule matches is left to Codex's own approval policy (ADR-025):
+    // no output, exit 0, and never the blocking deny an `ask` becomes.
+    let out = sb.guard("codex", &shell("codex-s2", "npm install left-pad"));
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    assert!(stdout(&out).trim().is_empty(), "{}", stdout(&out));
 }
 
 /// Codex runs `PermissionRequest` hooks only once it has decided to prompt, so

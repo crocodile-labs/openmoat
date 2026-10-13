@@ -15,7 +15,7 @@ const INSTALL: &str = "npm install left-pad";
 
 #[test]
 fn allow_last_grants_the_session_and_repins() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
 
     let out = sb.moat_as_person(&["allow", "--last"]);
@@ -40,7 +40,7 @@ fn allow_last_grants_the_session_and_repins() {
 
 #[test]
 fn allow_explicit_session_grant() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let out = sb.moat_as_person(&["allow", INSTALL, "--host", "claude-code", "--session", "s9"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(guard(&sb, "s9", INSTALL).0, "allow");
@@ -49,7 +49,7 @@ fn allow_explicit_session_grant() {
 
 #[test]
 fn allow_always_writes_the_overlay_and_keeps_the_lock_intact() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
     let out = sb.moat_as_person(&["allow", "--last", "--always"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -82,7 +82,7 @@ fn allow_always_writes_the_overlay_and_keeps_the_lock_intact() {
 
 #[test]
 fn allow_explains_missing_flags_and_shadowed_rules() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let out = sb.moat_as_person(&["allow", "ls"]);
     assert_eq!(out.status.code(), Some(USAGE));
     assert!(
@@ -110,7 +110,7 @@ fn allow_explains_missing_flags_and_shadowed_rules() {
 
 #[test]
 fn doctor_accept_repins_after_a_person_edits_the_policy() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let policy = sb.home.join(".moat/policy.yaml");
     let mut text_now = std::fs::read_to_string(&policy).unwrap();
     text_now.push_str("\n# edited by the owner\n");
@@ -126,7 +126,7 @@ fn doctor_accept_repins_after_a_person_edits_the_policy() {
 
 #[test]
 fn doctor_accept_refuses_to_pin_a_policy_that_does_not_lint() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let policy = sb.home.join(".moat/policy.yaml");
     std::fs::write(&policy, "version: 1\ndeny:\n  - id: broken\n").unwrap();
     let out = sb.moat_as_person(&["doctor", "--accept"]);
@@ -142,7 +142,7 @@ fn doctor_accept_refuses_to_pin_a_policy_that_does_not_lint() {
 
 #[test]
 fn hooks_without_a_terminal_are_still_refused() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let out = sb.moat(&["allow", INSTALL, "--always"]);
     assert_ne!(out.status.code(), Some(OK));
     assert!(text(&out).contains("must be run by a person in a terminal"));
@@ -158,7 +158,7 @@ fn approval_state(sb: &Sandbox) -> Vec<Option<Vec<u8>>> {
 
 /// Append to a pinned file, then check `allow` with `args` refuses and writes nothing.
 fn assert_allow_refuses_after_tampering(pinned: &str, args: &[&str]) {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let path = sb.home.join(pinned);
     let mut tampered = std::fs::read(&path).unwrap();
     // Whitespace alone would not do: a settings file is pinned by its JSON (#287).
@@ -202,7 +202,7 @@ fn session_grant_refuses_over_a_drifted_lock() {
 
 #[test]
 fn allow_on_a_clean_lock_pins_only_the_overlay_it_wrote() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     // Every pin but the overlay's, which is the one file `allow --always` writes.
     let others = |sb: &Sandbox| {
         let lock = std::fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
@@ -237,7 +237,7 @@ fn check(sb: &Sandbox, kind: &str, action: &str) -> Option<i32> {
 
 #[test]
 fn allow_site_adds_a_net_rule_and_remove_takes_it_back() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     assert_eq!(
         check(&sb, "net", "docs.rs"),
         Some(DENY),
@@ -272,7 +272,7 @@ fn allow_site_adds_a_net_rule_and_remove_takes_it_back() {
 
 #[test]
 fn allow_site_and_dir_refuse_dangerous_input_and_write_nothing() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let before = approval_state(&sb);
     let home = sb.home.to_str().unwrap().to_owned();
     let root = sb
@@ -306,7 +306,7 @@ fn allow_site_and_dir_refuse_dangerous_input_and_write_nothing() {
 
 #[test]
 fn allow_dir_opens_the_directory_but_deny_rules_still_win() {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let shared = sb.home.join("work/shared");
     std::fs::create_dir_all(&shared).unwrap();
     let notes = shared.join("notes.md").to_str().unwrap().to_owned();

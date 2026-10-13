@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(
             req.action,
             Some(Action::Shell {
-                command: "npm install left-pad".into()
+                command: "git config core.pager less".into()
             })
         );
         // `cn` names the path of `Read` `filepath`, not `file_path`: refused, not

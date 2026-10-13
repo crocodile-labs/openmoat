@@ -227,6 +227,22 @@ impl Host {
         }
     }
 
+    /// The decision to record and answer for `event`. A `defer` (ADR-025) needs a
+    /// host flow that decides by itself; Cursor's `preToolUse` and `beforeReadFile`
+    /// have none and run file tools outside Cursor's sandbox, so there OpenMoat asks
+    /// itself: the `ask` is recorded, and [`Self::answer`] sends it as a deny that
+    /// says how to approve it.
+    #[must_use]
+    pub fn decided(self, event: &HookEvent, mut decision: Decision) -> Decision {
+        if self == Self::Cursor
+            && *event == HookEvent::PreToolUseNoAsk
+            && decision.verdict == Verdict::Defer
+        {
+            decision.verdict = Verdict::Ask;
+        }
+        decision
+    }
+
     /// The decision as this host has to receive it. Codex's `PreToolUse` rejects
     /// `permissionDecision: "ask"` as unsupported and then runs the call, the
     /// Continue CLI ignores it and runs the call, and Cursor does not enforce
@@ -255,7 +271,7 @@ impl Host {
     #[must_use]
     pub fn render_response(self, event: &HookEvent, decision: &Decision) -> String {
         match (self, event) {
-            (Self::Cursor, _) => cursor::render(event, decision),
+            (Self::Cursor, _) => cursor::render(decision),
             (_, HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk) => {
                 pre_tool_use::render(decision)
             }

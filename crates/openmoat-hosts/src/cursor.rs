@@ -114,14 +114,12 @@ fn event_kind(event: &str) -> HookEvent {
     }
 }
 
-pub(crate) fn render(event: &HookEvent, decision: &Decision) -> String {
-    // Cursor's hooks have no "no decision" (ADR-025): `defer` is Cursor's own prompt
-    // where it can ask, and elsewhere what Cursor does without a hook, which is to
-    // run the tool under its own settings and sandbox.
-    let verdict = match (decision.verdict, event) {
-        (Verdict::Defer, HookEvent::PreToolUse) => Verdict::Ask,
-        (Verdict::Defer, _) => Verdict::Allow,
-        (verdict, _) => verdict,
+pub(crate) fn render(decision: &Decision) -> String {
+    // Cursor's hooks have no "no decision" (ADR-025): `defer` reaches only the shell
+    // and MCP events ([`Host::decided`]), where it is Cursor's own prompt.
+    let verdict = match decision.verdict {
+        Verdict::Defer => Verdict::Ask,
+        verdict => verdict,
     };
     // Each `Value` always renders, unlike serializing a struct; the members
     // keep the order the hooks documentation shows.
@@ -369,27 +367,27 @@ mod tests {
         deny.reasons.push("say \"hi\"\n\\".into());
         let message = r#""moat: deny — say \"hi\"\n\\""#;
         assert_eq!(
-            render(&HookEvent::PreToolUse, &deny),
+            render(&deny),
             format!(
                 r#"{{"permission":"deny","user_message":{message},"agent_message":{message}}}"#
             )
         );
     }
 
-    /// ADR-025: `defer` is Cursor's own prompt where it can ask, and runs the tool
-    /// under Cursor's own settings where it cannot; it never becomes a deny.
+    /// ADR-025: `defer` is Cursor's own prompt where Cursor can ask. File tools run
+    /// outside Cursor's sandbox and cannot prompt, so there OpenMoat asks itself.
     #[test]
-    fn defer_is_cursors_own_prompt_or_its_own_settings() {
-        let defer = Decision::new(Verdict::Defer);
-        for (name, permission) in [
-            ("beforeShellExecution", "ask"),
-            ("beforeMCPExecution", "ask"),
-            ("beforeReadFile", "allow"),
-            ("preToolUse-write", "allow"),
+    fn defer_is_cursors_own_prompt_or_openmoats_ask() {
+        for (name, recorded, permission) in [
+            ("beforeShellExecution", Verdict::Defer, "ask"),
+            ("beforeMCPExecution", Verdict::Defer, "ask"),
+            ("beforeReadFile", Verdict::Ask, "deny"),
+            ("preToolUse-write", Verdict::Ask, "deny"),
         ] {
             let event = Host::Cursor.parse_request(&fixture(name)).unwrap().event;
-            let answer = Host::Cursor.answer(&event, &defer);
-            assert_eq!(answer.verdict, Verdict::Defer, "{name}");
+            let decided = Host::Cursor.decided(&event, Decision::new(Verdict::Defer));
+            assert_eq!(decided.verdict, recorded, "{name}");
+            let answer = Host::Cursor.answer(&event, &decided);
             let out: Value =
                 serde_json::from_str(&Host::Cursor.render_response(&event, &answer)).unwrap();
             assert_eq!(out["permission"], permission, "{name}");

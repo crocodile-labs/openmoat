@@ -301,7 +301,7 @@ fn shell_ask_stays_an_ask_and_allow_last_approves_it() {
     let payload = serde_json::json!({
         "conversation_id": "cur-s2", "hook_event_name": "beforeShellExecution",
         "workspace_roots": [project.to_string_lossy()], "cwd": project.to_string_lossy(),
-        "command": "npm install left-pad"
+        "command": "git config core.pager less"
     })
     .to_string();
     let (code, doc) = guard(&sb, &payload);

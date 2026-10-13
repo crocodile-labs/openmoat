@@ -27,7 +27,7 @@ fn assert_blocked_ask(out: &Output) {
     let d = hook_output(out);
     assert_eq!(d["permissionDecision"], "deny", "{d}");
     let reason = d["permissionDecisionReason"].as_str().unwrap();
-    assert!(reason.contains("[installs]"), "{reason}");
+    assert!(reason.contains("[git-internals]"), "{reason}");
     assert!(reason.contains("Continue CLI"), "{reason}");
     assert!(reason.contains("moat allow --last"), "{reason}");
 }
@@ -53,7 +53,7 @@ fn an_ask_blocks_cn_until_a_person_approves_it() {
     assert_eq!(hook_output(&out)["permissionDecision"], "allow");
 
     // Claude Code can ask, so it still receives the `ask` itself.
-    let claude = bash_payload("s-claude", &sb.home, "npm install left-pad");
+    let claude = bash_payload("s-claude", &sb.home, "git config core.pager less");
     let out = sb.guard("claude-code", &claude);
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     assert_eq!(hook_output(&out)["permissionDecision"], "ask");
@@ -136,7 +136,7 @@ fn either_sign_of_cn_turns_an_ask_into_a_deny() {
     let sb = Sandbox::installed(&[".claude"]);
     assert_blocked_ask(&sb.guard("claude-code", &fixture("continue/pretooluse-bash.json")));
 
-    let claude_shaped = bash_payload("s-env", &sb.home, "npm install left-pad");
+    let claude_shaped = bash_payload("s-env", &sb.home, "git config core.pager less");
     assert_blocked_ask(&guard_under_cn(&sb, &claude_shaped));
     assert_eq!(recorded(&sb, "s-env")[0]["host"], "continue");
 }
