@@ -227,6 +227,22 @@ impl Host {
         }
     }
 
+    /// The decision to record and answer for `event`. A `defer` (ADR-025) needs a
+    /// host flow that decides by itself; Cursor's `preToolUse` and `beforeReadFile`
+    /// have none and run file tools outside Cursor's sandbox, so there OpenMoat asks
+    /// itself: the `ask` is recorded, and [`Self::answer`] sends it as a deny that
+    /// says how to approve it.
+    #[must_use]
+    pub fn decided(self, event: &HookEvent, mut decision: Decision) -> Decision {
+        if self == Self::Cursor
+            && *event == HookEvent::PreToolUseNoAsk
+            && decision.verdict == Verdict::Defer
+        {
+            decision.verdict = Verdict::Ask;
+        }
+        decision
+    }
+
     /// The decision as this host has to receive it. Codex's `PreToolUse` rejects
     /// `permissionDecision: "ask"` as unsupported and then runs the call, the
     /// Continue CLI ignores it and runs the call, and Cursor does not enforce
@@ -364,5 +380,28 @@ fn json_problem(error: &serde_json::Error) -> &'static str {
         "payload is JSON but does not fit the hook schema"
     } else {
         "payload is not valid JSON"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openmoat_core::{Decision, Verdict};
+
+    use super::{HookEvent, Host};
+
+    /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
+    /// run their own permission flow; hosts that cannot ask do not turn it into a deny.
+    #[test]
+    fn defer_is_no_decision_for_every_pre_tool_use_host() {
+        let defer = Decision::new(Verdict::Defer);
+        for host in [Host::ClaudeCode, Host::Codex, Host::Continue] {
+            let answer = host.answer(&HookEvent::PreToolUse, &defer);
+            assert_eq!(answer.verdict, Verdict::Defer, "{host:?}");
+            assert_eq!(
+                host.render_response(&HookEvent::PreToolUse, &answer),
+                "",
+                "{host:?}"
+            );
+        }
     }
 }

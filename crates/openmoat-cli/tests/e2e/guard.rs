@@ -103,7 +103,7 @@ fn guard_denies_secret_exfiltration_and_records_it() {
 }
 
 #[test]
-fn guard_allows_ordinary_work_and_asks_for_installs() {
+fn guard_allows_ordinary_work_and_defers_installs() {
     let sb = Sandbox::bare(&[".claude"]);
     sb.moat(&["init", "--yes"]);
     let project = sb.home.join("proj");
@@ -120,7 +120,8 @@ fn guard_allows_ordinary_work_and_asks_for_installs() {
 
     for (command, verdict, rule) in [
         ("git status --short", "allow", "dev-shell"),
-        ("npm install left-pad-pro", "ask", "installs"),
+        // ADR-025: no rule matches an install; the agent's own prompt decides
+        ("npm install left-pad-pro", "defer", ""),
     ] {
         let out = sb.guard("claude-code", &payload(command));
         assert_eq!(out.status.code(), Some(0), "{command}: {}", stderr(&out));
@@ -206,18 +207,18 @@ fn claude_code_command_tools_are_hooked_and_governed() {
     let ps = sb.guard("claude-code", &fixture("claude-code/powershell.json"));
     assert_eq!(ps.status.code(), Some(0));
     let d = decision(&ps);
-    assert_eq!(d["permissionDecision"], "ask");
-    let reason = d["permissionDecisionReason"].as_str().unwrap();
-    assert!(reason.contains("unparseable"), "{reason}");
-    assert!(reason.contains("PowerShell"), "{reason}");
+    assert_eq!(d["permissionDecision"], "defer");
+    let shown = stdout(&sb.moat(&["show", "--recent", "1"]));
+    assert!(shown.contains("unparseable"), "{shown}");
+    assert!(shown.contains("PowerShell"), "{shown}");
 }
 
 #[test]
-fn webfetch_to_an_unlisted_host_asks_but_a_websocket_is_denied() {
+fn webfetch_to_an_unlisted_host_defers_but_a_websocket_is_denied() {
     let sb = Sandbox::bare(&[".claude"]);
     sb.moat(&["init", "--yes"]);
     for (name, code, verdict, rule) in [
-        ("webfetch-docs", 0, "ask", "default.fetch"),
+        ("webfetch-docs", 0, "defer", ""),
         ("webfetch", 0, "allow", "registries"),
         ("monitor-ws", 2, "deny", "default.net"),
     ] {
@@ -367,8 +368,8 @@ fn mcp_arguments_are_checked_as_paths() {
     assert!(reason.contains("secrets-paths"), "{reason}");
 
     // Searched at 8 levels of nesting, the path is denied; one level deeper it is
-    // not searched, and the call asks instead of being allowed.
-    for (levels, verdict, why) in [(8, "deny", "secrets-paths"), (9, "ask", "8 levels")] {
+    // not searched, and the call is left to the agent instead of being allowed.
+    for (levels, verdict, why) in [(8, "deny", "secrets-paths"), (9, "defer", "")] {
         let (open, close) = (r#"{"o":"#.repeat(levels), "}".repeat(levels));
         let input = format!(r#"{open}{{"path":"~/.ssh/id_rsa"}}{close}"#);
         let payload =

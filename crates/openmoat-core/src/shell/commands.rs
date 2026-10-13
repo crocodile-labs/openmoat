@@ -4,9 +4,9 @@ mod payload;
 mod piped;
 
 use super::tables::{
-    ENV_BUILTINS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS, SHELLS, SOURCE_BUILTINS,
-    WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS, WRAPPERS_WITH_VALUE,
-    WRITE_ALL_PATHS,
+    ENV_BUILTINS, GIT_HOST_SUBCOMMANDS, HOST_PROGRAMS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS,
+    SHELLS, SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS,
+    WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS,
 };
 use super::tokens::{assignment_name, basename, flag_payload, strip_at, word_env_refs};
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
@@ -251,7 +251,14 @@ fn classify_simple(
             sink.read(ctx, script)?;
         }
         return match cmd.piped.iter().find_map(Piped::unknown) {
-            Some(program) if run.reads_stdin => Err(ClassifyError::UnknownStdin(program.into())),
+            Some(producer) if run.reads_stdin => {
+                // The shell runs text the line does not show: `<shell> @stdin`, which
+                // no allow rule names, so a rule can ask for it (`opaque-code`).
+                sink.push(AtomicAction::Shell {
+                    argv: vec![program.to_owned(), "@stdin".to_owned()],
+                })?;
+                Err(ClassifyError::UnknownStdin(producer.into()))
+            }
             _ => Ok(()),
         };
     }
@@ -412,7 +419,18 @@ fn classify_arguments(
             && let Some(host) = host::of_word(tok)
         {
             // Quoted prose ("see example.com") is not a host unless it is a full URL.
-            sink.push(AtomicAction::Net { host })?;
+            // Without a scheme and outside a program that names hosts, the word only
+            // looks like one (`check_runs.0.id`, ADR-025).
+            let names_hosts = HOST_PROGRAMS.contains(&program)
+                || (program == "git"
+                    && argv
+                        .get(1)
+                        .is_some_and(|s| GIT_HOST_SUBCOMMANDS.contains(&s.as_str())));
+            sink.push(if tok.contains("://") || names_hosts {
+                AtomicAction::Net { host }
+            } else {
+                AtomicAction::NetWord { host }
+            })?;
             continue;
         } else {
             operands::file_operand(tok, program, options_ended)

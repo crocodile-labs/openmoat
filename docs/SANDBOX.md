@@ -139,7 +139,9 @@ for every mask entry in the `credentials` block. When a policy mixes `plain_http
 and `plain_http: false` secrets, OpenMoat therefore drops the `plain_http: true` entries
 from Claude Code's mask block (lifting TLS for them would widen the others, which
 ADR-019 forbids); they still work through `moat proxy`, whose broker is per-secret,
-and `moat sandbox show` names each dropped id (#401).
+and `moat sandbox show` names each dropped id (#401). Its text output starts with a
+`Secrets` list: one line per secret with its host, header and source, never the value,
+and whether Claude Code injects it or why it skips it.
 
 Other settings and comments are kept, and each file is copied to
 `<file>.moat-sandbox-backup` before moat changes it. `moat sandbox show` prints what

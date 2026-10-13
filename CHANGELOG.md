@@ -8,10 +8,23 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Changed
+- **Quiet by default (ADR-025).** A new verdict, `defer`, leaves a call to the agent's own permission prompt (Claude Code's prompt or auto mode, Codex's approval policy), exactly as without OpenMoat. The default policy defers everything no rule names, installs, pushes, publishing, `WebFetch` and local services included, so OpenMoat shows no prompt of its own in normal work (the first dogfood day had 191 asks in 4 hours, none of them an attack). OpenMoat still asks itself where the effect outlives the sandbox or the session: new `git-internals`, `persistence`, `home-sweep`, `opaque-code` and `docker-secrets` ask groups, and session taint. Every deny rule and the generated sandboxes are unchanged; OS layers treat `defer` like `ask`, and `moat proxy` refuses a deferred host. Codex and the Continue CLI no longer turn an unknown command into a deny. Cursor's file tools cannot prompt, so there a deferred call still asks. ([#499](https://github.com/crocodile-labs/openmoat/pull/499))
+- A host-shaped word without a scheme outside programs that name hosts (`check_runs.0.id`, `defaults.net`) is matched by `net` rules but is no longer denied by `defaults.net`; it gets the catch-all default.
+- The policy has a `defer:` rule list, evaluated after `ask`; `defaults` accept `defer`. `unparseable` input defers under an `allow` or `defer` catch-all and asks under `ask` or `deny`.
+- A policy written before this release keeps its own `ask` defaults; `moat policy upgrade` offers the new ones. The audit log moves to schema version 3 (a `defer` verdict); an older `moat` refuses to open it. `moat report` and `moat team report` count calls left to the agent. Library: `Verdict::Defer`, `AtomicAction::NetWord` and `Policy::defer` are new (`Verdict` and `AtomicAction` are `#[non_exhaustive]`; `Policy` gains a field).
+
+### Security
+- `destructive` denies writes to raw disks (`/dev/disk*`, `/dev/sd*`, `/dev/nvme*`, …), and text piped into a shell that the command line does not show (`printf '\x63at .env' | sh`) asks (`opaque-code`).
+### Added
+- `moat sandbox show` starts with a `Secrets` list: each policy secret's host, header and source (never the value), and whether Claude Code injects it or why it skips it ([#498](https://github.com/crocodile-labs/openmoat/pull/498)).
+
 ### Fixed
 - The Codex sandbox profile no longer lists `**/` denies below a file it grants (`~/.gitconfig/**/.env`); they could match nothing ([#496](https://github.com/crocodile-labs/openmoat/pull/496)).
 - A function call in interpreter code, such as Python's `subprocess.run(`, is no longer taken for a host name, so the command asks instead of being denied as network access ([#495](https://github.com/crocodile-labs/openmoat/pull/495)).
 - `moat sandbox sync` writes only the agents whose OpenMoat hook is installed: it no longer added OpenMoat's sandbox to an agent you left out (such as Codex after `moat init --hosts claude-code`) or removed with `moat uninstall`, and says `not set up` for it instead; `moat status` and `moat doctor` check the sandbox of those agents only ([#493](https://github.com/crocodile-labs/openmoat/pull/493)).
+- `moat status` no longer lists Claude Code `WebSearch` as a known gap: it has been checked as `web.search` since 0.5.0-rc.1 ([#494](https://github.com/crocodile-labs/openmoat/pull/494)).
+- `moat show`, `audit`, `report` and the other audit readers say the audit log cannot be read, not that it is missing and `moat init` should run, when an agent's sandbox blocks `~/.moat` ([#494](https://github.com/crocodile-labs/openmoat/pull/494)).
 
 ## [0.5.0-rc.1] - 2026-10-12
 

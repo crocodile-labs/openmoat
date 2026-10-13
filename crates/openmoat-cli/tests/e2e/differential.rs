@@ -24,11 +24,13 @@ pub mod codex;
 pub mod scripts;
 
 /// A layer's verdict. Sandboxes express only `Allow` (ran) and `Deny` (blocked);
-/// `Ask` is a hook outcome (the host prompts the person).
+/// `Defer` and `Ask` are hook outcomes (the agent's own prompt decides, or
+/// OpenMoat asks the person, ADR-025).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Verdict {
     Allow,
+    Defer,
     Ask,
     Deny,
 }
@@ -37,6 +39,7 @@ impl Verdict {
     fn symbol(self) -> &'static str {
         match self {
             Self::Allow => "allow",
+            Self::Defer => "defer",
             Self::Ask => "ask ",
             Self::Deny => "deny",
         }
@@ -247,6 +250,7 @@ impl Fixtures {
         let decision = hook_output(&out)["permissionDecision"].clone();
         match decision.as_str() {
             Some("allow") => Verdict::Allow,
+            Some("defer") => Verdict::Defer,
             Some("ask") => Verdict::Ask,
             Some("deny") => Verdict::Deny,
             _ => panic!("{id}: no permissionDecision in {}", json(&out)),

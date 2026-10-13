@@ -4,7 +4,7 @@
 //! Output: JSON on stdout with `hookSpecificOutput.permissionDecision`
 //! (`allow` | `deny` | `ask`) and a reason the model gets to see.
 
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -127,6 +127,11 @@ fn send_file(input: &Value) -> Result<Vec<String>, HostError> {
 }
 
 pub(crate) fn render(decision: &Decision) -> String {
+    // `defer` (ADR-025) is no decision: with nothing on stdout and exit 0 the host
+    // runs its own permission flow, as if no hook had answered.
+    if decision.verdict == Verdict::Defer {
+        return String::new();
+    }
     // A `Value` always renders, unlike serializing a struct; its keys sort,
     // and these are already in order.
     serde_json::json!({

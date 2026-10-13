@@ -32,4 +32,4 @@
     person confirms it.
   steps:
     - { shell: "rm -rf target", expect: allow, rule: dev-shell }
-    - { shell: "rm -rf .", expect: ask }
+    - { shell: "rm -rf .", expect: defer }

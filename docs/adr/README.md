@@ -32,6 +32,7 @@ each ADR records the outcome it needs.
 | [022](ADR-022-repository-policy-and-trust.md) | `<project>/.moat/policy.yaml` adds deny and ask rules by itself; its allow rules apply only after `moat trust` pins that exact file by hash; hook only | accepted |
 | [023](ADR-023-isolated-tier-macos.md) | Isolated tier on macOS: a Linux guest booted through Apple's `containerization` toolchain; virtiofs mounts and vsock proxy relay; bubblewrap, Landlock and seccomp nest inside, as on Linux | accepted; refines ADR-018 for macOS; a note (2026-10-12) corrects its facts about Apple's `container` and leaves open questions |
 | [024](ADR-024-yaml-parser.md) | Policies are parsed by `serde-saphyr` (pure Rust, no `unsafe`) behind `openmoat_core::yaml`, kept strict: YAML 1.2 booleans only, duplicate keys, merge keys and unknown tags rejected | accepted |
+| [025](ADR-025-quiet-by-default.md) | Quiet by default: a `defer` verdict leaves calls no rule names to the agent's own permission prompt; OpenMoat asks only where the effect outlives the sandbox or the session; words that only look like hosts are not network evidence | accepted |
 
 ## Names in older ADRs
 

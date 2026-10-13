@@ -1,3 +1,4 @@
+mod defer;
 mod fetch;
 mod glob;
 mod moved_dirs;
@@ -118,7 +119,7 @@ fn negated_allow_patterns_fall_through_to_default() {
 fn unparseable_is_never_allowed() {
     let p = policy("version: 1\ndefaults: allow\n");
     let d = evaluate(&p, &ctx(), &shell("echo 'unterminated")).unwrap();
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Defer);
     assert_eq!(d.rules, ["unparseable"]);
     let d = evaluate(
         &p,
@@ -128,7 +129,7 @@ fn unparseable_is_never_allowed() {
         },
     )
     .unwrap();
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Defer);
     let powershell = Action::ForeignShell {
         shell: "PowerShell".into(),
         command: "Get-ChildItem".into(),
@@ -136,8 +137,12 @@ fn unparseable_is_never_allowed() {
     let d = evaluate(&p, &ctx(), &powershell).unwrap();
     assert_eq!(
         (d.verdict, d.rules),
-        (Verdict::Ask, vec!["unparseable".to_owned()])
+        (Verdict::Defer, vec!["unparseable".to_owned()])
     );
+    // Under an `ask` catch-all it asks, as before ADR-025.
+    let p = policy("version: 1\ndefaults: ask\n");
+    let d = evaluate(&p, &ctx(), &shell("echo 'unterminated")).unwrap();
+    assert_eq!(d.verdict, Verdict::Ask);
 }
 
 /// A part that cannot be parsed asks without hiding the other parts' decisions:
@@ -159,7 +164,7 @@ fn an_unparseable_part_never_softens_a_deny() {
         (d.verdict, d.rules)
     };
     let deny = (Verdict::Deny, vec!["keys".to_owned()]);
-    let ask = (Verdict::Ask, vec!["unparseable".to_owned()]);
+    let ask = (Verdict::Defer, vec!["unparseable".to_owned()]);
     assert_eq!(verdict(&mcp(&["~/.ssh/id_rsa"])), deny);
     assert_eq!(verdict(&mcp(&["/p/notes"])), ask);
     for (command, expected) in [

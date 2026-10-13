@@ -80,14 +80,20 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
     *responded = true;
     let response = host.render_response(event, decision);
     let mut stdout = io::stdout().lock();
-    if let Err(error) = writeln!(stdout, "{response}").and_then(|()| stdout.flush()) {
+    // An empty response is `defer` (ADR-025): no output at all, not even a newline.
+    let written = if response.is_empty() {
+        Ok(())
+    } else {
+        writeln!(stdout, "{response}")
+    };
+    if let Err(error) = written.and_then(|()| stdout.flush()) {
         // Without a response the host falls back to its own default, which
         // may be to proceed; exit 2 is the one signal every host honours.
         eprintln!("moat: could not write the hook response: {error}");
         return Some(Code::Deny);
     }
     Some(match decision.verdict {
-        Verdict::Allow | Verdict::Ask => Code::Ok,
+        Verdict::Allow | Verdict::Defer | Verdict::Ask => Code::Ok,
         // `Deny`, and any verdict added to the core later, blocks the call.
         _ => {
             // Hosts may show hook stderr in a terminal; the reason quotes the call.
@@ -117,6 +123,10 @@ fn decide_and_respond(installed_for: Host) -> Code {
         Err(error) => (None, kernel_error(&error)),
     };
 
+    // Where the host has no flow of its own for `defer`, OpenMoat asks (ADR-025).
+    if let Some(r) = &request {
+        decision = host.decided(&r.event, decision);
+    }
     // The audit log is part of the decision: a call that cannot be recorded
     // is not allowed, so a missing or unwritable log cannot hide activity.
     if let Err(error) = record(host, request.as_ref(), &decision, started, known) {
@@ -173,8 +183,9 @@ fn evaluate(
     let snapshot = Snapshot::load(&home.environment_path())?;
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
     let mut decision = compiled.decide_with(action, &snapshot, &FsPathResolver);
-    // A grant only turns an `ask` into an `allow`; a deny stays a deny.
-    if decision.verdict == Verdict::Ask
+    // A grant only turns an `ask` (or a `defer` the host turns into one, Cursor's file
+    // tools) into an `allow`; a deny stays a deny.
+    if matches!(decision.verdict, Verdict::Ask | Verdict::Defer)
         && let Some(asked) = approvals::approvable(action, Some(&ctx.cwd), &ctx.home)
         && Grants::load(&home.grants_path())?.matches(
             host.id(),
@@ -220,7 +231,8 @@ fn record(
         latency_us,
     };
     let id = store.record(&event)?;
-    if decision.verdict != Verdict::Allow {
+    // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
+    if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
         eprintln!("moat: trace {id}  (moat show {id})");
     }
     Ok(())

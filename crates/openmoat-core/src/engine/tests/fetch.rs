@@ -79,6 +79,6 @@ fn fetch_defaults_fall_back_to_net() {
     let p = policy("version: 1\ndefaults: allow\n");
     assert_eq!(
         verdict_and_rules(&p, &fetch("https://")),
-        (Verdict::Ask, vec!["unparseable".to_owned()])
+        (Verdict::Defer, vec!["unparseable".to_owned()])
     );
 }

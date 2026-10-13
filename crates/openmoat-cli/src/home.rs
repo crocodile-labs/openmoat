@@ -143,11 +143,19 @@ impl Home {
         Ok(policy)
     }
 
-    /// The audit log, read-only; an error naming `moat init` when it is missing.
+    /// The audit log, read-only; an error naming `moat init` when it is missing, and
+    /// one naming the sandbox when it exists but cannot be read (an agent's sandbox
+    /// denies `~/.moat`, so `moat show` run by the agent lands here).
     pub fn open_audit(&self) -> Result<openmoat_audit::Store> {
         let path = self.audit_path();
-        if !path.is_file() {
-            bail!("no audit log at {}; run `moat init`", path.display());
+        match std::fs::metadata(&path) {
+            Ok(meta) if meta.is_file() => {}
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => bail!(
+                "cannot read the audit log at {}: permission denied; an agent's sandbox \
+                 blocks it, so run this from your own terminal",
+                path.display()
+            ),
+            _ => bail!("no audit log at {}; run `moat init`", path.display()),
         }
         openmoat_audit::Store::open_read_only(&path)
             .with_context(|| format!("opening {}", path.display()))
@@ -309,5 +317,28 @@ mod tests {
         fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
         Home { root: root.clone() }.ensure().unwrap();
         assert_eq!(mode(&root), 0o700);
+    }
+
+    #[test]
+    fn an_unreadable_audit_log_is_not_reported_as_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home {
+            root: dir.path().join("state"),
+        };
+        let missing = home.open_audit().err().unwrap().to_string();
+        assert!(missing.contains("run `moat init`"), "{missing}");
+
+        fs::create_dir(home.root()).unwrap();
+        fs::write(home.audit_path(), b"").unwrap();
+        fs::set_permissions(home.root(), fs::Permissions::from_mode(0o000)).unwrap();
+        let blocked = fs::metadata(home.audit_path()).is_err();
+        let message = home.open_audit().err().map(|e| e.to_string());
+        fs::set_permissions(home.root(), fs::Permissions::from_mode(0o700)).unwrap();
+        if blocked {
+            // Root reads through mode 000, so only an ordinary user reaches this.
+            let message = message.unwrap();
+            assert!(message.contains("permission denied"), "{message}");
+            assert!(!message.contains("moat init"), "{message}");
+        }
     }
 }

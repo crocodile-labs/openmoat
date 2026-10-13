@@ -46,6 +46,9 @@ pub struct Summary {
     pub total: u64,
     /// Events that were allowed.
     pub allowed: u64,
+    /// Events left to the agent's own permission prompt (ADR-025).
+    #[serde(default)]
+    pub deferred: u64,
     /// Events that asked.
     pub asked: u64,
     /// Events that were denied.
@@ -130,6 +133,7 @@ impl Summary {
             since_ms,
             total: 0,
             allowed: 0,
+            deferred: 0,
             asked: 0,
             denied: 0,
             sessions: 0,
@@ -145,6 +149,7 @@ impl Summary {
             summary.total += 1;
             match event.verdict {
                 Verdict::Allow => summary.allowed += 1,
+                Verdict::Defer => summary.deferred += 1,
                 Verdict::Ask => summary.asked += 1,
                 // `Deny`, and any verdict added to the core later.
                 _ => summary.denied += 1,
@@ -152,7 +157,7 @@ impl Summary {
             *summary.by_host.entry(event.host.clone()).or_insert(0) += 1;
             sessions.insert((event.host.clone(), event.session_id.clone()));
             hours.insert(event.ts_ms.div_euclid(MS_PER_HOUR));
-            if event.verdict != Verdict::Allow {
+            if matches!(event.verdict, Verdict::Ask | Verdict::Deny) {
                 for rule in &event.rules {
                     *rules.entry(rule.clone()).or_insert(0) += 1;
                 }

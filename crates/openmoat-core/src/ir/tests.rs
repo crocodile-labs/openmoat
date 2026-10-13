@@ -54,8 +54,11 @@ fn default_policy_lowers_paths_and_hosts() {
         ids(&ir.fs.write.deny),
         ["secrets-paths", "destructive", "kernel-self", "shell-rc"]
     );
-    // the home directory and the root themselves, not their subtrees
-    assert_eq!(ir.fs.write.deny[1].patterns, ["/Users/me", "/"]);
+    // the home directory and the root themselves, not their subtrees, and raw disks
+    assert_eq!(
+        ir.fs.write.deny[1].patterns[..3],
+        ["/Users/me", "/", "/dev/disk*"]
+    );
     assert_eq!(ir.egress.net.default, Effect::Deny);
     assert_eq!(
         ids(&ir.egress.net.deny),
@@ -73,19 +76,24 @@ fn default_policy_lowers_paths_and_hosts() {
 }
 
 #[test]
-fn every_ask_is_reported_as_a_loss() {
+fn every_deferred_kind_is_reported_as_a_loss() {
     let ir = lowered(crate::DEFAULT_POLICY);
     let losses: Vec<String> = ir.losses.iter().map(ToString::to_string).collect();
+    let agent = "the hook leaves it to the agent";
     for expected in [
-        "fs.read `default`: no rule matches: the hook asks, OS layers deny",
-        "fs.write `default`: no rule matches: the hook asks, OS layers deny",
-        "fetch `default.fetch`: no rule matches: the hook asks, OS layers deny",
-        "net `local-net`: the hook asks; OS layers deny unless an allow rule matches",
-        "fetch `local-net`: the hook asks; OS layers deny unless an allow rule matches",
+        format!("fs.read `default`: no rule matches: {agent}, OS layers deny"),
+        format!("fs.write `default`: no rule matches: {agent}, OS layers deny"),
+        format!("fetch `default.fetch`: no rule matches: {agent}, OS layers deny"),
+        format!("net `local-net`: {agent}; OS layers deny unless an allow rule matches"),
+        format!("fetch `local-net`: {agent}; OS layers deny unless an allow rule matches"),
+        "fs.read `home-sweep`: the hook asks; OS layers deny unless an allow rule matches".into(),
+        "fs.write `git-internals`: the hook asks; OS layers deny unless an allow rule matches"
+            .into(),
+        "fs.write `persistence`: the hook asks; OS layers deny unless an allow rule matches".into(),
     ] {
-        assert!(losses.contains(&expected.to_owned()), "{losses:#?}");
+        assert!(losses.contains(&expected), "{losses:#?}");
     }
-    assert_eq!(losses.len(), 5, "{losses:#?}");
+    assert_eq!(losses.len(), 8, "{losses:#?}");
 }
 
 #[test]

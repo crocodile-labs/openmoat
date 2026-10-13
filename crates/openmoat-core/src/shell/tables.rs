@@ -192,6 +192,16 @@ pub const SPECIAL_PARAMS: &[char] = &['?', '$', '!', '#', '@', '*', '-', '0'];
 /// Variables that are expanded by the classifier itself or carry no secret.
 pub const IGNORED_VARS: &[&str] = &["HOME", "PWD", "OLDPWD", "USER", "SHELL", "TERM", "project"];
 
+/// Programs whose arguments name hosts: a host-shaped word there is network
+/// evidence (`Net`), elsewhere only a word that looks like one (`NetWord`, ADR-025).
+pub const HOST_PROGRAMS: &[&str] = &[
+    "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "telnet", "ftp", "ping",
+    "dig", "nslookup", "host",
+];
+
+/// `git` subcommands whose arguments name a remote host ([`HOST_PROGRAMS`]).
+pub const GIT_HOST_SUBCOMMANDS: &[&str] = &["clone", "fetch", "pull", "push", "ls-remote"];
+
 /// Top-level domains accepted for a bare dotted token (no scheme). Dotted
 /// identifiers in code (`sys.version`, `os.system`, `console.log`) and names
 /// like `fix.bug` are not hosts; a token with a scheme is always one.

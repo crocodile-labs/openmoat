@@ -10,7 +10,7 @@ const KEY: &str = "cat ~/.ssh/id_rsa";
 /// A machine where `commands` ran in session `s1`; `approve` runs
 /// `moat allow --last` after the first of them, as a person would.
 fn machine(commands: &[&str], approve: bool) -> Sandbox {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let project = sb.project();
     for (n, command) in commands.iter().enumerate() {
         sb.guard("claude-code", &bash_payload("s1", &project, command));
@@ -42,11 +42,11 @@ fn team_report_aggregates_verified_exports() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let t = stdout(&out);
     assert!(t.contains("5 decisions"), "{t}");
-    assert!(t.contains("claude-code  2 · 1 · 2"), "{t}");
+    assert!(t.contains("claude-code  2 · 0 · 1 · 2"), "{t}");
     assert!(t.contains("secrets-paths"), "{t}");
     assert!(t.contains(&format!("    2  {KEY}")), "{t}");
     assert!(
-        t.contains(&format!("1 asks, 1 approvals  {INSTALL}  [installs]")),
+        t.contains(&format!("1 asks, 1 approvals  {INSTALL}  [default]")),
         "{t}"
     );
 

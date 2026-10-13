@@ -136,7 +136,9 @@ impl CompiledPolicy<'_> {
 
     fn tainted(&self, atom: &AtomicAction, taint: &Taint) -> Option<Decision> {
         let reason = match atom {
-            AtomicAction::Net { host } | AtomicAction::Fetch { host } => {
+            AtomicAction::Net { host }
+            | AtomicAction::NetWord { host }
+            | AtomicAction::Fetch { host } => {
                 let secret = taint.secrets.iter().find(|s| {
                     !s.host
                         .as_deref()

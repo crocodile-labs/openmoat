@@ -7,7 +7,7 @@
 //! [`Host::answer`] sends it as a deny. Cursor is fail-open unless the hook entry sets
 //! `failClosed`, which the installer does.
 
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -115,9 +115,15 @@ fn event_kind(event: &str) -> HookEvent {
 }
 
 pub(crate) fn render(decision: &Decision) -> String {
+    // Cursor's hooks have no "no decision" (ADR-025): `defer` reaches only the shell
+    // and MCP events ([`Host::decided`]), where it is Cursor's own prompt.
+    let verdict = match decision.verdict {
+        Verdict::Defer => Verdict::Ask,
+        verdict => verdict,
+    };
     // Each `Value` always renders, unlike serializing a struct; the members
     // keep the order the hooks documentation shows.
-    let permission = Value::from(decision.verdict.as_str());
+    let permission = Value::from(verdict.as_str());
     let message = Value::from(crate::reason_line(decision));
     format!(r#"{{"permission":{permission},"user_message":{message},"agent_message":{message}}}"#)
 }
@@ -366,6 +372,26 @@ mod tests {
                 r#"{{"permission":"deny","user_message":{message},"agent_message":{message}}}"#
             )
         );
+    }
+
+    /// ADR-025: `defer` is Cursor's own prompt where Cursor can ask. File tools run
+    /// outside Cursor's sandbox and cannot prompt, so there OpenMoat asks itself.
+    #[test]
+    fn defer_is_cursors_own_prompt_or_openmoats_ask() {
+        for (name, recorded, permission) in [
+            ("beforeShellExecution", Verdict::Defer, "ask"),
+            ("beforeMCPExecution", Verdict::Defer, "ask"),
+            ("beforeReadFile", Verdict::Ask, "deny"),
+            ("preToolUse-write", Verdict::Ask, "deny"),
+        ] {
+            let event = Host::Cursor.parse_request(&fixture(name)).unwrap().event;
+            let decided = Host::Cursor.decided(&event, Decision::new(Verdict::Defer));
+            assert_eq!(decided.verdict, recorded, "{name}");
+            let answer = Host::Cursor.answer(&event, &decided);
+            let out: Value =
+                serde_json::from_str(&Host::Cursor.render_response(&event, &answer)).unwrap();
+            assert_eq!(out["permission"], permission, "{name}");
+        }
     }
 
     #[test]

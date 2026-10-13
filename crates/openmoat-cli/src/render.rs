@@ -179,11 +179,13 @@ pub fn report(summary: &Summary, window: &str) -> Result<()> {
     let mut out = io::stdout().lock();
     writeln!(
         out,
-        "since {window} ({}): {} decisions in {} sessions — {} allowed, {} asked, {} denied",
+        "since {window} ({}): {} decisions in {} sessions — {} allowed, {} left to the agent, \
+         {} asked, {} denied",
         timestamp(summary.since_ms),
         summary.total,
         summary.sessions,
         summary.allowed,
+        summary.deferred,
         summary.asked,
         summary.denied,
     )?;
@@ -215,6 +217,7 @@ pub fn report(summary: &Summary, window: &str) -> Result<()> {
 fn verdict_glyph(verdict: Verdict) -> &'static str {
     match verdict {
         Verdict::Allow => "✔",
+        Verdict::Defer => "→",
         Verdict::Ask => "❓",
         // `Deny`, and any verdict added to the core later.
         _ => "⛔",
@@ -261,6 +264,7 @@ pub fn event_detail(event: &Event) -> Result<()> {
 fn verdict_mark(verdict: Verdict) -> &'static str {
     match verdict {
         Verdict::Allow => "✔ allow",
+        Verdict::Defer => "→ defer",
         Verdict::Ask => "❓ ask",
         Verdict::Deny => "⛔ deny",
         _ => "⛔ unknown",

@@ -8,7 +8,7 @@ use crate::common::{OK, Sandbox, USAGE, bash_payload, stdout, text};
 
 /// An installed sandbox with two sessions of recorded decisions.
 fn seeded() -> Sandbox {
-    let sb = Sandbox::installed(&[".claude"]);
+    let sb = Sandbox::installed_asking(&[".claude"]);
     let project = sb.project();
     for (session, command) in [
         ("alpha", "git status --short"),
@@ -78,7 +78,7 @@ fn report_summarises_the_window() {
         t.contains("2 allowed") && t.contains("1 asked") && t.contains("1 denied"),
         "{t}"
     );
-    assert!(t.contains("secrets-paths") && t.contains("installs"), "{t}");
+    assert!(t.contains("secrets-paths") && t.contains("default"), "{t}");
     assert!(t.contains("claude-code"), "{t}");
 
     let json: Value = serde_json::from_slice(

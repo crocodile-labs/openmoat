@@ -30,6 +30,7 @@ struct Source {
 #[derive(Default, Serialize)]
 struct Counts {
     allowed: u64,
+    deferred: u64,
     asked: u64,
     denied: u64,
 }
@@ -131,6 +132,7 @@ impl TeamReport {
             let action = render::describe(event);
             match event.verdict {
                 Verdict::Allow => host.allowed += 1,
+                Verdict::Defer => host.deferred += 1,
                 Verdict::Ask => host.asked += 1,
                 // `Deny`, and any verdict added to the core later.
                 _ => host.denied += 1,
@@ -138,7 +140,7 @@ impl TeamReport {
             for rule in &event.rules {
                 let counts = rules.entry(rule.clone()).or_default();
                 match event.verdict {
-                    Verdict::Allow => {}
+                    Verdict::Allow | Verdict::Defer => {}
                     Verdict::Ask => counts.0 += 1,
                     _ => counts.1 += 1,
                 }
@@ -152,7 +154,7 @@ impl TeamReport {
                     candidate.rules.extend(event.rules.iter().cloned());
                 }
                 Verdict::Allow if approved => candidates.entry(action).or_default().approvals += 1,
-                Verdict::Allow => {}
+                Verdict::Allow | Verdict::Defer => {}
                 // `Deny`, and any verdict added to the core later: never a
                 // candidate for an allow rule.
                 _ => *denies.entry(action).or_default() += 1,
@@ -210,9 +212,15 @@ fn text(report: &TeamReport) -> Result<()> {
             source.file, source.events
         )?;
     }
-    writeln!(out, "per host (allowed · asked · denied):")?;
+    writeln!(
+        out,
+        "per host (allowed · left to the agent · asked · denied):"
+    )?;
     for (host, c) in &report.by_host {
-        let row = format!("  {host:<12} {} · {} · {}", c.allowed, c.asked, c.denied);
+        let row = format!(
+            "  {host:<12} {} · {} · {} · {}",
+            c.allowed, c.deferred, c.asked, c.denied
+        );
         render::line(&mut out, &row)?;
     }
     if !report.by_rule.is_empty() {

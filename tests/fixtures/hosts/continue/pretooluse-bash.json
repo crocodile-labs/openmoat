@@ -6,7 +6,7 @@
   "hook_event_name": "PreToolUse",
   "tool_name": "Bash",
   "tool_input": {
-    "command": "npm install left-pad"
+    "command": "git config core.pager less"
   },
   "tool_use_id": "call_k2Jd8sQx1Lw3"
 }

