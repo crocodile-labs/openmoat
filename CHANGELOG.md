@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.0-rc.2] - 2026-10-13
+
+A release candidate for testing; not a stable release. Quiet by default: OpenMoat denies what must never happen and leaves every other call to your agent's own permission prompt. Existing policies keep their `ask` defaults until `moat policy upgrade`.
+
 ### Changed
 - **Quiet by default (ADR-025).** A new verdict, `defer`, leaves a call to the agent's own permission prompt (Claude Code's prompt or auto mode, Codex's approval policy), exactly as without OpenMoat. The default policy defers everything no rule names, installs, pushes, publishing, `WebFetch` and local services included, so OpenMoat shows no prompt of its own in normal work (the first dogfood day had 191 asks in 4 hours, none of them an attack). OpenMoat still asks itself where the effect outlives the sandbox or the session: new `git-internals`, `persistence`, `home-sweep`, `opaque-code` and `docker-secrets` ask groups, and session taint. Every deny rule and the generated sandboxes are unchanged; OS layers treat `defer` like `ask`, and `moat proxy` refuses a deferred host. Codex and the Continue CLI no longer turn an unknown command into a deny. Cursor's file tools cannot prompt, so there a deferred call still asks. ([#499](https://github.com/crocodile-labs/openmoat/pull/499))
 - A host-shaped word without a scheme outside programs that name hosts (`check_runs.0.id`, `defaults.net`) is matched by `net` rules but is no longer denied by `defaults.net`; it gets the catch-all default.
@@ -425,7 +429,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.1...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.2...HEAD
+[0.5.0-rc.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.1...v0.5.0-rc.2
 [0.5.0-rc.1]: https://github.com/crocodile-labs/openmoat/compare/v0.4.0...v0.5.0-rc.1
 [0.4.0]: https://github.com/crocodile-labs/openmoat/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/crocodile-labs/openmoat/compare/v0.2.0...v0.3.0
