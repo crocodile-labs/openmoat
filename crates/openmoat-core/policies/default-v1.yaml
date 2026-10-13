@@ -1,15 +1,17 @@
 # OpenMoat default policy, schema v1 (docs/POLICY.md).
-# Evaluation: deny → allow → ask → defaults. Strictest verdict wins across the
-# atomic actions of one tool call. `${project}` is the trusted project root.
+# Evaluation: deny → allow → ask → defer → defaults. Strictest verdict wins across
+# the atomic actions of one tool call. `${project}` is the trusted project root.
+# `defer` leaves the call to the agent's own permission prompt (ADR-025): OpenMoat
+# denies what must never happen and stays quiet about the rest.
 # Deny rules are absolute (allow can never override them), so deny-by-default
 # for a whole kind is expressed via `defaults`, with allow rules as the holes.
 version: 1
 defaults:
-  "*": ask
+  "*": defer         # no rule matched: the agent's own permission prompt decides (ADR-025)
   net: deny          # outbound network: only hosts listed under allow
-  fetch: ask         # a host fetch tool (WebFetch) reading an unlisted URL: no request body, so ask (ADR-017)
+  fetch: defer       # a host fetch tool (WebFetch) reading an unlisted URL: no request body (ADR-017)
   web.search: allow  # a host search tool (WebSearch): recorded; asks after a secret read (session taint)
-  tool.unknown: ask  # a host tool OpenMoat cannot classify (an unknown Cursor tool naming no path)
+  tool.unknown: defer  # a host tool OpenMoat cannot classify (an unknown Cursor tool naming no path)
 
 deny:
   - id: secrets-paths
@@ -529,13 +531,10 @@ allow:
   - id: safe-mcp
     mcp: ["mcp__github__search_*", "mcp__github__get_*", "mcp__filesystem__read_*", "mcp__filesystem__list_*"]
 
-ask:
-  - id: installs
-    reason: new dependency
-    shell: ["npm install *", "npm i *", "npm ci*", "pnpm add *", "pnpm install*", "pnpm dlx *", "yarn add *", "yarn install*", "yarn dlx *", "npx *", "npm exec *", "npm x *", "pip install *", "pip3 install *", "cargo add *", "cargo install *", "brew install *", "gem install *"]
-  - id: push
-    reason: publishes to a remote
-    shell: ["git push *", "npm publish*", "pnpm publish*", "yarn publish*", "cargo publish*", "gh release *"]
+# Installs, publishing and pushes are not listed: they match no rule, so the agent's
+# own prompt decides them like any other unlisted call (ADR-025).
+defer:
+  # without this group the `net` default would deny local services
   - id: local-net
     reason: local service; may expose a control API (Docker, databases, cloud agents)
     net: ["localhost", "127.0.0.1", "::1"]

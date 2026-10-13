@@ -65,6 +65,7 @@ pub struct CompiledPolicy<'p> {
     repo_ask: Vec<CompiledGroup<'p>>,
     allow: Vec<CompiledGroup<'p>>,
     ask: Vec<CompiledGroup<'p>>,
+    defer: Vec<CompiledGroup<'p>>,
     /// Paths a write to asks once the session read untrusted content (`taint`).
     protected: Vec<GlobPattern>,
 }
@@ -96,6 +97,7 @@ impl<'p> CompiledPolicy<'p> {
             repo_ask: compile_list(&policy.repo_ask)?,
             allow: compile_list(&policy.allow)?,
             ask: compile_list(&policy.ask)?,
+            defer: compile_list(&policy.defer)?,
             protected: taint::compile_protected(policy, ctx)?,
         })
     }
@@ -112,7 +114,7 @@ impl<'p> CompiledPolicy<'p> {
         &self.ctx
     }
 
-    /// Evaluate one atomic action: deny → allow → ask → default, with a
+    /// Evaluate one atomic action: deny → allow → ask → defer → default, with a
     /// repository policy's ask rules ([`Policy::repo_ask`]) tried before allow.
     ///
     /// Returns `None` for a whole-pipeline atom that no rule mentions: pipelines
@@ -125,6 +127,7 @@ impl<'p> CompiledPolicy<'p> {
             (&self.repo_ask, Verdict::Ask),
             (&self.allow, Verdict::Allow),
             (&self.ask, Verdict::Ask),
+            (&self.defer, Verdict::Defer),
         ] {
             let mut hit = Decision::new(verdict);
             for g in groups {
@@ -393,7 +396,8 @@ fn checked_atoms(
 impl CompiledPolicy<'_> {
     /// Decide one host action without executable resolution.
     ///
-    /// Unparseable input yields `ask` with the parser's reason, never `allow`.
+    /// Unparseable input yields the policy's catch-all verdict (`ask` or
+    /// `defer`) with the parser's reason, never `allow`.
     #[must_use]
     pub fn decide(&self, action: &Action) -> Decision {
         self.decide_with(action, &NoResolver, &NoResolver)
@@ -432,15 +436,17 @@ impl CompiledPolicy<'_> {
         });
         // A part that could not be parsed, or arguments the adapter did not
         // search, may name anything: ask, and let a deny on the rest still win.
-        let unparsed =
-            unparsed.map(|reason| unparseable(format!("could not parse action safely: {reason}")));
+        let verdict = self.policy.defaults.unclassified();
+        let unparsed = unparsed
+            .map(|reason| unparseable(verdict, format!("could not parse action safely: {reason}")));
         let unchecked = match action {
             Action::McpTool {
                 unchecked: Some(limit),
                 ..
-            } => Some(unparseable(format!(
-                "mcp arguments not fully checked: {limit}"
-            ))),
+            } => Some(unparseable(
+                verdict,
+                format!("mcp arguments not fully checked: {limit}"),
+            )),
             _ => None,
         };
         atoms
@@ -453,7 +459,7 @@ impl CompiledPolicy<'_> {
                 acc.merge(next);
                 acc
             })
-            .unwrap_or_else(|| unparseable("action has no evaluable parts".to_owned()))
+            .unwrap_or_else(|| unparseable(verdict, "action has no evaluable parts".to_owned()))
     }
 }
 
@@ -472,8 +478,9 @@ fn with_resolved_paths(atoms: Vec<AtomicAction>, paths: &dyn PathResolver) -> Ve
     atoms.into_iter().chain(resolved).collect()
 }
 
-fn unparseable(reason: String) -> Decision {
-    Decision::single(Verdict::Ask, "unparseable", reason)
+/// Input that cannot be classified: the policy's catch-all, never `allow` (ADR-025).
+fn unparseable(verdict: Verdict, reason: String) -> Decision {
+    Decision::single(verdict, "unparseable", reason)
 }
 
 /// Compile `policy` for `ctx` and decide a single action.

@@ -81,7 +81,9 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
             format!("no rule decided {host}"),
         )
     });
-    if decision.verdict == Verdict::Ask {
+    // A deferred host (ADR-025) is refused too: the agent's permission flow never sees
+    // the proxy's connections.
+    if matches!(decision.verdict, Verdict::Ask | Verdict::Defer) {
         decision.verdict = Verdict::Deny;
         decision
             .reasons

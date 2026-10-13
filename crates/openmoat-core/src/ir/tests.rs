@@ -73,17 +73,18 @@ fn default_policy_lowers_paths_and_hosts() {
 }
 
 #[test]
-fn every_ask_is_reported_as_a_loss() {
+fn every_deferred_kind_is_reported_as_a_loss() {
     let ir = lowered(crate::DEFAULT_POLICY);
     let losses: Vec<String> = ir.losses.iter().map(ToString::to_string).collect();
+    let agent = "the hook leaves it to the agent";
     for expected in [
-        "fs.read `default`: no rule matches: the hook asks, OS layers deny",
-        "fs.write `default`: no rule matches: the hook asks, OS layers deny",
-        "fetch `default.fetch`: no rule matches: the hook asks, OS layers deny",
-        "net `local-net`: the hook asks; OS layers deny unless an allow rule matches",
-        "fetch `local-net`: the hook asks; OS layers deny unless an allow rule matches",
+        format!("fs.read `default`: no rule matches: {agent}, OS layers deny"),
+        format!("fs.write `default`: no rule matches: {agent}, OS layers deny"),
+        format!("fetch `default.fetch`: no rule matches: {agent}, OS layers deny"),
+        format!("net `local-net`: {agent}; OS layers deny unless an allow rule matches"),
+        format!("fetch `local-net`: {agent}; OS layers deny unless an allow rule matches"),
     ] {
-        assert!(losses.contains(&expected.to_owned()), "{losses:#?}");
+        assert!(losses.contains(&expected), "{losses:#?}");
     }
     assert_eq!(losses.len(), 5, "{losses:#?}");
 }

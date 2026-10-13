@@ -1,6 +1,6 @@
 //! The outcome of a policy decision.
 //!
-//! [`Verdict`] is `allow`, `ask` or `deny`, ordered by strictness.
+//! [`Verdict`] is `allow`, `defer`, `ask` or `deny`, ordered by strictness.
 //! [`Decision`] is a verdict plus the rule ids and reasons that produced it.
 //! When the atoms of one action are combined, the strictest verdict wins and
 //! the weaker matches are kept as `context`, not dropped (docs/POLICY.md §4).
@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 
 /// Outcome of evaluating one or more atomic actions.
 ///
-/// Ordering is by strictness: `Allow < Ask < Deny`. When several atomic
-/// actions are combined, the strictest wins (docs/POLICY.md §4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// Ordering is by strictness: `Allow < Defer < Ask < Deny`. When several
+/// atomic actions are combined, the strictest wins (docs/POLICY.md §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Verdict {
@@ -23,6 +23,33 @@ pub enum Verdict {
     Ask,
     /// The action is blocked.
     Deny,
+    /// No objection and no approval: the agent's own permission flow decides
+    /// (ADR-025). Declared last so the other variants keep their discriminants.
+    Defer,
+}
+
+impl Verdict {
+    /// Position in the strictness order.
+    fn strictness(self) -> u8 {
+        match self {
+            Self::Allow => 0,
+            Self::Defer => 1,
+            Self::Ask => 2,
+            Self::Deny => 3,
+        }
+    }
+}
+
+impl PartialOrd for Verdict {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Verdict {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.strictness().cmp(&other.strictness())
+    }
 }
 
 impl Verdict {
@@ -33,11 +60,12 @@ impl Verdict {
             Self::Allow => "allow",
             Self::Ask => "ask",
             Self::Deny => "deny",
+            Self::Defer => "defer",
         }
     }
 }
 
-/// A name that is not `allow`, `ask` or `deny`.
+/// A name that is not `allow`, `defer`, `ask` or `deny`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("unknown verdict `{0}`")]
 pub struct UnknownVerdict(pub String);
@@ -46,7 +74,7 @@ impl FromStr for Verdict {
     type Err = UnknownVerdict;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        [Self::Allow, Self::Ask, Self::Deny]
+        [Self::Allow, Self::Defer, Self::Ask, Self::Deny]
             .into_iter()
             .find(|v| v.as_str() == s)
             .ok_or_else(|| UnknownVerdict(s.to_owned()))
@@ -127,7 +155,7 @@ mod tests {
 
     #[test]
     fn verdict_names_round_trip() {
-        for v in [Verdict::Allow, Verdict::Ask, Verdict::Deny] {
+        for v in [Verdict::Allow, Verdict::Defer, Verdict::Ask, Verdict::Deny] {
             assert_eq!(v.as_str().parse::<Verdict>(), Ok(v));
         }
         assert_eq!(
@@ -180,7 +208,8 @@ mod tests {
     }
 
     #[test]
-    fn verdict_order_is_allow_ask_deny() {
-        assert!(Verdict::Allow < Verdict::Ask && Verdict::Ask < Verdict::Deny);
+    fn verdict_order_is_allow_defer_ask_deny() {
+        assert!(Verdict::Allow < Verdict::Defer);
+        assert!(Verdict::Defer < Verdict::Ask && Verdict::Ask < Verdict::Deny);
     }
 }

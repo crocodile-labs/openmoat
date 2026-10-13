@@ -53,8 +53,15 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
         }
     }
     shadowed(&policy.ask, &policy.allow, "ask", "allow", &mut out);
+    shadowed(&policy.defer, &policy.allow, "defer", "allow", &mut out);
     shadowed(&policy.allow, &policy.deny, "allow", "deny", &mut out);
-    for group in policy.deny.iter().chain(&policy.allow).chain(&policy.ask) {
+    for group in policy
+        .deny
+        .iter()
+        .chain(&policy.allow)
+        .chain(&policy.ask)
+        .chain(&policy.defer)
+    {
         excluded_positives(group, &mut out);
         fetch_exclusions_net_matches(group, &mut out);
     }

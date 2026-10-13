@@ -119,11 +119,17 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
     } else {
         Effect::Deny
     };
-    if verdict == Verdict::Ask {
+    let hook = match verdict {
+        Verdict::Ask => Some("the hook asks"),
+        // ADR-025: the agent's own permission flow decides; an OS layer cannot ask it.
+        Verdict::Defer => Some("the hook leaves it to the agent"),
+        _ => None,
+    };
+    if let Some(hook) = hook {
         losses.push(Loss {
             kind,
             rule: default_rule,
-            message: "no rule matches: the hook asks, OS layers deny".to_owned(),
+            message: format!("no rule matches: {hook}, OS layers deny"),
         });
     }
     let mut access = Access {
@@ -131,19 +137,25 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
         deny: rules(&policy.deny, kind, ctx),
         allow: rules(&policy.allow, kind, ctx),
     };
-    for rule in rules(&policy.ask, kind, ctx) {
-        // Under a deny default an ask rule needs no rule of its own: what no allow
-        // matches is denied anyway. Under an allow default it must deny, and an OS
-        // layer has no tier between allow and the default, so it denies before
-        // the allows do: narrower where an allow rule matches too.
+    let asks = rules(&policy.ask, kind, ctx)
+        .into_iter()
+        .map(|r| ("the hook asks", r));
+    let defers = rules(&policy.defer, kind, ctx)
+        .into_iter()
+        .map(|r| ("the hook leaves it to the agent", r));
+    for (hook, rule) in asks.chain(defers) {
+        // Under a deny default an ask or defer rule needs no rule of its own: what
+        // no allow matches is denied anyway. Under an allow default it must deny,
+        // and an OS layer has no tier between allow and the default, so it denies
+        // before the allows do: narrower where an allow rule matches too.
         let message = match default {
-            Effect::Deny => "the hook asks; OS layers deny unless an allow rule matches",
-            Effect::Allow => "the hook asks; OS layers deny, also where an allow rule matches",
+            Effect::Deny => format!("{hook}; OS layers deny unless an allow rule matches"),
+            Effect::Allow => format!("{hook}; OS layers deny, also where an allow rule matches"),
         };
         losses.push(Loss {
             kind,
             rule: rule.id.clone(),
-            message: message.to_owned(),
+            message,
         });
         if default == Effect::Allow {
             access.deny.push(rule);
@@ -175,7 +187,10 @@ fn rules(groups: &[RuleGroup], kind: Kind, ctx: &EvalContext) -> Vec<Rule> {
 }
 
 fn decide_only(policy: &Policy) -> Vec<DecideOnly> {
-    let groups = || policy.deny.iter().chain(&policy.allow).chain(&policy.ask);
+    let groups = || {
+        let lists = policy.deny.iter().chain(&policy.allow);
+        lists.chain(&policy.ask).chain(&policy.defer)
+    };
     let mut out: Vec<DecideOnly> = DECIDE_ONLY
         .into_iter()
         .map(|kind| DecideOnly {
