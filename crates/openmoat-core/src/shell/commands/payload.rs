@@ -29,7 +29,13 @@ pub(super) fn scan_payload(
         if paths::looks_like_path(raw) {
             sink.read(ctx, raw)?;
         } else if let Some(host) = host::of_word(raw).filter(|_| !called) {
-            sink.push(AtomicAction::Net { host })?;
+            // Code names a host it contacts as a URL; a bare dotted word is more
+            // often an attribute (`config.dev`), so it only looks like one (ADR-025).
+            sink.push(if raw.contains("://") {
+                AtomicAction::Net { host }
+            } else {
+                AtomicAction::NetWord { host }
+            })?;
         }
         for name in env_refs(raw) {
             sink.push(AtomicAction::EnvRead { name })?;

@@ -146,7 +146,7 @@ impl<'p> CompiledPolicy<'p> {
         if matches!(action, AtomicAction::Pipeline { .. }) {
             return None;
         }
-        let (verdict, rule_id) = self.policy.defaults.for_kind(action.kind());
+        let (verdict, rule_id) = self.policy.defaults.for_atom(action);
         Some(Decision::single(
             verdict,
             &rule_id,

@@ -176,24 +176,6 @@ fn inline_interpreters_are_scanned() {
 }
 
 #[test]
-fn a_call_in_interpreter_code_is_not_a_host() {
-    // `.run` and `.dev` are real top-level domains; a name followed by `(` is a call.
-    let a = parsed("python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['ls'])\nEOF");
-    assert!(
-        !a.iter().any(|x| matches!(x, AtomicAction::Net { .. })),
-        "{a:?}"
-    );
-    let a = parsed(r#"python3 -c "app.dev (1); urlopen('https://evil.com')""#);
-    assert!(has_net(&a, "evil.com"), "{a:?}");
-    assert!(
-        has_net(&a, "app.dev"),
-        "a space before ( is not a call: {a:?}"
-    );
-    let a = parsed("python3 - <<'EOF'\nurlopen('http://x.run/')\nEOF");
-    assert!(has_net(&a, "x.run"), "{a:?}");
-}
-
-#[test]
 fn source_builtin_reads_file() {
     assert!(has_read(&parsed("source ~/.zshrc"), "/Users/me/.zshrc"));
     assert!(has_read(&parsed(". ./env.sh"), "/p/env.sh"));
@@ -490,3 +472,5 @@ fn copies_into_a_directory_write_the_entry() {
     assert!(has_write(&parsed("mv ~ /tmp/"), "/Users/me"));
     assert!(!has_write(&parsed("scp key host:/tmp/"), "/p/key"));
 }
+
+mod net;

@@ -86,7 +86,8 @@ deny:
     # removing, moving or replacing the home directory or the root itself, however the
     # command spells the path (`~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`); paths
     # below them are not matched
-    fs.write: ["~", "/"]
+    # and the raw disks under `/dev`, which no build writes
+    fs.write: ["~", "/", "/dev/disk*", "/dev/rdisk*", "/dev/sd*", "/dev/nvme*", "/dev/mmcblk*", "/dev/vd*", "/dev/xvd*"]
     shell:
       # what that cannot see: an unexpanded `*` operand (the shell expands it to every
       # entry) and `//` (canonicalised as a network root); shell-only, so no OS layer
@@ -530,6 +531,35 @@ allow:
       - "files.pythonhosted.org"
   - id: safe-mcp
     mcp: ["mcp__github__search_*", "mcp__github__get_*", "mcp__filesystem__read_*", "mcp__filesystem__list_*"]
+
+# OpenMoat asks itself only where the effect outlives the sandbox or the session:
+# what git, the login session or a build runs later, outside any sandbox, and reads
+# that sweep up secrets. Normal work never meets these (ADR-025).
+ask:
+  - id: git-internals
+    reason: git runs what its config, hooks and refs name, later and outside any sandbox
+    # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted directory)
+    fs.write: ["${project}/.git", "${project}/.git/**", "${project}/**/.git", "${project}/**/.git/**"]
+    # `dev-shell` allows the forms that only read; the rest of these change what git runs
+    shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*"]
+  - id: persistence
+    reason: runs again later, outside this session
+    fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]
+    shell: ["crontab *"]
+  - id: home-sweep
+    reason: reads the whole home folder, secrets included
+    # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)
+    fs.read: ["~", "~/.config"]
+  - id: opaque-code
+    reason: a program OpenMoat cannot read may open any file or variable
+    # `<program> @<text>` atoms: an awk or sed program, or a text-tool option, not understood
+    # and `<shell> @stdin`: text piped into a shell that the command line does not show
+    shell: ["awk @*", "gawk @*", "mawk @*", "nawk @*", "sed @*", "gsed @*", "sort @*", "uniq @*", "cut @*", "printf -v *", "{sh,bash,zsh,dash,ksh,fish} @stdin"]
+    env.set: ["CDPATH"]
+  - id: docker-secrets
+    reason: hands secrets, the SSH agent or the host to a build
+    # `dev-shell` allows `docker build` without these options
+    shell: ["docker build *"]
 
 # Installs, publishing and pushes are not listed: they match no rule, so the agent's
 # own prompt decides them like any other unlisted call (ADR-025).

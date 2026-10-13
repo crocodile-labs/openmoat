@@ -36,6 +36,17 @@ impl Defaults {
         }
     }
 
+    /// The default for an atom no rule matched: [`Self::for_kind`], except that a
+    /// word that only looks like a host is no network evidence and gets
+    /// [`Self::unclassified`] (ADR-025).
+    #[must_use]
+    pub fn for_atom(&self, atom: &crate::AtomicAction) -> (Verdict, String) {
+        match atom {
+            crate::AtomicAction::NetWord { .. } => (self.unclassified(), "default".to_owned()),
+            _ => self.for_kind(atom.kind()),
+        }
+    }
+
     /// What OpenMoat gives a call it cannot classify, or a word that only looks
     /// like a host: `defer` under a catch-all (`"*"`) of `allow` or `defer`, else
     /// `ask` (ADR-025). Never `allow`, and never a deny nothing named.

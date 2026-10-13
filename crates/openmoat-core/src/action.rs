@@ -179,6 +179,14 @@ pub enum AtomicAction {
         /// Lowercase host name.
         host: String,
     },
+    /// A shell word with no scheme that looks like a host, outside the arguments
+    /// of a program that names hosts (ADR-025): it may be a JSON path or a method
+    /// call (`check_runs.0.id`, `app.run`). Matched by `net` rules; when none
+    /// matches, the policy's catch-all decides it, not `defaults.net`.
+    NetWord {
+        /// Lowercase host name.
+        host: String,
+    },
     /// A web search query; no rule list names it, so `defaults` decide it.
     WebSearch {
         /// The query as the tool gave it.
@@ -216,7 +224,7 @@ impl AtomicAction {
             Self::Shell { .. } | Self::Pipeline { .. } => Kind::Shell,
             Self::FsRead { .. } => Kind::FsRead,
             Self::FsWrite { .. } => Kind::FsWrite,
-            Self::Net { .. } => Kind::Net,
+            Self::Net { .. } | Self::NetWord { .. } => Kind::Net,
             Self::Fetch { .. } => Kind::Fetch,
             Self::WebSearch { .. } => Kind::WebSearch,
             Self::UnknownTool { .. } => Kind::UnknownTool,
@@ -241,7 +249,7 @@ impl AtomicAction {
         match self {
             Self::Shell { .. } | Self::Pipeline { .. } => None,
             Self::FsRead { path } | Self::FsWrite { path } => Some(path),
-            Self::Net { host } | Self::Fetch { host } => Some(host),
+            Self::Net { host } | Self::Fetch { host } | Self::NetWord { host } => Some(host),
             Self::EnvRead { name } | Self::EnvSet { name } | Self::McpTool { name } => Some(name),
             Self::WebSearch { query } => Some(query),
             Self::UnknownTool { tool, .. } => Some(tool),
@@ -257,6 +265,7 @@ impl AtomicAction {
             Self::FsRead { path } => format!("read {path}"),
             Self::FsWrite { path } => format!("write {path}"),
             Self::Net { host } => format!("net {host}"),
+            Self::NetWord { host } => format!("net {host} (a word that looks like a host)"),
             Self::Fetch { host } => format!("fetch {host}"),
             Self::WebSearch { query } => format!("web search \"{query}\""),
             Self::UnknownTool { host, tool } => format!("unknown {host} tool {tool}"),
