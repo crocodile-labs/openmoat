@@ -382,3 +382,26 @@ fn json_problem(error: &serde_json::Error) -> &'static str {
         "payload is not valid JSON"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use openmoat_core::{Decision, Verdict};
+
+    use super::{HookEvent, Host};
+
+    /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
+    /// run their own permission flow; hosts that cannot ask do not turn it into a deny.
+    #[test]
+    fn defer_is_no_decision_for_every_pre_tool_use_host() {
+        let defer = Decision::new(Verdict::Defer);
+        for host in [Host::ClaudeCode, Host::Codex, Host::Continue] {
+            let answer = host.answer(&HookEvent::PreToolUse, &defer);
+            assert_eq!(answer.verdict, Verdict::Defer, "{host:?}");
+            assert_eq!(
+                host.render_response(&HookEvent::PreToolUse, &answer),
+                "",
+                "{host:?}"
+            );
+        }
+    }
+}
