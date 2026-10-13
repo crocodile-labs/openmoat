@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 2;
+pub(super) const SCHEMA_VERSION: i64 = 3;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -36,6 +36,36 @@ ALTER TABLE events ADD COLUMN prev_hash TEXT;
 ALTER TABLE events ADD COLUMN hash TEXT;
 CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 INSERT INTO meta (key, value) VALUES ('legacy_last_id', COALESCE((SELECT MAX(id) FROM events), 0));
+";
+
+/// Version 3: the `defer` verdict (ADR-025). `SQLite` cannot change a `CHECK`, so the
+/// table is rebuilt; every row keeps its id, values and hashes, so the chain still
+/// verifies.
+const V3: &str = "
+CREATE TABLE events_v3 (
+    id          INTEGER PRIMARY KEY,
+    ts_ms       INTEGER NOT NULL,
+    host        TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    call_id     TEXT,
+    cwd         TEXT,
+    tool        TEXT    NOT NULL,
+    action      TEXT    NOT NULL,
+    verdict     TEXT    NOT NULL CHECK (verdict IN ('allow','defer','ask','deny')),
+    rules       TEXT    NOT NULL,
+    reasons     TEXT    NOT NULL,
+    latency_us  INTEGER NOT NULL,
+    prev_hash   TEXT,
+    hash        TEXT
+);
+INSERT INTO events_v3 (id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules,
+                       reasons, latency_us, prev_hash, hash)
+    SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules,
+           reasons, latency_us, prev_hash, hash FROM events;
+DROP TABLE events;
+ALTER TABLE events_v3 RENAME TO events;
+CREATE INDEX events_session ON events(session_id, id);
+CREATE INDEX events_ts ON events(ts_ms);
 ";
 
 /// The `user_version` of the open database.
@@ -69,6 +99,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 2 {
         tx.execute_batch(V2)?;
+    }
+    if found < 3 {
+        tx.execute_batch(V3)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

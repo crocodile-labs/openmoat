@@ -80,14 +80,20 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
     *responded = true;
     let response = host.render_response(event, decision);
     let mut stdout = io::stdout().lock();
-    if let Err(error) = writeln!(stdout, "{response}").and_then(|()| stdout.flush()) {
+    // An empty response is `defer` (ADR-025): no output at all, not even a newline.
+    let written = if response.is_empty() {
+        Ok(())
+    } else {
+        writeln!(stdout, "{response}")
+    };
+    if let Err(error) = written.and_then(|()| stdout.flush()) {
         // Without a response the host falls back to its own default, which
         // may be to proceed; exit 2 is the one signal every host honours.
         eprintln!("moat: could not write the hook response: {error}");
         return Some(Code::Deny);
     }
     Some(match decision.verdict {
-        Verdict::Allow | Verdict::Ask => Code::Ok,
+        Verdict::Allow | Verdict::Defer | Verdict::Ask => Code::Ok,
         // `Deny`, and any verdict added to the core later, blocks the call.
         _ => {
             // Hosts may show hook stderr in a terminal; the reason quotes the call.
@@ -220,7 +226,8 @@ fn record(
         latency_us,
     };
     let id = store.record(&event)?;
-    if decision.verdict != Verdict::Allow {
+    // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
+    if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
         eprintln!("moat: trace {id}  (moat show {id})");
     }
     Ok(())

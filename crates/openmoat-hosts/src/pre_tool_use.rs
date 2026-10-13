@@ -4,7 +4,7 @@
 //! Output: JSON on stdout with `hookSpecificOutput.permissionDecision`
 //! (`allow` | `deny` | `ask`) and a reason the model gets to see.
 
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -127,6 +127,11 @@ fn send_file(input: &Value) -> Result<Vec<String>, HostError> {
 }
 
 pub(crate) fn render(decision: &Decision) -> String {
+    // `defer` (ADR-025) is no decision: with nothing on stdout and exit 0 the host
+    // runs its own permission flow, as if no hook had answered.
+    if decision.verdict == Verdict::Defer {
+        return String::new();
+    }
     // A `Value` always renders, unlike serializing a struct; its keys sort,
     // and these are already in order.
     serde_json::json!({
@@ -149,6 +154,22 @@ mod tests {
 
     fn fixture(host: &str, name: &str) -> String {
         std::fs::read_to_string(format!("{FIXTURES}/{host}/{name}.json")).unwrap()
+    }
+
+    /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
+    /// run their own permission flow; hosts that cannot ask do not turn it into a deny.
+    #[test]
+    fn defer_is_no_decision_for_every_pre_tool_use_host() {
+        let defer = Decision::new(Verdict::Defer);
+        for host in [Host::ClaudeCode, Host::Codex, Host::Continue] {
+            let answer = host.answer(&HookEvent::PreToolUse, &defer);
+            assert_eq!(answer.verdict, Verdict::Defer, "{host:?}");
+            assert_eq!(
+                host.render_response(&HookEvent::PreToolUse, &answer),
+                "",
+                "{host:?}"
+            );
+        }
     }
 
     #[test]

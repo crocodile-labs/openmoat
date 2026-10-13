@@ -255,7 +255,7 @@ impl Host {
     #[must_use]
     pub fn render_response(self, event: &HookEvent, decision: &Decision) -> String {
         match (self, event) {
-            (Self::Cursor, _) => cursor::render(decision),
+            (Self::Cursor, _) => cursor::render(event, decision),
             (_, HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk) => {
                 pre_tool_use::render(decision)
             }

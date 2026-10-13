@@ -35,6 +35,8 @@ impl From<Verdict> for Answer {
     fn from(verdict: Verdict) -> Self {
         match verdict {
             Verdict::Allow => Self::Allow,
+            // ADR-025: no decision, the host's own permission flow runs.
+            Verdict::Defer => Self::Passthrough,
             Verdict::Ask => Self::Ask,
             // `Deny`, and any verdict added to the core later: the strictest.
             _ => Self::Deny,
@@ -63,14 +65,16 @@ impl Answer {
 
 /// The answer a host must end up with for `verdict` on `call`: Codex cannot ask,
 /// nor can Cursor's `beforeReadFile` and `preToolUse` (file reads and writes), so
-/// there an `ask` has to arrive as a blocking `deny`.
+/// there an `ask` has to arrive as a blocking `deny`. Cursor's hooks have no "no
+/// decision", so a `defer` is Cursor's own prompt, or an allow for file tools.
 pub fn seen(host: Host, call: &Call, verdict: Verdict) -> Answer {
-    match (host, call, verdict) {
-        (Host::Codex, _, Verdict::Ask)
-        | (Host::Cursor, Call::Read(_) | Call::Write(_) | Call::Edit(_), Verdict::Ask) => {
-            Answer::Deny
-        }
-        (_, _, other) => other.into(),
+    let file_tool = matches!(call, Call::Read(_) | Call::Write(_) | Call::Edit(_));
+    match (host, verdict) {
+        (Host::Codex, Verdict::Ask) => Answer::Deny,
+        (Host::Cursor, Verdict::Ask) if file_tool => Answer::Deny,
+        (Host::Cursor, Verdict::Defer) if file_tool => Answer::Allow,
+        (Host::Cursor, Verdict::Defer) => Answer::Ask,
+        (_, other) => other.into(),
     }
 }
 

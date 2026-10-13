@@ -139,7 +139,14 @@
 ; deny destructive (fs.write)
 (deny file-write*
   (literal "/Users/me")
-  (literal "/"))
+  (literal "/")
+  (regex "^/dev/disk[^/]*$")
+  (regex "^/dev/rdisk[^/]*$")
+  (regex "^/dev/sd[^/]*$")
+  (regex "^/dev/nvme[^/]*$")
+  (regex "^/dev/mmcblk[^/]*$")
+  (regex "^/dev/vd[^/]*$")
+  (regex "^/dev/xvd[^/]*$"))
 ; deny kernel-self (fs.write)
 (deny file-write*
   (literal "/Users/me/.claude")

@@ -7,7 +7,7 @@
 //! [`Host::answer`] sends it as a deny. Cursor is fail-open unless the hook entry sets
 //! `failClosed`, which the installer does.
 
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -114,10 +114,18 @@ fn event_kind(event: &str) -> HookEvent {
     }
 }
 
-pub(crate) fn render(decision: &Decision) -> String {
+pub(crate) fn render(event: &HookEvent, decision: &Decision) -> String {
+    // Cursor's hooks have no "no decision" (ADR-025): `defer` is Cursor's own prompt
+    // where it can ask, and elsewhere what Cursor does without a hook, which is to
+    // run the tool under its own settings and sandbox.
+    let verdict = match (decision.verdict, event) {
+        (Verdict::Defer, HookEvent::PreToolUse) => Verdict::Ask,
+        (Verdict::Defer, _) => Verdict::Allow,
+        (verdict, _) => verdict,
+    };
     // Each `Value` always renders, unlike serializing a struct; the members
     // keep the order the hooks documentation shows.
-    let permission = Value::from(decision.verdict.as_str());
+    let permission = Value::from(verdict.as_str());
     let message = Value::from(crate::reason_line(decision));
     format!(r#"{{"permission":{permission},"user_message":{message},"agent_message":{message}}}"#)
 }
@@ -361,11 +369,31 @@ mod tests {
         deny.reasons.push("say \"hi\"\n\\".into());
         let message = r#""moat: deny — say \"hi\"\n\\""#;
         assert_eq!(
-            render(&deny),
+            render(&HookEvent::PreToolUse, &deny),
             format!(
                 r#"{{"permission":"deny","user_message":{message},"agent_message":{message}}}"#
             )
         );
+    }
+
+    /// ADR-025: `defer` is Cursor's own prompt where it can ask, and runs the tool
+    /// under Cursor's own settings where it cannot; it never becomes a deny.
+    #[test]
+    fn defer_is_cursors_own_prompt_or_its_own_settings() {
+        let defer = Decision::new(Verdict::Defer);
+        for (name, permission) in [
+            ("beforeShellExecution", "ask"),
+            ("beforeMCPExecution", "ask"),
+            ("beforeReadFile", "allow"),
+            ("preToolUse-write", "allow"),
+        ] {
+            let event = Host::Cursor.parse_request(&fixture(name)).unwrap().event;
+            let answer = Host::Cursor.answer(&event, &defer);
+            assert_eq!(answer.verdict, Verdict::Defer, "{name}");
+            let out: Value =
+                serde_json::from_str(&Host::Cursor.render_response(&event, &answer)).unwrap();
+            assert_eq!(out["permission"], permission, "{name}");
+        }
     }
 
     #[test]

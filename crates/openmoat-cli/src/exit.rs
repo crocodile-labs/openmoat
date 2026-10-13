@@ -25,7 +25,8 @@ pub enum Code {
 impl From<Verdict> for Code {
     fn from(verdict: Verdict) -> Self {
         match verdict {
-            Verdict::Allow => Self::Ok,
+            // `defer` (ADR-025): OpenMoat does not stop the call; the agent decides.
+            Verdict::Allow | Verdict::Defer => Self::Ok,
             Verdict::Ask => Self::Ask,
             // `Deny`, and any verdict added to the core later: the strictest.
             _ => Self::Deny,

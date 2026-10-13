@@ -259,3 +259,65 @@ fn concurrent_writers_build_one_chain() {
     assert_eq!(report.events, (THREADS * EACH) as u64);
     assert_eq!(report.broken, None);
 }
+
+/// ADR-025: version 3 widens the verdict check for `defer`. A version-2 database
+/// with a hashed chain keeps every row and hash, still verifies, and takes `defer`.
+#[test]
+fn a_version_2_database_is_migrated_with_its_chain_intact() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    let head = {
+        let store = Store::open(&path).unwrap();
+        record(&store, "git status");
+        record(&store, "git log");
+        store.verify_chain().unwrap().head
+    };
+    // Put the table back as 0.5.0-rc.1 left it: the old check, `user_version` 2.
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE events RENAME TO events_new;
+             CREATE TABLE events (
+                 id INTEGER PRIMARY KEY, ts_ms INTEGER NOT NULL, host TEXT NOT NULL,
+                 session_id TEXT NOT NULL, call_id TEXT, cwd TEXT, tool TEXT NOT NULL,
+                 action TEXT NOT NULL,
+                 verdict TEXT NOT NULL CHECK (verdict IN ('allow','ask','deny')),
+                 rules TEXT NOT NULL, reasons TEXT NOT NULL, latency_us INTEGER NOT NULL,
+                 prev_hash TEXT, hash TEXT);
+             INSERT INTO events SELECT * FROM events_new;
+             DROP TABLE events_new;
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+        let refused = conn.execute(
+            "INSERT INTO events (ts_ms, host, session_id, tool, action, verdict, rules, reasons, latency_us)
+             VALUES (0, 'h', 's', 't', 'null', 'defer', '[]', '[]', 1)",
+            [],
+        );
+        assert!(refused.is_err(), "the version-2 check refuses `defer`");
+    }
+
+    let store = Store::open(&path).unwrap();
+    let report = store.verify_chain().unwrap();
+    assert_eq!((report.events, report.broken, report.head), (2, None, head));
+    let mut decision = Decision::new(Verdict::Defer);
+    decision.rules.push("default".to_owned());
+    decision.reasons.push("no rule matched".to_owned());
+    let action = Action::Shell {
+        command: "make deploy".to_owned(),
+    };
+    let id = store
+        .record(&NewEvent {
+            host: "claude-code",
+            session_id: "s1",
+            call_id: None,
+            cwd: Some("/p"),
+            tool: "Bash",
+            action: Some(&action),
+            decision: &decision,
+            latency_us: 900,
+        })
+        .unwrap();
+    assert_eq!(store.get(id).unwrap().unwrap().verdict, Verdict::Defer);
+    assert!(store.verify_chain().unwrap().broken.is_none());
+}
