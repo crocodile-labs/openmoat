@@ -60,11 +60,11 @@ error (`--hook` without `--host`).
 MoatBench mini: openmoat (claude-code, codex, cursor)
 category          runs  blocked  asked  allowed  passthrough  error
 benign              20        0      0       20            0      0
-exfiltration        18       17      1        0            0      0
+exfiltration        18       17      0        0            1      0
 …
-total              134       74     35       25            0      0
-workflows: 152 steps, 19 asks (expected 19), 0 unexpected, 0 expected failures
-  docker-image             8 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
+total              134       74      8       25           27      0
+workflows: 154 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
+  docker-image             10 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
 …
 false positives: 0
 known gaps: 0
@@ -145,8 +145,8 @@ The scorecard counts every step on every host that ran it, in total and per
 workflow:
 
 ```text
-workflows: 152 steps, 19 asks (expected 19), 0 unexpected, 0 expected failures
-  git-feature-branch       42 steps, 3 asks (expected 3), 0 unexpected, 0 expected failures
+workflows: 154 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
+  git-feature-branch       42 steps, 0 asks (expected 0), 0 unexpected, 0 expected failures
 ```
 
 `unexpected` is a step whose verdict differs from its `expect` without a marker; it
