@@ -44,7 +44,7 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         );
     }
     let before = read_policy(&path)?;
-    let after = with_secret(&before, &secret)?;
+    let after = with_entry(&before, &secret)?;
     // Lint the result as `moat edit` does, in the state directory agents cannot write.
     let draft = home.root().join("policy.secret.yaml");
     write_private(&draft, after.as_bytes())?;
@@ -116,7 +116,7 @@ fn secret(args: &SecretAddArgs) -> Result<Secret> {
 
 /// `policy` with `secret` added to its `secrets:` list, or a new list at the end.
 /// Comments and layout are kept: the entry is text inserted after `secrets:`.
-fn with_secret(policy: &str, secret: &Secret) -> Result<String> {
+fn with_entry(policy: &str, secret: &Secret) -> Result<String> {
     let entry = openmoat_core::yaml::to_string(&[secret])?;
     let lines: Vec<&str> = policy.lines().collect();
     let Some(at) = lines.iter().position(|l| l.starts_with("secrets:")) else {
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn a_policy_without_secrets_gets_a_list() {
-        let out = with_secret("version: 1\n# end\n", &gh()).unwrap();
+        let out = with_entry("version: 1\n# end\n", &gh()).unwrap();
         assert!(
             out.starts_with("version: 1\n# end\nsecrets:\n  - id: gh\n"),
             "{out}"
@@ -217,14 +217,14 @@ mod tests {
     fn an_existing_list_keeps_its_entries_and_indent() {
         let other = "- id: x\n  host: x.test\n  header: X-Key\n  source: { env: X_KEY }\n";
         let policy = format!("version: 1\nsecrets:\n{other}deny: []\n");
-        let out = with_secret(&policy, &gh()).unwrap();
+        let out = with_entry(&policy, &gh()).unwrap();
         let ids: Vec<String> = secrets(&out).into_iter().map(|s| s.id).collect();
         assert_eq!(ids, ["gh", "x"]);
         assert!(out.ends_with("deny: []\n"), "{out}");
-        let empty = with_secret("version: 1\nsecrets: []  # none yet\n", &gh()).unwrap();
+        let empty = with_entry("version: 1\nsecrets: []  # none yet\n", &gh()).unwrap();
         assert_eq!(secrets(&empty), [gh()]);
         let flow =
             "version: 1\nsecrets: [{ id: x, host: x.test, header: X, source: { env: X } }]\n";
-        assert!(with_secret(flow, &gh()).is_err());
+        assert!(with_entry(flow, &gh()).is_err());
     }
 }
