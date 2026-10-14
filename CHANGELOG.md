@@ -34,6 +34,7 @@ A release candidate for testing; not a stable release. Quiet by default: OpenMoa
 
 ### Security
 - `destructive` denies writes to raw disks (`/dev/disk*`, `/dev/sd*`, `/dev/nvme*`, …), and text piped into a shell that the command line does not show (`printf '\x63at .env' | sh`) asks (`opaque-code`).
+
 ### Added
 - `moat sandbox show` starts with a `Secrets` list: each policy secret's host, header and source (never the value), and whether Claude Code injects it or why it skips it ([#498](https://github.com/crocodile-labs/openmoat/pull/498)).
 

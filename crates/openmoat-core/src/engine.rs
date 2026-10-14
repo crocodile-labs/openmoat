@@ -435,7 +435,8 @@ impl CompiledPolicy<'_> {
             _ => None,
         });
         // A part that could not be parsed, or arguments the adapter did not
-        // search, may name anything: ask, and let a deny on the rest still win.
+        // search, may name anything: never allow (defer or ask, ADR-025), and let
+        // a deny on the rest still win.
         let verdict = self.policy.defaults.unclassified();
         let unparsed = unparsed
             .map(|reason| unparseable(verdict, format!("could not parse action safely: {reason}")));
