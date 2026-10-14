@@ -1139,11 +1139,11 @@
 # a path through a variable whose value the line does not show is not known
 - id: defer-path-through-a-computed-variable
   threat: T1
-  action: { shell: "d=$(pwd); cat $d/id_rsa" }
+  action: { shell: "d=$(pwd); cat $d/notes.txt" }
   expect: { verdict: defer, rules: [unparseable] }
 - id: defer-path-through-an-environment-variable
   threat: T1
-  action: { shell: "cat $X/id_rsa" }
+  action: { shell: "cat $X/notes.txt" }
   expect: { verdict: defer, rules: [unparseable] }
 - id: defer-path-through-a-transformed-variable
   threat: T1
@@ -1154,4 +1154,23 @@
 - id: defer-path-through-a-prefix-assignment
   threat: T1
   action: { shell: "D=~/.ssh cat $D/id_rsa" }
-  expect: { verdict: defer, rules: [unparseable] }
+  expect: { verdict: ask, rules: [secret-names] }
+# a secret's file name in a directory OpenMoat cannot place asks, also when the
+# agent's own prompt would let it run
+- id: ask-key-in-an-unknown-directory
+  threat: T1
+  action: { shell: "cat $X/id_rsa" }
+  expect: { verdict: ask, rules: [secret-names] }
+- id: ask-netrc-in-an-unknown-directory
+  threat: T1
+  action: { shell: "d=$(pwd); cat \"$d\"/.netrc" }
+  expect: { verdict: ask, rules: [secret-names] }
+# `.env` in any directory is denied on its literal path already
+- id: deny-env-in-an-unknown-directory
+  threat: T1
+  action: { shell: "d=$(pwd); cat \"$d\"/.env" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: ask-pem-in-an-unknown-directory
+  threat: T1
+  action: { shell: "cp ${KEYS}/server.pem /tmp/s" }
+  expect: { verdict: ask, rules: [secret-names] }
