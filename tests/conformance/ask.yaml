@@ -57,7 +57,7 @@
 - id: ask-heredoc-through-tee-into-shell
   threat: T7
   action: { shell: "cat <<'EOF' | tee log | sh\ncat ~/.ssh/id_rsa\nEOF" }
-  expect: { verdict: defer, rules: [default] }
+  expect: { verdict: ask, rules: [opaque-code] }
 - id: ask-nesting-too-deep
   threat: T7
   action: { shell: "echo $(echo $(echo $(echo $(echo $(echo hi)))))" }

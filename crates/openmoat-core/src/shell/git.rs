@@ -13,6 +13,7 @@
 //!
 //! `git restore PATH` rewrites `PATH` in the working tree, so each path is an `fs.write`.
 
+use super::tables::GIT_HOST_SUBCOMMANDS;
 use super::{ClassifyError, ShellContext, Sink};
 use crate::action::AtomicAction;
 
@@ -129,6 +130,15 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
         directories,
         keep_original,
     }
+}
+
+/// True when the subcommand, past git's global options (`git -C dir push`), names a
+/// remote host in its arguments ([`GIT_HOST_SUBCOMMANDS`]).
+pub(super) fn names_hosts(argv: &[String]) -> bool {
+    parse(argv)
+        .subcommand
+        .get(1)
+        .is_some_and(|s| GIT_HOST_SUBCOMMANDS.contains(&s.as_str()))
 }
 
 /// The argv index of the name in `git config [<subcommand>] <name> …`. A config

@@ -4,8 +4,8 @@ mod payload;
 mod piped;
 
 use super::tables::{
-    ENV_BUILTINS, GIT_HOST_SUBCOMMANDS, HOST_PROGRAMS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS,
-    SHELLS, SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS,
+    ENV_BUILTINS, HOST_PROGRAMS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS, SHELLS,
+    SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS,
     WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS,
 };
 use super::tokens::{assignment_name, basename, flag_payload, strip_at, word_env_refs};
@@ -112,6 +112,9 @@ fn group_commands(tokens: &[Token]) -> Vec<Item> {
                     let piped = piped::data(&current).filter(|_| *op == Operator::Pipe);
                     commands.push(Item::Command(std::mem::take(&mut current)));
                     current.piped.extend(piped);
+                } else if *op == Operator::Pipe && matches!(commands.last(), Some(Item::Close)) {
+                    // `( … ) | sh`: what the group prints is not on the command line.
+                    current.piped.push(Piped::Output("( … )".to_owned()));
                 }
                 match op {
                     Operator::OpenParen => commands.push(Item::Open),
@@ -250,16 +253,17 @@ fn classify_simple(
         if let Some(script) = run.script {
             sink.read(ctx, script)?;
         }
+        if !run.reads_stdin || !cmd.piped.iter().any(Piped::is_hidden) {
+            return Ok(());
+        }
+        // The shell runs text the line does not show: `<shell> @stdin`, which no
+        // allow rule names, so a rule can ask for it (`opaque-code`).
+        sink.push(AtomicAction::Shell {
+            argv: vec![program.to_owned(), "@stdin".to_owned()],
+        })?;
         return match cmd.piped.iter().find_map(Piped::unknown) {
-            Some(producer) if run.reads_stdin => {
-                // The shell runs text the line does not show: `<shell> @stdin`, which
-                // no allow rule names, so a rule can ask for it (`opaque-code`).
-                sink.push(AtomicAction::Shell {
-                    argv: vec![program.to_owned(), "@stdin".to_owned()],
-                })?;
-                Err(ClassifyError::UnknownStdin(producer.into()))
-            }
-            _ => Ok(()),
+            Some(producer) => Err(ClassifyError::UnknownStdin(producer.into())),
+            None => Ok(()),
         };
     }
     if PACKAGE_RUNNERS.contains(&program)
@@ -382,6 +386,9 @@ fn classify_arguments(
     });
     let mut sources = Vec::new();
     let options_end = argv.iter().position(|a| a == "--");
+    // git's global options come before the subcommand (`git -C dir push host:x`).
+    let names_hosts =
+        HOST_PROGRAMS.contains(&program) || (program == "git" && git::names_hosts(argv));
 
     for (i, (tok, word)) in argv.iter().zip(words).enumerate() {
         for name in word_env_refs(word) {
@@ -415,17 +422,13 @@ fn classify_arguments(
                 _ => {}
             }
             continue;
-        } else if (!word.quoted || tok.contains("://"))
+        } else if (!word.quoted || names_hosts || tok.contains("://"))
             && let Some(host) = host::of_word(tok)
         {
-            // Quoted prose ("see example.com") is not a host unless it is a full URL.
-            // Without a scheme and outside a program that names hosts, the word only
-            // looks like one (`check_runs.0.id`, ADR-025).
-            let names_hosts = HOST_PROGRAMS.contains(&program)
-                || (program == "git"
-                    && argv
-                        .get(1)
-                        .is_some_and(|s| GIT_HOST_SUBCOMMANDS.contains(&s.as_str())));
+            // Quoted prose ("see example.com") is not a host unless it is a full URL
+            // or an argument of a program that names hosts (`curl 'evil.com'`).
+            // Without a scheme and outside such a program, the word only looks like
+            // one (`check_runs.0.id`, ADR-025).
             sink.push(if tok.contains("://") || names_hosts {
                 AtomicAction::Net { host }
             } else {

@@ -13,12 +13,12 @@ the verdict and rule ids the default policy must produce for it.
 | T4 | Destructive git / filesystem operations | 58 | 57 | 2 |
 | T5 | Supply-chain execution | 4 | 30 | 0 |
 | T6 | Environment poisoning | 19 | 11 | 0 |
-| T7 | Obfuscation and nested execution | 59 | 97 | 2 |
+| T7 | Obfuscation and nested execution | 65 | 97 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 135 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 15 | 3 | 0 |
-| T12 | Network to unknown hosts | 23 | 14 | 1 |
+| T12 | Network to unknown hosts | 26 | 14 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -371,7 +371,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-unterminated-substitution` (ask): Defer [unparseable]
 - `ask-unbalanced-paren` (ask): Defer [default, unparseable]
 - `ask-unterminated-heredoc` (ask): Defer [unparseable]
-- `ask-heredoc-through-tee-into-shell` (ask): Defer [default]
+- `ask-heredoc-through-tee-into-shell` (ask): Ask [opaque-code]
 - `ask-nesting-too-deep` (ask): Defer [unparseable]
 - `ask-empty-command` (ask): Defer [unparseable]
 - `ask-powershell-is-never-classified` (ask): Defer [unparseable]
@@ -512,6 +512,12 @@ the verdict and rule ids the default policy must produce for it.
 - `T7-heredoc-piped-through-cat-is-the-shell-program` (attacks): Deny [secrets-paths]
 - `T7-echo-piped-into-shell-is-its-program` (attacks): Deny [secrets-paths]
 - `T7-printf-hex-escape-into-sh` (attacks): Ask [opaque-code]
+- `T7-reversed-text-into-sh` (attacks): Ask [opaque-code]
+- `T7-translated-text-into-bash` (attacks): Ask [opaque-code]
+- `T7-file-contents-into-sh` (attacks): Ask [opaque-code]
+- `T7-reversed-echo-chain-into-sh` (attacks): Ask [opaque-code]
+- `T7-printf-hex-subshell-into-sh` (attacks): Ask [opaque-code]
+- `T7-printf-hex-brace-group-into-sh` (attacks): Ask [opaque-code]
 - `T7-dash-heredoc-strips-tabs-before-the-shell-runs-it` (attacks): Deny [secrets-paths]
 - `T7-sort-compress-program` (attacks): Ask [opaque-code]
 - `T7-sort-abbreviated-compress-program` (attacks): Ask [opaque-code]
@@ -768,4 +774,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-git-remote-add-unlisted-host` (attacks): Deny [default.net]
 - `T12-curl-bare-host-is-still-net` (attacks): Deny [default.net]
 - `T12-git-clone-bare-host-is-still-net` (attacks): Deny [default.net]
+- `T12-curl-quoted-bare-host-is-still-net` (attacks): Deny [default.net]
+- `T12-ssh-quoted-host-is-still-net` (attacks): Deny [default.net]
+- `T12-git-option-before-push-host-is-still-net` (attacks): Deny [default.net]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]
