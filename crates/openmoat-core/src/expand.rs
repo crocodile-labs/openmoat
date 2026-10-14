@@ -146,9 +146,9 @@ fn component_glob(component: &str) -> Option<GlobMatcher> {
 
 /// `component` with every bracket expression that holds a POSIX class, an
 /// equivalence class or a collating symbol (`[[:alpha:]]`, `[[=e=]]`, `[[.a.]]`)
-/// made `?`. globset reads `[[:alpha:]]` as the set `[:alph` followed by a
-/// literal `]`, so it would name fewer paths than the shell opens; any one
-/// character names at least as many.
+/// made `?`. globset ends that set at the first `]` (the one after `:alpha:`)
+/// and reads the second `]` as a literal, so it would name fewer paths than the
+/// shell opens; any one character names at least as many.
 fn widen_classes(component: &str) -> String {
     let chars: Vec<char> = component.chars().collect();
     let mut out = String::with_capacity(component.len());
