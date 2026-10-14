@@ -277,6 +277,19 @@ mod tests {
             }),
             "a write-shaped tool writes what it names"
         );
+        // A tool outside the listing and search tools may edit what it names even
+        // without a write verb in its name.
+        for tool in ["search_replace", "ApplyPatch", "Truncate", "chmod"] {
+            assert_eq!(
+                parse(tool, r#"{"file_path":"/p/.cursor/hooks.json"}"#)
+                    .unwrap()
+                    .action,
+                Some(Action::FsWrite {
+                    path: "/p/.cursor/hooks.json".into()
+                }),
+                "{tool}"
+            );
+        }
         assert_eq!(
             parse("Rename", r#"{"file_path":"/p/a","target_file":"/p/.env"}"#)
                 .unwrap()

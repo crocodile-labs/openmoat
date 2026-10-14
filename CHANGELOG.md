@@ -12,6 +12,7 @@ view at the end of the file.
 - A host quoted as an argument of a program that names hosts (`curl 'host'`, `ssh "user@host"`) and a host after git's global options (`git -C dir push host:repo`) are network again, so an unlisted host is denied instead of left to the agent; the output of any program other than `cat`, `echo` or `printf`, and of a `( … )` group, piped into a shell asks (`opaque-code`) like other text the command line does not show.
 - `sh` is read with bash's long options (`sh --norc -c '…'`), as macOS runs it, so the command string is classified and a secret read in it is denied; it was left to the agent as `unparseable`.
 - A glob operand with a POSIX bracket class (`cat .e[[:alpha:]]v`, `cat ~/.s[[:alpha:]]h/id_rsa`) names the paths the shell opens, so `secrets-paths` denies it; it was allowed inside the project and left to the agent outside it.
+- A Cursor `preToolUse` tool OpenMoat does not know that names a path is checked as writing it unless it is one of Cursor's listing or search tools, so an editing tool without a write verb in its name (`search_replace`) can no longer change `.cursor/hooks.json` or `.git/hooks` under the project read allow.
 
 ## [0.5.0-rc.2] - 2026-10-13
 
