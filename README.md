@@ -172,7 +172,7 @@ What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes
 
 ## Status
 
-**Beta.** The latest release is `0.5.0-rc.4`; the policy format and commands may still
+**Beta.** The latest release is `0.5.0-rc.5`; the policy format and commands may still
 change before 1.0. Decisions are deterministic, and everything runs locally: the audit
 log is a SQLite file in `~/.moat`, credentials are redacted before they are stored.
 [Roadmap](docs/ROADMAP.md).

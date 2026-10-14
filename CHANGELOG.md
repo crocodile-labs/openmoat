@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.0-rc.5] - 2026-10-14
+
+A release candidate for testing; not a stable release. A security fix: a shell variable set on the command line is checked as the path or host it holds, so `d=~/.ssh; cat $d/id_rsa` is denied (it was allowed in 0.5.0-rc.2 to rc.4). Inline code of versioned interpreters, `lua` and `Rscript` is scanned too.
+
 ### Security
 - A shell variable set on the line is substituted where it names a path or a host: `d=~/.ssh; cat $d/id_rsa` is denied. Since 0.5.0-rc.2 a lowercase variable's read was no environment read, and its path was taken as a file in the project, so the read was allowed. A path through a variable whose value is not known (`$X/id_rsa`, `d=$(pwd)`, `${d:-x}`) is `unparseable`, never allowed, and `$PWD` is the working directory.
 - Inline code of versioned interpreters (`python3.12 -c`, `python2.7 -c`) and of `lua -e`, `luajit -e` and `Rscript -e` is scanned for paths and hosts like `python3 -c`.
@@ -466,7 +470,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.4...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.5...HEAD
+[0.5.0-rc.5]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.4...v0.5.0-rc.5
 [0.5.0-rc.4]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.3...v0.5.0-rc.4
 [0.5.0-rc.3]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.2...v0.5.0-rc.3
 [0.5.0-rc.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.1...v0.5.0-rc.2
