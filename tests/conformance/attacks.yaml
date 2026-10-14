@@ -1667,6 +1667,16 @@
   action: { shell: "cat .[e]nv" }
   files: [/p/.env]
   expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-glob-posix-class-reads-env
+  threat: T1
+  action: { shell: "cat .e[[:alpha:]]v" }
+  files: [/p/.env]
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-glob-posix-class-reads-ssh-key
+  threat: T1
+  action: { shell: "cat ~/.s[[:alpha:]]h/id_rsa" }
+  files: [/Users/me/.ssh/id_rsa]
+  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T1-glob-class-head-reads-env
   threat: T1
   action: { shell: "head -c 99 .en[v]" }

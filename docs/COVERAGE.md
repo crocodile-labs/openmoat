@@ -95,6 +95,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-glob-question-mark-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-star-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-class-reads-env` (attacks): Deny [secrets-paths]
+- `T1-glob-posix-class-reads-env` (attacks): Deny [secrets-paths]
+- `T1-glob-posix-class-reads-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-glob-class-head-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-negated-class-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-directory-component-reads-ssh-key` (attacks): Deny [secrets-paths]
