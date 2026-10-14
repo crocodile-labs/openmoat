@@ -2073,3 +2073,26 @@
   threat: T9
   action: { shell: "/opt/homebrew/bin/moat secret add gh" }
   expect: { verdict: deny, rules: [kernel-self] }
+# a grep pattern is text only while nothing else names the pattern: with `-e` or `-f`
+# anywhere every operand is a file, and after an option that may take a value the
+# word may be one
+- id: T1-grep-key-after-e-option
+  threat: T1
+  action: { shell: "grep ~/.ssh/id_rsa -e x" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-grep-key-after-context-option
+  threat: T1
+  action: { shell: "grep -A 2 ~/.ssh/id_rsa x" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-grep-env-as-file
+  threat: T1
+  action: { shell: "grep TOKEN .env" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-env-in-claude-temp
+  threat: T1
+  action: { shell: "cat /private/tmp/claude-501/x/.env" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-tr-reading-env-on-stdin
+  threat: T1
+  action: { shell: "tr a b < .env" }
+  expect: { verdict: deny, rules: [secrets-paths] }

@@ -211,6 +211,10 @@ allow:
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted
     # directory), so writing one asks like the root's own `.git`
     fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**"]
+  # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
+  # agent's background commands, which it reads back with `cat`
+  - id: agent-temp
+    fs.read: ["/tmp/claude-*/**", "/private/tmp/claude-*/**"]
   - id: dev-shell
     shell:
       - "git status*"
@@ -528,6 +532,8 @@ allow:
       - "sort *"
       - "uniq *"
       - "cut *"
+      # reads only stdin and writes only stdout; its operands are character sets
+      - "tr *"
       # what the classifier cannot prove read-only is reported as `<program> @<argument>`
       - "!{sed,awk,sort,uniq,cut} @*"
   - id: registries

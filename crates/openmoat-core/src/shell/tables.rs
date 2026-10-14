@@ -172,8 +172,9 @@ pub const FILE_OPERANDS: &[&str] = &[
     "open",
 ];
 
-/// Programs that only print their arguments; a `/` in them is text.
-pub const NO_FILE_OPERANDS: &[&str] = &["echo", "printf"];
+/// Programs whose arguments are never files: `echo` and `printf` print them,
+/// `tr` takes character sets. A `/` in them is text.
+pub const NO_FILE_OPERANDS: &[&str] = &["echo", "printf", "tr"];
 
 /// Words before a command that leave it running in the current shell, so a
 /// `cd` after them still moves it (`builtin cd`, `if cd x; then`, `{ cd x; }`).

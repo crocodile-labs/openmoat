@@ -131,6 +131,8 @@ network_proxy = true
 GIT_CONFIG_COUNT = "1"
 GIT_CONFIG_KEY_0 = "safe.bareRepository"
 GIT_CONFIG_VALUE_0 = "explicit"
+# stricter: fs.read `agent-temp`: `/tmp/claude-*/**` cannot be granted as a path, so it stays denied
+# stricter: fs.read `agent-temp`: `/private/tmp/claude-*/**` cannot be granted as a path, so it stays denied
 # stricter: fs.read `secrets-paths`: Codex cannot re-allow inside a deny glob, so the exceptions (**/.env.example, **/.env.sample, **/.env.template) stay denied
 # stricter: fs.write `codex.git`: Codex keeps all of `.git` read-only: sandboxed commands cannot commit, Codex asks to run them outside the sandbox
 # wider: fs.read `codex.minimal`: Codex's minimal platform reads (system libraries, devices) every command needs

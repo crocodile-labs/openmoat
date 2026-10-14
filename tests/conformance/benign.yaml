@@ -917,3 +917,22 @@
 - id: benign-python-two-safe-options
   action: { shell: "python3 -I -u scripts/check.py" }
   expect: { verdict: allow, rules: [dev-shell] }
+# everyday forms from a dogfood session: a grep pattern is text, not a file; `tr`
+# only filters stdin; the agent reads its own background command output
+- id: benign-grep-pattern-with-backslash
+  action: { shell: "grep -n '\\.ENV' docs/notes.md" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-grep-alternation-with-backslash
+  action: { shell: "grep -rn \"cfg(not(unix))\\|cfg(unix)\" crates" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-tr-newlines
+  action: { shell: "ls src | tr '\\n' ' '" }
+  expect: { verdict: allow, rules: [dev-shell, text-tools, project-fs] }
+- id: benign-read-claude-task-output
+  action: { shell: "cat /private/tmp/claude-501/-p/s/tasks/b1.output" }
+  expect: { verdict: allow, rules: [dev-shell, agent-temp] }
+# `tr` takes character sets, never files: a `/` among them reads and writes nothing
+- id: benign-tr-delete-slashes
+  threat: T4
+  action: { shell: "tr -d/ < notes.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }

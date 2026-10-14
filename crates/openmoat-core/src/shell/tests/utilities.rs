@@ -21,6 +21,46 @@ fn fd_pattern_is_no_path_and_its_directories_are_reads() {
 }
 
 #[test]
+fn grep_pattern_is_no_path_and_its_files_are_reads() {
+    // The first operand is text grep never opens; `\.` would make it `/.ENV`.
+    for cmd in [
+        "grep -n '\\.ENV' notes.md",
+        "grep -rn --include=*.md '\\.env' docs",
+        "egrep 'a/b|c' notes.md",
+        "grep -- '\\.env' notes.md",
+        "grep -i -- ~/.ssh/id_rsa notes.md",
+    ] {
+        let a = parsed(cmd);
+        assert!(!a.iter().any(|x| matches!(x, AtomicAction::FsRead { path } if path.contains("env") || path.contains(".ssh"))), "{cmd}: {a:?}");
+        assert!(
+            has_read(&a, "/p/notes.md") || has_read(&a, "/p/docs"),
+            "{cmd}: {a:?}"
+        );
+    }
+    // The files after the pattern are still read.
+    assert!(has_read(&parsed("grep -r x ~/.ssh"), "/Users/me/.ssh"));
+    assert!(has_read(&parsed("grep x .env"), "/p/.env"));
+    // With `-e` or `-f` anywhere every operand is a file (GNU grep permutes options).
+    for cmd in [
+        "grep ~/.ssh/id_rsa -e x",
+        "grep -e x ~/.ssh/id_rsa",
+        "grep -ie x ~/.ssh/id_rsa",
+        "grep --regexp=x ~/.ssh/id_rsa",
+        "grep --reg x ~/.ssh/id_rsa",
+        "grep -f pats ~/.ssh/id_rsa",
+        "grep --fi=pats ~/.ssh/id_rsa",
+        // after an option that may take a value, or one not known, the word may be a file
+        "grep -A 2 ~/.ssh/id_rsa x",
+        "grep -A2 ~/.ssh/id_rsa x",
+        "grep -m1 ~/.ssh/id_rsa x",
+        "grep --context 2 ~/.ssh/id_rsa x",
+        "grep --frobnicate ~/.ssh/id_rsa x",
+    ] {
+        assert!(has_read(&parsed(cmd), "/Users/me/.ssh/id_rsa"), "{cmd}");
+    }
+}
+
+#[test]
 fn gofmt_reads_operands_and_writes_them_only_with_w() {
     let atoms = parsed("gofmt -l .");
     assert!(has_read(&atoms, "/p"));

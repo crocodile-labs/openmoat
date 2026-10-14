@@ -1084,15 +1084,6 @@
   threat: T7
   action: { shell: "grep -f/tmp/patterns src/app.js" }
   expect: { verdict: defer, rules: [default] }
-# `tr` is not allowed, but a set attached to its option is no write of `/`
-- id: ask-tr-delete-slashes
-  threat: T4
-  action: { shell: "tr -d/ < notes.txt" }
-  expect: { verdict: defer, rules: [default] }
-- id: ask-tr-slash-to-underscore
-  threat: T4
-  action: { shell: "tr '/' '_' < notes.txt" }
-  expect: { verdict: defer, rules: [default] }
 # A call in interpreter code is not a host (`.run` is a top-level domain): the
 # program asks like any other inline code instead of meeting `default.net`.
 - id: ask-interpreter-call-named-like-a-host
@@ -1138,4 +1129,10 @@
 - id: defer-npm-config-variable
   threat: T6
   action: { shell: "npm_config_script_shell=/tmp/x npm test" }
+  expect: { verdict: defer, rules: [default] }
+# a word that is a path wherever it appears (`/`, `/etc`) is still read, also as a
+# `tr` set: deferred, not allowed
+- id: defer-tr-absolute-slash-set
+  threat: T4
+  action: { shell: "tr '/' '_' < notes.txt" }
   expect: { verdict: defer, rules: [default] }
