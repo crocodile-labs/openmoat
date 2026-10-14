@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.0-rc.3] - 2026-10-13
+
+A release candidate for testing; not a stable release. Security fixes found in a review of the quiet default: a bracket-glob read of a secret file that was allowed, more network clients and quoted hosts in inline code denied, unknown Cursor tools checked as writes, other users' homes asked, and docs that match the defer verdict.
+
 ### Security
 - More network clients count as naming a host (`openssl`, `socat` addresses, `psql`/`mysql`/`redis-cli -h`, `nmap`, `mosh`, `aria2c` and others), and a host in a quoted string in inline interpreter code is network access again, so an unlisted host there is denied, not left to the agent. A path in another user's home (`~alice/.ssh/id_rsa`) always asks (`other-home`).
 - A host quoted as an argument of a program that names hosts (`curl 'host'`, `ssh "user@host"`) and a host after git's global options (`git -C dir push host:repo`) are network again, so an unlisted host is denied instead of left to the agent; the output of any program other than `cat`, `echo` or `printf`, and of a `( … )` group, piped into a shell asks (`opaque-code`) like other text the command line does not show.
@@ -440,7 +444,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.2...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.3...HEAD
+[0.5.0-rc.3]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.2...v0.5.0-rc.3
 [0.5.0-rc.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.1...v0.5.0-rc.2
 [0.5.0-rc.1]: https://github.com/crocodile-labs/openmoat/compare/v0.4.0...v0.5.0-rc.1
 [0.4.0]: https://github.com/crocodile-labs/openmoat/compare/v0.3.0...v0.4.0
