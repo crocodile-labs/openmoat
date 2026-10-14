@@ -147,6 +147,12 @@ fn expand_home(raw: &str, home: &str) -> Option<String> {
     }
 }
 
+/// Whether `raw` starts with `~name` of a user other than the one `home` belongs to.
+pub(crate) fn other_user_home(raw: &str, home: &str) -> bool {
+    let user = home.rsplit_once('/').map_or(home, |(_, user)| user);
+    home_prefix(raw).is_some_and(|(name, _)| !name.is_empty() && name != user)
+}
+
 /// `~` or `~name` followed by nothing or `/…`: the name (empty for `~`) and
 /// the rest of the word.
 fn home_prefix(raw: &str) -> Option<(&str, &str)> {

@@ -423,7 +423,7 @@ fn classify_arguments(
             }
             continue;
         } else if (!word.quoted || names_hosts || tok.contains("://"))
-            && let Some(host) = host::of_word(tok)
+            && let Some(host) = host::of_argument(program, tok)
         {
             // Quoted prose ("see example.com") is not a host unless it is a full URL
             // or an argument of a program that names hosts (`curl 'evil.com'`).

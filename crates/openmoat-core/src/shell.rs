@@ -212,6 +212,16 @@ impl Sink {
     /// Every path `word` may name, or none when one of them is not known (skipped).
     fn paths(&mut self, ctx: &ShellContext<'_>, word: &str) -> Vec<String> {
         ctx.paths(word).unwrap_or_else(|e| {
+            // Another user's home cannot be placed, and it may hold that user's
+            // secrets: `@other-home <word>`, which a rule can ask for (S-08).
+            if paths::other_user_home(word, ctx.home) {
+                let atom = AtomicAction::Shell {
+                    argv: vec!["@other-home".to_owned(), word.to_owned()],
+                };
+                if let Err(full) = self.push(atom) {
+                    self.skip(full);
+                }
+            }
             self.skip(e);
             Vec::new()
         })

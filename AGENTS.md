@@ -80,7 +80,10 @@ Claim "done" only after it passes locally. CI runs the same script on macOS (arm
 The shell classifier is a triage layer, not the security boundary (ADR-013); OS
 enforcement is. Under the parser freeze, a newly found bypass gets an attack fixture
 and the smallest change that makes it `ask`, not a new grammar or an ADR, unless an
-invariant moves. Put the saved time into enforcement (`docs/SANDBOX.md`).
+invariant moves. Since ADR-025 `unparseable` defers under the default policy, so a
+bypass is not closed by making it unparseable: emit an atom a default `ask` or `deny`
+rule names (`<program> @<argument>`, `<shell> @stdin`, `@other-home`, a `Net`), or a
+real `fs`/`net` atom a deny rule matches. Put the saved time into enforcement (`docs/SANDBOX.md`).
 1. Data goes in `crates/openmoat-core/src/shell/tables.rs`; behaviour in `commands.rs` or `tokens.rs`.
 2. Unit test in `shell/tests/` asserting the atomic actions produced.
 3. Conformance fixture showing the end-to-end verdict.

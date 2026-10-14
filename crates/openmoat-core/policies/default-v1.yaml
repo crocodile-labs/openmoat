@@ -550,6 +550,8 @@ ask:
     reason: reads the whole home folder, secrets included
     # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)
     fs.read: ["~", "~/.config"]
+    # another user's home (`~alice/.ssh/id_rsa`), which OpenMoat cannot place (S-08)
+    shell: ["@other-home *"]
   - id: opaque-code
     reason: a program OpenMoat cannot read may open any file or variable
     # `<program> @<text>` atoms: an awk or sed program, or a text-tool option, not understood

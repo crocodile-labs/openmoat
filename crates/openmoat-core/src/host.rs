@@ -37,6 +37,24 @@ pub fn of_word(token: &str) -> Option<String> {
     }
 }
 
+/// Host named by an argument of `program`: [`of_word`], after taking off the address
+/// type `socat` puts in front of a host (`TCP:evil.com:443`, `OPENSSL:evil.com:443`).
+#[must_use]
+pub fn of_argument(program: &str, token: &str) -> Option<String> {
+    let address = match token.split_once(':') {
+        Some((kind, rest))
+            if program == "socat"
+                && !kind.is_empty()
+                && kind.len() <= 16
+                && kind.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') =>
+        {
+            rest
+        }
+        _ => token,
+    };
+    of_word(address)
+}
+
 /// `[userinfo@]host[:port]` up to the first `/`, `?` or `#`. `_` is kept: DNS
 /// itself allows it and resolvers look such names up (`a_b.evil.com`), so a
 /// rule must still see the host.
