@@ -25,6 +25,33 @@ fn database_and_wal_files_are_owner_only() {
     }
 }
 
+/// Windows has no mode bits: the log relies on the ACL it inherits from the
+/// user's profile directory, as `~/.moat` does. No broad group may read it.
+#[cfg(windows)]
+#[test]
+fn database_and_wal_files_inherit_a_user_only_acl() {
+    let profile = std::env::var_os("USERPROFILE").expect("USERPROFILE");
+    let dir = tempfile::tempdir_in(profile).unwrap();
+    let path = dir.path().join("audit.db");
+    let store = Store::open(&path).unwrap();
+    let d = decision(Verdict::Allow, "dev-shell", "ok");
+    let a = Action::Shell {
+        command: "git status".into(),
+    };
+    store.record(&sample(&d, &a)).unwrap();
+    for name in ["audit.db", "audit.db-wal", "audit.db-shm"] {
+        let out = std::process::Command::new("icacls")
+            .arg(dir.path().join(name))
+            .output()
+            .unwrap();
+        let acl = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "{name}: {acl}");
+        for broad in ["Everyone", "BUILTIN\\Users", "Authenticated Users"] {
+            assert!(!acl.contains(broad), "{name} grants {broad}: {acl}");
+        }
+    }
+}
+
 fn decision(verdict: Verdict, rule: &str, reason: &str) -> Decision {
     let mut d = Decision::new(verdict);
     d.rules.push(rule.to_owned());

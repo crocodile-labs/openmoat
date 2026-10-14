@@ -80,6 +80,12 @@ fn codex_enforces_the_generated_profile() {
         text(&main)
     );
     assert_eq!(cat(&codex, &sb, &project, ".env"), None, "secrets-paths");
+    // On a case-insensitive filesystem (macOS by default) `.ENV` opens `.env`.
+    assert_eq!(
+        cat(&codex, &sb, &project, ".ENV"),
+        None,
+        "secrets-paths, in another case"
+    );
     let key = sb.home.join(".ssh/id_rsa");
     assert_eq!(
         cat(&codex, &sb, &project, &key.to_string_lossy()),
