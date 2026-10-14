@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Fixed
+- docs/THREAT_MODEL.md, docs/POLICY.md and SECURITY.md say `defer` where the default policy leaves a call to the agent's own prompt; they still said `ask` for `unparseable` input, recursive `rm`, discarding checkouts, `local-net`, `WebFetch`, `npx` and PowerShell ([#505](https://github.com/crocodile-labs/openmoat/pull/505)).
+
 ## [0.5.0-rc.2] - 2026-10-13
 
 A release candidate for testing; not a stable release. Quiet by default: OpenMoat denies what must never happen and leaves every other call to your agent's own permission prompt. Existing policies keep their `ask` defaults until `moat policy upgrade`.
