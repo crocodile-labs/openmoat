@@ -310,7 +310,7 @@ non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
   and `doctor --accept` before it re-pins) names the keys that were changed, added or
   removed: `settings.json was modified: changed hooks; added theme`. A lock written
   before that, or a file that no longer parses, gives the plain `was modified`. Only a person re-pins: `moat init`, or
-  `moat doctor --accept`, `moat allow`, `moat edit`, `moat trust` and `moat sandbox sync` from an
+  `moat doctor --accept`, `moat allow`, `moat edit`, `moat secret`, `moat trust` and `moat sandbox sync` from an
   interactive terminal.
 - **ConfigChange veto.** Claude Code reports settings changes; while any pinned file
   no longer matches the lock, every change is blocked for the session. Codex and Cursor have no such
@@ -323,9 +323,9 @@ non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
   `CURSOR_CONFIG_DIR` moved them, and where `moat init` recorded them in `hosts.json`), hook
   files and any `bin/moat`, and denies `moat
-  allow|doctor|edit|init|policy|trust|uninstall` and `moat sandbox sync` from an agent, including under pseudo-terminal
+  allow|doctor|edit|init|policy|secret|trust|uninstall` and `moat sandbox sync` from an agent, including under pseudo-terminal
   wrappers (ADR-011, ADR-014).
-- **Terminal check.** `moat allow`, `moat edit`, `moat trust`, `moat uninstall` and `moat doctor --accept` refuse to
+- **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall` and `moat doctor --accept` refuse to
   run without a terminal (`terminal.rs`). The debug-only `MOAT_ASSUME_TTY` override exists for tests.
 - **Stable hook path** (ADR-016). Hooks run the package manager's stable link to
   `moat`, not a versioned file an upgrade deletes; `doctor` and `status` name a hook

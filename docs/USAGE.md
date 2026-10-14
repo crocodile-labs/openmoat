@@ -172,6 +172,20 @@ moat: deny [kernel-integrity] — /Users/you/.moat/policy.yaml was modified;
 for. The policy language, the full default policy and recipes are in
 [POLICY.md](POLICY.md).
 
+### Keep a token from the agent
+
+An agent that calls an API needs its token, and an agent that can read the token can
+send it anywhere. A brokered secret stays with OpenMoat instead: the agent holds a
+placeholder, and the value goes only into one header of requests to one host. For
+GitHub:
+
+```bash
+moat secret add gh    # GITHUB_TOKEN, sent only to api.github.com; shows the change and asks
+```
+
+Then start a new agent session. Other services: `moat secret add <id> --host <host>
+--env <NAME>` (or `--file <path>`); [POLICY.md](POLICY.md) §2.1 has the details.
+
 ### After upgrading OpenMoat
 
 `moat init` keeps your policy, so a rule the new default gained is offered, not forced.
@@ -241,6 +255,7 @@ denied all of them):
 | `moat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h) or a permanent rule for exactly that command or those paths |
 | `moat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |
 | `moat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
+| `moat secret add gh` · `moat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only |
 | `moat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes |
 | `moat policy lint` · `moat policy check "<cmd>"` · `moat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |

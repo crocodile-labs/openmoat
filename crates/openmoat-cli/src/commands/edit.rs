@@ -81,7 +81,7 @@ fn edit(home: &Home, draft: &Path, before: &str) -> Result<Code> {
 }
 
 /// Keep the previous policy next to it, write the new one and re-pin.
-fn apply(home: &Home, before: &str, after: &str, out: &mut Deferred) -> Result<()> {
+pub(super) fn apply(home: &Home, before: &str, after: &str, out: &mut Deferred) -> Result<()> {
     // A pinned file changed while the editor was open would be accepted unseen.
     integrity::refuse_drift(home, "apply the edit")?;
     let path = home.policy_path();

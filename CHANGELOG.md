@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Added
+- `moat secret add gh` keeps the GitHub token from the agent in one step: it adds the brokered secret to the policy, shows the diff and asks, then re-pins and syncs the sandbox settings. Other services take `--host` and `--env` or `--file`. Agents are denied `moat secret` like `moat edit` (`kernel-self`).
+
 ### Security
 - The command after a shell reserved word (`do`, `then`, `if`, `!`, `{`, …) is classified as that command, so `for f in a; do cat ~/.ssh/id_rsa; done` is a read of the key; the reserved word was taken as the program and the command's file operands were missed. `for PATH in …` is a set of `PATH`, which `env-poison` denies.
 

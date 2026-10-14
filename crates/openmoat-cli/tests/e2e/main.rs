@@ -42,6 +42,7 @@ mod sandbox;
 #[cfg(unix)]
 mod sandbox_exec;
 mod sandbox_sync;
+mod secret;
 mod taint;
 mod team;
 mod trust;
