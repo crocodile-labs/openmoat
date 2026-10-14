@@ -1,3 +1,4 @@
+mod compound;
 mod database;
 mod path_options;
 mod quotes;

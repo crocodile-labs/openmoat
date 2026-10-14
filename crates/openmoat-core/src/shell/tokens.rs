@@ -74,3 +74,19 @@ pub fn flag_payload<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
 pub fn basename(program: &str) -> &str {
     program.rsplit(['/', '\\']).next().unwrap_or(program)
 }
+
+/// `NAME` of `for NAME in WORDS`, when the words are a plain `for` header.
+pub(super) fn for_variable(words: &[Word]) -> Option<&str> {
+    match words {
+        [f, name, i, ..] if !f.quoted && f.text == "for" && i.text == "in" => {
+            let ok = !name.text.is_empty()
+                && name
+                    .text
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                && !name.text.as_bytes()[0].is_ascii_digit();
+            ok.then_some(name.text.as_str())
+        }
+        _ => None,
+    }
+}

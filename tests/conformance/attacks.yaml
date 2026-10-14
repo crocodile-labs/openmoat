@@ -2038,3 +2038,25 @@
   action: { shell: "tar czf k.tgz ~alice/.aws" }
   expect: { verdict: ask, rules: [other-home] }
 
+# compound commands: a reserved word hides neither the command after it nor a loop
+# variable that poisons later commands
+- id: T1-key-read-inside-for-loop
+  threat: T1
+  action: { shell: "for f in a; do cat ~/.ssh/id_rsa; done" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-env-read-after-if
+  threat: T1
+  action: { shell: "if true; then cat .env; fi" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T3-secret-read-after-a-shell-variable
+  threat: T3
+  action: { shell: "x=1; echo $GITHUB_TOKEN" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-uppercase-variable-set-earlier-is-still-read
+  threat: T3
+  action: { shell: "NPM_TOKEN=x; echo $NPM_TOKEN" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T6-loop-variable-named-path
+  threat: T6
+  action: { shell: "for PATH in /tmp/x; do git status; done" }
+  expect: { verdict: deny, rules: [env-poison] }

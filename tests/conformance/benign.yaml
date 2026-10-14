@@ -900,3 +900,20 @@
 - id: benign-rg-attached-pattern
   action: { shell: "rg -e/api src" }
   expect: { verdict: allow, rules: [dev-shell] }
+# compound commands: each command after a reserved word is decided on its own, and
+# the loop variable is a shell variable
+- id: benign-for-loop-git-log
+  action: { shell: "for s in abc def; do git log -1 --format=%s $s; done" }
+  expect: { verdict: allow, rules: [dev-shell, shell-locals] }
+- id: benign-shell-variable-then-use
+  action: { shell: "n=3; git log -$n" }
+  expect: { verdict: allow, rules: [dev-shell, shell-locals] }
+- id: benign-if-test-then-echo
+  action: { shell: "if grep -q serde Cargo.toml; then echo rust; fi" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-python-isolated-script
+  action: { shell: "python3 -I scripts/check.py" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-python-two-safe-options
+  action: { shell: "python3 -I -u scripts/check.py" }
+  expect: { verdict: allow, rules: [dev-shell] }

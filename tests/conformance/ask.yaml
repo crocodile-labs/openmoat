@@ -1102,14 +1102,6 @@
 
 # The first dogfood day (2026-10-12): calls the agent made in normal work that matched
 # no rule. They defer, so OpenMoat shows no prompt of its own (ADR-025).
-- id: defer-python-isolated-mode-script
-  threat: T7
-  action: { shell: "python3 -I scripts/gh-rest.py GET repos/o/r/pulls" }
-  expect: { verdict: defer, rules: [default] }
-- id: defer-shell-loop-variables
-  threat: T7
-  action: { shell: "for sha in a1 b2; do git log -1 $sha; done" }
-  expect: { verdict: defer, rules: [default] }
 - id: defer-json-path-that-looks-like-a-host
   threat: T12
   action: { shell: "python3 x.py --get check_runs.0.id" }
@@ -1133,3 +1125,17 @@
   action: { shell: "python3 -c \"import config; print(config.dev)\"" }
   expect: { verdict: defer, rules: [default] }
 
+# the safe Python options are whole words: an attached `-c` runs code, and a loop
+# variable named like a poisoning one is still one
+- id: defer-python-attached-code-option
+  threat: T12
+  action: { shell: "python3 -Ic 'print(1)' x.py" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-lowercase-proxy-variable
+  threat: T6
+  action: { shell: "https_proxy=http://x.io:1; echo hi" }
+  expect: { verdict: defer, rules: [default] }
+- id: defer-npm-config-variable
+  threat: T6
+  action: { shell: "npm_config_script_shell=/tmp/x npm test" }
+  expect: { verdict: defer, rules: [default] }
