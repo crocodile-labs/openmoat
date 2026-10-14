@@ -10,7 +10,7 @@ use super::SimpleCommand;
 use crate::shell::tokens::basename;
 
 /// Text a command passes on through a pipe.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Piped {
     /// The text, as the shell after the pipe reads it.
     Text(String),

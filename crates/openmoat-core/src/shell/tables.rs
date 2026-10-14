@@ -84,7 +84,30 @@ pub const INLINE_INTERPRETERS: &[(&str, &[&str])] = &[
     ("osascript", &["-e"]),
     ("pwsh", &["-c", "-Command"]),
     ("powershell", &["-c", "-Command"]),
+    ("lua", &["-e"]),
+    ("luajit", &["-e"]),
+    ("Rscript", &["-e"]),
 ];
+
+/// The inline-code options of `program`, also when it is spelled with a version
+/// (`python3.12`, `python2.7`, `ruby3.3`, `lua5.4`).
+#[must_use]
+pub fn inline_flags(program: &str) -> Option<&'static [&'static str]> {
+    let exact = |p: &str| {
+        INLINE_INTERPRETERS
+            .iter()
+            .find(|(n, _)| *n == p)
+            .map(|(_, f)| *f)
+    };
+    exact(program).or_else(|| {
+        let base = program.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
+        let versioned = base.len() < program.len()
+            && program[base.len()..].starts_with(|c: char| c.is_ascii_digit());
+        // `python3.12` → `python3`, `python2.7` → `python`
+        let base = if base == "python" { "python3" } else { base };
+        versioned.then(|| exact(base)).flatten()
+    })
+}
 
 /// Programs for which every path argument is a write.
 pub const WRITE_ALL_PATHS: &[&str] = &[

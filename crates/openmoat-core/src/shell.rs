@@ -172,6 +172,10 @@ pub(crate) enum ClassifyError {
     UnbalancedParens,
     #[error("the shell runs text from `{0}` that the command line does not show")]
     UnknownStdin(String),
+    #[error("`{0}` depends on a variable whose value is not known")]
+    UnknownValue(String),
+    #[error("a variable set on the line may hold more than {MAX_DIRS} combinations of values")]
+    TooManyValues,
 }
 
 /// Accumulates atomic actions with de-duplication and a hard size bound.
@@ -189,10 +193,15 @@ pub(crate) struct Sink {
     /// Read and write atoms whose path is one of those globs: the engine
     /// evaluates every file it matches as well as the literal path.
     globs: Vec<AtomicAction>,
+    /// Words of the command line with a `$` the shell expands (not one from
+    /// single quotes): a path taken from one is not known as written.
+    dollar_words: Vec<String>,
     /// Lowercase shell variables an earlier command of the line set on its own
-    /// (`x=1;`, `for x in`), with the nesting depth: reading one is no
-    /// environment read. A child shell (`sh -c`) does not see them.
-    locals: Vec<(String, u8)>,
+    /// (`x=1;`, `for x in`), with the nesting depth and the values they may
+    /// hold, when those are known text. Such a variable is substituted where it
+    /// is used, and reading it is no environment read; one whose value is not
+    /// known is still an `env.read`. A child shell (`sh -c`) does not see them.
+    locals: Vec<(String, u8, Option<Vec<String>>)>,
     /// The nesting depth of the simple command being classified.
     depth: u8,
 }
@@ -206,14 +215,26 @@ impl Sink {
     /// `name`, set by a command of its own, is a shell variable from here on, if
     /// it is all lowercase: environment variables, secrets among them, are by
     /// convention uppercase, and deny rules name them so.
-    pub(crate) fn note_local(&mut self, name: &str) {
+    pub(crate) fn note_local(&mut self, name: &str, values: Option<Vec<String>>) {
         let lowercase = name.bytes().any(|b| b.is_ascii_lowercase())
             && name
                 .bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        // a later assignment replaces the earlier one
+        self.locals
+            .retain(|(n, d, _)| !(n == name && *d == self.depth));
         if lowercase {
-            self.locals.push((name.to_owned(), self.depth));
+            self.locals.push((name.to_owned(), self.depth, values));
         }
+    }
+
+    /// The variables at `depth` whose values are all known.
+    pub(crate) fn known_locals(&self, depth: u8) -> Vec<(String, Vec<String>)> {
+        self.locals
+            .iter()
+            .filter(|(_, d, _)| *d == depth)
+            .filter_map(|(n, _, v)| Some((n.clone(), v.clone()?)))
+            .collect()
     }
 
     pub(crate) fn push(&mut self, atom: AtomicAction) -> Result<(), ClassifyError> {
@@ -221,7 +242,7 @@ impl Sink {
             && self
                 .locals
                 .iter()
-                .any(|(n, d)| n == name && *d == self.depth)
+                .any(|(n, d, v)| n == name && *d == self.depth && v.is_some())
         {
             return Ok(());
         }
@@ -243,6 +264,13 @@ impl Sink {
 
     /// Every path `word` may name, or none when one of them is not known (skipped).
     fn paths(&mut self, ctx: &ShellContext<'_>, word: &str) -> Vec<String> {
+        // `cat $d/id_rsa`: the literal path is still checked, so a deny on it wins,
+        // but the file the shell opens is not known
+        if paths::has_unexpanded_variable(word)
+            && self.dollar_words.iter().any(|w| w.contains(word))
+        {
+            self.skip(ClassifyError::UnknownValue(word.to_owned()));
+        }
         ctx.paths(word).unwrap_or_else(|e| {
             // Another user's home cannot be placed, and it may hold that user's
             // secrets: `@other-home <word>`, which the `other-home` rule asks for.
@@ -259,15 +287,27 @@ impl Sink {
         })
     }
 
-    /// Remember the words of `tokens` the shell expands as globs.
+    /// Remember the words of `tokens` the shell expands as globs, and those
+    /// with a `$` it expands.
     pub(crate) fn note_globs(&mut self, tokens: &[Token]) {
         for token in tokens {
-            if let Token::Word(w) = token
-                && w.glob
-                && !self.glob_words.contains(&w.text)
-            {
-                self.glob_words.push(w.text.clone());
+            if let Token::Word(w) = token {
+                if w.glob && !self.glob_words.contains(&w.text) {
+                    self.glob_words.push(w.text.clone());
+                }
+                self.note_dollar_word(w);
             }
+        }
+    }
+
+    /// Remember `word` when the shell expands a `$` in it.
+    pub(crate) fn note_dollar_word(&mut self, word: &crate::lexer::Word) {
+        let expands = word
+            .text
+            .match_indices('$')
+            .any(|(pos, _)| !word.literal.iter().any(|span| span.contains(&pos)));
+        if expands && !self.dollar_words.contains(&word.text) {
+            self.dollar_words.push(word.text.clone());
         }
     }
 

@@ -37,15 +37,45 @@ pub fn resolve(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) 
         Some(_) => return None,
         None => expand_home(&unified, home)?,
     };
-    let s = expanded
+    let mut s = expanded
         .replace("${project}", project.unwrap_or_default())
         .replace("${HOME}", home)
         .replace("$HOME", home);
+    // `$PWD` is the working directory, when it is known
+    if s.contains("$PWD") || s.contains("${PWD}") {
+        let dir = cwd?;
+        s = s.replace("${PWD}", dir).replace("$PWD", dir);
+    }
     if is_absolute(&s) {
         Some(collapse(&s))
     } else {
         Some(collapse(&format!("{}/{s}", cwd?)))
     }
+}
+
+/// Whether `raw` still names a variable after the ones [`resolve`] expands
+/// (`HOME`, `PWD`, `project`): the shell replaces it with a value the path
+/// itself does not show, so the path is not known (`cat $d/id_rsa`).
+#[must_use]
+pub fn has_unexpanded_variable(raw: &str) -> bool {
+    let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    raw.match_indices('$').any(|(pos, _)| {
+        let rest = &raw[pos + 1..];
+        let (body, braced) = match rest.strip_prefix('{') {
+            Some(b) => (b, true),
+            None => (rest, false),
+        };
+        let end = body.find(|c: char| !is_name(c)).unwrap_or(body.len());
+        let name = &body[..end];
+        if name.is_empty() || !name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+            // `$1`, `$$`, `$?` and a lone `$` are positional or special: unknown
+            // too, except a bare `$` that starts no expansion (`a$`, `$/`)
+            return braced
+                || body.starts_with(|c: char| c.is_ascii_digit() || "@*#?$!-".contains(c));
+        }
+        let known = matches!(name, "HOME" | "PWD" | "project");
+        !(known && (!braced || body[end..].starts_with('}')))
+    })
 }
 
 /// `~+` (the working directory) and `~-` (the previous one), alone or before
