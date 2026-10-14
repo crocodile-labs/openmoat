@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A shell variable set on the line is substituted where it names a path or a host: `d=~/.ssh; cat $d/id_rsa` is denied. Since 0.5.0-rc.2 a lowercase variable's read was no environment read, and its path was taken as a file in the project, so the read was allowed. A path through a variable whose value is not known (`$X/id_rsa`, `d=$(pwd)`, `${d:-x}`) is `unparseable`, never allowed, and `$PWD` is the working directory.
+- Inline code of versioned interpreters (`python3.12 -c`, `python2.7 -c`) and of `lua -e`, `luajit -e` and `Rscript -e` is scanned for paths and hosts like `python3 -c`.
+
 ## [0.5.0-rc.4] - 2026-10-14
 
 A release candidate for testing; not a stable release. Fixes from a day of dogfooding the quiet default: commands after shell reserved words are checked as themselves, `for` loops, lowercase shell variables, `python3 -I script.py`, `grep` patterns and `tr` no longer leave normal work to the agent's prompt, and `moat secret add gh` keeps the GitHub token from the agent in one step.

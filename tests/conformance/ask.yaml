@@ -1136,3 +1136,16 @@
   threat: T4
   action: { shell: "tr '/' '_' < notes.txt" }
   expect: { verdict: defer, rules: [default] }
+# a path through a variable whose value the line does not show is not known
+- id: defer-path-through-a-computed-variable
+  threat: T1
+  action: { shell: "d=$(pwd); cat $d/id_rsa" }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: defer-path-through-an-environment-variable
+  threat: T1
+  action: { shell: "cat $X/id_rsa" }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: defer-path-through-a-transformed-variable
+  threat: T1
+  action: { shell: "d=~/.ssh; cat ${d:-x}/id_rsa" }
+  expect: { verdict: defer, rules: [unparseable] }

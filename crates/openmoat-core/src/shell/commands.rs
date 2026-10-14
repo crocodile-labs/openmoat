@@ -1,13 +1,14 @@
 //! From tokens to simple commands to atomic actions.
 
+mod locals;
 mod payload;
 mod piped;
 mod pipelines;
 
 use super::tables::{
-    ENV_BUILTINS, HOST_PROGRAMS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS,
-    RESERVED_PREFIXES, SHELLS, SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS,
-    WRAPPERS, WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS,
+    ENV_BUILTINS, HOST_PROGRAMS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS, RESERVED_PREFIXES,
+    SHELLS, SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS,
+    WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
     assignment_name, basename, flag_payload, for_variable, strip_at, word_env_refs,
@@ -30,7 +31,7 @@ enum Item {
 
 /// One simple command: words (assignments + argv), its redirection targets and
 /// its stdin data.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct SimpleCommand {
     words: Vec<Word>,
     reads: Vec<String>,
@@ -163,6 +164,11 @@ fn classify_simple(
     sink: &mut Sink,
     depth: u8,
 ) -> Result<(), ClassifyError> {
+    // `d=~/.ssh; cat $d/id_rsa`: a variable set earlier on the line is classified
+    // with each value it may hold
+    if locals::classify_with_values(cmd, ctx, sink, depth)? {
+        return Ok(());
+    }
     for w in cmd.words.iter().chain(&cmd.stdin) {
         for inner in &w.substitutions {
             classify_into(inner, ctx, sink, depth + 1)?;
@@ -203,7 +209,10 @@ fn classify_simple(
                 sink.push(AtomicAction::EnvRead { name })?;
             }
         }
-        sink.note_local(loop_var);
+        sink.note_local(
+            loop_var,
+            locals::loop_values(&cmd.words[idx + 3..], ctx.home),
+        );
         return Ok(());
     }
     let first_assignment = idx;
@@ -224,7 +233,8 @@ fn classify_simple(
         // `x=1` on its own sets a shell variable for the rest of the line
         for word in &cmd.words[first_assignment..idx] {
             if let Some(name) = assignment_name(&word.text) {
-                sink.note_local(name);
+                let value = locals::assignment_value(word, ctx.home);
+                sink.note_local(name, value.map(|v| vec![v]));
             }
         }
         return Ok(());
@@ -309,14 +319,13 @@ fn classify_simple(
     if let Some(inner) = wrapped_command(&argv, program) {
         return classify_wrapped(inner, ctx, sink, depth);
     }
-    if let Some((_, flags)) = INLINE_INTERPRETERS
-        .iter()
-        .find(|(name, _)| *name == program)
+    let inline = inline_flags(program);
+    if let Some(flags) = inline
         && let Some(payload) = flag_payload(&argv, flags)
     {
         payload::scan_payload(payload, ctx, sink)?;
     }
-    if INLINE_INTERPRETERS.iter().any(|(name, _)| *name == program) {
+    if inline.is_some() {
         for text in cmd.stdin_texts() {
             payload::scan_payload(text, ctx, sink)?;
         }

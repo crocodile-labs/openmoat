@@ -1,6 +1,6 @@
 //! Compound commands: reserved words, `for` loops and shell variables.
 
-use super::{has_read, parsed};
+use super::{ParseOutcome, classify, ctx, has_read, parsed};
 use crate::action::AtomicAction;
 
 fn shells(atoms: &[AtomicAction]) -> Vec<String> {
@@ -48,9 +48,61 @@ fn a_for_loop_sets_its_variable() {
     assert!(a.contains(&AtomicAction::EnvSet {
         name: "PATH".to_owned()
     }));
+    // known values are substituted: each command is classified with each value
+    let a = parsed("for s in a1 b2; do git log -1 $s; done");
+    assert!(!reads_env(&a, "s"), "{a:?}");
+    let s = shells(&a);
+    assert!(
+        s.contains(&"git log -1 a1".to_owned()) && s.contains(&"git log -1 b2".to_owned()),
+        "{s:?}"
+    );
+    // a value that is not known keeps the read
     let a = parsed("for s in $GITHUB_TOKEN b; do git log -1 $s; done");
     assert!(reads_env(&a, "GITHUB_TOKEN"), "{a:?}");
-    assert!(!reads_env(&a, "s"), "{a:?}");
+    assert!(reads_env(&a, "s"), "{a:?}");
+}
+
+#[test]
+fn a_known_variable_is_substituted_where_it_names_a_path() {
+    let a = parsed("d=~/.ssh; cat $d/id_rsa");
+    assert!(has_read(&a, "/Users/me/.ssh/id_rsa"), "{a:?}");
+    let a = parsed("d=~/.ssh; echo x > ${d}/authorized_keys");
+    assert!(
+        a.contains(&AtomicAction::FsWrite {
+            path: "/Users/me/.ssh/authorized_keys".to_owned()
+        }),
+        "{a:?}"
+    );
+    // a later assignment replaces the earlier value; values chain
+    assert!(has_read(
+        &parsed("d=x; d=~/.ssh; cat $d/id_rsa"),
+        "/Users/me/.ssh/id_rsa"
+    ));
+    assert!(has_read(
+        &parsed("d=~/.ssh; e=$d; cat $e/id_rsa"),
+        "/Users/me/.ssh/id_rsa"
+    ));
+    // inside single quotes nothing is expanded: the file is literally `$d/id_rsa`
+    assert!(has_read(
+        &parsed("d=~/.ssh; cat '$d/id_rsa'"),
+        "/p/$d/id_rsa"
+    ));
+}
+
+#[test]
+fn a_path_through_a_variable_that_is_not_known_is_unparseable() {
+    for cmd in [
+        "cat $X/id_rsa",
+        "d=$(pwd); cat $d/id_rsa",
+        "d=~/.ssh; cat ${d:-x}/id_rsa",
+        "d='~/.ssh'; cat $d/id_rsa",
+        "for f in src/*.rs; do wc -l $f; done",
+    ] {
+        assert!(
+            matches!(classify(cmd, &ctx()), ParseOutcome::Unparseable { .. }),
+            "{cmd}"
+        );
+    }
 }
 
 #[test]

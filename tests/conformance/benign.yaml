@@ -936,3 +936,13 @@
   threat: T4
   action: { shell: "tr -d/ < notes.txt" }
   expect: { verdict: allow, rules: [text-tools, project-fs] }
+# a loop or variable over project files is the files it names
+- id: benign-loop-over-project-files
+  action: { shell: "for f in src/a.rs src/b.rs; do wc -l $f; done" }
+  expect: { verdict: allow, rules: [dev-readonly, shell-locals, project-fs] }
+- id: benign-variable-naming-a-project-file
+  action: { shell: "f=src/main.rs; head -5 $f" }
+  expect: { verdict: allow, rules: [dev-shell, shell-locals, project-fs] }
+- id: benign-pwd-in-a-path
+  action: { shell: "cat $PWD/README.md" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
