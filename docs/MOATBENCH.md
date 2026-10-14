@@ -40,7 +40,9 @@ Windows), and reads each reply by that host's hook protocol
 
 A step is then compared with what the host must end up doing: an expected `ask`
 becomes a `deny` where the host cannot ask, and an expected `allow` is also met by
-`passthrough`. Gap markers name OpenMoat issues, so they apply only to OpenMoat. The
+`passthrough`. An expected `defer` (ADR-025) is `passthrough` on Claude Code and
+Codex; on Cursor it is `ask` for a shell or MCP call and `deny` for a file tool,
+where OpenMoat asks itself. Gap markers name OpenMoat issues, so they apply only to OpenMoat. The
 report ends with what that host does when its hook is missing, crashes or times out,
 as documented in `docs/THREAT_MODEL.md` §5; that part is host behaviour, not a test of
 the hook.

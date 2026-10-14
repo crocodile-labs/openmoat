@@ -87,7 +87,7 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
         decision.verdict = Verdict::Deny;
         decision
             .reasons
-            .push("the proxy cannot ask, so a host that would ask is refused".to_owned());
+            .push("the proxy cannot ask, so a host the hook would ask for or leave to the agent is refused".to_owned());
     }
     decision
 }

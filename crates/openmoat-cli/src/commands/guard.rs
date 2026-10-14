@@ -183,8 +183,8 @@ fn evaluate(
     let snapshot = Snapshot::load(&home.environment_path())?;
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
     let mut decision = compiled.decide_with(action, &snapshot, &FsPathResolver);
-    // A grant only turns an `ask` (or a `defer` the host turns into one, Cursor's file
-    // tools) into an `allow`; a deny stays a deny.
+    // A grant a person made with `moat allow` turns an `ask` or a `defer` into an
+    // `allow` (Cursor's file tools ask for a defer, so they need it); a deny stays a deny.
     if matches!(decision.verdict, Verdict::Ask | Verdict::Defer)
         && let Some(asked) = approvals::approvable(action, Some(&ctx.cwd), &ctx.home)
         && Grants::load(&home.grants_path())?.matches(

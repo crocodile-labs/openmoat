@@ -277,7 +277,9 @@ when you change an invariant (policy semantics, exit codes, crate boundaries).
 
 A shell-classifier bypass is not such a decision. The classifier triages; OS
 enforcement is the boundary (ADR-013). Report the bypass, add an attack fixture, and
-make the smallest change that turns it into `ask`.
+make the smallest change that turns it into `ask` or `deny`. Since ADR-025 an
+`unparseable` call defers under the default policy, so emit an atom a default rule
+names instead (`<program> @<argument>`, `<shell> @stdin`, a `net` host, a real path).
 
 ## Governance
 

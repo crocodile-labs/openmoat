@@ -2,7 +2,7 @@
 //!
 //! For every conformance fixture that is a file read, file write, network or
 //! fetch action, the lowered IR's verdict on the atoms the engine evaluates
-//! must be the engine's verdict with `ask` read as `deny`. A wider IR verdict
+//! must be the engine's verdict with `ask` and `defer` read as `deny`. A wider IR verdict
 //! (an allow the engine would not give) is a bypass of every OS layer; a
 //! narrower one would be allowed by ADR-019 but must then be reported as a
 //! loss, and the default policy has none on these fixtures.

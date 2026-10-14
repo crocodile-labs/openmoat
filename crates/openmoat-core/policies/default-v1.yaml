@@ -577,7 +577,7 @@ executables: {}
 
 # What the host sandboxes OpenMoat configures (ADR-018) may read beyond the project:
 # system and toolchain locations every build reads. Only OS layers use this list;
-# the hook still applies the rules above to these reads (ask), and secrets-paths
+# the hook still applies the rules above to these reads (defer), and secrets-paths
 # still wins inside them. Writes stay project-only. Missing paths are harmless.
 sandbox:
   read_roots:
