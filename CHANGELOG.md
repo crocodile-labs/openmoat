@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Fixed
+- `moat show`, `moat audit` and the other readers refuse an audit log a newer `moat` wrote (schema too new), as `moat guard` already does, instead of reading it with an older schema.
+
 ## [0.5.0-rc.3] - 2026-10-13
 
 A release candidate for testing; not a stable release. Security fixes found in a review of the quiet default: a bracket-glob read of a secret file that was allowed, more network clients and quoted hosts in inline code denied, unknown Cursor tools checked as writes, other users' homes asked, and docs that match the defer verdict.
