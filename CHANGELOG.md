@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- An uppercase variable set on the line (`X=~/.ssh; cat $X/id_rsa`, `export D=~/.ssh`) is substituted where it names a path or a host, like a lowercase one, so the read is denied; it was left to the agent's prompt.
+
 ## [0.5.0-rc.5] - 2026-10-14
 
 A release candidate for testing; not a stable release. A security fix: a shell variable set on the command line is checked as the path or host it holds, so `d=~/.ssh; cat $d/id_rsa` is denied (it was allowed in 0.5.0-rc.2 to rc.4). Inline code of versioned interpreters, `lua` and `Rscript` is scanned too.

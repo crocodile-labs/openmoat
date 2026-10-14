@@ -178,6 +178,15 @@ pub(crate) enum ClassifyError {
     TooManyValues,
 }
 
+/// All lowercase letters, digits and `_`, with one letter at least: a shell
+/// variable by convention, not an environment variable.
+pub(crate) fn is_lowercase(name: &str) -> bool {
+    name.bytes().any(|b| b.is_ascii_lowercase())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
 /// Accumulates atomic actions with de-duplication and a hard size bound.
 ///
 /// Every classifier function writes through a `&mut Sink`, never a bare
@@ -196,11 +205,12 @@ pub(crate) struct Sink {
     /// Words of the command line with a `$` the shell expands (not one from
     /// single quotes): a path taken from one is not known as written.
     dollar_words: Vec<String>,
-    /// Lowercase shell variables an earlier command of the line set on its own
-    /// (`x=1;`, `for x in`), with the nesting depth and the values they may
+    /// Shell variables an earlier command of the line set on its own (`x=1;`,
+    /// `for x in`, `export X=1`), with the nesting depth and the values they may
     /// hold, when those are known text. Such a variable is substituted where it
-    /// is used, and reading it is no environment read; one whose value is not
-    /// known is still an `env.read`. A child shell (`sh -c`) does not see them.
+    /// is used, whatever its case; reading a lowercase one is no environment
+    /// read, while an uppercase name, by convention an environment variable,
+    /// keeps its `env.read`. A child shell (`sh -c`) does not see them.
     locals: Vec<(String, u8, Option<Vec<String>>)>,
     /// The nesting depth of the simple command being classified.
     depth: u8,
@@ -216,16 +226,10 @@ impl Sink {
     /// it is all lowercase: environment variables, secrets among them, are by
     /// convention uppercase, and deny rules name them so.
     pub(crate) fn note_local(&mut self, name: &str, values: Option<Vec<String>>) {
-        let lowercase = name.bytes().any(|b| b.is_ascii_lowercase())
-            && name
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
         // a later assignment replaces the earlier one
         self.locals
             .retain(|(n, d, _)| !(n == name && *d == self.depth));
-        if lowercase {
-            self.locals.push((name.to_owned(), self.depth, values));
-        }
+        self.locals.push((name.to_owned(), self.depth, values));
     }
 
     /// The variables at `depth` whose values are all known.
@@ -239,6 +243,7 @@ impl Sink {
 
     pub(crate) fn push(&mut self, atom: AtomicAction) -> Result<(), ClassifyError> {
         if let AtomicAction::EnvRead { name } = &atom
+            && is_lowercase(name)
             && self
                 .locals
                 .iter()

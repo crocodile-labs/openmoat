@@ -82,6 +82,19 @@ fn a_known_variable_is_substituted_where_it_names_a_path() {
         &parsed("d=~/.ssh; e=$d; cat $e/id_rsa"),
         "/Users/me/.ssh/id_rsa"
     ));
+    // an uppercase name is substituted as well, and keeps its read
+    let a = parsed("X=~/.ssh; cat $X/id_rsa");
+    assert!(has_read(&a, "/Users/me/.ssh/id_rsa"), "{a:?}");
+    assert!(reads_env(&a, "X"), "{a:?}");
+    assert!(has_read(
+        &parsed("export D=~/.ssh; cat $D/id_rsa"),
+        "/Users/me/.ssh/id_rsa"
+    ));
+    // with an option the builtin may set an array, a number or a reference
+    assert!(matches!(
+        classify("declare -n D=x; cat $D/id_rsa", &ctx()),
+        ParseOutcome::Unparseable { .. }
+    ));
     // inside single quotes nothing is expanded: the file is literally `$d/id_rsa`
     assert!(has_read(
         &parsed("d=~/.ssh; cat '$d/id_rsa'"),

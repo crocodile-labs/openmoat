@@ -1149,3 +1149,9 @@
   threat: T1
   action: { shell: "d=~/.ssh; cat ${d:-x}/id_rsa" }
   expect: { verdict: defer, rules: [unparseable] }
+# a prefix assignment applies to the command, not to its words: bash expands `$D`
+# before it, so the path is not known
+- id: defer-path-through-a-prefix-assignment
+  threat: T1
+  action: { shell: "D=~/.ssh cat $D/id_rsa" }
+  expect: { verdict: defer, rules: [unparseable] }
