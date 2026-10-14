@@ -7,7 +7,7 @@ GitHub milestone. Neither carries dates.
 
 ## Where it is today
 
-The latest release is `0.5.0-rc.5` (beta), from GitHub Releases, the Homebrew tap and
+The latest release is `0.5.0` (stable), from GitHub Releases, the Homebrew tap and
 crates.io (README, Install). What exists:
 
 - One policy for Claude Code, Codex and Cursor, checked through each host's own hooks.
@@ -44,19 +44,17 @@ What it does not do: confine every call. Only commands inside the host sandboxes
 your permissions and the hook's decision is the only check, so a classifier mistake is
 a security bug ([THREAT_MODEL.md](THREAT_MODEL.md) §5).
 
-## Next: stable 0.5.0
+## Next: 0.5.x
 
-The 0.5.0 release candidates take fixes only, no new features. 0.5.0 is cut when all of
-these hold at the same time:
+0.5.0 is the first stable release with the quiet default. What comes next takes fixes
+only, released as 0.5.x:
 
-- three days in a row of the maintainer's own daily use with no new fixture (no new
-  false positive and no new bypass);
-- five or more people outside the project use it for a week on their own work, with no
-  false positive that blocks them;
-- the private bypass round (#131) is closed and every valid report is fixed;
-- no P1 or P2 issue is open.
+- five or more people outside the project use it for a week on their own work; every
+  false positive that blocks them becomes a fixture and a fix;
+- the private bypass round (#131); every valid report is fixed and credited;
+- the maintainer's own daily use continues, with the same rule.
 
-A failed condition starts its own count again once the fix is released.
+New features wait until these are done and no P1 or P2 issue is open.
 
 ## Positioning
 
