@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 63 | 30 | 3 |
+| T1 | Secret exfiltration via shell | 65 | 30 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 22 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 58 | 57 | 2 |
@@ -93,6 +93,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-glob-question-mark-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-star-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-class-reads-env` (attacks): Deny [secrets-paths]
+- `T1-glob-posix-class-reads-env` (attacks): Deny [secrets-paths]
+- `T1-glob-posix-class-reads-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-glob-class-head-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-negated-class-reads-env` (attacks): Deny [secrets-paths]
 - `T1-glob-directory-component-reads-ssh-key` (attacks): Deny [secrets-paths]

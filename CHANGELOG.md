@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A glob operand with a POSIX bracket class (`cat .e[[:alpha:]]v`, `cat ~/.s[[:alpha:]]h/id_rsa`) names the paths the shell opens, so `secrets-paths` denies it; it was allowed inside the project and left to the agent outside it.
+
 ## [0.5.0-rc.2] - 2026-10-13
 
 A release candidate for testing; not a stable release. Quiet by default: OpenMoat denies what must never happen and leaves every other call to your agent's own permission prompt. Existing policies keep their `ask` defaults until `moat policy upgrade`.
