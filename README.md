@@ -121,8 +121,10 @@ exceptions are under [Limits](#limits).
 - **Your network.** Agents connect only to destinations the policy allows. Cloud
   metadata services are refused, and connections to services on this machine go through
   your agent's own prompt.
-- **OpenMoat itself.** The agent cannot edit, approve or switch off OpenMoat. If its
-  policy or settings change behind its back, everything is blocked until you review.
+- **OpenMoat itself.** The agent is denied editing, approving or uninstalling OpenMoat
+  through its tools. If its policy or settings change behind its back, everything is
+  blocked until you review. One gap: if the `moat` binary itself goes missing, Claude Code
+  and Codex run calls unchecked ([Limits](#limits)).
 - **A record of every decision.** Every decision goes into a local audit log that detects
   tampering and can be exported and verified by your team.
 
