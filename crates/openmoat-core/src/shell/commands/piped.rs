@@ -14,23 +14,32 @@ use crate::shell::tokens::basename;
 pub(super) enum Piped {
     /// The text, as the shell after the pipe reads it.
     Text(String),
-    /// The program prints text the command line does not show.
+    /// `echo` or `printf` print text the command line does not show (an escape
+    /// or a format the classifier does not read).
     Unknown(String),
+    /// Any other program: its output is not on the command line (`rev`, `tr`,
+    /// `cat FILE`, a download already judged on its own).
+    Output(String),
 }
 
 impl Piped {
     pub(super) fn text(&self) -> Option<&str> {
         match self {
             Self::Text(text) => Some(text),
-            Self::Unknown(_) => None,
+            Self::Unknown(_) | Self::Output(_) => None,
         }
     }
 
     pub(super) fn unknown(&self) -> Option<&str> {
         match self {
             Self::Unknown(program) => Some(program),
-            Self::Text(_) => None,
+            Self::Text(_) | Self::Output(_) => None,
         }
+    }
+
+    /// True when a shell reading this runs text the command line does not show.
+    pub(super) fn is_hidden(&self) -> bool {
+        !matches!(self, Self::Text(_))
     }
 }
 
@@ -52,7 +61,10 @@ pub(super) fn data(cmd: &SimpleCommand) -> Option<Piped> {
             let text = expand_newlines(&printed.join(" ")).filter(|_| !format);
             Some(text.map_or_else(|| Piped::Unknown(basename(program).to_owned()), Piped::Text))
         }
-        _ => None,
+        // Any other program prints what the command line does not show (`rev`, `tr`,
+        // `cat FILE`): a shell after the pipe runs text no rule saw.
+        [program, ..] => Some(Piped::Output(basename(program).to_owned())),
+        [] => None,
     }
 }
 
