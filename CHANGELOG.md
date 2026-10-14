@@ -18,6 +18,7 @@ view at the end of the file.
 - Common shell forms an agent writes no longer leave the call to the agent: a `for` loop or a lowercase shell variable (`n=3; git log -$n`) over allowed commands is allowed (`shell-locals`), and so is a project script run with whole-word safe Python options (`python3 -I script.py`).
 
 ### Fixed
+- A `grep` pattern is no longer read as a file: `grep -n '\.env' notes.md` was denied as a read of `.env` (a `\` became a path separator); with `-e` or `-f` anywhere every operand is still a file. `tr` is allowed (`text-tools`) and its character sets are not files, and reading Claude Code's own temporary folder is allowed (`agent-temp`).
 - docs/POLICY.md §3 and §4 had an outdated copy of seven paragraphs (here-documents, shell options, `cd`, symlinks, globs, braces) next to the current one; the outdated copies are gone.
 - `moat show`, `moat audit` and the other readers refuse an audit log a newer `moat` wrote (schema too new), as `moat guard` already does, instead of reading it with an older schema.
 

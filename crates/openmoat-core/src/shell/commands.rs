@@ -265,7 +265,7 @@ fn classify_simple(
     text_operands.data.extend(git::config_name(&argv));
     text_operands
         .data
-        .extend(options::fd_pattern(&argv, program));
+        .extend(options::fd_pattern(&argv, program).or(options::grep_pattern(&argv, program)));
     super::path_options::classify(&argv, program, &mut text_operands, ctx, sink)?;
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
 

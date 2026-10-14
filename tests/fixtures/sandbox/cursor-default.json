@@ -10,6 +10,8 @@
     "shell `cursor.unsandboxed`: Cursor runs a command outside its sandbox when its Auto-review classifier approves it (a command that cannot use the sandbox, or a rerun after a sandbox error), in Run Everything mode, in Allowlist mode with sandboxing off, and in the CLI unless it starts with `--sandbox enabled`; on Linux without Landlock v3 it asks instead"
   ],
   "losses": [
+    "fs.read `agent-temp`: `/tmp/claude-*/**` cannot be granted as a path, so it stays denied",
+    "fs.read `agent-temp`: `/private/tmp/claude-*/**` cannot be granted as a path, so it stays denied",
     "fs.read `sandbox.read_roots`: `/Users/me/.cargo` holds a denied path (`/Users/me/.cargo/credentials`), and sandbox.json cannot close a path inside one it grants, so it is not granted",
     "fs.read `default`: Cursor's file tools ask before reading outside the workspace and the read allowlist (readBoundary), where the hook may allow"
   ],

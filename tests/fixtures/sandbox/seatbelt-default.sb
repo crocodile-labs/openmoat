@@ -38,6 +38,10 @@
 ; allow project-fs (fs.read)
 (allow file-read*
   (subpath "/Users/me/proj"))
+; allow agent-temp (fs.read)
+(allow file-read*
+  (regex "^/tmp/claude-[^/]*(/.*)?$")
+  (regex "^/private/tmp/claude-[^/]*(/.*)?$"))
 ; sandbox.read_roots
 (allow file-read*
   (subpath "/usr")

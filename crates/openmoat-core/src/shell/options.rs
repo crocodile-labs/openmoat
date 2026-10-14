@@ -109,6 +109,76 @@ pub(super) fn fd_pattern(argv: &[String], program: &str) -> Option<usize> {
     argv[1..at].iter().all(flag).then_some(at)
 }
 
+/// `grep` flags that take no value (GNU and BSD), so the word after them is
+/// still the pattern.
+const GREP_FLAGS: &str = "abcEFGhHiIlLnoPqrRsTUvVwxyzZ";
+const GREP_LONG_FLAGS: &[&str] = &[
+    "--count",
+    "--ignore-case",
+    "--no-ignore-case",
+    "--line-number",
+    "--recursive",
+    "--dereference-recursive",
+    "--files-with-matches",
+    "--files-without-match",
+    "--only-matching",
+    "--quiet",
+    "--silent",
+    "--no-messages",
+    "--invert-match",
+    "--word-regexp",
+    "--line-regexp",
+    "--with-filename",
+    "--no-filename",
+    "--extended-regexp",
+    "--fixed-strings",
+    "--basic-regexp",
+    "--perl-regexp",
+    "--null",
+    "--null-data",
+    "--text",
+    "--byte-offset",
+    "--initial-tab",
+    "--color",
+    "--colour",
+];
+
+/// The index of the pattern of `grep`, `egrep` or `fgrep`: its first operand,
+/// text such as `\.env` or `a/b`, which grep never opens. Only when every word
+/// before it is a flag without a value (or a `--name=value`), and no word of the
+/// command gives the pattern another way: with `-e` or `-f` (in any cluster, or
+/// `--regexp`/`--file` in any abbreviation) every operand is a file, and GNU grep
+/// finds them anywhere on the line (`grep ~/.ssh/id_rsa -e x` reads the key).
+pub(super) fn grep_pattern(argv: &[String], program: &str) -> Option<usize> {
+    if !matches!(program, "grep" | "egrep" | "fgrep") {
+        return None;
+    }
+    let end = argv.iter().position(|a| a == "--").unwrap_or(argv.len());
+    let names_pattern = |a: &String| match a.strip_prefix("--") {
+        Some(long) => {
+            let name = long.split('=').next().unwrap_or(long);
+            name.is_empty() || "regexp".starts_with(name) || "file".starts_with(name)
+        }
+        None => a.len() > 1 && a.starts_with('-') && a[1..].contains(['e', 'f']),
+    };
+    if argv[1..end].iter().any(names_pattern) {
+        return None;
+    }
+    let at = argv[1..end]
+        .iter()
+        .position(|a| !a.starts_with('-'))
+        .map(|i| i + 1)
+        .or_else(|| (end + 1 < argv.len()).then_some(end + 1))?;
+    let flag = |a: &String| {
+        a == "--"
+            || GREP_LONG_FLAGS.contains(&a.as_str())
+            || (a.starts_with("--") && a.contains('='))
+            || a.strip_prefix('-')
+                .is_some_and(|f| !f.is_empty() && f.chars().all(|c| GREP_FLAGS.contains(c)))
+    };
+    argv[1..at].iter().all(flag).then_some(at)
+}
+
 /// `command -v name` and `command -V name` print how the shell would find
 /// `name` and run nothing.
 pub(super) fn only_describes(argv: &[String], program: &str) -> bool {
