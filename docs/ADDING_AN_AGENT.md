@@ -59,7 +59,7 @@ parser through `Host::wire`, as the Continue CLI does (`continue_cli.rs`).
 | The tool | `Action` | Example |
 |---|---|---|
 | runs a POSIX shell command | `Shell { command }` | Claude Code `Bash`, Cursor `beforeShellExecution` |
-| runs a shell OpenMoat cannot parse | `ForeignShell { shell, command }` (always asks) | Claude Code `PowerShell` |
+| runs a shell OpenMoat cannot parse | `ForeignShell { shell, command }` (always `unparseable`: `defer` under the default policy) | Claude Code `PowerShell` |
 | reads one file or directory | `FsRead { path }` | `Read`, `beforeReadFile` |
 | reads several | `ReadFiles { paths }` | `SendFile`, Cursor search tools |
 | searches a directory | `FsRead` of its path, else the working directory (`search_root`) | `Grep`, `Glob` |
@@ -68,7 +68,7 @@ parser through `Host::wire`, as the Continue CLI does (`continue_cli.rs`).
 | fetches a URL with no request body | `Fetch { url }` | `WebFetch` (ADR-017) |
 | opens a connection that can send data | `Net { url }` | `Monitor` WebSocket |
 | calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `mcp.rs` finds path and URL arguments |
-| a tool the hook receives for every tool and cannot classify | `UnknownTool { host, tool }`: `defaults.tool.unknown` decides, `ask` by default | Cursor `preToolUse` |
+| a tool the hook receives for every tool and cannot classify | `UnknownTool { host, tool }`: `defaults.tool.unknown` decides, `defer` in the default policy | Cursor `preToolUse` |
 | anything else | `None`: allowed with rule `ungoverned` and recorded | `TodoWrite`, `Task` |
 
 Rules the existing adapters follow:
@@ -87,11 +87,18 @@ Rules the existing adapters follow:
 - Keep the agent's session id (`session_or_unknown`) and call id. Grants, session
   taint and `moat allow --last` depend on them.
 
-## Answer allow, ask or deny
+## Answer allow, defer, ask or deny
 
 `render` writes the response the agent expects; `reason_line` gives the one-line reason
 for the model and the person. On a deny, `guard` also prints the reason on stderr and
 exits 2, so write the response even if the agent only reads the exit code.
+
+A `defer` (ADR-025) means OpenMoat neither objects nor vouches: the agent's own
+permission flow decides, as it would without OpenMoat. For an agent that runs its own
+flow when a hook gives no answer, render nothing and exit 0, as `pre_tool_use.rs` does.
+An agent with no such answer needs a mapping: Cursor's shell and MCP hooks send it as
+`ask` (`cursor.rs`), and for events that cannot prompt `Host::decided` records and
+answers it as `ask`. Find out from the agent's source which applies.
 
 Some agents cannot ask. Codex rejects `ask` and runs the call; the Continue CLI ignores
 it; Cursor accepts `ask` on `preToolUse` but runs the call, and `beforeReadFile` takes
@@ -178,6 +185,8 @@ runs the hook. Test at least:
 - a safe call is allowed;
 - an `ask` arrives as the agent needs it (a deny with `moat allow --last` if it cannot
   ask);
+- a deferred call is left to the agent (no output and exit 0, or the agent's own
+  prompt) and is not denied;
 - malformed arguments are denied;
 - `moat uninstall` removes the entries (see `e2e/uninstall.rs`).
 

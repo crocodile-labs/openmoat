@@ -34,10 +34,10 @@ host payload (stdin)
               └─► load policy + overlay    ~/.moat/policy.yaml + policy.d/approved.yaml
                     + repository policy    <project>/.moat/policy.yaml, tightening only
                     └─► classify (openmoat-core)  Action ⇒ atomic actions
-                          └─► engine            per atom: deny → allow → ask → defaults
+                          └─► engine            per atom: deny → allow → ask → defer → defaults
                                 └─► combine     strictest wins ⇒ Decision
-                                      └─► session grant   ask on a granted shell command ⇒ allow
-                                            └─► session taint     earlier calls in the audit log ⇒ allow may become ask
+                                      └─► session grant   ask or defer on a granted call ⇒ allow
+                                            └─► session taint     earlier calls in the audit log ⇒ allow or defer may become ask
                                                   └─► audit record      failure ⇒ deny [kernel-error]
                                                         └─► hook response (stdout) + exit code
 ```
@@ -74,13 +74,13 @@ exits. There is no daemon.
    cannot be read or does not parse is a `kernel-error` deny.
 7. **Decide.** `CompiledPolicy::compile(policy, ctx).decide_with(action, snapshot,
    FsPathResolver)` classifies and evaluates (§3, §4).
-8. **Grant.** An `ask` for a shell command whose exact text was granted for this host
+8. **Grant.** An `ask` or `defer` for a call whose exact text was granted for this host
    session with `moat allow` becomes `allow` with rule `approved-session`. A grant
    never touches a `deny` and expires 24 h after it was given; expired grants are
    ignored and pruned.
 9. **Taint.** `taint::of_session` (`taint.rs`) reads this host session's earlier events
    from the audit log. It folds `CompiledPolicy::exposure` over the calls that may have
-   run: allowed calls, and asks on a host that can ask. Each call is resolved from its
+   run: allowed and deferred calls, and asks on a host that can ask. Each call is resolved from its
    own recorded working directory. `CompiledPolicy::with_taint` then tightens the
    decision (POLICY.md §4.1). This runs after the grant, so a grant cannot lift a taint
    ask. A log or session event that cannot be read is a `kernel-error` deny. An edited
@@ -100,7 +100,7 @@ unrecorded, and exits 2, since a host that times the hook out runs the call
 ## 3. Classification
 
 `openmoat-core` turns an `Action` into atomic actions (`AtomicAction`): `Shell`,
-`Pipeline`, `FsRead`, `FsWrite`, `Net`, `Fetch`, `EnvRead`, `EnvSet`, `McpTool`.
+`Pipeline`, `FsRead`, `FsWrite`, `Net`, `NetWord`, `Fetch`, `WebSearch`, `UnknownTool`, `EnvRead`, `EnvSet`, `McpTool`.
 
 - **Shell** (ADR-005). The lexer (`lexer/`) reads words, quotes, escapes, operators,
   redirections, `$( … )`, backticks, here-documents and here-strings, up to 64 KB, and
@@ -109,35 +109,38 @@ unrecorded, and exits 2, since a host that times the hook out runs the call
   atom per pipeline suffix. It recurses into `sh -c`, `eval`, substitutions and
   wrappers (`sudo`, `env`, `xargs`, `timeout`, …) to depth 4. It adds `fs.read`/`fs.write`
   atoms for redirections and file operands (`operands.rs`), relative paths resolved
-  through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs and hosts, and `env.*` atoms
+  through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs and the hosts of programs that name hosts (any other host-shaped word is a `NetWord`), and `env.*` atoms
   for assignments and `$VAR` reads. Shell options are read per shell
   (`invocation.rs`), git's global options are unwrapped (`git.rs`), `make` arguments
   that run code (`make.rs`), options that run programs (`options.rs`), option values
   that name files in every spelling (`path_options.rs`) and decoder pipelines
   (`decoders.rs`) are surfaced. Inline interpreter code (`python -c`, `node -e`) is scanned for paths, hosts and variable names, not parsed. Output is
   capped at 2048 atoms.
-- **ForeignShell** (Claude Code `PowerShell`). Always `ask` with rule `unparseable`;
+- **ForeignShell** (Claude Code `PowerShell`). Always rule `unparseable` (below);
   there is no PowerShell parser.
 - **ReadFiles** (Claude Code `SendFile`, absolute Glob patterns). One `fs.read` per
-  path; an empty list asks.
+  path; an empty list is `unparseable`.
 - **Patch** (Codex `apply_patch`, a write-shaped Cursor tool naming several paths). One
-  `fs.write` per added, updated, deleted or moved-to file; a patch naming no file asks.
+  `fs.write` per added, updated, deleted or moved-to file; a patch naming no file is `unparseable`.
   A header line is matched trimmed and in any case, as Codex reads it, wherever it is.
 - **McpTool.** An `mcp` atom for the tool name, plus `fs.*` and `net` atoms for path-
   and URL-shaped arguments found down to 8 levels of nesting (`openmoat-hosts/src/mcp.rs`).
   When deeper nesting stops the search, the adapter names the limit in `unchecked`, and
-  the engine adds an `unparseable` ask to the decision.
+  the engine adds an `unparseable` atom to the decision.
 - **Fetch** (Claude Code `WebFetch`). A `fetch` atom for the URL's host (ADR-017).
 - **WebSearch** (Claude Code and Cursor `WebSearch`). A `web.search` atom for the query;
   the host picks the search provider, so only `defaults` and session taint decide it.
 - **UnknownTool** (a Cursor `preToolUse` tool the adapter cannot classify). A
-  `tool.unknown` atom for the tool name; only `defaults` (`ask` in the default policy)
-  and session taint decide it.
+  `tool.unknown` atom for the tool name; only `defaults` (`defer` in the default policy)
+  and session taint decide it. Cursor's `preToolUse` cannot prompt, so `Host::decided`
+  records and answers a `defer` there as `ask` (§5).
 
-Anything the lexer or classifier cannot make sense of is `unparseable`, which the
-engine turns into `ask`, never `allow`. `ParseOutcome::Unparseable` carries the atoms
-classified around the part that failed (other simple commands, other MCP arguments), and
-the engine merges its `ask` with their decisions, so the failing part cannot hide a deny.
+Anything the lexer or classifier cannot make sense of is `unparseable`, never `allow`:
+the engine gives it `Defaults::unclassified`, which is `defer` when the catch-all
+(`"*"`) is `allow` or `defer`, as in the default policy, and `ask` when it is `ask` or
+`deny` (ADR-025). `ParseOutcome::Unparseable` carries the atoms classified around the
+part that failed (other simple commands, other MCP arguments), and the engine merges the
+`unparseable` verdict with their decisions, so the failing part cannot hide a deny.
 
 ### Host tool mapping
 
@@ -171,11 +174,14 @@ third-party capture shows `Grep` and `Read` send `file_path`; the rest is unveri
 
 ## 4. Decision
 
-For each atomic action, the lists are tried in order `deny → allow → ask`; the first
-list with a match decides that atom. A repository policy's ask groups (`repo_ask`) are
-tried between `deny` and `allow`. If none matches, `defaults` decides (rule id
-`default.<kind>` or `default`). The verdict for the tool call is the strictest across
-its atoms: `deny > ask > allow`. Deny is absolute (ADR-002). A `fetch` atom also
+For each atomic action, the lists are tried in order `deny → allow → ask → defer`; the
+first list with a match decides that atom. A repository policy's ask groups (`repo_ask`)
+are tried between `deny` and `allow`. If none matches, `defaults` decides (rule id
+`default.<kind>` or `default`). A `NetWord` atom (a word that only looks like a host,
+outside the programs that name hosts) is matched by `net` rules, but with no match the
+catch-all decides it, not `defaults.net` (ADR-025). The verdict for the tool call is the
+strictest across its atoms: `deny > ask > defer > allow`. `defer` means OpenMoat neither
+objects nor vouches: the agent's own permission flow decides. Deny is absolute (ADR-002). A `fetch` atom also
 matches `net` patterns and falls back to the `net` default (ADR-017). The decision
 carries the rule ids that produced the final verdict and weaker matches as context.
 
@@ -216,14 +222,14 @@ through the engine (§12).
 Per access the IR applies deny rules, then allow rules, then the default.
 `ir::Checker` is that reference evaluation.
 
-**Lowering never widens.** An `ask` default lowers to deny. An `ask` rule disappears
+**Lowering never widens.** `defer` lowers exactly like `ask` (ADR-025). An `ask` default lowers to deny. An `ask` rule disappears
 under a deny default, where the outcome is the same. Under an allow default it becomes a
 deny rule, which also denies where an allow matches. Each case is a loss.
 
 Two tests prove agreement with the engine:
 - `tests/ir_consistency.rs` checks every fs, net, fetch and patch conformance fixture.
   The IR verdict on the engine's own atoms (`CompiledPolicy::atoms`, symlinks included)
-  must equal the engine verdict, with `ask` read as deny.
+  must equal the engine verdict, with `ask` and `defer` read as deny.
 - `tests/ir_never_widens.rs` lowers generated policies and checks that an IR allow is
   always an engine allow.
 
@@ -233,9 +239,15 @@ Two tests prove agreement with the engine:
 
 | Host event | Response | Exit |
 |---|---|---|
-| Claude Code, Codex, Continue CLI `PreToolUse` | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":…,"permissionDecisionReason":…}}` | 0, or 2 on deny |
+| Claude Code, Codex, Continue CLI `PreToolUse` | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":…,"permissionDecisionReason":…}}`; nothing for a `defer` | 0, or 2 on deny |
 | Cursor `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | `{"permission":…,"user_message":…,"agent_message":…}` | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
+
+A `defer` (ADR-025) writes no output for Claude Code, Codex and the Continue CLI and
+exits 0, so the host's own permission flow runs as it would without OpenMoat. Cursor's
+`beforeShellExecution` and `beforeMCPExecution` receive it as `ask`, which is Cursor's own
+prompt; on `preToolUse` and `beforeReadFile`, which cannot prompt, `Host::decided`
+records and answers it as `ask` (below). `guard` prints no trace line for a `defer`.
 
 `ask` is the host's own prompt; OpenMoat has no prompt of its own. Codex cannot ask:
 its `PreToolUse` rejects `permissionDecision: "ask"` as unsupported and then runs the
@@ -277,7 +289,7 @@ prompt. `moat init` therefore does not install `PermissionRequest`. `guard` refu
 event as a wrong event (deny, exit 2, reason on stderr), which Codex reads as a deny
 (`tests/fixtures/hosts/codex/permission-request-shell.json`, built from Codex's
 `permission-request.command.input.schema.json`). Exit codes follow
-ADR-004 and ADR-015: 0 allow or ask, 2 deny, 3 unresolved ask from `moat policy
+ADR-004 and ADR-015: 0 allow, defer or ask, 2 deny, 3 unresolved ask from `moat policy
 check`, 64 usage or configuration error. `moat run` exits 1 when the agent it started
 exits non-zero; never 2 or 3. `guard` never exits 64: an argument it cannot
 parse is a deny with exit 2, because Claude Code and Codex proceed on any other
@@ -437,7 +449,7 @@ rules apply in the hook.
 ## 9. Invariants
 
 The full list, with the tests that hold each one, is AGENTS.md §3. In short: deny is
-absolute; strictest wins; unparseable is `ask`; every error path in `guard` is a deny
+absolute; strictest wins; unparseable is never `allow` (`ask`, or `defer` under an allow or defer catch-all); every error path in `guard` is a deny
 with exit 2; exit codes 2 and 3 mean nothing else; nothing persisted skips
 redaction; the core stays pure; `moat init` never overwrites a policy or duplicates a
 hook; the lock is checked before any decision.
@@ -512,7 +524,7 @@ host outside TLS termination.
      Refuse (`proxy-secret`) a request whose head, or body bytes read with it, carries a
      brokered secret's placeholder or value when the host is not that secret's own.
   2. Decide the host as a `fetch` atom through `CompiledPolicy` (POLICY.md §4). Only
-     `allow` passes. An `ask` is refused, because the proxy cannot prompt.
+     `allow` passes. An `ask` or a `defer` is refused, because the proxy cannot prompt.
      `metadata.google.internal` and `metadata.goog` are refused by name whatever the
      policy says.
   3. Resolve the name with the system resolver (IP literals skip it). Refuse the
