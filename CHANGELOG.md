@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A host quoted as an argument of a program that names hosts (`curl 'host'`, `ssh "user@host"`) and a host after git's global options (`git -C dir push host:repo`) are network again, so an unlisted host is denied instead of left to the agent; the output of any program other than `cat`, `echo` or `printf`, and of a `( … )` group, piped into a shell asks (`opaque-code`) like other text the command line does not show.
+
 ## [0.5.0-rc.2] - 2026-10-13
 
 A release candidate for testing; not a stable release. Quiet by default: OpenMoat denies what must never happen and leaves every other call to your agent's own permission prompt. Existing policies keep their `ask` defaults until `moat policy upgrade`.

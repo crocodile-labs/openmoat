@@ -126,3 +126,28 @@ fn piped_text_the_line_does_not_show_is_unparseable() {
     parsed("printf '\\x63at .env' | grep cat");
     parsed("printf '%s' x | sh x.sh");
 }
+
+/// The output of any other program is text the line does not show either: a shell
+/// reading it runs `<shell> @stdin`, which `opaque-code` asks for.
+#[test]
+fn another_programs_output_piped_into_a_shell_is_hidden_stdin() {
+    for (cmd, shell) in [
+        ("rev <<< 'vne. tac' | sh", "sh"),
+        ("tr A-Z a-z <<< 'CAT .ENV' | bash -s", "bash"),
+        ("cat notes.txt | sh", "sh"),
+    ] {
+        let stdin = AtomicAction::Shell {
+            argv: vec![shell.to_owned(), "@stdin".to_owned()],
+        };
+        assert!(parsed(cmd).contains(&stdin), "{cmd}");
+    }
+    for cmd in ["rev notes.txt | grep x", "rev notes.txt | sh x.sh"] {
+        assert!(
+            !parsed(cmd).iter().any(|a| matches!(
+                a,
+                AtomicAction::Shell { argv } if argv.last().is_some_and(|w| w == "@stdin")
+            )),
+            "{cmd}"
+        );
+    }
+}
