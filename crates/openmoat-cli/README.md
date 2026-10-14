@@ -2,7 +2,7 @@
 
 The command-line tool of [OpenMoat](https://github.com/crocodile-labs/openmoat):
 it checks the tool calls Claude Code, Codex and Cursor report through their hooks
-against one policy (allow, ask or deny), configures those agents' own sandboxes from
+against one policy (allow, defer to the agent's own prompt, ask, or deny), configures those agents' own sandboxes from
 that policy, and keeps a local, tamper-evident audit log. This crate owns all I/O: files,
 environment, terminal, host configuration. Decisions come from `openmoat-core`.
 
@@ -33,7 +33,7 @@ Installers, Homebrew and the full guide: the
 | `moat proxy [--listen 127.0.0.1:<port>]` | run the default-deny egress proxy |
 | `moat guard --host <id>` | hook entry point: payload on stdin, decision on stdout; fail-closed |
 
-Exit codes are a contract (ADR-004): 0 allow/ok, 1 the agent `moat run` started
+Exit codes are a contract (ADR-004): 0 allow, defer or ok, 1 the agent `moat run` started
 exited non-zero, 2 deny, 3 unresolved ask, 64 usage or configuration error.
 
 Environment: `MOAT_HOME` (state directory, default `~/.moat`), `CLAUDE_CONFIG_DIR`,

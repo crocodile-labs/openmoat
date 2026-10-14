@@ -27,8 +27,10 @@ const PATH_KEYS: &[&str] = &[
 /// Cursor documents tool names but no file tool's arguments
 /// (`tests/fixtures/hosts/cursor/README.md`, #138). A search reads every path
 /// key it carries (a captured `Grep` sends `file_path`, not `path`). Any other
-/// tool that names a path is checked instead of passed: as writing it when its
-/// name is write-shaped (`DeleteDirectory`, `Rename`), else as reading it. A
+/// tool that names a path is checked instead of passed: as reading it only when
+/// it is one of Cursor's listing and search tools ([`READ_ONLY_TOOLS`]), else as
+/// writing it, since a name without a write verb (`search_replace`) may still
+/// edit the file and Cursor's file tools run outside its sandbox. A
 /// tool that names no such path is an [`Action::UnknownTool`], which the policy
 /// decides (`ask` by default) instead of passing it unseen.
 pub(super) fn pre_tool_action(
@@ -57,10 +59,10 @@ pub(super) fn pre_tool_action(
         }
         _ => {
             let paths = read_paths(tool, input)?;
-            let checked = if is_write_shaped(tool) {
-                writes(paths)
-            } else {
+            let checked = if READ_ONLY_TOOLS.contains(&tool) && !is_write_shaped(tool) {
                 reads(paths)
+            } else {
+                writes(paths)
             };
             match checked {
                 None if AGENT_STATE_TOOLS.contains(&tool) => None,
@@ -75,6 +77,19 @@ pub(super) fn pre_tool_action(
 /// Code's, which Cursor keeps for third-party hooks, and the agent's own
 /// `todo_write`.
 const AGENT_STATE_TOOLS: &[&str] = &["TodoWrite", "TodoRead", "todo_write"];
+
+/// Cursor's own tools that only list or search what they name (the `target_*`
+/// keys of [`PATH_KEYS`]); any other tool naming a path is checked as a write.
+const READ_ONLY_TOOLS: &[&str] = &[
+    "LS",
+    "ListDir",
+    "list_dir",
+    "SemanticSearch",
+    "codebase_search",
+    "grep_search",
+    "file_search",
+    "read_file",
+];
 
 fn unknown(tool: &str) -> Action {
     Action::UnknownTool {

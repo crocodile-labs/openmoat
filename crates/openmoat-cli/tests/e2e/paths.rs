@@ -80,13 +80,7 @@ fn tilde_user_paths_are_home_directories() {
         "deny",
         "secrets-paths",
     );
-    assert_verdict(
-        &sb,
-        &project,
-        "cat ~alice/notes.txt",
-        "defer",
-        "unparseable",
-    );
+    assert_verdict(&sb, &project, "cat ~alice/notes.txt", "ask", "other-home");
     assert_verdict(&sb, &project, "cat ~-/notes.txt", "defer", "unparseable");
 }
 

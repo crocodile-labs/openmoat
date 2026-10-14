@@ -22,16 +22,22 @@ pub(super) fn scan_payload(
         let tail = &rest[start..];
         let end = tail.find(is_separator).unwrap_or(tail.len());
         let raw = &tail[..end];
+        // In a string (`urlopen('evil.com')`), not a bare dotted word.
+        let quote = rest[..start]
+            .chars()
+            .last()
+            .filter(|c| matches!(c, '\'' | '"' | '`'));
         rest = &tail[end..];
+        let in_string = quote.is_some_and(|q| rest.starts_with(q));
         // A word followed by `(` is a call (`subprocess.run(`, `app.dev(`), never a
         // host: a host in code is a string, so a quote or an operator follows it.
         let called = rest.starts_with('(');
         if paths::looks_like_path(raw) {
             sink.read(ctx, raw)?;
         } else if let Some(host) = host::of_word(raw).filter(|_| !called) {
-            // Code names a host it contacts as a URL; a bare dotted word is more
-            // often an attribute (`config.dev`), so it only looks like one (ADR-025).
-            sink.push(if raw.contains("://") {
+            // Code names a host it contacts as a URL or a string; a bare dotted word
+            // is more often an attribute (`config.dev`), so it only looks like one.
+            sink.push(if raw.contains("://") || in_string {
                 AtomicAction::Net { host }
             } else {
                 AtomicAction::NetWord { host }

@@ -195,8 +195,41 @@ pub const IGNORED_VARS: &[&str] = &["HOME", "PWD", "OLDPWD", "USER", "SHELL", "T
 /// Programs whose arguments name hosts: a host-shaped word there is network
 /// evidence (`Net`), elsewhere only a word that looks like one (`NetWord`, ADR-025).
 pub const HOST_PROGRAMS: &[&str] = &[
-    "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "telnet", "ftp", "ping",
-    "dig", "nslookup", "host",
+    "curl",
+    "wget",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "nc",
+    "ncat",
+    "netcat",
+    "telnet",
+    "ftp",
+    "ping",
+    "dig",
+    "nslookup",
+    "host",
+    // more clients that connect where their arguments say
+    "openssl",
+    "socat",
+    "mosh",
+    "lftp",
+    "aria2c",
+    "nmap",
+    "psql",
+    "mysql",
+    "redis-cli",
+    "mongo",
+    "mongosh",
+    "http",
+    "https",
+    "xh",
+    "curlie",
+    "wget2",
+    "whois",
+    "traceroute",
+    "mtr",
 ];
 
 /// `git` subcommands whose arguments name a remote host ([`HOST_PROGRAMS`]).

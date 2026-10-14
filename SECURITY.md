@@ -80,9 +80,9 @@ These are known limits, documented in `docs/THREAT_MODEL.md` §4–5 and
 | Sandbox gaps listed as gaps in `docs/EVIDENCE.md` or as losses by `moat sandbox show` (for example, on Linux `moat run` cannot deny `.env` inside the project) | tracked in the issue each one names |
 | HTTPS secret injection, and per-host method and path rules, in `moat proxy` | #247 |
 | Data sent to a host the policy allows (`api.github.com`, registries) by an allowed or approved command, including project scripts such as `npm test` | known limit; session taint asks for network after a secret read |
-| PowerShell / cmd tokenisation | Claude Code `PowerShell` always asks; other PowerShell lines are lexed as POSIX and fall through to the `ask` default |
+| PowerShell / cmd tokenisation | Claude Code `PowerShell` is always `unparseable`, which the default policy defers to the agent's own prompt (ADR-025); other PowerShell lines are lexed as POSIX and fall through to the catch-all default |
 | Hosts that proceed when the hook binary is missing or killed | host limitation; `moat status` reports a missing hook |
-| Tools no hook reports (Claude Code `WebSearch`, Codex web search) | host limitation: the hook never sees them |
+| Tools no hook reports (Codex web search and other hosted tools) | host limitation: the hook never sees them |
 | An attacker with root or the user's own shell, a compromised release pipeline, prompt-injection detection in text | not a target (THREAT_MODEL §4) |
 | Agents running in a vendor's cloud rather than on the host | not a target |
 

@@ -136,12 +136,67 @@ impl<'r> Expansion<'r> {
 /// The matcher for one path component holding `*`, `?` or `[`, or `None` when
 /// it does not compile.
 fn component_glob(component: &str) -> Option<GlobMatcher> {
-    GlobBuilder::new(&component.replace("[^", "[!"))
+    GlobBuilder::new(&widen_classes(&component.replace("[^", "[!")))
         .literal_separator(true)
         .backslash_escape(false)
         .build()
         .ok()
         .map(|g| g.compile_matcher())
+}
+
+/// `component` with every bracket expression that holds a POSIX class, an
+/// equivalence class or a collating symbol (`[[:alpha:]]`, `[[=e=]]`, `[[.a.]]`)
+/// made `?`. globset ends that set at the first `]` (the one after `:alpha:`)
+/// and reads the second `]` as a literal, so it would name fewer paths than the
+/// shell opens; any one character names at least as many.
+fn widen_classes(component: &str) -> String {
+    let chars: Vec<char> = component.chars().collect();
+    let mut out = String::with_capacity(component.len());
+    let mut i = 0;
+    while let Some(&c) = chars.get(i) {
+        if c == '['
+            && let Some((end, special)) = bracket_end(&chars, i)
+        {
+            if special {
+                out.push('?');
+            } else {
+                out.extend(&chars[i..=end]);
+            }
+            i = end + 1;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
+/// The index of the `]` that closes the bracket expression opening at `start`,
+/// and whether it holds a `[:`, `[=` or `[.` unit; `None` when it is not closed.
+fn bracket_end(chars: &[char], start: usize) -> Option<(usize, bool)> {
+    let mut i = start + 1;
+    if chars.get(i) == Some(&'!') {
+        i += 1;
+    }
+    // A `]` first in the set is a member, not the end.
+    if chars.get(i) == Some(&']') {
+        i += 1;
+    }
+    let mut special = false;
+    while let Some(&c) = chars.get(i) {
+        match c {
+            ']' => return Some((i, special)),
+            '[' if matches!(chars.get(i + 1), Some(':' | '=' | '.')) => {
+                let delim = chars.get(i + 1);
+                let close = (i + 2..chars.len())
+                    .find(|&j| chars.get(j) == delim && chars.get(j + 1) == Some(&']'))?;
+                special = true;
+                i = close + 2;
+            }
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 fn join(dir: &str, name: &str) -> String {
@@ -226,6 +281,26 @@ mod tests {
                 "{pattern}"
             );
         }
+    }
+
+    /// The shell expands POSIX classes (`[[:alpha:]]`), equivalence classes and
+    /// collating symbols; each names at least the paths the shell would open.
+    #[test]
+    fn posix_classes_name_what_the_shell_opens() {
+        let fs = files(&["/p/.env", "/h/.ssh/id_rsa"]);
+        for pattern in [
+            "/p/.e[[:alpha:]]v",
+            "/p/.[[:lower:]]nv",
+            "/p/.en[![:digit:]]",
+            "/p/.e[[=n=]]v",
+            "/p/.e[[.n.]]v",
+            "/p/.e[x[:alnum:]]v",
+        ] {
+            assert_eq!(expand(&fs, pattern), ["/p/.env"], "{pattern}");
+        }
+        assert_eq!(expand(&fs, "/h/.s[[:alpha:]]h/id_rsa"), ["/h/.ssh/id_rsa"]);
+        assert_eq!(widen_classes("a[]x]b[!c]"), "a[]x]b[!c]");
+        assert_eq!(widen_classes("a[[:alpha:]"), "a[[:alpha:]");
     }
 
     #[test]

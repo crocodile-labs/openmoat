@@ -213,6 +213,30 @@ fn pre_tool_use_unlisted_search_of_a_secret_is_denied() {
     );
 }
 
+/// A tool outside Cursor's listing and search tools is checked as writing the
+/// paths it names, so an editing tool without a write verb in its name cannot
+/// change the project's hook file under a read allow.
+#[test]
+fn pre_tool_use_unlisted_editing_tool_is_checked_as_a_write() {
+    let sb = sandbox();
+    let project = sb.project();
+    let hooks = project.join(".cursor/hooks.json");
+    let payload = serde_json::json!({
+        "hook_event_name": "preToolUse",
+        "workspace_roots": [project.to_string_lossy()],
+        "cwd": project.to_string_lossy(),
+        "tool_name": "search_replace",
+        "tool_input": {"file_path": hooks.to_string_lossy(), "old_string": "a", "new_string": "b"}
+    })
+    .to_string();
+    let (code, doc) = guard(&sb, &payload);
+    assert_eq!(code, Some(DENY), "{doc}");
+    assert!(
+        doc["user_message"].to_string().contains("kernel-self"),
+        "{doc}"
+    );
+}
+
 /// A tool that names no path OpenMoat can check asks (`tool.unknown`), which
 /// Cursor's `preToolUse` receives as a deny, instead of passing as ungoverned;
 /// a to-do update (`TodoWrite`) stays ungoverned.
