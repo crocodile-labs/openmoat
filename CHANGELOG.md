@@ -9,6 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
+- A key's, a token file's or a `.env`'s name in a directory a variable hides (`cat $X/id_rsa`) asks (`secret-names`) instead of being left to the agent's prompt, so an auto-approve mode does not run it unseen.
 - An uppercase variable set on the line (`X=~/.ssh; cat $X/id_rsa`, `export D=~/.ssh`) is substituted where it names a path or a host, like a lowercase one, so the read is denied; it was left to the agent's prompt.
 
 ## [0.5.0-rc.5] - 2026-10-14

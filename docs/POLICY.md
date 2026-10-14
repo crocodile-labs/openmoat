@@ -375,6 +375,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | ask | `git-internals` | writes to a `.git` at any depth (hooks, config, refs, a `gitdir:` file) and `git config`, `git remote`, `git -c`, `git --config-env`, `git --git-dir`, `git --work-tree`, `git --exec-path` in the forms `dev-shell` does not allow: git runs what they name later, outside any sandbox |
 | ask | `persistence` | writes to `~/Library/LaunchAgents`, `~/.gitconfig`, `~/.config/git`, `~/.config/autostart`, `~/.config/systemd/user`; `crontab` |
 | ask | `home-sweep` | reading the home folder or `~/.config` themselves, which is what a recursive read of them reads (`grep -r . ~`, `tar czf h.tgz ~`, `find ~ -name '*.pem'`) |
+| ask | `secret-names` | a path through a variable whose value is not known (the `@unknown-path` atom, §3.1) whose file name is a key's, a token file's or a `.env` (`cat $X/id_rsa`, `cat "$d"/.env`); other such paths defer |
 | ask | `other-home` | any path in another user's home (`~alice/.ssh/id_rsa`, the `@other-home` atom), which OpenMoat cannot place and which may hold that user's secrets |
 | ask | `opaque-code` | `<program> @<argument>` atoms of `awk`, `sed`, `sort`, `uniq`, `cut` (a program or option the classifier cannot prove harmless, §3.1), `printf -v`, setting `CDPATH`, and `<shell> @stdin`: text piped into a shell that the command line does not show (`printf '\x63at .env' \| sh`) |
 | ask | `docker-secrets` | `docker build` with the options `dev-shell` leaves out (`--secret`, `--ssh`, `--build-context`, `--network`, `--output`, …) |

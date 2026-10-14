@@ -572,6 +572,16 @@ ask:
     reason: names another user's home, which OpenMoat cannot place
     # `@other-home <word>` atoms: `~alice/.ssh/id_rsa` may hold that user's secrets
     shell: ["@other-home *"]
+  - id: secret-names
+    reason: names a secret's file in a directory OpenMoat cannot see
+    # `@unknown-path <word>` atoms: a path through a variable whose value is not known
+    # (`cat $X/id_rsa`); its file name is that of a key, a token or a `.env`
+    shell:
+      - "@unknown-path *{id_rsa,id_dsa,id_ecdsa,id_ed25519}"
+      - "@unknown-path *{id_rsa,id_dsa,id_ecdsa,id_ed25519}.pub"
+      - "@unknown-path *{.env,.envrc,.netrc,.npmrc,.pypirc,.git-credentials,credentials}"
+      - "@unknown-path *.env.*"
+      - "@unknown-path *.{pem,key,p12,pfx}"
   - id: opaque-code
     reason: a program OpenMoat cannot read may open any file or variable
     # `<program> @<text>` atoms: an awk or sed program, or a text-tool option, not understood

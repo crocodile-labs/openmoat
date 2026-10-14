@@ -274,6 +274,14 @@ impl Sink {
         if paths::has_unexpanded_variable(word)
             && self.dollar_words.iter().any(|w| w.contains(word))
         {
+            // `@unknown-path <word>`: a rule can ask for a secret's file name in a
+            // directory OpenMoat cannot place (`secret-names`)
+            let atom = AtomicAction::Shell {
+                argv: vec!["@unknown-path".to_owned(), word.to_owned()],
+            };
+            if let Err(full) = self.push(atom) {
+                self.skip(full);
+            }
             self.skip(ClassifyError::UnknownValue(word.to_owned()));
         }
         ctx.paths(word).unwrap_or_else(|e| {
