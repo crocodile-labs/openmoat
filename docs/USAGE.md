@@ -220,11 +220,11 @@ again. Repository rules apply in the hook, not in the host sandboxes
 
 ## If OpenMoat gets in your way
 
-OpenMoat blocks when it is unsure, so a wrong decision stops work rather than letting
-something through. Each of these takes one command in your own terminal (agents are
-denied all of them):
+OpenMoat leaves to your agent's own prompt what it has no rule for, and blocks only
+what a rule names, so most work never meets it. When it does get in the way, each of
+these takes one command in your own terminal (agents are denied all of them):
 
-- **Every call is denied** with rule `integrity`: a pinned file (the policy, a hook, an
+- **Every call is denied** with rule `kernel-integrity`: a pinned file (the policy, a hook, an
   agent's settings) changed behind OpenMoat's back. Run `moat`; it shows the change and
   asks whether to accept it (`moat doctor --accept` does the same).
 - **A command you need keeps asking or is denied**: `moat allow --last` for this session,

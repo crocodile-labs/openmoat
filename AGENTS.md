@@ -45,7 +45,7 @@ Each `crates/openmoat-<name>` directory holds the package `openmoat-<name>`; `cr
 6. **No secrets in the audit log.** Everything persisted passes `openmoat_audit::redact`.
 7. **Pure core.** `openmoat-core` depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Anything that needs the filesystem (program resolution, hashing) is injected from the CLI through a trait (`ProgramResolver`, `PathResolver`).
 8. **Idempotent install.** `moat init` never overwrites a policy, never duplicates a hook, always backs up before editing a host file.
-9. **Lock before decide.** `moat guard` verifies `policy.lock` first; drift ⇒ `deny` (`kernel-integrity`). A Claude Code `ConfigChange` for a pinned file that no longer matches the lock is blocked for the session. Only a person may re-pin: `moat init`, or `moat doctor --accept` from an interactive terminal.
+9. **Lock before decide.** `moat guard` verifies `policy.lock` first; drift ⇒ `deny` (`kernel-integrity`). A Claude Code `ConfigChange` for a pinned file that no longer matches the lock is blocked for the session. Only a person may re-pin: `moat init`, or from an interactive terminal `moat doctor --accept`, `moat allow`, `moat edit`, `moat secret`, `moat trust` and `moat sandbox sync`.
 
 ## 4. Engineering rules
 

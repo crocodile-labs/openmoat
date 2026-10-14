@@ -22,16 +22,31 @@ check fails · published evidence · nothing leaves your machine unless you expo
 
 ![A prompt injection in a README asks Claude Code and Codex to upload the SSH key; OpenMoat denies every attempt, denies the agent's attempts to switch it off, and records it all](docs/assets/demo.gif)
 
-## Quick start
+## Get started
+
+**1. Install.**
 
 ```bash
-brew install crocodile-labs/tap/moat      # or the installer, cargo: docs/INSTALL.md
-moat init                                 # asks before changing each agent it finds
-moat policy check "cat ~/.ssh/id_rsa"
+brew install crocodile-labs/tap/moat      # macOS and Linux; the installer and cargo: docs/INSTALL.md
 ```
 
-`moat init` lists the agents it found and asks `Protect Claude Code (~/.claude)? [Y/n]`
-for each. It backs up every file before changing it, and `moat uninstall` undoes it.
+**2. Set it up.**
+
+```bash
+moat init
+```
+
+`moat init` lists the agents it finds and asks `Protect Claude Code (~/.claude)? [Y/n]`
+for each one. It backs up every file before it changes it; `moat uninstall` puts them
+back.
+
+**3. Start your agent as usual,** in a new session. Nothing else changes: normal work
+runs as before. To check what OpenMoat sees:
+
+```bash
+moat status                               # each agent: hook + OS sandbox, hook only, or not protected
+moat policy check "cat ~/.ssh/id_rsa"     # the verdict for any command, without running it
+```
 
 ```
 ⛔ deny
@@ -40,32 +55,35 @@ for each. It backs up every file before changing it, and `moat uninstall` undoes
    also  : shell "cat ~/.ssh/id_rsa"
 ```
 
-Start your agent as usual. Every tool call its hook reports now goes through OpenMoat;
-`moat show` lists the decisions. `moat status` shows how each agent is protected
-(`hook + OS sandbox`, `hook only` or `not protected`) and what its hook does not see.
+## Everyday use
 
-When something is blocked or asked, run `moat`. It shows which agents are protected and
-today's decisions, then anything that needs you: a changed policy to accept, or the
-command an agent last asked to run (`Allow? [o]nce for this session / [a]lways / [n]o`).
-It shows what would change before it asks, and changes nothing unless you answer.
-If OpenMoat ever blocks work you need, [USAGE.md](docs/USAGE.md#if-openmoat-gets-in-your-way)
-has the one command for each case, including turning it off with `moat uninstall`.
+**What you will see.** Most calls run without any change. Installs, pushes and anything
+the policy does not name go to your agent's own prompt, as they did before. When
+OpenMoat blocks a call, the agent gets the rule and the reason, and usually tells you:
 
-Found a way past it? Please report it as described in [SECURITY.md](SECURITY.md).
+```
+moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa
+```
 
-## Why you need it
+A few calls ask you directly, because their effect outlives the session (a git hook, a
+login item). The prompt is tagged with the rule: `moat: ask [git-internals] — …`.
 
-AI coding agents run commands, edit files and connect to the internet with your
-account and your permissions. Agents also read untrusted text all day: READMEs,
-issues, web pages, package code. One hidden instruction in that text can make an agent:
+**One command for each case** (run them in your own terminal; agents are denied all of
+them):
 
-- copy your SSH keys, cloud credentials or `.env` secrets to someone else;
-- delete files, force-push over your branch, or rewrite your shell startup files;
-- change its own settings so that it can do more next time.
+| You want to | Run |
+|---|---|
+| See protection, today's decisions and anything that needs you | `moat` |
+| Allow the command an agent was just stopped on, for this session or for good | `moat allow --last` · `moat allow --last --always` |
+| Allow a site or a whole directory | `moat allow --site docs.rs` · `moat allow --dir ~/work/shared` |
+| See what the agents did | `moat show` · `moat report --since today` |
+| Keep a token from the agent: it holds a placeholder, OpenMoat sends the value to one host | `moat secret add gh` |
+| Change any rule (checked, and the diff shown before it applies) | `moat edit` |
+| Share rules with your team | commit `.moat/policy.yaml`, then `moat trust` ([USAGE](docs/USAGE.md#share-rules-with-your-team)) |
+| Turn OpenMoat off | `moat uninstall` |
 
-The agent's built-in "allow this?" prompt shows you a command, not what that command
-does. A harmless-looking `npm test` can run code that reads `~/.ssh`. And in
-auto-approve modes, in CI and in background agents, there is no prompt at all.
+Every command, and what to do when OpenMoat gets in your way:
+[docs/USAGE.md](docs/USAGE.md).
 
 ## What it blocks
 
@@ -85,7 +103,10 @@ Real verdicts from the default policy (`moat policy check`, in a project directo
 | `echo x >> ~/.zshrc` | deny | `shell-rc` |
 | `moat allow --last` (run by the agent) | deny | `kernel-self` |
 
-The full table and how to test your own commands: [docs/USAGE.md](docs/USAGE.md).
+Hiding the action does not change the verdict: a path in a shell variable
+(`d=~/.ssh; cat $d/id_rsa`), a base64 payload, a glob or brace spelling (`cat .e*`,
+`cat .{env,x}`) and a symlink are checked as what they open. The full table:
+[docs/USAGE.md](docs/USAGE.md).
 
 ## How it works
 
@@ -128,6 +149,32 @@ exceptions are under [Limits](#limits).
 - **A record of every decision.** Every decision goes into a local audit log that detects
   tampering and can be exported and verified by your team.
 
+## Supported agents
+
+| Agent | Status |
+|---|---|
+| Claude Code | hooks and its OS sandbox |
+| Codex | hooks and its OS sandbox; an `ask` becomes a deny you approve with `moat allow --last`; a deferred call follows Codex's own approval policy |
+| Cursor | hooks and its OS sandbox (macOS, Linux); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
+| Continue CLI (`cn`) | partial: the released `cn` does not run hooks yet; use `moat run` |
+
+What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes
+(Standard, Lightweight and Isolated tiers): [docs/SANDBOX.md](docs/SANDBOX.md).
+
+## Why you need it
+
+AI coding agents run commands, edit files and connect to the internet with your
+account and your permissions. Agents also read untrusted text all day: READMEs,
+issues, web pages, package code. One hidden instruction in that text can make an agent:
+
+- copy your SSH keys, cloud credentials or `.env` secrets to someone else;
+- delete files, force-push over your branch, or rewrite your shell startup files;
+- change its own settings so that it can do more next time.
+
+The agent's built-in "allow this?" prompt shows you a command, not what that command
+does. A harmless-looking `npm test` can run code that reads `~/.ssh`. And in
+auto-approve modes, in CI and in background agents, there is no prompt at all.
+
 ## How it compares
 
 OpenMoat does not replace the agent's prompt or sandbox. It fills the gaps between them.
@@ -143,17 +190,31 @@ OpenMoat does not replace the agent's prompt or sandbox. It fills the gaps betwe
 | Blocks the call when its own check errors or hangs | – | – | yes (the agent still runs the call if the hook binary is missing; THREAT_MODEL §5) |
 | Published tests of what the OS layer stops | no | no | yes, [docs/EVIDENCE.md](docs/EVIDENCE.md) |
 
-## Supported agents
+## Limits
 
-| Agent | Status |
-|---|---|
-| Claude Code | hooks and its OS sandbox |
-| Codex | hooks and its OS sandbox; an `ask` becomes a deny you approve with `moat allow --last`; a deferred call follows Codex's own approval policy |
-| Cursor | hooks and its OS sandbox (macOS, Linux); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
-| Continue CLI (`cn`) | partial: the released `cn` does not run hooks yet; use `moat run` |
+- Cursor runs a command outside the sandbox OpenMoat configures when its Auto-review
+  classifier approves it, in Run Everything mode, and in the Cursor CLI without
+  `--sandbox enabled`; inside the workspace its sandbox cannot deny `.env` or `.git`
+  ([docs/SANDBOX.md](docs/SANDBOX.md#cursors-sandbox)). Claude Code's
+  sandbox covers only `Bash`, `PowerShell` and `Monitor`. `moat run` covers a whole
+  agent but is weaker per command.
+- Allowed scripts (`npm test`, `make test`) run whatever they contain; the sandbox
+  bounds them, OpenMoat does not inspect them. What `moat run` and the agents' own
+  sandboxes stop in such a script, and what they do not, is tested on every pull
+  request: [docs/EVIDENCE.md](docs/EVIDENCE.md). On Linux, `moat run` does not protect
+  anything inside the project: a script can read and write `.env`, create `.envrc`,
+  write `.moat` and add `.git` hooks. `moat run --isolate` (bubblewrap, Linux only)
+  covers them.
+- Hosts the policy allows (`api.github.com`, the registries) can receive data from an
+  allowed or approved command, under `moat run` too: the proxy checks the host, not
+  what is sent inside HTTPS.
+- A deferred call runs if your agent's own permission mode lets it run (auto-approve,
+  `--dangerously-skip-permissions`, Run Everything); only `deny` and `ask` stop it.
+- Tools no hook exposes are not seen (Codex web search and hosted tools).
+- If the hook binary is missing or is killed, Claude Code and Codex run the call
+  unchecked; `moat status` reports a missing hook.
 
-What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes
-(Standard, Lightweight and Isolated tiers): [docs/SANDBOX.md](docs/SANDBOX.md).
+The full list, with the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Documentation
 
@@ -177,29 +238,7 @@ change before 1.0. Decisions are deterministic, and everything runs locally: the
 log is a SQLite file in `~/.moat`, credentials are redacted before they are stored.
 [Roadmap](docs/ROADMAP.md).
 
-## Limits
-
-- Cursor runs a command outside the sandbox OpenMoat configures when its Auto-review
-  classifier approves it, in Run Everything mode, and in the Cursor CLI without
-  `--sandbox enabled`; inside the workspace its sandbox cannot deny `.env` or `.git`
-  ([docs/SANDBOX.md](docs/SANDBOX.md#cursors-sandbox)). Claude Code's
-  sandbox covers only `Bash`, `PowerShell` and `Monitor`. `moat run` covers a whole
-  agent but is weaker per command.
-- Allowed scripts (`npm test`, `make test`) run whatever they contain; the sandbox
-  bounds them, OpenMoat does not inspect them. What `moat run` and the agents' own
-  sandboxes stop in such a script, and what they do not, is tested on every pull
-  request: [docs/EVIDENCE.md](docs/EVIDENCE.md). On Linux, `moat run` does not protect
-  anything inside the project: a script can read and write `.env`, create `.envrc`,
-  write `.moat` and add `.git` hooks. `moat run --isolate` (bubblewrap, Linux only)
-  covers them.
-- Hosts the policy allows (`api.github.com`, the registries) can receive data from an
-  allowed or approved command, under `moat run` too: the proxy checks the host, not
-  what is sent inside HTTPS.
-- Tools no hook exposes are not seen (Codex web search and hosted tools).
-- If the hook binary is missing or is killed, Claude Code and Codex run the call
-  unchecked; `moat status` reports a missing hook.
-
-The full list, with the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+Found a way past it? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
 ## Contributing
 

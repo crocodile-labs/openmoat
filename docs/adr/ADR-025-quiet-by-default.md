@@ -112,3 +112,14 @@ The protection does not depend on those asks:
   shell variables, loops) is a separate change. It reduces the agent's own prompts too.
 - Reads and writes outside the git root (sibling repositories, the agent's own folders)
   defer under this ADR. Whether to allow some of them is open.
+
+## Note (2026-10-14): what the open points became
+
+- `dev-shell` was widened in 0.5.0-rc.4: whole-word safe Python options before a project
+  script, `for` loops and shell variables (the `shell-locals` group). A variable set on the
+  line is substituted where it is used, so a path or host it holds is checked as written
+  out; a path through one whose value is not known is `unparseable`, and asks
+  (`secret-names`) when its file name is a key's or a token file's.
+- Of the reads outside the git root, only the agent's own temporary folder is allowed
+  (`agent-temp`, `/tmp/claude-*`). Sibling repositories still defer; a person allows
+  one with `moat allow --dir`.
