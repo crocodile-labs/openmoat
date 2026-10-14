@@ -255,7 +255,7 @@
 - id: ask-sh-bash-only-long-option
   threat: T7
   action: { shell: "sh --rcfile rc -c 'cargo test'" }
-  expect: { verdict: defer, rules: [default, unparseable] }
+  expect: { verdict: defer, rules: [default] }
 - id: ask-bash-option-value-is-not-a-script
   threat: T7
   action: { shell: "bash -o pipefail build.sh" }

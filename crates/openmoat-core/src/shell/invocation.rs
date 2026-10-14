@@ -54,14 +54,9 @@ const BASH: Grammar = Grammar {
     long_values: &["rcfile", "init-file"],
     long_flags: Some(BASH_LONG_FLAGS),
 };
-// `sh` is bash in POSIX mode on macOS and dash on Debian. Only what both read
-// the same way is understood: dash rejects every long option, and bash's `-O`
-// takes a value, so `sh -O extglob -c X` still runs `X`.
-const SH: Grammar = Grammar {
-    short_values: "oO",
-    long_values: &[],
-    long_flags: Some(&[]),
-};
+// `sh` is bash in POSIX mode on macOS and dash on Debian, so it is read with bash's
+// options: macOS runs `sh --norc -c X`, and dash refuses the long option and runs
+// nothing, so classifying `X` is never less strict than either shell.
 const DASH: Grammar = Grammar {
     short_values: "o",
     long_values: &[],
@@ -114,7 +109,6 @@ pub(super) fn parse<'a, S: AsRef<str>>(
     let grammar = match program {
         "fish" => return fish(&words),
         "zsh" => &ZSH,
-        "sh" => &SH,
         "dash" => &DASH,
         "ksh" => &KSH,
         _ => &BASH,
@@ -277,6 +271,10 @@ mod tests {
             "zsh -ic X",
             "sh -ec X",
             "sh -O extglob -c X",
+            "sh --norc -c X",
+            "sh --login -c X",
+            "sh --rcfile rc -c X",
+            "/bin/sh --noprofile --norc -c X",
             "dash -xc X",
             "ksh -c X",
             "/bin/bash -lc X",
@@ -354,8 +352,7 @@ mod tests {
             "bash --frobnicate -c X",
             "bash --login=yes -c X",
             "dash --login -c X",
-            "sh --login -c X",
-            "sh --rcfile X -c Y",
+            "sh --frobnicate -c X",
             "ksh --login -c X",
             "bash -c",
             "bash -l%c X",
