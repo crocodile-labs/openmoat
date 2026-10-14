@@ -5,11 +5,13 @@ mod piped;
 mod pipelines;
 
 use super::tables::{
-    ENV_BUILTINS, HOST_PROGRAMS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS, SHELLS,
-    SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS,
-    WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS,
+    ENV_BUILTINS, HOST_PROGRAMS, INLINE_INTERPRETERS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS,
+    RESERVED_PREFIXES, SHELLS, SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS,
+    WRAPPERS, WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS,
 };
-use super::tokens::{assignment_name, basename, flag_payload, strip_at, word_env_refs};
+use super::tokens::{
+    assignment_name, basename, flag_payload, for_variable, strip_at, word_env_refs,
+};
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{copy, cwd, database, decoders, git, invocation, make, operands, options, text};
 use crate::action::AtomicAction;
@@ -166,6 +168,7 @@ fn classify_simple(
             classify_into(inner, ctx, sink, depth + 1)?;
         }
     }
+    sink.enter(depth);
     for w in &cmd.stdin {
         for name in word_env_refs(w) {
             sink.push(AtomicAction::EnvRead { name })?;
@@ -178,7 +181,32 @@ fn classify_simple(
         sink.redirect_write(ctx, w)?;
     }
 
-    let mut idx = 0;
+    // `do git log`, `if cat x; then`: the command after a reserved word is the
+    // one that runs; `done`, `fi`, `}` alone run nothing.
+    let mut idx = cmd
+        .words
+        .iter()
+        .take_while(|w| !w.quoted && RESERVED_PREFIXES.contains(&w.text.as_str()))
+        .count();
+    if let [only] = &cmd.words[idx..]
+        && !only.quoted
+        && RESERVED_CLOSERS.contains(&only.text.as_str())
+    {
+        return Ok(());
+    }
+    if let Some(loop_var) = for_variable(&cmd.words[idx..]) {
+        sink.push(AtomicAction::EnvSet {
+            name: loop_var.to_owned(),
+        })?;
+        for word in &cmd.words[idx + 3..] {
+            for name in word_env_refs(word) {
+                sink.push(AtomicAction::EnvRead { name })?;
+            }
+        }
+        sink.note_local(loop_var);
+        return Ok(());
+    }
+    let first_assignment = idx;
     while let Some(word) = cmd.words.get(idx) {
         let Some(name) = assignment_name(&word.text) else {
             break;
@@ -193,6 +221,12 @@ fn classify_simple(
     }
     let words = &cmd.words[idx..];
     if words.is_empty() {
+        // `x=1` on its own sets a shell variable for the rest of the line
+        for word in &cmd.words[first_assignment..idx] {
+            if let Some(name) = assignment_name(&word.text) {
+                sink.note_local(name);
+            }
+        }
         return Ok(());
     }
     let argv: Vec<String> = words.iter().map(|w| w.text.clone()).collect();

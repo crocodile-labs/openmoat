@@ -351,6 +351,10 @@ allow:
       - "go run {.,./*,*.go}"
       # a project script: the script is an fs.read atom, resolved through symlinks
       - "{python,python3} *.py"
+      # options that only change buffering, bytecode or which paths Python trusts,
+      # each a word of its own: `-Ic` would run code
+      - "{python,python3} {-I,-u,-B,-E,-s,-S,-O} *.py"
+      - "{python,python3} {-I,-u,-B,-E,-s,-S,-O} {-I,-u,-B,-E,-s,-S,-O} *.py"
       - "node *.{js,mjs,cjs}"
       # the wrapped command is classified on its own (`uv run pytest` is also `pytest`)
       - "uv run *"
@@ -493,6 +497,11 @@ allow:
       - "!file * -[!-]*[Cf]*"
       - "!file * --{c,f}*"
     env.read: ["PATH", "HOME", "USER", "SHELL", "PWD", "LANG", "TERM", "TMPDIR", "EDITOR"]
+  # a lowercase shell variable (`for f in`, `n=3`): environment variables, secrets
+  # among them, are uppercase by convention; the lowercase ones programs do read,
+  # the proxy variables of curl and git and npm's `npm_config_*`, stay out
+  - id: shell-locals
+    env.set: ["[a-z_]*", "![a-z_]*[!a-z0-9_]*", "!*_proxy", "!no_proxy", "!npm_config_*"]
   - id: dev-tools
     shell:
       - "tsc*"

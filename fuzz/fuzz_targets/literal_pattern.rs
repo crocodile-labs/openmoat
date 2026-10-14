@@ -66,10 +66,12 @@ fuzz_target!(|data: &[u8]| {
     let plain = command
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || " -_./:,+@%*?[]{}!".contains(c))
+        // the command after leading reserved words (`do x`) is the one classified;
+        // an assignment or a `for` header sets a variable and runs no command
         && command
             .split_whitespace()
-            .next()
-            .is_some_and(|w| !w.contains('='));
+            .find(|w| !["do", "then", "else", "elif", "if", "while", "until", "!", "{"].contains(w))
+            .is_some_and(|w| !w.contains('=') && w != "for");
     // A command the classifier cannot parse asks before any rule is consulted
     // (unparseable ⇒ ask), so its approval cannot take part (`sh -ee.a`).
     let unparseable = decision.rules.iter().any(|r| r == "unparseable");

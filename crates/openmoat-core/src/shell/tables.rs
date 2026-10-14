@@ -181,6 +181,15 @@ pub const CWD_PREFIXES: &[&str] = &[
     "builtin", "command", "time", "{", "!", "if", "then", "else", "elif", "while", "until", "do",
 ];
 
+/// Shell reserved words that start a command inside a compound one: the command
+/// after them is classified on its own (`do git log`, `if cat .env; then`).
+pub const RESERVED_PREFIXES: &[&str] = &[
+    "do", "then", "else", "elif", "if", "while", "until", "!", "{",
+];
+
+/// Reserved words that close a compound command and run nothing themselves.
+pub const RESERVED_CLOSERS: &[&str] = &["done", "fi", "}", "esac"];
+
 /// Builtins that may move the shell somewhere the classifier cannot see
 /// (`cwd.rs`): `eval` and `source` may run a `cd`; `popd` returns to a
 /// directory pushed before this command line.

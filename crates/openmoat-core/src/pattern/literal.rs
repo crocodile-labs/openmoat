@@ -8,6 +8,7 @@
 
 use crate::lexer::{self, Token};
 use crate::policy::PolicyError;
+use crate::shell::tables::RESERVED_PREFIXES;
 
 /// A shell pattern that matches `command` token for token and nothing wider.
 ///
@@ -29,6 +30,17 @@ pub fn literal_shell_pattern(command: &str) -> Result<String, PolicyError> {
     }
     if tokens.is_empty() {
         return Err(PolicyError::EmptyPattern);
+    }
+    // `! git diff --quiet`, `do make test`: the classifier reports the command
+    // after a reserved word, so the approval names that command.
+    let reserved = tokens
+        .iter()
+        .take_while(|t| {
+            matches!(t, Token::Word(w) if !w.quoted && RESERVED_PREFIXES.contains(&w.text.as_str()))
+        })
+        .count();
+    if reserved < tokens.len() {
+        tokens.drain(..reserved);
     }
     if let Some(subcommand) = git_subcommand(&tokens) {
         tokens = subcommand;
@@ -133,6 +145,17 @@ mod tests {
             bang.is_match(&argv(&["!echo", "hi", "$", "more"])),
             "`$` is not an anchor"
         );
+    }
+
+    #[test]
+    fn a_leading_reserved_word_is_not_part_of_the_command() {
+        assert_eq!(
+            literal_shell_pattern("! git diff --quiet").unwrap(),
+            "git diff --quiet"
+        );
+        assert_eq!(literal_shell_pattern("do make test").unwrap(), "make test");
+        assert_eq!(literal_shell_pattern("'do' x").unwrap(), "do x");
+        assert_eq!(literal_shell_pattern("do").unwrap(), "do");
     }
 
     #[test]

@@ -189,10 +189,42 @@ pub(crate) struct Sink {
     /// Read and write atoms whose path is one of those globs: the engine
     /// evaluates every file it matches as well as the literal path.
     globs: Vec<AtomicAction>,
+    /// Lowercase shell variables an earlier command of the line set on its own
+    /// (`x=1;`, `for x in`), with the nesting depth: reading one is no
+    /// environment read. A child shell (`sh -c`) does not see them.
+    locals: Vec<(String, u8)>,
+    /// The nesting depth of the simple command being classified.
+    depth: u8,
 }
 
 impl Sink {
+    /// Classify the next simple command at `depth`.
+    pub(crate) fn enter(&mut self, depth: u8) {
+        self.depth = depth;
+    }
+
+    /// `name`, set by a command of its own, is a shell variable from here on, if
+    /// it is all lowercase: environment variables, secrets among them, are by
+    /// convention uppercase, and deny rules name them so.
+    pub(crate) fn note_local(&mut self, name: &str) {
+        let lowercase = name.bytes().any(|b| b.is_ascii_lowercase())
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        if lowercase {
+            self.locals.push((name.to_owned(), self.depth));
+        }
+    }
+
     pub(crate) fn push(&mut self, atom: AtomicAction) -> Result<(), ClassifyError> {
+        if let AtomicAction::EnvRead { name } = &atom
+            && self
+                .locals
+                .iter()
+                .any(|(n, d)| n == name && *d == self.depth)
+        {
+            return Ok(());
+        }
         if self.atoms.contains(&atom) {
             return Ok(());
         }

@@ -7,18 +7,18 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 68 | 30 | 3 |
+| T1 | Secret exfiltration via shell | 70 | 30 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
-| T3 | Secret exfiltration via environment | 22 | 3 | 0 |
+| T3 | Secret exfiltration via environment | 24 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 58 | 57 | 2 |
 | T5 | Supply-chain execution | 4 | 30 | 0 |
-| T6 | Environment poisoning | 19 | 11 | 0 |
-| T7 | Obfuscation and nested execution | 65 | 97 | 2 |
+| T6 | Environment poisoning | 20 | 13 | 0 |
+| T7 | Obfuscation and nested execution | 65 | 95 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 135 | 17 | 4 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 15 | 3 | 0 |
-| T12 | Network to unknown hosts | 30 | 15 | 1 |
+| T12 | Network to unknown hosts | 30 | 16 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -120,6 +120,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-uv-run-env-file` (attacks): Deny [secrets-paths]
 - `T1-ssh-attached-identity-file` (attacks): Deny [secrets-paths]
 - `T1-other-user-home-relative-asks` (attacks): Ask [other-home]
+- `T1-key-read-inside-for-loop` (attacks): Deny [secrets-paths]
+- `T1-env-read-after-if` (attacks): Deny [secrets-paths]
 - `benign-cd-src-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-cd-crate-then-ls` (benign): Allow [dev-shell]
 - `benign-recursive-read-of-project-root` (benign): Allow [dev-shell, project-fs]
@@ -178,6 +180,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-heredoc-feeds-token-to-curl` (attacks): Deny [env-secrets]
 - `T3-awk-environ-token` (attacks): Ask [opaque-code]
 - `T3-mvn-test-token-property` (attacks): Deny [env-secrets]
+- `T3-secret-read-after-a-shell-variable` (attacks): Deny [env-secrets]
+- `T3-uppercase-variable-set-earlier-is-still-read` (attacks): Deny [env-secrets]
 
 ## T4: Destructive git / filesystem operations
 
@@ -349,6 +353,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-config-unset` (ask): Ask [git-internals]
 - `ask-git-remote-set-url` (ask): Ask [git-internals]
 - `ask-bare-git-with-a-program-running-option` (ask): Ask [git-internals]
+- `defer-lowercase-proxy-variable` (ask): Defer [default]
+- `defer-npm-config-variable` (ask): Defer [default]
 - `T6-export-path` (attacks): Deny [env-poison]
 - `T6-export-path-unspaced` (attacks): Deny [env-poison]
 - `T6-inline-ld-preload` (attacks): Deny [env-poison]
@@ -368,6 +374,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T6-printf-sets-path` (attacks): Ask [opaque-code]
 - `T6-gofmt-rewrites-shell-rc` (attacks): Deny [shell-rc]
 - `T6-sed-in-place-shell-rc` (attacks): Deny [shell-rc]
+- `T6-loop-variable-named-path` (attacks): Deny [env-poison]
 
 ## T7: Obfuscation and nested execution
 
@@ -466,8 +473,6 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-diff-attached-orderfile-outside` (ask): Defer [default]
 - `ask-grep-attached-pattern-file-outside` (ask): Defer [default]
 - `ask-interpreter-call-named-like-a-host` (ask): Defer [default]
-- `defer-python-isolated-mode-script` (ask): Defer [default]
-- `defer-shell-loop-variables` (ask): Defer [default]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -757,6 +762,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-docker-compose-up` (ask): Defer [default]
 - `defer-json-path-that-looks-like-a-host` (ask): Defer [default]
 - `defer-attribute-in-inline-code` (ask): Defer [default]
+- `defer-python-attached-code-option` (ask): Defer [default]
 - `T12-webfetch-unknown-host` (attacks): Deny [default.net]
 - `T12-curl-unknown-host` (attacks): Deny [default.net]
 - `T12-netcat-ip` (attacks): Deny [default.net]

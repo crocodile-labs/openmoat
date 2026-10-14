@@ -8,7 +8,14 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- The command after a shell reserved word (`do`, `then`, `if`, `!`, `{`, …) is classified as that command, so `for f in a; do cat ~/.ssh/id_rsa; done` is a read of the key; the reserved word was taken as the program and the command's file operands were missed. `for PATH in …` is a set of `PATH`, which `env-poison` denies.
+
+### Changed
+- Common shell forms an agent writes no longer leave the call to the agent: a `for` loop or a lowercase shell variable (`n=3; git log -$n`) over allowed commands is allowed (`shell-locals`), and so is a project script run with whole-word safe Python options (`python3 -I script.py`).
+
 ### Fixed
+- docs/POLICY.md §3 and §4 had an outdated copy of seven paragraphs (here-documents, shell options, `cd`, symlinks, globs, braces) next to the current one; the outdated copies are gone.
 - `moat show`, `moat audit` and the other readers refuse an audit log a newer `moat` wrote (schema too new), as `moat guard` already does, instead of reading it with an older schema.
 
 ## [0.5.0-rc.3] - 2026-10-13
