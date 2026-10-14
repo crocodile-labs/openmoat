@@ -178,7 +178,7 @@ fails, it blocks. Everything runs locally; the audit log is a SQLite file in `~/
 credentials are redacted before they are stored, and nothing leaves your machine unless
 you export it.
 
-**Status: beta.** The latest release is `0.5.0-rc.2`; the policy format and commands may still change before 1.0.
+**Status: beta.** The latest release is `0.5.0-rc.3`; the policy format and commands may still change before 1.0.
 [Roadmap](docs/ROADMAP.md).
 
 ## Limits
