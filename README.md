@@ -238,7 +238,7 @@ The full list, with the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Status
 
-**Beta.** The latest release is `0.5.0-rc.5`; the policy format and commands may still
+**Stable.** The latest release is `0.5.0`; the policy format and commands may still
 change before 1.0. What is planned: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Found a way past it? Please report it privately, as described in [SECURITY.md](SECURITY.md).
