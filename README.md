@@ -4,13 +4,15 @@
 [![Release](https://img.shields.io/github/v/release/crocodile-labs/openmoat)](https://github.com/crocodile-labs/openmoat/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue)](#license)
 
-**Security for AI coding agents.** One local policy decides what Claude Code, Codex and
-Cursor may run, read, write and send, and the same policy configures every layer that
-enforces it: the agent's hook, its OS sandbox, the network and its secrets. What each
-layer stops is tested in CI and published in [docs/EVIDENCE.md](docs/EVIDENCE.md).
+**Security for AI coding agents.** OpenMoat checks the commands, file access, web
+requests and MCP calls of Claude Code, Codex and Cursor, and blocks the dangerous ones
+before they run: reading your keys and `.env` files, sending data to unknown hosts,
+destructive git and file commands, an agent switching OpenMoat off. Everything else it
+leaves to your agent's own permission prompt, so normal work goes on as before.
 
-Works with **Claude Code**, **Codex** and **Cursor**, with more agents to come. Built
-by Crocodile Labs. The command is `moat`.
+One local policy configures every layer that enforces it: the agent's hook, its OS
+sandbox, the network and its secrets. What each layer stops is tested in CI and
+published in [docs/EVIDENCE.md](docs/EVIDENCE.md).
 
 **Single Rust binary · about 10 ms per check · no AI model decides · blocks when its own
 check fails · published evidence · nothing leaves your machine unless you export it**
@@ -18,11 +20,38 @@ check fails · published evidence · nothing leaves your machine unless you expo
 [Install](docs/INSTALL.md) · [Usage](docs/USAGE.md) · [Policy](docs/POLICY.md) ·
 [Threat model](docs/THREAT_MODEL.md) · [Demo](docs/DEMO.md) · [Roadmap](docs/ROADMAP.md)
 
+![A prompt injection in a README asks Claude Code and Codex to upload the SSH key; OpenMoat denies every attempt, denies the agent's attempts to switch it off, and records it all](docs/assets/demo.gif)
+
+## Quick start
+
 ```bash
-brew install crocodile-labs/tap/moat && moat init     # other ways: docs/INSTALL.md
+brew install crocodile-labs/tap/moat      # or the installer, cargo: docs/INSTALL.md
+moat init                                 # asks before changing each agent it finds
+moat policy check "cat ~/.ssh/id_rsa"
 ```
 
-![A prompt injection in a README asks Claude Code and Codex to upload the SSH key; OpenMoat denies every attempt, denies the agent's attempts to switch it off, and records it all](docs/assets/demo.gif)
+`moat init` lists the agents it found and asks `Protect Claude Code (~/.claude)? [Y/n]`
+for each. It backs up every file before changing it, and `moat uninstall` undoes it.
+
+```
+⛔ deny
+   rules : secrets-paths
+   reason: secret material: read /Users/you/.ssh/id_rsa
+   also  : shell "cat ~/.ssh/id_rsa"
+```
+
+Start your agent as usual. Every tool call its hook reports now goes through OpenMoat;
+`moat show` lists the decisions. `moat status` shows how each agent is protected
+(`hook + OS sandbox`, `hook only` or `not protected`) and what its hook does not see.
+
+When something is blocked or asked, run `moat`. It shows which agents are protected and
+today's decisions, then anything that needs you: a changed policy to accept, or the
+command an agent last asked to run (`Allow? [o]nce for this session / [a]lways / [n]o`).
+It shows what would change before it asks, and changes nothing unless you answer.
+If OpenMoat ever blocks work you need, [USAGE.md](docs/USAGE.md#if-openmoat-gets-in-your-way)
+has the one command for each case, including turning it off with `moat uninstall`.
+
+Found a way past it? Please report it as described in [SECURITY.md](SECURITY.md).
 
 ## Why you need it
 
@@ -57,38 +86,6 @@ Real verdicts from the default policy (`moat policy check`, in a project directo
 | `moat allow --last` (run by the agent) | deny | `kernel-self` |
 
 The full table and how to test your own commands: [docs/USAGE.md](docs/USAGE.md).
-
-## Quick start
-
-```bash
-brew install crocodile-labs/tap/moat      # or the installer, cargo: docs/INSTALL.md
-moat init                                 # asks before changing each agent it finds
-moat policy check "cat ~/.ssh/id_rsa"
-```
-
-`moat init` lists the agents it found and asks `Protect Claude Code (~/.claude)? [Y/n]`
-for each. It backs up every file before changing it, and `moat uninstall` undoes it.
-
-```
-⛔ deny
-   rules : secrets-paths
-   reason: secret material: read /Users/you/.ssh/id_rsa
-   also  : shell "cat ~/.ssh/id_rsa"
-```
-
-Start your agent as usual. Every tool call its hook reports now goes through OpenMoat;
-`moat show` lists the decisions. `moat status` shows how each agent is protected
-(`hook + OS sandbox`, `hook only` or `not protected`) and what its hook does not see.
-
-When something is blocked or asked, run `moat`. It shows which agents are protected and
-today's decisions, then anything that needs you: a changed policy to accept, or the
-command an agent last asked to run (`Allow? [o]nce for this session / [a]lways / [n]o`).
-It shows what would change before it asks, and changes nothing unless you answer.
-If OpenMoat ever blocks work you need, [USAGE.md](docs/USAGE.md#if-openmoat-gets-in-your-way)
-has the one command for each case, including turning it off with `moat uninstall`.
-
-If OpenMoat is useful to you, a star on GitHub helps other developers find it. Found a
-way past it? Please report it as described in [SECURITY.md](SECURITY.md).
 
 ## How it works
 
@@ -171,14 +168,11 @@ What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes
 | Run the demo | [docs/DEMO.md](docs/DEMO.md) |
 | Understand the code | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/](docs/adr/README.md) |
 
-## Principles and status
+## Status
 
-Decisions are deterministic: no AI model decides. When OpenMoat is unsure or something
-fails, it blocks. Everything runs locally; the audit log is a SQLite file in `~/.moat`,
-credentials are redacted before they are stored, and nothing leaves your machine unless
-you export it.
-
-**Status: beta.** The latest release is `0.5.0-rc.3`; the policy format and commands may still change before 1.0.
+**Beta.** The latest release is `0.5.0-rc.3`; the policy format and commands may still
+change before 1.0. Decisions are deterministic, and everything runs locally: the audit
+log is a SQLite file in `~/.moat`, credentials are redacted before they are stored.
 [Roadmap](docs/ROADMAP.md).
 
 ## Limits
