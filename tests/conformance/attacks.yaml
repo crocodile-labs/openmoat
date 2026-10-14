@@ -1050,6 +1050,15 @@
   threat: T7
   action: { shell: "bash -lc 'cat ~/.ssh/id_rsa'" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# `sh` is bash on macOS, which takes bash's long options and runs the command
+- id: T1-sh-long-option-ssh-key
+  threat: T1
+  action: { shell: "sh --norc -c 'cat ~/.ssh/id_rsa'" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T1-sh-rcfile-option-env
+  threat: T1
+  action: { shell: "sh --rcfile rc -c 'cat .env'" }
+  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T7-zsh-interactive-c
   threat: T7
   action: { shell: "zsh -ic 'cat ~/.ssh/id_rsa'" }

@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 63 | 30 | 3 |
+| T1 | Secret exfiltration via shell | 65 | 30 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 22 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 58 | 57 | 2 |
@@ -75,6 +75,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-rg-unrestricted-secret-dir` (attacks): Deny [secrets-paths]
 - `T1-tar-secret-dir` (attacks): Deny [secrets-paths]
 - `T1-home-session-grep-ssh` (attacks): Deny [secrets-paths]
+- `T1-sh-long-option-ssh-key` (attacks): Deny [secrets-paths]
+- `T1-sh-rcfile-option-env` (attacks): Deny [secrets-paths]
 - `T1-heredoc-substitution-reads-key` (attacks): Deny [secrets-paths]
 - `T1-move-key-into-authorized-keys` (attacks): Deny [secrets-paths]
 - `T1-cd-allowed-still-follows-into-secrets` (attacks): Deny [secrets-paths]
@@ -395,7 +397,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-patch-without-files` (ask): Defer [unparseable]
 - `ask-bash-login-c-ordinary-command` (ask): Defer [default]
 - `ask-shell-option-unknown` (ask): Defer [default, unparseable]
-- `ask-sh-bash-only-long-option` (ask): Defer [default, unparseable]
+- `ask-sh-bash-only-long-option` (ask): Defer [default]
 - `ask-bash-option-value-is-not-a-script` (ask): Defer [default]
 - `ask-git-config-fsmonitor-runs-code` (ask): Ask [git-internals]
 - `ask-git-config-hooks-path-runs-code` (ask): Ask [git-internals]
