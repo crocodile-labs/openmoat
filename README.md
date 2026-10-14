@@ -20,7 +20,7 @@ check fails · published evidence · nothing leaves your machine unless you expo
 [Install](docs/INSTALL.md) · [Usage](docs/USAGE.md) · [Policy](docs/POLICY.md) ·
 [Threat model](docs/THREAT_MODEL.md) · [Demo](docs/DEMO.md) · [Roadmap](docs/ROADMAP.md)
 
-![A prompt injection in a README asks Claude Code and Codex to upload the SSH key; OpenMoat denies every attempt, denies the agent's attempts to switch it off, and records it all](docs/assets/demo.gif)
+![Normal work is allowed; a prompt injection asking Claude Code and Codex to upload the SSH key is blocked, also in base64 and through a shell variable; a package install goes to the agent's own prompt; switching OpenMoat off is blocked; every decision is in the log](docs/assets/demo.gif)
 
 ## Get started
 
