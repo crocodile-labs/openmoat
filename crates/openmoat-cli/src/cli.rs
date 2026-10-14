@@ -53,6 +53,12 @@ pub enum Command {
     /// Edit ~/.moat/policy.yaml in $VISUAL or $EDITOR; lint it, show the diff and ask
     /// before applying and re-pinning. Refused unless run from an interactive terminal.
     Edit,
+    /// Keep a secret from the agent: OpenMoat adds it to the policy, shows the diff and
+    /// asks, then syncs the sandbox. Refused unless run from an interactive terminal.
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommand,
+    },
     /// Let a repository's .moat/policy.yaml allow, not only deny and ask, until the file changes.
     /// Refused unless run from an interactive terminal, and over a drifted lock.
     Trust(TrustArgs),
@@ -176,6 +182,32 @@ pub struct ReportArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SecretCommand {
+    /// Broker a secret: the agent holds a placeholder, and OpenMoat puts the value in
+    /// one header of requests to one host. `moat secret add gh` is the GitHub API token
+    /// (`GITHUB_TOKEN`, `api.github.com`).
+    Add(SecretAddArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SecretAddArgs {
+    /// The secret's id: lowercase letters, digits and `-`. `gh` alone sets up GitHub.
+    pub id: String,
+    /// The one host whose requests get the value.
+    #[arg(long)]
+    pub host: Option<String>,
+    /// The request header the value goes in.
+    #[arg(long)]
+    pub header: Option<String>,
+    /// Read the value from this environment variable of `moat proxy` and the agent.
+    #[arg(long, value_name = "NAME")]
+    pub env: Option<String>,
+    /// Read the value from this file (absolute or under `~/`).
+    #[arg(long, value_name = "PATH")]
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Args)]

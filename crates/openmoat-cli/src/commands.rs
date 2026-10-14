@@ -14,6 +14,7 @@ mod replay;
 mod report;
 mod run;
 mod sandbox;
+mod secret;
 mod service;
 mod show;
 mod status;
@@ -23,7 +24,9 @@ mod uninstall;
 
 use anyhow::Result;
 
-use crate::cli::{AuditCommand, Cli, Command, PolicyCommand, ProxyCommand, SandboxCommand};
+use crate::cli::{
+    AuditCommand, Cli, Command, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
+};
 use crate::exit::Code;
 
 pub fn run(cli: Cli) -> Result<Code> {
@@ -39,6 +42,9 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Doctor(args) => doctor::run(&args),
         Command::Allow(args) => allow::run(&args),
         Command::Edit => edit::run(),
+        Command::Secret { command } => match command {
+            SecretCommand::Add(args) => secret::add(&args),
+        },
         Command::Trust(args) => trust::run(&args),
         Command::Replay(args) => replay::run(&args),
         Command::Report(args) => report::run(&args),
