@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.0-rc.4] - 2026-10-14
+
+A release candidate for testing; not a stable release. Fixes from a day of dogfooding the quiet default: commands after shell reserved words are checked as themselves, `for` loops, lowercase shell variables, `python3 -I script.py`, `grep` patterns and `tr` no longer leave normal work to the agent's prompt, and `moat secret add gh` keeps the GitHub token from the agent in one step.
+
 ### Added
 - `moat secret add gh` keeps the GitHub token from the agent in one step: it adds the brokered secret to the policy, shows the diff and asks, then re-pins and syncs the sandbox settings. Other services take `--host` and `--env` or `--file`. Agents are denied `moat secret` like `moat edit` (`kernel-self`).
 
@@ -458,7 +462,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.3...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.4...HEAD
+[0.5.0-rc.4]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.3...v0.5.0-rc.4
 [0.5.0-rc.3]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.2...v0.5.0-rc.3
 [0.5.0-rc.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.1...v0.5.0-rc.2
 [0.5.0-rc.1]: https://github.com/crocodile-labs/openmoat/compare/v0.4.0...v0.5.0-rc.1
