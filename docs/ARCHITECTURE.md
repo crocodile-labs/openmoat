@@ -150,8 +150,8 @@ the engine merges its `ask` with their decisions, so the failing part cannot hid
 | Claude Code `LSP` | `filePath` | `FsRead` |
 | Claude Code `Glob`, `Grep` | `path`, else the working directory; an absolute or `~` Glob `pattern` also reads its directory part (Claude Code searches that instead of `path`) | `FsRead`, `ReadFiles` |
 | Cursor `preToolUse` `Grep`, `Glob` | every path in `path`, `file_path`, `target_file`, `target_directory`, `target_directories`, else the working directory | `FsRead`, `ReadFiles` |
-| Cursor `preToolUse`, any other write-shaped tool (name contains `write`, `edit`, `create`, `move`, `rename`, `delete`, `remove`, `append`, `mkdir`, `copy`, `save`, `patch` or `update`) that names a path under those keys | every such path | `FsWrite`, `Patch` |
-| Cursor `preToolUse`, any other tool that names a path under those keys | every such path | `FsRead`, `ReadFiles` |
+| Cursor `preToolUse` listing and search tools (`LS`, `ListDir`, `list_dir`, `SemanticSearch`, `codebase_search`, `grep_search`, `file_search`, `read_file`) that name a path under those keys | every such path | `FsRead`, `ReadFiles` |
+| Cursor `preToolUse`, any other tool that names a path under those keys (an editing tool need not have a write verb in its name) | every such path | `FsWrite`, `Patch` |
 | Claude Code `SendFile` | every path in `files` (the contents go to another session; an empty or non-string list is an adapter error, so `deny`) | `ReadFiles` |
 | Claude Code `Edit`, `Write`, `MultiEdit`; `NotebookEdit` | `file_path`; `notebook_path` | `FsWrite` |
 | Cursor `preToolUse` `Write`, `Edit`, `MultiEdit`, `StrReplace`, `Delete` | `file_path` | `FsWrite` |

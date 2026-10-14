@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A Cursor `preToolUse` tool OpenMoat does not know that names a path is checked as writing it unless it is one of Cursor's listing or search tools, so an editing tool without a write verb in its name (`search_replace`) can no longer change `.cursor/hooks.json` or `.git/hooks` under the project read allow.
+
 ## [0.5.0-rc.2] - 2026-10-13
 
 A release candidate for testing; not a stable release. Quiet by default: OpenMoat denies what must never happen and leaves every other call to your agent's own permission prompt. Existing policies keep their `ask` defaults until `moat policy upgrade`.

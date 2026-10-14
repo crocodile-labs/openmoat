@@ -289,7 +289,7 @@ something OpenMoat claims to stop.
   | Hook prints no or malformed JSON, exit 0 | runs the call | runs the call | blocks (permission hooks) | runs the call |
   | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks |
   | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
-  | Ours: tool OpenMoat does not know | allow, rule `ungoverned`, recorded; the installed matcher sends only mapped tools | as Claude Code | a tool naming a path is checked as reading it (writing it when its name is write-shaped); otherwise `tool.unknown`, which asks (sent as a deny) | as Claude Code |
+  | Ours: tool OpenMoat does not know | allow, rule `ungoverned`, recorded; the installed matcher sends only mapped tools | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | as Claude Code |
   | Ours: no decision within 10 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | not applicable: `cn` fires no hooks (below) |
 
