@@ -20,14 +20,20 @@ pub(super) fn classify_with_values(
     sink: &mut Sink,
     depth: u8,
 ) -> Result<bool, ClassifyError> {
-    let variants = match expand(cmd, &sink.known_locals(depth)) {
-        Ok(Some(variants)) => variants,
+    let (variants, used) = match expand(cmd, &sink.known_locals(depth)) {
+        Ok(Some(expanded)) => expanded,
         Ok(None) => return Ok(false),
         Err(e) => {
             sink.skip(e);
             return Ok(false);
         }
     };
+    // an uppercase name is by convention an environment variable: its read
+    // stays an atom, which the substitution took out of the words
+    sink.enter(depth);
+    for name in used.into_iter().filter(|n| !crate::shell::is_lowercase(n)) {
+        sink.push(crate::action::AtomicAction::EnvRead { name })?;
+    }
     for variant in &variants {
         for w in variant.words.iter().chain(&variant.stdin) {
             sink.note_dollar_word(w);
@@ -52,6 +58,27 @@ pub(super) fn assignment_value(word: &Word, home: &str) -> Option<String> {
     }
     let start = name.len() + 1;
     literal_value(value, start, word, home)
+}
+
+/// `export X=v`, `readonly X=v`, `local x=v`: the shell variables they set, as
+/// an assignment on its own does. With an option (`declare -a`, `-i`, `-n`) the
+/// value may be an array, a number or a reference: not known.
+pub(super) fn note_builtin(args: &[Word], program: &str, home: &str, sink: &mut Sink) {
+    if !matches!(
+        program,
+        "export" | "readonly" | "local" | "declare" | "typeset"
+    ) {
+        return;
+    }
+    let with_options = args.iter().any(|w| w.text.starts_with(['-', '+']));
+    for word in args {
+        if let Some(name) = super::assignment_name(&word.text) {
+            let value = (!with_options)
+                .then(|| assignment_value(word, home))
+                .flatten();
+            sink.note_local(name, value.map(|v| vec![v]));
+        }
+    }
 }
 
 /// The words of a `for` header after `in`, when each is known text.
@@ -84,14 +111,18 @@ fn literal_value(value: &str, start: usize, word: &Word, home: &str) -> Option<S
     (!value.starts_with('~')).then(|| value.to_owned())
 }
 
+/// The variants of a command, and the names substituted in them.
+type Expanded = (Vec<SimpleCommand>, Vec<String>);
+
 /// The variants of `cmd` with every use of a known variable substituted, one
-/// per combination of values; `None` when it uses none. A use the shell would
+/// per combination of values, and the names substituted; `None` when it uses
+/// none. A use the shell would
 /// transform (`${d:-x}`, `${d#*/}`) cannot be substituted: an error, which
 /// leaves the command to be classified as written.
 pub(super) fn expand(
     cmd: &SimpleCommand,
     known: &[(String, Vec<String>)],
-) -> Result<Option<Vec<SimpleCommand>>, ClassifyError> {
+) -> Result<Option<Expanded>, ClassifyError> {
     let mut used: Vec<&(String, Vec<String>)> = Vec::new();
     let words = cmd.words.iter().chain(&cmd.stdin);
     for w in words {
@@ -138,7 +169,7 @@ pub(super) fn expand(
         }
         variants.push(out);
     }
-    Ok(Some(variants))
+    Ok(Some((variants, used.iter().map(|u| u.0.clone()).collect())))
 }
 
 /// Whether `text` expands `$name` or `${name}` outside `literal` spans; an

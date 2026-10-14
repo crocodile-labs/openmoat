@@ -7,11 +7,11 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 82 | 33 | 3 |
+| T1 | Secret exfiltration via shell | 85 | 34 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 24 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 59 | 56 | 3 |
-| T5 | Supply-chain execution | 5 | 30 | 0 |
+| T5 | Supply-chain execution | 6 | 30 | 0 |
 | T6 | Environment poisoning | 20 | 13 | 0 |
 | T7 | Obfuscation and nested execution | 65 | 95 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
@@ -55,6 +55,7 @@ the verdict and rule ids the default policy must produce for it.
 - `defer-path-through-a-computed-variable` (ask): Defer [unparseable]
 - `defer-path-through-an-environment-variable` (ask): Defer [unparseable]
 - `defer-path-through-a-transformed-variable` (ask): Defer [unparseable]
+- `defer-path-through-a-prefix-assignment` (ask): Defer [unparseable]
 - `T1-cat-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-curl-upload-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-substitution-exfil` (attacks): Deny [secrets-paths]
@@ -137,6 +138,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-key-through-pwd-after-cd` (attacks): Deny [secrets-paths]
 - `T1-key-in-versioned-python-code` (attacks): Deny [secrets-paths]
 - `T1-key-in-lua-code` (attacks): Deny [secrets-paths]
+- `T1-key-through-an-uppercase-variable` (attacks): Deny [secrets-paths]
+- `T1-key-through-an-exported-variable` (attacks): Deny [secrets-paths]
+- `T1-key-through-an-uppercase-loop-variable` (attacks): Deny [secrets-paths]
 - `benign-cd-src-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-cd-crate-then-ls` (benign): Allow [dev-shell]
 - `benign-recursive-read-of-project-root` (benign): Allow [dev-shell, project-fs]
@@ -356,6 +360,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T5-wget-pipe-sh-with-args` (attacks): Deny [pipe-to-shell]
 - `T5-repo-asks-for-what-the-user-allows` (attacks): Ask [repo:deploy]
 - `T5-host-through-a-shell-variable` (attacks): Deny [default.net]
+- `T5-host-through-an-uppercase-variable` (attacks): Deny [default.net]
 
 ## T6: Environment poisoning
 

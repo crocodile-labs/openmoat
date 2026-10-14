@@ -254,6 +254,7 @@ fn classify_simple(
                 name: name.to_owned(),
             })?;
         }
+        locals::note_builtin(&words[1..], program, ctx.home, sink);
     }
     if program == "printenv" {
         for name in argv[1..].iter().filter(|a| !a.starts_with('-')) {
