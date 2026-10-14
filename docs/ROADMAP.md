@@ -11,7 +11,9 @@ The latest release is `0.5.0-rc.5` (beta), from GitHub Releases, the Homebrew ta
 crates.io (README, Install). What exists:
 
 - One policy for Claude Code, Codex and Cursor, checked through each host's own hooks.
-- Policy kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`, `mcp`.
+- Policy kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`, `mcp`,
+  `web.search` and `tool.unknown`, and four verdicts: `allow`, `defer` (the agent's own
+  prompt decides, the default for anything no rule names, ADR-025), `ask` and `deny`.
 - An own POSIX lexer and shell classifier, executable pins (ADR-008) and symlink
   resolution (ADR-009).
 - A redacted, hash-chained local audit log with `show`, `replay` and `report`, and
@@ -41,6 +43,20 @@ What it does not do: confine every call. Only commands inside the host sandboxes
 `moat run` are confined by the operating system. Elsewhere an allowed call runs with
 your permissions and the hook's decision is the only check, so a classifier mistake is
 a security bug ([THREAT_MODEL.md](THREAT_MODEL.md) §5).
+
+## Next: stable 0.5.0
+
+The 0.5.0 release candidates take fixes only, no new features. 0.5.0 is cut when all of
+these hold at the same time:
+
+- three days in a row of the maintainer's own daily use with no new fixture (no new
+  false positive and no new bypass);
+- five or more people outside the project use it for a week on their own work, with no
+  false positive that blocks them;
+- the private bypass round (#131) is closed and every valid report is fixed;
+- no P1 or P2 issue is open.
+
+A failed condition starts its own count again once the fix is released.
 
 ## Positioning
 
@@ -80,7 +96,8 @@ every CI platform, and a week of daily use with every false positive turned into
 fixture.
 
 ADR-013 also listed a conservative PowerShell tokenizer under the alpha. It has no
-issue yet; until one lands, Claude Code `PowerShell` always asks.
+issue yet; until one lands, Claude Code `PowerShell` is `unparseable`, which the default
+policy defers to the agent's own prompt.
 
 ### Beta: `0.1.0-beta.N`, enforcement
 
@@ -122,7 +139,6 @@ Milestone `v1.0.0`.
 | #136 | Stable policy schema, `moat policy migrate`, signed policy packs |
 | #174, #175 | Isolated tier: `moat run --isolate` in a rootless container (Linux) or an Apple Virtualization guest (macOS) |
 | #363 | Policy secrets compiled into Claude Code's credential masking |
-| #364 | `moat bench --hook` to run the fixtures against any hook |
 
 Exit (ADR-013): MoatBench meets its gate and the policy schema is stable.
 

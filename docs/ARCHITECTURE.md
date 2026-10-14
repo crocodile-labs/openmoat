@@ -110,11 +110,14 @@ unrecorded, and exits 2, since a host that times the hook out runs the call
   wrappers (`sudo`, `env`, `xargs`, `timeout`, …) to depth 4. It adds `fs.read`/`fs.write`
   atoms for redirections and file operands (`operands.rs`), relative paths resolved
   through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs and the hosts of programs that name hosts (any other host-shaped word is a `NetWord`), and `env.*` atoms
-  for assignments and `$VAR` reads. Shell options are read per shell
+  for assignments and `$VAR` reads. Leading reserved words (`do`, `then`, `if`, …) are skipped, and a
+  variable set earlier on the line with a known value is substituted where it is used
+  (`commands/locals.rs`); a path through one whose value is not known is `unparseable`. Shell options are read per shell
   (`invocation.rs`), git's global options are unwrapped (`git.rs`), `make` arguments
   that run code (`make.rs`), options that run programs (`options.rs`), option values
   that name files in every spelling (`path_options.rs`) and decoder pipelines
-  (`decoders.rs`) are surfaced. Inline interpreter code (`python -c`, `node -e`) is scanned for paths, hosts and variable names, not parsed. Output is
+  (`decoders.rs`) are surfaced. Inline interpreter code (`python -c`, `python3.12 -c`, `node -e`, `lua -e`, `Rscript -e`, …;
+  `tables.rs`) is scanned for paths, hosts and variable names, not parsed. Output is
   capped at 2048 atoms.
 - **ForeignShell** (Claude Code `PowerShell`). Always rule `unparseable` (below);
   there is no PowerShell parser.
@@ -325,7 +328,8 @@ non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
   files and any `bin/moat`, and denies `moat
   allow|doctor|edit|init|policy|secret|trust|uninstall` and `moat sandbox sync` from an agent, including under pseudo-terminal
   wrappers (ADR-011, ADR-014).
-- **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall` and `moat doctor --accept` refuse to
+- **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`, `moat doctor --accept`,
+  `moat sandbox sync`, `moat policy upgrade` and `moat proxy install`/`uninstall` refuse to
   run without a terminal (`terminal.rs`). The debug-only `MOAT_ASSUME_TTY` override exists for tests.
 - **Stable hook path** (ADR-016). Hooks run the package manager's stable link to
   `moat`, not a versioned file an upgrade deletes; `doctor` and `status` name a hook

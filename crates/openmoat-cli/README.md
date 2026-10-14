@@ -26,11 +26,13 @@ Installers, Homebrew and the full guide: the
 | `moat audit export \| verify \| report` | export the log as JSON Lines with chain hashes, verify an export, report over several machines |
 | `moat allow [--last \| <command> --host … --session …] [--always]` | grant one command to a session, or add a permanent allow rule (terminal only) |
 | `moat allow --site <host> \| --dir <path> \| --remove <id>` · `moat edit` | allow a site or a directory, or take such a rule out · edit the policy with a diff before applying (terminal only) |
+| `moat secret add gh` · `moat secret add <id> --host … (--env NAME \| --file PATH)` | keep a token from the agent: add a brokered secret, show the diff, re-pin and sync (terminal only) |
 | `moat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes (terminal only) |
-| `moat policy lint \| check \| compile` | validate a policy · explain a decision · print what OS layers enforce |
+| `moat policy lint \| check \| compile \| upgrade` | validate a policy · explain a decision · print what OS layers enforce · add what a new default changed (terminal only) |
 | `moat sandbox show \| sync` | the host sandbox settings the policy compiles to · write and re-pin them |
-| `moat run [--write PATH]… -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux) |
-| `moat proxy [--listen 127.0.0.1:<port>]` | run the default-deny egress proxy |
+| `moat run [--isolate] [--write PATH]… -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; `--isolate`: bubblewrap, Linux) |
+| `moat proxy [--listen 127.0.0.1:<port>]` · `moat proxy install \| uninstall \| status` | run the default-deny egress proxy · as a user service (macOS launchd, Linux systemd; install and uninstall terminal only) |
+| `moat bench [--host …] [--hook <command>]` | send the bundled MoatBench scenarios to OpenMoat or any hook, and print the scorecard |
 | `moat guard --host <id>` | hook entry point: payload on stdin, decision on stdout; fail-closed |
 
 Exit codes are a contract (ADR-004): 0 allow, defer or ok, 1 the agent `moat run` started

@@ -136,9 +136,10 @@ A scenario has a marker on itself or on its steps, not both.
 `crates/openmoat-cli/moatbench/workflows.yaml` measures false positives on real development
 work: one scenario per ecosystem (Rust, Node, Python, Go, git, Docker, Make, and
 editing project files with each agent's file tools), written as the sequence of
-steps an agent runs. Each step expects `allow`, or `ask` where the default policy
-means to ask: a new dependency (`npm ci`, `pip install -e .`, `cargo add`,
-`go mod tidy`), a push, a container build.
+steps an agent runs. Each step expects `allow`; `defer` where the default policy leaves
+the call to the agent's own prompt: a new dependency (`npm ci`, `pip install -e .`,
+`cargo add`, `go mod tidy`) or a push; and `ask` where OpenMoat asks itself (a
+container build that hands the build the SSH agent, `docker build --ssh`).
 
 The scorecard counts every step on every host that ran it, in total and per
 workflow:

@@ -357,8 +357,8 @@ something OpenMoat claims to stop.
   `Glob` and `Grep` are checked as reads of their search directory, as before:
   `Glob` returns names, not contents, and `Grep` searches the whole directory
   whatever its `glob` filter.
-- **The terminal check is not a boundary.** `moat allow`, `moat trust`, `moat uninstall` and `moat doctor --accept`
-  check for a TTY. The `kernel-self` rules and the lock are what stop an agent from
+- **The terminal check is not a boundary.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`,
+  `moat sandbox sync` and `moat doctor --accept` check for a TTY. The `kernel-self` rules and the lock are what stop an agent from
   re-pinning or granting itself anything.
 - **Repository rules are hook-only, and a repository can block itself.** A
   repository policy is merged into the hook decision only. Host sandboxes and
