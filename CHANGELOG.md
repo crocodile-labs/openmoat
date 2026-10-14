@@ -9,13 +9,12 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
-- More network clients count as naming a host (`openssl`, `socat` addresses, `psql`/`mysql`/`redis-cli -h`, `nmap`, `mosh`, `aria2c` and others), and a host in a quoted string in inline interpreter code is network access again, so an unlisted host there is denied, not left to the agent (S-07). A path in another user's home (`~alice/.ssh/id_rsa`) always asks (`home-sweep`, S-08).
-
-### Security
+- More network clients count as naming a host (`openssl`, `socat` addresses, `psql`/`mysql`/`redis-cli -h`, `nmap`, `mosh`, `aria2c` and others), and a host in a quoted string in inline interpreter code is network access again, so an unlisted host there is denied, not left to the agent. A path in another user's home (`~alice/.ssh/id_rsa`) always asks (`other-home`).
 - A host quoted as an argument of a program that names hosts (`curl 'host'`, `ssh "user@host"`) and a host after git's global options (`git -C dir push host:repo`) are network again, so an unlisted host is denied instead of left to the agent; the output of any program other than `cat`, `echo` or `printf`, and of a `( … )` group, piped into a shell asks (`opaque-code`) like other text the command line does not show.
 - `sh` is read with bash's long options (`sh --norc -c '…'`), as macOS runs it, so the command string is classified and a secret read in it is denied; it was left to the agent as `unparseable`.
 - A glob operand with a POSIX bracket class (`cat .e[[:alpha:]]v`, `cat ~/.s[[:alpha:]]h/id_rsa`) names the paths the shell opens, so `secrets-paths` denies it; it was allowed inside the project and left to the agent outside it.
 - A Cursor `preToolUse` tool OpenMoat does not know that names a path is checked as writing it unless it is one of Cursor's listing or search tools, so an editing tool without a write verb in its name (`search_replace`) can no longer change `.cursor/hooks.json` or `.git/hooks` under the project read allow.
+
 ### Fixed
 - docs/THREAT_MODEL.md, docs/POLICY.md and SECURITY.md say `defer` where the default policy leaves a call to the agent's own prompt; they still said `ask` for `unparseable` input, recursive `rm`, discarding checkouts, `local-net`, `WebFetch`, `npx` and PowerShell ([#505](https://github.com/crocodile-labs/openmoat/pull/505)).
 

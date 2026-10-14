@@ -22,7 +22,7 @@ pub(super) fn scan_payload(
         let tail = &rest[start..];
         let end = tail.find(is_separator).unwrap_or(tail.len());
         let raw = &tail[..end];
-        // In a string (`urlopen('evil.com')`), not a bare dotted word (S-07).
+        // In a string (`urlopen('evil.com')`), not a bare dotted word.
         let quote = rest[..start]
             .chars()
             .last()

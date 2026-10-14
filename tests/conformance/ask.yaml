@@ -1127,7 +1127,7 @@
   action: { shell: "git push origin feature" }
   expect: { verdict: defer, rules: [default] }
 
-# S-07: a dotted attribute in inline code is still only a word (ADR-025)
+# A dotted attribute in inline code is still only a word (ADR-025)
 - id: defer-attribute-in-inline-code
   threat: T12
   action: { shell: "python3 -c \"import config; print(config.dev)\"" }
