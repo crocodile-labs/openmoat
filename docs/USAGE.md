@@ -3,7 +3,8 @@
 ## What the default policy does
 
 Each line was checked with `moat policy check` against the shipped policy, in a
-project directory:
+project directory, and `crates/openmoat-core/tests/doc_tables.rs` checks it again on
+every change:
 
 | Command | Verdict | Rule |
 |---|---|---|
@@ -34,7 +35,8 @@ effect outlives the sandbox or the session, and after a session read a secret (A
 Try your own:
 
 ```bash
-moat policy check "git push origin main"                      # exit 3: ask
+moat policy check "git push origin main"                      # exit 0: defer
+moat policy check "git config core.hooksPath .h"              # exit 3: ask
 moat policy check "https://docs.rs/serde" --kind fetch
 moat policy check "~/.aws/credentials" --kind fs-read
 ```
