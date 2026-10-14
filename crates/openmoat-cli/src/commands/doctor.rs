@@ -17,10 +17,8 @@ use crate::install::{
 use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
-use crate::sandbox::{Plan, install as host_sandbox};
 
-use super::sandbox::write_report;
-
+mod sandboxes;
 mod warnings;
 
 /// What a check is about, so accepting changes clears exactly the problems a
@@ -36,80 +34,6 @@ enum Area {
     Sandbox,
     Audit,
     Service,
-}
-
-/// The Standard tier: each present host's sandbox settings against the policy,
-/// then how many places the translation loses or widens (each one with `verbose`).
-fn sandboxes(
-    report: &mut Report,
-    home: &Home,
-    policy: &Policy,
-    lock: Option<&Lock>,
-    binary: &Path,
-    verbose: bool,
-) {
-    let plan = match Plan::new(home, policy) {
-        Ok(plan) => plan,
-        Err(e) => {
-            report.line(Area::Sandbox, false, format!("sandbox          {e:#}"));
-            return;
-        }
-    };
-    let mut present = false;
-    for host in host_sandbox::HOSTS
-        .into_iter()
-        .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
-    {
-        let name = host.display_name();
-        let problems = host_sandbox::problems(home, host, &plan, lock);
-        if let (Ok(Some(_)), Some(note)) = (&problems, host_sandbox::unavailable(host)) {
-            report.note(&format!("{name:<16} {note}"));
-            continue;
-        }
-        present |= !matches!(problems, Ok(None));
-        let translation = host_sandbox::report(host, &plan);
-        match problems {
-            Ok(None) => continue,
-            Ok(Some(problems)) if problems.is_empty() => {
-                let details = if verbose {
-                    ""
-                } else {
-                    "; --verbose for details"
-                };
-                report.line(
-                    Area::Sandbox,
-                    true,
-                    format!(
-                        "{name:<16} sandbox matches the policy ({} stricter, {} wider{details})",
-                        translation.losses.len(),
-                        translation.allowances.len()
-                    ),
-                );
-            }
-            Ok(Some(problems)) => {
-                for problem in problems {
-                    report.line(
-                        Area::Sandbox,
-                        false,
-                        format!("{name:<16} sandbox: {problem}"),
-                    );
-                }
-            }
-            Err(e) => report.line(Area::Sandbox, false, format!("{name:<16} sandbox: {e:#}")),
-        }
-        if verbose {
-            let _ = write_report(&mut report.out, translation);
-        }
-    }
-    if let Some(port) = plan.proxy_port.filter(|_| present) {
-        // A warning, not a problem: a stopped proxy fails closed.
-        let (ok, text) = super::proxy::listening_line(port);
-        let _ = writeln!(
-            report.out,
-            "{} moat proxy       {text}",
-            if ok { "✔" } else { "!" }
-        );
-    }
 }
 
 /// The `moat doctor` line for the proxy user service (`moat proxy install`,
@@ -179,7 +103,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         hook_pins(&mut report, lock, &home, &hook_files);
     }
     if let Some(policy) = &policy {
-        sandboxes(
+        sandboxes::sandboxes(
             &mut report,
             &home,
             policy,

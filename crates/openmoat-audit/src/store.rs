@@ -231,7 +231,16 @@ impl Store {
     pub fn open_read_only(path: &Path) -> Result<Self, StoreError> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))?;
-        let chained = schema::version(&conn)? >= 2;
+        let found = schema::version(&conn)?;
+        // A newer build's rows may hold what this one cannot read (a new verdict):
+        // refuse, as the writing path does, instead of showing them wrongly.
+        if found > schema::SCHEMA_VERSION {
+            return Err(StoreError::SchemaTooNew {
+                found,
+                supported: schema::SCHEMA_VERSION,
+            });
+        }
+        let chained = found >= 2;
         Ok(Self {
             conn,
             chained,

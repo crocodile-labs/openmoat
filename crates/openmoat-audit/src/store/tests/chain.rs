@@ -321,3 +321,21 @@ fn a_version_2_database_is_migrated_with_its_chain_intact() {
     assert_eq!(store.get(id).unwrap().unwrap().verdict, Verdict::Defer);
     assert!(store.verify_chain().unwrap().broken.is_none());
 }
+
+/// A database a newer build wrote is refused read-only too, not read with a
+/// schema this build does not know.
+#[test]
+fn a_newer_schema_is_refused_read_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    drop(Store::open(&path).unwrap());
+    Connection::open(&path)
+        .unwrap()
+        .pragma_update(None, "user_version", 99)
+        .unwrap();
+    let refused = Store::open_read_only(&path).err().unwrap();
+    assert!(
+        matches!(refused, StoreError::SchemaTooNew { found: 99, .. }),
+        "{refused}"
+    );
+}
