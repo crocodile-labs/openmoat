@@ -1,5 +1,12 @@
 # Threat model
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you need to know what OpenMoat defends, how the hook and the OS layers answer each threat class, and where it stops.
+
+**On this page:** [1. Assets](#1-assets) · [2. Attacker](#2-attacker) · [3. Threat classes](#3-threat-classes) · [4. Out of scope](#4-out-of-scope) · [5. Known limitations](#5-known-limitations) · [6. How the claims are tested](#6-how-the-claims-are-tested)
+
 What OpenMoat defends, against whom, how well the current code does it, and where it
 does not. The hook decides each tool call it sees; the operating system enforces the
 policy only inside the host sandboxes and `moat run` ([SANDBOX.md](SANDBOX.md)), with the

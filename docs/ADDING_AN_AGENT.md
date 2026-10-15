@@ -1,5 +1,12 @@
 # Adding an agent
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you add support for another AI coding agent: adapter, installer, fixtures, tests and docs.
+
+**On this page:** [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
+
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex
 and Cursor are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of

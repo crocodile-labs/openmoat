@@ -1,5 +1,12 @@
 # Policy reference (schema v1)
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you write or read a policy file: the schema, rule kinds, pattern syntax, evaluation order and the default policy.
+
+**On this page:** [1. Shape](#1-shape) · [2. Rule groups](#2-rule-groups) · [3. Pattern syntax](#3-pattern-syntax) · [4. How a decision is made](#4-how-a-decision-is-made) · [5. Verdicts and what the host does](#5-verdicts-and-what-the-host-does) · [6. The default policy, in one table](#6-the-default-policy-in-one-table) · [7. Recipes](#7-recipes) · [8. The policy lock](#8-the-policy-lock) · [9. Host sandboxes (sandbox:)](#9-host-sandboxes-sandbox) · [10. Repository policy](#10-repository-policy)
+
 A policy is a YAML document that tells OpenMoat what an agent may do. The installed
 user policy lives at `~/.moat/policy.yaml` (or `$MOAT_HOME/policy.yaml`).
 `moat init` writes the default; `moat policy lint` validates; `moat policy check`

@@ -1,5 +1,12 @@
 # Using OpenMoat day to day
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** an agent was stopped or asked, you want to review what it did, change the policy or share rules with a team. Every command and exit code is here.
+
+**On this page:** [What the default policy does](#what-the-default-policy-does) · [Run moat when something needs you](#run-moat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call asks](#a-call-asks) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Commands](#commands)
+
 ## What the default policy does
 
 Each line was checked with `moat policy check` against the shipped policy, in a

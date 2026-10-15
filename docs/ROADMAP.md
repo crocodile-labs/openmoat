@@ -1,5 +1,12 @@
 # Roadmap
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you want to know what exists today and what comes next, in order.
+
+**On this page:** [Where it is today](#where-it-is-today) · [Next: 0.5.x](#next-05x) · [Positioning](#positioning) · [Stages](#stages) · [The team wedge](#the-team-wedge) · [Not planned](#not-planned)
+
 Where OpenMoat is, what comes next, and in which order. The release stages and their
 exit criteria come from ADR-013. The live, ordered work list is the pinned issue
 [#144](https://github.com/crocodile-labs/openmoat/issues/144), and each stage is a

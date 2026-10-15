@@ -1,5 +1,12 @@
 # Architecture
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you change the code: where it lives, and how a tool call becomes a decision, a hook response and an audit record.
+
+**On this page:** [1. Crates](#1-crates) · [2. One tool call, end to end](#2-one-tool-call-end-to-end) · [3. Classification](#3-classification) · [4. Decision](#4-decision) · [5. Hook responses and exit codes](#5-hook-responses-and-exit-codes) · [6. Self-protection](#6-self-protection) · [7. Audit log](#7-audit-log) · [8. Files on disk](#8-files-on-disk) · [9. Invariants](#9-invariants) · [10. Repository layout](#10-repository-layout) · [11. Testing layers](#11-testing-layers) · [12. Egress proxy](#12-egress-proxy) · [13. Standard tier: host sandboxes](#13-standard-tier-host-sandboxes) · [14. Lightweight tier: moat run](#14-lightweight-tier-moat-run)
+
 How OpenMoat turns one agent tool call into a decision, a hook response and an audit
 record. This describes the code on `main`. The working rules for changing it are in
 [AGENTS.md](../AGENTS.md); the policy language is in [POLICY.md](POLICY.md); what

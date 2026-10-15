@@ -1,26 +1,43 @@
-# Documentation map
+# OpenMoat documentation
 
-Start with the top-level `README.md` for what OpenMoat is. Every document here
-describes the code on `main`.
+[README](../README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/) · [Changelog](../CHANGELOG.md)
 
-| Document | Read it when you want to… |
+Start with the top-level [README](../README.md) for what OpenMoat is. Step-by-step
+guides for common situations (a blocked call, a site to allow, a token to protect) are
+on [openmoat.dev/docs](https://openmoat.dev/docs/). The documents here are the full
+reference, and they describe the code on `main`.
+
+## Use OpenMoat
+
+| Goal | Start here |
 |---|---|
-| [INSTALL.md](INSTALL.md) | install on any platform, run `moat init`, see what each agent's hook covers, use other config directories |
-| [USAGE.md](USAGE.md) | handle a deny or an ask, review what the agent did, change the policy, share rules with a team; every command and exit code |
-| [SANDBOX.md](SANDBOX.md) | make the OS enforce the policy: the agents' own sandboxes (Standard tier) and `moat run` (Lightweight tier) |
-| [POLICY.md](POLICY.md) | write or understand a policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | know what is defended, how the hook and the OS layers answer each threat class, and the known limitations |
-| [COVERAGE.md](COVERAGE.md) | see the conformance fixtures per threat class (generated; do not edit) |
-| [EVIDENCE.md](EVIDENCE.md) | see what the OS layer stops in an allowed project script, per OS, and the known gaps (generated; do not edit) |
-| [MOATBENCH.md](MOATBENCH.md) | run the attack and everyday scenarios per host and read the scorecard |
-| [DEMO.md](DEMO.md) | run the launch demo in a throwaway home |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | find where code lives and how a tool call becomes a decision, a hook response and an audit record |
-| [ADDING_AN_AGENT.md](ADDING_AN_AGENT.md) | add support for another AI coding agent: adapter, installer, fixtures, tests, docs |
-| [ROADMAP.md](ROADMAP.md) | see the alpha, beta and 1.0 stages; the live order is issue #144 |
-| [adr/](adr/README.md) | read the decisions that constrain the code |
+| Install on macOS, Linux or Windows, run `moat init`, see what each agent's hook covers, use other config directories | [INSTALL.md](INSTALL.md) |
+| Handle a deny or an ask, review what the agent did, change the policy, share rules with a team; every command and exit code | [USAGE.md](USAGE.md) |
+| Write or read a policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy | [POLICY.md](POLICY.md) |
+| Make the OS enforce the policy: the agents' own sandboxes (Standard tier), `moat run` (Lightweight), `moat run --isolate` (Isolated) | [SANDBOX.md](SANDBOX.md) |
+| Run the launch demo in a throwaway home | [DEMO.md](DEMO.md) |
 
-Contributor files live at the repository root: `AGENTS.md` (working contract),
-`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`.
+## Understand the protection
+
+| Goal | Start here |
+|---|---|
+| Know what is defended, how the hook and the OS layers answer each threat class, and the known limits | [THREAT_MODEL.md](THREAT_MODEL.md) |
+| See what the OS layer stops in an allowed project script, per OS, and the known gaps (generated; do not edit) | [EVIDENCE.md](EVIDENCE.md) |
+| See the conformance fixtures per threat class (generated; do not edit) | [COVERAGE.md](COVERAGE.md) |
+| Run the attack and everyday scenarios per agent and read the scorecard | [MOATBENCH.md](MOATBENCH.md) |
+
+## Contribute
+
+| Goal | Start here |
+|---|---|
+| Find where code lives and how a tool call becomes a decision, a hook response and an audit record | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Add support for another AI coding agent: adapter, installer, fixtures, tests, docs | [ADDING_AN_AGENT.md](ADDING_AN_AGENT.md) |
+| Read the decisions that constrain the code | [adr/](adr/README.md) |
+| See what exists and what comes next; the live order is issue #144 | [ROADMAP.md](ROADMAP.md) |
+
+Contributor files live at the repository root: [AGENTS.md](../AGENTS.md) (working
+contract), [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md),
+[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) and [CHANGELOG.md](../CHANGELOG.md).
 
 Conventions: documents are updated in the same pull request as the behaviour they
 describe. ADRs are immutable and superseded, never edited.
