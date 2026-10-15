@@ -1,5 +1,10 @@
 # OS sandboxes: Standard, Lightweight and Isolated tiers
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you want the operating system to enforce the policy: the agents' own sandboxes (Standard tier), `moat run` (Lightweight) and `moat run --isolate` (Isolated).
+
 OpenMoat decides each tool call in the agent's hook. The sandboxes below make the operating system enforce the same policy on everything those calls start.
 
 ## Host sandboxes (Standard tier)

@@ -1,5 +1,12 @@
 # MoatBench mini
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you want to run the attack and everyday scenarios per agent, read the scorecard, or score another hook.
+
+**On this page:** [Reproduce it: moat bench](#reproduce-it-moat-bench) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario)
+
 End-to-end scenarios of what a steered agent tries, run through the real `moat`
 binary with each host's own payload shape. The conformance suite
 (`tests/conformance/`) checks one action against the engine; MoatBench checks the

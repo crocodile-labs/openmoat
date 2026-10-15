@@ -1,33 +1,43 @@
 # Install and set up OpenMoat
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you install OpenMoat on macOS, Linux or Windows, run `moat init`, want to know what each agent's hook covers, or use other config directories.
+
+**On this page:** [Install](#install) · [Set up with moat init](#set-up-with-moat-init) · [Keep moat proxy running as a user service](#keep-moat-proxy-running-as-a-user-service) · [Undo with moat uninstall](#undo-with-moat-uninstall) · [Non-default config directories](#non-default-config-directories)
+
 ## Install
 
 Release builds cover macOS (arm64, x64), Linux (x64, arm64; glibc and static musl)
 and Windows (x64). The installer URLs below always fetch the latest release; every
 release is listed on [Releases](https://github.com/crocodile-labs/openmoat/releases).
 
-`moat run` needs macOS 14 or later: its Seatbelt profile names
-`(ioctl-command TIOCSTI)` (CVE-2017-5226 class), an identifier `sandbox-exec`
-only recognises from macOS 13 onwards. On macOS 12 and earlier, `sandbox-exec`
-refuses to parse the profile and `moat run` exits without starting the agent
-(fail closed). The hook, `moat init` and `moat status` work on earlier macOS;
-only `moat run` has this floor. CI covers `macos-14` and `macos-15-intel`;
-GitHub Actions no longer offers a `macos-13` runner, so macOS 13 is not
-exercised in CI and is unsupported in practice.
-
 ```bash
+# Homebrew (macOS, Linux)
+brew install crocodile-labs/tap/moat
+
 # macOS and Linux: installs moat into ~/.cargo/bin
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/crocodile-labs/openmoat/releases/latest/download/openmoat-installer.sh | sh
 
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/crocodile-labs/openmoat/releases/latest/download/openmoat-installer.ps1 | iex"
 
-# Homebrew (macOS, Linux)
-brew install crocodile-labs/tap/moat
-
 # From crates.io (Rust 1.95)
 cargo install openmoat --locked
 ```
+
+Then run `moat init` ([below](#set-up-with-moat-init)).
+
+> [!IMPORTANT]
+> **macOS version.** `moat run` needs macOS 14 or later: its Seatbelt profile names
+> `(ioctl-command TIOCSTI)` (CVE-2017-5226 class), an identifier `sandbox-exec`
+> only recognises from macOS 13 onwards. On macOS 12 and earlier, `sandbox-exec`
+> refuses to parse the profile and `moat run` exits without starting the agent
+> (fail closed). The hook, `moat init` and `moat status` work on earlier macOS;
+> only `moat run` has this floor. CI covers `macos-14` and `macos-15-intel`;
+> GitHub Actions no longer offers a `macos-13` runner, so macOS 13 is not
+> exercised in CI and is unsupported in practice.
 
 To build from a clone instead (Rust 1.95, pinned by `rust-toolchain.toml`):
 

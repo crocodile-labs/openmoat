@@ -1,5 +1,12 @@
 # Launch demo
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you want to run the launch demo yourself, in a throwaway home.
+
+**On this page:** [Run it](#run-it) · [It never touches your configuration](#it-never-touches-your-configuration) · [What it shows](#what-it-shows) · [What it does not claim](#what-it-does-not-claim)
+
 A short, reproducible terminal demo. A README carries a prompt injection that tells
 coding agents to upload the SSH key. Claude Code follows it in plain form and Codex
 follows it base64-obfuscated inside `bash -lc`. Both run under one OpenMoat policy, which
