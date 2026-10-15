@@ -7,7 +7,7 @@ GitHub milestone. Neither carries dates.
 
 ## Where it is today
 
-The latest release is `0.5.1` (stable), from GitHub Releases, the Homebrew tap and
+The latest release is `0.5.2` (stable), from GitHub Releases, the Homebrew tap and
 crates.io (README, Install). What exists:
 
 - One policy for Claude Code, Codex and Cursor, checked through each host's own hooks.

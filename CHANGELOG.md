@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-15
+
+Writes an agent should not make without a question now ask: CI workflows and commit hooks (`runs-later`), and `.git` in a directory allowed with `moat allow --dir`. `moat secret add` denies the secret's source to the agent, and `moat allow` updates the agents' sandboxes at once.
+
 ### Security
 - A new ask group, `runs-later`, asks before an agent writes what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) or what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.vscode/tasks.json`). They were allowed as project files. `project-fs` and `moat allow --dir` leave them out; reading them stays allowed, and the OS sandboxes do not deny them. Existing policies get the group with `moat policy upgrade`.
 - `moat allow --dir` no longer allows writes into a `.git` in that directory (hooks, config, a `.git` file pointing elsewhere). As in the project, git runs what those name later, outside any sandbox; such a write now goes to the agent's own prompt. Rules added by an earlier version keep their old form: remove and add the directory again to get it.
@@ -502,7 +506,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.5...v0.5.0
 [0.5.0-rc.5]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0-rc.4...v0.5.0-rc.5
