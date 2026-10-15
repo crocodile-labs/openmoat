@@ -196,6 +196,7 @@
 ; wider: fs.write `seatbelt.platform`: the devices every process writes
 ; wider: fs.read `seatbelt.program`: the program `moat run` starts, which must be readable to start
 ; wider: fs.read `sandbox.read_roots`: the hook decides these reads by the rules (ask by default); OS layers allow them so commands can run, and deny rules still win
+; wider: fs.write `seatbelt.runs-later`: commands may write CI configuration, commit-hook managers' files and editor tasks (an install runs `husky`); the hook asks before the agent writes one (`runs-later`)
 ; wider: fs.write `seatbelt.tmpdir`: commands may read and write the temp directory; the hook asks
 ; wider: fs.write `seatbelt.write`: `moat run --write`: commands may read and write these; deny rules still win
 ; wider: fs.read `seatbelt.case`: Seatbelt compares paths in their on-disk spelling, so a pattern spelled in another case than the file on disk does not match it

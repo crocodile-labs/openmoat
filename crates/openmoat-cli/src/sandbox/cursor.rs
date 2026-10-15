@@ -29,7 +29,8 @@ pub use settings::{apply, in_sync, remove, weaknesses};
 
 use super::Report;
 use super::patterns::{
-    Spot, domain, git_exclusion, is_below, literal_tree, push_unique, split, spot,
+    Spot, domain, git_exclusion, is_below, literal_tree, push_unique, runs_later_exclusion, split,
+    spot,
 };
 
 /// What OpenMoat writes into `sandbox.json`.
@@ -122,9 +123,10 @@ impl Grants {
 
     fn close(&mut self, pattern: &str) {
         match spot(pattern) {
-            // a `.git` in a granted directory: like the workspace's, Cursor keeps
-            // its hooks and config unwritable, and denying it would refuse the grant
-            Spot::Absolute(path) if git_exclusion(pattern) => {
+            // a `.git` or a file run later (CI, commit hooks) in a granted directory:
+            // left open as in the workspace, since denying it would refuse the grant;
+            // Cursor keeps `.git` hooks and config unwritable, and the hook asks
+            Spot::Absolute(path) if git_exclusion(pattern) || runs_later_exclusion(pattern) => {
                 push_unique(&mut self.open, path.to_owned());
             }
             Spot::Absolute(path) => push_unique(&mut self.denied, path.to_owned()),

@@ -129,11 +129,12 @@
   why: >-
     The file tools of each agent editing ordinary project files: source, tests,
     docs, CI config, dotfiles of the project. All inside the project. No `read`
-    step, so Codex (which reads through its shell) runs it too.
+    step, so Codex (which reads through its shell) runs it too. The CI workflow is
+    the one intended ask: CI runs it later with the repository's secrets (`runs-later`).
   steps:
     - { edit: "src/lib.rs", expect: allow, rule: project-fs }
     - { write: "tests/parse.rs", expect: allow, rule: project-fs }
     - { edit: "docs/guide.md", expect: allow, rule: project-fs }
-    - { edit: ".github/workflows/ci.yml", expect: allow, rule: project-fs }
+    - { edit: ".github/workflows/ci.yml", expect: ask, rule: runs-later }
     - { edit: ".gitignore", expect: allow, rule: project-fs }
     - { write: "crates/core/src/new_module.rs", expect: allow, rule: project-fs }

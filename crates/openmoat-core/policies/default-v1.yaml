@@ -229,7 +229,9 @@ allow:
     fs.read: ["${project}", "${project}/**"]
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted
     # directory), so writing one asks like the root's own `.git`
-    fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**"]
+    fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
+      # what CI or a commit runs later, outside any sandbox (`runs-later` asks)
+      "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -579,6 +581,13 @@ ask:
     fs.write: ["${project}/.git", "${project}/.git/**", "${project}/**/.git", "${project}/**/.git/**"]
     # `dev-shell` allows the forms that only read; the rest of these change what git runs
     shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*"]
+  # CI configuration runs with the repository's secrets once a branch is pushed, and
+  # commit-hook managers and editor tasks run on this machine outside any sandbox;
+  # `project-fs` leaves them out, so a write asks wherever it is. Hook only: the OS
+  # sandboxes list them as writable (`sandbox/patterns.rs`)
+  - id: runs-later
+    reason: CI, commit hooks or the editor run this later, outside any sandbox
+    fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

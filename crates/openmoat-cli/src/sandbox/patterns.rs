@@ -38,6 +38,38 @@ pub fn spot(pattern: &str) -> Spot<'_> {
 /// git follows like the root's own `.git`.
 pub const ANY_GIT: &str = "**/.git/**";
 
+/// Files CI, a commit-hook manager or the editor runs later, outside any
+/// sandbox (`runs-later` in the default policy). `project-fs` and `moat allow
+/// --dir` leave them out so the hook asks; an OS sandbox gets no deny for them,
+/// which would also make them unreadable (Codex globs) or refuse a whole
+/// granted directory (Cursor).
+pub const RUNS_LATER: &[&str] = &[
+    "**/.github/workflows/**",
+    "**/.gitlab-ci.yml",
+    "**/.circleci/**",
+    "**/azure-pipelines.yml",
+    "**/Jenkinsfile",
+    "**/.buildkite/**",
+    "**/.husky/**",
+    "**/.pre-commit-config.yaml",
+    "**/lefthook.yml",
+    "**/.lefthook.yml",
+    "**/.vscode/tasks.json",
+];
+
+/// A write exclusion of one of [`RUNS_LATER`], below the project or below a
+/// directory `moat allow --dir` granted.
+pub fn runs_later_exclusion(pattern: &str) -> bool {
+    let rest = match spot(pattern) {
+        Spot::Project(rest) => rest,
+        Spot::Absolute(path) => path,
+        Spot::Anywhere(_) => return false,
+    };
+    RUNS_LATER
+        .iter()
+        .any(|file| rest == *file || rest.ends_with(&format!("/{file}")))
+}
+
 /// A write exclusion that keeps a repository's `.git` out of an allow rule:
 /// the project's own (`.git/**`, [`ANY_GIT`]) or one below a directory
 /// `moat allow --dir` granted (`/w/lib/.git/**`, `/w/lib/**/.git/**`).

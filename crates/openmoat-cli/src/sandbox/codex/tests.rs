@@ -454,3 +454,30 @@ fn an_allowed_directory_keeps_its_git_read_only_and_readable() {
         out.report.allowances
     );
 }
+
+/// Files run later (`runs-later`) get no deny glob, which would make them
+/// unreadable; the hook asks, and the profile lists them.
+#[test]
+fn files_run_later_are_no_deny_glob() {
+    let out = generated(DEFAULT_POLICY);
+    let text = render(&out);
+    for name in [
+        ".github/workflows",
+        ".husky",
+        "Jenkinsfile",
+        ".pre-commit-config",
+    ] {
+        assert!(
+            !text.contains(&format!("{name}\" = \"none\"")),
+            "{name}: {text}"
+        );
+    }
+    assert!(
+        out.report
+            .allowances
+            .iter()
+            .any(|a| a.rule == "codex.runs-later"),
+        "{:?}",
+        out.report.allowances
+    );
+}

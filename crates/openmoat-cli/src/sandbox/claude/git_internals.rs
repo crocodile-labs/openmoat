@@ -6,7 +6,7 @@ use openmoat_core::Kind;
 
 use super::Filesystem;
 use super::Report;
-use crate::sandbox::patterns::push_unique;
+use crate::sandbox::patterns::{RUNS_LATER, push_unique};
 
 /// The allowance's id in the report.
 const GIT_INTERNALS: &str = "claude-code.git-internals";
@@ -57,4 +57,19 @@ impl Filesystem {
              and the hook still asks for file-tool writes to any `.git`",
         );
     }
+}
+
+/// The hook asks before the agent writes a [`RUNS_LATER`] file; the sandbox is
+/// not asked to deny it, so sandboxed commands may still write one.
+pub(super) fn runs_later(report: &mut Report, rule: &str) {
+    if report.allowances.iter().any(|a| a.rule == rule) {
+        return;
+    }
+    report.allowance(
+        Kind::FsWrite,
+        rule,
+        RUNS_LATER.iter().map(|f| (*f).to_owned()).collect(),
+        "sandboxed commands may write CI configuration, commit-hook managers' files and \
+         editor tasks; the hook asks before the agent writes one (`runs-later`)",
+    );
 }

@@ -156,3 +156,15 @@ fn an_allowed_directory_with_its_git_left_out_is_still_granted() {
         "{wider:?}"
     );
 }
+
+/// A file run later (`runs-later`) in a directory `moat allow --dir` granted is
+/// left open like the `.git`, so the grant is kept; the hook asks.
+#[test]
+fn a_file_run_later_in_an_allowed_directory_keeps_the_grant() {
+    let out = generated(
+        "version: 1\nallow:\n  - id: approved-1\n    fs.read: ['/w/lib', '/w/lib/**']\n    \
+         fs.write: ['/w/lib', '/w/lib/**', '!/w/lib/**/.github/workflows/**']\n",
+    );
+    let writes = list(&out, "/additionalReadwritePaths");
+    assert!(writes.contains(&"/w/lib".to_owned()), "{writes:?}");
+}

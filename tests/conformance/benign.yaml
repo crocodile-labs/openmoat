@@ -430,10 +430,6 @@
   session: [{ fs_read: "/p/README.md" }, { shell: "cat .env.example" }]
   action: { net: "https://api.github.com/repos/x/y" }
   expect: { verdict: allow, rules: [registries] }
-- id: benign-ci-workflow-edit-in-a-clean-session
-  threat: T9
-  action: { fs_write: "/p/.github/workflows/ci.yml" }
-  expect: { verdict: allow, rules: [project-fs] }
 # Read-only text tools on project files (#212)
 - id: benign-sort-uniq-count
   action: { shell: "sort data.txt | uniq -c" }
@@ -976,3 +972,26 @@
           fs.read: ["/w/lib", "/w/lib/**"]
           fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
   expect: { verdict: allow, rules: [repo:approved-1] }
+# `runs-later` names only files CI, commit hooks or the editor run: the rest of
+# `.github` and `.vscode`, build files and reading workflows stay allowed
+- id: benign-read-a-github-workflow
+  action: { shell: "cat .github/workflows/ci.yml" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-write-an-issue-template
+  action: { fs_write: "/p/.github/ISSUE_TEMPLATE/bug.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-codeowners
+  action: { fs_write: "/p/.github/CODEOWNERS" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-vscode-settings
+  action: { fs_write: "/p/.vscode/settings.json" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-package-json
+  action: { fs_write: "/p/package.json" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-a-makefile
+  action: { fs_write: "/p/Makefile" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-a-workflow-doc
+  action: { fs_write: "/p/docs/workflows/release.md" }
+  expect: { verdict: allow, rules: [project-fs] }

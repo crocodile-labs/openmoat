@@ -22,7 +22,7 @@ use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 
 use super::landlock::{self, Rules};
-use super::patterns::{has_glob, is_below, literal_tree, push_unique, split};
+use super::patterns::{has_glob, is_below, literal_tree, push_unique, runs_later_exclusion, split};
 use super::{Grants, Report};
 
 /// A name below a directory that only a rule for the whole subtree (`dir/**`)
@@ -253,10 +253,13 @@ fn deny_patterns(ir: &Enforcement) -> impl Iterator<Item = &str> {
     [&ir.fs.read, &ir.fs.write].into_iter().flat_map(denials)
 }
 
-/// The deny rules and allow exceptions of `access`.
+/// The deny rules and allow exceptions of `access`, except the files run later
+/// (`runs-later`), which the hook asks about: masking them would make them
+/// unreadable and fail installs that write them.
 fn denials(access: &Access) -> impl Iterator<Item = &str> {
     let denied = access.deny.iter().flat_map(|r| split(&r.patterns).0);
-    denied.chain(access.allow.iter().flat_map(|r| split(&r.patterns).1))
+    let excepted = access.allow.iter().flat_map(|r| split(&r.patterns).1);
+    denied.chain(excepted.filter(|p| !runs_later_exclusion(p)))
 }
 
 struct Masks<'a> {

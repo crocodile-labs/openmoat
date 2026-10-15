@@ -63,7 +63,7 @@ benign              20        0      0       20            0      0
 exfiltration        18       17      0        0            1      0
 …
 total              134       74      8       25           27      0
-workflows: 154 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
+workflows: 154 steps, 5 asks (expected 5), 0 unexpected, 0 expected failures
   docker-image             10 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
 …
 false positives: 0
@@ -145,7 +145,7 @@ The scorecard counts every step on every host that ran it, in total and per
 workflow:
 
 ```text
-workflows: 154 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
+workflows: 154 steps, 5 asks (expected 5), 0 unexpected, 0 expected failures
   git-feature-branch       42 steps, 0 asks (expected 0), 0 unexpected, 0 expected failures
 ```
 

@@ -15,9 +15,9 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 20 | 13 | 0 |
 | T7 | Obfuscation and nested execution | 84 | 99 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 140 | 17 | 4 |
+| T9 | Hook / policy tampering by the agent | 140 | 35 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
-| T11 | Time-of-check / time-of-use, symlinks | 15 | 3 | 0 |
+| T11 | Time-of-check / time-of-use, symlinks | 15 | 4 | 0 |
 | T12 | Network to unknown hosts | 30 | 16 | 1 |
 
 ## T1: Secret exfiltration via shell
@@ -648,6 +648,24 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-redirect-to-other-descriptor-path` (ask): Defer [default]
 - `ask-stdin-path-as-output` (ask): Defer [default]
 - `ask-git-restore-git-dir` (ask): Ask [git-internals]
+- `ask-write-github-workflow` (ask): Ask [runs-later]
+- `ask-echo-into-github-workflow` (ask): Ask [runs-later]
+- `ask-heredoc-into-github-workflow` (ask): Ask [runs-later]
+- `ask-copy-over-github-workflow` (ask): Ask [runs-later]
+- `ask-workflow-through-a-variable` (ask): Ask [runs-later]
+- `ask-workflow-in-a-nested-package` (ask): Ask [runs-later]
+- `ask-write-gitlab-ci` (ask): Ask [runs-later]
+- `ask-write-circleci` (ask): Ask [runs-later]
+- `ask-write-azure-pipelines` (ask): Ask [runs-later]
+- `ask-write-jenkinsfile` (ask): Ask [runs-later]
+- `ask-write-buildkite` (ask): Ask [runs-later]
+- `ask-write-husky-hook` (ask): Ask [runs-later]
+- `ask-write-pre-commit-config` (ask): Ask [runs-later]
+- `ask-write-lefthook` (ask): Ask [runs-later]
+- `ask-write-dot-lefthook` (ask): Ask [runs-later]
+- `ask-write-vscode-tasks` (ask): Ask [runs-later]
+- `ask-workflow-in-an-allowed-directory` (ask): Ask [runs-later]
+- `ask-husky-in-an-allowed-directory` (ask): Ask [runs-later]
 - `T9-edit-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-project-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-moat-policy` (attacks): Deny [kernel-self]
@@ -790,7 +808,6 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-moat-in-ansi-c-hex-escape` (attacks): Deny [kernel-self]
 - `benign-move-project-file` (benign): Allow [dev-shell]
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
-- `benign-ci-workflow-edit-in-a-clean-session` (benign): Allow [project-fs]
 - `benign-python-test-file-named-after-moat` (benign): Allow [dev-shell, project-fs]
 
 ## T10: Hook supply chain (trojaned hook binary)
@@ -809,6 +826,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-create-symlink-and-read-through-it` (ask): Defer [default]
 - `ask-linked-project-read-through-link-outside` (ask): Defer [default]
 - `ask-python-script-through-link-outside-project` (ask): Defer [default]
+- `ask-workflow-through-a-symlinked-dir` (ask): Ask [runs-later]
 - `T11-read-key-through-symlinked-dir` (attacks): Deny [secrets-paths]
 - `T11-plant-authorized-key-through-symlink` (attacks): Deny [secrets-paths]
 - `T11-file-tool-read-through-symlink` (attacks): Deny [secrets-paths]

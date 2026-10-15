@@ -138,6 +138,7 @@ GIT_CONFIG_VALUE_0 = "explicit"
 # wider: fs.read `codex.minimal`: Codex's minimal platform reads (system libraries, devices) every command needs
 # wider: fs.read `sandbox.read_roots`: the hook decides these reads by the rules (ask by default); OS layers allow them so commands can run, and deny rules still win
 # wider: fs.write `codex.nested-git`: a profile glob can only deny, which would also block reading every `.git`, so sandboxed commands may write a `.git` file (`gitdir: …`) or directory below a workspace root; Codex keeps the root's own `.git` read-only, and the hook asks
+# wider: fs.write `codex.runs-later`: a profile glob can only deny, which would also block reading them, so sandboxed commands may write CI configuration, commit-hook managers' files and editor tasks; the hook asks (`runs-later`)
 # wider: fs.write `codex.tmpdir`: commands may write the temp directory; the hook asks
 # wider: fs.write `codex.directory-nodes`: a denied directory covers its subtree, so these directory nodes are left out and only the files below them are denied; renaming or deleting the directory itself is left to the hook
 # wider: fs.read `codex.outside-home`: Codex on Linux lists every directory below a deny glob before each command and runs no command when one is unreadable (root-only directories under /etc and /tmp), so `**/` denies (`.env` files) cover the project and the read roots in the home but not these directories; the hook still denies the agent's own reads there

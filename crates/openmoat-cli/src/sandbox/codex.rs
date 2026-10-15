@@ -40,7 +40,10 @@ use openmoat_core::ir::{Access, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 use toml_edit::{Item, Table, value};
 
-use super::patterns::{ANY_GIT, Spot, is_below, literal_tree, push_unique, split, spot};
+use super::patterns::{
+    ANY_GIT, RUNS_LATER, Spot, is_below, literal_tree, push_unique, runs_later_exclusion, split,
+    spot,
+};
 use super::{PROJECT, Report};
 
 mod config;
@@ -333,6 +336,10 @@ impl Filesystem {
                     nested_git(report);
                     continue;
                 }
+                if mode == Mode::Write && runs_later_exclusion(pattern) {
+                    runs_later(report);
+                    continue;
+                }
                 let read_only = write_only_target(pattern).is_some_and(|path| readable(&path));
                 self.deny(
                     pattern,
@@ -436,6 +443,26 @@ fn nested_git(report: &mut Report) {
         "a profile glob can only deny, which would also block reading every `.git`, so \
          sandboxed commands may write a `.git` file (`gitdir: …`) or directory below a \
          workspace root; Codex keeps the root's own `.git` read-only, and the hook asks",
+    );
+}
+
+/// The hook asks before the agent writes a [`RUNS_LATER`] file; a profile glob
+/// could only deny it, reads included, so sandboxed commands may write one.
+fn runs_later(report: &mut Report) {
+    if report
+        .allowances
+        .iter()
+        .any(|a| a.rule == "codex.runs-later")
+    {
+        return;
+    }
+    report.allowance(
+        Kind::FsWrite,
+        "codex.runs-later",
+        RUNS_LATER.iter().map(|f| (*f).to_owned()).collect(),
+        "a profile glob can only deny, which would also block reading them, so sandboxed \
+         commands may write CI configuration, commit-hook managers' files and editor tasks; \
+         the hook asks (`runs-later`)",
     );
 }
 
