@@ -324,7 +324,36 @@ fn checked_atoms(
         }
     }
     let unexpanded = expansion.overflow();
-    (with_resolved_paths(atoms, paths), unparsed.or(unexpanded))
+    let atoms = with_environ_reads(with_resolved_paths(atoms, paths));
+    (atoms, unparsed.or(unexpanded))
+}
+
+/// Add `@proc-environ <path>` for every read of a process's environment
+/// (`/proc/self/environ`, `/proc/1/task/1/environ`): the same variables as
+/// `printenv`, secrets included, which `env-dump` denies. A shell atom, not a
+/// path rule, so no OS sandbox is asked to deny a glob under `/proc`.
+fn with_environ_reads(atoms: Vec<AtomicAction>) -> Vec<AtomicAction> {
+    let environ: Vec<AtomicAction> = atoms
+        .iter()
+        .filter_map(|atom| match atom {
+            AtomicAction::FsRead { path } if is_proc_environ(path) => Some(AtomicAction::Shell {
+                argv: vec!["@proc-environ".to_owned(), path.clone()],
+            }),
+            _ => None,
+        })
+        .collect();
+    atoms.into_iter().chain(environ).collect()
+}
+
+/// `/proc/<pid>/environ` or `/proc/<pid>/task/<tid>/environ`, any spelling of the ids.
+fn is_proc_environ(path: &str) -> bool {
+    let parts: Vec<&str> = path.split('/').collect();
+    let id = |s: &str| !s.is_empty();
+    match parts.as_slice() {
+        ["", "proc", pid, "environ"] => id(pid),
+        ["", "proc", pid, "task", tid, "environ"] => id(pid) && id(tid),
+        _ => false,
+    }
 }
 
 impl CompiledPolicy<'_> {

@@ -54,11 +54,15 @@ pub fn resolve(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) 
 }
 
 /// Whether `raw` still names a variable after the ones [`resolve`] expands
-/// (`HOME`, `PWD`, `project`): the shell replaces it with a value the path
-/// itself does not show, so the path is not known (`cat $d/id_rsa`).
+/// (`HOME`, `PWD`, `project`), or holds the output of a command (`$( … )`,
+/// backticks): the shell replaces it with a value the path itself does not
+/// show, so the path is not known (`cat $d/id_rsa`, `cat $(cat list)`).
 #[must_use]
 pub fn has_unexpanded_variable(raw: &str) -> bool {
     let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    if raw.contains("$(") || raw.contains('`') {
+        return true;
+    }
     raw.match_indices('$').any(|(pos, _)| {
         let rest = &raw[pos + 1..];
         let (body, braced) = match rest.strip_prefix('{') {

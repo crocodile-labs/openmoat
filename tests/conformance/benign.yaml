@@ -946,3 +946,10 @@
 - id: benign-pwd-in-a-path
   action: { shell: "cat $PWD/README.md" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
+# ANSI-C quoting in everyday commands
+- id: benign-ansi-c-tab-in-printf
+  action: { shell: "printf $'a\\tb\\n'" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-ansi-c-project-path
+  action: { shell: "cat $'src/main.rs'" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }

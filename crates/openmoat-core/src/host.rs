@@ -21,6 +21,52 @@ pub fn of_url(url: &str) -> Option<String> {
     authority_host(rest)
 }
 
+/// The local path a `file:` URL names (`file:///p`, `file://localhost/p`,
+/// `FILE:/p`), percent-decoded, also as the value of `--opt=URL`. Programs that
+/// fetch URLs (`curl`, `wget`, `git`) read that file.
+#[must_use]
+pub fn file_url_path(token: &str) -> Option<String> {
+    let url = match token.split_once('=') {
+        Some((option, value)) if option.starts_with('-') => value,
+        _ => token,
+    };
+    let scheme = url.get(..5)?;
+    if !scheme.eq_ignore_ascii_case("file:") {
+        return None;
+    }
+    let rest = &url[5..];
+    let path = match rest.strip_prefix("//") {
+        Some(authority_and_path) => &authority_and_path[authority_and_path.find('/')?..],
+        None => rest,
+    };
+    let path = path.split(['?', '#']).next().unwrap_or(path);
+    (path.starts_with('/') || path.starts_with('~')).then(|| percent_decode(path))
+}
+
+/// `%2e` → `.`; a `%` not followed by two hex digits stays as it is.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        if bytes[i] == b'%'
+            && let (Some(hi), Some(lo)) = (
+                bytes.get(i + 1).copied().and_then(hex),
+                bytes.get(i + 2).copied().and_then(hex),
+            )
+        {
+            // two hex digits: always a byte
+            out.extend(u8::try_from(hi * 16 + lo).ok());
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Host named by one shell word, if the word is evidently a network address.
 #[must_use]
 pub fn of_word(token: &str) -> Option<String> {

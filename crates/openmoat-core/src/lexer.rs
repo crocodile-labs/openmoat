@@ -7,7 +7,8 @@
 //! Supported syntax:
 //! - whitespace and newlines; `#` comments at word start;
 //! - single quotes, double quotes (with `\"`, `\\`, `\$`, `` \` `` escapes), backslash
-//!   escapes outside quotes;
+//!   escapes outside quotes; `$'…'` decoded like bash (`\x2f`, `\057`, `\u…`, `\'`) into
+//!   quoted text, and `$"…"` read as `"…"`;
 //! - control operators `|`, `||`, `&`, `&&`, `;`, `(`, `)`, newline;
 //! - redirections `<`, `>`, `>>`, `<>`, `&>`, `&>>`, `<&`, `>&`, with optional
 //!   leading file-descriptor digits (`2>&1`, `3<file`);
@@ -24,6 +25,7 @@
 //! errors to `ask`, never to `allow`. Brace expansion (`brace.rs`) is a separate
 //! step the classifier runs on the tokens, so policy patterns are lexed as written.
 
+mod ansi_c;
 mod brace;
 mod heredoc;
 mod operator;
@@ -153,6 +155,8 @@ pub enum LexError {
     TooLong { max: usize },
     #[error("braces expand past what can be checked ({MAX_BRACE_WORDS} words)")]
     TooManyBraceWords,
+    #[error("`$'…'` decodes to a NUL byte, bytes that are not text or an escape not understood")]
+    AnsiC,
 }
 
 /// Upper bound on input size; larger commands are refused (and therefore `ask`).
@@ -245,14 +249,17 @@ impl Lexer {
                     }
                 }
                 '\'' => {
-                    // `$'…'` (ANSI-C quoting) decodes escapes such as `\x24`; its
-                    // text is not marked literal, so it is scanned as before.
-                    let ansi_c = self.pos > 0 && self.chars[self.pos - 1] == '$';
                     self.bump();
-                    self.single_quoted(ansi_c)?;
+                    if self.take_unquoted_dollar() {
+                        self.ansi_c_quoted()?;
+                    } else {
+                        self.single_quoted()?;
+                    }
                 }
                 '"' => {
                     self.bump();
+                    // `$"…"` (locale translation) is a double-quoted string
+                    self.take_unquoted_dollar();
                     self.double_quoted()?;
                 }
                 '\\' => {
@@ -301,7 +308,36 @@ impl Lexer {
         Ok(self.tokens)
     }
 
-    fn single_quoted(&mut self, ansi_c: bool) -> Result<(), LexError> {
+    /// Take off the `$` that ends the current word, when the shell reads it as the
+    /// start of `$'…'` or `$"…"`: unquoted, and not the second half of `$$`.
+    fn take_unquoted_dollar(&mut self) -> bool {
+        let Some(word) = self.current.as_mut() else {
+            return false;
+        };
+        let Some(run) = word
+            .unquoted
+            .last_mut()
+            .filter(|r| r.end == word.text.len())
+        else {
+            return false;
+        };
+        let dollars = word.text[run.clone()]
+            .bytes()
+            .rev()
+            .take_while(|&b| b == b'$')
+            .count();
+        if dollars % 2 == 0 {
+            return false;
+        }
+        word.text.pop();
+        run.end -= 1;
+        if run.start == run.end {
+            word.unquoted.pop();
+        }
+        true
+    }
+
+    fn single_quoted(&mut self) -> Result<(), LexError> {
         let word = self.word();
         word.quoted = true;
         let start = word.text.len();
@@ -309,7 +345,7 @@ impl Lexer {
             match self.bump() {
                 Some('\'') => {
                     let word = self.word();
-                    if !ansi_c && word.text.len() > start {
+                    if word.text.len() > start {
                         word.literal.push(start..word.text.len());
                     }
                     return Ok(());

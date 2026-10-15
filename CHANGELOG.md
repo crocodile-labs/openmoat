@@ -8,6 +8,14 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- `$'…'` (ANSI-C quoting) is decoded the way bash decodes it, and `$"…"` is read as `"…"`. `cat $'/Users/me/.ssh/id_rsa'` and `cat $'\x2f'Users/me/.ssh/id_rsa` were allowed as project files; they are reads of the key and denied, and `$'moat' allow --last` is denied like `moat allow --last`.
+- A path that is the output of a command (`cat $(cat list.txt)`, `` cat `cmd` ``) is no longer allowed as a project file: like a path through an unknown variable it defers, and asks when its file name is a key's or a `.env`.
+- A `file:` URL is a read of its file: `curl file:///Users/me/.ssh/id_rsa` is denied; it was left to the agent's prompt.
+- `$IFS` splits a word where it stands: `cat${IFS}~/.ssh/id_rsa` is denied.
+- A command handed to `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `git difftool --extcmd`, `git filter-branch --*-filter`, `ssh -o ProxyCommand=` (and `LocalCommand`, `KnownHostsCommand`) or `rsync -e` is checked as a command of its own.
+- `env-dump` denies reading a process environment from `/proc/<pid>/environ`, and `secrets-paths` denies the commands that print a stored token or password (`gh auth token`, `gcloud auth print-access-token`, `az account get-access-token`, `aws configure export-credentials`, `git credential fill`, `security find-generic-password -w`).
+
 ## [0.5.0] - 2026-10-14
 
 The first stable release with the quiet default (ADR-025): OpenMoat denies what must never happen, asks for the few calls whose effect outlives the session, and leaves every other call to your agent's own permission prompt. This section lists what changed since 0.5.0-rc.5; the release candidates below list the rest since 0.4.0.

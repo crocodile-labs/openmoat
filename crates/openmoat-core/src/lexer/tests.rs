@@ -165,3 +165,42 @@ fn refuses_huge_input() {
     let big = "a".repeat(MAX_COMMAND_BYTES + 1);
     assert!(matches!(lex(&big), Err(LexError::TooLong { .. })));
 }
+
+#[test]
+fn ansi_c_quoting_is_decoded() {
+    assert_eq!(words(r"cat $'\x2f'Users/me"), ["cat", "/Users/me"]);
+    assert_eq!(words(r"cat $'\057etc\057passwd'"), ["cat", "/etc/passwd"]);
+    assert_eq!(words(r"cat $'/etc'"), ["cat", "/etc"]);
+    assert_eq!(words(r"echo $'it\'s' x"), ["echo", "it's", "x"]);
+    assert_eq!(words(r"echo $'a\tb'"), ["echo", "a\tb"]);
+    assert_eq!(
+        words(r"echo $'\q'"),
+        ["echo", "\\q"],
+        "unknown escapes stay"
+    );
+    assert_eq!(words(r"$'moat' allow"), ["moat", "allow"]);
+    assert_eq!(
+        words("cat $\"/etc\"/x"),
+        ["cat", "/etc/x"],
+        "`$\"…\"` is `\"…\"`"
+    );
+}
+
+#[test]
+fn only_an_unquoted_dollar_starts_ansi_c_quoting() {
+    assert_eq!(words(r"echo \$'\x2f'"), ["echo", r"$\x2f"]);
+    assert_eq!(words(r"echo '$'''"), ["echo", "$"]);
+    assert_eq!(
+        words(r"echo $$'x'"),
+        ["echo", "$$x"],
+        "`$$` is the process id"
+    );
+    assert_eq!(words(r"echo $$$'\x2f'"), ["echo", "$$/"]);
+}
+
+#[test]
+fn ansi_c_quoting_that_cannot_be_text_is_an_error() {
+    for input in [r"cat $'a\0b'", r"cat $'\xff'", r"cat $'\c\'", r"cat $'abc"] {
+        assert!(lex(input).is_err(), "{input}");
+    }
+}
