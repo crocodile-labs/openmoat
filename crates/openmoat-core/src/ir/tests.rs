@@ -47,8 +47,12 @@ fn default_policy_lowers_paths_and_hosts() {
         "exclusions kept"
     );
     assert_eq!(
-        ir.fs.write.allow[0].patterns,
+        ir.fs.write.allow[0].patterns[..4],
         ["/p/**", "!/p/.git/**", "!/p/**/.git/**", "!/p/.moat/**"]
+    );
+    assert!(
+        (ir.fs.write.allow[0].patterns.iter()).any(|p| p == "!/p/**/.github/workflows/**"),
+        "what `runs-later` asks for is left out"
     );
     assert_eq!(
         ids(&ir.fs.write.deny),
@@ -90,10 +94,11 @@ fn every_deferred_kind_is_reported_as_a_loss() {
         "fs.write `git-internals`: the hook asks; OS layers deny unless an allow rule matches"
             .into(),
         "fs.write `persistence`: the hook asks; OS layers deny unless an allow rule matches".into(),
+        "fs.write `runs-later`: the hook asks; OS layers deny unless an allow rule matches".into(),
     ] {
         assert!(losses.contains(&expected), "{losses:#?}");
     }
-    assert_eq!(losses.len(), 8, "{losses:#?}");
+    assert_eq!(losses.len(), 9, "{losses:#?}");
 }
 
 #[test]

@@ -76,3 +76,28 @@ fn an_allowed_directory_keeps_git_writable_except_what_runs_code() {
         out.report.losses
     );
 }
+
+/// Files CI or a commit hook runs later (`runs-later`): the hook asks, the
+/// sandbox denies none of them and lists them once.
+#[test]
+fn files_run_later_are_asked_by_the_hook_not_denied_by_the_sandbox() {
+    let out = generated(DEFAULT_POLICY);
+    let deny = list(&out, "/filesystem/denyWrite");
+    for name in [
+        ".github",
+        ".husky",
+        "Jenkinsfile",
+        ".gitlab-ci.yml",
+        "tasks.json",
+    ] {
+        assert!(!deny.iter().any(|d| d.contains(name)), "{name}: {deny:?}");
+    }
+    let listed: Vec<_> = (out.report.allowances.iter())
+        .filter(|a| a.rule == "claude-code.runs-later")
+        .collect();
+    assert!(
+        matches!(listed[..], [a] if a.patterns.iter().any(|p| p == "**/.github/workflows/**")),
+        "{:?}",
+        out.report.allowances
+    );
+}

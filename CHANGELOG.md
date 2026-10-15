@@ -9,6 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
+- A new ask group, `runs-later`, asks before an agent writes what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) or what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.vscode/tasks.json`). They were allowed as project files. `project-fs` and `moat allow --dir` leave them out; reading them stays allowed, and the OS sandboxes do not deny them. Existing policies get the group with `moat policy upgrade`.
 - `moat allow --dir` no longer allows writes into a `.git` in that directory (hooks, config, a `.git` file pointing elsewhere). As in the project, git runs what those name later, outside any sandbox; such a write now goes to the agent's own prompt. Rules added by an earlier version keep their old form: remove and add the directory again to get it.
 - `moat secret add` adds a deny rule for the secret's source when none covers it (an environment variable whose name the policy does not deny, a file outside the secret paths), so the agent cannot read the value it brokers. It only warned before.
 

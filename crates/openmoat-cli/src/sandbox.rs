@@ -25,6 +25,7 @@ pub mod git_env;
 pub mod install;
 pub mod landlock;
 mod patterns;
+pub(crate) use patterns::RUNS_LATER;
 pub mod seatbelt;
 #[cfg(any(target_os = "linux", test))]
 pub mod seccomp;

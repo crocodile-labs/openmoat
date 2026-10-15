@@ -19,7 +19,7 @@ use std::fmt::Write as _;
 use openmoat_core::Kind;
 use openmoat_core::ir::{Access, Effect, Enforcement, Rule};
 
-use super::patterns::{literal_tree, split};
+use super::patterns::{RUNS_LATER, literal_tree, runs_later_exclusion, split};
 use super::{Grants, Report};
 
 /// Paths every process reads: `/` (the dynamic loader), the terminal and
@@ -199,6 +199,20 @@ impl Generated {
             let _ = writeln!(self.profile, "; default\n({operation})");
         }
         rules(&mut self.profile, &access.allow, operation);
+        let runs_later = access
+            .allow
+            .iter()
+            .any(|r| split(&r.patterns).1.iter().any(|p| runs_later_exclusion(p)));
+        if runs_later {
+            self.report.allowance(
+                Kind::FsWrite,
+                "seatbelt.runs-later",
+                RUNS_LATER.iter().map(|f| (*f).to_owned()).collect(),
+                "commands may write CI configuration, commit-hook managers' files and editor \
+                 tasks (an install runs `husky`); the hook asks before the agent writes one \
+                 (`runs-later`)",
+            );
+        }
     }
 }
 
@@ -214,7 +228,9 @@ fn rules(out: &mut String, rules: &[Rule], operation: &str) {
 /// `(<operation> …)` matching what `patterns` match: at least one positive
 /// pattern and none of the `!` exceptions.
 fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
-    let (mut positive, excluded) = split(patterns);
+    let (mut positive, mut excluded) = split(patterns);
+    // files run later are the hook's to ask about: a deny here would fail installs
+    excluded.retain(|p| !runs_later_exclusion(p));
     // `dir/**` becomes `(subpath dir)`, which covers `dir` itself.
     positive.retain(|p| !patterns.contains(&format!("{p}/**")));
     if positive.is_empty() {

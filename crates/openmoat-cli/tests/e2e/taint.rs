@@ -34,7 +34,14 @@ fn fetched_content_makes_a_later_workflow_write_ask() {
         let input = json!({"file_path": workflow.to_string_lossy(), "content": "on: push"});
         decide(&sb, "claude-code", &call(session, &proj, "Write", &input))
     };
-    assert_eq!(write("s1").0, "allow", "a clean session edits CI");
+    // CI runs a workflow later with the repository's secrets: a write asks even in
+    // a clean session (`runs-later`), and the session's taint is added to it
+    let (verdict, reason) = write("s1");
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(
+        reason.contains("runs-later") && !reason.contains("session-taint"),
+        "{reason}"
+    );
 
     let fetch = json!({"url": "https://crates.io/crates/serde", "prompt": "summarise"});
     let (verdict, _) = decide(&sb, "claude-code", &call("s1", &proj, "WebFetch", &fetch));
@@ -42,9 +49,14 @@ fn fetched_content_makes_a_later_workflow_write_ask() {
 
     let (verdict, reason) = write("s1");
     assert_eq!(verdict, "ask", "{reason}");
-    assert!(reason.contains("[session-taint]"), "{reason}");
+    assert!(reason.contains("session-taint"), "{reason}");
     assert!(reason.contains("fetch crates.io"), "{reason}");
-    assert_eq!(write("s2").0, "allow", "taint belongs to one session");
+    let (verdict, reason) = write("s2");
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(
+        !reason.contains("session-taint"),
+        "taint belongs to one session: {reason}"
+    );
 
     let source = json!({"file_path": proj.join("src/main.rs").to_string_lossy(), "content": ""});
     let (verdict, _) = decide(&sb, "claude-code", &call("s1", &proj, "Write", &source));

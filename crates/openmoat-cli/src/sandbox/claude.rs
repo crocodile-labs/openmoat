@@ -59,8 +59,10 @@ pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
 use super::Report;
 use super::patterns::{
-    Spot, domain, git_exclusion, has_glob, is_below, literal_tree, push_unique, split, spot,
+    Spot, domain, git_exclusion, has_glob, is_below, literal_tree, push_unique,
+    runs_later_exclusion, split, spot,
 };
+use git_internals::runs_later;
 
 /// Claude Code's own directory, whose settings it keeps read-only in the
 /// working directory itself (the sandbox runtime's `.claude/settings.json`,
@@ -259,6 +261,10 @@ impl Filesystem {
                 };
                 if kind == Kind::FsWrite && git_exclusion(pattern) {
                     self.git_internals(report);
+                    continue;
+                }
+                if kind == Kind::FsWrite && runs_later_exclusion(pattern) {
+                    runs_later(report, "claude-code.runs-later");
                     continue;
                 }
                 self.deny(kind, pattern);
