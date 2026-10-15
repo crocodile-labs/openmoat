@@ -26,7 +26,8 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
     let mut out = Deferred::default();
     if args.site.is_some() || args.dir.is_some() || args.remove.is_some() {
         change_overlay(&home, args, &mut out)?;
-        return repin(&home, out);
+        repin(&home, out)?;
+        return sync_sandboxes();
     }
     let (host, session, action) = match (&args.command, args.last) {
         (Some(command), false) => (
@@ -88,7 +89,8 @@ fn checked_home() -> Result<Home> {
     Ok(home)
 }
 
-/// Write the session grant, or with `always` the permanent rule, then re-pin.
+/// Write the session grant, or with `always` the permanent rule, then re-pin;
+/// a permanent file rule also updates the agents' sandboxes.
 fn approve(
     home: &Home,
     host: Option<String>,
@@ -151,7 +153,20 @@ fn approve(
             "  only in this agent session: a new session asks again{resume}"
         )?;
     }
-    repin(home, out)
+    repin(home, out)?;
+    // a command rule is the hook's alone; a file rule is also a sandbox grant
+    if always && !matches!(action, Action::Shell { .. }) {
+        return sync_sandboxes();
+    }
+    Ok(Code::Ok)
+}
+
+/// A rule that names a directory, a file or a host changes what the agents'
+/// OS sandboxes may reach, so write them now, as `moat sandbox sync` does:
+/// until then a sandboxed command still meets the old settings.
+fn sync_sandboxes() -> Result<Code> {
+    println!("Updating the agents' sandbox settings:");
+    super::sandbox::sync()
 }
 
 /// What a permanent rule from `--always` will match, printed before it is

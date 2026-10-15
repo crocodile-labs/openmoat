@@ -251,7 +251,8 @@ fn allow_site_adds_a_net_rule_and_remove_takes_it_back() {
         message.contains("added to")
             && message.contains("- docs.rs")
             && message.contains("undo: moat allow --remove approved-1")
-            && message.contains("lock re-pinned"),
+            && message.contains("lock re-pinned")
+            && message.contains("Updating the agents' sandbox settings"),
         "{message}"
     );
     assert_eq!(check(&sb, "net", "docs.rs"), Some(OK));
@@ -323,10 +324,19 @@ fn allow_dir_opens_the_directory_but_deny_rules_still_win() {
     assert!(
         message.contains("fs.write:")
             && message.contains("/**")
-            && message.contains("deny rules still win"),
+            && message.contains("deny rules still win")
+            && message.contains("Updating the agents' sandbox settings"),
         "{message}"
     );
     assert_eq!(check(&sb, "fs-write", &notes), Some(OK));
+    let hook = shared.join(".git/hooks/pre-commit");
+    assert_ne!(
+        check(&sb, "fs-write", hook.to_str().unwrap()),
+        Some(OK),
+        "a hook planted in the allowed directory is not allowed by it"
+    );
+    let doctor = sb.moat(&["doctor"]);
+    assert!(text(&doctor).contains("all intact"), "{}", text(&doctor));
     assert_eq!(check(&sb, "fs-read", &notes), Some(OK));
     assert_eq!(
         check(&sb, "fs-read", &env),

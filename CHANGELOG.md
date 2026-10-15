@@ -8,6 +8,14 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- `moat allow --dir` no longer allows writes into a `.git` in that directory (hooks, config, a `.git` file pointing elsewhere). As in the project, git runs what those name later, outside any sandbox; such a write now goes to the agent's own prompt. Rules added by an earlier version keep their old form: remove and add the directory again to get it.
+- `moat secret add` adds a deny rule for the secret's source when none covers it (an environment variable whose name the policy does not deny, a file outside the secret paths), so the agent cannot read the value it brokers. It only warned before.
+
+### Changed
+- `moat allow --dir`, `--site`, `--remove` and a permanent file rule update the agents' sandbox settings at once, as `moat sandbox sync` does; before, sandboxed commands met the old settings until you ran it.
+- The README says where a brokered secret's value is injected today: into HTTPS through Claude Code's sandbox broker, through `moat proxy` into plain HTTP only.
+
 ## [0.5.1] - 2026-10-14
 
 Security fixes from an outside review of 0.5.0: paths hidden in `$'…'` quoting or in a command's output, `file:` URLs, `$IFS`, commands handed to `ssh`, `git rebase --exec` and other programs, `/proc/*/environ` and commands that print a stored token.

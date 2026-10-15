@@ -953,3 +953,26 @@
 - id: benign-ansi-c-project-path
   action: { shell: "cat $'src/main.rs'" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
+# what `moat allow --dir` is for: files in that directory, outside `.git`
+- id: benign-edit-in-an-allowed-directory
+  action: { shell: "echo x > /w/lib/src/notes.md" }
+  repo:
+    trusted: true
+    policy: |
+      version: 1
+      allow:
+        - id: approved-1
+          fs.read: ["/w/lib", "/w/lib/**"]
+          fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
+  expect: { verdict: allow, rules: [repo:approved-1] }
+- id: benign-read-in-an-allowed-directory
+  action: { shell: "cat /w/lib/src/index.ts" }
+  repo:
+    trusted: true
+    policy: |
+      version: 1
+      allow:
+        - id: approved-1
+          fs.read: ["/w/lib", "/w/lib/**"]
+          fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
+  expect: { verdict: allow, rules: [repo:approved-1] }

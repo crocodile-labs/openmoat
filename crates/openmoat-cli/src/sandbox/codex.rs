@@ -325,7 +325,11 @@ impl Filesystem {
                 }
             }
             for pattern in excluded {
-                if mode == Mode::Write && spot(pattern) == Spot::Project(ANY_GIT) {
+                // the project's nested `.git`, or every `.git` below a directory
+                // `moat allow --dir` granted (its own `.git` stays read-only below)
+                let nested = spot(pattern) == Spot::Project(ANY_GIT)
+                    || matches!(spot(pattern), Spot::Absolute(p) if p.ends_with("/**/.git/**"));
+                if mode == Mode::Write && nested {
                     nested_git(report);
                     continue;
                 }

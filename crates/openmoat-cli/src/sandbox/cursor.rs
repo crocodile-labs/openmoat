@@ -28,7 +28,9 @@ use serde_json::{Map, Value, json};
 pub use settings::{apply, in_sync, remove, weaknesses};
 
 use super::Report;
-use super::patterns::{Spot, domain, is_below, literal_tree, push_unique, split, spot};
+use super::patterns::{
+    Spot, domain, git_exclusion, is_below, literal_tree, push_unique, split, spot,
+};
 
 /// What OpenMoat writes into `sandbox.json`.
 #[derive(Debug, Clone, PartialEq)]
@@ -120,6 +122,11 @@ impl Grants {
 
     fn close(&mut self, pattern: &str) {
         match spot(pattern) {
+            // a `.git` in a granted directory: like the workspace's, Cursor keeps
+            // its hooks and config unwritable, and denying it would refuse the grant
+            Spot::Absolute(path) if git_exclusion(pattern) => {
+                push_unique(&mut self.open, path.to_owned());
+            }
             Spot::Absolute(path) => push_unique(&mut self.denied, path.to_owned()),
             Spot::Project(rest) => push_unique(&mut self.open, format!("${{project}}/{rest}")),
             Spot::Anywhere(_) => push_unique(&mut self.open, pattern.to_owned()),

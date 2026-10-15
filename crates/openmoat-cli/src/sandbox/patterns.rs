@@ -38,6 +38,17 @@ pub fn spot(pattern: &str) -> Spot<'_> {
 /// git follows like the root's own `.git`.
 pub const ANY_GIT: &str = "**/.git/**";
 
+/// A write exclusion that keeps a repository's `.git` out of an allow rule:
+/// the project's own (`.git/**`, [`ANY_GIT`]) or one below a directory
+/// `moat allow --dir` granted (`/w/lib/.git/**`, `/w/lib/**/.git/**`).
+pub fn git_exclusion(pattern: &str) -> bool {
+    match spot(pattern) {
+        Spot::Project(rest) => rest == ".git/**" || rest == ANY_GIT,
+        Spot::Absolute(path) => path.ends_with("/.git/**"),
+        Spot::Anywhere(_) => false,
+    }
+}
+
 pub fn has_glob(pattern: &str) -> bool {
     pattern.contains(['*', '?', '[', ']', '{', '}'])
 }
