@@ -1200,3 +1200,54 @@
   threat: T1
   action: { shell: "cat $(find ~ -name id_rsa)" }
   expect: { verdict: ask, rules: [home-sweep] }
+# A directory allowed with `moat allow --dir` (here as the rule it writes): its
+# `.git` is left out like the project's, so planting a hook or config there is
+# not allowed by the rule and goes to the agent's own prompt
+- id: defer-hook-in-an-allowed-directory
+  threat: T7
+  action: { shell: "echo x > /w/lib/.git/hooks/pre-commit" }
+  repo:
+    trusted: true
+    policy: |
+      version: 1
+      allow:
+        - id: approved-1
+          fs.read: ["/w/lib", "/w/lib/**"]
+          fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
+  expect: { verdict: defer, rules: [default] }
+- id: defer-config-in-an-allowed-directory
+  threat: T7
+  action: { shell: "echo x >> /w/lib/.git/config" }
+  repo:
+    trusted: true
+    policy: |
+      version: 1
+      allow:
+        - id: approved-1
+          fs.read: ["/w/lib", "/w/lib/**"]
+          fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
+  expect: { verdict: defer, rules: [default] }
+- id: defer-nested-git-in-an-allowed-directory
+  threat: T7
+  action: { shell: "echo x > /w/lib/vendor/x/.git/hooks/post-checkout" }
+  repo:
+    trusted: true
+    policy: |
+      version: 1
+      allow:
+        - id: approved-1
+          fs.read: ["/w/lib", "/w/lib/**"]
+          fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
+  expect: { verdict: defer, rules: [default] }
+- id: defer-gitdir-file-in-an-allowed-directory
+  threat: T7
+  action: { shell: "echo 'gitdir: /tmp/x' > /w/lib/.git" }
+  repo:
+    trusted: true
+    policy: |
+      version: 1
+      allow:
+        - id: approved-1
+          fs.read: ["/w/lib", "/w/lib/**"]
+          fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
+  expect: { verdict: defer, rules: [default] }

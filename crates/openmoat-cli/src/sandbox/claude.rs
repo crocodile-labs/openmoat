@@ -59,7 +59,7 @@ pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
 use super::Report;
 use super::patterns::{
-    ANY_GIT, Spot, domain, has_glob, is_below, literal_tree, push_unique, split, spot,
+    Spot, domain, git_exclusion, has_glob, is_below, literal_tree, push_unique, split, spot,
 };
 
 /// Claude Code's own directory, whose settings it keeps read-only in the
@@ -257,7 +257,7 @@ impl Filesystem {
                     Spot::Project(rest) => Some(rest),
                     _ => None,
                 };
-                if kind == Kind::FsWrite && matches!(project, Some(".git/**" | ANY_GIT)) {
+                if kind == Kind::FsWrite && git_exclusion(pattern) {
                     self.git_internals(report);
                     continue;
                 }

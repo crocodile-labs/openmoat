@@ -131,7 +131,9 @@ each layer stops is tested in CI and published in [docs/EVIDENCE.md](docs/EVIDEN
 
 - **Your secrets.** SSH keys, cloud credentials, tokens and `.env` files stay out of
   reach. The secrets broker gives the agent a placeholder instead of the real token and
-  blocks any request that would carry it to the wrong host.
+  blocks any request that would carry it to the wrong host. The value goes into HTTPS
+  requests through Claude Code's own sandbox broker; through `moat proxy` (Codex,
+  Cursor, `moat run`) only into plain-HTTP requests for now.
 - **Your files and history.** Recursive deletes of your home directory, force pushes,
   hard resets and edits to shell startup files are blocked.
 - **Your network.** Agents connect only to destinations the policy allows. Cloud

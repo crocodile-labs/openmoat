@@ -99,7 +99,10 @@ secrets:
 ```
 
 `moat secret add gh` adds exactly this entry, shows the diff and asks, then re-pins and
-runs `moat sandbox sync`. For another secret: `moat secret add <id> --host <host>
+runs `moat sandbox sync`. When no deny rule covers the source yet (an `env` name the
+policy does not deny, a `file` outside the secret paths), it also adds one, first in
+`deny:` and in the same diff: `secret-<id>` with an `env.read` or `fs.read` of the
+source, so the agent cannot read the value it brokers. For another secret: `moat secret add <id> --host <host>
 [--header <name>] (--env NAME | --file PATH)`; the header defaults to `Authorization`.
 
 A brokered secret is kept by OpenMoat, not by the agent (ADR-020). The agent holds the

@@ -270,15 +270,21 @@ impl Overlay {
     }
 
     /// Append an `fs.read` and `fs.write` allow for each spelling of a directory
-    /// and everything below it.
+    /// and everything below it. Writes into a `.git` there are left out, as
+    /// `project-fs` leaves out the project's: git runs what its hooks and config
+    /// name later, outside any sandbox, so such a write is not allowed by this rule.
     pub fn allow_dir(&mut self, spellings: &[String]) -> &RuleGroup {
         let patterns: Vec<String> = spellings
             .iter()
             .flat_map(|dir| [dir.clone(), format!("{dir}/**")])
             .collect();
+        let git: Vec<String> = spellings
+            .iter()
+            .flat_map(|dir| [format!("!{dir}/.git/**"), format!("!{dir}/**/.git/**")])
+            .collect();
         self.push("moat allow --dir", |g| {
             g.fs_read.clone_from(&patterns);
-            g.fs_write = patterns;
+            g.fs_write = patterns.into_iter().chain(git).collect();
         })
     }
 
@@ -358,7 +364,20 @@ mod tests {
         let dir = o.allow_dir(&["/w/a".to_owned(), "/real/a".to_owned()]);
         assert_eq!(dir.id, "approved-2");
         assert_eq!(dir.fs_read, ["/w/a", "/w/a/**", "/real/a", "/real/a/**"]);
-        assert_eq!(dir.fs_write, dir.fs_read);
+        assert_eq!(
+            dir.fs_write,
+            [
+                "/w/a",
+                "/w/a/**",
+                "/real/a",
+                "/real/a/**",
+                "!/w/a/.git/**",
+                "!/w/a/**/.git/**",
+                "!/real/a/.git/**",
+                "!/real/a/**/.git/**"
+            ],
+            "writes into a `.git` there are left out, as for the project"
+        );
         assert_eq!(o.remove("approved-1").unwrap().net, ["docs.rs"]);
         assert!(o.remove("approved-1").is_none());
         assert_eq!(o.allow.len(), 1);

@@ -133,3 +133,26 @@ fn a_literal_write_grant_outside_the_project_is_kept_unless_a_deny_is_below_it()
         "the home directory holds ~/.ssh, which stays denied"
     );
 }
+
+/// `moat allow --dir` leaves `.git` out of its write grant; sandbox.json cannot
+/// deny inside a grant, so the grant is kept and the `.git` listed as wider
+/// (Cursor itself keeps hooks and config unwritable).
+#[test]
+fn an_allowed_directory_with_its_git_left_out_is_still_granted() {
+    let out = generated(
+        "version: 1\nallow:\n  - id: approved-1\n    fs.read: ['/w/lib', '/w/lib/**']\n    \
+         fs.write: ['/w/lib', '/w/lib/**', '!/w/lib/.git/**', '!/w/lib/**/.git/**']\n",
+    );
+    let writes = list(&out, "/additionalReadwritePaths");
+    assert!(writes.contains(&"/w/lib".to_owned()), "{writes:?}");
+    let wider = out
+        .report
+        .allowances
+        .iter()
+        .find(|a| a.rule == "cursor.writes-in-workspace")
+        .expect("the .git is listed");
+    assert!(
+        wider.patterns.iter().any(|p| p == "/w/lib/.git/**"),
+        "{wider:?}"
+    );
+}

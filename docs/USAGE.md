@@ -134,11 +134,12 @@ Credentials are redacted before anything is stored. The log is a SQLite file in
 ## Change the policy
 
 The common changes are one command each. Each prints the rule it added and the
-command that takes it back, and re-pins the lock:
+command that takes it back, re-pins the lock and updates the agents' sandbox settings,
+as `moat sandbox sync` does:
 
 ```bash
 moat allow --site docs.rs          # network access to docs.rs, web fetches included
-moat allow --dir ~/work/shared     # read and write in that directory; .env files and keys in it stay denied
+moat allow --dir ~/work/shared     # read and write in that directory; .env files, keys and writes into a .git in it are not allowed
 moat allow --remove approved-3     # undo: take a rule moat allow added out again
 ```
 
@@ -184,7 +185,9 @@ moat secret add gh    # GITHUB_TOKEN, sent only to api.github.com; shows the cha
 ```
 
 Then start a new agent session. Other services: `moat secret add <id> --host <host>
---env <NAME>` (or `--file <path>`); [POLICY.md](POLICY.md) §2.1 has the details.
+--env <NAME>` (or `--file <path>`), and `moat allow --site <host>`: a secret opens no
+host by itself. When nothing denies the source yet, `moat secret add` adds a deny rule
+for it in the same diff. [POLICY.md](POLICY.md) §2.1 has the details.
 
 ### After upgrading OpenMoat
 

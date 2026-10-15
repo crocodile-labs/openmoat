@@ -86,16 +86,7 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
                 secret.host
             ));
         }
-        let exposed = match &secret.source {
-            SecretSource::File(path) => paths::expand_pattern(path, HOME, Some(PROJECT))
-                .filter(|p| !listed(&policy.deny, &[Kind::FsRead], p))
-                .map(|_| format!("no deny fs.read rule covers `{path}`, so the agent can read it")),
-            SecretSource::Env(name) => (!listed(&policy.deny, &[Kind::EnvRead], name)).then(|| {
-                format!("no deny env.read rule covers `{name}`, so the agent can read it")
-            }),
-            SecretSource::Keychain { .. } => None,
-        };
-        if let Some(message) = exposed {
+        if let Some(message) = exposed_source(policy, secret) {
             warn(message);
         }
         if secret.plain_http && !secret.is_loopback() {
@@ -105,6 +96,21 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
                 secret.host
             ));
         }
+    }
+}
+
+/// Why the agent can read `secret`'s value itself, when no deny rule covers
+/// its source: a `file` no `fs.read` deny names, an `env` variable no
+/// `env.read` deny names. `None` for a covered source and for the keychain.
+#[must_use]
+pub fn exposed_source(policy: &Policy, secret: &crate::Secret) -> Option<String> {
+    match &secret.source {
+        SecretSource::File(path) => paths::expand_pattern(path, HOME, Some(PROJECT))
+            .filter(|p| !listed(&policy.deny, &[Kind::FsRead], p))
+            .map(|_| format!("no deny fs.read rule covers `{path}`, so the agent can read it")),
+        SecretSource::Env(name) => (!listed(&policy.deny, &[Kind::EnvRead], name))
+            .then(|| format!("no deny env.read rule covers `{name}`, so the agent can read it")),
+        SecretSource::Keychain { .. } => None,
     }
 }
 

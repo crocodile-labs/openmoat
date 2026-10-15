@@ -44,13 +44,18 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         );
     }
     let before = read_policy(&path)?;
-    let after = with_entry(&before, &secret)?;
-    // Lint the result as `moat edit` does, in the state directory agents cannot write.
-    let draft = home.root().join("policy.secret.yaml");
-    write_private(&draft, after.as_bytes())?;
-    let linted = home.load_policy_at(&draft);
-    let _ = fs::remove_file(&draft);
-    let policy = linted.context("the policy with the new secret does not lint")?;
+    let mut after = with_entry(&before, &secret)?;
+    let mut policy = lint_draft(&home, &after)?;
+    // A brokered value the agent can read anyway protects nothing: deny its
+    // source too, in the same diff, when no rule covers it yet.
+    let mut source_denied = None;
+    if openmoat_core::lint::exposed_source(&policy, &secret).is_some()
+        && let Some((id, denied)) = with_source_deny(&after, &secret)?
+    {
+        policy = lint_draft(&home, &denied)?;
+        after = denied;
+        source_denied = Some(id);
+    }
     let mut out = Deferred::default();
     for warning in openmoat_core::lint::warnings(&policy) {
         writeln!(out, "warning: {warning}")?;
@@ -71,6 +76,12 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         secret.header,
         secret.host
     )?;
+    if let Some(id) = &source_denied {
+        writeln!(
+            out,
+            "The deny rule `{id}` keeps the agent from reading the value at its source."
+        )?;
+    }
     if !super::edit::confirm(&mut out, "Apply? [y/N] ")? {
         writeln!(out, "the policy was not changed")?;
         out.finish()?;
@@ -112,6 +123,61 @@ fn secret(args: &SecretAddArgs) -> Result<Secret> {
         source,
         plain_http: false,
     })
+}
+
+/// Lint `text` as `moat edit` does, in the state directory agents cannot write.
+fn lint_draft(home: &Home, text: &str) -> Result<openmoat_core::Policy> {
+    let draft = home.root().join("policy.secret.yaml");
+    write_private(&draft, text.as_bytes())?;
+    let linted = home.load_policy_at(&draft);
+    let _ = fs::remove_file(&draft);
+    linted.context("the policy with the new secret does not lint")
+}
+
+/// `policy` with a deny rule for `secret`'s source (`env.read` of its variable,
+/// `fs.read` of its file) first in the `deny:` list, and the rule's id. `None`
+/// for a keychain source, a policy without a block `deny:` list, or one that
+/// already has a rule with that id: then the lint warning stays.
+fn with_source_deny(policy: &str, secret: &Secret) -> Result<Option<(String, String)>> {
+    let (kind, value) = match &secret.source {
+        SecretSource::Env(name) => ("env.read", name),
+        SecretSource::File(path) => ("fs.read", path),
+        SecretSource::Keychain { .. } => return Ok(None),
+    };
+    let id = format!("secret-{}", secret.id);
+    let lines: Vec<&str> = policy.lines().collect();
+    let taken = lines
+        .iter()
+        .any(|l| l.trim_start().trim_start_matches("- ").trim() == format!("id: {id}"));
+    let Some(at) = lines
+        .iter()
+        .position(|l| l.split('#').next().unwrap_or("").trim_end() == "deny:")
+    else {
+        return Ok(None);
+    };
+    if taken {
+        return Ok(None);
+    }
+    let indent = lines[at + 1..]
+        .iter()
+        .find(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+        .filter(|l| l.trim_start().starts_with('-'))
+        .map_or("  ", |l| &l[..l.len() - l.trim_start().len()]);
+    let quoted = serde_json::to_string(value)?;
+    let group = format!(
+        "{indent}- id: {id}\n{indent}  reason: the source of the brokered secret `{}`\n\
+         {indent}  {kind}: [{quoted}]\n",
+        secret.id
+    );
+    let mut out = String::new();
+    for (n, line) in lines.iter().enumerate() {
+        out.push_str(line);
+        out.push('\n');
+        if n == at {
+            out.push_str(&group);
+        }
+    }
+    Ok(Some((id, out)))
 }
 
 /// `policy` with `secret` added to its `secrets:` list, or a new list at the end.
@@ -226,5 +292,49 @@ mod tests {
         let flow =
             "version: 1\nsecrets: [{ id: x, host: x.test, header: X, source: { env: X } }]\n";
         assert!(with_entry(flow, &gh()).is_err());
+    }
+
+    fn other(id: &str, env: Option<&str>, file: Option<&str>) -> Secret {
+        secret(&SecretAddArgs {
+            id: id.into(),
+            host: Some("api.example.com".into()),
+            header: None,
+            env: env.map(Into::into),
+            file: file.map(Into::into),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn an_exposed_source_gets_a_deny_rule_and_a_covered_one_none() {
+        use openmoat_core::DEFAULT_POLICY;
+        use openmoat_core::lint::exposed_source;
+        for (s, kind) in [
+            (
+                other("ex", None, Some("~/.config/example/token")),
+                "fs.read",
+            ),
+            (other("db", Some("DATABASE_URL"), None), "env.read"),
+        ] {
+            let with = with_entry(DEFAULT_POLICY, &s).unwrap();
+            assert!(exposed_source(&Policy::parse(&with).unwrap(), &s).is_some());
+            let (id, denied) = with_source_deny(&with, &s).unwrap().expect("a deny rule");
+            assert_eq!(id, format!("secret-{}", s.id));
+            assert!(denied.contains(&format!("    {kind}: [")), "{denied}");
+            let policy = Policy::parse(&denied).expect("still lints");
+            assert_eq!(exposed_source(&policy, &s), None);
+            assert!(
+                with_source_deny(&denied, &s).unwrap().is_none(),
+                "the id is taken"
+            );
+        }
+        // `*_KEY` is already denied by `env-secrets`, and `~/.ssh` by `secrets-paths`
+        for s in [
+            other("stripe", Some("STRIPE_API_KEY"), None),
+            other("ssh", None, Some("~/.ssh/deploy_token")),
+        ] {
+            let with = with_entry(DEFAULT_POLICY, &s).unwrap();
+            assert_eq!(exposed_source(&Policy::parse(&with).unwrap(), &s), None);
+        }
     }
 }

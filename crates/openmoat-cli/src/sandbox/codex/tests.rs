@@ -421,3 +421,36 @@ fn git_safe_bare_repository_follows_the_users_entries_and_is_pinned() {
     assert!(remove(&mut doc));
     assert_eq!(doc.to_string(), original);
 }
+
+/// `moat allow --dir` leaves `.git` out of its write grant: the directory is
+/// writable, its own `.git` read-only, and the nested `**/.git/**` is no deny
+/// glob, which would make every `.git` below it unreadable.
+#[test]
+fn an_allowed_directory_keeps_its_git_read_only_and_readable() {
+    let policy = Policy::parse(
+        "version: 1\nallow:\n  - id: approved-1\n    fs.read: ['/w/lib', '/w/lib/**']\n    \
+         fs.write: ['/w/lib', '/w/lib/**', '!/w/lib/.git/**', '!/w/lib/**/.git/**']\n",
+    )
+    .expect("test policy lints");
+    let ir = lower_for_hosts(&policy, "/Users/me", None, Vec::new(), false).expect("lowers");
+    let out = generate_with(&ir, &["/Users/me".into()], None, |p| {
+        p.starts_with("/w/lib")
+    })
+    .expect("generates");
+    assert_eq!(mode(&out, &[], "/w/lib"), Some("write"), "{}", render(&out));
+    assert_eq!(
+        mode(&out, &[], "/w/lib/.git"),
+        Some("read"),
+        "{}",
+        render(&out)
+    );
+    assert!(!render(&out).contains("/w/lib/**/.git"), "{}", render(&out));
+    assert!(
+        out.report
+            .allowances
+            .iter()
+            .any(|a| a.rule == "codex.nested-git"),
+        "{:?}",
+        out.report.allowances
+    );
+}
