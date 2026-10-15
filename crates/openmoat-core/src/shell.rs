@@ -16,6 +16,8 @@
 //! | `$( … )`, backticks, `sh -c` (any option spelling, `invocation.rs`), `eval`, `xargs`, `sudo`, `env`, … | nested classification |
 //! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload |
 //! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
+//! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e` (`embedded.rs`) | nested classification |
+//! | `file:` URLs (`curl file:///etc/passwd`) | `FsRead` |
 //! | `make --eval`, `-e`, `SHELL=`, `X!=cmd`, `$(shell …)` (`make.rs`) | `make <arg>` `Shell` atom + nested classification |
 //! | text tool options (`text.rs`): `sort -o FILE`, `uniq in out`; an unknown option | `FsWrite`; `<program> @<option>` `Shell` atom |
 //! | `sed` scripts (`sed/`): `r FILE`, `w FILE`; `e`, anything not understood | `FsRead`, `FsWrite`; `sed @<script>` `Shell` atom |
@@ -35,8 +37,9 @@
 //! `git` takes git's global options out of the command;
 //! `operands` decides which plain arguments name files, and `copy` where a copy
 //! or a move writes (`cp f ~/` writes `~/f`);
-//! `decoders`, `make` and `options` handle constructs that hide a command or a
-//! write (decoded pipelines, make arguments, `find -exec`, `--output=`);
+//! `decoders`, `make`, `options` and `embedded` handle constructs that hide a command or a
+//! write (decoded pipelines, make arguments, `find -exec`, `--output=`, `watch 'cmd'`,
+//! `git rebase --exec`, `ssh -o ProxyCommand=`);
 //! `text` reads the options of text tools, whose values are data, not files,
 //! and `sed` and `awk` their programs;
 //! `tables` holds the program lists that drive all of them.
@@ -47,6 +50,7 @@ mod copy;
 mod cwd;
 mod database;
 mod decoders;
+mod embedded;
 pub(crate) mod git;
 mod invocation;
 mod make;
@@ -136,7 +140,15 @@ pub fn classify(command: &str, ctx: &ShellContext<'_>) -> ParseOutcome {
 #[must_use]
 pub fn classify_globs(command: &str, ctx: &ShellContext<'_>) -> (ParseOutcome, Vec<AtomicAction>) {
     let mut sink = Sink::default();
-    let stopped = commands::classify_into(command, ctx, &mut sink, 0).err();
+    let mut stopped = commands::classify_into(command, ctx, &mut sink, 0).err();
+    // `cat${IFS}~/.ssh/id_rsa`: the shell splits words where `$IFS` expands. The
+    // line is classified a second time with it read as a space, and both sets of
+    // actions count, so the split never loosens the verdict.
+    let split = command.replace("${IFS}", " ").replace("$IFS", " ");
+    if split != command {
+        let again = commands::classify_into(&split, ctx, &mut sink, 0).err();
+        stopped = stopped.or(again);
+    }
     let outcome = match sink.skipped.or(stopped) {
         Some(e) => ParseOutcome::Unparseable {
             reason: e.to_string(),
@@ -313,12 +325,13 @@ impl Sink {
         }
     }
 
-    /// Remember `word` when the shell expands a `$` in it.
+    /// Remember `word` when the shell expands a `$` or a command substitution in it.
     pub(crate) fn note_dollar_word(&mut self, word: &crate::lexer::Word) {
-        let expands = word
-            .text
-            .match_indices('$')
-            .any(|(pos, _)| !word.literal.iter().any(|span| span.contains(&pos)));
+        let expands = !word.substitutions.is_empty()
+            || word
+                .text
+                .match_indices('$')
+                .any(|(pos, _)| !word.literal.iter().any(|span| span.contains(&pos)));
         if expands && !self.dollar_words.contains(&word.text) {
             self.dollar_words.push(word.text.clone());
         }

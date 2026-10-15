@@ -636,7 +636,7 @@
 # git rebase options that run commands, open or resume a todo list, or pick a program
 - id: ask-git-rebase-exec
   threat: T7
-  action: { shell: "git rebase --exec 'cat ~/.ssh/id_rsa' main" }
+  action: { shell: "git rebase --exec 'npm test' main" }
   expect: { verdict: defer, rules: [default] }
 - id: ask-git-rebase-exec-abbreviated
   threat: T7
@@ -1174,3 +1174,29 @@
   threat: T1
   action: { shell: "cp ${KEYS}/server.pem /tmp/s" }
   expect: { verdict: ask, rules: [secret-names] }
+# A path from a command's output (`$( … )`, backticks) is not known: like `$X`, it
+# never allows, and a key's file name in it asks (`secret-names`)
+- id: defer-path-from-command-output
+  threat: T1
+  action: { shell: "cat $(cat list.txt)" }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: defer-quoted-path-from-command-output
+  threat: T1
+  action: { shell: "cat \"$(cat list.txt)\"" }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: defer-path-from-backticks
+  threat: T1
+  action: { shell: "cat `cat list.txt`" }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: defer-copy-from-command-output
+  threat: T1
+  action: { shell: "cp $(cat list.txt) out/" }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: ask-key-under-command-output
+  threat: T1
+  action: { shell: "cat $(git rev-parse --show-toplevel)/id_rsa" }
+  expect: { verdict: ask, rules: [secret-names] }
+- id: ask-home-search-as-operand
+  threat: T1
+  action: { shell: "cat $(find ~ -name id_rsa)" }
+  expect: { verdict: ask, rules: [home-sweep] }

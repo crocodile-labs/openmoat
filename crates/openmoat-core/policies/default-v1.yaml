@@ -44,6 +44,23 @@ deny:
       - "!**/.env.template"
       - "~/Library/Keychains/**"
     fs.write: *secret-paths
+    # commands that print a stored token or password
+    shell:
+      - "{gh,*/gh} auth token*"
+      - "{gh,*/gh} auth status * --show-token*"
+      - "{gh,*/gh} auth status * -t*"
+      - "{gh,*/gh} auth status {--show-token,-t}*"
+      - "{gcloud,*/gcloud} auth print-access-token*"
+      - "{gcloud,*/gcloud} auth print-identity-token*"
+      - "{gcloud,*/gcloud} auth application-default print-access-token*"
+      - "{az,*/az} account get-access-token*"
+      - "{aws,*/aws} configure export-credentials*"
+      - "{aws,*/aws} configure get *secret*"
+      - "git credential fill*"
+      - "git credential-* get*"
+      - "{security,*/security} find-{generic,internet}-password -{w,g}*"
+      - "{security,*/security} find-{generic,internet}-password * -{w,g}*"
+      - "{security,*/security} dump-keychain*"
   - id: env-secrets
     reason: secret environment variable
     env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN"]
@@ -67,6 +84,8 @@ deny:
       - "typeset $"
       - "typeset -p $"
       - "typeset -x $"
+      # `@proc-environ <path>` atoms: a read of `/proc/<pid>/environ`
+      - "@proc-environ *"
   - id: env-poison
     reason: changes how later commands resolve or load code
     env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*"]

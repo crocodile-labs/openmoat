@@ -4,22 +4,25 @@ mod locals;
 mod payload;
 mod piped;
 mod pipelines;
+mod wrappers;
 
 use super::tables::{
     ENV_BUILTINS, HOST_PROGRAMS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS, RESERVED_PREFIXES,
-    SHELLS, SOURCE_BUILTINS, WRAPPER_OPTIONS_WITH_VALUE, WRAPPER_SUBCOMMANDS, WRAPPERS,
-    WRAPPERS_WITH_VALUE, WRITE_ALL_PATHS, inline_flags,
+    SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
     assignment_name, basename, flag_payload, for_variable, strip_at, word_env_refs,
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
-use super::{copy, cwd, database, decoders, git, invocation, make, operands, options, text};
+use super::{
+    copy, cwd, database, decoders, embedded, git, invocation, make, operands, options, text,
+};
 use crate::action::AtomicAction;
 use crate::host;
 use crate::lexer::{self, Operator, Token, Word};
 use crate::paths;
 use piped::Piped;
+use wrappers::wrapped_command;
 
 /// A simple command, or the opening or closing parenthesis of a subshell.
 #[derive(Debug)]
@@ -279,6 +282,9 @@ fn classify_simple(
         .extend(options::fd_pattern(&argv, program).or(options::grep_pattern(&argv, program)));
     super::path_options::classify(&argv, program, &mut text_operands, ctx, sink)?;
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
+    for code in embedded::commands(&argv, program) {
+        classify_into(&code, ctx, sink, depth + 1)?;
+    }
 
     if MAKES.contains(&program) {
         return make::classify(&argv, ctx, sink, depth);
@@ -360,62 +366,6 @@ pub(super) fn classify_wrapped(
     classify_simple(&cmd, ctx, sink, depth + 1)
 }
 
-/// For `sudo -u x cmd …`, `env A=1 cmd …`, `xargs -0 cmd …`, `timeout 5 cmd …`
-/// return the wrapped argv.
-fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&'a [String]> {
-    if let Some((_, subcommands)) = WRAPPER_SUBCOMMANDS
-        .iter()
-        .find(|(name, _)| *name == program)
-    {
-        if !subcommands.contains(&argv.get(1)?.as_str()) {
-            return None;
-        }
-        let mut i = 2;
-        while let Some(arg) = argv.get(i) {
-            if arg == "--" {
-                i += 1;
-                break;
-            }
-            if !arg.starts_with('-') {
-                break;
-            }
-            i += 1;
-        }
-        return argv.get(i..).filter(|rest| !rest.is_empty());
-    }
-    if !WRAPPERS.contains(&program) || options::only_describes(argv, program) {
-        return None;
-    }
-    let options_with_value = WRAPPER_OPTIONS_WITH_VALUE
-        .iter()
-        .find(|(name, _)| *name == program)
-        .map_or(&[][..], |(_, opts)| *opts);
-    let mut i = 1;
-    let mut value_pending = WRAPPERS_WITH_VALUE.contains(&program);
-    while let Some(arg) = argv.get(i) {
-        if arg == "--" {
-            i += 1;
-            break;
-        }
-        if options_with_value.contains(&arg.as_str()) {
-            i += 2;
-            continue;
-        }
-        let is_env_assignment = program == "env" && assignment_name(arg).is_some();
-        if arg.starts_with('-') || is_env_assignment {
-            i += 1;
-            continue;
-        }
-        if value_pending {
-            value_pending = false;
-            i += 1;
-            continue;
-        }
-        break;
-    }
-    argv.get(i..).filter(|rest| !rest.is_empty())
-}
-
 fn classify_arguments(
     argv: &[String],
     program: &str,
@@ -454,6 +404,11 @@ fn classify_arguments(
         let options_ended = options_end.is_some_and(|end| i > end);
         if options_ended || !tok.starts_with('-') {
             sources.push(tok.as_str());
+        }
+        // `curl file:///etc/passwd` reads the file, whatever the program
+        if let Some(path) = host::file_url_path(tok) {
+            sink.read(ctx, &path)?;
+            continue;
         }
         let candidate = strip_at(tok);
         let file = if paths::looks_like_path(candidate) {
