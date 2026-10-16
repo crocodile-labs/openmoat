@@ -29,6 +29,42 @@ limit is in this repository.
 
 ![Normal work is allowed; a prompt injection asking Claude Code and Codex to upload the SSH key is blocked, also in base64 and through a shell variable; a package install goes to the agent's own prompt; switching OpenMoat off is blocked; every decision is in the log](docs/assets/demo.gif)
 
+## Features
+
+- **Agent hooks** for Claude Code, Codex and Cursor: every command, file read and
+  write, web request and MCP call is checked before it runs.
+- **A real shell parser.** Variables, `$'…'` quoting, base64 and other decoders,
+  globs, braces, symlinks, here-documents and `$(…)` are checked as what they open,
+  and commands handed to `ssh`, `git` or `watch` as commands of their own.
+- **OS sandboxes** configured from the same policy, so code inside an allowed
+  `npm test` cannot reach your secrets or files outside the project; `moat run` puts
+  a whole agent in one. What each one stops is tested in CI
+  ([EVIDENCE.md](docs/EVIDENCE.md)).
+- **Network allowlist.** Agents reach only the hosts the policy lists; cloud
+  metadata services are refused.
+- **Secrets broker.** With `moat secret add`, the agent holds a placeholder and the
+  real token goes to one host only.
+- **Session taint.** After a session reads a secret, its network and MCP calls ask.
+  After it fetches web content or gets an MCP result, writes to CI, git hooks, build
+  files and agent instructions ask.
+- **Self-protection.** The agent cannot edit the rules, approve its own blocked call
+  or uninstall OpenMoat; a policy or settings change behind its back blocks every
+  call until you review.
+- **A record of every decision** in a local, hash-chained log you can export and
+  verify (tamper-evident, not tamper-proof), read with `moat`, `moat show`,
+  `moat replay` and `moat report`.
+- **Team rules.** A committed `.moat/policy.yaml` applies its deny and ask rules to
+  everyone, and its allow rules after `moat trust`.
+- **Policy tools.** `moat policy check` shows any verdict in advance, `moat edit`
+  shows the diff before it applies, and `moat policy upgrade` keeps your changes.
+- **Fails closed.** If its own check errors or hangs, the call is blocked. The
+  exception: if the `moat` binary is missing, Claude Code and Codex run calls
+  unchecked ([Limits](#limits)).
+- **MoatBench.** `moat bench` scores OpenMoat, or any agent hook, against the
+  bundled attack and workflow scenarios ([MOATBENCH.md](docs/MOATBENCH.md)).
+- **Single binary** for macOS, Linux and Windows, written in Rust, about 10 ms per
+  check; no AI model decides and nothing leaves your machine unless you export it.
+
 ## Install
 
 ```bash
@@ -106,22 +142,11 @@ agent action ──► OpenMoat ──► allow ──► runs, and is recorded
                            └► deny  ──► blocked, with the rule and the reason
 ```
 
-- **The hook** checks each tool call against one local policy, before it runs.
-  **Allow** is normal development work. **Defer** is anything the policy has no rule
-  for. **Ask** is only for effects that outlive the session (a git hook, a login item).
-  **Deny** is what must never happen: secrets read or sent, unknown hosts, destructive
-  commands, changes to OpenMoat itself.
-- **The OS sandbox.** The same policy configures each agent's own sandbox, so code
-  hidden inside an allowed command (`npm test`, a build step) cannot reach your secrets
-  or files outside the project. What each sandbox stops is tested in CI:
-  [docs/EVIDENCE.md](docs/EVIDENCE.md).
-- **The secrets broker.** `moat secret add gh` gives the agent a placeholder instead of
-  your token, and the value goes only to the host it belongs to.
-- **The audit log.** Every decision is recorded locally, in a log that detects
-  tampering and that your team can export and verify.
-- **Self-protection.** The agent cannot edit the rules, approve its own blocked call or
-  uninstall OpenMoat. If its policy or settings change behind its back, every call is
-  blocked until you review.
+The hook checks each tool call against one local policy, before it runs. **Allow** is
+normal development work. **Defer** is anything the policy has no rule for. **Ask** is
+only for effects that outlive the session (a git hook, a login item). **Deny** is what
+must never happen: secrets read or sent, unknown hosts, destructive commands, changes
+to OpenMoat itself.
 
 ## Supported agents
 
@@ -181,16 +206,19 @@ The full list, with the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Documentation
 
-| Goal | Start here |
-|---|---|
-| Get going, handle a block, allow a site or a directory | [openmoat.dev/docs](https://openmoat.dev/docs/) |
-| Install on macOS, Linux or Windows; other config directories | [docs/INSTALL.md](docs/INSTALL.md) |
-| Every command; review what the agent did; edit the policy | [docs/USAGE.md](docs/USAGE.md) |
-| Write rules | [docs/POLICY.md](docs/POLICY.md) |
-| Make the OS enforce the policy (agent sandboxes, `moat run`) | [docs/SANDBOX.md](docs/SANDBOX.md) |
-| Know what is defended and what is not | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) |
-| See the attack scenarios and the scorecard, or score any hook | [docs/MOATBENCH.md](docs/MOATBENCH.md) · [docs/COVERAGE.md](docs/COVERAGE.md) |
-| Understand the code | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/adr/](docs/adr/README.md) |
+- [Guides](https://openmoat.dev/docs/): get going, handle a block, allow a site or a
+  directory, keep a token from the agent.
+- [Install](docs/INSTALL.md): macOS, Linux and Windows, what each agent's hook
+  covers, other config directories.
+- [Usage](docs/USAGE.md): every command, reviewing what the agent did, editing the
+  policy.
+- [Policy](docs/POLICY.md): the rule format, pattern syntax and evaluation order.
+- [Sandboxes](docs/SANDBOX.md): agent sandboxes, `moat run` and `moat run --isolate`.
+- [Threat model](docs/THREAT_MODEL.md): what is defended, and what is not.
+- [MoatBench](docs/MOATBENCH.md) and [coverage](docs/COVERAGE.md): the attack
+  scenarios, the scorecard and the conformance fixtures per threat.
+- [Architecture](docs/ARCHITECTURE.md) and [decisions](docs/adr/README.md): how the
+  code is built and why.
 
 ## Development
 
