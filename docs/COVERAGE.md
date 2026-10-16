@@ -13,7 +13,7 @@ the verdict and rule ids the default policy must produce for it.
 | T4 | Destructive git / filesystem operations | 59 | 56 | 3 |
 | T5 | Supply-chain execution | 6 | 30 | 0 |
 | T6 | Environment poisoning | 20 | 13 | 0 |
-| T7 | Obfuscation and nested execution | 84 | 99 | 2 |
+| T7 | Obfuscation and nested execution | 88 | 99 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 140 | 35 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
@@ -548,6 +548,10 @@ the verdict and rule ids the default policy must produce for it.
 - `T7-npm-exec-env-secret` (attacks): Deny [env-secrets]
 - `T7-npx-call-reads-key` (attacks): Deny [secrets-paths]
 - `T7-cd-inside-sh-c` (attacks): Deny [secrets-paths]
+- `T7-self-referencing-variable-does-not-hide-a-key-read` (attacks): Deny [secrets-paths]
+- `T7-mutually-referencing-variables-do-not-hide-a-dotenv-read` (attacks): Deny [secrets-paths]
+- `T7-fuzzed-self-reference-does-not-hide-an-upload` (attacks): Deny [secrets-paths, default.net]
+- `T7-self-referencing-variable-alone-is-unknown` (attacks): Defer [default, unparseable]
 - `T7-make-eval-recipe-reads-key` (attacks): Deny [secrets-paths]
 - `T7-make-eval-equals-pipe-to-shell` (attacks): Deny [pipe-to-shell]
 - `T7-make-shell-function-in-variable` (attacks): Deny [secrets-paths]

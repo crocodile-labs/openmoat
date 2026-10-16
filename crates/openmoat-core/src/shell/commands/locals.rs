@@ -8,7 +8,7 @@
 
 use std::ops::Range;
 
-use super::{SimpleCommand, classify_simple};
+use super::{SimpleCommand, classify_as_written};
 use crate::lexer::Word;
 use crate::shell::{ClassifyError, MAX_DIRS, ShellContext, Sink};
 
@@ -44,7 +44,8 @@ pub(super) fn classify_with_values(
                 ..Word::default()
             });
         }
-        classify_simple(variant, ctx, sink, depth)?;
+        // one round, as the shell does: a value is not expanded again
+        classify_as_written(variant, ctx, sink, depth)?;
     }
     Ok(true)
 }
