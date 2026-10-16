@@ -172,6 +172,19 @@ fn classify_simple(
     if locals::classify_with_values(cmd, ctx, sink, depth)? {
         return Ok(());
     }
+    classify_as_written(cmd, ctx, sink, depth)
+}
+
+/// [`classify_simple`] without substituting variables: for a command whose
+/// variables were substituted already. The shell expands a value once and
+/// never again, so a value holding `${e}` (from single quotes) stays that
+/// text; expanding it again would recurse without end (`e='${e}'; cat $e`).
+fn classify_as_written(
+    cmd: &SimpleCommand,
+    ctx: &ShellContext<'_>,
+    sink: &mut Sink,
+    depth: u8,
+) -> Result<(), ClassifyError> {
     for w in cmd.words.iter().chain(&cmd.stdin) {
         for inner in &w.substitutions {
             classify_into(inner, ctx, sink, depth + 1)?;

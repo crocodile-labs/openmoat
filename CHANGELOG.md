@@ -10,6 +10,7 @@ view at the end of the file.
 
 ### Security
 - A path that steps up (`..`) after a symlink is checked where the OS really goes: with `c` linked to `~/.config`, `cat c/../.ssh/id_rsa` and a file-tool read of it were allowed as project files; they are denied, and so is `cd -P c/.. && cat .ssh/id_rsa` ([#536](https://github.com/crocodile-labs/openmoat/pull/536)).
+- A shell variable whose value names itself (`e='${e}'; cat $e`) was expanded again and again until the guard crashed; a crashed guard is not a deny, so Claude Code and Codex ran the rest of the command unchecked. A value is now expanded once, as the shell does ([#539](https://github.com/crocodile-labs/openmoat/pull/539)).
 
 ## [0.5.2] - 2026-10-15
 
