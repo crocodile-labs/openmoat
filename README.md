@@ -106,22 +106,28 @@ agent action ──► OpenMoat ──► allow ──► runs, and is recorded
                            └► deny  ──► blocked, with the rule and the reason
 ```
 
-- **The hook** checks each tool call against one local policy, before it runs.
-  **Allow** is normal development work. **Defer** is anything the policy has no rule
-  for. **Ask** is only for effects that outlive the session (a git hook, a login item).
-  **Deny** is what must never happen: secrets read or sent, unknown hosts, destructive
-  commands, changes to OpenMoat itself.
-- **The OS sandbox.** The same policy configures each agent's own sandbox, so code
-  hidden inside an allowed command (`npm test`, a build step) cannot reach your secrets
-  or files outside the project. What each sandbox stops is tested in CI:
-  [docs/EVIDENCE.md](docs/EVIDENCE.md).
-- **The secrets broker.** `moat secret add gh` gives the agent a placeholder instead of
-  your token, and the value goes only to the host it belongs to.
-- **The audit log.** Every decision is recorded locally, in a log that detects
-  tampering and that your team can export and verify.
-- **Self-protection.** The agent cannot edit the rules, approve its own blocked call or
-  uninstall OpenMoat. If its policy or settings change behind its back, every call is
-  blocked until you review.
+The hook checks each tool call against one local policy, before it runs. **Allow** is
+normal development work. **Defer** is anything the policy has no rule for. **Ask** is
+only for effects that outlive the session (a git hook, a login item). **Deny** is what
+must never happen: secrets read or sent, unknown hosts, destructive commands, changes
+to OpenMoat itself.
+
+## Features
+
+| Feature | What it does |
+|---|---|
+| **Agent hooks** | Claude Code, Codex and Cursor: every command, file read and write, web request and MCP call is checked before it runs. |
+| **A real shell parser** | Variables, `$'…'` quoting, base64 and other decoders, globs, braces, symlinks, here-documents and `$(…)` are checked as what they open, and commands handed to `ssh`, `git` or `watch` as commands of their own. |
+| **OS sandboxes** | The same policy configures each agent's own sandbox, so code inside an allowed `npm test` cannot reach your secrets or files outside the project; `moat run` puts a whole agent in one ([SANDBOX.md](docs/SANDBOX.md), tested in [EVIDENCE.md](docs/EVIDENCE.md)). |
+| **Network allowlist** | Agents reach only the hosts the policy lists. Cloud metadata services are refused. |
+| **Secrets broker** | `moat secret add`: the agent holds a placeholder, and the real token goes to one host only. |
+| **Session taint** | After a session reads a secret, its network and MCP calls ask. After it fetches web content or gets an MCP result, writes to CI, git hooks, build files and agent instructions ask. |
+| **Self-protection** | The agent cannot edit the rules, approve its own blocked call or uninstall OpenMoat. A policy or settings change behind its back blocks every call until you review. |
+| **See what happened** | `moat`, `moat show`, `moat replay` and `moat report`. Every decision is in a local, hash-chained log you can export and verify (tamper-evident, not tamper-proof). |
+| **Team rules** | Commit `.moat/policy.yaml`: its deny and ask rules apply to everyone, its allow rules after `moat trust`. |
+| **Policy tools** | `moat policy check` shows any verdict in advance, `moat edit` shows the diff before it applies, `moat policy upgrade` keeps your changes. |
+| **Fails closed** | If its own check errors or hangs, the call is blocked. The exception: if the `moat` binary is missing, Claude Code and Codex run calls unchecked ([Limits](#limits)). |
+| **MoatBench** | `moat bench` scores OpenMoat, or any agent hook, against the bundled attack and workflow scenarios ([MOATBENCH.md](docs/MOATBENCH.md)). |
 
 ## Supported agents
 
