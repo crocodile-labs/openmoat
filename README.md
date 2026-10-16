@@ -249,7 +249,7 @@ Found a way past OpenMoat? Report it privately, as described in [SECURITY.md](SE
 
 ## Status
 
-**Stable.** The latest release is `0.5.2`; the policy format and commands may still
+**Stable.** The latest release is `0.5.3`; the policy format and commands may still
 change before 1.0. What is planned: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
