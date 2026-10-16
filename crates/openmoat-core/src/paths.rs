@@ -31,6 +31,33 @@ pub fn normalise(raw: &str, home: &str, project: Option<&str>, cwd: &str) -> Str
 /// `unparseable`).
 #[must_use]
 pub fn resolve(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) -> Option<String> {
+    absolute(raw, home, project, cwd).map(|s| collapse(&s))
+}
+
+/// The absolute form of `raw` with its `..` segments kept, when it has one
+/// (`c/../.ssh/id_rsa` in `/p` is `/p/c/../.ssh/id_rsa`). [`resolve`] collapses
+/// `..` against the name before it, but the OS steps up from where that name
+/// really points: through `ln -s ~/.config c`, `c/..` is the home directory, not
+/// the project. The engine resolves this form with [`crate::realpath::physical`]
+/// and checks where it lands as well as the collapsed path.
+#[must_use]
+pub fn traversal(
+    raw: &str,
+    home: &str,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> Option<String> {
+    absolute(raw, home, project, cwd).filter(|s| has_dotdot(s))
+}
+
+/// Whether `path` has a `..` segment.
+#[must_use]
+pub fn has_dotdot(path: &str) -> bool {
+    path.split('/').any(|seg| seg == "..")
+}
+
+/// [`resolve`] before `.` and `..` are collapsed.
+fn absolute(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) -> Option<String> {
     let unified = raw.replace('\\', "/");
     let expanded = match dir_stack_tilde(&unified) {
         Some(('+', rest)) => format!("{}{rest}", cwd?),
@@ -47,9 +74,9 @@ pub fn resolve(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) 
         s = s.replace("${PWD}", dir).replace("$PWD", dir);
     }
     if is_absolute(&s) {
-        Some(collapse(&s))
+        Some(s)
     } else {
-        Some(collapse(&format!("{}/{s}", cwd?)))
+        Some(format!("{}/{s}", cwd?))
     }
 }
 

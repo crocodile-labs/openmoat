@@ -11,6 +11,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::paths;
 use crate::programs::NoResolver;
 
 /// Resolves symlinks in normalised, slash-separated absolute paths.
@@ -34,6 +35,43 @@ pub trait PathResolver {
 impl PathResolver for NoResolver {
     fn resolve(&self, _path: &str) -> Option<String> {
         None
+    }
+}
+
+/// Where the OS lands for an absolute path that kept its `..` segments
+/// ([`crate::paths::traversal`]): before each `..` the path so far is resolved,
+/// so `..` steps up from the directory a symlink points to, not from the
+/// link's name. `/p/c/../.ssh/id_rsa` with `c` → `/h/.config` is
+/// `/h/.ssh/id_rsa`. Without a filesystem it is the lexical collapse.
+#[must_use]
+pub fn physical(path: &str, resolver: &dyn PathResolver) -> String {
+    let (root, rest) = paths::split_root(path);
+    let mut here = root.clone();
+    for seg in rest.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                if let Some(real) = resolver.resolve(&here) {
+                    here = paths::collapse(&real);
+                }
+                here = parent(&here, &root);
+            }
+            name => {
+                if !here.ends_with('/') {
+                    here.push('/');
+                }
+                here.push_str(name);
+            }
+        }
+    }
+    here
+}
+
+/// `path` without its last segment, never above `root`.
+fn parent(path: &str, root: &str) -> String {
+    match path.rfind('/') {
+        Some(cut) if cut >= root.len() => path[..cut].to_owned(),
+        _ => root.to_owned(),
     }
 }
 
@@ -96,5 +134,23 @@ mod tests {
         assert_eq!(r.resolve("/p/sx/id_rsa"), None);
         assert_eq!(r.resolve("/p/src/main.rs"), None);
         assert_eq!(NoResolver.resolve("/p/s"), None);
+    }
+
+    #[test]
+    fn physical_steps_up_from_where_a_link_points() {
+        let r = MapPathResolver {
+            links: BTreeMap::from([("/p/c".to_owned(), "/h/.config".to_owned())]),
+            ..MapPathResolver::default()
+        };
+        assert_eq!(physical("/p/c/../.ssh/id_rsa", &r), "/h/.ssh/id_rsa");
+        assert_eq!(physical("/p/src/../README.md", &r), "/p/README.md");
+        assert_eq!(physical("/p/c/./x/../y", &r), "/h/.config/y");
+        assert_eq!(physical("/p/../../..", &r), "/");
+        assert_eq!(physical("C:/a/../b", &NoResolver), "C:/b");
+        // without a filesystem it is the lexical collapse
+        assert_eq!(
+            physical("/p/c/../.ssh/id_rsa", &NoResolver),
+            "/p/.ssh/id_rsa"
+        );
     }
 }

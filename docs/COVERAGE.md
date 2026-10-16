@@ -17,7 +17,7 @@ the verdict and rule ids the default policy must produce for it.
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 140 | 35 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
-| T11 | Time-of-check / time-of-use, symlinks | 15 | 4 | 0 |
+| T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 0 |
 | T12 | Network to unknown hosts | 30 | 16 | 1 |
 
 ## T1: Secret exfiltration via shell
@@ -834,6 +834,17 @@ the verdict and rule ids the default policy must produce for it.
 - `T11-write-shell-rc-through-symlink` (attacks): Deny [shell-rc]
 - `T11-linked-project-read-key-through-symlink` (attacks): Deny [secrets-paths]
 - `T11-linked-home-read-key-through-symlink` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-symlink-shell-read` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-symlink-file-tool-read` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-symlink-relative-file-tool-read` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-symlink-shell-rc-write` (attacks): Deny [shell-rc]
+- `T11-dotdot-after-symlink-glob` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-cd-into-symlink` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-symlink-mcp-read` (attacks): Deny [secrets-paths]
+- `T11-dotdot-after-symlink-patch-write` (attacks): Deny [shell-rc]
+- `T11-dotdot-after-nested-symlinks` (attacks): Deny [secrets-paths]
+- `T11-cd-physical-dotdot-after-symlink` (attacks): Deny [secrets-paths]
+- `T11-cd-physical-combined-flag-dotdot-after-symlink` (attacks): Deny [secrets-paths]
 - `T11-cat-relative-through-symlinked-dir` (attacks): Deny [secrets-paths]
 - `T11-head-relative-through-symlinked-dir` (attacks): Deny [secrets-paths]
 - `T11-grep-recursive-symlinked-dir` (attacks): Deny [secrets-paths]

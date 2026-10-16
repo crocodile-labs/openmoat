@@ -679,6 +679,63 @@
   action: { shell: "cat s/id_rsa" }
   links: { /p/s: /Volumes/u/me/.ssh }
   expect: { verdict: deny, rules: [secrets-paths] }
+# T11 `..` after a symlink: the OS steps up from where the link points, not from its name
+- id: T11-dotdot-after-symlink-shell-read
+  threat: T11
+  action: { shell: "cat ./c/../.ssh/id_rsa" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotdot-after-symlink-file-tool-read
+  threat: T11
+  action: { fs_read: "/p/c/../.ssh/id_rsa" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotdot-after-symlink-relative-file-tool-read
+  threat: T11
+  action: { fs_read: "c/../.aws/credentials" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotdot-after-symlink-shell-rc-write
+  threat: T11
+  action: { shell: "echo x >> c/../.zshrc" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: T11-dotdot-after-symlink-glob
+  threat: T11
+  action: { shell: "cat c/../.ssh/id_*" }
+  links: { /p/c: /Users/me/.config }
+  files: [/Users/me/.ssh/id_rsa]
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotdot-after-cd-into-symlink
+  threat: T11
+  action: { shell: "cd c && cat ../.ssh/id_rsa" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotdot-after-symlink-mcp-read
+  threat: T11
+  action: { mcp_tool: { name: mcp__filesystem__read_file, reads: [/p/c/../.ssh/id_rsa] } }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotdot-after-symlink-patch-write
+  threat: T11
+  action: { patch: ["c/../.zshrc"] }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: T11-dotdot-after-nested-symlinks
+  threat: T11
+  action: { shell: "cat a/b/../../.ssh/id_rsa" }
+  links: { /p/a: /Users/me/Library, /Users/me/Library/b: /Users/me/.config/x }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-cd-physical-dotdot-after-symlink
+  threat: T11
+  action: { shell: "cd -P c/.. && cat .ssh/id_rsa" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-cd-physical-combined-flag-dotdot-after-symlink
+  threat: T11
+  action: { shell: "cd -eP c/.. && cat .ssh/id_rsa" }
+  links: { /p/c: /Users/me/.config }
+  expect: { verdict: deny, rules: [secrets-paths] }
 # Relative operands are paths too, so the link is resolved without `./`
 - id: T11-cat-relative-through-symlinked-dir
   threat: T11

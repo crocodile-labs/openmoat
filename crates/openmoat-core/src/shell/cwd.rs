@@ -55,18 +55,30 @@ pub(super) fn targets(words: &[Word], ctx: &ShellContext<'_>) -> Vec<Option<Stri
         return Vec::new();
     }
     let mut options_ended = false;
+    let mut physical = false;
     let target = rest.find(|w| {
         if !options_ended && w.text == "--" {
             options_ended = true;
             return false;
         }
-        options_ended || !w.text.starts_with('-') || w.text == "-"
+        let operand = options_ended || !w.text.starts_with('-') || w.text == "-";
+        physical |= !operand && w.text[1..].contains('P');
+        operand
     });
     match target {
         None if program == "cd" => vec![Some(ctx.home.to_owned())],
+        // `cd -P` resolves links before `..`, so the directory is also kept
+        // in the form with its `..` for the engine to follow (`paths::traversal`)
         Some(word) if knowable(word) => ctx.paths(&word.text).map_or_else(
             |_| vec![None],
-            |paths| paths.into_iter().map(Some).collect(),
+            |paths| {
+                let traversals = physical.then(|| ctx.traversals(&word.text));
+                paths
+                    .into_iter()
+                    .chain(traversals.into_iter().flatten())
+                    .map(Some)
+                    .collect()
+            },
         ),
         _ => vec![None],
     }

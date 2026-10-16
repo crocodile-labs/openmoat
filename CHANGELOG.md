@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A path that steps up (`..`) after a symlink is checked where the OS really goes: with `c` linked to `~/.config`, `cat c/../.ssh/id_rsa` and a file-tool read of it were allowed as project files; they are denied, and so is `cd -P c/.. && cat .ssh/id_rsa` ([#536](https://github.com/crocodile-labs/openmoat/pull/536)).
+
 ## [0.5.2] - 2026-10-15
 
 Writes an agent should not make without a question now ask: CI workflows and commit hooks (`runs-later`), and `.git` in a directory allowed with `moat allow --dir`. `moat secret add` denies the secret's source to the agent, and `moat allow` updates the agents' sandboxes at once.
