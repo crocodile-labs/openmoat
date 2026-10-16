@@ -11,7 +11,7 @@ use crate::kind::Kind;
 use crate::pattern::{GlobPattern, ShellPattern, any_match};
 use crate::policy::{Policy, PolicyError, RuleGroup};
 use crate::programs::{self, NoResolver, ProgramResolver};
-use crate::realpath::PathResolver;
+use crate::realpath::{PathResolver, physical};
 use crate::shell::{ParseOutcome, ShellContext, classify_globs};
 use crate::verdict::{Decision, Verdict};
 use crate::{host, paths};
@@ -218,12 +218,8 @@ pub fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec
             reason: format!("{shell} commands are not parsed; only POSIX shell is classified"),
             atoms: Vec::new(),
         },
-        Action::FsRead { path } => ParseOutcome::Parsed(vec![AtomicAction::FsRead {
-            path: paths::normalise(path, &ctx.home, ctx.project.as_deref(), &ctx.cwd),
-        }]),
-        Action::FsWrite { path } => ParseOutcome::Parsed(vec![AtomicAction::FsWrite {
-            path: paths::normalise(path, &ctx.home, ctx.project.as_deref(), &ctx.cwd),
-        }]),
+        Action::FsRead { path } => ParseOutcome::Parsed(file_atoms(path, ctx, read).collect()),
+        Action::FsWrite { path } => ParseOutcome::Parsed(file_atoms(path, ctx, write).collect()),
         Action::Patch { writes } if writes.is_empty() => ParseOutcome::Unparseable {
             reason: "patch names no files".to_owned(),
             atoms: Vec::new(),
@@ -231,9 +227,7 @@ pub fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec
         Action::Patch { writes } => ParseOutcome::Parsed(
             writes
                 .iter()
-                .map(|p| AtomicAction::FsWrite {
-                    path: paths::normalise(p, &ctx.home, ctx.project.as_deref(), &ctx.cwd),
-                })
+                .flat_map(|p| file_atoms(p, ctx, write))
                 .collect(),
         ),
         Action::ReadFiles { paths } if paths.is_empty() => ParseOutcome::Unparseable {
@@ -243,9 +237,7 @@ pub fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec
         Action::ReadFiles { paths } => ParseOutcome::Parsed(
             paths
                 .iter()
-                .map(|p| AtomicAction::FsRead {
-                    path: paths::normalise(p, &ctx.home, ctx.project.as_deref(), &ctx.cwd),
-                })
+                .flat_map(|p| file_atoms(p, ctx, read))
                 .collect(),
         ),
         Action::Net { url } => match host::of_url(url) {
@@ -278,15 +270,9 @@ pub fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec
             hosts,
             ..
         } => {
-            let norm =
-                |p: &String| paths::normalise(p, &ctx.home, ctx.project.as_deref(), &ctx.cwd);
             let mut atoms = vec![AtomicAction::McpTool { name: name.clone() }];
-            atoms.extend(reads.iter().map(|p| AtomicAction::FsRead { path: norm(p) }));
-            atoms.extend(
-                writes
-                    .iter()
-                    .map(|p| AtomicAction::FsWrite { path: norm(p) }),
-            );
+            atoms.extend(reads.iter().flat_map(|p| file_atoms(p, ctx, read)));
+            atoms.extend(writes.iter().flat_map(|p| file_atoms(p, ctx, write)));
             let mut bad_host = None;
             for host in hosts {
                 match host::of_url(host) {
@@ -319,7 +305,13 @@ fn checked_atoms(
     let mut expansion = Expansion::new(paths);
     for glob in &globs {
         if let Some(pattern) = glob.subject() {
-            let named = expansion.paths(pattern);
+            // a glob that kept its `..` is listed where the OS would look
+            let pattern = if paths::has_dotdot(pattern) {
+                physical(pattern, paths)
+            } else {
+                pattern.to_owned()
+            };
+            let named = expansion.paths(&pattern);
             atoms.extend(named.into_iter().filter_map(|path| glob.with_path(path)));
         }
     }
@@ -427,9 +419,48 @@ impl CompiledPolicy<'_> {
     }
 }
 
+/// The read or write of a file a tool names: its collapsed path, and the form
+/// that kept its `..`, if any, for [`with_resolved_paths`] to follow.
+fn file_atoms(
+    raw: &str,
+    ctx: &EvalContext,
+    atom: fn(String) -> AtomicAction,
+) -> impl Iterator<Item = AtomicAction> {
+    let project = ctx.project.as_deref();
+    let collapsed = paths::normalise(raw, &ctx.home, project, &ctx.cwd);
+    let traversal = paths::traversal(raw, &ctx.home, project, Some(&ctx.cwd));
+    std::iter::once(atom(collapsed)).chain(traversal.map(atom))
+}
+
+fn read(path: String) -> AtomicAction {
+    AtomicAction::FsRead { path }
+}
+
+fn write(path: String) -> AtomicAction {
+    AtomicAction::FsWrite { path }
+}
+
+/// The path of a read or write atom.
+fn file_path(atom: &AtomicAction) -> Option<&str> {
+    match atom {
+        AtomicAction::FsRead { path } | AtomicAction::FsWrite { path } => Some(path),
+        _ => None,
+    }
+}
+
 /// Add an atom for the resolved path of every read and write that goes
 /// through a symlink. The literal atom stays: a rule may name either location.
+/// A path that kept its `..` ([`paths::traversal`]) is not checked as
+/// written: it is replaced by where the OS lands ([`physical`]), since each
+/// `..` steps up from where a symlink before it points.
 fn with_resolved_paths(atoms: Vec<AtomicAction>, paths: &dyn PathResolver) -> Vec<AtomicAction> {
+    let atoms: Vec<AtomicAction> = atoms
+        .into_iter()
+        .filter_map(|atom| match file_path(&atom) {
+            Some(path) if paths::has_dotdot(path) => atom.with_path(physical(path, paths)),
+            _ => Some(atom),
+        })
+        .collect();
     let resolved: Vec<AtomicAction> = atoms
         .iter()
         .filter_map(|atom| {

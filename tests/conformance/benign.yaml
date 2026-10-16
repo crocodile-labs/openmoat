@@ -995,3 +995,22 @@
 - id: benign-write-a-workflow-doc
   action: { fs_write: "/p/docs/workflows/release.md" }
   expect: { verdict: allow, rules: [project-fs] }
+# `..` inside the project, with and without a symlink that stays in the project
+- id: benign-dotdot-plain
+  action: { shell: "cat src/../README.md" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-dotdot-file-tool
+  action: { fs_read: "/p/src/../Cargo.toml" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-dotdot-after-symlink-inside-project
+  action: { shell: "cat lib/../README.md" }
+  links: { /p/lib: /p/vendor/lib }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-dotdot-write-after-symlink-inside-project
+  action: { fs_write: "/p/lib/../notes.md" }
+  links: { /p/lib: /p/vendor/lib }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-cd-physical-dotdot-inside-project
+  action: { shell: "cd -P lib/.. && cat README.md" }
+  links: { /p/lib: /p/vendor/lib }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }

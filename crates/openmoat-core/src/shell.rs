@@ -118,6 +118,20 @@ impl ShellContext<'_> {
             })
             .collect()
     }
+
+    /// The absolute forms of `word` that kept a `..` (`c/../x`), one per
+    /// possible working directory: the engine resolves them where the OS would
+    /// (`crate::realpath::physical`). Empty when `word` has no `..` or its
+    /// directory is not known ([`Self::paths`] already reports that).
+    pub(crate) fn traversals(&self, word: &str) -> Vec<String> {
+        if let Some(path) = paths::traversal(word, self.home, self.project, None) {
+            return vec![path];
+        }
+        self.cwd
+            .iter()
+            .filter_map(|cwd| paths::traversal(word, self.home, self.project, cwd.as_deref()))
+            .collect()
+    }
 }
 
 /// Maximum nesting of `$( … )`, `sh -c`, `eval` and wrapper commands.
@@ -406,7 +420,9 @@ impl Sink {
     ) -> Result<(), ClassifyError> {
         let glob =
             word.contains(['*', '?', '[']) && self.glob_words.iter().any(|w| w.ends_with(word));
-        for path in self.paths(ctx, word) {
+        // a `..` is also kept, to be followed where the OS goes (through a symlink)
+        let traversals = ctx.traversals(word);
+        for path in self.paths(ctx, word).into_iter().chain(traversals) {
             let atom = atom(path);
             if glob && !self.globs.contains(&atom) {
                 self.globs.push(atom.clone());
