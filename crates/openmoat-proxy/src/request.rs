@@ -272,7 +272,13 @@ pub(crate) fn normalise_name(raw: &str) -> Option<String> {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         });
-    valid.then_some(name)
+    // No top-level domain is a number. A name whose last label is digits or
+    // `0x…` is an address in another spelling (`1572394766`, `0x5d.0xb8.0xd7.0x0e`,
+    // `0177.0.0.1`) that the system resolver turns into an IP, past rules that
+    // name the address the usual way.
+    let last = name.rsplit('.').next().unwrap_or_default();
+    let numeric = last.bytes().all(|b| b.is_ascii_digit()) || last.starts_with("0x");
+    (valid && !numeric).then_some(name)
 }
 
 #[cfg(test)]

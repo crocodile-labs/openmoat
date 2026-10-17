@@ -167,3 +167,29 @@ fn names_are_checked_like_dns_labels() {
         assert_eq!(normalise_name(bad), None, "{bad:?}");
     }
 }
+
+#[test]
+fn an_address_in_another_spelling_is_not_a_name() {
+    // The system resolver reads these as IPv4 addresses; only the canonical
+    // dotted form is an address here, and these are refused outright.
+    for numeric in [
+        "1572394766",
+        "0x5d.0xb8.0xd7.0x0e",
+        "0x5db8d70e",
+        "0177.0.0.1",
+        "127.1",
+        "10.0.1",
+        "0X7F.0.0.1",
+    ] {
+        assert_eq!(normalise_name(numeric), None, "{numeric:?}");
+    }
+    for name in [
+        "1e100.net",
+        "123.example.com",
+        "0x.example",
+        "v6.0x00.dev",
+        "a1",
+    ] {
+        assert!(normalise_name(name).is_some(), "{name:?}");
+    }
+}
