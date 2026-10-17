@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-17
+
+Two security fixes: the egress proxy no longer passes along a second request pipelined after the first, and a session grant can no longer be made for a call without a session id, where it applied to every such session. Long agent sessions also stay fast.
+
 ### Security
 - The egress proxy forwards one plain-HTTP request per connection: a request pipelined after the first one's body, possibly for another host, was relayed to the first host's server without a decision; it is now dropped, and chunked framing the proxy cannot follow is refused ([#540](https://github.com/crocodile-labs/openmoat/pull/540)).
 - `moat allow --last` on a call whose agent sent no session id wrote a "session" grant that held for every session without an id for 24 hours; it is refused now, and the guard never applies such a grant ([#541](https://github.com/crocodile-labs/openmoat/pull/541)).
@@ -521,7 +525,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/crocodile-labs/openmoat/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/crocodile-labs/openmoat/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/crocodile-labs/openmoat/compare/v0.5.0...v0.5.1
