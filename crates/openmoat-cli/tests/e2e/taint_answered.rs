@@ -41,9 +41,18 @@ fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
     let (verdict, reason) = tainted_write(&sb, "s1", "CMakeLists.txt");
     assert_eq!(verdict, "allow", "{reason}");
     assert!(
-        reason.contains("after the session read untrusted content"),
+        reason.contains("after the session last read untrusted content"),
         "{reason}"
     );
+
+    // More untrusted content after the grant: the grant did not see it, so the
+    // same file asks again until it is answered again.
+    fetch_untrusted(&sb, "s1");
+    let (verdict, reason) = tainted_write(&sb, "s1", "CMakeLists.txt");
+    assert_eq!(verdict, "ask", "a later read asks again: {reason}");
+    let out = sb.moat_as_person(&["allow", "--last"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "allow");
 
     // Only that file, only that session.
     let (verdict, reason) = tainted_write(&sb, "s1", "pom.xml");

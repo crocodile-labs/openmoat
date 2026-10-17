@@ -91,7 +91,8 @@ exits. There is no daemon.
    own recorded working directory. `CompiledPolicy::with_taint` then tightens the
    decision (POLICY.md §4.1). This runs after the grant, so a grant cannot lift a taint
    ask, with one exception (`taint::answered`): a grant for this exact call made after
-   the session first read untrusted content answers that content's ask. A taint from a
+   the session last read untrusted content answers that content's ask; a later read
+   asks again. A taint from a
    secret the session read is never answered this way. A log or session event that cannot be read is a `kernel-error` deny. An edited
    or deleted event is found by the hash chain (`moat doctor`), not on every call.
 10. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot

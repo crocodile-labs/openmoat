@@ -2,10 +2,10 @@
 //! session that ran, folded into the [`Taint`] the core tightens the next call
 //! with. The log is OpenMoat's, not the agent's, so the agent cannot reset it.
 //!
-//! A person can answer one taint ask for the rest of the session: a grant for
-//! that exact call, made with `moat allow` after the session read untrusted
-//! content, stands for it ([`answered`]). A grant made before the taint, or a
-//! taint from a secret the session read, still asks.
+//! A person can answer a taint ask: a grant for that exact call, made with
+//! `moat allow` after the session last read untrusted content, stands for it
+//! ([`answered`]) until the session reads more. A grant made before that read,
+//! or a taint from a secret the session read, still asks.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -23,12 +23,13 @@ use crate::realpath::FsPathResolver;
 /// The rule id the core gives a taint ask.
 const TAINT_RULE: &str = "session-taint";
 
-/// What a session was exposed to, and since when it has read untrusted content.
+/// What a session was exposed to, and when it last read untrusted content.
 #[derive(Debug, Default)]
 pub struct SessionTaint {
     pub taint: Taint,
-    /// When the first call that read untrusted content was recorded.
-    pub untrusted_since_ms: Option<i64>,
+    /// When the latest call that read untrusted content was recorded. A grant
+    /// must be newer: one made before a later read did not see that content.
+    pub untrusted_last_ms: Option<i64>,
 }
 
 /// What the earlier calls of `session` on `host` exposed it to. A call
@@ -74,8 +75,8 @@ pub fn of_session(
                 slot.insert(exposure).clone()
             }
         };
-        if out.untrusted_since_ms.is_none() && exposure.untrusted.is_some() {
-            out.untrusted_since_ms = Some(event.ts_ms);
+        if exposure.untrusted.is_some() {
+            out.untrusted_last_ms = out.untrusted_last_ms.max(Some(event.ts_ms));
         }
         out.taint.absorb(exposure);
     }
@@ -94,9 +95,9 @@ pub struct Call<'a> {
 
 /// `tainted` is `untainted` tightened by the session's taint. When it is a
 /// taint ask a person can answer, and they did: a grant for this exact call,
-/// made after the session read untrusted content, gives `untainted` back.
+/// made after the session last read untrusted content, gives `untainted` back.
 /// Taint from a secret the session read is never answered this way, and a
-/// grant made before the taint did not see the ask it would answer.
+/// grant made before the latest untrusted read did not see that content.
 ///
 /// A taint ask that a grant could answer, and has not, says how to give one.
 pub fn answered(
@@ -107,7 +108,7 @@ pub fn answered(
     tainted: Decision,
     now_ms: i64,
 ) -> Result<Decision> {
-    let Some(since) = session.untrusted_since_ms else {
+    let Some(last_read) = session.untrusted_last_ms else {
         return Ok(tainted);
     };
     if tainted.verdict != Verdict::Ask || !tainted.rules.iter().any(|r| r == TAINT_RULE) {
@@ -136,12 +137,12 @@ pub fn answered(
         .transpose()?
         .flatten();
     if let Some(at) = granted_at
-        && at >= since
+        && at > last_read
     {
         let mut decision = untainted;
-        decision
-            .reasons
-            .push("approved with `moat allow` after the session read untrusted content".to_owned());
+        decision.reasons.push(
+            "approved with `moat allow` after the session last read untrusted content".to_owned(),
+        );
         return Ok(decision);
     }
     let mut decision = tainted;
