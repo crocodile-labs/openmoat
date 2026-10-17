@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- The egress proxy forwards one plain-HTTP request per connection: a request pipelined after the first one's body, possibly for another host, was relayed to the first host's server without a decision; it is now dropped, and chunked framing the proxy cannot follow is refused ([#540](https://github.com/crocodile-labs/openmoat/pull/540)).
+
 ## [0.5.3] - 2026-10-15
 
 Two security fixes: a path that steps up (`..`) after a symlink is checked where the OS really goes, and a shell variable whose value names itself can no longer crash the guard, which let Claude Code and Codex run a command unchecked.
