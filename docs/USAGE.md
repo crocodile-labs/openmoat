@@ -70,7 +70,10 @@ changes nothing.
 
 `moat status` and `moat doctor` print one protection level per agent, derived from the
 hook and sandbox checks above them, and one line of what that agent's hook and sandbox
-do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5):
+do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5). For tools that
+show them, `moat status --format json` prints the levels and `moat doctor --format json`
+every check (`ok`, `problem`, `warning` or `note`, with its name and detail), with the same
+exit code as the text:
 
 | Level | Means |
 |---|---|

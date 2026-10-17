@@ -266,6 +266,10 @@ pub struct DoctorArgs {
     /// Print every place each host sandbox is stricter or wider than the policy.
     #[arg(long)]
     pub verbose: bool,
+
+    /// Output format; `json` prints every check as one document, for tools that show them.
+    #[arg(long, value_enum, default_value_t = Format::Text, conflicts_with_all = ["accept", "verbose"])]
+    pub format: Format,
 }
 
 #[derive(Debug, Args)]

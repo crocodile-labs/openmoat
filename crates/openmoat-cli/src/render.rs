@@ -33,9 +33,19 @@ struct DecisionReport<'a> {
 #[derive(Default)]
 pub struct Deferred {
     error: Option<io::Error>,
+    /// Discard everything: the command prints one JSON document instead.
+    quiet: bool,
 }
 
 impl Deferred {
+    /// A `Deferred` that writes nothing, for a command's `--format json`.
+    pub fn quiet() -> Self {
+        Self {
+            error: None,
+            quiet: true,
+        }
+    }
+
     /// The first write error, if any, now that the command has done its work.
     pub fn finish(mut self) -> Result<()> {
         self.flush()?;
@@ -48,7 +58,8 @@ impl Deferred {
 
 impl Write for Deferred {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if self.error.is_none()
+        if !self.quiet
+            && self.error.is_none()
             && let Err(error) = io::stdout().write_all(buf)
         {
             self.error = Some(error);
@@ -57,7 +68,8 @@ impl Write for Deferred {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if self.error.is_none()
+        if !self.quiet
+            && self.error.is_none()
             && let Err(error) = io::stdout().flush()
         {
             self.error = Some(error);

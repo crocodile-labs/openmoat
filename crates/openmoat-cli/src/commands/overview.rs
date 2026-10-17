@@ -54,6 +54,7 @@ pub fn run() -> Result<Code> {
         let code = super::doctor::run(&DoctorArgs {
             accept: true,
             verbose: false,
+            format: crate::cli::Format::Text,
         })?;
         if !Lock::load(&lock_path)?.verify().is_empty() {
             return Ok(code);
