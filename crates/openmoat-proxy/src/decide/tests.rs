@@ -98,6 +98,9 @@ fn local_and_metadata_addresses_are_forbidden() {
         ("febf::1", Forbidden::LinkLocal),
         ("fd00:ec2::254", Forbidden::Metadata),
         ("100.100.100.200", Forbidden::Metadata),
+        ("168.63.129.16", Forbidden::Metadata),
+        ("64:ff9b:1::a9fe:a9fe", Forbidden::LinkLocal),
+        ("64:ff9b:1::7f00:1", Forbidden::Loopback),
         ("0.0.0.0", Forbidden::NotUnicast),
         ("0.1.2.3", Forbidden::NotUnicast),
         ("::", Forbidden::NotUnicast),
@@ -166,6 +169,16 @@ fn private_ranges_are_forbidden_in_every_spelling() {
         ),
         ("fc00::", private("a unique local address (fc00::/7)")),
         ("fdff:ffff::1", private("a unique local address (fc00::/7)")),
+        (
+            "192.0.0.170",
+            private("an IETF protocol address (192.0.0.0/24)"),
+        ),
+        ("64:ff9b:1::a00:5", private(ten)),
+        // a local-use NAT64 address in a layout other than /96, public inside
+        (
+            "64:ff9b:1:5db8:d7:e00:808:808",
+            private("a local-use NAT64 address (64:ff9b:1::/48)"),
+        ),
         // metadata inside a private range stays metadata: never opened
         ("100.100.100.200", Some(Forbidden::Metadata)),
         ("fd00:ec2::254", Some(Forbidden::Metadata)),
