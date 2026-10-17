@@ -77,6 +77,62 @@ fn loopback_is_refused_unless_it_is_the_listed_server() {
 }
 
 #[test]
+fn a_pipelined_second_request_is_never_forwarded() {
+    // The proxy decided the first request only. A second one after its body,
+    // here for a host the policy refuses, must not reach the first host's
+    // server, whatever that server would make of it.
+    let h = start(None, Limits::default());
+    let port = h.port();
+    let second = "GET http://unknown.test/ HTTP/1.1\r\nHost: unknown.test\r\n\r\n";
+    let cases = [
+        ("Content-Length: 5\r\n", "hello"),
+        ("Transfer-Encoding: chunked\r\n", "5\r\nhello\r\n0\r\n\r\n"),
+    ];
+    for (framing, body) in cases {
+        let reply = h.exchange(&format!(
+            "POST http://allowed.test:{port}/a HTTP/1.1\r\nHost: allowed.test:{port}\r\n\
+             {framing}\r\n{body}{second}"
+        ));
+        assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
+        let forwarded = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+        assert_eq!(
+            forwarded,
+            format!(
+                "POST /a HTTP/1.1\r\nHost: allowed.test:{port}\r\n{framing}\
+                 Connection: close\r\n\r\n{body}"
+            )
+        );
+    }
+}
+
+#[test]
+fn a_request_without_a_body_forwards_nothing_after_its_head() {
+    let h = start(None, Limits::default());
+    let port = h.port();
+    let reply = h.exchange(&format!(
+        "GET http://allowed.test:{port}/ HTTP/1.1\r\nHost: allowed.test:{port}\r\n\r\n\
+         GET http://allowed.test:{port}/second HTTP/1.1\r\n\r\n"
+    ));
+    assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
+    let forwarded = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    assert!(!forwarded.contains("/second"), "{forwarded}");
+}
+
+#[test]
+fn a_chunked_body_the_proxy_cannot_follow_is_refused() {
+    let h = start(None, Limits::default());
+    let port = h.port();
+    let reply = h.exchange(&format!(
+        "POST http://allowed.test:{port}/a HTTP/1.1\r\nHost: allowed.test:{port}\r\n\
+         Transfer-Encoding: chunked\r\n\r\n5 5\r\nhello\r\n0\r\n\r\n"
+    ));
+    assert!(reply.starts_with("HTTP/1.1 400 Bad Request"), "{reply}");
+    assert!(reply.contains("malformed chunked"), "{reply}");
+    assert!(h.nothing_forwarded());
+    assert!(h.rows().iter().any(|r| r.verdict == Verdict::Deny));
+}
+
+#[test]
 fn a_refused_upload_still_reads_the_403() {
     // The proxy refuses before reading the body. Closing with that body
     // unread resets the connection, and the client loses the 403 it was sent.

@@ -23,6 +23,7 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 mod audit;
+mod body;
 mod broker;
 mod decide;
 mod request;

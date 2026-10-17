@@ -557,6 +557,11 @@ host outside TLS termination.
      - drop hop-by-hop headers (`Connection` and the headers it names, `Proxy-*`, `TE`,
        `Trailer`, `Upgrade`, `Keep-Alive`) and add `Connection: close`;
      - refuse `Content-Length` with `Transfer-Encoding`, or more than one `Content-Length`;
+     - forward one request: its head and its body, delimited by `Content-Length` or
+       `chunked` framing (a request with neither has no body). Whatever the client sends
+       after that body, such as a pipelined request for another host, is read and
+       dropped, never forwarded. Chunked framing the proxy cannot follow is refused
+       (`proxy-request`);
      - after the row is recorded, put the value of each brokered secret the host owns
        and that sets `plain_http` into the head (POLICY.md §2.1). The head is zeroed once
        it is written. A secret without `plain_http` is not injected, and the row's reasons
