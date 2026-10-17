@@ -1,7 +1,6 @@
 //! `moat doctor`'s Standard-tier rows: each present host's sandbox settings
 //! against the policy.
 
-use std::io::Write as _;
 use std::path::Path;
 
 use openmoat_core::Policy;
@@ -79,10 +78,11 @@ pub(super) fn sandboxes(
     if let Some(port) = plan.proxy_port.filter(|_| present) {
         // A warning, not a problem: a stopped proxy fails closed.
         let (ok, text) = crate::commands::proxy::listening_line(port);
-        let _ = writeln!(
-            report.out,
-            "{} moat proxy       {text}",
-            if ok { "✔" } else { "!" }
-        );
+        let line = format!("moat proxy       {text}");
+        if ok {
+            report.line(Area::Service, true, line);
+        } else {
+            report.warn(&line);
+        }
     }
 }

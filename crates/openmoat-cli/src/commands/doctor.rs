@@ -8,7 +8,7 @@ use openmoat_audit::{ChainReport, Store};
 use openmoat_core::Policy;
 use openmoat_hosts::Host;
 
-use crate::cli::DoctorArgs;
+use crate::cli::{DoctorArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::install::{
@@ -18,12 +18,14 @@ use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
 
+mod json;
 mod sandboxes;
 mod warnings;
 
 /// What a check is about, so accepting changes clears exactly the problems a
 /// re-pin fixes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 enum Area {
     State,
     Policy,
@@ -52,12 +54,20 @@ fn service(report: &mut Report, home: &Home) {
 struct Report {
     problems: Vec<(Area, String)>,
     out: Deferred,
+    /// Every row in order, for `--format json`.
+    rows: Vec<json::Row>,
 }
 
 impl Report {
     fn line(&mut self, area: Area, ok: bool, text: String) {
         // `Deferred` keeps a write error for `finish`; it never returns one here.
         let _ = writeln!(self.out, "{} {text}", if ok { "✔" } else { "✗" });
+        let status = if ok {
+            json::Status::Ok
+        } else {
+            json::Status::Problem
+        };
+        self.rows.push(json::Row::new(status, Some(area), &text));
         if !ok {
             self.problems.push((area, text));
         }
@@ -65,20 +75,30 @@ impl Report {
 
     fn note(&mut self, text: &str) {
         let _ = writeln!(self.out, "· {text}");
+        self.rows
+            .push(json::Row::new(json::Status::Note, None, text));
     }
 
     /// A row that needs attention without being a problem: the exit code stays 0.
     fn warn(&mut self, text: &str) {
         let _ = writeln!(self.out, "! {text}");
+        self.rows
+            .push(json::Row::new(json::Status::Warning, None, text));
     }
 }
 
 pub fn run(args: &DoctorArgs) -> Result<Code> {
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
+    let as_json = args.format == Format::Json;
     let mut report = Report {
         problems: Vec::new(),
-        out: Deferred::default(),
+        out: if as_json {
+            Deferred::quiet()
+        } else {
+            Deferred::default()
+        },
+        rows: Vec::new(),
     };
 
     report.line(
@@ -132,6 +152,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     if args.accept {
         let intact = drift.is_empty() && lock.is_some();
         accept(&mut report, &home, &binary, policy.is_some(), intact)?;
+    }
+    if as_json {
+        return json::finish(&report.rows, report.problems.len());
     }
     finish(report)
 }

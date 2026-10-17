@@ -240,3 +240,37 @@ fn status_and_doctor_report_a_missing_lock_and_audit_log() {
         "{doctor}"
     );
 }
+
+/// `moat doctor --format json`: the same rows as the text, one document, and
+/// the same exit code; nothing else on stdout.
+#[test]
+fn doctor_prints_its_checks_as_one_json_document() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let out = sb.moat(&["doctor", "--format", "json"]);
+    let doc = json(&out);
+    let checks = doc["checks"].as_array().expect("checks");
+    assert!(!checks.is_empty(), "{}", text(&out));
+    assert_eq!(
+        doc["healthy"],
+        out.status.code() == Some(OK),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        checks
+            .iter()
+            .any(|c| c["status"] == "ok" && c["name"] == "state directory"),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        checks
+            .iter()
+            .all(|c| ["ok", "problem", "warning", "note"]
+                .contains(&c["status"].as_str().unwrap_or(""))),
+        "{}",
+        text(&out)
+    );
+    let refused = sb.moat(&["doctor", "--format", "json", "--accept"]);
+    assert_ne!(refused.status.code(), Some(OK), "json never accepts");
+}
