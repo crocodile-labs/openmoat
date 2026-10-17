@@ -1,6 +1,7 @@
 //! Command dispatch.
 
 mod allow;
+mod allowed;
 mod audit;
 mod bench;
 mod doctor;
@@ -41,9 +42,11 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Status(args) => status::run(&args),
         Command::Doctor(args) => doctor::run(&args),
         Command::Allow(args) => allow::run(&args),
+        Command::Allowed(args) => allowed::run(&args),
         Command::Edit => edit::run(),
         Command::Secret { command } => match command {
             SecretCommand::Add(args) => secret::add(&args),
+            SecretCommand::List(args) => secret::list(&args),
         },
         Command::Trust(args) => trust::run(&args),
         Command::Replay(args) => replay::run(&args),

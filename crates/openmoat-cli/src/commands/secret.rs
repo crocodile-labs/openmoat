@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Secret, SecretSource};
 use similar::{Algorithm, udiff::unified_diff};
 
-use crate::cli::SecretAddArgs;
+use crate::cli::{Format, SecretAddArgs, SecretListArgs};
 use crate::context::read_policy;
 use crate::exit::Code;
 use crate::home::{Home, write_private};
@@ -20,6 +20,62 @@ use crate::render::Deferred;
 /// `moat secret add gh`: the GitHub API token most agents use, from the
 /// variable `gh` and git's tools read.
 const GITHUB: (&str, &str, &str) = ("api.github.com", "Authorization", "GITHUB_TOKEN");
+
+/// One brokered secret as `moat secret list` shows it: where the value is read
+/// from and where it goes, never the value.
+#[derive(serde::Serialize)]
+struct Listed<'a> {
+    #[serde(flatten)]
+    secret: &'a Secret,
+    /// No deny rule covers where the value is read from, so the agent could
+    /// read it there (`moat policy lint` warns too).
+    source_exposed: bool,
+}
+
+/// `moat secret list`: read-only, so no terminal is needed.
+pub fn list(args: &SecretListArgs) -> Result<Code> {
+    let policy = Home::locate()?.load_policy()?;
+    let listed: Vec<Listed<'_>> = policy
+        .secrets
+        .iter()
+        .map(|secret| Listed {
+            secret,
+            source_exposed: openmoat_core::lint::exposed_source(&policy, secret).is_some(),
+        })
+        .collect();
+    if args.format == Format::Json {
+        crate::render::json(&serde_json::json!({ "secrets": listed }))?;
+        return Ok(Code::Ok);
+    }
+    let mut out = Deferred::default();
+    if listed.is_empty() {
+        writeln!(out, "no brokered secrets; `moat secret add` adds one")?;
+    }
+    for item in &listed {
+        let s = item.secret;
+        let source = match &s.source {
+            SecretSource::File(path) => format!("file {path}"),
+            SecretSource::Env(name) => format!("env {name}"),
+            SecretSource::Keychain { service, account } => {
+                format!("keychain {service}/{account}")
+            }
+        };
+        writeln!(
+            out,
+            "{:<14} {} header {}, from {source}",
+            s.id, s.host, s.header
+        )?;
+        if item.source_exposed {
+            writeln!(
+                out,
+                "{:<14} ! no deny rule covers its source: the agent can read the value there",
+                ""
+            )?;
+        }
+    }
+    out.finish()?;
+    Ok(Code::Ok)
+}
 
 pub fn add(args: &SecretAddArgs) -> Result<Code> {
     if !crate::terminal::interactive() {

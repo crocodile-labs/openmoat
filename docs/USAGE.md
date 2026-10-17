@@ -269,8 +269,10 @@ these takes one command in your own terminal (agents are denied all of them):
 | `moat audit report <file>…` | one report over verified exports from several machines |
 | `moat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h) or a permanent rule for exactly that command or those paths |
 | `moat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |
+| `moat allowed [--format json]` | list what you allowed: permanent rules, session grants still in force, trusted repositories, each with how to take it back |
 | `moat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
 | `moat secret add gh` · `moat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only |
+| `moat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `moat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes |
 | `moat policy lint` · `moat policy check "<cmd>"` · `moat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |

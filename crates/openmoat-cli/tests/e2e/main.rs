@@ -29,6 +29,7 @@ mod home_screen;
 mod host_failures;
 #[cfg(unix)]
 mod install_path;
+mod listings;
 mod lock;
 mod moatbench;
 mod paths;

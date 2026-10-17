@@ -50,6 +50,9 @@ pub enum Command {
     /// Approve a shell command for one session, or permanently; or permanently allow
     /// a site (`--site`) or a directory (`--dir`). Refused unless run from an interactive terminal.
     Allow(AllowArgs),
+    /// List what you allowed: permanent rules from `moat allow`, active session
+    /// grants, and trusted repositories, each with how to take it back.
+    Allowed(AllowedArgs),
     /// Edit ~/.moat/policy.yaml in $VISUAL or $EDITOR; lint it, show the diff and ask
     /// before applying and re-pinning. Refused unless run from an interactive terminal.
     Edit,
@@ -190,6 +193,23 @@ pub enum SecretCommand {
     /// one header of requests to one host. `moat secret add gh` is the GitHub API token
     /// (`GITHUB_TOKEN`, `api.github.com`).
     Add(SecretAddArgs),
+    /// List the brokered secrets: id, host, header and where the value is read from.
+    /// Never the value.
+    List(SecretListArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SecretListArgs {
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct AllowedArgs {
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
 }
 
 #[derive(Debug, Args)]
