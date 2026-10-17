@@ -12,6 +12,9 @@ view at the end of the file.
 - The egress proxy forwards one plain-HTTP request per connection: a request pipelined after the first one's body, possibly for another host, was relayed to the first host's server without a decision; it is now dropped, and chunked framing the proxy cannot follow is refused ([#540](https://github.com/crocodile-labs/openmoat/pull/540)).
 - `moat allow --last` on a call whose agent sent no session id wrote a "session" grant that held for every session without an id for 24 hours; it is refused now, and the guard never applies such a grant ([#541](https://github.com/crocodile-labs/openmoat/pull/541)).
 
+### Changed
+- The guard stays fast in long agent sessions: when it works out a session's taint, each distinct earlier call is classified once instead of once per later call ([#542](https://github.com/crocodile-labs/openmoat/pull/542)).
+
 ## [0.5.3] - 2026-10-15
 
 Two security fixes: a path that steps up (`..`) after a symlink is checked where the OS really goes, and a shell variable whose value names itself can no longer crash the guard, which let Claude Code and Codex run a command unchecked.
