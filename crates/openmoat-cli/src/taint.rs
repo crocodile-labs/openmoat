@@ -1,18 +1,35 @@
 //! Session taint (ADR-020) read from the audit log: the calls of one host
 //! session that ran, folded into the [`Taint`] the core tightens the next call
 //! with. The log is OpenMoat's, not the agent's, so the agent cannot reset it.
+//!
+//! A person can answer one taint ask for the rest of the session: a grant for
+//! that exact call, made with `moat allow` after the session read untrusted
+//! content, stands for it ([`answered`]). A grant made before the taint, or a
+//! taint from a secret the session read, still asks.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_core::{CompiledPolicy, Decision, Taint, Verdict};
+use openmoat_core::{Action, CompiledPolicy, Decision, Taint, Verdict};
 use openmoat_hosts::{HookEvent, Host};
 
+use crate::approvals::{self, Grants};
 use crate::context;
 use crate::home::Home;
 use crate::realpath::FsPathResolver;
+
+/// The rule id the core gives a taint ask.
+const TAINT_RULE: &str = "session-taint";
+
+/// What a session was exposed to, and since when it has read untrusted content.
+#[derive(Debug, Default)]
+pub struct SessionTaint {
+    pub taint: Taint,
+    /// When the first call that read untrusted content was recorded.
+    pub untrusted_since_ms: Option<i64>,
+}
 
 /// What the earlier calls of `session` on `host` exposed it to. A call
 /// recorded without a working directory is taken to have run in `cwd`. A log
@@ -24,12 +41,12 @@ pub fn of_session(
     session: &str,
     policy: &CompiledPolicy<'_>,
     cwd: &str,
-) -> Result<Taint> {
+) -> Result<SessionTaint> {
     let events = home
         .open_audit()?
         .session(session)
         .context("reading this session from the audit log")?;
-    let mut taint = Taint::default();
+    let mut out = SessionTaint::default();
     // Every guard call folds the whole session again, so a long session would
     // classify each of its calls once per later call. Agents repeat calls
     // (`git status`, the same file reads); each distinct one, in its working
@@ -57,9 +74,85 @@ pub fn of_session(
                 slot.insert(exposure).clone()
             }
         };
-        taint.absorb(exposure);
+        if out.untrusted_since_ms.is_none() && exposure.untrusted.is_some() {
+            out.untrusted_since_ms = Some(event.ts_ms);
+        }
+        out.taint.absorb(exposure);
     }
-    Ok(taint)
+    Ok(out)
+}
+
+/// Everything `answered` needs about the call being decided.
+pub struct Call<'a> {
+    pub home: &'a Home,
+    pub host: Host,
+    pub session: &'a str,
+    pub action: &'a Action,
+    pub cwd: &'a str,
+    pub user_home: &'a str,
+}
+
+/// `tainted` is `untainted` tightened by the session's taint. When it is a
+/// taint ask a person can answer, and they did: a grant for this exact call,
+/// made after the session read untrusted content, gives `untainted` back.
+/// Taint from a secret the session read is never answered this way, and a
+/// grant made before the taint did not see the ask it would answer.
+///
+/// A taint ask that a grant could answer, and has not, says how to give one.
+pub fn answered(
+    call: &Call<'_>,
+    policy: &CompiledPolicy<'_>,
+    session: &SessionTaint,
+    untainted: Decision,
+    tainted: Decision,
+    now_ms: i64,
+) -> Result<Decision> {
+    let Some(since) = session.untrusted_since_ms else {
+        return Ok(tainted);
+    };
+    if tainted.verdict != Verdict::Ask || !tainted.rules.iter().any(|r| r == TAINT_RULE) {
+        return Ok(tainted);
+    }
+    // Only untrusted content may be answered: the secrets alone must not make
+    // this call ask.
+    let secrets_only = Taint {
+        secrets: session.taint.secrets.clone(),
+        untrusted: None,
+    };
+    let with_secrets = policy.with_taint(
+        untainted.clone(),
+        call.action,
+        &FsPathResolver,
+        &secrets_only,
+    );
+    if with_secrets.rules.iter().any(|r| r == TAINT_RULE) {
+        return Ok(tainted);
+    }
+    let granted_at = approvals::approvable(call.action, Some(call.cwd), call.user_home)
+        .map(|asked| {
+            Grants::load(&call.home.grants_path())
+                .map(|g| g.granted_at(call.host.id(), call.session, &asked, now_ms))
+        })
+        .transpose()?
+        .flatten();
+    if let Some(at) = granted_at
+        && at >= since
+    {
+        let mut decision = untainted;
+        decision
+            .reasons
+            .push("approved with `moat allow` after the session read untrusted content".to_owned());
+        return Ok(decision);
+    }
+    let mut decision = tainted;
+    // Hosts that cannot ask are told how already (`Host::answer`).
+    if call.host == Host::ClaudeCode {
+        decision.reasons.push(
+            "to stop asking for this in this session, run `moat allow --last` in a terminal"
+                .to_owned(),
+        );
+    }
+    Ok(decision)
 }
 
 /// Whether a call decided `verdict` may have run: it was allowed, or it asked

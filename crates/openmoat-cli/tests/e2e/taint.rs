@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::common::{OK, Sandbox, hook_output, stderr, text};
 
 /// A `PreToolUse` payload for `tool` in `session`, as Claude Code and Codex send it.
-fn call(session: &str, cwd: &Path, tool: &str, input: &Value) -> String {
+pub(crate) fn call(session: &str, cwd: &Path, tool: &str, input: &Value) -> String {
     json!({
         "session_id": session, "cwd": cwd.to_string_lossy(), "hook_event_name": "PreToolUse",
         "tool_name": tool, "tool_input": input, "tool_use_id": "t1"
@@ -17,7 +17,7 @@ fn call(session: &str, cwd: &Path, tool: &str, input: &Value) -> String {
 }
 
 /// The verdict the host received and its reason.
-fn decide(sb: &Sandbox, host: &str, payload: &str) -> (String, String) {
+pub(crate) fn decide(sb: &Sandbox, host: &str, payload: &str) -> (String, String) {
     let out = sb.guard(host, payload);
     let d = hook_output(&out);
     let verdict = d["permissionDecision"].as_str().unwrap_or_default();
