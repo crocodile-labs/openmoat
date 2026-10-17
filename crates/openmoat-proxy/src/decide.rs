@@ -25,11 +25,16 @@ pub const RULE_AUDIT: &str = "proxy-audit";
 /// Metadata services reachable by name on cloud instances.
 const METADATA_NAMES: &[&str] = &["metadata.google.internal", "metadata.goog"];
 const ALIBABA_METADATA: Ipv4Addr = Ipv4Addr::new(100, 100, 100, 200);
+/// Azure's `WireServer`, which serves instance configuration and keys to the VM.
+const AZURE_WIRESERVER: Ipv4Addr = Ipv4Addr::new(168, 63, 129, 16);
 const AWS_METADATA_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
 /// RFC 6052 well-known NAT64 prefix: `64:ff9b::a.b.c.d` reaches `a.b.c.d`.
 const NAT64: [u16; 6] = [0x64, 0xff9b, 0, 0, 0, 0];
+/// RFC 8215 local-use NAT64 prefix `64:ff9b:1::/48`. The operator picks how the
+/// IPv4 address is embedded inside it, so its addresses count as local network.
+const NAT64_LOCAL: [u16; 3] = [0x64, 0xff9b, 1];
 /// Ranges on the local network (or the carrier's), each with its description.
-const PRIVATE_V4: [(Ipv4Addr, u8, &str); 5] = [
+const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
     (
         Ipv4Addr::new(10, 0, 0, 0),
         8,
@@ -54,6 +59,11 @@ const PRIVATE_V4: [(Ipv4Addr, u8, &str); 5] = [
         Ipv4Addr::new(198, 18, 0, 0),
         15,
         "a benchmarking address (198.18.0.0/15)",
+    ),
+    (
+        Ipv4Addr::new(192, 0, 0, 0),
+        24,
+        "an IETF protocol address (192.0.0.0/24)",
     ),
 ];
 
@@ -140,7 +150,7 @@ fn forbidden_v4(ip: Ipv4Addr) -> Option<Forbidden> {
         Some(Forbidden::Loopback)
     } else if ip.is_link_local() {
         Some(Forbidden::LinkLocal)
-    } else if ip == ALIBABA_METADATA {
+    } else if ip == ALIBABA_METADATA || ip == AZURE_WIRESERVER {
         Some(Forbidden::Metadata)
     } else if ip.is_unspecified() || ip.is_broadcast() || ip.is_multicast() || ip.octets()[0] == 0 {
         Some(Forbidden::NotUnicast)
@@ -167,6 +177,14 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
         let [a, b] = seg[6].to_be_bytes();
         let [c, d] = seg[7].to_be_bytes();
         forbidden_v4(Ipv4Addr::new(a, b, c, d))
+    } else if seg[..3] == NAT64_LOCAL {
+        // The common /96 layout first, so a metadata or loopback address in it
+        // is named as such; any other layout is local network all the same.
+        let [a, b] = seg[6].to_be_bytes();
+        let [c, d] = seg[7].to_be_bytes();
+        forbidden_v4(Ipv4Addr::new(a, b, c, d)).or(Some(Forbidden::Private(
+            "a local-use NAT64 address (64:ff9b:1::/48)",
+        )))
     } else if seg[0] & 0xfe00 == 0xfc00 {
         Some(Forbidden::Private("a unique local address (fc00::/7)"))
     } else {
