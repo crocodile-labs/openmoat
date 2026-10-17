@@ -39,6 +39,30 @@ fn allow_last_grants_the_session_and_repins() {
 }
 
 #[test]
+fn no_session_grant_for_a_call_without_a_session_id() {
+    // A host that sends no session id is recorded as session "unknown", shared
+    // by every such call: a "session" grant there would hold everywhere.
+    let sb = Sandbox::installed_asking(&[".claude"]);
+    assert_eq!(guard(&sb, "unknown", INSTALL).0, "ask");
+
+    let out = sb.moat_as_person(&["allow", "--last"]);
+    assert_ne!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("no session id"), "{}", text(&out));
+
+    let explicit = [
+        "allow",
+        INSTALL,
+        "--host",
+        "claude-code",
+        "--session",
+        "unknown",
+    ];
+    let out = sb.moat_as_person(&explicit);
+    assert_ne!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(guard(&sb, "unknown", INSTALL).0, "ask", "still asked");
+}
+
+#[test]
 fn allow_explicit_session_grant() {
     let sb = Sandbox::installed_asking(&[".claude"]);
     let out = sb.moat_as_person(&["allow", INSTALL, "--host", "claude-code", "--session", "s9"]);
