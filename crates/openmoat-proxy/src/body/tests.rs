@@ -35,9 +35,9 @@ fn a_length_body_ends_after_exactly_its_length_however_it_arrives() {
         );
     }
     let mut end = BodyEnd::new(Framing::Length(5));
-    assert_eq!(end.feed(b"hel"), Ok(3));
+    assert_eq!(end.feed(b"123"), Ok(3));
     assert!(!end.done());
-    assert_eq!(end.feed(b"lo and more"), Ok(2));
+    assert_eq!(end.feed(b"45 and more"), Ok(2));
     assert!(end.done());
     assert_eq!(end.feed(b"anything"), Ok(0));
 }
@@ -67,7 +67,7 @@ fn chunked_framing_a_server_could_read_differently_is_malformed() {
         b"x\r\n",                     // not hex
         b"5 5\r\nhello\r\n0\r\n\r\n", // a second number after a space
         b"5\nhello",                  // bare LF ends the size line
-        b"5\r\nhelloXX",              // data not followed by CRLF
+        b"5\r\nhello..",              // data not followed by CRLF
         b"0\r\n\n",                   // bare LF in the trailers
         b"10000000000000000\r\n",     // over u64
     ] {
