@@ -78,7 +78,7 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
     std::fs::write(
         sb.home.join(".moat/policy.yaml"),
         "version: 1\ndefaults: { '*': ask, net: deny }\n\
-         allow:\n  - id: registries\n    net: [api.github.com]\n\
+         allow:\n  - id: registries\n    net: [api.github.com, crates.io]\n\
          ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
     )
     .unwrap();
