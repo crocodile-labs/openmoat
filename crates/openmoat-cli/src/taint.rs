@@ -2,6 +2,8 @@
 //! session that ran, folded into the [`Taint`] the core tightens the next call
 //! with. The log is OpenMoat's, not the agent's, so the agent cannot reset it.
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
@@ -28,6 +30,11 @@ pub fn of_session(
         .session(session)
         .context("reading this session from the audit log")?;
     let mut taint = Taint::default();
+    // Every guard call folds the whole session again, so a long session would
+    // classify each of its calls once per later call. Agents repeat calls
+    // (`git status`, the same file reads); each distinct one, in its working
+    // directory, is classified once here.
+    let mut seen: HashMap<(String, String), Taint> = HashMap::new();
     for event in events
         .iter()
         .filter(|e| e.host == host.id() && ran(host, e.verdict))
@@ -42,7 +49,15 @@ pub fn of_session(
             .cwd
             .as_deref()
             .map_or_else(|| cwd.to_owned(), |c| context::path_string(Path::new(c)));
-        taint.absorb(policy.exposure(action, &cwd, &FsPathResolver));
+        let key = (serde_json::to_string(action)?, cwd);
+        let exposure = match seen.entry(key) {
+            Entry::Occupied(known) => known.get().clone(),
+            Entry::Vacant(slot) => {
+                let exposure = policy.exposure(action, &slot.key().1, &FsPathResolver);
+                slot.insert(exposure).clone()
+            }
+        };
+        taint.absorb(exposure);
     }
     Ok(taint)
 }
