@@ -202,8 +202,26 @@ fn evaluate(
     }
     // After the grant: taint only tightens, and a grant made before the
     // session read a secret did not approve sending that secret anywhere.
-    let taint = taint::of_session(&home, host, &request.session_id, &compiled, &ctx.cwd)?;
-    let decision = compiled.with_taint(decision, action, &FsPathResolver, &taint);
+    // A grant made after the session read untrusted content answers that
+    // content's ask for this exact call (taint.rs).
+    let session = taint::of_session(&home, host, &request.session_id, &compiled, &ctx.cwd)?;
+    let tainted = compiled.with_taint(decision.clone(), action, &FsPathResolver, &session.taint);
+    let call = taint::Call {
+        home: &home,
+        host,
+        session: &request.session_id,
+        action,
+        cwd: &ctx.cwd,
+        user_home: &ctx.home,
+    };
+    let decision = taint::answered(
+        &call,
+        &compiled,
+        &session,
+        decision,
+        tainted,
+        crate::time::now_ms(),
+    )?;
     Ok((Some(request), decision))
 }
 

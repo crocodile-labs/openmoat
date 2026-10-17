@@ -44,6 +44,7 @@ mod sandbox_exec;
 mod sandbox_sync;
 mod secret;
 mod taint;
+mod taint_answered;
 mod team;
 mod trust;
 mod uninstall;

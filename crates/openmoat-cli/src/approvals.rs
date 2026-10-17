@@ -143,10 +143,25 @@ impl Grants {
     /// placeholder id, so a grant for it would hold in every session.
     #[must_use]
     pub fn matches(&self, host: &str, session_id: &str, action: &Action, now_ms: i64) -> bool {
-        !openmoat_hosts::is_unknown_session(session_id)
-            && self
-                .active(now_ms)
-                .any(|g| g.host == host && g.session_id == session_id && g.action == *action)
+        self.granted_at(host, session_id, action, now_ms).is_some()
+    }
+
+    /// When the grant [`Grants::matches`] finds was made, if there is one.
+    #[must_use]
+    pub fn granted_at(
+        &self,
+        host: &str,
+        session_id: &str,
+        action: &Action,
+        now_ms: i64,
+    ) -> Option<i64> {
+        if openmoat_hosts::is_unknown_session(session_id) {
+            return None;
+        }
+        self.active(now_ms)
+            .filter(|g| g.host == host && g.session_id == session_id && g.action == *action)
+            .map(|g| g.granted_at_ms)
+            .max()
     }
 
     /// Grants still valid at `now_ms`.

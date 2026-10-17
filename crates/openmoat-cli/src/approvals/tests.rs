@@ -92,6 +92,29 @@ fn a_call_without_a_session_id_matches_no_grant() {
 }
 
 #[test]
+fn a_grant_says_when_it_was_made() {
+    let mut g = Grants::default();
+    g.grant("claude-code", "s1", &sh("make"), NOW);
+    assert_eq!(
+        g.granted_at("claude-code", "s1", &sh("make"), NOW + 1),
+        Some(NOW)
+    );
+    g.grant("claude-code", "s1", &sh("make"), NOW + 5);
+    assert_eq!(
+        g.granted_at("claude-code", "s1", &sh("make"), NOW + 6),
+        Some(NOW + 5)
+    );
+    assert_eq!(
+        g.granted_at("claude-code", "s2", &sh("make"), NOW + 6),
+        None
+    );
+    assert_eq!(
+        g.granted_at("claude-code", "unknown", &sh("make"), NOW + 6),
+        None
+    );
+}
+
+#[test]
 fn grants_expire_after_the_ttl() {
     let mut g = Grants::default();
     g.grant("codex", "k1", &sh("cargo add serde"), NOW);

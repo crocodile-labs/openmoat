@@ -90,7 +90,10 @@ exits. There is no daemon.
    run: allowed and deferred calls, and asks on a host that can ask. Each call is resolved from its
    own recorded working directory. `CompiledPolicy::with_taint` then tightens the
    decision (POLICY.md §4.1). This runs after the grant, so a grant cannot lift a taint
-   ask. A log or session event that cannot be read is a `kernel-error` deny. An edited
+   ask, with one exception (`taint::answered`): a grant for this exact call made after
+   the session last read untrusted content answers that content's ask; a later read
+   asks again. A taint from a
+   secret the session read is never answered this way. A log or session event that cannot be read is a `kernel-error` deny. An edited
    or deleted event is found by the hash chain (`moat doctor`), not on every call.
 10. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot
    be written, the decision becomes a `kernel-error` deny: an unrecorded call is not

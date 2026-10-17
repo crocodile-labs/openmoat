@@ -265,6 +265,12 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   test-runner configs written in JavaScript (`jest.config.js`) included: they are code the
   run executes like any other file, and the command that runs them is named in a
   protected file.
+- A protected-path ask from untrusted content can be answered once per file: `moat allow
+  --last` after the ask grants that exact file, and the grant stands while it is newer
+  than the session's latest untrusted read (the ask says how). Once the session reads
+  more untrusted content, the file asks again. A grant made before that read does not
+  answer it, other files and sessions still ask, and an ask from a secret the session
+  read is never answered by a grant.
 - `taint: { protected_writes: [<glob>, …] }` adds path globs (§3.2, `~` and `${project}`
   included) to that list. It only extends: a policy cannot remove a built-in path, and
   `moat policy lint` rejects a `!` exclusion as well as a glob that does not compile.
