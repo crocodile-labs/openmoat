@@ -132,6 +132,13 @@ fn approve(
             "give --host and --session for a session grant, --always for a permanent rule, or --last",
         )?;
         let host = host.context("--session needs --host")?;
+        if openmoat_hosts::is_unknown_session(&session) {
+            bail!(
+                "this call came with no session id, so a session grant would hold in every \
+                 session that sends none; approve it in the agent, or give --always for a \
+                 permanent rule you can remove with `moat allow --remove`"
+            );
+        }
         let path = home.grants_path();
         let mut grants = Grants::load(&path)?;
         let now = crate::time::now_ms();

@@ -134,6 +134,14 @@ fn session_or_unknown(session: Option<String>) -> String {
     session.unwrap_or_else(|| UNKNOWN_SESSION.to_owned())
 }
 
+/// Whether `session_id` names no real session: the placeholder recorded when a
+/// host sent none, or an empty id. Every such call shares it, so it can never
+/// scope a session grant.
+#[must_use]
+pub fn is_unknown_session(session_id: &str) -> bool {
+    session_id.is_empty() || session_id == UNKNOWN_SESSION
+}
+
 /// Agents with a supported integration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Host {

@@ -80,6 +80,18 @@ fn grants_match_exactly_per_host_session() {
 }
 
 #[test]
+fn a_call_without_a_session_id_matches_no_grant() {
+    // Every call a host sends without a session id is recorded as "unknown";
+    // a grant for that id would hold in all of them. A grants file that has
+    // one anyway (written by hand, or by an older moat) must not apply.
+    let mut g = Grants::default();
+    g.grant("cursor", "unknown", &sh("npm install left-pad"), NOW);
+    g.grant("cursor", "", &sh("npm install left-pad"), NOW);
+    assert!(!g.matches("cursor", "unknown", &sh("npm install left-pad"), NOW));
+    assert!(!g.matches("cursor", "", &sh("npm install left-pad"), NOW));
+}
+
+#[test]
 fn grants_expire_after_the_ttl() {
     let mut g = Grants::default();
     g.grant("codex", "k1", &sh("cargo add serde"), NOW);

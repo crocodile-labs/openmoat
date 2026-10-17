@@ -139,10 +139,14 @@ impl Grants {
 
     /// Exact match of `action` (spelled by [`approvable`]) for this host session
     /// among grants still valid at `now_ms`; no prefix or glob semantics.
+    /// A call without a session id never matches: every such call shares the
+    /// placeholder id, so a grant for it would hold in every session.
     #[must_use]
     pub fn matches(&self, host: &str, session_id: &str, action: &Action, now_ms: i64) -> bool {
-        self.active(now_ms)
-            .any(|g| g.host == host && g.session_id == session_id && g.action == *action)
+        !openmoat_hosts::is_unknown_session(session_id)
+            && self
+                .active(now_ms)
+                .any(|g| g.host == host && g.session_id == session_id && g.action == *action)
     }
 
     /// Grants still valid at `now_ms`.
