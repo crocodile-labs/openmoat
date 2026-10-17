@@ -17,12 +17,16 @@ use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use zeroize::Zeroizing;
 
 use crate::audit::{Connection, Recorder};
+use crate::body::{self, BodyEnd, Framing};
 use crate::broker::{Broker, Watch};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
 use crate::request::{self, Request, Target};
 use crate::sni::{self, Hello};
-use crate::tunnel;
+use crate::tunnel::{self, Forward};
 use crate::upstream::{self, Refusal, Resolve};
+
+/// Why a request whose chunked body cannot be followed is refused.
+const MALFORMED_CHUNKS: &str = "malformed chunked request body";
 
 /// How long, and how much input, a refused connection is drained for.
 const LINGER: Duration = Duration::from_secs(1);
@@ -184,6 +188,19 @@ impl Proxy<'_> {
             refuse(client, 403, &summary(&decision));
             return;
         }
+        // A plain-HTTP request is one request: its body is forwarded, and
+        // nothing the client sends after it (body.rs). A tunnel carries TLS,
+        // where the proxy cannot see a secret or a second request.
+        let mut body = BodyEnd::new(match &request.target {
+            Target::Http { head, .. } => body::framing(head),
+            Target::Connect { .. } => Framing::None,
+        });
+        let Ok(body_in_rest) = body.feed(&rest) else {
+            let decision = Decision::single(Verdict::Deny, RULE_REQUEST, MALFORMED_CHUNKS);
+            self.record(Some(&request), &decision, started);
+            refuse(client, 400, MALFORMED_CHUNKS);
+            return;
+        };
         let upstream = match upstream::connect(
             self.resolver,
             request.host(),
@@ -205,13 +222,19 @@ impl Proxy<'_> {
                 return;
             }
         };
-        // A plain-HTTP body keeps being watched; a tunnel carries TLS, where
-        // the proxy cannot see a secret.
-        let mut inspect = |chunk: &[u8]| match watch.next(chunk) {
-            None => true,
-            Some(leak) => {
+        // The body keeps being watched for brokered secrets as it goes by.
+        let mut inspect = |chunk: &[u8]| {
+            let Ok(n) = body.feed(chunk) else {
+                return Forward::Stop;
+            };
+            if let Some(leak) = watch.next(&chunk[..n]) {
                 self.record(Some(&request), &leak.decision(request.host()), started);
-                false
+                return Forward::Stop;
+            }
+            if n < chunk.len() || body.done() {
+                Forward::Part(n)
+            } else {
+                Forward::All
             }
         };
         let (first_bytes, inspect) = match &request.target {
@@ -237,7 +260,8 @@ impl Proxy<'_> {
                 // with `first_bytes` once written.
                 let injected = self.broker.inject(host, head);
                 let head = injected.as_deref().map_or(head.as_slice(), Vec::as_slice);
-                (Zeroizing::new([head, &rest].concat()), Some(inspect))
+                let body_bytes = &rest[..body_in_rest];
+                (Zeroizing::new([head, body_bytes].concat()), Some(inspect))
             }
         };
         if (&upstream).write_all(&first_bytes).is_ok() {

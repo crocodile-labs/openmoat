@@ -4,8 +4,10 @@
 //! expires the connection closes unless the other direction moved bytes in the
 //! meantime, so a long download with a silent client is not cut off.
 //!
-//! The client's bytes can pass an inspection first; when it says no, the
-//! connection closes before that chunk is forwarded.
+//! The client's bytes can pass an inspection first. It can let a chunk
+//! through, let only its start through and nothing from the client after it
+//! (the end of a plain-HTTP request's body), or close the connection before
+//! the chunk is forwarded.
 
 use std::io::{ErrorKind, Read as _, Write as _};
 use std::net::{Shutdown, TcpStream};
@@ -15,9 +17,20 @@ use std::time::{Duration, Instant};
 
 const BUFFER: usize = 16 * 1024;
 
-/// What a chunk from the client must pass before it is forwarded: `false`
-/// closes the connection.
-pub(crate) type Inspect<'a> = &'a mut dyn FnMut(&[u8]) -> bool;
+/// What happens to a chunk from the client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Forward {
+    /// Forward all of it.
+    All,
+    /// Forward its first `n` bytes; the client's later bytes are read (so the
+    /// upstream's answer still flows back) and dropped.
+    Part(usize),
+    /// Close the connection without forwarding it.
+    Stop,
+}
+
+/// What a chunk from the client passes before it is forwarded.
+pub(crate) type Inspect<'a> = &'a mut dyn FnMut(&[u8]) -> Forward;
 
 /// Relay between `client` and `upstream` until both sides finish or the
 /// connection is idle for `idle`.
@@ -49,6 +62,8 @@ fn copy(
     mut inspect: Option<Inspect<'_>>,
 ) {
     let mut buf = [0u8; BUFFER];
+    // Set once `Forward::Part` has been answered: nothing more is forwarded.
+    let mut dropping = false;
     loop {
         match (&*from).read(&mut buf) {
             Ok(0) => {
@@ -56,10 +71,21 @@ fn copy(
                 let _ = to.shutdown(Shutdown::Write);
                 return;
             }
+            // Dropped bytes do not count as activity.
+            Ok(_) if dropping => {}
             Ok(n) => {
-                if inspect.as_mut().is_some_and(|pass| !pass(&buf[..n]))
-                    || (&*to).write_all(&buf[..n]).is_err()
-                {
+                let forward = inspect
+                    .as_mut()
+                    .map_or(Forward::All, |pass| pass(&buf[..n]));
+                let send = match forward {
+                    Forward::All => n,
+                    Forward::Part(k) => {
+                        dropping = true;
+                        k.min(n)
+                    }
+                    Forward::Stop => break,
+                };
+                if (&*to).write_all(&buf[..send]).is_err() {
                     break;
                 }
                 activity.touch();
