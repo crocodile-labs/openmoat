@@ -52,24 +52,60 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             render::line(&mut out, &last)?;
             // The newest ask of any agent session: say which one before approving
             // it, so a person never approves a call they did not see.
-            if !super::edit::confirm(&mut out, "Approve it? [y/N] ")? {
-                writeln!(out, "nothing approved")?;
-                out.finish()?;
-                return Ok(Code::Ok);
-            }
-            (Some(event.host), Some(event.session_id), action)
+            let taint = !args.always && event.rules.iter().any(|r| r == TAINT_RULE);
+            let answer = if taint {
+                writeln!(
+                    out,
+                    "  it asks because the session read untrusted content earlier; `s` \
+                     approves every protected write of this session until it reads \
+                     untrusted content again"
+                )?;
+                super::edit::answer(&mut out, "Approve it? [y/s/N] ")?
+            } else {
+                super::edit::answer(&mut out, "Approve it? [y/N] ")?
+            };
+            let covers_taint = match answer.as_str() {
+                "y" | "yes" => false,
+                "s" if taint => true,
+                _ => {
+                    writeln!(out, "nothing approved")?;
+                    out.finish()?;
+                    return Ok(Code::Ok);
+                }
+            };
+            let (host, session) = (Some(event.host), Some(event.session_id));
+            return approve(
+                &home,
+                host,
+                session,
+                &action,
+                args.always,
+                covers_taint,
+                out,
+            );
         }
         _ => bail!("give a command, or --last to take the most recent ask"),
     };
-    approve(&home, host, session, &action, args.always, out)
+    approve(&home, host, session, &action, args.always, false, out)
 }
+
+/// The rule id the core gives a session-taint ask.
+const TAINT_RULE: &str = "session-taint";
 
 /// Approve exactly `action` (from [`asked`]) for the host session, or for good
 /// with `always`: the home screen's answer, with the same checks as `run`.
 pub(super) fn run_for(host: &str, session: &str, action: &Action, always: bool) -> Result<Code> {
     let home = checked_home()?;
     let (host, session) = (Some(host.to_owned()), Some(session.to_owned()));
-    approve(&home, host, session, action, always, Deferred::default())
+    approve(
+        &home,
+        host,
+        session,
+        action,
+        always,
+        false,
+        Deferred::default(),
+    )
 }
 
 /// The state directory, once a person at a terminal is confirmed and the lock
@@ -98,13 +134,16 @@ fn checked_home() -> Result<Home> {
 }
 
 /// Write the session grant, or with `always` the permanent rule, then re-pin;
-/// a permanent file rule also updates the agents' sandboxes.
+/// a permanent file rule also updates the agents' sandboxes. With
+/// `covers_taint` the session grant also answers the session's other taint
+/// asks from untrusted content ([`approvals::Grant::covers_taint`]).
 fn approve(
     home: &Home,
     host: Option<String>,
     session: Option<String>,
     action: &Action,
     always: bool,
+    covers_taint: bool,
     mut out: Deferred,
 ) -> Result<Code> {
     if always {
@@ -154,6 +193,9 @@ fn approve(
         // read nothing untrusted after it, whatever the clock says.
         let seen = home.open_audit()?.latest_id()?.map_or(0, |id| id.0);
         grants.grant(&host, &session, action, now, Some(seen));
+        if covers_taint {
+            grants.cover_taint(&host, &session, action);
+        }
         grants.save(&path, now)?;
         let granted = format!(
             "✔ session {session} on {host} may {} for {}",
@@ -161,6 +203,12 @@ fn approve(
             crate::time::duration(GRANT_TTL_MS)
         );
         render::line(&mut out, &granted)?;
+        if covers_taint {
+            writeln!(
+                out,
+                "  and every protected write of this session until it reads untrusted content again"
+            )?;
+        }
         let resume = if host == openmoat_hosts::Host::ClaudeCode.id() {
             " (`claude --continue` resumes this one)"
         } else {

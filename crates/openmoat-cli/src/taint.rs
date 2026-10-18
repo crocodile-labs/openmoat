@@ -190,21 +190,35 @@ pub fn answered(
     if with_secrets.rules.iter().any(|r| r == TAINT_RULE) {
         return Ok(tainted);
     }
-    let grant = approvals::approvable(call.action, Some(call.cwd), call.user_home)
-        .map(|asked| {
-            Grants::load(&call.home.grants_path()).map(|g| {
-                g.newest(call.host.id(), call.session, &asked, now_ms)
-                    .map(|g| (g.granted_at_ms, g.audit_row))
-            })
-        })
-        .transpose()?
-        .flatten();
-    if let Some((at, row)) = grant
-        && after_read(at, row, last_read, session.untrusted_last_row)
-    {
+    let grants = Grants::load(&call.home.grants_path())?;
+    let read_row = session.untrusted_last_row;
+    let fresh =
+        |g: &&approvals::Grant| after_read(g.granted_at_ms, g.audit_row, last_read, read_row);
+    // A grant for exactly this call, or one the person gave for every protected
+    // write of the session (`moat allow --last`, answer `s`); either only while
+    // the session has read nothing untrusted since.
+    let exact =
+        approvals::approvable(call.action, Some(call.cwd), call.user_home).and_then(|asked| {
+            grants
+                .newest(call.host.id(), call.session, &asked, now_ms)
+                .cloned()
+        });
+    if exact.as_ref().is_some_and(|g| fresh(&g)) {
         let mut decision = untainted;
         decision.reasons.push(
             "approved with `moat allow` after the session last read untrusted content".to_owned(),
+        );
+        return Ok(decision);
+    }
+    if grants
+        .covering_taint(call.host.id(), call.session, now_ms)
+        .is_some_and(|g| fresh(&g))
+    {
+        let mut decision = untainted;
+        decision.reasons.push(
+            "the session's protected writes were approved with `moat allow` after it last read \
+             untrusted content"
+                .to_owned(),
         );
         return Ok(decision);
     }

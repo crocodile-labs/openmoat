@@ -123,3 +123,62 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
         "{reason}"
     );
 }
+
+/// `moat allow --last` answering `s` on a taint ask.
+fn allow_last_answering(sb: &Sandbox, answer: &str) -> std::process::Output {
+    crate::common::output(
+        sb.command()
+            .args(["allow", "--last"])
+            .env("MOAT_ASSUME_TTY", "1"),
+        Some(answer),
+    )
+}
+
+/// Answering `s` approves every protected write of the session until it reads
+/// untrusted content again. The attack side: a later read takes it back,
+/// another session still asks, and `s` approves nothing on an ask that is not
+/// a taint ask.
+#[test]
+fn answering_s_covers_the_sessions_protected_writes_until_the_next_untrusted_read() {
+    let sb = Sandbox::installed(&[".claude"]);
+    fetch_untrusted(&sb, "s1");
+    assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "ask");
+    let out = allow_last_answering(&sb, "s\n");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("[y/s/N]"), "{}", text(&out));
+    assert!(
+        text(&out).contains("every protected write"),
+        "{}",
+        text(&out)
+    );
+
+    for file in ["CMakeLists.txt", "pom.xml", ".claude/agents/helper.md"] {
+        let (verdict, reason) = tainted_write(&sb, "s1", file);
+        assert_eq!(verdict, "allow", "{file}: {reason}");
+        assert!(
+            reason.contains("protected writes were approved"),
+            "{reason}"
+        );
+    }
+
+    fetch_untrusted(&sb, "s1");
+    let (verdict, reason) = tainted_write(&sb, "s1", "pom.xml");
+    assert_eq!(verdict, "ask", "a later read takes it back: {reason}");
+
+    fetch_untrusted(&sb, "s2");
+    let (verdict, reason) = tainted_write(&sb, "s2", "pom.xml");
+    assert_eq!(verdict, "ask", "another session still asks: {reason}");
+
+    // A clean session's workflow write asks (`runs-later`), not a taint ask:
+    // `s` is not offered there and approves nothing.
+    assert_eq!(
+        tainted_write(&sb, "s3", ".github/workflows/ci.yml").0,
+        "ask"
+    );
+    let out = allow_last_answering(&sb, "s\n");
+    assert!(text(&out).contains("nothing approved"), "{}", text(&out));
+    assert_eq!(
+        tainted_write(&sb, "s3", ".github/workflows/ci.yml").0,
+        "ask"
+    );
+}
