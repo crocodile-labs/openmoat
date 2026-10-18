@@ -20,6 +20,8 @@ view at the end of the file.
 - MCP arguments named in camel or kebab case (`sourcePath`, `output-dir`, `baseUrl`) are read as paths and URLs, and a write verb anywhere in a tool's name (`file_write`, `download_file`) makes its paths writes ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
 
 ### Changed
+- `moat status` says when a policy update waits for `moat policy upgrade`, and its JSON adds `policy_update` and `lock_drift` ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
+- On a session-taint ask, `moat allow --last` offers `s`: it approves every protected write of that session until it reads untrusted content again (other sessions still ask; a secret's asks never) ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
 - `moat init` shows a diff of every file it would change for an agent before asking about it, hooks and sandbox settings together ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
 - `--help` and the `moat run` banner use plain words: no ADR numbers or tier names, and the banner is two lines (`--verbose` for the rest) ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
 - A tool call over the 1 MiB payload limit is refused with a message naming the limit, instead of failing as malformed input ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
