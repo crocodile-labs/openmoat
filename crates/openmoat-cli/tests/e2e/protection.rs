@@ -274,3 +274,27 @@ fn doctor_prints_its_checks_as_one_json_document() {
     let refused = sb.moat(&["doctor", "--format", "json", "--accept"]);
     assert_ne!(refused.status.code(), Some(OK), "json never accepts");
 }
+
+/// `moat status --format json` also says whether a policy update waits for
+/// `moat policy upgrade` and which pinned files changed, for tools such as the
+/// menu bar app that show them.
+#[test]
+fn status_json_reports_a_waiting_update_and_lock_drift() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let out = sb.moat(&["status", "--format", "json"]);
+    let doc = json(&out);
+    assert!(doc["policy_update"].is_null(), "{}", text(&out));
+    assert_eq!(doc["lock_drift"], serde_json::json!([]), "{}", text(&out));
+
+    let policy = sb.home.join(".moat/policy.yaml");
+    let edited = fs::read_to_string(&policy).unwrap() + "\n# edited by hand\n";
+    fs::write(&policy, edited).unwrap();
+    let doc = json(&sb.moat(&["status", "--format", "json"]));
+    let drift = doc["lock_drift"].as_array().unwrap();
+    assert!(
+        drift
+            .iter()
+            .any(|d| d.as_str().unwrap().contains("policy.yaml")),
+        "{doc}"
+    );
+}
