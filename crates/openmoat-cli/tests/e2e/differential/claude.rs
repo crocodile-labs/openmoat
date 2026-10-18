@@ -294,8 +294,21 @@ fn hostile_scripts_meet_the_claude_code_sandbox() {
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/differential/fake_api.py");
     let fx = fixtures();
     meet(&format!("claude-{OS}"), &fx, |terminal| {
-        let perl = start(PERL, terminal);
-        let out = fx.claude_output(perl, &claude, &python, &script, "scripts", NPM_TEST);
+        let run = || {
+            let perl = start(PERL, terminal);
+            fx.claude_output(perl, &claude, &python, &script, "scripts", NPM_TEST)
+        };
+        let mut out = run();
+        // Claude Code starts its own proxy on `localhost` for each session, and
+        // a request made before it listens fails to connect (#554). Run again,
+        // at most twice more; a proxy that forwards the request still fails the row.
+        for _ in 0..2 {
+            if !text(&out).contains("Failed to connect to localhost port ") {
+                break;
+            }
+            eprintln!("retrying: Claude Code's proxy was not listening yet (#554)");
+            out = run();
+        }
         let shown = text(&out);
         // Claude Code's Bash tool reports a non-zero exit as "Exit code N".
         let completed = out.status.success() && !shown.contains("Exit code ");

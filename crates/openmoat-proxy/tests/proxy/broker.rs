@@ -11,6 +11,10 @@ fn brokered() -> Harness {
     brokered_to(upstream(), false)
 }
 
+/// How long a test waits for the [`sink`]'s report: clearly longer than its
+/// read timeout ([`WAIT`]), which starts before the test begins waiting (#553).
+const SINK_WAIT: Duration = Duration::from_secs(15);
+
 /// An upstream that reports everything it received once the connection ends.
 fn sink() -> (SocketAddr, Receiver<Vec<u8>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -100,7 +104,7 @@ fn a_secret_later_in_a_streamed_body_closes_the_connection() {
     let _ = s.write_all(second.as_bytes());
     let reply = read_all(&mut s);
     assert_no_value(&h, &reply);
-    let forwarded = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    let forwarded = String::from_utf8(h.received.recv_timeout(SINK_WAIT).unwrap()).unwrap();
     assert!(forwarded.starts_with("POST / HTTP/1.1"), "{forwarded}");
     assert!(forwarded.ends_with(first), "relayed up to the split");
     assert!(!forwarded.contains(VALUE));
@@ -191,7 +195,7 @@ fn a_secret_split_between_the_head_read_and_the_body_is_caught() {
     let _ = s.write_all(second.as_bytes());
     let reply = read_all(&mut s);
     assert_no_value(&h, &reply);
-    let forwarded = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    let forwarded = String::from_utf8(h.received.recv_timeout(SINK_WAIT).unwrap()).unwrap();
     assert!(forwarded.ends_with(&format!("k={first}")), "{forwarded}");
     let rows = h.rows();
     assert_eq!(rows.len(), 2, "{rows:?}");
