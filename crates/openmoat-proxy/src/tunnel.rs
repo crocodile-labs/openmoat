@@ -49,7 +49,14 @@ pub(crate) fn relay(
     }
     let activity = Activity::new();
     thread::scope(|scope| {
-        scope.spawn(|| copy(upstream, client, &activity, idle, None));
+        // A thread that cannot be created (the process is at its limit) closes
+        // this connection instead of panicking through the server.
+        let back = thread::Builder::new()
+            .spawn_scoped(scope, || copy(upstream, client, &activity, idle, None));
+        if back.is_err() {
+            close(client, upstream);
+            return;
+        }
         copy(client, upstream, &activity, idle, inspect);
     });
 }
