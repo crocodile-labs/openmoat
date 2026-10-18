@@ -230,7 +230,15 @@ fn rules(out: &mut String, rules: &[Rule], operation: &str) {
 fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
     // `~/{.ssh/**,.aws/**}`: each alternative on its own, so `/**` inside braces
     // is recursive here as it is in the engine
-    let patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
+    let mut patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
+    // Seatbelt sees the path the kernel opens: a pattern under a symlinked
+    // directory (`/tmp` → `/private/tmp`) is also written where the link points.
+    let real: Vec<String> = patterns.iter().filter_map(|p| through_links(p)).collect();
+    for p in real {
+        if !patterns.contains(&p) {
+            patterns.push(p);
+        }
+    }
     let patterns = &patterns[..];
     let (mut positive, mut excluded) = split(patterns);
     // files run later are the hook's to ask about: a deny here would fail installs
@@ -336,6 +344,34 @@ fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
         }
     }
     None
+}
+
+/// `pattern` (an absolute glob, `!` for an exclusion) with its literal
+/// directory prefix written as the filesystem resolves it, when that differs:
+/// `/tmp/x/**` → `/private/tmp/x/**` on macOS. The deepest existing directory
+/// of the prefix is resolved; `None` when nothing changes.
+fn through_links(pattern: &str) -> Option<String> {
+    let (bang, body) = match pattern.strip_prefix('!') {
+        Some(rest) => ("!", rest),
+        None => ("", pattern),
+    };
+    if !body.starts_with('/') {
+        return None;
+    }
+    let literal_end = body.find(['*', '?', '[', '{', '\\']).unwrap_or(body.len());
+    let literal = &body[..literal_end];
+    let dir_end = literal.rfind('/')?;
+    let mut dir = std::path::Path::new(&literal[..dir_end.max(1)]);
+    loop {
+        if let Ok(real) = std::fs::canonicalize(dir) {
+            let (dir, real) = (dir.to_str()?, real.to_str()?.to_owned());
+            if real == dir {
+                return None;
+            }
+            return Some(format!("{bang}{real}{}", &body[dir.len()..]));
+        }
+        dir = dir.parent()?;
+    }
 }
 
 /// One IR glob as a Seatbelt path filter.
