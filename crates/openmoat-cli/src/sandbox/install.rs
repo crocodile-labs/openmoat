@@ -62,44 +62,82 @@ pub fn settings_path(home: &Home, host: Host) -> Result<PathBuf> {
 /// backup and the Claude Code rules OpenMoat owns.
 pub fn write(home: &Home, host: Host, plan: &Plan, dry_run: bool) -> Result<bool> {
     let path = settings_path(home, host)?;
-    let changed;
-    let text = if host == Host::Codex {
-        let mut doc = read_toml(&path)?;
-        changed = codex::apply(&mut doc, &plan.codex)?;
-        doc.to_string()
-    } else if host == Host::Cursor {
-        if unavailable(host).is_some() {
-            return Ok(false);
-        }
-        let mut root = read_or_empty(&path)?;
-        changed = cursor::apply(&mut root, &plan.cursor)
-            .with_context(|| format!("updating {}", path.display()))?;
-        serde_json::to_string_pretty(&root)? + "\n"
-    } else {
-        let mut recorded = Recorded::load(home)?;
-        let mut owned = recorded.claude_rules.clone();
-        let mut root = read_or_empty(&path)?;
-        changed = if unavailable(host).is_some() {
-            claude::apply_rules(&mut root, &plan.claude, &mut owned)
-        } else {
-            claude::apply(&mut root, &plan.claude, &mut owned)
-        }
-        .with_context(|| format!("updating {}", path.display()))?;
-        if !dry_run && owned != recorded.claude_rules {
-            recorded.claude_rules = owned;
-            recorded.save(home)?;
-        }
-        serde_json::to_string_pretty(&root)? + "\n"
-    };
-    if !changed {
+    let current = read_text(&path)?;
+    let Some(rendered) = render(home, host, plan, &current)
+        .with_context(|| format!("updating {}", path.display()))?
+    else {
         return Ok(false);
-    }
+    };
     if dry_run {
         return Ok(true);
     }
+    if let Some(owned) = rendered.claude_rules {
+        let mut recorded = Recorded::load(home)?;
+        if owned != recorded.claude_rules {
+            recorded.claude_rules = owned;
+            recorded.save(home)?;
+        }
+    }
     crate::install::back_up(home, &path, SANDBOX_BACKUP)?;
-    write_private(&path, text.as_bytes())?;
+    write_private(&path, rendered.text.as_bytes())?;
     Ok(true)
+}
+
+/// What [`render`] makes of a host's sandbox settings file.
+pub struct Rendered {
+    /// The whole file as it would be written.
+    pub text: String,
+    /// For Claude Code, the rules OpenMoat owns in it afterwards.
+    pub claude_rules: Option<Vec<String>>,
+}
+
+/// `current` (the text of `host`'s sandbox settings file, empty when there is
+/// none) with the plan merged in, as [`write()`] would write it; `None` when it
+/// would not change. Reads `hosts.json` for the Claude Code rules OpenMoat
+/// owns, writes nothing.
+pub fn render(home: &Home, host: Host, plan: &Plan, current: &str) -> Result<Option<Rendered>> {
+    let (changed, text, claude_rules) = if host == Host::Codex {
+        let mut doc: DocumentMut = current.parse().context("parsing the settings")?;
+        let changed = codex::apply(&mut doc, &plan.codex)?;
+        (changed, doc.to_string(), None)
+    } else if host == Host::Cursor {
+        if unavailable(host).is_some() {
+            return Ok(None);
+        }
+        let mut root = parse_json(current)?;
+        let changed = cursor::apply(&mut root, &plan.cursor)?;
+        (changed, serde_json::to_string_pretty(&root)? + "\n", None)
+    } else {
+        let mut owned = Recorded::load(home)?.claude_rules;
+        let mut root = parse_json(current)?;
+        let changed = if unavailable(host).is_some() {
+            claude::apply_rules(&mut root, &plan.claude, &mut owned)
+        } else {
+            claude::apply(&mut root, &plan.claude, &mut owned)
+        }?;
+        (
+            changed,
+            serde_json::to_string_pretty(&root)? + "\n",
+            Some(owned),
+        )
+    };
+    Ok(changed.then_some(Rendered { text, claude_rules }))
+}
+
+/// A file's text, or empty when it does not exist.
+pub fn read_text(path: &Path) -> Result<String> {
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))
+}
+
+/// A JSON settings text, an empty one being an empty object.
+pub fn parse_json(text: &str) -> Result<serde_json::Value> {
+    if text.trim().is_empty() {
+        return Ok(serde_json::Value::Object(serde_json::Map::new()));
+    }
+    serde_json::from_str(text).context("parsing the settings")
 }
 
 /// The backend report for `host`.

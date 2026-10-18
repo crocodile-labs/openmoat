@@ -36,16 +36,32 @@ pub enum HookState {
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
     let path = &config.settings_path;
     let mut root = read_or_empty(path)?;
-    let mut outcome = Outcome::Unchanged;
-    for spec in config.hooks {
-        outcome = outcome.max(upsert(&mut root, config, spec, binary)?);
-    }
+    let outcome = upsert_all(&mut root, config, binary)?;
     if outcome == Outcome::Unchanged || dry_run {
         return Ok(outcome);
     }
     super::back_up(home, path, HOOK_BACKUP)?;
     let text = serde_json::to_string_pretty(&root)? + "\n";
     write_private(path, text.as_bytes())?;
+    Ok(outcome)
+}
+
+/// `current` (the text of the host's hook file, empty when there is none)
+/// with OpenMoat's hooks in it, as [`install`] would write it; `None` when it
+/// would not change. Writes nothing.
+pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Option<String>> {
+    let mut root = crate::sandbox::install::parse_json(current)?;
+    if upsert_all(&mut root, config, binary)? == Outcome::Unchanged {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::to_string_pretty(&root)? + "\n"))
+}
+
+fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Outcome> {
+    let mut outcome = Outcome::Unchanged;
+    for spec in config.hooks {
+        outcome = outcome.max(upsert(root, config, spec, binary)?);
+    }
     Ok(outcome)
 }
 
