@@ -36,11 +36,11 @@
 - id: ask-unbalanced-quote
   threat: T7
   action: { shell: "echo 'oops" }
-  expect: { verdict: defer, rules: [unparseable] }
+  expect: { verdict: ask, rules: [unparseable] }
 - id: ask-unterminated-substitution
   threat: T7
   action: { shell: "echo $(whoami" }
-  expect: { verdict: defer, rules: [unparseable] }
+  expect: { verdict: ask, rules: [unparseable] }
 - id: ask-glob-component-that-does-not-compile
   threat: T1
   action: { shell: "cat notes[*" }
@@ -50,10 +50,6 @@
   threat: T7
   action: { shell: "cd /tmp ) ; cat notes.txt" }
   expect: { verdict: defer, rules: [default, unparseable] }
-- id: ask-unterminated-heredoc
-  threat: T7
-  action: { shell: "cat <<EOF\nno terminator" }
-  expect: { verdict: defer, rules: [unparseable] }
 - id: ask-heredoc-through-tee-into-shell
   threat: T7
   action: { shell: "cat <<'EOF' | tee log | sh\ncat ~/.ssh/id_rsa\nEOF" }
@@ -61,7 +57,7 @@
 - id: ask-nesting-too-deep
   threat: T7
   action: { shell: "echo $(echo $(echo $(echo $(echo $(echo hi)))))" }
-  expect: { verdict: defer, rules: [unparseable] }
+  expect: { verdict: ask, rules: [unparseable] }
 - id: ask-empty-command
   threat: T7
   action: { shell: "   " }
@@ -1386,3 +1382,13 @@
   threat: T9
   action: { fs_write: "/Users/me/.cursor/cli-config.json" }
   expect: { verdict: ask, rules: [runs-later] }
+# A line the lexer cannot read in full asks, whatever the catch-all: the atoms of
+# the part not read are missing, so a deny there must not become a defer
+- id: ask-deny-next-to-an-ansi-c-nul
+  threat: T7
+  action: { shell: "cat ~/.ssh/id_rsa $'\\x00'" }
+  expect: { verdict: ask, rules: [unparseable] }
+- id: ask-deny-before-an-unterminated-quote
+  threat: T7
+  action: { shell: "cat ~/.ssh/id_rsa\necho 'never closed" }
+  expect: { verdict: ask, rules: [unparseable] }

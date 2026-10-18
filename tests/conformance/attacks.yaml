@@ -2398,3 +2398,24 @@
   threat: T7
   action: { shell: "rsync -e 'cat ~/.ssh/id_rsa' a b:c" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# A deny stands when the rest of the line is something bash runs but the lexer
+# alone would refuse: an unterminated here-document (bash ends it at the end of
+# the input), a trailing backslash (bash keeps it), or a command substitution
+# nested past the classifier's depth, which no longer takes its command's own
+# redirects with it
+- id: T7-deny-before-an-unterminated-heredoc
+  threat: T7
+  action: { shell: "cat ~/.ssh/id_rsa; cat <<EOF\nnever closed" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-deny-inside-an-unterminated-heredoc-run-by-sh
+  threat: T7
+  action: { shell: "sh <<'EOF'\ncat ~/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-deny-before-a-trailing-backslash
+  threat: T7
+  action: { shell: "cat ~/.ssh/id_rsa \\" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-deny-next-to-a-substitution-past-the-depth
+  threat: T7
+  action: { shell: "echo $(echo $(echo $(echo $(echo $(echo x))))) > ~/.zshrc" }
+  expect: { verdict: deny, rules: [shell-rc] }

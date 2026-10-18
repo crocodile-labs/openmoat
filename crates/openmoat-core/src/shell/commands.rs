@@ -19,7 +19,7 @@ use super::{
 };
 use crate::action::AtomicAction;
 use crate::host;
-use crate::lexer::{self, Operator, Token, Word};
+use crate::lexer::{self, LexError, Operator, Token, Word};
 use crate::paths;
 use piped::Piped;
 use wrappers::wrapped_command;
@@ -62,6 +62,26 @@ impl SimpleCommand {
     }
 }
 
+/// Lex `command` as bash runs it. Bash ends a here-document that has no
+/// delimiter line at the end of the input (with a warning) and keeps a
+/// backslash that ends the input as a character; the lexer refuses both, which
+/// would leave the whole line unread, so the line is lexed again with the
+/// delimiter line or the backslash written out.
+fn lex_like_bash(command: &str) -> Result<Vec<Token>, LexError> {
+    let mut line = command.to_owned();
+    // one try per here-document left open, and one for a trailing backslash
+    for _ in 0..8 {
+        match lexer::lex(&line) {
+            Err(LexError::UnterminatedHereDoc { delimiter }) => {
+                line = format!("{line}\n{delimiter}\n");
+            }
+            Err(LexError::TrailingBackslash) => line.push('\\'),
+            result => return result,
+        }
+    }
+    lexer::lex(&line)
+}
+
 pub(super) fn classify_into(
     command: &str,
     ctx: &ShellContext<'_>,
@@ -71,7 +91,7 @@ pub(super) fn classify_into(
     if depth > MAX_DEPTH {
         return Err(ClassifyError::TooDeep);
     }
-    let (tokens, too_many) = lexer::expand_braces(lexer::lex(command)?);
+    let (tokens, too_many) = lexer::expand_braces(lex_like_bash(command)?);
     if let Some(e) = too_many {
         sink.skip(e.into());
     }
@@ -187,7 +207,12 @@ fn classify_as_written(
 ) -> Result<(), ClassifyError> {
     for w in cmd.words.iter().chain(&cmd.stdin) {
         for inner in &w.substitutions {
-            classify_into(inner, ctx, sink, depth + 1)?;
+            // A substitution that cannot be classified (`TooDeep`, a lexer
+            // error) does not take this command's own reads, writes and
+            // operands with it: they are still decided below.
+            if let Err(e) = classify_into(inner, ctx, sink, depth + 1) {
+                sink.skip(e);
+            }
         }
     }
     sink.enter(depth);

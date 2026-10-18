@@ -73,20 +73,37 @@ use crate::paths;
 pub enum ParseOutcome {
     Parsed(Vec<AtomicAction>),
     /// Some part could not be classified (`reason`); `atoms` are the parts that
-    /// were, still decided so that a `deny` among them is not lost.
+    /// were, still decided so that a `deny` among them is not lost. `asks` when
+    /// the line could not be read in full or a classifier limit was reached
+    /// ([`ClassifyError::asks`]).
     Unparseable {
         reason: String,
         atoms: Vec<AtomicAction>,
+        asks: bool,
     },
+}
+
+/// Why part of an action could not be classified.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unparsed {
+    pub reason: String,
+    /// The engine asks, whatever the policy's catch-all says: the atoms of the
+    /// rest of the line may be missing, so a deny among them must not become
+    /// a `defer` (padding a command until the classifier gives up).
+    pub asks: bool,
 }
 
 impl ParseOutcome {
     /// The atoms classified, and why the rest could not be, if anything was left.
     #[must_use]
-    pub fn into_parts(self) -> (Vec<AtomicAction>, Option<String>) {
+    pub fn into_parts(self) -> (Vec<AtomicAction>, Option<Unparsed>) {
         match self {
             Self::Parsed(atoms) => (atoms, None),
-            Self::Unparseable { reason, atoms } => (atoms, Some(reason)),
+            Self::Unparseable {
+                reason,
+                atoms,
+                asks,
+            } => (atoms, Some(Unparsed { reason, asks })),
         }
     }
 }
@@ -163,14 +180,17 @@ pub fn classify_globs(command: &str, ctx: &ShellContext<'_>) -> (ParseOutcome, V
         let again = commands::classify_into(&split, ctx, &mut sink, 0).err();
         stopped = stopped.or(again);
     }
+    let asks = sink.asks || stopped.as_ref().is_some_and(ClassifyError::asks);
     let outcome = match sink.skipped.or(stopped) {
         Some(e) => ParseOutcome::Unparseable {
             reason: e.to_string(),
             atoms: sink.atoms,
+            asks,
         },
         None if sink.atoms.is_empty() => ParseOutcome::Unparseable {
             reason: "no command found".to_owned(),
             atoms: Vec::new(),
+            asks: false,
         },
         None => ParseOutcome::Parsed(sink.atoms),
     };
@@ -204,6 +224,24 @@ pub(crate) enum ClassifyError {
     TooManyValues,
 }
 
+impl ClassifyError {
+    /// The line could not be read in full, or a limit of the classifier was
+    /// reached: what follows may be missing from the atoms, and any line can
+    /// be padded to get here, so the call asks instead of taking the policy's
+    /// catch-all. The other errors are one part the classifier cannot model;
+    /// the rest of the line is classified around it.
+    pub(crate) fn asks(&self) -> bool {
+        matches!(
+            self,
+            Self::Lex(_)
+                | Self::TooDeep
+                | Self::TooManyActions
+                | Self::TooManyDirectories
+                | Self::TooManyValues
+        )
+    }
+}
+
 /// All lowercase letters, digits and `_`, with one letter at least: a shell
 /// variable by convention, not an environment variable.
 pub(crate) fn is_lowercase(name: &str) -> bool {
@@ -222,6 +260,8 @@ pub(crate) struct Sink {
     atoms: Vec<AtomicAction>,
     /// The first part classification went past without understanding it.
     skipped: Option<ClassifyError>,
+    /// Whether any part skipped was one that asks ([`ClassifyError::asks`]).
+    asks: bool,
     /// Words of the command line, nested commands included, that the shell
     /// expands as globs ([`crate::lexer::Word::glob`]).
     glob_words: Vec<String>,
@@ -290,6 +330,7 @@ impl Sink {
     /// Note a part that could not be classified and carry on with the rest:
     /// the command still asks, and what else it does is still decided.
     pub(crate) fn skip(&mut self, error: ClassifyError) {
+        self.asks |= error.asks();
         self.skipped.get_or_insert(error);
     }
 

@@ -13,7 +13,7 @@ the verdict and rule ids the default policy must produce for it.
 | T4 | Destructive git / filesystem operations | 59 | 56 | 3 |
 | T5 | Supply-chain execution | 6 | 30 | 0 |
 | T6 | Environment poisoning | 20 | 13 | 0 |
-| T7 | Obfuscation and nested execution | 88 | 99 | 2 |
+| T7 | Obfuscation and nested execution | 92 | 100 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 140 | 44 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
@@ -431,12 +431,11 @@ the verdict and rule ids the default policy must produce for it.
 ## T7: Obfuscation and nested execution
 
 - `ask-unknown-command` (ask): Defer [default]
-- `ask-unbalanced-quote` (ask): Defer [unparseable]
-- `ask-unterminated-substitution` (ask): Defer [unparseable]
+- `ask-unbalanced-quote` (ask): Ask [unparseable]
+- `ask-unterminated-substitution` (ask): Ask [unparseable]
 - `ask-unbalanced-paren` (ask): Defer [default, unparseable]
-- `ask-unterminated-heredoc` (ask): Defer [unparseable]
 - `ask-heredoc-through-tee-into-shell` (ask): Ask [opaque-code]
-- `ask-nesting-too-deep` (ask): Defer [unparseable]
+- `ask-nesting-too-deep` (ask): Ask [unparseable]
 - `ask-empty-command` (ask): Defer [unparseable]
 - `ask-powershell-is-never-classified` (ask): Defer [unparseable]
 - `ask-make-shell-override-after-target` (ask): Defer [default]
@@ -529,6 +528,8 @@ the verdict and rule ids the default policy must produce for it.
 - `defer-config-in-an-allowed-directory` (ask): Defer [default]
 - `defer-nested-git-in-an-allowed-directory` (ask): Defer [default]
 - `defer-gitdir-file-in-an-allowed-directory` (ask): Defer [default]
+- `ask-deny-next-to-an-ansi-c-nul` (ask): Ask [unparseable]
+- `ask-deny-before-an-unterminated-quote` (ask): Ask [unparseable]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -617,8 +618,13 @@ the verdict and rule ids the default policy must produce for it.
 - `T7-git-filter-branch-reads-key` (attacks): Deny [secrets-paths]
 - `T7-watch-reads-key` (attacks): Deny [secrets-paths]
 - `T7-rsync-remote-shell-reads-key` (attacks): Deny [secrets-paths]
+- `T7-deny-before-an-unterminated-heredoc` (attacks): Deny [secrets-paths]
+- `T7-deny-inside-an-unterminated-heredoc-run-by-sh` (attacks): Deny [secrets-paths]
+- `T7-deny-before-a-trailing-backslash` (attacks): Deny [secrets-paths]
+- `T7-deny-next-to-a-substitution-past-the-depth` (attacks): Deny [shell-rc]
 - `benign-here-string-to-cat` (benign): Allow [dev-shell]
 - `benign-here-string-to-grep` (benign): Allow [dev-shell]
+- `benign-unterminated-heredoc-ends-with-the-input` (benign): Allow [dev-shell]
 
 ## T8: MCP tool poisoning / over-privileged tools
 
