@@ -33,6 +33,7 @@ mod listings;
 mod lock;
 mod moatbench;
 mod paths;
+mod permission_mode;
 mod policy_upgrade;
 mod protection;
 mod proxy;

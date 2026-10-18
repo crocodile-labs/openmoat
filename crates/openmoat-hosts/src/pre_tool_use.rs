@@ -23,11 +23,26 @@ struct Payload {
     tool_name: String,
     #[serde(default)]
     tool_input: Value,
+    /// Claude Code's permission mode for the session (`default`, `acceptEdits`,
+    /// `plan`, `auto`, `dontAsk`, `bypassPermissions`).
+    #[serde(default)]
+    permission_mode: Option<String>,
 }
+
+/// Claude Code permission modes in which no question reaches a person:
+/// `bypassPermissions` skips its prompts and `dontAsk` denies whatever would
+/// prompt. An `ask` there is answered as a deny that says how to approve it.
+const MODES_WITHOUT_PROMPT: &[&str] = &["bypassPermissions", "dontAsk"];
 
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let action = map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?;
+    let event = match p.permission_mode.as_deref() {
+        Some(mode) if host == Host::ClaudeCode && MODES_WITHOUT_PROMPT.contains(&mode) => {
+            HookEvent::PreToolUseNoAsk
+        }
+        _ => HookEvent::PreToolUse,
+    };
     Ok(HookRequest {
         host,
         session_id: crate::session_or_unknown(p.session_id),
@@ -35,7 +50,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         cwd: p.cwd,
         tool: p.tool_name,
         action,
-        event: HookEvent::PreToolUse,
+        event,
     })
 }
 

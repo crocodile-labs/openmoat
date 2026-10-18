@@ -18,6 +18,7 @@ view at the end of the file.
 - Under `moat run` on macOS, a pattern with `**` inside braces (`~/{.ssh/**,.aws/**}`) and a pattern under a symlinked directory (`/tmp/x/**`, which is `/private/tmp/x`) are enforced as the hook reads them; both were narrower ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
 - A patch handed to `apply_patch` in a shell command, which Codex applies like its own patch tool, is checked as writes to every file it names; a write to a denied file deferred ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
 - MCP arguments named in camel or kebab case (`sourcePath`, `output-dir`, `baseUrl`) are read as paths and URLs, and a write verb anywhere in a tool's name (`file_write`, `download_file`) makes its paths writes ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
+- In Claude Code's `bypassPermissions` and `dontAsk` modes, where no question reaches a person, an OpenMoat ask is a deny that says how to approve it (`moat allow --last`), as for Codex; calls OpenMoat leaves to Claude Code are unchanged ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 
 ### Changed
 - `moat status` says when a policy update waits for `moat policy upgrade`, and its JSON adds `policy_update` and `lock_drift` ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).

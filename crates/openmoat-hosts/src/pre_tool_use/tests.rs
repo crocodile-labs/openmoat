@@ -336,6 +336,62 @@ fn response_bytes_are_exact_and_escaped() {
     );
 }
 
+fn bash_in_mode(host: Host, mode: &str) -> HookRequest {
+    let payload = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash",
+        "tool_input": {"command": "ls"},
+        "permission_mode": mode,
+    });
+    host.parse_request(&payload.to_string()).unwrap()
+}
+
+/// `bypassPermissions` and `dontAsk` put no question to a person, so an `ask`
+/// is answered as a deny that says how to approve it; a `defer` stays a defer.
+#[test]
+fn claude_code_modes_that_cannot_prompt_turn_an_ask_into_a_deny() {
+    let ask = Decision::new(Verdict::Ask);
+    for mode in ["bypassPermissions", "dontAsk"] {
+        let req = bash_in_mode(Host::ClaudeCode, mode);
+        assert_eq!(req.event, HookEvent::PreToolUseNoAsk, "{mode}");
+        let answer = Host::ClaudeCode.answer(&req.event, &ask);
+        assert_eq!(answer.verdict, Verdict::Deny, "{mode}");
+        assert!(
+            answer
+                .reasons
+                .iter()
+                .any(|r| r.contains("moat allow --last"))
+        );
+        let rendered = Host::ClaudeCode.render_response(&req.event, &answer);
+        assert!(
+            rendered.contains(r#""permissionDecision":"deny""#),
+            "{rendered}"
+        );
+
+        let defer = Host::ClaudeCode.decided(&req.event, Decision::new(Verdict::Defer));
+        assert_eq!(defer.verdict, Verdict::Defer, "{mode}");
+        let defer = Host::ClaudeCode.answer(&req.event, &defer);
+        assert_eq!(Host::ClaudeCode.render_response(&req.event, &defer), "");
+    }
+}
+
+#[test]
+fn claude_code_modes_that_prompt_keep_the_ask() {
+    let ask = Decision::new(Verdict::Ask);
+    for mode in ["default", "acceptEdits", "plan", "auto", "something-new"] {
+        let req = bash_in_mode(Host::ClaudeCode, mode);
+        assert_eq!(req.event, HookEvent::PreToolUse, "{mode}");
+        assert_eq!(
+            Host::ClaudeCode.answer(&req.event, &ask).verdict,
+            Verdict::Ask
+        );
+    }
+    // Codex sends no such mode; a field of that name changes nothing there.
+    let req = bash_in_mode(Host::Codex, "bypassPermissions");
+    assert_eq!(req.event, HookEvent::PreToolUse);
+}
+
 #[test]
 fn host_ids_round_trip() {
     for host in Host::ALL {

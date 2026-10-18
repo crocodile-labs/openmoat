@@ -293,6 +293,14 @@ deny. The Cursor adapter marks those two events `HookEvent::PreToolUseNoAsk`, an
 `ask` there is sent as a `deny` (exit 2) whose reason says to approve it with `moat` or
 `moat allow --last`, which approve the exact file. The audit log keeps the `ask`.
 
+Claude Code sends its session's `permission_mode` with `PreToolUse`. Two modes put no
+question to a person: `bypassPermissions` skips Claude Code's prompts and `dontAsk`
+denies whatever would prompt. For these the adapter marks the call
+`HookEvent::PreToolUseNoAsk`, and an `ask` is sent as a `deny` with the same
+`moat allow --last` instruction; the audit log keeps the `ask`. A `defer` stays a
+`defer` (Claude Code decides it as its mode says). Every other mode, `auto` included,
+receives the `ask`.
+
 Codex's `PermissionRequest` hook does not change this (#178, checked against
 openai/codex `ff9ab4a` and codex-cli 0.160.1). Codex runs it only from
 `Session::request_approval` (`core/src/tools/approvals.rs`), after its own approval
