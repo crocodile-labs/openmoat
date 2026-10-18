@@ -521,7 +521,7 @@ scripts/ci/sync-labels.sh      the repository's label set
 | `wasm32` purity build | CI job | every PR |
 | Fuzz | `fuzz/`, one minute per target on PRs, ten minutes weekly | CI |
 | Guard latency | `scripts/ci/guard-latency.py`: one process per call, end to end and as recorded by guard; warns above the 15 ms p95 budget, fails above 45 ms (about 3 ms deciding and 8 ms end to end on Apple silicon) | every PR, `latency` job (not required) |
-| Guard latency in long sessions | `scripts/ci/guard-session-latency.py`: one session grown to 100, 1,000 and 5,000 earlier calls, each a distinct file read; reports and warns above 50 ms p95 at 5,000, never fails. Before the session cache (#570), CI runners measured p95 18 / 40 / 158 ms on Linux and 41 / 110 / 370 ms on macOS 14, nearly all of it the session's taint worked out again from the audit log on every call (#559) | every PR, `latency` job (not required) |
+| Guard latency in long sessions | `scripts/ci/guard-session-latency.py`: one session grown to 100, 1,000 and 5,000 earlier calls, each a distinct file read; reports and warns above 50 ms p95 at 5,000, never fails. With the session cache (#570), CI runners measure p95 12 / 10 / 10 ms on Linux and 15 / 12 / 18 ms on macOS 14; before it, 18 / 40 / 158 ms and 41 / 110 / 370 ms, nearly all of it the session's taint worked out again from the audit log on every call (#559) | every PR, `latency` job (not required) |
 
 CI runs `scripts/ci/quality-gate.sh` on macOS (arm64, x64), Linux and Windows, plus
 `cargo-deny`, the crate packaging check and `actionlint`/`zizmor` on workflows.
