@@ -40,6 +40,7 @@ executables:                        # pin program names to absolute paths (enfor
 sandbox:                            # optional: what the host sandboxes may read beyond the rules (§9)
   read_roots: ["/usr", "~/.cargo"]
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `moat proxy` (§9)
+  proxy_allow_ech: false            # optional: let `moat proxy` forward encrypted server names (ECH) (§9)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 
@@ -151,6 +152,11 @@ What the proxy does with them:
   built (#172).
 - **Leak blocking.** The proxy refuses a request to any other host that carries the
   placeholder or the value, in its head or plain-HTTP body (`proxy-secret`, §5.1).
+  `moat guard` already denies the call that would send it (`placeholder-egress`, §6): a
+  placeholder (`moat-secret:<id>:placeholder`, any letter case) in a fetch or network
+  tool's URL, an MCP URL argument, a web search, or the arguments of a command that
+  connects to a host, when the destination is not `host`. A placeholder whose id the
+  policy does not broker belongs to no host, so it is denied wherever it goes.
 - **Audit masking.** A value of 8 bytes or more is replaced by `[redacted]` wherever it
   occurs in an audit row the proxy records, and in the row of a call `moat guard`
   decides when its source is a `file` or `env` the guard can read (ARCHITECTURE.md §7).
@@ -222,7 +228,7 @@ Consequences worth remembering:
 - A host is network evidence (`net`) when it comes from a URL with a scheme or from an argument of a program that names hosts (`curl`, `wget`, `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `netcat`, `telnet`, `ftp`, `ping`, `dig`, `nslookup`, `host`, `openssl`, `socat` (its `TCP:host:port` addresses), `mosh`, `lftp`, `aria2c`, `nmap`, `psql`, `mysql`, `redis-cli`, `mongo`, `mongosh`, `http`/`https`, `xh`, `curlie`, `wget2`, `whois`, `traceroute`, `mtr`, `git clone/fetch/pull/push/ls-remote`, also after git's global options such as `-C dir`); for these programs a quoted word is a host too (`curl 'host'`). In inline interpreter code a host in a quoted string is network evidence too (`urlopen('evil.com')`). Any other unquoted word that only looks like a host (`check_runs.0.id`, `config.dev`, `subprocess.run` in a here-document) is still matched by `net` rules, so a host you deny or allow is denied or allowed; when no rule matches it, the catch-all decides it (it is deferred in the default policy), not `defaults.net` (ADR-025).
 - An allow rule on `shell` does not allow the paths or hosts the command touches; those are evaluated separately. `cat ~/.ssh/id_rsa` is denied by the path rule even though `cat *` is allowed.
 - Arguments that name files become `fs.read`/`fs.write` actions even when they are relative: any word containing `/` (`s/id_rsa`, `src/main.rs`, the value of `--in=keys/k`), and every operand of programs that read or write their operands (`cat`, `head`, `tail`, `less`, `grep`, `rg`, `wc`, `diff`, `base64`, `tar`, `ls`, `find`, `cp`, `mv`, `rm`, `tee`, … ; `shell/tables.rs`), so `cat k` is a read of `<cwd>/k`. Options before `--`, URLs, remote specs (`host:dir`) and the arguments of `echo`/`printf` are not files. Inside the project these reads cost nothing (`project-fs` allows them); an option value such as the `5` in `head -n 5 f` becomes a harmless read of `<cwd>/5`.
-- A reserved word that starts a command inside a compound one (`do`, `then`, `else`, `elif`, `if`, `while`, `until`, `!`, `{`) is not the program: `for f in a; do cat x; done` is the command `cat x`, and `done`, `fi`, `}` and `esac` alone run nothing. `for NAME in WORDS` is an `env.set` of `NAME`, and the words are read like any others. A variable set by a command of its own earlier on the line (`n=3; git log -$n`, a `for` variable, `export X=v`; also `readonly`, `local`, `declare` and `typeset` without options, which may set an array, a number or a reference) is a shell variable. When every value it can hold is text the line shows (no `$`, `$( … )`, glob or quoted `~`), it is substituted where it is used and the command is classified once per value, so `d=~/.ssh; cat $d/id_rsa` and `X=~/.ssh; cat $X/id_rsa` are reads of `~/.ssh/id_rsa`. Reading a lowercase one is then no `env.read`; an uppercase name, by convention an environment variable, keeps its `env.read`, and so does any variable whose value is not known. A prefix assignment (`D=x cmd $D`) does not count: the shell expands `$D` before it. A path that still contains a variable the shell expands (other than `$HOME`, `$PWD`, `${project}`), or the output of a command (`cat $(cat list)`, `` cat `cmd` ``), is not known: the call gets rule `unparseable` (§4 step 5) and the literal path is still checked, so a deny on it wins. `$PWD` is the working directory. A child shell (`sh -c`) does not see the variables, so `x=1; sh -c 'echo $x'` reads `x`, and an uppercase name's read stays: `NPM_TOKEN=x; echo $NPM_TOKEN` is still a read of `NPM_TOKEN`. A path through a variable whose value is not known is also the atom `@unknown-path <word>`, which `secret-names` asks for when its file name is a key's, a token file's or a `.env`. Where `$IFS` or `${IFS}` stands in a word, the line is classified a second time with it read as a space and both results count, so `cat${IFS}~/.ssh/id_rsa` is a read of the key. A `file:` URL in any argument (`curl file:///etc/passwd`, `--url=FILE:///…`, `%`-escapes decoded) is an `fs.read` of its path. Arguments that are a command line the program runs are classified as one: `watch 'cmd'`, `git rebase --exec`/`-x` (by any prefix git accepts), `git submodule foreach`, `git bisect run`, `git difftool --extcmd`/`-x`, `git filter-branch --*-filter`, `ssh`/`scp`/`sftp -o ProxyCommand=`/`LocalCommand`/`KnownHostsCommand` and `rsync -e`/`--rsh`.
+- A reserved word that starts a command inside a compound one (`do`, `then`, `else`, `elif`, `if`, `while`, `until`, `!`, `{`) is not the program: `for f in a; do cat x; done` is the command `cat x`, and `done`, `fi`, `}` and `esac` alone run nothing. `for NAME in WORDS` is an `env.set` of `NAME`, and the words are read like any others. A variable set by a command of its own earlier on the line (`n=3; git log -$n`, a `for` variable, `export X=v`; also `readonly`, `local`, `declare` and `typeset` without options, which may set an array, a number or a reference) is a shell variable. When every value it can hold is text the line shows (no `$`, `$( … )`, glob or quoted `~`), it is substituted where it is used and the command is classified once per value, so `d=~/.ssh; cat $d/id_rsa` and `X=~/.ssh; cat $X/id_rsa` are reads of `~/.ssh/id_rsa`. Reading a lowercase one is then no `env.read`; an uppercase name, by convention an environment variable, keeps its `env.read`, and so does any variable whose value is not known. A prefix assignment (`D=x cmd $D`) does not count: the shell expands `$D` before it. A path that still contains a variable the shell expands (other than `$HOME` and `$PWD`, unless the line gave them a value it does not show, as `read HOME` or `HOME=$(cat f)` do; `${project}` is the policy's syntax, so in a command it is the shell's variable `project`, read as empty), or the output of a command (`cat $(cat list)`, `` cat `cmd` ``), is not known: the call gets rule `unparseable` (§4 step 5) and the literal path is still checked, so a deny on it wins. `$PWD` is the working directory. A child shell (`sh -c`) does not see the variables, so `x=1; sh -c 'echo $x'` reads `x`, and an uppercase name's read stays: `NPM_TOKEN=x; echo $NPM_TOKEN` is still a read of `NPM_TOKEN`. A path through a variable whose value is not known is also the atom `@unknown-path <word>`, which `secret-names` asks for when its file name is a key's, a token file's or a `.env`. Where `$IFS` or `${IFS}` stands in a word, the line is classified a second time with it read as a space and both results count, so `cat${IFS}~/.ssh/id_rsa` is a read of the key. A `file:` URL in any argument (`curl file:///etc/passwd`, `--url=FILE:///…`, `%`-escapes decoded) is an `fs.read` of its path. Arguments that are a command line the program runs are classified as one: `watch 'cmd'`, `git rebase --exec`/`-x` (by any prefix git accepts), `git submodule foreach`, `git bisect run`, `git difftool --extcmd`/`-x`, `git filter-branch --*-filter`, `ssh`/`scp`/`sftp -o ProxyCommand=`/`LocalCommand`/`KnownHostsCommand` and `rsync -e`/`--rsh`.
 - Inline code given to an interpreter on the command line is scanned for paths, hosts and variable names (not parsed): `python`/`python3 -c` (also versioned, `python3.12 -c`, `python2.7 -c`), `node -e`/`--eval`/`-p`/`--print`, `deno eval`, `bun -e`, `perl -e`/`-E`, `ruby -e`, `php -r`, `osascript -e`, `pwsh`/`powershell -c`/`-Command`, `lua`/`luajit -e` and `Rscript -e` (`shell/tables.rs`). So `python3.12 -c "open('/Users/you/.ssh/id_rsa')"` is a read of the key.
 - Relative paths follow `cd` and `pushd` earlier in the same command line: `cd ~/.ssh && cat id_rsa` is a read of `~/.ssh/id_rsa`. Which commands run after a `cd` succeeds is not modelled (`cd x || cat y`, a failed `cd` before `;`), so a relative path is checked in every directory the line may be in (the session's directory and each `cd` target), strictest wins. A subshell `( … )` restores the directory when it closes; `$( … )` and `sh -c` start from the directory where they appear. `cd` alone is `~`. A target that cannot be known (`cd "$DIR"`, `cd -`, `cd s*`, `pushd +1`, `popd`, and `eval`/`source`, which may `cd` themselves) makes every later relative path unresolvable, so the command gets rule `unparseable` (step 5); absolute paths are still checked normally. More than 16 possible directories is `unparseable` too. `cd` itself adds no new action (a path-looking target is an `fs.read` like any argument). `CDPATH` is not consulted: the shell searches it for a target that does not start with `/`, `./` or `../`, but the classifier cannot see the environment the host started the shell with, so such a target is taken relative to the current directory. Setting `CDPATH` on the line itself (`CDPATH=~ cd .ssh`, `export CDPATH=…`) is an `env.set` that `opaque-code` asks for, and the shell start-up files that could preset it are denied by `shell-rc`.
 - `moat guard` checks a path where it really points as well as where it was written: after `ln -s ~/.ssh ./s`, `cat ./s/id_rsa`, `cat s/id_rsa`, `head s/id_rsa` and `grep -r . s/` are denied by `secrets-paths`. A link inside the project that points elsewhere inside the project stays allowed; one that points outside it is checked at its target (`ln -s /etc e; cat e/hosts` is decided as a read of `/etc/hosts`, which the default policy defers), also when the project itself sits under a linked directory (§3.2). `moat policy check` resolves symlinks the same way. Hard links and a link swapped after the check are not seen (ADR-009).
@@ -249,8 +255,9 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   The trigger matters when your policy moves `secrets-paths` to `ask`: once you approve
   the read, the session is tainted.
 - Protected paths are files whose change runs code or steers the agent later. The built-in
-  list (`taint.rs`) is CI (`.github/workflows/**`, `.gitlab-ci.yml`, `.circleci/**`), git
-  hooks (`.husky/**`, `.githooks/**`), editor tasks (`.vscode/**`), the build and test
+  list (`taint.rs`) is CI (`.github/workflows/**`, `.gitlab-ci.yml`, `.circleci/**`,
+  `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/**`), git hooks (`.husky/**`,
+  `.githooks/**`, `.pre-commit-config.yaml`, `lefthook.yml`), editor tasks (`.vscode/**`), the build and test
   definitions of every ecosystem whose commands the default policy runs: JavaScript
   (`package.json`, `.npmrc`, `.yarnrc`, `.yarnrc.yml`, `pnpm-workspace.yaml`), make, just
   and task (`Makefile`, `makefile`, `GNUmakefile`, `*.mk`, `justfile`, `Taskfile.yml`),
@@ -262,8 +269,10 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   (`composer.json`, `artisan`, `phpunit.xml`), Python (`conftest.py`, `pytest.ini`,
   `pyproject.toml`, `setup.py`, `setup.cfg`, `tox.ini`, `noxfile.py`) and containers
   (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`), and agent instructions and
-  settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.codex/**`, `.cursor/**`,
-  `.cursorrules`, `.mcp.json`), at any depth. Source and test files are not protected,
+  settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.claude.json`, `.codex/**`,
+  `.cursor/**`, `.cursorrules`, `.mcp.json`) and OpenMoat's own `.moat/**`, at any depth:
+  every file `runs-later` asks about and every config file `kernel-self` protects (a
+  test keeps the lists in step). Source and test files are not protected,
   test-runner configs written in JavaScript (`jest.config.js`) included: they are code the
   run executes like any other file, and the command that runs them is named in a
   protected file.
@@ -289,7 +298,68 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   declined ask is not recorded, so it counts as run. Codex turns an ask into a deny, so
   an ask under Codex never taints. The agent cannot reset its session's taint, and a log
   that cannot be read denies the call (`kernel-error`).
+- `moat run`'s proxy applies the same taint to every request of the run (ADR-027). The
+  run's hooks link each agent session to the run's audit session (`MOAT_RUN_SESSION`),
+  and the proxy folds the linked sessions as the guard does. After a secret read, a
+  CONNECT or plain-HTTP request to any host but the secret's own would ask; the proxy
+  cannot ask, so it refuses (`session-taint`), the package registries included. A grant
+  does not answer it; a new `moat run` starts clean. Untrusted content changes nothing at
+  the proxy. The standalone `moat proxy` has no sessions, so taint does not apply there.
+  As the run's profiles stand, a hook inside `moat run` cannot write these links
+  (ADR-027, Consequences).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
+
+### 4.2 The push check
+
+A push publishes commits: CI runs them with the repository's secrets, and anyone who can
+read the remote can read them. After the steps above, and only when the call is not
+already denied, `moat guard` looks at what a push would publish. A push is `git push`,
+in any spelling the classifier reads (after git's global options, `-C`, `cd`, `sh -c`,
+`sudo`, `$( … )`), and `gh pr create`, which pushes the current branch when it is not
+pushed yet. `gh pr merge` publishes nothing local and is not checked.
+
+- **Which commits.** What the push sends (each refspec's source; every branch for
+  `--all`, `--branches`, `--mirror` or a glob refspec; every tag for `--tags` or
+  `--mirror`; `HEAD` when none is named), minus what the remote has: with no refspec the
+  current branch's upstream (`@{u}`); otherwise, or without an upstream, the remote's
+  default branch (`refs/remotes/<remote>/HEAD`), else every branch of that remote git
+  knows of; for a URL or a path in place of a remote's name, every remote-tracking
+  branch. The remote is the one named, else git's own choice (`branch.<b>.pushRemote`,
+  `remote.pushDefault`, `branch.<b>.remote`, `origin`). Commits the remote is not known
+  to have are all checked, so a first push checks the whole history. Deletions, a
+  directory that is not a repository and a branch with no commits check nothing.
+- **How.** git runs read-only in each directory the push may run in (`git log`,
+  `rev-parse`, `config --get`), with the options that would let a repository's config
+  start a program turned off (external diff, text conversion, signature check, file
+  system monitor). Every line a commit's diff adds (a merge's against its first parent)
+  and every commit message is searched; removed and unchanged lines are not, and
+  neither are binary files. Needs git 2.31 or later.
+- **`push-secret` (deny).** A line or message holds a known token format with a
+  vendor prefix (GitHub, OpenAI and Anthropic, AWS access key ids, Slack, Google API,
+  npm, GitLab; the audit log's redaction patterns, without JSON web tokens, which are
+  common in test data), or the value of a brokered secret (§2.1) the guard can read (file
+  and environment sources, 8 bytes or longer, any letter case). The reason names the
+  commit, the file and the kind of token, never the value. A token added and removed
+  again inside the push still denies: the push sends both commits. Remove it from the
+  commits, or push from a terminal yourself.
+- **`push-runs-later` (ask).** The session read untrusted content or a secret (§4.1),
+  and the push changes (adds, edits or deletes) one of the project files `runs-later`
+  names (§6), at any depth and in any letter case. In a clean session such a push
+  stays as the policy decided it.
+- **`push-unchecked` (ask).** What the push publishes could not be checked: git took
+  longer than 2 s for all of a call's pushes together, the diffs exceed 8 MiB (the
+  commit messages or the list of changed files 1 MiB), git failed, a refspec names no
+  commit, or the push may run in a directory or repository that is not known (`cd
+  "$X"`, `git --git-dir=…`, a git option that keeps the command as written, or
+  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, `GIT_OBJECT_DIRECTORY`,
+  `GIT_ALTERNATE_OBJECT_DIRECTORIES` or `GIT_CEILING_DIRECTORIES` set on the line).
+- **Otherwise** the decision stands unchanged: the check adds nothing to a push it has
+  no finding for. Codex and the Continue CLI cannot ask, so the two asks reach them as
+  a deny; a `moat allow` grant does not answer them.
+- **Limits.** The check reads what git shows at the time of the call: a commit made by
+  a later part of the same command line (`git commit -am x && git push`), a variable
+  that moves git to another repository exported by an earlier tool call, and a push
+  through a program other than `git` and `gh` (an API call, a script) are not seen.
 
 ## 5. Verdicts and what the host does
 
@@ -314,14 +384,19 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `unparseable` | ask | the shell command or URL, or part of it, could not be classified safely (§4 step 5) |
 | `executables` | deny | the command's program resolves to a path other than its pin (§8.1) |
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
+| `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `moat mcp accept` |
+| `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `moat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's description or input schema is not the one a person accepted (§8) |
 | `kernel-error` | deny | `moat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
 | `config-change` | allow | a Claude Code `ConfigChange` for a settings file that is not pinned, or still matches the lock; a change that names no file is allowed only while every pinned file matches the lock; recorded |
 | `session-taint` | ask | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
+| `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
+| `push-runs-later` | ask | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
+| `push-unchecked` | ask | what a push would publish could not be checked within 2 s or 8 MiB, or where it runs is not known (§4.2) |
 | `approved-session` | allow | an `ask` for a shell command that a person granted with `moat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `moat allow --always` |
-| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host, a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
+| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
 
 ### 5.2 `moat proxy`
 
@@ -389,6 +464,8 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | deny | `kernel-self` | writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/secret/trust/uninstall` and `moat sandbox sync` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
 | deny | `shell-rc` | writes to `~/.zshrc`, `~/.bashrc`, `~/.profile` and friends |
 | deny | `cloud-metadata` | network to instance metadata and link-local services (`169.254.*`, `fe80:*`, `fd00:ec2::254`, `100.100.100.200`, `metadata.google.internal`, `metadata.goog`), for shell network and for a host fetch tool alike |
+| deny | `token-egress` | a token of a well-known prefixed format sent to a host that is not its service's, allowed hosts included: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`; own hosts `github.com`, `githubusercontent.com`, `ghcr.io`), OpenAI and Anthropic (`sk-`, `sk-proj-`, `sk-ant-`, `sk-svcacct-`, `sk-admin-`; `openai.com`, `anthropic.com`), AWS access key ids (`AKIA…`; `amazonaws.com`, `aws.amazon.com`), Slack (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`; `slack.com`), Google API keys (`AIza…`; `googleapis.com`, `google.com`), npm (`npm_`; `npmjs.org`, `npmjs.com`) and GitLab (`glpat-`; `gitlab.com`), each with its subdomains. Checked in a fetch or network tool's URL, an MCP URL argument, a web search query, and the arguments of a command that connects to a host (the `curl`, `wget`, `nc`, `ssh` family, `git clone/fetch/pull/push/ls-remote`) and of every command piped into one; the destination is every host those arguments name, `--connect-to`/`--resolve` targets and `Host:` headers included, and a destination that cannot be read counts as another host. The atom is `@token-egress <service> <host>`; the token is never in it. Only prefixed formats, the same list audit redaction masks: a commit SHA, a UUID or a base64 blob is never a token. A self-hosted GitLab or GitHub Enterprise server is not the service's host: to send tokens there, narrow the group (`shell: ["@token-egress github *", …]` without that service) |
+| deny | `placeholder-egress` | a brokered secret's placeholder sent anywhere but that secret's `host` (§2.1), in the same places as `token-egress`; the atom is `@placeholder-egress <id> <host>` |
 | allow | `agent-temp` | reading Claude Code's own temporary folder (`/tmp/claude-*/`, `/private/tmp/claude-*/`), where it keeps the output of background commands; `secrets-paths` still denies a `.env` or key there |
 | allow | `project-fs` | read anywhere in `${project}`, including the root itself (a search with no path); write anywhere except `.moat/`, a `.git` at any depth (the root's, a nested repository's, a `gitdir:` file) and the files `runs-later` asks for |
 | allow | `dev-shell` | `git status/diff/log/show/branch/add/commit/checkout/switch/fetch/pull/rebase/stash/merge`; `git restore` (each path is an `fs.write`, so `.git`, `.moat` and hook settings ask or are denied; not `.`, `./`, `*`, a `:` pathspec such as `:/`, or `--pathspec-from-file`, which restore the whole tree); the read-only `git ls-files/ls-tree/rev-parse/rev-list/merge-base/cat-file/blame/grep/describe/shortlog/check-ignore`, `git worktree list`, `git reflog` and `git reflog show`, listing tags (`git tag` alone, `-l`/`--list`, `--contains`, `--merged`, `--points-at`, `-n`), `git remote` alone or with `-v`, `git remote get-url`, and reading config (`git config --get/--get-all/--get-regexp/--list/-l`, `git config get/list`) when the read action comes first, after at most one scope option (`--global`, `--show-origin`, …) or `-f <file>`: git takes options only before the first name, so `git config core.pager '--get…'` is a write and asks; a config name (`user.name`) is never a host; `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `find`, `pwd`, `echo`, `which`, `printf` (not `printf -v`, which assigns a variable), `command -v`/`-V` and `type` (they print how a name resolves and run nothing), `true`, `jq`; `cd`, `pushd`, `popd`, `mkdir`, `touch`, `cp`, `mv`, `rm` (their path operands are fs actions resolved through `cd` and symlinks, so outside `${project}` they defer, ask or meet a deny); `npm test/run`, `pnpm test/run/build/lint/typecheck/exec`, `yarn test/run/build/lint/exec`, `cargo build/test/check/clippy/fmt/run/doc/bench/nextest/tree/metadata`, `go test/build/vet`, `swift test/build`, `pytest`, `python -m pytest`, `python3 -m pytest`, `python -m venv`, `python3 -m venv` (each directory operand is an `fs.write`), sourcing the project venv's activate script spelled exactly `.venv/bin/activate` or `venv/bin/activate` (`source` or `.`, no arguments; the script is an `fs.read`, so one outside `${project}` defers), `make` with no arguments, `make test/build/check/lint`; other ecosystems' build and test commands, which run the project's own code like `cargo test`: `mvn test/compile/package/verify` (not with a `plugin:goal` such as `exec:exec`), `./gradlew` or `gradle test/build/check`, `dotnet build/test/run` (not with an msbuild `-switch:value` such as `-logger:`, or an `@file`), `bundle exec rspec`, `rspec`, `rake test` (not `-e`/`-p`/`--execute*`, which run Ruby given on the line, or `-g`/`--system`), `php artisan test`, `phpunit`, `cmake -B`/`-S` and `cmake --build` (not `-E`/`-P` or arguments after `--`), `ctest` (not dashboard submission `-D/-M/-T`, scripts `-S` or `--build-and-test`), `terraform fmt/validate` (`plan`, `apply` and `init` defer), `swift run`, `go run` of `.`, a `./` package or `.go` files (not `pkg@version`), a project script `python`/`python3 <file>.py` (also after up to two of `-I`, `-u`, `-B`, `-E`, `-s`, `-S`, `-O`, each a word of its own: `-Ic` runs code) or `node <file>.js/.mjs/.cjs` (the script is an `fs.read`, resolved through symlinks, so one outside `${project}` defers; `python -c` and `node -e` defer), `uv run <command>` (the command is classified on its own; not `--with`), `docker build` (not `--secret`, `--ssh`, `--build-context`, `--network`, `--allow`, `--security-opt`, `--output`/`-o`, `--push`, `--cache-to`, which `docker-secrets` asks for; `docker compose` defers). `npx <tool>` is not allowed, so it defers: it downloads a tool the project does not have, and the classifier cannot see `node_modules/.bin`. `exec` forms are allowed only because the wrapped program is evaluated on its own. Excluded (they defer, except the `git config` and `git remote` forms, which `git-internals` asks for): a recursive `rm` (`-r`, `-R`, `-rf`, …) of an operand that may name the project root or reach past it: `.`, `./`, an absolute or `~` path, a `$` variable, any `..`, or an unexpanded `*`, `./*`, `.*` (a recursive removal of a project subdirectory such as `rm -rf build` is allowed; `project-fs` leaves out `.git`, which `git-internals` asks for), `git merge -s`/`--strategy` (runs a `git-merge-<name>` program), `git checkout .`, `git checkout -- …` and forced checkouts (they discard uncommitted work), `find -exec/-ok/-delete/-fprint/-fls`, `rg --pre`, `git --upload-pack/--receive-pack`, `go -exec/-toolexec/-vettool`, `cargo --config`, `git grep -O`/`--open-files-in-pager` (runs a pager) and `--textconv`, `git cat-file --textconv/--filters` and `git blame --textconv` (run configured drivers), every other `git tag`, `git remote`, `git config`, `git reflog` and `git worktree` form (they create, delete, change config or contact the remote), `git rebase --exec/-x`, `--interactive/-i`, `--edit-todo`, `--continue`, `--skip` (they run or resume a todo list, which may hold `exec` lines) and `--strategy/-s` (runs a `git-merge-<name>` program), long options by any prefix git accepts, `venv --clear` (empties the directory) and `--upgrade`/`--upgrade-deps` |
@@ -462,6 +539,24 @@ installed in `~/.moat/policy.lock`. `moat guard` recomputes them on every call; 
 pinned file changed or disappeared, every call is denied with rule `kernel-integrity`
 until a person re-pins with `moat doctor --accept` (refused outside an interactive terminal) or
 by re-running `moat init`. Edit the policy, then run `moat doctor --accept`. Which hook files are pinned is decided only by `moat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR`, else the recorded or default ones). `moat doctor --accept`, `moat allow` and `moat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `moat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `moat doctor` and `moat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
+
+The lock also pins each MCP server definition the agents read (ADR-026): Claude Code's
+`~/.claude.json` (`mcpServers` and each project's local `mcpServers`) and a project's
+`.mcp.json`, Codex's `config.toml` and a project's `.codex/config.toml`, and Cursor's
+`mcp.json` and a project's `.cursor/mcp.json`. Each entry is pinned by itself, by the
+SHA-256 of its canonical JSON, not by its file, so the rest of `~/.claude.json` may change
+freely. A definition that differs from its pin, or one added since, does not deny every
+call. It denies that server's tool calls (`mcp__<server>__…`) with rule
+`mcp-server-changed` until a person runs `moat mcp accept` or `moat doctor --accept`.
+Both show what changed (never the value of an `env` variable or header) and ask. A file
+that cannot be parsed holds back every MCP call of its agent. `moat init` pins what it
+finds. The other re-pinning commands keep the MCP pins as they are.
+
+`moat mcp proxy` (opt-in per server with `moat mcp wrap`) pins each tool's name,
+description and input schema the first time a server lists it, in `~/.moat/mcp/`. Later,
+a tool that changed, or a new one, is left out of `tools/list`, and a `tools/call` for it
+is answered with an error naming `moat mcp accept <server>` (rule `mcp-tool-held` in the
+audit log, host `mcp-proxy`).
 
 ### 8.1 Executable pinning and the environment snapshot
 
@@ -590,6 +685,16 @@ Set the additive `sandbox.proxy_port` key (1–65535) to send sandboxed commands
 traffic through `moat proxy` (§5.2) on `127.0.0.1:<port>` instead. `moat proxy`
 without `--listen` then uses that port, and the policy lock pins it with the rest of
 the file.
+
+`moat proxy` refuses a TLS tunnel whose `ClientHello` carries an encrypted server name
+(ECH, extension `0xfe0d`, or the older ESNI, `0xffce`), rule `proxy-sni`: the server acts
+on the encrypted inner name, so a site the policy does not allow could be reached
+behind an allowed host on the same provider. Browsers send an ECH extension even
+without an ECH key ("GREASE"), so a browser driven through the proxy is refused too.
+`sandbox.proxy_allow_ech: true` forwards such tunnels (the cleartext name must still
+match the CONNECT host), and `moat policy lint` warns about it. Without ECH an allowed
+host can still front for another site through the HTTP `Host` header inside the
+tunnel, which the proxy does not see.
 
 | | What you gain | What it costs |
 |---|---|---|

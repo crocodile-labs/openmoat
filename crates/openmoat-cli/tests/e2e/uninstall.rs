@@ -79,6 +79,12 @@ fn init_shows_each_agents_changes_before_asking() {
             .any(|l| l.starts_with('+') && l.contains("\"--host\"")),
         "{shown}"
     );
+    assert!(
+        shown
+            .lines()
+            .any(|l| l.starts_with('+') && l.contains("\"onFailure\": \"block\"")),
+        "{shown}"
+    );
     assert!(!sb.home.join(".codex/hooks.json").exists());
 }
 

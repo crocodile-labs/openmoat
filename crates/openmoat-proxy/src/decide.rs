@@ -11,7 +11,10 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use openmoat_core::{AtomicAction, CompiledPolicy, Decision, Defaults, Kind, Policy, Verdict};
+use openmoat_core::{
+    Action, AtomicAction, CompiledPolicy, Decision, Defaults, Kind, MapPathResolver, Policy, Taint,
+    Verdict,
+};
 
 /// Rule id for a destination refused whatever the policy says.
 pub const RULE_ADDRESS: &str = "proxy-address";
@@ -102,6 +105,45 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
             .push("the proxy cannot ask, so a host the hook would ask for or leave to the agent is refused".to_owned());
     }
     decision
+}
+
+/// The refusal for a request to `host:port` from a session with `taint`, if
+/// any (ADR-027). The core's taint rules decide (POLICY.md §4.1): after the
+/// session read secret material, network to every host but that secret's own
+/// asks. The proxy cannot ask, so that ask is refused. Untrusted content alone
+/// changes nothing here: its taint protects writes.
+#[must_use]
+pub fn tainted(
+    policy: &CompiledPolicy<'_>,
+    host: &str,
+    port: u16,
+    taint: &Taint,
+) -> Option<Decision> {
+    let authority = if host.contains(':') {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    };
+    let action = Action::Net {
+        url: format!("https://{authority}/"),
+    };
+    let mut decision = policy.with_taint(
+        Decision::new(Verdict::Allow),
+        &action,
+        &MapPathResolver::default(),
+        taint,
+    );
+    if decision.verdict == Verdict::Allow {
+        return None;
+    }
+    decision.verdict = Verdict::Deny;
+    decision.reasons.push(
+        "the proxy cannot ask, so a session that read secret material reaches only that \
+         secret's own host until it ends; `moat allow` does not answer a secret's taint, \
+         so start a new session"
+            .to_owned(),
+    );
+    Some(decision)
 }
 
 /// Why the proxy never connects to `ip`, if it does not. Checked on every

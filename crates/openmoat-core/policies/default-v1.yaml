@@ -189,25 +189,28 @@ deny:
       # a brokered secret's host is where its value goes
       - "moat secret*"
       - "*/moat secret*"
-      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept` require
+      # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
+      - "moat mcp {accept,wrap,unwrap}*"
+      - "*/moat mcp {accept,wrap,unwrap}*"
+      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept` require
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * moat sandbox sync*"
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */moat sandbox sync*"
-      - "script * moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "script * */moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "script * '*moat {allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "expect * '*moat {allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "unbuffer * moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "unbuffer * */moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "*/script * moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "*/script * */moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "*/script * '*moat {allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "*/expect * '*moat {allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "script * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "script * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "unbuffer * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "unbuffer * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "*/script * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "*/script * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
-      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "{tmux,*/tmux,screen,*/screen} * moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * */moat {allow,doctor,edit,init,policy,secret,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{tmux,*/tmux,screen,*/screen} * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       # a bare `moat` (the home screen asks to accept drift or approve an ask) under the
       # same wrappers; patterns are prefixes, so these deny any `moat` command run in them
       - "{script,*/script,unbuffer,*/unbuffer,tmux,*/tmux,screen,*/screen} * {moat,*/moat}"
@@ -222,6 +225,17 @@ deny:
     reason: instance metadata and link-local services hand out cloud credentials
     # a `net` deny also covers `fetch` (ADR-017), so a fetch tool cannot read them either
     net: ["169.254.*", "fe80:*", "fd00:ec2::254", "100.100.100.200", "metadata.google.internal", "metadata.goog"]
+  - id: token-egress
+    reason: sends a known kind of token to a host that is not its service's
+    # `@token-egress <service> <host>` atoms: a GitHub, OpenAI/Anthropic, AWS, Slack,
+    # Google, npm or GitLab token in a URL, a web search, or the arguments of a
+    # command that connects to a host (POLICY.md §3)
+    shell: ["@token-egress *"]
+  - id: placeholder-egress
+    reason: sends a brokered secret's placeholder to a host the proxy does not put that secret in
+    # `@placeholder-egress <id> <host>` atoms: `moat-secret:<id>:placeholder` going
+    # anywhere but the secret's `host` (POLICY.md §2.1)
+    shell: ["@placeholder-egress *"]
 
 allow:
   - id: project-fs

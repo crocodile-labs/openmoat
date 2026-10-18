@@ -25,6 +25,7 @@ use crate::render::Deferred;
 use crate::sandbox::{claude, codex, codex_config_path, cursor};
 
 pub fn run(args: &UninstallArgs) -> Result<Code> {
+    crate::terminal::refuse_agent("moat uninstall")?;
     if !crate::terminal::interactive() {
         bail!("`moat uninstall` must be run by a person in a terminal, not from a hook or script");
     }
@@ -37,6 +38,14 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             .collect(),
     };
     let mut out = Deferred::default();
+    // Before the record forgets where each agent is: the wrapped servers point at
+    // `moat mcp proxy`, which outlives the hooks only as a dangling path.
+    if let Err(e) = super::mcp::unwrap_servers(&home, &hosts, &[], &mut out) {
+        writeln!(
+            out,
+            "! mcp servers      {e:#}; `moat mcp unwrap` restores the wrapped ones"
+        )?;
+    }
     let mut undone = Vec::new();
     let mut recorded = Recorded::load(&home)?;
     for host in hosts.iter().copied() {

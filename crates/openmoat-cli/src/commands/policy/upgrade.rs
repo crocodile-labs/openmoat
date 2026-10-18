@@ -33,7 +33,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let mut out = Deferred::default();
     describe(&plan, &mut out)?;
     if plan.applicable() == 0 || args.dry_run {
-        if !args.dry_run && up_to_date_without_record(&plan) && crate::terminal::interactive() {
+        if !args.dry_run && up_to_date_without_record(&plan) && crate::terminal::person() {
             // Recorded now so a later default is compared with this one, not 0.3.0.
             write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
         }
@@ -122,6 +122,7 @@ fn up_to_date_without_record(plan: &Plan) -> bool {
 
 /// Refuse unless a person is at a terminal: writing the policy re-pins the lock.
 fn person(command: &str) -> Result<()> {
+    crate::terminal::refuse_agent(command)?;
     if !crate::terminal::interactive() {
         bail!(
             "`{command}` must be run by a person in a terminal, not from a hook or script; \

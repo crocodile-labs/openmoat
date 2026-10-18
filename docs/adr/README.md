@@ -33,6 +33,8 @@ each ADR records the outcome it needs.
 | [023](ADR-023-isolated-tier-macos.md) | Isolated tier on macOS: a Linux guest booted through Apple's `containerization` toolchain; virtiofs mounts and vsock proxy relay; bubblewrap, Landlock and seccomp nest inside, as on Linux | accepted; refines ADR-018 for macOS; a note (2026-10-12) corrects its facts about Apple's `container` and leaves open questions |
 | [024](ADR-024-yaml-parser.md) | Policies are parsed by `serde-saphyr` (pure Rust, no `unsafe`) behind `openmoat_core::yaml`, kept strict: YAML 1.2 booleans only, duplicate keys, merge keys and unknown tags rejected | accepted |
 | [025](ADR-025-quiet-by-default.md) | Quiet by default: a `defer` verdict leaves calls no rule names to the agent's own permission prompt; OpenMoat asks only where the effect outlives the sandbox or the session; words that only look like hosts are not network evidence | accepted |
+| [026](ADR-026-mcp-server-and-tool-pinning.md) | MCP server definitions are pinned per server in the lock; a changed or new one has its tool calls denied until `moat mcp accept`; an opt-in `moat mcp proxy` pins tool descriptions and can confine the server under `moat run` | accepted; implements #133, deferred by ADR-013 |
+| [027](ADR-027-per-session-proxy-credentials.md) | Per-session proxy credentials: `moat run`'s proxy serves its session alone (`Proxy-Authorization: Basic`), records each row under it, refuses hosts other than a secret's own after the session read secret material, and caps each session at half the connections; the standalone `moat proxy` stays open for the host sandboxes | accepted; refines ADR-020 |
 
 ## Names in older ADRs
 

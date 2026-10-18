@@ -19,7 +19,8 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{NewEvent, Store};
 use openmoat_core::{Action, CompiledPolicy, EvalContext, Policy, Secret};
 use openmoat_proxy::{
-    Broker, Connection, Limits, Proxy, RULE_AUDIT, RecordError, Recorder, SystemResolver,
+    Broker, Connection, Credential, Limits, Proxy, RULE_AUDIT, RecordError, Recorder, Sessions,
+    SystemResolver,
 };
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -31,6 +32,7 @@ use crate::home::Home;
 use crate::integrity;
 use crate::render::Deferred;
 use crate::secrets;
+use crate::taint::run::RunTaint;
 
 use super::service;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -49,7 +51,12 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
     let listen = args.listen.unwrap_or_else(|| {
         SocketAddr::from((Ipv4Addr::LOCALHOST, hosts_port.unwrap_or(DEFAULT_PORT)))
     });
-    let exit = Exit::open(&home, policy, context::eval_context(&home, None, None)?)?;
+    let exit = Exit::open(
+        &home,
+        policy,
+        context::eval_context(&home, None, None)?,
+        None,
+    )?;
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     let addr = listener
         .local_addr()
@@ -59,6 +66,13 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
         stdout,
         "moat proxy: listening on {addr} (audit session {})",
         exit.session()
+    )?;
+    // The host sandboxes cannot send a credential, so this proxy serves
+    // without sessions (ADR-027); `moat run` serves its own that needs one.
+    writeln!(
+        std::io::stderr(),
+        "moat proxy: note: no session credentials here, so any local process may use this \
+         proxy and session taint does not apply to it; `moat run` serves one that requires them"
     )?;
     if let Some(port) = hosts_port.filter(|p| *p != addr.port()) {
         writeln!(
@@ -85,6 +99,7 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
 
 /// `moat proxy install`: write and start the per-user service.
 pub fn install() -> Result<Code> {
+    crate::terminal::refuse_agent("moat proxy install")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat proxy install` must be run by a person in a terminal, not from a hook \
@@ -116,6 +131,7 @@ pub fn install() -> Result<Code> {
 
 /// `moat proxy uninstall`: stop and remove the per-user service.
 pub fn uninstall() -> Result<Code> {
+    crate::terminal::refuse_agent("moat proxy uninstall")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat proxy uninstall` must be run by a person in a terminal, not from a hook or script"
@@ -263,26 +279,59 @@ pub(super) struct Exit {
     ctx: EvalContext,
     broker: Broker,
     recorder: AuditLog,
+    run: Option<RunSession>,
+}
+
+/// Session mode (ADR-027): the one session `moat run` serves, and the
+/// project's effective policy its taint is folded with, as the guard does.
+struct RunSession {
+    credential: Credential,
+    home: Home,
+    effective: Policy,
 }
 
 impl Exit {
     /// Fails when the policy does not compile, a secret's source cannot be read,
-    /// or the audit log cannot be opened.
-    pub(super) fn open(home: &Home, policy: Policy, ctx: EvalContext) -> Result<Self> {
+    /// or the audit log cannot be opened. With `credential`, the proxy serves
+    /// that session alone and records under its id (`moat run`); without, it
+    /// serves any local client under a `proxy-<ms>` session (`moat proxy`).
+    pub(super) fn open(
+        home: &Home,
+        policy: Policy,
+        ctx: EvalContext,
+        credential: Option<Credential>,
+    ) -> Result<Self> {
         CompiledPolicy::compile(&policy, &ctx)?;
         let (broker, known) = secrets::broker(&policy.secrets, &ctx.home)?;
         let audit_path = home.audit_path();
         let store = Store::open_existing(&audit_path)
             .with_context(|| format!("opening {}", audit_path.display()))?
             .with_secrets(known);
+        let session = credential.as_ref().map_or_else(
+            || format!("proxy-{}", crate::time::now_ms()),
+            |c| c.session().to_owned(),
+        );
+        let run = match credential {
+            Some(credential) => {
+                let effective = crate::repo::effective_policy(home, &ctx)?;
+                CompiledPolicy::compile(&effective, &ctx)?;
+                Some(RunSession {
+                    credential,
+                    home: home.clone(),
+                    effective,
+                })
+            }
+            None => None,
+        };
         Ok(Self {
             policy,
             ctx,
             broker,
             recorder: AuditLog {
                 store: Mutex::new(store),
-                session: format!("proxy-{}", crate::time::now_ms()),
+                session,
             },
+            run,
         })
     }
 
@@ -298,17 +347,33 @@ impl Exit {
     }
 
     /// Serve `listener` until accepting fails.
-    pub(super) fn serve(&self, listener: &TcpListener) -> Result<()> {
+    pub(super) fn serve(self, listener: &TcpListener) -> Result<()> {
         let compiled = CompiledPolicy::compile(&self.policy, &self.ctx)?;
-        let proxy = Proxy {
+        let limits = Limits::default();
+        let proxy = |sessions| Proxy {
             policy: &compiled,
             resolver: &SystemResolver,
             recorder: &self.recorder,
-            limits: &Limits::default(),
+            limits: &limits,
             loopback_ok: &[],
             broker: &self.broker,
+            allow_ech: self
+                .policy
+                .sandbox
+                .as_ref()
+                .is_some_and(|s| s.proxy_allow_ech),
+            sessions,
         };
-        proxy.serve(listener).context("accepting connections")
+        let Some(run) = self.run else {
+            return proxy(None).serve(listener).context("accepting connections");
+        };
+        let effective = CompiledPolicy::compile(&run.effective, &self.ctx)?;
+        let id = run.credential.session().to_owned();
+        let lookup = RunTaint::new(run.home, &id, &effective, &self.ctx.cwd);
+        let sessions = Sessions::new(vec![run.credential], &lookup);
+        proxy(Some(&sessions))
+            .serve(listener)
+            .context("accepting connections")
     }
 }
 
@@ -339,7 +404,7 @@ impl Recorder for AuditLog {
         });
         let event = NewEvent {
             host: "proxy",
-            session_id: &self.session,
+            session_id: c.session.unwrap_or(&self.session),
             call_id: None,
             cwd: None,
             tool: c.method.unwrap_or("unknown"),

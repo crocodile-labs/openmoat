@@ -15,12 +15,18 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 76] = [
+const PROTECTED_WRITES: [&str; 84] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
+    "**/azure-pipelines.yml",
+    "**/Jenkinsfile",
+    "**/.buildkite/**",
     "**/.husky/**",
     "**/.githooks/**",
+    "**/.pre-commit-config.yaml",
+    "**/lefthook.yml",
+    "**/.lefthook.yml",
     "**/.vscode/**",
     // JavaScript: scripts, and package-manager settings that pick the script shell
     "**/package.json",
@@ -101,10 +107,13 @@ const PROTECTED_WRITES: [&str; 76] = [
     "**/CLAUDE.md",
     "**/AGENTS.md",
     "**/.claude/**",
+    "**/.claude.json",
     "**/.codex/**",
     "**/.cursor/**",
     "**/.cursorrules",
     "**/.mcp.json",
+    // OpenMoat's own state (`kernel-self` denies it outright)
+    "**/.moat/**",
 ];
 
 /// The `taint:` section. Absent in policies written before it existed.
@@ -170,5 +179,49 @@ mod tests {
             );
         }
         assert!(Policy::parse("version: 1\ntaint: { bogus: [] }\n").is_err());
+    }
+
+    /// A path a `fs.write` pattern of the default policy names: `~` as a home,
+    /// `**/` as a project, a trailing `/**` as a file below, `*` as a word.
+    fn sample(pattern: &str) -> String {
+        let path = pattern
+            .replacen('~', "/home/u", 1)
+            .replacen("**/", "/home/u/work/repo/", 1);
+        let path = match path.strip_suffix("/**") {
+            Some(dir) => format!("{dir}/x"),
+            None => path,
+        };
+        path.replace('*', "v1")
+    }
+
+    /// One list of "files that run later": every file `runs-later` asks for and
+    /// every OpenMoat or host config file `kernel-self` denies is also a write
+    /// session taint protects. (`sandbox/patterns.rs` `RUNS_LATER` is checked
+    /// against `runs-later` in the CLI.)
+    #[test]
+    fn protected_writes_cover_runs_later_and_the_kernel_config_files() {
+        let policy = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+        let protected: Vec<_> = super::PROTECTED_WRITES
+            .iter()
+            .map(|p| crate::pattern::GlobPattern::compile(p, false).unwrap())
+            .collect();
+        let rule = |groups: &[crate::RuleGroup], id: &str| {
+            groups.iter().find(|g| g.id == id).unwrap().fs_write.clone()
+        };
+        let mut files = rule(&policy.ask, "runs-later");
+        // the binary is not a file that runs later as configuration does
+        files.extend(
+            rule(&policy.deny, "kernel-self")
+                .into_iter()
+                .filter(|p| !p.contains("/bin/moat") && !p.contains("apps/moat")),
+        );
+        assert!(files.len() > 30, "{files:?}");
+        for pattern in &files {
+            let path = sample(pattern);
+            assert!(
+                protected.iter().any(|g| g.is_match(&path)),
+                "`{pattern}` ({path}) is not in PROTECTED_WRITES"
+            );
+        }
     }
 }

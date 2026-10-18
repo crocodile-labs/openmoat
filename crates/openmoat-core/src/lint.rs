@@ -66,6 +66,14 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
         fetch_exclusions_net_matches(group, &mut out);
     }
     secrets(policy, &mut out);
+    if policy.sandbox.as_ref().is_some_and(|s| s.proxy_allow_ech) {
+        out.push(Warning {
+            rule: "sandbox.proxy_allow_ech".to_owned(),
+            message: "`moat proxy` forwards encrypted server names (ECH): an allowed host's \
+                      provider may serve another site it hosts through it"
+                .to_owned(),
+        });
+    }
     out
 }
 
@@ -393,6 +401,14 @@ mod tests {
              env.read: ['*']\nallow:\n  - id: n\n    net: ['*', '!api.github.com']\n{secrets}"
         ));
         assert_eq!(excluded.len(), 2, "{excluded:?}");
+    }
+
+    #[test]
+    fn forwarding_encrypted_server_names_is_reported() {
+        let w = warn("version: 1\nsandbox: { proxy_allow_ech: true }\n");
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("ECH"), "{w:?}");
+        assert!(warn("version: 1\nsandbox: { proxy_allow_ech: false }\n").is_empty());
     }
 
     #[test]

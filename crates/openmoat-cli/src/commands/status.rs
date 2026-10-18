@@ -31,6 +31,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
             "agents": protection::report(&home, &binary)?,
             "policy_update": update,
             "lock_drift": drift,
+            "mcp_changes": mcp_changes(&home, &binary).unwrap_or_default(),
         }))?;
         return Ok(Code::Ok);
     }
@@ -45,6 +46,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
         )?;
     }
     healthy &= lock(&mut out, &home, &binary)?;
+    healthy &= mcp_line(&mut out, &home, &binary)?;
     healthy &= approvals(&mut out, &home)?;
     let recorded = Recorded::load(&home).unwrap_or_default();
     healthy &= hooks(&mut out, &home, &binary, &recorded)?;
@@ -56,6 +58,74 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     healthy &= audit(&mut out, &home)?;
 
     Ok(if healthy { Code::Ok } else { Code::Usage })
+}
+
+/// One line per MCP server definition or held tool that waits for `moat mcp
+/// accept` (ADR-026); empty when there is no lock, or nothing waits.
+fn mcp_changes(home: &Home, binary: &Path) -> Result<Vec<String>> {
+    let path = home.lock_path();
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    let lock = Lock::load(&path)?;
+    let cwd = std::env::current_dir().ok();
+    let found = crate::mcp::review(
+        home,
+        &lock,
+        &crate::mcp::set_up_hosts(home, binary),
+        cwd.as_deref(),
+    )?;
+    let mut lines = Vec::new();
+    if found.pinned {
+        lines.extend(
+            found
+                .changes
+                .iter()
+                .map(|c| c.describe().lines().next().unwrap_or_default().to_owned()),
+        );
+    }
+    lines.extend(
+        found
+            .unreadable
+            .iter()
+            .map(|(p, why)| format!("{} cannot be read: {why}", p.display())),
+    );
+    for (_, pins) in crate::mcp::tools::all(home)? {
+        if !pins.held.is_empty() {
+            lines.push(format!(
+                "MCP server `{}` lists {} changed or new tool(s)",
+                pins.server,
+                pins.held.len()
+            ));
+        }
+    }
+    Ok(lines)
+}
+
+/// The MCP line; `false` when something waits for `moat mcp accept`.
+fn mcp_line(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
+    match mcp_changes(home, binary) {
+        Ok(lines) if lines.is_empty() => {
+            writeln!(
+                out,
+                "mcp servers      ✔ nothing waits for `moat mcp accept`"
+            )?;
+            Ok(true)
+        }
+        Ok(lines) => {
+            for line in lines {
+                writeln!(
+                    out,
+                    "mcp servers      ✗ {line}; `moat mcp accept` shows it and asks"
+                )?;
+            }
+            Ok(false)
+        }
+        Err(error) => {
+            writeln!(out, "mcp servers      ✗ {error:#}")?;
+            Ok(false)
+        }
+    }
 }
 
 /// The policy line and, in a project with one, the repository policy line;

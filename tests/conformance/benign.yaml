@@ -68,6 +68,14 @@
 - id: benign-npm-registry
   action: { net: "https://registry.npmjs.org/react" }
   expect: { verdict: allow, rules: [registries] }
+# A token (made-up value) sent to its own service is not `token-egress`; nor
+# are values with no vendor prefix: a commit SHA, a UUID, a base64 blob
+- id: benign-github-token-in-fetch-to-github
+  action: { fetch: "https://api.github.com/user?access_token=ghp_FAKEfake0000FAKEfake0000FAKEfake00" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-fetch-commit-sha-uuid-base64
+  action: { fetch: "https://api.github.com/repos/x/y/commits/3f786850e387550fdab836ed7e6dc881de23001b?id=123e4567-e89b-12d3-a456-426614174000&b=aGVsbG8gd29ybGQgdGhpcyBpcyBhIGJhc2U2NCB0ZXN0IGJsb2I=" }
+  expect: { verdict: allow, rules: [registries] }
 - id: benign-mcp-read
   action: { mcp_tool: "mcp__github__get_pull_request" }
   expect: { verdict: allow, rules: [safe-mcp] }

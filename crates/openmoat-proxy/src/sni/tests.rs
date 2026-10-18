@@ -168,6 +168,38 @@ fn unknown_name_types_are_skipped() {
     );
 }
 
+/// An ECH or ESNI extension marks the hello, before or after the SNI, with or
+/// without one: the cleartext name may front for another.
+#[test]
+fn an_encrypted_server_name_is_reported_with_the_cleartext_one() {
+    let ech = (EXT_ECH, vec![0, 0, 1, 0, 1, 7]);
+    let esni = (EXT_ESNI, vec![0x13, 0x01, 0, 0]);
+    let sni = sni_ext(&[(0, b"front.example")]);
+    for exts in [
+        vec![sni.clone(), ech.clone()],
+        vec![ech.clone(), sni.clone()],
+        vec![sni.clone(), esni.clone()],
+    ] {
+        let raw = records(&handshake(&hello_body(&exts)), 16384);
+        assert_eq!(
+            server_name(&raw),
+            Ok(Hello::Encrypted(Some("front.example".to_owned()))),
+            "{exts:?}"
+        );
+    }
+    let raw = records(&handshake(&hello_body(&[ech])), 16384);
+    assert_eq!(server_name(&raw), Ok(Hello::Encrypted(None)));
+    // Neighbouring extension types are not taken for it.
+    let raw = records(
+        &handshake(&hello_body(&[sni, (0xfe0c, vec![]), (0xffcd, vec![])])),
+        16384,
+    );
+    assert_eq!(
+        server_name(&raw),
+        Ok(Hello::ServerName(Some("front.example".to_owned())))
+    );
+}
+
 #[test]
 fn oversized_hellos_are_refused() {
     let mut huge = vec![HANDSHAKE_CLIENT_HELLO, 0x10, 0, 0];

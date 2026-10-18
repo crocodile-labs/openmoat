@@ -5,7 +5,7 @@
 //! (a hook, a script, an agent's shell) it prints the command to run and changes
 //! nothing.
 
-use std::io::{self, BufRead as _, Write as _};
+use std::io::{self, Write as _};
 
 use anyhow::{Context as _, Result};
 use openmoat_audit::Event;
@@ -28,7 +28,7 @@ pub fn run() -> Result<Code> {
         println!("OpenMoat is not set up here; run `moat init`.");
         return Ok(Code::Usage);
     }
-    let person = crate::terminal::interactive();
+    let person = crate::terminal::person();
     let now = crate::time::now_ms();
     let today = now - now.rem_euclid(MS_PER_DAY);
     let store = home.open_audit()?;
@@ -166,10 +166,6 @@ fn pending_ask(
 fn answer(question: &str) -> Result<String> {
     print!("{question}");
     io::stdout().flush()?;
-    let mut line = String::new();
-    io::stdin()
-        .lock()
-        .read_line(&mut line)
-        .context("reading the answer")?;
+    let line = crate::terminal::read_answer().context("reading the answer")?;
     Ok(line.trim().to_ascii_lowercase())
 }

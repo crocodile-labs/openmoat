@@ -19,7 +19,6 @@ fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec<Ato
                 command,
                 &ShellContext {
                     home: &ctx.home,
-                    project: ctx.project.as_deref(),
                     cwd: &[Some(ctx.cwd.clone())],
                 },
             );

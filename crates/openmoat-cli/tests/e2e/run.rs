@@ -329,6 +329,33 @@ pub mod confined {
         );
     }
 
+    /// The proxy serves the run's session alone (ADR-027): the agent's proxy
+    /// URL carries the credential, and a request without it, or with a wrong
+    /// token, gets 407 before its host is decided.
+    #[test]
+    fn the_proxy_needs_the_runs_credential() {
+        let (sb, project) = installed_with_secret();
+        let script = r#"case "$HTTPS_PROXY" in
+               "http://$MOAT_RUN_SESSION:"*@127.0.0.1:*) echo userinfo=yes ;;
+             esac
+             addr="${HTTPS_PROXY#*@}"
+             curl -sS -m 30 -o /dev/null -w 'bare=%{http_code}\n' -x "http://$addr" http://127.0.0.1:9/
+             curl -sS -m 30 -o /dev/null -w 'wrong=%{http_code}\n' \
+               -x "http://$MOAT_RUN_SESSION:wrong-token@$addr" http://127.0.0.1:9/
+             curl -sS -m 30 -o /dev/null -w 'session=%{http_code}\n' http://127.0.0.1:9/"#;
+        let out = retried(|| run_sh(&sb, &project, script));
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        let printed = stdout(&out);
+        assert!(printed.contains("userinfo=yes"), "{shown}");
+        assert!(printed.contains("bare=407"), "{shown}");
+        assert!(printed.contains("wrong=407"), "{shown}");
+        // With the credential the request is decided: loopback is refused.
+        assert!(printed.contains("session=403"), "{shown}");
+    }
+
     /// Landlock alone leaves Unix sockets (the user's D-Bus session bus) and
     /// UDP open; the seccomp filter closes them, and `io_uring` around them.
     #[cfg(target_os = "linux")]

@@ -1,0 +1,8 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ReadMcpResourceTool",
+  "tool_input": { "server": "github", "uri": "https://api.github.com/repos/x/y/readme" },
+  "tool_use_id": "toolu_11MCP"
+}

@@ -27,6 +27,51 @@ fn verdicts(yaml: &str, cases: &[(&str, Verdict, &str)]) {
     }
 }
 
+fn secret(host: Option<&str>) -> openmoat_core::TaintSecret {
+    openmoat_core::TaintSecret {
+        source: "read /home/u/.config/token".to_owned(),
+        host: host.map(str::to_owned),
+    }
+}
+
+#[test]
+fn a_session_that_read_a_secret_reaches_only_that_secrets_host() {
+    let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+    let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    // A clean session, or one that only read untrusted content: unchanged.
+    assert!(tainted(&compiled, "registry.npmjs.org", 443, &Taint::default()).is_none());
+    let untrusted = Taint {
+        secrets: Vec::new(),
+        untrusted: Some("fetch docs.rs".to_owned()),
+    };
+    assert!(tainted(&compiled, "registry.npmjs.org", 443, &untrusted).is_none());
+    // A secret from a file belongs to no host: every host, registries too, is refused.
+    let file = Taint {
+        secrets: vec![secret(None)],
+        untrusted: None,
+    };
+    for (host, port) in [
+        ("registry.npmjs.org", 443),
+        ("api.github.com", 443),
+        ("::1", 80),
+    ] {
+        let d = tainted(&compiled, host, port, &file).unwrap();
+        assert_eq!(d.verdict, Verdict::Deny, "{host}");
+        assert_eq!(d.rules, ["session-taint"], "{host}");
+        assert!(
+            d.reasons.iter().any(|r| r.contains("start a new session")),
+            "{d:?}"
+        );
+    }
+    // A secret bound to a host still reaches that host, and only it.
+    let owned = Taint {
+        secrets: vec![secret(Some("api.example.com"))],
+        untrusted: None,
+    };
+    assert!(tainted(&compiled, "api.example.com", 443, &owned).is_none());
+    assert!(tainted(&compiled, "api.github.com", 443, &owned).is_some());
+}
+
 #[test]
 fn the_default_policy_allows_only_listed_hosts() {
     verdicts(

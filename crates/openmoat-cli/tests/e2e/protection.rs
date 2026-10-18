@@ -115,6 +115,39 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
     assert!(home.contains("No agent is protected"), "{home}");
 }
 
+/// A Claude Code older than 2.1.295 gets no `onFailure` and `doctor` says the
+/// call then runs when the hook fails; once Claude Code is updated the hook is
+/// out of date until `moat init` adds the key.
+#[test]
+fn an_older_claude_code_gets_no_on_failure_until_it_is_updated() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let old = |args: &[&str]| {
+        output(
+            sb.command()
+                .args(args)
+                .env("MOAT_CLAUDE_CODE_VERSION", "2.1.200 (Claude Code)"),
+            None,
+        )
+    };
+    let out = old(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let settings = sb.home.join(".claude/settings.json");
+    let handler = || -> Value {
+        let doc: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        doc["hooks"]["PreToolUse"][0]["hooks"][0].clone()
+    };
+    assert!(handler().get("onFailure").is_none(), "{}", handler());
+    let doctor = stdout(&old(&["doctor"]));
+    assert!(doctor.contains("no `onFailure: \"block\"`"), "{doctor}");
+    assert_eq!(agent(&sb, "claude-code")["reason"], "hook out of date");
+
+    let out = sb.moat(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(handler()["onFailure"], "block");
+    let doctor = stdout(&sb.moat(&["doctor"]));
+    assert!(!doctor.contains("onFailure"), "{doctor}");
+}
+
 /// #327: Claude Code's sandbox cannot run on native Windows, so its hook is all
 /// OpenMoat gives it there.
 #[cfg(windows)]

@@ -20,7 +20,18 @@ pub fn normalise(raw: &str, home: &str, project: Option<&str>, cwd: &str) -> Str
     // host-side `fs.read` of `~alice/.ssh/id_rsa` still has an atom to check (the
     // guarded suffix is intact; a rule naming `~alice` matches as written, and
     // a shell token with it asks through `unparseable` via `resolve`).
-    resolve(raw, home, project, Some(cwd)).unwrap_or_else(|| collapse(&format!("{cwd}/{raw}")))
+    resolve(raw, home, project, Some(cwd)).unwrap_or_else(|| collapse(&under(cwd, raw)))
+}
+
+/// `rel` below the directory `dir`. A root (`/`, `C:/`) already ends in its
+/// separator: `/` and `x` are `/x`, not `//x`, which is a UNC path naming the
+/// server `x`.
+fn under(dir: &str, rel: &str) -> String {
+    if dir.ends_with('/') {
+        format!("{dir}{rel}")
+    } else {
+        format!("{dir}/{rel}")
+    }
 }
 
 /// `normalise` for a word a shell will expand, against a working directory
@@ -76,12 +87,12 @@ fn absolute(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) -> 
     if is_absolute(&s) {
         Some(s)
     } else {
-        Some(format!("{}/{s}", cwd?))
+        Some(under(cwd?, &s))
     }
 }
 
 /// Whether `raw` still names a variable after the ones [`resolve`] expands
-/// (`HOME`, `PWD`, `project`), or holds the output of a command (`$( … )`,
+/// in a shell word (`HOME`, `PWD`), or holds the output of a command (`$( … )`,
 /// backticks): the shell replaces it with a value the path itself does not
 /// show, so the path is not known (`cat $d/id_rsa`, `cat $(cat list)`).
 #[must_use]
@@ -104,7 +115,8 @@ pub fn has_unexpanded_variable(raw: &str) -> bool {
             return braced
                 || body.starts_with(|c: char| c.is_ascii_digit() || "@*#?$!-".contains(c));
         }
-        let known = matches!(name, "HOME" | "PWD" | "project");
+        // `${project}` is the policy's syntax; in a shell word it is a variable
+        let known = matches!(name, "HOME" | "PWD");
         !(known && (!braced || body[end..].starts_with('}')))
     })
 }
@@ -297,6 +309,16 @@ mod tests {
             normalise("$HOME/.aws/credentials", "/h", Some("/p"), "/c"),
             "/h/.aws/credentials"
         );
+        // from the root, a relative path is below `/`, not a `//server` path
+        assert_eq!(
+            normalise("Users/me/.ssh/id_rsa", "/Users/me", None, "/"),
+            "/Users/me/.ssh/id_rsa"
+        );
+        assert_eq!(
+            resolve("./etc/x", "/h", None, Some("/")).as_deref(),
+            Some("/etc/x")
+        );
+        assert_eq!(normalise("x", "/h", None, "C:/"), "C:/x");
         assert_eq!(collapse("/a//b/./c/../d"), "/a/b/d");
         assert_eq!(collapse("/../x"), "/x");
     }

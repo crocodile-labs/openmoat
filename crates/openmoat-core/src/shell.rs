@@ -51,12 +51,14 @@ mod cwd;
 mod database;
 mod decoders;
 mod embedded;
+mod error;
 pub(crate) mod git;
 mod invocation;
 mod make;
 mod operands;
 mod options;
 mod path_options;
+pub(crate) mod push;
 mod sed;
 pub(crate) mod tables;
 #[cfg(test)]
@@ -64,8 +66,10 @@ mod tests;
 mod text;
 pub(crate) mod tokens;
 
+pub(crate) use error::ClassifyError;
+
 use crate::action::AtomicAction;
-use crate::lexer::{LexError, Token};
+use crate::lexer::Token;
 use crate::paths;
 
 /// Result of classifying a command line.
@@ -108,11 +112,28 @@ impl ParseOutcome {
     }
 }
 
+/// The program of a command's argv, without its directory (`/usr/bin/curl` → `curl`).
+pub(crate) fn program_name(argv: &[String]) -> &str {
+    argv.first().map_or("", |p| tokens::basename(p))
+}
+
+/// Whether the command connects where its arguments say: a program of
+/// [`tables::HOST_PROGRAMS`], or `git` with a subcommand that names a remote.
+pub(crate) fn names_hosts(argv: &[String]) -> bool {
+    let program = program_name(argv);
+    tables::HOST_PROGRAMS.contains(&program) || (program == "git" && git::names_hosts(argv))
+}
+
+/// What `${project}` is in a shell word: the shell's variable `project`, not
+/// the policy's project root. Unset it expands to nothing, which is what the
+/// word is resolved with; set by the line it is substituted (`locals.rs`), and
+/// otherwise its value is not known (`paths::has_unexpanded_variable`).
+const WORD_PROJECT: Option<&str> = None;
+
 /// Context needed to normalise paths inside a command. No I/O.
 #[derive(Debug, Clone, Copy)]
 pub struct ShellContext<'a> {
     pub home: &'a str,
-    pub project: Option<&'a str>,
     /// Every directory the command may be running in: the session's working
     /// directory, plus wherever an earlier `cd` may have moved (`cwd.rs`).
     /// `None` is a directory that cannot be known (`cd "$X"`, `cd -`).
@@ -124,13 +145,13 @@ impl ShellContext<'_> {
     /// directory for a relative word. An error when one of them is not known
     /// (`~-`, or a relative word after `cd "$X"`), which makes the command `ask`.
     pub(crate) fn paths(&self, word: &str) -> Result<Vec<String>, ClassifyError> {
-        if let Some(path) = paths::resolve(word, self.home, self.project, None) {
+        if let Some(path) = paths::resolve(word, self.home, WORD_PROJECT, None) {
             return Ok(vec![path]);
         }
         self.cwd
             .iter()
             .map(|cwd| {
-                paths::resolve(word, self.home, self.project, cwd.as_deref())
+                paths::resolve(word, self.home, WORD_PROJECT, cwd.as_deref())
                     .ok_or_else(|| ClassifyError::UnknownDirectory(word.to_owned()))
             })
             .collect()
@@ -141,12 +162,12 @@ impl ShellContext<'_> {
     /// (`crate::realpath::physical`). Empty when `word` has no `..` or its
     /// directory is not known ([`Self::paths`] already reports that).
     pub(crate) fn traversals(&self, word: &str) -> Vec<String> {
-        if let Some(path) = paths::traversal(word, self.home, self.project, None) {
+        if let Some(path) = paths::traversal(word, self.home, WORD_PROJECT, None) {
             return vec![path];
         }
         self.cwd
             .iter()
-            .filter_map(|cwd| paths::traversal(word, self.home, self.project, cwd.as_deref()))
+            .filter_map(|cwd| paths::traversal(word, self.home, WORD_PROJECT, cwd.as_deref()))
             .collect()
     }
 }
@@ -197,51 +218,6 @@ pub fn classify_globs(command: &str, ctx: &ShellContext<'_>) -> (ParseOutcome, V
     (outcome, sink.globs)
 }
 
-/// Why a command line could not be classified safely; the engine turns it into `ask`.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ClassifyError {
-    #[error(transparent)]
-    Lex(#[from] LexError),
-    #[error("command nesting deeper than {MAX_DEPTH}")]
-    TooDeep,
-    #[error("command expands to more than {MAX_ATOMS} actions")]
-    TooManyActions,
-    #[error("cannot interpret `{option}` for `{program}`")]
-    ShellOption { program: String, option: String },
-    #[error("`{program} {option}` runs code from a file or module the command line names")]
-    LoadsCode { program: String, option: String },
-    #[error("`{0}` names a path relative to a directory that is not known")]
-    UnknownDirectory(String),
-    #[error("`cd` may lead to more than {MAX_DIRS} directories")]
-    TooManyDirectories,
-    #[error("unbalanced parentheses")]
-    UnbalancedParens,
-    #[error("the shell runs text from `{0}` that the command line does not show")]
-    UnknownStdin(String),
-    #[error("`{0}` depends on a variable whose value is not known")]
-    UnknownValue(String),
-    #[error("a variable set on the line may hold more than {MAX_DIRS} combinations of values")]
-    TooManyValues,
-}
-
-impl ClassifyError {
-    /// The line could not be read in full, or a limit of the classifier was
-    /// reached: what follows may be missing from the atoms, and any line can
-    /// be padded to get here, so the call asks instead of taking the policy's
-    /// catch-all. The other errors are one part the classifier cannot model;
-    /// the rest of the line is classified around it.
-    pub(crate) fn asks(&self) -> bool {
-        matches!(
-            self,
-            Self::Lex(_)
-                | Self::TooDeep
-                | Self::TooManyActions
-                | Self::TooManyDirectories
-                | Self::TooManyValues
-        )
-    }
-}
-
 /// All lowercase letters, digits and `_`, with one letter at least: a shell
 /// variable by convention, not an environment variable.
 pub(crate) fn is_lowercase(name: &str) -> bool {
@@ -280,6 +256,8 @@ pub(crate) struct Sink {
     locals: Vec<(String, u8, Option<Vec<String>>)>,
     /// The nesting depth of the simple command being classified.
     depth: u8,
+    /// Commands that publish commits (`push.rs`).
+    pushes: Vec<push::Push>,
 }
 
 impl Sink {
@@ -334,11 +312,30 @@ impl Sink {
         self.skipped.get_or_insert(error);
     }
 
+    /// Whether `word` uses `HOME`, `PWD` or `project` after the line gave it a
+    /// value that is not known (`project=$(cat f)`, `read HOME`): path
+    /// resolution reads those names as the real home, working directory and
+    /// project, which the shell no longer does.
+    fn overrides_a_known_name(&self, word: &str) -> bool {
+        ["HOME", "PWD", "project"].iter().any(|name| {
+            let refers = word.contains(&format!("${{{name}}}"))
+                || word.match_indices(&format!("${name}")).any(|(at, _)| {
+                    !word[at + 1 + name.len()..]
+                        .starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                });
+            refers
+                && self
+                    .locals
+                    .iter()
+                    .any(|(n, d, v)| n == name && *d == self.depth && v.is_none())
+        })
+    }
+
     /// Every path `word` may name, or none when one of them is not known (skipped).
     fn paths(&mut self, ctx: &ShellContext<'_>, word: &str) -> Vec<String> {
         // `cat $d/id_rsa`: the literal path is still checked, so a deny on it wins,
         // but the file the shell opens is not known
-        if paths::has_unexpanded_variable(word)
+        if (paths::has_unexpanded_variable(word) || self.overrides_a_known_name(word))
             && self.dollar_words.iter().any(|w| w.contains(word))
         {
             // `@unknown-path <word>`: a rule can ask for a secret's file name in a

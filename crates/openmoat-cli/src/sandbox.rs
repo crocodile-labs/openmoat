@@ -21,6 +21,8 @@ pub mod bwrap;
 pub mod claude;
 pub mod codex;
 pub mod cursor;
+#[cfg(test)]
+mod differential;
 pub mod git_env;
 pub mod install;
 pub mod landlock;

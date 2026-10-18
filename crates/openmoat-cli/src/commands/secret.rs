@@ -78,6 +78,7 @@ pub fn list(args: &SecretListArgs) -> Result<Code> {
 }
 
 pub fn add(args: &SecretAddArgs) -> Result<Code> {
+    crate::terminal::refuse_agent("moat secret add")?;
     if !crate::terminal::interactive() {
         bail!("`moat secret add` must be run by a person in a terminal, not from a hook or script");
     }

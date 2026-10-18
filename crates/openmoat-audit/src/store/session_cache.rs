@@ -8,7 +8,9 @@
 //! first write, so the schema version (and older builds' view of the
 //! database) is unchanged.
 
-use rusqlite::{OptionalExtension as _, params};
+use std::time::Duration;
+
+use rusqlite::{ErrorCode, OptionalExtension as _, params};
 
 use super::{EventId, Store, StoreError, row_to_event};
 use crate::store::Event;
@@ -48,6 +50,28 @@ impl Store {
         let session_id = self.secrets.redact(session_id);
         let rows = stmt.query_map(params![session_id, after.0], row_to_event)?;
         rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    /// Whether `session_id` has an event of `host` with call id `call_id`.
+    /// The ids are redacted as [`Store::record`] redacts them.
+    pub fn session_has(
+        &self,
+        session_id: &str,
+        host: &str,
+        call_id: &str,
+    ) -> Result<bool, StoreError> {
+        let session_id = self.secrets.redact(session_id);
+        let host = self.secrets.redact(host);
+        let call_id = self.secrets.redact(call_id);
+        let found: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM events WHERE session_id = ?1 AND host = ?2 AND call_id = ?3 LIMIT 1",
+                params![session_id, host, call_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(found.is_some())
     }
 
     /// The cached state of `session_id` on `host`, if one was written.
@@ -104,5 +128,37 @@ impl Store {
             params![session_id, host, cached.digest, cached.upto.0, cached.state],
         )?;
         Ok(())
+    }
+
+    /// [`Store::set_session_cache`], without waiting for the database's write
+    /// lock: when another connection holds it, nothing is written and this
+    /// returns `Ok(false)`. The cache is only a shortcut, and the guard that
+    /// writes it is about to wait for the same lock to record its call, so it
+    /// must not wait twice. A skipped write leaves the older row, which the
+    /// next fold reads on from (the row only moves forward, never back).
+    pub fn try_set_session_cache(
+        &self,
+        session_id: &str,
+        host: &str,
+        cached: &Cached,
+    ) -> Result<bool, StoreError> {
+        self.conn.busy_timeout(Duration::ZERO)?;
+        let written = self.set_session_cache(session_id, host, cached);
+        // Restored whatever happened: a later write on this handle (the
+        // guard's record) waits for the lock as usual.
+        self.conn
+            .busy_timeout(Duration::from_millis(super::BUSY_TIMEOUT_MS))?;
+        match written {
+            Ok(()) => Ok(true),
+            Err(StoreError::Sqlite(rusqlite::Error::SqliteFailure(error, _)))
+                if matches!(
+                    error.code,
+                    ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked
+                ) =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
     }
 }

@@ -23,11 +23,26 @@ struct Payload {
     tool_name: String,
     #[serde(default)]
     tool_input: Value,
+    /// Claude Code's permission mode for the session (`default`, `acceptEdits`,
+    /// `plan`, `auto`, `dontAsk`, `bypassPermissions`).
+    #[serde(default)]
+    permission_mode: Option<String>,
 }
+
+/// Claude Code permission modes in which no question reaches a person:
+/// `bypassPermissions` skips its prompts and `dontAsk` denies whatever would
+/// prompt. An `ask` there is answered as a deny that says how to approve it.
+const MODES_WITHOUT_PROMPT: &[&str] = &["bypassPermissions", "dontAsk"];
 
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let action = map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?;
+    let event = match p.permission_mode.as_deref() {
+        Some(mode) if host == Host::ClaudeCode && MODES_WITHOUT_PROMPT.contains(&mode) => {
+            HookEvent::PreToolUseNoAsk
+        }
+        _ => HookEvent::PreToolUse,
+    };
     Ok(HookRequest {
         host,
         session_id: crate::session_or_unknown(p.session_id),
@@ -35,7 +50,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         cwd: p.cwd,
         tool: p.tool_name,
         action,
-        event: HookEvent::PreToolUse,
+        event,
     })
 }
 
@@ -80,10 +95,52 @@ fn map_tool(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Option<Actio
         },
         "Glob" => crate::glob_roots(input, cwd),
         "Grep" => crate::search_root(input, cwd),
+        "ReadMcpResourceTool" => read_mcp_resource(input)?,
+        // Entering an existing worktree moves the session, and so the project
+        // root, to `path`: read as a directory, so a deny on it holds. A new
+        // worktree (`name`) goes under the project's `.claude/worktrees/` and is
+        // left to Claude Code, as `Skill` is.
+        "EnterWorktree" => match crate::search_path(input) {
+            Some(path) => Action::FsRead {
+                path: path.to_owned(),
+            },
+            None => return Ok(None),
+        },
         name if name.starts_with("mcp__") => crate::mcp::action(name, input)?,
         _ => return Ok(None),
     };
     Ok(Some(action))
+}
+
+/// Claude Code `ReadMcpResourceTool` asks MCP `server` for the resource at
+/// `uri`: decided as that server's `read_resource` tool, with a `file:` URI read
+/// as the file it names and any other URI as a host it may contact.
+fn read_mcp_resource(input: &Value) -> Result<Action, HostError> {
+    const TOOL: &str = "ReadMcpResourceTool";
+    let server = crate::input_str(input, TOOL, "server")?;
+    let uri = crate::input_str(input, TOOL, "uri")?;
+    let (reads, hosts) = match openmoat_core::file_url_path(&uri) {
+        Some(path) => (vec![path], Vec::new()),
+        // A `file:` URI without an absolute path names no file that can be
+        // checked, so it is refused.
+        None if uri
+            .get(..5)
+            .is_some_and(|s| s.eq_ignore_ascii_case("file:")) =>
+        {
+            return Err(HostError::MalformedArguments {
+                tool: TOOL.to_owned(),
+                problem: format!("`{uri}` is a file URI without an absolute path"),
+            });
+        }
+        None => (Vec::new(), vec![uri]),
+    };
+    Ok(Action::McpTool {
+        name: format!("mcp__{server}__read_resource"),
+        reads,
+        writes: Vec::new(),
+        hosts,
+        unchecked: None,
+    })
 }
 
 /// Claude Code `Monitor` streams the output of a shell `command`, or the frames

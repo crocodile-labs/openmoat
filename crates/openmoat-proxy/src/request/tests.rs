@@ -81,6 +81,25 @@ fn plain_http_is_rewritten_to_origin_form() {
 }
 
 #[test]
+fn proxy_credentials_are_kept_for_the_proxy_and_never_forwarded() {
+    let raw = "GET http://example.com/ HTTP/1.1\r\nproxy-authorization: Basic c2Vzczp0b2s=\r\n\
+               PROXY-AUTHORIZATION: Basic b3RoZXI=\r\n\r\n";
+    let req = ok(raw);
+    let values: Vec<&[u8]> = req.credentials.iter().map(AsRef::as_ref).collect();
+    assert_eq!(values, [&b"Basic c2Vzczp0b2s="[..], &b"Basic b3RoZXI="[..]]);
+    assert!(!head(raw).to_ascii_lowercase().contains("authorization"));
+    // Never printed, so a panic or log line cannot show it.
+    assert!(!format!("{req:?}").contains("c2Vzczp0b2s"));
+    let tunnel = ok("CONNECT example.com:443 HTTP/1.1\r\nProxy-Authorization: Basic eDp5\r\n\r\n");
+    assert_eq!(tunnel.credentials.len(), 1);
+    assert!(
+        ok("CONNECT example.com:443 HTTP/1.1\r\n\r\n")
+            .credentials
+            .is_empty()
+    );
+}
+
+#[test]
 fn a_missing_host_header_or_path_is_filled_in() {
     assert_eq!(
         head("GET http://example.com:8080 HTTP/1.0\r\n\r\n"),

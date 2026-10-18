@@ -42,6 +42,12 @@ const CURSOR_ASK: &str = "this needs your approval and Cursor does not prompt fo
      hook: run `moat` to approve it, or `moat allow --last` (this session) or \
      `moat allow --last --always`, then retry";
 
+/// Appended to an `ask` that Claude Code receives as a `deny` because its
+/// permission mode (`bypassPermissions`, `dontAsk`) puts no question to a person.
+const CLAUDE_NO_PROMPT_ASK: &str = "this needs your approval and Claude Code's permission \
+     mode does not ask: run `moat` to approve it, or `moat allow --last` (this session) or \
+     `moat allow --last --always`, then retry";
+
 /// One line the model can act on: verdict, rule ids, then the reasons.
 #[must_use]
 pub fn reason_line(decision: &Decision) -> String {
@@ -253,7 +259,8 @@ impl Host {
     /// The decision as this host has to receive it. Codex's `PreToolUse` rejects
     /// `permissionDecision: "ask"` as unsupported and then runs the call, the
     /// Continue CLI ignores it and runs the call, and Cursor does not enforce
-    /// `ask` on `preToolUse` or `beforeReadFile` ([`HookEvent::PreToolUseNoAsk`]).
+    /// `ask` on `preToolUse` or `beforeReadFile` ([`HookEvent::PreToolUseNoAsk`]);
+    /// nor does Claude Code in `bypassPermissions` or `dontAsk` mode.
     /// There an `ask` reaches the host as a `deny` that says how to approve it;
     /// the audit log keeps the `ask`, which is what `moat allow --last` looks for.
     #[must_use]
@@ -262,6 +269,7 @@ impl Host {
             (Self::Codex, HookEvent::PreToolUse) => Some(CODEX_ASK),
             (Self::Continue, HookEvent::PreToolUse) => Some(CONTINUE_ASK),
             (Self::Cursor, HookEvent::PreToolUseNoAsk) => Some(CURSOR_ASK),
+            (Self::ClaudeCode, HookEvent::PreToolUseNoAsk) => Some(CLAUDE_NO_PROMPT_ASK),
             _ => None,
         };
         let mut answer = decision.clone();
@@ -313,6 +321,9 @@ pub enum HookEvent {
     PreToolUse,
     /// A tool is about to run under a hook that ignores `ask`: Cursor `preToolUse`
     /// accepts it but runs the call, and `beforeReadFile` takes only allow or deny.
+    /// Claude Code in a permission mode that puts no question to a person
+    /// (`bypassPermissions`, `dontAsk`) sends this too; there a `defer` stays a
+    /// `defer` ([`Host::decided`] turns it into an `ask` for Cursor only).
     PreToolUseNoAsk,
     /// A host settings file changed on disk (Claude Code only).
     ConfigChange {

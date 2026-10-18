@@ -19,6 +19,11 @@ const CONTENT_HANDSHAKE: u8 = 22;
 const HANDSHAKE_CLIENT_HELLO: u8 = 1;
 const EXT_SERVER_NAME: u16 = 0;
 const NAME_TYPE_HOST: u8 = 0;
+/// `encrypted_client_hello` (RFC 9849): the real server name travels in an
+/// encrypted inner `ClientHello`, the cleartext one may name a fronting host.
+const EXT_ECH: u16 = 0xfe0d;
+/// `encrypted_server_name`, the ECH drafts' predecessor (draft-ietf-tls-esni-02).
+const EXT_ESNI: u16 = 0xffce;
 
 /// What the start of a tunnel says about the server it wants.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +32,9 @@ pub enum Hello {
     Incomplete,
     /// A complete `ClientHello`; `None` when it carries no SNI.
     ServerName(Option<String>),
+    /// A complete `ClientHello` that carries an encrypted server name (ECH or
+    /// ESNI), with its cleartext SNI. The name the server acts on may be another.
+    Encrypted(Option<String>),
 }
 
 /// Why the start of a tunnel is not a `ClientHello` the proxy can check.
@@ -75,13 +83,20 @@ pub fn server_name(buf: &[u8]) -> Result<Hello, HelloError> {
                 return Err(HelloError::TooLarge);
             }
             if let Some(body) = handshake.get(4..4 + body_len) {
-                return client_hello_sni(body).map(Hello::ServerName);
+                return client_hello_sni(body).map(|(name, encrypted)| {
+                    if encrypted {
+                        Hello::Encrypted(name)
+                    } else {
+                        Hello::ServerName(name)
+                    }
+                });
             }
         }
     }
 }
 
-fn client_hello_sni(body: &[u8]) -> Result<Option<String>, HelloError> {
+/// The cleartext SNI, and whether an ECH or ESNI extension is present.
+fn client_hello_sni(body: &[u8]) -> Result<(Option<String>, bool), HelloError> {
     let mut r = Reader(body);
     r.take(2 + 32)?; // legacy_version, random
     let session_id_len = r.u8()?;
@@ -91,12 +106,13 @@ fn client_hello_sni(body: &[u8]) -> Result<Option<String>, HelloError> {
     let compression_len = r.u8()?;
     r.take(compression_len.into())?;
     if r.0.is_empty() {
-        return Ok(None);
+        return Ok((None, false));
     }
     let ext_len = r.u16()?;
     let mut exts = Reader(r.take(ext_len.into())?);
     r.end()?;
     let mut name = None;
+    let mut encrypted = false;
     while !exts.0.is_empty() {
         let kind = exts.u16()?;
         let len = exts.u16()?;
@@ -107,8 +123,9 @@ fn client_hello_sni(body: &[u8]) -> Result<Option<String>, HelloError> {
             }
             name = Some(server_name_list(data)?);
         }
+        encrypted |= kind == EXT_ECH || kind == EXT_ESNI;
     }
-    Ok(name.flatten())
+    Ok((name.flatten(), encrypted))
 }
 
 /// `ServerNameList`: at most one `host_name` entry (RFC 6066 §3).

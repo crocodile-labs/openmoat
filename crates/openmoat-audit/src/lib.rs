@@ -16,7 +16,7 @@ mod store;
 pub mod testing;
 
 pub use query::{SessionSummary, Summary};
-pub use redact::{KnownSecrets, MIN_SECRET_LEN, redact, redact_value};
+pub use redact::{KnownSecrets, MIN_SECRET_LEN, TOKEN_SHAPES, redact, redact_value, token_shape};
 pub use store::{
     AnchorCheck, BreakKind, Cached, ChainBreak, ChainReport, Event, EventId, ExportBreak,
     ExportFilter, ExportFormat, ExportReport, ExportedEvent, GENESIS, NewEvent, Store, StoreError,

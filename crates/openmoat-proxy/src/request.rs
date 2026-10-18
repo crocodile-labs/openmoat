@@ -6,6 +6,8 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+use zeroize::Zeroizing;
+
 /// Most headers one request head may carry.
 pub const MAX_HEADERS: usize = 64;
 
@@ -45,6 +47,23 @@ pub enum Target {
     },
 }
 
+/// One `Proxy-Authorization` value (ADR-027): zeroed when dropped, never
+/// printed, and never part of the head forwarded upstream.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ProxyCredential(Zeroizing<Vec<u8>>);
+
+impl std::fmt::Debug for ProxyCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProxyCredential(..)")
+    }
+}
+
+impl AsRef<[u8]> for ProxyCredential {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// A parsed request head.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
@@ -54,6 +73,8 @@ pub struct Request {
     pub target: Target,
     /// Bytes of the input the head occupied; what follows is body or tunnel data.
     pub head_len: usize,
+    /// Every `Proxy-Authorization` header the head carried, in order.
+    pub credentials: Vec<ProxyCredential>,
 }
 
 impl Request {
@@ -108,10 +129,17 @@ pub fn parse(buf: &[u8]) -> Result<Option<Request>, RequestError> {
     } else {
         http_target(method, raw_target, version, req.headers)?
     };
+    let credentials = req
+        .headers
+        .iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("proxy-authorization"))
+        .map(|h| ProxyCredential(Zeroizing::new(h.value.to_vec())))
+        .collect();
     Ok(Some(Request {
         method: method.to_owned(),
         target,
         head_len,
+        credentials,
     }))
 }
 

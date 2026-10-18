@@ -102,7 +102,6 @@ mod tests {
         let cwd = [Some("/p".to_owned())];
         let ctx = ShellContext {
             home: "/Users/me",
-            project: Some("/p"),
             cwd: &cwd,
         };
         classify(cmd, &ctx)

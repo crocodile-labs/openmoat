@@ -61,6 +61,9 @@ pub fn run(args: &InitArgs) -> Result<Code> {
 
     if dry_run {
         writeln!(out, "would lock             {}", home.lock_path().display())?;
+        if args.mcp_proxy {
+            super::mcp::wrap_servers(&home, &binary, &hosts, &[], false, true, &mut out)?;
+        }
         writeln!(out, "dry run: nothing was written")?;
     } else {
         let lock = integrity::repin(&home, &binary, integrity::HookPins::Adopt)?;
@@ -70,6 +73,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             home.lock_path().display(),
             lock.entries.len()
         )?;
+        mcp_servers(&home, &binary, args.mcp_proxy, &hosts, &mut out)?;
         if !hosts.is_empty() {
             backups(&home, &hosts, &mut out)?;
         }
@@ -77,6 +81,27 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     }
     out.finish()?;
     Ok(Code::Ok)
+}
+
+/// Pin the MCP server definitions the agents read (ADR-026) and, with
+/// `--mcp-proxy`, run their stdio servers through `moat mcp proxy`.
+fn mcp_servers(
+    home: &Home,
+    binary: &std::path::Path,
+    proxy: bool,
+    hosts: &[Host],
+    out: &mut Deferred,
+) -> Result<()> {
+    let cwd = std::env::current_dir().ok();
+    let pinned = crate::mcp::pin_current(home, binary, cwd.as_deref())?;
+    writeln!(
+        out,
+        "✔ mcp servers      {pinned} definitions pinned; a changed or new one waits for `moat mcp accept`"
+    )?;
+    if proxy {
+        super::mcp::wrap_servers(home, binary, hosts, &[], false, false, out)?;
+    }
+    Ok(())
 }
 
 /// Refuse, before anything is written, a binary an agent could replace; the
@@ -263,9 +288,9 @@ fn choose_hosts(
             config.dir().display()
         )?;
         out.flush()?;
-        let mut answer = String::new();
         // End of input is a no: nothing is changed that a person did not accept.
-        if std::io::stdin().read_line(&mut answer)? == 0 {
+        let answer = crate::terminal::read_answer()?;
+        if answer.is_empty() {
             writeln!(out)?;
             continue;
         }

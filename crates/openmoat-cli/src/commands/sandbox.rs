@@ -126,6 +126,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
 /// host's files are left as they are. A re-pin accepts what it pins, so like
 /// `moat allow` it refuses over a drifted lock (#163) and without a person.
 pub fn sync() -> Result<Code> {
+    crate::terminal::refuse_agent("moat sandbox sync")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat sandbox sync` must be run by a person in a terminal, not from a hook or script"

@@ -51,18 +51,19 @@ sandboxes and `moat run` add today, or the planned answer from the
 
 | # | Class | Hook | OS layer |
 |---|---|---|---|
-| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net` | No reads of secret paths, network only through a proxy to allowed hosts |
+| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included | No reads of secret paths, network only through a proxy to allowed hosts |
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, and MCP path arguments | Only under `moat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
 | T5 | Supply-chain execution (`curl … \| sh`, unknown installs) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; package installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries) |
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) ask (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and asks under an `ask` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands; a line not read in full or past a classifier limit asks, so padding cannot turn a deny into a defer | The sandbox bounds what any spelling can reach |
-| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy) | *Planned:* MCP stdio proxy with description pinning (1.0) |
+| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `moat mcp accept` (ADR-026) | Opt-in: `moat mcp proxy` pins each tool's description and input schema, hides a changed or new tool until `moat mcp accept`, and with `--sandbox` starts the server under `moat run` |
 | T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `moat allow\\|doctor\\|init\\|policy\\|secret\\|trust\\|uninstall` and `moat sandbox sync`; the lock denies everything after drift; Claude Code `ConfigChange` blocks a drifted settings file; a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `moat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); *planned:* signed policy (1.0) |
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/moat` and to the recorded binary, its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `moat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
 | T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts; `cloud-metadata` denies metadata and link-local services; `local-net` defers localhost to the agent's own prompt; `moat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host defers to the agent's own prompt (ADR-017, ADR-025); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `moat run`, and host sandboxes with `sandbox.proxy_port`, go through `moat proxy` |
+| T13 | Publishing through a push: an injected agent commits a token or a CI workflow change and pushes, so the secret is published or CI runs the change with the repository's secrets | The push check ([POLICY.md §4.2](POLICY.md#42-the-push-check)) reads the commits a `git push` or `gh pr create` would send: a known token format or a brokered secret's value in an added line or a message denies (`push-secret`); a change to a `runs-later` file in a session that read untrusted content or a secret asks (`push-runs-later`); a push it cannot check within 2 s or 8 MiB asks (`push-unchecked`) | None: the push goes to a host the policy allows |
 
 ## 4. Out of scope
 
@@ -77,6 +78,14 @@ sandboxes and `moat run` add today, or the planned answer from the
 
 These hold for the current code. Each is a design consequence or a tracked gap, not
 something OpenMoat claims to stop.
+
+- **MCP servers start before OpenMoat sees a call.** A host starts its MCP servers when
+  a session begins, outside every sandbox. When a definition changed or was added and
+  no person accepted it, OpenMoat denies that server's tool calls, but the command has
+  already run once. Only `moat mcp proxy --sandbox` or `moat run` confines it. Without
+  `moat mcp proxy`, a server can change its tool descriptions unseen. With it, the
+  first listing is trusted, and prompts, resources, tool results and remote (HTTP)
+  servers are not pinned. Plugin and managed MCP servers are not read (ADR-026).
 
 - **Outside the sandboxes, the hook decides alone.** `moat run` (below) is the one
   place OpenMoat applies a sandbox itself. In the Standard tier (ADR-018), `moat init`
@@ -233,14 +242,39 @@ something OpenMoat claims to stop.
   `CMakeLists.txt`, `pom.xml`, `build.gradle`, `*.csproj`, `Rakefile`, `conftest.py`,
   `.cargo/config.toml`, …; POLICY.md §4.1) and agent instruction files ask, and so
   do writes to the paths a policy adds under `taint.protected_writes`.
-- **Session taint is minimal.** It follows host tool calls only: proxied connections
-  carry no session. It does not count these as untrusted content: shell network to
+- **Token shapes are checked where the guard sees them, and only the known ones.**
+  `token-egress` denies a GitHub, OpenAI/Anthropic, AWS, Slack, Google, npm or GitLab
+  token going to a host that is not its service's, allowed relays included (POLICY.md
+  §6). It sees URLs, web search queries, MCP URL arguments and the arguments of a
+  command that connects to a host and of commands piped into it. It does not see a token
+  in a file the command uploads (`curl -d @file`), a here-document, a variable whose
+  value is not in the command line, a config file (`.curlrc`), a proxy variable that
+  redirects the request, an encoded or split token, MCP arguments other than URLs, or a
+  token of any other format: no entropy guessing, so tokens without a vendor prefix
+  (and generic `Authorization: Bearer` values) pass. A token sent to its own service is
+  not checked, whatever account it belongs to; a self-hosted GitLab or GitHub Enterprise
+  server is not the service's host, so a token sent there is denied.
+- **Session taint is minimal.** It follows host tool calls only. `moat run`'s proxy
+  applies it to the run's connections (ADR-027): after a hook-visible call of a linked
+  agent session read secret material, a request to any host but that secret's own is
+  refused. As the run's profiles stand, a hook inside `moat run` cannot reach the
+  OpenMoat state directory, so it writes no links and the proxy has no history to apply
+  (ADR-027, Consequences). Connections through the standalone `moat proxy` (the host
+  sandboxes' `sandbox.proxy_port`) carry no session, and taint does not apply to them.
+  It does not count these as untrusted content: shell network to
   allowed hosts (`gh pr view`, `git pull`), an allowed command that reads secrets at run
   time (a project script), or a command OpenMoat cannot classify. A secret that leaves
   through an allowed command without a `net` atom (`npm test`) is not seen. With the
   default policy, `secrets-paths` denies, so only the secrets broker (#172) or a policy
   that asks for secret reads can taint a session. An edited or deleted audit event
   clears taint until `moat doctor` reports the broken chain.
+- **A proxy credential is shared by everything in its session.** `moat run`'s proxy
+  serves only requests that carry the run's credential (ADR-027), which keeps other
+  local programs and other runs off it. The credential sits in the agent's environment,
+  so every command in the run's sandbox has it; they all are the session. A process of
+  the same user outside the sandbox that can read the agent's environment (`ps eww` on
+  some systems, `/proc/<pid>/environ` on Linux) can use the session too. The standalone
+  `moat proxy` asks for no credential, so any local process may use it.
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**
   `openmoat-proxy` holds the value of each `secrets:` entry. It refuses and records
   (`proxy-secret`) any request to another host whose head, or plain-HTTP body, carries
@@ -256,6 +290,9 @@ something OpenMoat claims to stop.
     injects the value there in clear text, but only for a secret that opts in with
     `plain_http: true`, which `moat policy lint` flags for any host off this machine;
   - covert channels such as timing, or data hidden in requests to the owner host;
+  - before the proxy: `moat guard` denies a placeholder in a URL, web search or
+    connecting command's arguments to another host (`placeholder-egress`), but not one
+    in a file, a here-document, an environment variable or an encoded form;
   - an agent that asks the user to paste the secret into the conversation;
   - the owner host itself misusing or reflecting the token;
   - traffic that does not go through `moat proxy`: the agent's own requests and
@@ -278,6 +315,10 @@ something OpenMoat claims to stop.
   - Codex's own API requests then go through `moat proxy` too. Its API hosts
     (`api.openai.com`, `chatgpt.com`) need a `fetch` allow rule, or Codex cannot reach
     its model.
+- **An allowed host can front for another site on the same provider.** `moat proxy`
+  checks the cleartext TLS server name against the CONNECT host and refuses an
+  encrypted one (ECH, unless `sandbox.proxy_allow_ech`), but it does not see the HTTP
+  `Host` header inside the tunnel, which some CDNs still route by.
 - **When the hook fails, most hosts run the call.** The host rows below come from
   each host's documentation or source as of 2026-10-07 ([Claude Code hooks][cc-hooks],
   [Codex hooks][codex-hooks] and [`pre_tool_use.rs`][codex-pre],
@@ -289,26 +330,38 @@ something OpenMoat claims to stop.
 
   | Case | Claude Code | Codex | Cursor | Continue CLI |
   |---|---|---|---|---|
-  | Hook binary missing or cannot start | runs the call | runs the call | blocks: `moat init` sets `failClosed` (*unverified* for a missing binary; Cursor runs a shell string, which exits 127) | runs the call |
-  | Hook crashes or exits non-zero, not 2, without output | runs the call | runs the call | blocks (`failClosed`) | runs the call |
-  | Hook times out | runs the call | runs the call | blocks (`failClosed`) | runs the call (a killed hook counts as exit 0) |
+  | Hook binary missing or cannot start | 2.1.295 and later: blocks, `moat init` sets `onFailure: "block"` on `PreToolUse`; before: runs the call | runs the call | blocks: `moat init` sets `failClosed` (*unverified* for a missing binary; Cursor runs a shell string, which exits 127) | runs the call |
+  | Hook crashes or exits non-zero, not 2, without output | 2.1.295 and later: blocks (`onFailure`); before: runs the call | runs the call | blocks (`failClosed`) | runs the call |
+  | Hook times out | 2.1.295 and later: blocks (`onFailure`); before: runs the call | runs the call | blocks (`failClosed`) | runs the call (a killed hook counts as exit 0) |
   | Timeout: host default / set by `moat init` | 600 s / 600 s (`ConfigChange` 60 s) | 600 s / 600 s | not documented (*unverified*) / 600 s | 600 s / 600 s (Claude Code's entry) |
   | Hook prints no or malformed JSON, exit 0 | runs the call | runs the call | blocks (permission hooks) | runs the call |
   | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks |
   | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
   | Ours: tool OpenMoat does not know | defer (no output: Claude Code's own prompt and rules decide), rule `ungoverned`, recorded | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | as Claude Code |
-  | Ours: no decision within 10 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
+  | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | not applicable: `cn` fires no hooks (below) |
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
   turns its own panics into a deny. A crash that bypasses that (killed, aborted, out of
-  memory) or a missing binary leaves Claude Code, Codex and `cn` with no way to block:
-  none of them has a fail-closed setting; Claude Code's own deny rules for secrets and
-  OpenMoat's files, which `moat init` writes on every OS, still hold for its file tools
-  then. A `guard` that hangs denies after 10 s, well
-  before any host timeout `moat init` sets, so the host never reaches the timeout that
-  would run the call; that deny goes to a side file (`~/.moat/guard-hangs.log`, which
-  `moat doctor` reports), not the audit log, because what hangs may be the audit log.
+  memory) or a missing binary leaves Codex and `cn` with no way to block: neither has a
+  fail-closed setting. Claude Code has one since 2.1.295 (`onFailure: "block"` on a
+  `command` hook: a hook that cannot start, crashes, exits other than 0 or 2, or times
+  out then blocks the call as exit 2 does). `moat init` writes it on the `PreToolUse`
+  entry only when the `claude` on `PATH` reports 2.1.295 or later, because the docs do
+  not say what an older Claude Code does with a key it does not know, and one hook entry
+  its settings schema rejects can stop every hook from running. With an older Claude
+  Code, or none on `PATH` (an IDE-only install), the key is left out and `moat doctor`
+  warns. A key already written is kept, also after a downgrade below 2.1.295, which then
+  depends on that older version ignoring it. `ConfigChange` gets no `onFailure`: a broken
+  `moat` would then block every settings reload. Before 2.1.295, Claude Code's own deny
+  rules for secrets and OpenMoat's files, which `moat init` writes on every OS, still
+  hold for its file tools. A `guard` that hangs denies after 30 s, well
+  before any host timeout `moat init` sets (60 s for the settings-change hook, 600 s
+  for tool calls), so the host never reaches the timeout that would run the call; that
+  deny goes to a side file (`~/.moat/guard-hangs.log`, which `moat doctor` reports with
+  the step the guard was stuck in), not the audit log, because what hangs may be the
+  audit log. The limit is wall-clock time, so a heavily loaded machine can reach it
+  with a call that is only slow; the call is then denied, never allowed.
 
   [cc-hooks]: https://code.claude.com/docs/en/hooks
   [codex-hooks]: https://developers.openai.com/codex/hooks
@@ -372,7 +425,14 @@ something OpenMoat claims to stop.
   `Glob` returns names, not contents, and `Grep` searches the whole directory
   whatever its `glob` filter.
 - **The terminal check is not a boundary.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`,
-  `moat sandbox sync` and `moat doctor --accept` check for a TTY. The `kernel-self` rules and the lock are what stop an agent from
+  `moat sandbox sync`, `moat mcp accept`/`wrap`/`unwrap` and `moat doctor --accept` check
+  for a TTY, and refuse when an
+  agent (`claude`, `codex`, `cursor-agent`, or `moat run`) is among their parent
+  processes; answers are read from `/dev/tty`. An agent can still detach a process from
+  its own tree (a double fork, `setsid`, a launchd or systemd job), which the parent
+  check cannot see; on Windows only the TTY is checked; and Cursor's editor agent runs its
+  commands in the same process tree as the person's own terminals there, so it is not told
+  apart. The `kernel-self` rules and the lock are what stop an agent from
   re-pinning or granting itself anything.
 - **Repository rules are hook-only, and a repository can block itself.** A
   repository policy is merged into the hook decision only. Host sandboxes and
@@ -426,6 +486,17 @@ something OpenMoat claims to stop.
   as it was at export time, no more. Exported cells are the redacted store cells.
   A secret shape that redaction learned after an event was recorded stays in that
   event.
+- **What the push check sees.** It looks for token formats with a vendor prefix and
+  for brokered values the guard can read (not keychain ones), in the lines a push's
+  commits add and in their messages: a secret of no known format, an encoded or split
+  value, and anything in a binary file are pushed. It reads the repository when the call
+  is decided, so a commit made later on the same command line (`git commit -am x && git
+  push`) is not checked, and neither is a push by another program (a script, `curl` to
+  the forge's API) or one moved to another repository by a variable an earlier call
+  exported. What the remote has is taken from the remote-tracking branches git knows
+  of: commits git believes the remote has are not checked again, even if the remote has
+  dropped them since. A sample
+  token in a project's test data denies the push too; a person pushes it from a terminal.
 - **What audit redaction guarantees.** The value of a brokered secret of 8 bytes or
   more never appears verbatim, in any letter case, in a row the proxy records, nor in
   the row of a call the policy decides in `moat guard` when the secret has a `file`

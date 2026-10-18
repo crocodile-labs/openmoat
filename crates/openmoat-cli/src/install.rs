@@ -1,6 +1,7 @@
 //! Host hook installation.
 
 mod binary;
+mod claude_version;
 mod dirs;
 mod hook_file;
 pub mod self_paths;
@@ -65,6 +66,10 @@ pub struct HookSpec {
     pub matcher: &'static str,
     /// Seconds the host waits for `moat guard` before treating it as failed.
     pub timeout: u64,
+    /// Whether the entry asks the host to block the call when `moat guard`
+    /// fails to run, crashes or times out (Claude Code `onFailure`), where the
+    /// host's version knows the key ([`HostConfig::blocks_on_failure`]).
+    pub block_on_failure: bool,
 }
 
 /// Seconds a host waits for a tool-call hook. Long enough for a person to
@@ -75,55 +80,76 @@ const CONFIG_HOOK_TIMEOUT_S: u64 = 60;
 /// Seconds `moat guard` may take before it denies on its own. A host that times
 /// a hook out treats it as failed, and Claude Code, Codex and the Continue CLI
 /// then run the call; below every timeout above, so the host gets the deny.
-pub const GUARD_BUDGET_S: u64 = 10;
+///
+/// The watchdog measures wall-clock time, which includes the time the guard
+/// waits to be scheduled. A guard decides in 10–20 ms, but on a machine loaded
+/// by parallel builds (load average near 100) a call can wait seconds for a CPU
+/// and for the audit database's lock; 10 s denied such calls that were only
+/// slow. 30 s leaves room for that and stays half the settings-change timeout.
+pub const GUARD_BUDGET_S: u64 = 30;
 const _: () = assert!(GUARD_BUDGET_S < CONFIG_HOOK_TIMEOUT_S);
 const _: () = assert!(GUARD_BUDGET_S < TOOL_HOOK_TIMEOUT_S);
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
-const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|mcp__.*";
+/// `Skill` and `EnterWorktree` without a `path` are recorded and left to Claude
+/// Code's own permission flow; changing this list makes existing entries stale,
+/// which `moat doctor` and `moat status` report with "run `moat init`".
+const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|mcp__.*";
 
 const CLAUDE_CODE_HOOKS: &[HookSpec] = &[
     HookSpec {
         event: "PreToolUse",
         matcher: TOOL_MATCHER,
         timeout: TOOL_HOOK_TIMEOUT_S,
+        block_on_failure: true,
     },
     HookSpec {
         event: "ConfigChange",
         matcher: "user_settings|project_settings|local_settings",
         timeout: CONFIG_HOOK_TIMEOUT_S,
+        block_on_failure: false,
     },
 ];
 
 /// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
-/// web search and hosted tools have no hook.
+/// web search and hosted tools have no hook. Codex has no key that blocks a
+/// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
+/// failed, reports the error, and continues the tool call"
+/// (<https://learn.chatgpt.com/docs/hooks>), so `guard` itself must answer.
 const CODEX_HOOKS: &[HookSpec] = &[HookSpec {
     event: "PreToolUse",
     matcher: "Bash|apply_patch|mcp__.*",
     timeout: TOOL_HOOK_TIMEOUT_S,
+    block_on_failure: false,
 }];
 
+/// Cursor blocks a failed hook through `failClosed` on every entry
+/// ([`HookFormat::Cursor`]), not through `block_on_failure`.
 const CURSOR_HOOKS: &[HookSpec] = &[
     HookSpec {
         event: "beforeShellExecution",
         matcher: "",
         timeout: TOOL_HOOK_TIMEOUT_S,
+        block_on_failure: false,
     },
     HookSpec {
         event: "beforeMCPExecution",
         matcher: "",
         timeout: TOOL_HOOK_TIMEOUT_S,
+        block_on_failure: false,
     },
     HookSpec {
         event: "beforeReadFile",
         matcher: "",
         timeout: TOOL_HOOK_TIMEOUT_S,
+        block_on_failure: false,
     },
     HookSpec {
         event: "preToolUse",
         matcher: "",
         timeout: TOOL_HOOK_TIMEOUT_S,
+        block_on_failure: false,
     },
 ];
 
@@ -145,6 +171,10 @@ pub struct HostConfig {
     pub settings_path: PathBuf,
     pub hooks: &'static [HookSpec],
     pub format: HookFormat,
+    /// Whether the host's version knows `onFailure`; asked only when an
+    /// entry with [`HookSpec::block_on_failure`] lacks the key, so commands
+    /// that never compare entries (`uninstall`) never ask.
+    pub blocks_on_failure: fn() -> bool,
 }
 
 /// The environment variable that moves `host`'s configuration directory, and
@@ -194,11 +224,16 @@ impl HostConfig {
             Host::Codex => ("hooks.json", CODEX_HOOKS, HookFormat::Nested),
             _ => ("hooks.json", CURSOR_HOOKS, HookFormat::Cursor),
         };
+        let blocks_on_failure: fn() -> bool = match host {
+            Host::ClaudeCode => claude_version::blocks_on_failure,
+            _ => || false,
+        };
         Ok(Self {
             host,
             settings_path: dir.join(file),
             hooks,
             format,
+            blocks_on_failure,
         })
     }
 
@@ -239,6 +274,13 @@ impl HostConfig {
     /// Remove OpenMoat's hook entries from the parsed hook file `root`.
     pub fn remove(&self, root: &mut serde_json::Value) -> bool {
         hook_file::remove(root, self)
+    }
+
+    /// Whether an installed entry that should block the call when `moat guard`
+    /// fails lacks `onFailure`, because this host's version does not know it
+    /// or no `claude` is on `PATH`: the host then runs a call whose hook failed.
+    pub fn runs_calls_when_hook_fails(&self) -> bool {
+        hook_file::lacks_on_failure(self)
     }
 }
 

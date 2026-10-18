@@ -82,6 +82,23 @@ pub(super) fn note_builtin(args: &[Word], program: &str, home: &str, sink: &mut 
     }
 }
 
+/// `read`, `mapfile`, `readarray` and `getopts` set the variables they name to
+/// text the line does not show: each name-shaped argument is noted as a shell
+/// variable whose value is not known (an option's value noted too only makes
+/// a path unknown).
+pub(super) fn note_read_targets(args: &[Word], program: &str, sink: &mut Sink) {
+    if !matches!(program, "read" | "mapfile" | "readarray" | "getopts") {
+        return;
+    }
+    let is_name = |t: &str| {
+        t.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+    for word in args.iter().filter(|w| is_name(&w.text)) {
+        sink.note_local(&word.text, None);
+    }
+}
+
 /// The words of a `for` header after `in`, when each is known text.
 pub(super) fn loop_values(words: &[Word], home: &str) -> Option<Vec<String>> {
     words

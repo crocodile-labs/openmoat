@@ -28,14 +28,19 @@ mod guard;
 mod home_screen;
 mod host_failures;
 #[cfg(unix)]
+mod human_only;
+#[cfg(unix)]
 mod install_path;
 mod listings;
 mod lock;
+mod mcp;
 mod moatbench;
 mod paths;
+mod permission_mode;
 mod policy_upgrade;
 mod protection;
 mod proxy;
+mod push;
 mod replay_report;
 mod repo_policy;
 mod run;

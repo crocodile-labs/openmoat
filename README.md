@@ -58,8 +58,8 @@ limit is in this repository.
 - **Policy tools.** `moat policy check` shows any verdict in advance, `moat edit`
   shows the diff before it applies, and `moat policy upgrade` keeps your changes.
 - **Fails closed.** If its own check errors or hangs, the call is blocked. The
-  exception: if the `moat` binary is missing, Claude Code and Codex run calls
-  unchecked ([Limits](#limits)).
+  exception: if the `moat` binary is missing, Codex and Claude Code before 2.1.295
+  run calls unchecked ([Limits](#limits)).
 - **MoatBench.** `moat bench` scores OpenMoat, or any agent hook, against the
   bundled attack and workflow scenarios ([MOATBENCH.md](docs/MOATBENCH.md)).
 - **Single binary** for macOS, Linux and Windows, written in Rust, about 10 ms per
@@ -199,8 +199,10 @@ configures the sandbox and fills the gaps between them.
   sandbox covers only `Bash`, `PowerShell` and `Monitor`. On Linux, plain `moat run`
   does not protect files inside the project; `moat run --isolate` does.
 - **Tools no hook exposes** are not seen (Codex web search and hosted tools).
-- **A missing hook binary:** if `moat` is missing or killed, Claude Code and Codex run
-  the call unchecked; `moat status` reports it.
+- **A missing hook binary:** if `moat` is missing or killed, Codex and Claude Code
+  before 2.1.295 run the call unchecked; `moat status` reports it. With Claude Code
+  2.1.295 or later, `moat init` sets the hook's `onFailure: "block"`, so the call is
+  blocked.
 
 The full list, with the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 

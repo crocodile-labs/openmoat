@@ -19,6 +19,7 @@ use crate::protection;
 use crate::render::Deferred;
 
 mod json;
+mod mcp;
 mod sandboxes;
 mod warnings;
 
@@ -36,6 +37,7 @@ enum Area {
     Sandbox,
     Audit,
     Service,
+    Mcp,
 }
 
 /// The `moat doctor` line for the proxy user service (`moat proxy install`,
@@ -121,6 +123,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let hook_files = hooks(&mut report, &home, &binary)?;
     if let Some(lock) = &lock {
         hook_pins(&mut report, lock, &home, &hook_files);
+        mcp::lines(&mut report, &home, lock, &binary);
     }
     if let Some(policy) = &policy {
         sandboxes::sandboxes(
@@ -291,6 +294,7 @@ fn accept(
     policy_lints: bool,
     intact: bool,
 ) -> Result<()> {
+    crate::terminal::refuse_agent("moat doctor --accept")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat doctor --accept` must be run by a person in a terminal, not from a hook or script"
@@ -302,7 +306,12 @@ fn accept(
         );
     }
     if intact {
-        writeln!(report.out, "nothing to accept: lock is intact")?;
+        // MCP definitions are not files of the lock: accepted on their own, after
+        // a person has seen each change.
+        if home.lock_path().is_file() {
+            mcp::accept(report, home, binary)?;
+        }
+        writeln!(report.out, "nothing else to accept: lock is intact")?;
         return Ok(());
     }
     let lock = integrity::repin(home, binary, HookPins::Keep)?;
@@ -314,7 +323,7 @@ fn accept(
     report
         .problems
         .retain(|(area, _)| !matches!(area, Area::Lock | Area::Binary));
-    Ok(())
+    mcp::accept(report, home, binary)
 }
 
 /// The closing line, the output and the exit code.
@@ -377,6 +386,13 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                         config.settings_path.display()
                     ),
                 );
+                if config.runs_calls_when_hook_fails() {
+                    report.warn(&format!(
+                        "{name:<16} runs a tool call when its hook fails to start, crashes or \
+                         times out: no `claude` 2.1.295 or later on PATH, so the hook has no \
+                         `onFailure: \"block\"`; update Claude Code, then run `moat init`"
+                    ));
+                }
             }
             HookState::Missing if !config.host_present() => {
                 report.note(&format!("{name:<16} host not found"));
