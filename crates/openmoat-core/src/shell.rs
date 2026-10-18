@@ -108,11 +108,16 @@ impl ParseOutcome {
     }
 }
 
+/// What `${project}` is in a shell word: the shell's variable `project`, not
+/// the policy's project root. Unset it expands to nothing, which is what the
+/// word is resolved with; set by the line it is substituted (`locals.rs`), and
+/// otherwise its value is not known (`paths::has_unexpanded_variable`).
+const WORD_PROJECT: Option<&str> = None;
+
 /// Context needed to normalise paths inside a command. No I/O.
 #[derive(Debug, Clone, Copy)]
 pub struct ShellContext<'a> {
     pub home: &'a str,
-    pub project: Option<&'a str>,
     /// Every directory the command may be running in: the session's working
     /// directory, plus wherever an earlier `cd` may have moved (`cwd.rs`).
     /// `None` is a directory that cannot be known (`cd "$X"`, `cd -`).
@@ -124,13 +129,13 @@ impl ShellContext<'_> {
     /// directory for a relative word. An error when one of them is not known
     /// (`~-`, or a relative word after `cd "$X"`), which makes the command `ask`.
     pub(crate) fn paths(&self, word: &str) -> Result<Vec<String>, ClassifyError> {
-        if let Some(path) = paths::resolve(word, self.home, self.project, None) {
+        if let Some(path) = paths::resolve(word, self.home, WORD_PROJECT, None) {
             return Ok(vec![path]);
         }
         self.cwd
             .iter()
             .map(|cwd| {
-                paths::resolve(word, self.home, self.project, cwd.as_deref())
+                paths::resolve(word, self.home, WORD_PROJECT, cwd.as_deref())
                     .ok_or_else(|| ClassifyError::UnknownDirectory(word.to_owned()))
             })
             .collect()
@@ -141,12 +146,12 @@ impl ShellContext<'_> {
     /// (`crate::realpath::physical`). Empty when `word` has no `..` or its
     /// directory is not known ([`Self::paths`] already reports that).
     pub(crate) fn traversals(&self, word: &str) -> Vec<String> {
-        if let Some(path) = paths::traversal(word, self.home, self.project, None) {
+        if let Some(path) = paths::traversal(word, self.home, WORD_PROJECT, None) {
             return vec![path];
         }
         self.cwd
             .iter()
-            .filter_map(|cwd| paths::traversal(word, self.home, self.project, cwd.as_deref()))
+            .filter_map(|cwd| paths::traversal(word, self.home, WORD_PROJECT, cwd.as_deref()))
             .collect()
     }
 }

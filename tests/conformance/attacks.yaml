@@ -786,6 +786,12 @@
   threat: T1
   action: { shell: "cd ~ && cat .ssh/id_rsa" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# `${project}` in a command is the shell's variable, empty when unset: this reads
+# the key, and was allowed as the project file `/p/Users/me/.ssh/id_rsa`
+- id: T1-project-variable-in-a-command-is-the-shells
+  threat: T1
+  action: { shell: "cat ${project}/Users/me/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
 # from `/`, a relative path was joined as `//Users/…`, a UNC path no rule names
 - id: T1-cd-root-then-relative-key
   threat: T1

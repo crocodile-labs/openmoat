@@ -92,7 +92,7 @@ fn absolute(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) -> 
 }
 
 /// Whether `raw` still names a variable after the ones [`resolve`] expands
-/// (`HOME`, `PWD`, `project`), or holds the output of a command (`$( … )`,
+/// in a shell word (`HOME`, `PWD`), or holds the output of a command (`$( … )`,
 /// backticks): the shell replaces it with a value the path itself does not
 /// show, so the path is not known (`cat $d/id_rsa`, `cat $(cat list)`).
 #[must_use]
@@ -115,7 +115,8 @@ pub fn has_unexpanded_variable(raw: &str) -> bool {
             return braced
                 || body.starts_with(|c: char| c.is_ascii_digit() || "@*#?$!-".contains(c));
         }
-        let known = matches!(name, "HOME" | "PWD" | "project");
+        // `${project}` is the policy's syntax; in a shell word it is a variable
+        let known = matches!(name, "HOME" | "PWD");
         !(known && (!braced || body[end..].starts_with('}')))
     })
 }

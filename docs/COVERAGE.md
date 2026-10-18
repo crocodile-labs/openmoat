@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 91 | 46 | 3 |
+| T1 | Secret exfiltration via shell | 92 | 46 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 39 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 59 | 57 | 3 |
@@ -85,6 +85,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-cd-into-ssh-then-cat` (attacks): Deny [secrets-paths]
 - `T1-cd-then-git-dash-c-relative` (attacks): Deny [secrets-paths]
 - `T1-cd-home-then-relative-key` (attacks): Deny [secrets-paths]
+- `T1-project-variable-in-a-command-is-the-shells` (attacks): Deny [secrets-paths]
 - `T1-cd-root-then-relative-key` (attacks): Deny [secrets-paths]
 - `T1-cd-twice-then-head-credentials` (attacks): Deny [secrets-paths]
 - `T1-cd-config-then-gh-token` (attacks): Deny [secrets-paths]
