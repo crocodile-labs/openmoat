@@ -89,7 +89,13 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
         if let Some(message) = exposed_source(policy, secret) {
             warn(message);
         }
-        if secret.plain_http && !secret.is_loopback() {
+        if secret.plain_http && secret.is_loopback() {
+            warn(format!(
+                "`plain_http: true` names {}, a loopback host; `moat proxy` never connects to \
+                 a loopback address, so the secret is never injected",
+                secret.host
+            ));
+        } else if secret.plain_http {
             warn(format!(
                 "`plain_http: true` sends the value to {} in clear text, readable by anyone \
                  on the network path",
@@ -401,7 +407,25 @@ mod tests {
         let w = warn(&policy("api.example.com"));
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("in clear text"), "{w:?}");
-        assert!(warn(&policy("localhost")).is_empty());
-        assert!(warn(&policy("127.0.0.1")).is_empty());
+    }
+
+    #[test]
+    fn plain_http_injection_to_loopback_is_reported_as_never_injected() {
+        let policy = |host: &str| {
+            format!(
+                "version: 1\ndeny:\n  - id: s\n    env.read: ['*']\nallow:\n  - id: n\n    net: ['*']\n\
+                 secrets:\n  - id: s\n    host: {host}\n    header: X-K\n    source: {{ env: K }}\n    \
+                 plain_http: true\n"
+            )
+        };
+        for host in ["localhost", "api.localhost", "127.0.0.1", "127.8.9.10"] {
+            let w = warn(&policy(host));
+            assert_eq!(w.len(), 1, "{host}: {w:?}");
+            assert!(
+                w[0].contains("never connects to a loopback address"),
+                "{w:?}"
+            );
+            assert!(!w[0].contains("in clear text"), "{w:?}");
+        }
     }
 }

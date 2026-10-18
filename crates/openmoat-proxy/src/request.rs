@@ -135,7 +135,7 @@ fn http_target(
     let (raw_authority, path) = rest.split_at(end);
     let path = path.split('#').next().unwrap_or_default();
     let (host, port) = authority(raw_authority, Some(80))?;
-    check_framing(headers)?;
+    check_framing(version, headers)?;
 
     let mut connection_tokens: Vec<String> = Vec::new();
     for h in headers
@@ -176,7 +176,10 @@ fn http_target(
 /// Refuse the framing ambiguities request smuggling relies on: both
 /// `Content-Length` and `Transfer-Encoding`, repeated or list-form length,
 /// or a `Transfer-Encoding` whose tokens are anything but a single `chunked`.
-fn check_framing(headers: &[httparse::Header<'_>]) -> Result<(), RequestError> {
+/// HTTP/1.0 has no transfer codings, so a 1.0 request carrying
+/// `Transfer-Encoding` is malformed (RFC 9112 §6.1): a server may read its
+/// body by another rule.
+fn check_framing(version: u8, headers: &[httparse::Header<'_>]) -> Result<(), RequestError> {
     const AMBIGUOUS: RequestError = RequestError::Unsupported(
         "ambiguous body framing (Content-Length with Transfer-Encoding, repeated, \
          list-form length, or a transfer coding other than chunked)",
@@ -189,6 +192,11 @@ fn check_framing(headers: &[httparse::Header<'_>]) -> Result<(), RequestError> {
         } else if h.name.eq_ignore_ascii_case("transfer-encoding") {
             encodings.push(h.value);
         }
+    }
+    if version == 0 && !encodings.is_empty() {
+        return Err(RequestError::Malformed(
+            "Transfer-Encoding in an HTTP/1.0 request".to_owned(),
+        ));
     }
     if lengths.len() > 1 || (!lengths.is_empty() && !encodings.is_empty()) {
         return Err(AMBIGUOUS);

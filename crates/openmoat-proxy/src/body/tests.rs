@@ -70,6 +70,8 @@ fn chunked_framing_a_server_could_read_differently_is_malformed() {
         b"5\r\nhello..",              // data not followed by CRLF
         b"0\r\n\n",                   // bare LF in the trailers
         b"10000000000000000\r\n",     // over u64
+        b"80000000\r\n",              // 2^31, over the chunk limit
+        b"ffffffff\r\n",              // 2^32 - 1
     ] {
         assert_eq!(
             body_len(Framing::Chunked, bad, 1),
@@ -80,6 +82,19 @@ fn chunked_framing_a_server_could_read_differently_is_malformed() {
     }
     let long = [vec![b'1'], vec![b';'; MAX_LINE], b"\r\n".to_vec()].concat();
     assert_eq!(body_len(Framing::Chunked, &long, 512), Err(Malformed));
+}
+
+#[test]
+fn the_largest_chunk_size_is_two_to_the_31_minus_one() {
+    let mut end = BodyEnd::new(Framing::Chunked);
+    assert_eq!(end.feed(b"7fffffff\r\n1234"), Ok(14));
+    assert!(!end.done());
+    let mut padded = BodyEnd::new(Framing::Chunked);
+    assert_eq!(padded.feed(b"00007fffffff\r\n"), Ok(14));
+    assert_eq!(
+        BodyEnd::new(Framing::Chunked).feed(b"000080000000\r\n"),
+        Err(Malformed)
+    );
 }
 
 #[test]

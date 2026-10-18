@@ -50,6 +50,11 @@ pub(crate) struct Malformed;
 /// Longest chunk-size line (size, extensions) or trailer line, in bytes.
 const MAX_LINE: usize = 8 * 1024;
 
+/// Largest chunk size the proxy follows: 2^31 - 1. Servers that hold the size
+/// in a signed 32-bit integer read a larger one as another number, and would
+/// see a different body end.
+const MAX_CHUNK: u64 = (1 << 31) - 1;
+
 /// Follows a body as its bytes go by and says how many of them belong to it.
 #[derive(Debug)]
 pub(crate) struct BodyEnd {
@@ -211,6 +216,7 @@ fn size_line(size: u64, digits: usize, len: usize, part: Part, b: u8) -> Result<
             let size = size
                 .checked_mul(16)
                 .and_then(|s| s.checked_add(u64::from(digit)))
+                .filter(|s| *s <= MAX_CHUNK)
                 .ok_or(Malformed)?;
             Ok(next(size, digits + 1, Part::Digits))
         }

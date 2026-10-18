@@ -127,12 +127,14 @@ value from `source` and is the only component that uses it.
   that says `plain_http: true`.
 - **Never wider.** A secret opens nothing: its host still needs a `net` or `fetch` allow
   rule, or the proxy refuses it.
-- **Lint.** `moat policy lint` warns in three cases:
+- **Lint.** `moat policy lint` warns in four cases:
   - no allow rule names the host;
   - no deny rule covers a `file` source (`fs.read`) or an `env` source (`env.read`), so
     the agent could read the value itself;
   - `plain_http: true` is set for a host that is not loopback (`localhost`, `*.localhost`,
-    `127.0.0.0/8`).
+    `127.0.0.0/8`);
+  - `plain_http: true` is set for a loopback host: the proxy never connects to a loopback
+    address, so the secret is never injected.
 
 What the proxy does with them:
 

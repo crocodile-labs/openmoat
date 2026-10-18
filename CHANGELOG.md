@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- The egress proxy refuses plain-HTTP framing a server could read differently: an HTTP/1.0 request that carries `Transfer-Encoding`, and a chunk size over 2^31 - 1 ([#564](https://github.com/crocodile-labs/openmoat/pull/564)).
+- `moat policy lint` warns when a secret sets `plain_http: true` for a loopback host: the proxy never connects there, so the secret is never injected ([#564](https://github.com/crocodile-labs/openmoat/pull/564)).
+
 ## [0.5.5] - 2026-10-17
 
 Two security fixes: `moat allow --last` shows which ask it takes and asks before approving, and the egress proxy refuses numeric host spellings and more local addresses. New read-only listings: `moat allowed`, `moat secret list` and `moat doctor --format json`.
