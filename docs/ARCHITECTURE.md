@@ -397,6 +397,17 @@ oldest first (about 0.15 s per 100 000 events) and reports the first event that 
 edited (contents do not match its hash), unlinked (an event before it was deleted or
 inserted, or events were reordered) or unhashed, and exits 64.
 
+**Session cache** (`store/session_cache.rs`). Session taint is the fold of a session's
+earlier events (POLICY.md §4.1). `guard` keeps that fold per session and host in a
+`session_cache` table, with the newest event it covers and a digest of what it
+depends on: this build's version, the effective policy and context, and the working
+directory. A call reads the cache, folds only the events recorded since, and writes
+it back, so a late call in a long session stays fast (#570). A cache under another
+digest, or one that cannot be read, is ignored and the session is folded from its
+first event. The cache is outside the hash chain and never a source of truth: it can
+only hold what the events folded to. The table is created on first use, without
+changing the schema version, so older builds still open the database.
+
 **Export** (`moat audit export`, `crates/openmoat-audit/src/store/export.rs`). JSON Lines,
 oldest first, one object per chained event with the filters `--since`, `--host` and
 `--session`. Every line has `"format": "moat-audit-export-v1"` and the fields `id`

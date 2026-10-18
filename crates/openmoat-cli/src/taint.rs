@@ -12,19 +12,22 @@ use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
+use openmoat_audit::{Cached, Event, EventId};
 use openmoat_core::{Action, CompiledPolicy, Decision, Taint, Verdict};
 use openmoat_hosts::{HookEvent, Host};
+use serde::{Deserialize, Serialize};
 
 use crate::approvals::{self, Grants};
 use crate::context;
 use crate::home::Home;
+use crate::integrity::sha256_hex;
 use crate::realpath::FsPathResolver;
 
 /// The rule id the core gives a taint ask.
 const TAINT_RULE: &str = "session-taint";
 
 /// What a session was exposed to, and when it last read untrusted content.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SessionTaint {
     pub taint: Taint,
     /// When the latest call that read untrusted content was recorded. A grant
@@ -40,6 +43,12 @@ pub struct SessionTaint {
 /// recorded without a working directory is taken to have run in `cwd`. A log
 /// that cannot be read fails the call: without it the session's history is
 /// unknown, and the guard denies.
+///
+/// A session's fold is cached in the audit database with the event it reached
+/// (#570), so a call late in a long session classifies only the events since.
+/// The cache applies only under the same OpenMoat version, policy, context and
+/// directory it was computed with; otherwise, or when it cannot be read, the
+/// session is folded from its first event, as it always was.
 pub fn of_session(
     home: &Home,
     host: Host,
@@ -47,15 +56,62 @@ pub fn of_session(
     policy: &CompiledPolicy<'_>,
     cwd: &str,
 ) -> Result<SessionTaint> {
-    let events = home
-        .open_audit()?
-        .session(session)
+    let store = home.open_audit()?;
+    let digest = digest(host, policy, cwd)?;
+    let (mut out, after) = store
+        .session_cache(session, host.id())
+        .ok()
+        .flatten()
+        .filter(|cached| cached.digest == digest)
+        .and_then(|cached| Some((serde_json::from_str(&cached.state).ok()?, cached.upto)))
+        .unwrap_or((SessionTaint::default(), EventId(0)));
+    let events = store
+        .session_after(session, after)
         .context("reading this session from the audit log")?;
-    let mut out = SessionTaint::default();
-    // Every guard call folds the whole session again, so a long session would
-    // classify each of its calls once per later call. Agents repeat calls
-    // (`git status`, the same file reads); each distinct one, in its working
-    // directory, is classified once here.
+    fold(&mut out, &events, host, policy, cwd)?;
+    if let Some(last) = events.last() {
+        // Best effort: without the cache the next call folds more, nothing else.
+        let cached = Cached {
+            digest,
+            upto: last.id,
+            state: serde_json::to_string(&out)?,
+        };
+        if let Ok(writable) = openmoat_audit::Store::open_existing(&home.audit_path()) {
+            let _ = writable.set_session_cache(session, host.id(), &cached);
+        }
+    }
+    Ok(out)
+}
+
+/// What the fold of a session depends on besides its events: this build's
+/// classifier, the host, the effective policy and its context, and the
+/// directory a call recorded without one is taken to have run in.
+fn digest(host: Host, policy: &CompiledPolicy<'_>, cwd: &str) -> Result<String> {
+    let mut bytes = Vec::new();
+    for part in [
+        env!("CARGO_PKG_VERSION").to_owned(),
+        host.id().to_owned(),
+        serde_json::to_string(policy.policy())?,
+        format!("{:?}", policy.context()),
+        cwd.to_owned(),
+    ] {
+        // length-prefixed, so no two different lists of parts hash alike
+        bytes.extend_from_slice(&part.len().to_le_bytes());
+        bytes.extend_from_slice(part.as_bytes());
+    }
+    Ok(sha256_hex(&bytes))
+}
+
+/// Add what `events` (of the session, oldest first) exposed it to into `out`.
+fn fold(
+    out: &mut SessionTaint,
+    events: &[Event],
+    host: Host,
+    policy: &CompiledPolicy<'_>,
+    cwd: &str,
+) -> Result<()> {
+    // Agents repeat calls (`git status`, the same file reads); each distinct
+    // one, in its working directory, is classified once per fold.
     let mut seen: HashMap<(String, String), Taint> = HashMap::new();
     for event in events
         .iter()
@@ -85,7 +141,7 @@ pub fn of_session(
         }
         out.taint.absorb(exposure);
     }
-    Ok(out)
+    Ok(())
 }
 
 /// Everything `answered` needs about the call being decided.

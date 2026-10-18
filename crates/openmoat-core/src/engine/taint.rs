@@ -6,6 +6,8 @@
 //! resulting [`Taint`] then goes into [`CompiledPolicy::with_taint`], which can
 //! only turn an outcome stricter.
 
+use serde::{Deserialize, Serialize};
+
 use super::{CompiledPolicy, EvalContext, checked_atoms};
 use crate::action::{Action, AtomicAction};
 use crate::pattern::{GlobPattern, any_match};
@@ -25,7 +27,7 @@ const SECRET_RULE: &str = "secrets-paths";
 const TAINT_RULE: &str = "session-taint";
 
 /// Where secret material in a session came from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Secret {
     /// What brought it in, for reasons (`read /Users/me/.ssh/id_rsa`).
     pub source: String,
@@ -37,7 +39,7 @@ pub struct Secret {
 }
 
 /// What earlier calls of one session exposed it to.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Taint {
     /// Secret material the session read, de-duplicated by source.
     pub secrets: Vec<Secret>,
