@@ -246,7 +246,9 @@ fn pending_ids(home: &Home, hosts: &[Host]) -> Result<BTreeSet<String>> {
     Ok(found.changes.into_iter().map(|c| c.id).collect())
 }
 
-/// Write `edits`, record them and re-pin exactly the definitions they changed.
+/// Write `edits`, record them and re-pin exactly what they changed: the
+/// definitions, `hosts.json` (the record and the backups) and any edited file
+/// the lock pins whole.
 fn finish_edits(
     home: &Home,
     hosts: &[Host],
@@ -278,8 +280,22 @@ fn finish_edits(
     let done: Vec<Done> = edits.iter().map(|(_, d)| d.clone()).collect();
     wrap::record(home, &done, wrapping)?;
     if home.lock_path().is_file() {
+        // Without this, the change to the pinned `hosts.json` is drift that
+        // denies every tool call (`kernel-integrity`).
+        let lock = Lock::load(&home.lock_path())?;
+        let mut rewritten = vec![home.hosts_path()];
+        rewritten.extend(
+            edits
+                .iter()
+                .map(|(source, _)| source.path.clone())
+                .filter(|path| lock.pins(path)),
+        );
+        integrity::unpin(home, &[], &rewritten)?;
         let ids: BTreeSet<String> = done.iter().map(|d| d.server.id.clone()).collect();
         mcp::accept_ids(home, hosts, &ids)?;
     }
     Ok(edits.len())
 }
+
+#[cfg(test)]
+mod tests;

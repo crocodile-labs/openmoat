@@ -207,17 +207,20 @@ pub fn refuse_drift(home: &Home, doing: &str) -> Result<()> {
 }
 
 /// Forget the pins of `paths`, the host files `moat uninstall` just undid, and
-/// pin `rewritten`, the state files it just wrote (`hosts.json`). Every other
-/// pin stays as it is, so no drift elsewhere is accepted.
+/// pin `rewritten` whole, the files a person's command just wrote (`hosts.json`,
+/// or a pinned file `moat mcp wrap` changed). Every other pin stays as it is,
+/// so no drift elsewhere is accepted.
 pub fn unpin(home: &Home, paths: &[PathBuf], rewritten: &[PathBuf]) -> Result<()> {
     let lock_path = home.lock_path();
     if !lock_path.is_file() {
         return Ok(());
     }
     let mut lock = Lock::load(&lock_path)?;
+    for path in paths.iter().map(|p| key(p)) {
+        lock.codex_profiles.remove(&path);
+    }
     for path in paths.iter().chain(rewritten).map(|p| key(p)) {
         lock.entries.remove(&path);
-        lock.codex_profiles.remove(&path);
         lock.keys.remove(&path);
     }
     let fresh = Lock::pin(Path::new(&lock.binary), rewritten)?;
