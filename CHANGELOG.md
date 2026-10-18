@@ -20,6 +20,9 @@ view at the end of the file.
 - MCP arguments named in camel or kebab case (`sourcePath`, `output-dir`, `baseUrl`) are read as paths and URLs, and a write verb anywhere in a tool's name (`file_write`, `download_file`) makes its paths writes ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
 
 ### Changed
+- `moat init` shows a diff of every file it would change for an agent before asking about it, hooks and sandbox settings together ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
+- `--help` and the `moat run` banner use plain words: no ADR numbers or tier names, and the banner is two lines (`--verbose` for the rest) ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
+- A tool call over the 1 MiB payload limit is refused with a message naming the limit, instead of failing as malformed input ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
 - `moat guard` stays fast in long agent sessions: the session's taint is folded from the calls since the last one, cached in the audit database, instead of from the whole session. Late in a 5,000-call session a call took 158 ms on Linux and 370 ms on macOS; it now takes about 10 and 18 ms ([#571](https://github.com/crocodile-labs/openmoat/pull/571)).
 
 ## [0.5.6] - 2026-10-18
