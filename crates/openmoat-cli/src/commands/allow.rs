@@ -150,7 +150,10 @@ fn approve(
         let path = home.grants_path();
         let mut grants = Grants::load(&path)?;
         let now = crate::time::now_ms();
-        grants.grant(&host, &session, action, now);
+        // The newest event so far: a taint ask is answered only if the session
+        // read nothing untrusted after it, whatever the clock says.
+        let seen = home.open_audit()?.latest_id()?.map_or(0, |id| id.0);
+        grants.grant(&host, &session, action, now, Some(seen));
         grants.save(&path, now)?;
         let granted = format!(
             "✔ session {session} on {host} may {} for {}",

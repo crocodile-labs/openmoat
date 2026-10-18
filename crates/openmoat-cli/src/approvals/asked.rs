@@ -77,7 +77,7 @@ mod tests {
         assert_eq!(read("~/notes.md", None), read("/h/notes.md", None));
         assert_eq!(read("notes.md", None), None, "relative without a cwd");
         let mut g = Grants::default();
-        g.grant("cursor", "c1", &asked, NOW);
+        g.grant("cursor", "c1", &asked, NOW, None);
         assert!(g.matches("cursor", "c1", &read("/p/notes.md", None).unwrap(), NOW));
         assert!(!g.matches("cursor", "c1", &read("/p/other.md", None).unwrap(), NOW));
         let write = Action::FsWrite {

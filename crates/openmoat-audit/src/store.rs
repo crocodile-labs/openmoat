@@ -391,6 +391,15 @@ impl Store {
             .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?;
         Ok(u64::try_from(n).unwrap_or_default())
     }
+
+    /// The id of the newest event, if any. Ids only grow, so an event recorded
+    /// later has a larger one whatever the clock says.
+    pub fn latest_id(&self) -> Result<Option<EventId>, StoreError> {
+        let id: Option<i64> = self
+            .conn
+            .query_row("SELECT MAX(id) FROM events", [], |r| r.get(0))?;
+        Ok(id.map(EventId))
+    }
 }
 
 const SELECT_CHAINED: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules, reasons, latency_us, prev_hash, hash FROM events";

@@ -269,8 +269,10 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   protected file.
 - A protected-path ask from untrusted content can be answered once per file: `moat allow
   --last` after the ask grants that exact file, and the grant stands while it is newer
-  than the session's latest untrusted read (the ask says how). Once the session reads
-  more untrusted content, the file asks again. A grant made before that read does not
+  than the session's latest untrusted read (the ask says how). Newer is by audit row, not
+  by the clock: the grant records the newest row it saw, so a clock that steps back cannot
+  reorder them (a grant written by an older version has no row and is compared by time).
+  Once the session reads more untrusted content, the file asks again. A grant made before that read does not
   answer it, other files and sessions still ask, and an ask from a secret the session
   read is never answered by a grant.
 - `taint: { protected_writes: [<glob>, …] }` adds path globs (§3.2, `~` and `${project}`

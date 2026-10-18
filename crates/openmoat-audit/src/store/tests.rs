@@ -95,6 +95,22 @@ fn record_and_read_back() {
 }
 
 #[test]
+fn the_latest_id_follows_the_rows_not_the_clock() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.latest_id().unwrap(), None);
+    let d = decision(Verdict::Allow, "dev-shell", "ok");
+    let a = Action::Shell {
+        command: "ls".into(),
+    };
+    let first = store.record_at(&sample(&d, &a), 2_000).unwrap();
+    assert_eq!(store.latest_id().unwrap(), Some(first));
+    // A clock stepped back: the later row is older by time, newer by id.
+    let second = store.record_at(&sample(&d, &a), 1_000).unwrap();
+    assert!(second.0 > first.0);
+    assert_eq!(store.latest_id().unwrap(), Some(second));
+}
+
+#[test]
 fn redaction_keeps_stored_json_valid_and_secret_free() {
     let store = Store::open_in_memory().unwrap();
     let d = decision(Verdict::Allow, "dev-shell", "ok");

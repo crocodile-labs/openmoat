@@ -30,6 +30,10 @@ pub struct SessionTaint {
     /// When the latest call that read untrusted content was recorded. A grant
     /// must be newer: one made before a later read did not see that content.
     pub untrusted_last_ms: Option<i64>,
+    /// The audit row of that call. Rows only grow, so a grant that records the
+    /// newest row it saw is ordered against the read even if the clock stepped
+    /// back.
+    pub untrusted_last_row: Option<i64>,
 }
 
 /// What the earlier calls of `session` on `host` exposed it to. A call
@@ -77,6 +81,7 @@ pub fn of_session(
         };
         if exposure.untrusted.is_some() {
             out.untrusted_last_ms = out.untrusted_last_ms.max(Some(event.ts_ms));
+            out.untrusted_last_row = out.untrusted_last_row.max(Some(event.id.0));
         }
         out.taint.absorb(exposure);
     }
@@ -129,15 +134,17 @@ pub fn answered(
     if with_secrets.rules.iter().any(|r| r == TAINT_RULE) {
         return Ok(tainted);
     }
-    let granted_at = approvals::approvable(call.action, Some(call.cwd), call.user_home)
+    let grant = approvals::approvable(call.action, Some(call.cwd), call.user_home)
         .map(|asked| {
-            Grants::load(&call.home.grants_path())
-                .map(|g| g.granted_at(call.host.id(), call.session, &asked, now_ms))
+            Grants::load(&call.home.grants_path()).map(|g| {
+                g.newest(call.host.id(), call.session, &asked, now_ms)
+                    .map(|g| (g.granted_at_ms, g.audit_row))
+            })
         })
         .transpose()?
         .flatten();
-    if let Some(at) = granted_at
-        && at > last_read
+    if let Some((at, row)) = grant
+        && after_read(at, row, last_read, session.untrusted_last_row)
     {
         let mut decision = untainted;
         decision.reasons.push(
@@ -156,6 +163,17 @@ pub fn answered(
     Ok(decision)
 }
 
+/// Whether a grant made at `granted_ms`, having seen the audit log up to row
+/// `seen_row`, came after the untrusted read recorded at `read_ms` in row
+/// `read_row`. By row when both are known: rows only grow, the clock may step
+/// back. A grant written by an older build has no row and is ordered by time.
+fn after_read(granted_ms: i64, seen_row: Option<i64>, read_ms: i64, read_row: Option<i64>) -> bool {
+    match (seen_row, read_row) {
+        (Some(seen), Some(read)) => seen >= read,
+        _ => granted_ms > read_ms,
+    }
+}
+
 /// Whether a call decided `verdict` may have run: it was allowed, or it asked
 /// a host that can ask (Codex turns an ask into a deny). A person may have
 /// declined an ask; that is not recorded, so it counts as run.
@@ -163,4 +181,27 @@ fn ran(host: Host, verdict: Verdict) -> bool {
     host.answer(&HookEvent::PreToolUse, &Decision::new(verdict))
         .verdict
         != Verdict::Deny
+}
+
+#[cfg(test)]
+mod tests {
+    use super::after_read;
+
+    #[test]
+    fn a_grant_is_ordered_against_the_read_by_row_whatever_the_clock_says() {
+        // The clock stepped back after the read: the grant looks older by
+        // time, but it saw the read's row, so it answers.
+        assert!(after_read(1_000, Some(7), 2_000, Some(5)));
+        assert!(after_read(1_000, Some(5), 2_000, Some(5)));
+        // The clock stepped back before the read: the grant looks newer by
+        // time, but the read came after every row it saw, so it does not.
+        assert!(!after_read(3_000, Some(4), 2_000, Some(5)));
+    }
+
+    #[test]
+    fn a_grant_without_a_row_is_ordered_by_time() {
+        assert!(after_read(3_000, None, 2_000, Some(5)));
+        assert!(!after_read(2_000, None, 2_000, Some(5)));
+        assert!(!after_read(1_000, None, 2_000, Some(5)));
+    }
 }
