@@ -57,6 +57,7 @@ mod make;
 mod operands;
 mod options;
 mod path_options;
+pub(crate) mod push;
 mod sed;
 pub(crate) mod tables;
 #[cfg(test)]
@@ -285,6 +286,8 @@ pub(crate) struct Sink {
     locals: Vec<(String, u8, Option<Vec<String>>)>,
     /// The nesting depth of the simple command being classified.
     depth: u8,
+    /// Commands that publish commits (`push.rs`).
+    pushes: Vec<push::Push>,
 }
 
 impl Sink {

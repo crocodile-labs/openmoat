@@ -295,6 +295,58 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   that cannot be read denies the call (`kernel-error`).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
 
+### 4.2 The push check
+
+A push publishes commits: CI runs them with the repository's secrets, and anyone who can
+read the remote can read them. After the steps above, and only when the call is not
+already denied, `moat guard` looks at what a push would publish. A push is `git push`,
+in any spelling the classifier reads (after git's global options, `-C`, `cd`, `sh -c`,
+`sudo`, `$( … )`), and `gh pr create`, which pushes the current branch when it is not
+pushed yet. `gh pr merge` publishes nothing local and is not checked.
+
+- **Which commits.** What the push sends (each refspec's source; every branch for
+  `--all`, `--branches`, `--mirror` or a glob refspec; every tag for `--tags` or
+  `--mirror`; `HEAD` when none is named), minus what the remote has: with no refspec the
+  current branch's upstream (`@{u}`); otherwise, or without an upstream, the remote's
+  default branch (`refs/remotes/<remote>/HEAD`), else every branch of that remote git
+  knows of; for a URL or a path in place of a remote's name, every remote-tracking
+  branch. The remote is the one named, else git's own choice (`branch.<b>.pushRemote`,
+  `remote.pushDefault`, `branch.<b>.remote`, `origin`). Commits the remote is not known
+  to have are all checked, so a first push checks the whole history. Deletions, a
+  directory that is not a repository and a branch with no commits check nothing.
+- **How.** git runs read-only in each directory the push may run in (`git log`,
+  `rev-parse`, `config --get`), with the options that would let a repository's config
+  start a program turned off (external diff, text conversion, signature check, file
+  system monitor). Every line a commit's diff adds (a merge's against its first parent)
+  and every commit message is searched; removed and unchanged lines are not, and
+  neither are binary files. Needs git 2.31 or later.
+- **`push-secret` (deny).** A line or message holds a known token format with a
+  vendor prefix (GitHub, OpenAI and Anthropic, AWS access key ids, Slack, Google API,
+  npm, GitLab; the audit log's redaction patterns, without JSON web tokens, which are
+  common in test data), or the value of a brokered secret (§2.1) the guard can read (file
+  and environment sources, 8 bytes or longer, any letter case). The reason names the
+  commit, the file and the kind of token, never the value. A token added and removed
+  again inside the push still denies: the push sends both commits. Remove it from the
+  commits, or push from a terminal yourself.
+- **`push-runs-later` (ask).** The session read untrusted content or a secret (§4.1),
+  and the push changes (adds, edits or deletes) one of the project files `runs-later`
+  names (§6), at any depth and in any letter case. In a clean session such a push
+  stays as the policy decided it.
+- **`push-unchecked` (ask).** What the push publishes could not be checked: git took
+  longer than 2 s for all of a call's pushes together, the diffs exceed 8 MiB (the
+  commit messages or the list of changed files 1 MiB), git failed, a refspec names no
+  commit, or the push may run in a directory or repository that is not known (`cd
+  "$X"`, `git --git-dir=…`, a git option that keeps the command as written, or
+  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, `GIT_OBJECT_DIRECTORY`,
+  `GIT_ALTERNATE_OBJECT_DIRECTORIES` or `GIT_CEILING_DIRECTORIES` set on the line).
+- **Otherwise** the decision stands unchanged: the check adds nothing to a push it has
+  no finding for. Codex and the Continue CLI cannot ask, so the two asks reach them as
+  a deny; a `moat allow` grant does not answer them.
+- **Limits.** The check reads what git shows at the time of the call: a commit made by
+  a later part of the same command line (`git commit -am x && git push`), a variable
+  that moves git to another repository exported by an earlier tool call, and a push
+  through a program other than `git` and `gh` (an API call, a script) are not seen.
+
 ## 5. Verdicts and what the host does
 
 The verdict is the same for every host; the response document is the host's own format.
@@ -323,6 +375,9 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
 | `config-change` | allow | a Claude Code `ConfigChange` for a settings file that is not pinned, or still matches the lock; a change that names no file is allowed only while every pinned file matches the lock; recorded |
 | `session-taint` | ask | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
+| `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
+| `push-runs-later` | ask | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
+| `push-unchecked` | ask | what a push would publish could not be checked within 2 s or 8 MiB, or where it runs is not known (§4.2) |
 | `approved-session` | allow | an `ask` for a shell command that a person granted with `moat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `moat allow --always` |
 | `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |

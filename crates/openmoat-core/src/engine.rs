@@ -223,6 +223,23 @@ impl CompiledPolicy<'_> {
         (atoms, unparsed.map(|u| u.reason))
     }
 
+    /// The commands of `action` that publish local commits (`git push`, `gh pr
+    /// create`), each with the directories it may run in. Only a shell command
+    /// has any.
+    #[must_use]
+    pub fn pushes(&self, action: &Action) -> Vec<crate::shell::push::Push> {
+        let Action::Shell { command } = action else {
+            return Vec::new();
+        };
+        crate::shell::push::pushes(
+            command,
+            &crate::shell::ShellContext {
+                home: &self.ctx.home,
+                cwd: &[Some(self.ctx.cwd.clone())],
+            },
+        )
+    }
+
     /// Decide one host action, resolving shell programs through `resolver` so
     /// that `executables` pins and installation pins are enforced, and paths
     /// through `paths` so a symlink cannot move a read or write past a rule.

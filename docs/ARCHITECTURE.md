@@ -45,8 +45,9 @@ host payload (stdin)
                                 └─► combine     strictest wins ⇒ Decision
                                       └─► session grant   ask or defer on a granted call ⇒ allow
                                             └─► session taint     earlier calls in the audit log ⇒ allow or defer may become ask
-                                                  └─► audit record      failure ⇒ deny [kernel-error]
-                                                        └─► hook response (stdout) + exit code
+                                                  └─► push check        git push / gh pr create: what it publishes ⇒ may become deny or ask
+                                                        └─► audit record      failure ⇒ deny [kernel-error]
+                                                              └─► hook response (stdout) + exit code
 ```
 
 `moat guard --host <id>` (`commands/guard.rs`) runs this once per tool call and
@@ -96,13 +97,18 @@ exits. There is no daemon.
    asks again. A taint from a
    secret the session read is never answered this way. A log or session event that cannot be read is a `kernel-error` deny. An edited
    or deleted event is found by the hash chain (`moat doctor`), not on every call.
-10. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot
+10. **Push.** `CompiledPolicy::pushes` lists the shell command's pushes (`git push`,
+    `gh pr create`; core `shell/push.rs`) with the directories each may run in. Unless the
+    call is already denied, `push.rs` runs git read-only there, within 2 s for the whole
+    call, and tightens the decision: `push-secret` deny, `push-runs-later` or
+    `push-unchecked` ask (POLICY.md §4.2). With no finding the decision is unchanged.
+11. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot
    be written, the decision becomes a `kernel-error` deny: an unrecorded call is not
    allowed.
-11. **Respond.** The adapter renders the host's response document. `deny` also prints
+12. **Respond.** The adapter renders the host's response document. `deny` also prints
     the reason line on stderr and exits 2.
 
-A panic inside steps 1–10 is caught and answered with a deny and exit 2, because
+A panic inside steps 1–11 is caught and answered with a deny and exit 2, because
 Claude Code treats exit 101 as a non-blocking error. A `guard` with no answer after
 30 s (`GUARD_BUDGET_S`, below every hook timeout `moat init` sets) writes a deny,
 unrecorded, and exits 2, since a host that times the hook out runs the call

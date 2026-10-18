@@ -267,6 +267,7 @@ fn classify_as_written(
     }
     let argv: Vec<String> = words.iter().map(|w| w.text.clone()).collect();
     let program = basename(&argv[0]);
+    super::push::note(&argv, program, ctx, sink);
 
     if program == "git" {
         git::push_shell(&argv, ctx, sink)?;

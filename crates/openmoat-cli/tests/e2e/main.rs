@@ -39,6 +39,7 @@ mod permission_mode;
 mod policy_upgrade;
 mod protection;
 mod proxy;
+mod push;
 mod replay_report;
 mod repo_policy;
 mod run;

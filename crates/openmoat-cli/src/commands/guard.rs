@@ -23,7 +23,7 @@ use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, INTEGRITY_RULE, Lock};
 use crate::realpath::FsPathResolver;
-use crate::{render, secrets, taint, time};
+use crate::{push, render, secrets, taint, time};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const UNGOVERNED_RULE: &str = "ungoverned";
@@ -245,6 +245,9 @@ fn evaluate(
         tainted,
         crate::time::now_ms(),
     )?;
+    // Last: a push is checked for what it would publish (push.rs); only tightens.
+    let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
+    let decision = push::check(&compiled.pushes(action), known, tainted, decision);
     Ok((Some(request), decision))
 }
 

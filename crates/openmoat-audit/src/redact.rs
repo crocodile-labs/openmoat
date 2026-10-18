@@ -16,8 +16,8 @@ use crate::StoreError;
 
 const REPLACEMENT: &str = "[redacted]";
 
-/// Credential patterns and what replaces each match.
-const RULES: &[(&str, &str)] = &[
+/// Credential patterns that run before [`TOKEN_SHAPES`], and what replaces each match.
+const NAMED: &[(&str, &str)] = &[
     // Named credentials in key=value or key: value form; keep the key.
     (
         r"(?i)\b((?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|authorization|private[_-]?key)\s*[=:]\s*)(['\x22]?)((?:bearer|basic)\s+)?[^\s'\x22&;]+(['\x22]?)",
@@ -28,15 +28,30 @@ const RULES: &[(&str, &str)] = &[
         "Bearer [redacted]",
     ),
     (r"(?i)\bbasic\s+[A-Za-z0-9+/=]{8,}", "Basic [redacted]"),
-    // Well-known token shapes.
-    (r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b", REPLACEMENT),
-    (r"\bgithub_pat_[A-Za-z0-9_]{20,}\b", REPLACEMENT),
-    (r"\bsk-(?:[a-z]+-)?[A-Za-z0-9]{16,}\b", REPLACEMENT),
-    (r"\bAKIA[0-9A-Z]{16}\b", REPLACEMENT),
-    (r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b", REPLACEMENT),
-    (r"\bAIza[0-9A-Za-z_-]{30,}\b", REPLACEMENT),
-    (r"\bnpm_[A-Za-z0-9]{30,}\b", REPLACEMENT),
-    (r"\bglpat-[A-Za-z0-9_-]{20,}\b", REPLACEMENT),
+];
+
+/// Well-known token formats with a vendor prefix, by name. Rarely anything
+/// else, so `moat guard` also refuses a push that adds one ([`token_shape`]).
+pub const TOKEN_SHAPES: &[(&str, &str)] = &[
+    (
+        "a GitHub token",
+        r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b",
+    ),
+    ("a GitHub token", r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    (
+        "an OpenAI or Anthropic key",
+        r"\bsk-(?:[a-z]+-)?[A-Za-z0-9]{16,}\b",
+    ),
+    ("an AWS access key id", r"\bAKIA[0-9A-Z]{16}\b"),
+    ("a Slack token", r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"),
+    ("a Google API key", r"\bAIza[0-9A-Za-z_-]{30,}\b"),
+    ("an npm token", r"\bnpm_[A-Za-z0-9]{30,}\b"),
+    ("a GitLab token", r"\bglpat-[A-Za-z0-9_-]{20,}\b"),
+];
+
+/// Credential patterns that run after [`TOKEN_SHAPES`]. A JSON web token is
+/// masked but not in [`TOKEN_SHAPES`]: sample ones are common in test data.
+const TAIL: &[(&str, &str)] = &[
     (
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
         REPLACEMENT,
@@ -45,15 +60,46 @@ const RULES: &[(&str, &str)] = &[
     (r"(://[^/\s:@]+:)[^@/\s]+@", "${1}[redacted]@"),
 ];
 
-/// [`RULES`] compiled; `None` when one does not compile, which a test rules
+/// Every pattern in the order it runs, with what replaces its match.
+fn rules() -> impl Iterator<Item = (&'static str, &'static str)> {
+    let shapes = TOKEN_SHAPES.iter().map(|(_, p)| (*p, REPLACEMENT));
+    NAMED
+        .iter()
+        .copied()
+        .chain(shapes)
+        .chain(TAIL.iter().copied())
+}
+
+/// [`rules`] compiled; `None` when one does not compile, which a test rules
 /// out. Every text is then redacted whole rather than masked by fewer patterns.
 static PATTERNS: LazyLock<Option<Vec<(Regex, &'static str)>>> = LazyLock::new(|| {
-    RULES
-        .iter()
-        .map(|(pattern, replacement)| Regex::new(pattern).map(|re| (re, *replacement)))
+    rules()
+        .map(|(pattern, replacement)| Regex::new(pattern).map(|re| (re, replacement)))
         .collect::<Result<_, _>>()
         .ok()
 });
+
+/// [`TOKEN_SHAPES`] compiled, with their names; `None` as for [`PATTERNS`].
+static SHAPES: LazyLock<Option<Vec<(Regex, &'static str)>>> = LazyLock::new(|| {
+    TOKEN_SHAPES
+        .iter()
+        .map(|(name, pattern)| Regex::new(pattern).map(|re| (re, *name)))
+        .collect::<Result<_, _>>()
+        .ok()
+});
+
+/// What kind of token `text` holds, if it holds one of [`TOKEN_SHAPES`]. If
+/// the shapes could not be compiled, every text counts as holding one.
+#[must_use]
+pub fn token_shape(text: &str) -> Option<&'static str> {
+    let Some(shapes) = SHAPES.as_deref() else {
+        return Some("a token (the patterns could not be compiled)");
+    };
+    shapes
+        .iter()
+        .find(|(re, _)| re.is_match(text))
+        .map(|(_, name)| *name)
+}
 
 /// Values shorter than this many bytes are not masked by exact match: a short
 /// value (`admin`, `8080`) also occurs in ordinary text, and masking it there
@@ -103,6 +149,12 @@ impl KnownSecrets {
             .build()
             .map(|re| Self(Some(re)))
             .map_err(|_| StoreError::Secrets)
+    }
+
+    /// Whether one of the known values occurs in `text`, in any letter case.
+    #[must_use]
+    pub fn occurs_in(&self, text: &str) -> bool {
+        self.0.as_ref().is_some_and(|re| re.is_match(text))
     }
 
     /// [`redact`] after masking the known values. Idempotent.
@@ -159,12 +211,48 @@ pub fn redact_value(value: Value) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{KnownSecrets, PATTERNS, RULES, mask_patterns, redact, redact_value};
+    use super::{
+        KnownSecrets, PATTERNS, SHAPES, TOKEN_SHAPES, mask_patterns, redact, redact_value, rules,
+        token_shape,
+    };
     use serde_json::json;
 
     #[test]
     fn every_pattern_compiles() {
-        assert!(PATTERNS.as_ref().is_some_and(|p| p.len() == RULES.len()));
+        assert!(
+            PATTERNS
+                .as_ref()
+                .is_some_and(|p| p.len() == rules().count())
+        );
+        assert!(
+            SHAPES
+                .as_ref()
+                .is_some_and(|p| p.len() == TOKEN_SHAPES.len())
+        );
+    }
+
+    #[test]
+    fn token_shapes_are_named_and_ordinary_text_has_none() {
+        // Built at run time, so a push of this file holds no token-shaped line.
+        let aws = format!("AKIA{}", "FAKE0EXAMPLE".repeat(2).get(..16).unwrap());
+        assert_eq!(
+            token_shape(&format!("+ key = \"{aws}\"")),
+            Some("an AWS access key id")
+        );
+        let github = format!("ghp_{}", "Fake0Token".repeat(3));
+        assert_eq!(token_shape(&format!("x={github}")), Some("a GitHub token"));
+        for text in [
+            "fn main() {}",
+            "token: ${{ secrets.X }}",
+            "sk-short",
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijkl",
+        ] {
+            assert_eq!(token_shape(text), None, "{text}");
+        }
+        let known = KnownSecrets::new([FAKE]).unwrap();
+        assert!(known.occurs_in(&format!("+v={}", FAKE.to_ascii_uppercase())));
+        assert!(!known.occurs_in("+v=other"));
+        assert!(!KnownSecrets::default().occurs_in(FAKE));
     }
 
     #[test]

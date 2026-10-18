@@ -81,6 +81,8 @@ pub(crate) struct GitCommand<'a> {
     pub subcommand: Vec<String>,
     /// Values of `-C`, `--git-dir` and `--work-tree`.
     pub directories: Vec<&'a str>,
+    /// Values of `-C` alone, in order: git changes into each before it runs.
+    pub chdirs: Vec<&'a str>,
     /// True when an option can run a program, names the git directory or is not
     /// understood: the command line as written must be judged too.
     pub keep_original: bool,
@@ -89,6 +91,7 @@ pub(crate) struct GitCommand<'a> {
 /// Split `argv` (`argv[0]` is git) into its global options and the subcommand.
 pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
     let mut directories = Vec::new();
+    let mut chdirs = Vec::new();
     let mut keep_original = false;
     let mut i = 1;
     while let Some(arg) = argv.get(i).filter(|a| a.starts_with('-')) {
@@ -114,6 +117,9 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
         i += usize::from(inline.is_none());
         if DIRECTORIES.contains(&name) {
             directories.push(value);
+            if name == "-C" {
+                chdirs.push(value);
+            }
             keep_original |= name == GIT_DIR;
         } else if CONFIG.contains(&name) {
             let key = value
@@ -128,6 +134,7 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
     GitCommand {
         subcommand: argv[..1].iter().chain(&argv[i..]).cloned().collect(),
         directories,
+        chdirs,
         keep_original,
     }
 }

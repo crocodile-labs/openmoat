@@ -16,6 +16,7 @@ mod install;
 mod integrity;
 mod project;
 mod protection;
+mod push;
 mod realpath;
 mod render;
 mod repo;

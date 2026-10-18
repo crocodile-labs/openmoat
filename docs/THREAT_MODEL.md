@@ -63,6 +63,7 @@ sandboxes and `moat run` add today, or the planned answer from the
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/moat` and to the recorded binary, its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `moat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
 | T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts; `cloud-metadata` denies metadata and link-local services; `local-net` defers localhost to the agent's own prompt; `moat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host defers to the agent's own prompt (ADR-017, ADR-025); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `moat run`, and host sandboxes with `sandbox.proxy_port`, go through `moat proxy` |
+| T13 | Publishing through a push: an injected agent commits a token or a CI workflow change and pushes, so the secret is published or CI runs the change with the repository's secrets | The push check ([POLICY.md §4.2](POLICY.md#42-the-push-check)) reads the commits a `git push` or `gh pr create` would send: a known token format or a brokered secret's value in an added line or a message denies (`push-secret`); a change to a `runs-later` file in a session that read untrusted content or a secret asks (`push-runs-later`); a push it cannot check within 2 s or 8 MiB asks (`push-unchecked`) | None: the push goes to a host the policy allows |
 
 ## 4. Out of scope
 
@@ -439,6 +440,17 @@ something OpenMoat claims to stop.
   as it was at export time, no more. Exported cells are the redacted store cells.
   A secret shape that redaction learned after an event was recorded stays in that
   event.
+- **What the push check sees.** It looks for token formats with a vendor prefix and
+  for brokered values the guard can read (not keychain ones), in the lines a push's
+  commits add and in their messages: a secret of no known format, an encoded or split
+  value, and anything in a binary file are pushed. It reads the repository when the call
+  is decided, so a commit made later on the same command line (`git commit -am x && git
+  push`) is not checked, and neither is a push by another program (a script, `curl` to
+  the forge's API) or one moved to another repository by a variable an earlier call
+  exported. What the remote has is taken from the remote-tracking branches git knows
+  of: commits git believes the remote has are not checked again, even if the remote has
+  dropped them since. A sample
+  token in a project's test data denies the push too; a person pushes it from a terminal.
 - **What audit redaction guarantees.** The value of a brokered secret of 8 bytes or
   more never appears verbatim, in any letter case, in a row the proxy records, nor in
   the row of a call the policy decides in `moat guard` when the secret has a `file`
