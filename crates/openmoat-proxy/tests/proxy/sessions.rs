@@ -2,6 +2,7 @@
 //! per-session share of the connections.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::hash::{BuildHasher as _, Hasher as _, RandomState};
 use std::sync::OnceLock;
 
@@ -13,9 +14,12 @@ use super::*;
 /// A 64-character hex token made at run time, so no credential in these
 /// tests is a fixed value: each `RandomState` is freshly keyed.
 fn fresh_token() -> String {
-    (0..4)
-        .map(|_| format!("{:016x}", RandomState::new().build_hasher().finish()))
-        .collect()
+    let mut token = String::new();
+    for _ in 0..4 {
+        let random = RandomState::new().build_hasher().finish();
+        write!(token, "{random:016x}").unwrap();
+    }
+    token
 }
 
 /// Session `run-a`'s token, the same for the whole test run.
