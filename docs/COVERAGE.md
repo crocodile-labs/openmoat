@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 90 | 44 | 3 |
+| T1 | Secret exfiltration via shell | 90 | 46 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 39 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 59 | 57 | 3 |
@@ -57,6 +57,8 @@ the verdict and rule ids the default policy must produce for it.
 - `defer-path-through-a-transformed-variable` (ask): Defer [unparseable]
 - `defer-path-through-a-prefix-assignment` (ask): Ask [secret-names]
 - `ask-key-in-an-unknown-directory` (ask): Ask [secret-names]
+- `ask-key-under-a-project-variable-from-command-output` (ask): Ask [secret-names]
+- `ask-key-under-a-home-read-from-input` (ask): Ask [secret-names]
 - `ask-netrc-in-an-unknown-directory` (ask): Ask [secret-names]
 - `deny-env-in-an-unknown-directory` (ask): Deny [secrets-paths]
 - `ask-pem-in-an-unknown-directory` (ask): Ask [secret-names]

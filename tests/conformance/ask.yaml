@@ -1157,6 +1157,17 @@
   threat: T1
   action: { shell: "cat $X/id_rsa" }
   expect: { verdict: ask, rules: [secret-names] }
+# `HOME`, `PWD` and `project` are read as the real home, working directory and
+# project, unless the line gave them a value it does not show: then they are as
+# unknown as any other variable (`${project}` allowed the read as a project file)
+- id: ask-key-under-a-project-variable-from-command-output
+  threat: T1
+  action: { shell: "project=$(cat /p/dir.txt); cat ${project}/id_rsa" }
+  expect: { verdict: ask, rules: [secret-names] }
+- id: ask-key-under-a-home-read-from-input
+  threat: T1
+  action: { shell: "read -r HOME < /p/dir.txt; cat $HOME/id_rsa" }
+  expect: { verdict: ask, rules: [secret-names] }
 - id: ask-netrc-in-an-unknown-directory
   threat: T1
   action: { shell: "d=$(pwd); cat \"$d\"/.netrc" }

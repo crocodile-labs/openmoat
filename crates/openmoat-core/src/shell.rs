@@ -334,11 +334,30 @@ impl Sink {
         self.skipped.get_or_insert(error);
     }
 
+    /// Whether `word` uses `HOME`, `PWD` or `project` after the line gave it a
+    /// value that is not known (`project=$(cat f)`, `read HOME`): path
+    /// resolution reads those names as the real home, working directory and
+    /// project, which the shell no longer does.
+    fn overrides_a_known_name(&self, word: &str) -> bool {
+        ["HOME", "PWD", "project"].iter().any(|name| {
+            let refers = word.contains(&format!("${{{name}}}"))
+                || word.match_indices(&format!("${name}")).any(|(at, _)| {
+                    !word[at + 1 + name.len()..]
+                        .starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                });
+            refers
+                && self
+                    .locals
+                    .iter()
+                    .any(|(n, d, v)| n == name && *d == self.depth && v.is_none())
+        })
+    }
+
     /// Every path `word` may name, or none when one of them is not known (skipped).
     fn paths(&mut self, ctx: &ShellContext<'_>, word: &str) -> Vec<String> {
         // `cat $d/id_rsa`: the literal path is still checked, so a deny on it wins,
         // but the file the shell opens is not known
-        if paths::has_unexpanded_variable(word)
+        if (paths::has_unexpanded_variable(word) || self.overrides_a_known_name(word))
             && self.dollar_words.iter().any(|w| w.contains(word))
         {
             // `@unknown-path <word>`: a rule can ask for a secret's file name in a
