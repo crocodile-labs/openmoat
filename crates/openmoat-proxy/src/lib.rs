@@ -36,7 +36,7 @@ pub use audit::{Connection, RecordError, Recorder};
 pub use broker::{Broker, BrokerError, Carried, Leak, RULE_SECRET};
 pub use decide::{
     Forbidden, RULE_ADDRESS, RULE_AUDIT, RULE_REQUEST, RULE_SNI, RULE_UPSTREAM, address_policy,
-    forbidden, host as decide_host, named as address_named,
+    denied as address_denied, forbidden, host as decide_host, named as address_named,
 };
 pub use request::{MAX_HEADERS, Request, RequestError, Target, parse as parse_request};
 pub use server::{Limits, Proxy};

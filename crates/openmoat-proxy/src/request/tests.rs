@@ -138,6 +138,24 @@ fn ambiguous_or_unsupported_http_is_refused() {
 }
 
 #[test]
+fn transfer_encoding_in_an_http_1_0_request_is_malformed() {
+    for raw in [
+        "POST http://a.com/ HTTP/1.0\r\nTransfer-Encoding: chunked\r\n\r\n",
+        "POST http://a.com/ HTTP/1.0\r\ntransfer-encoding: chunked\r\nContent-Length: 4\r\n\r\n",
+        "POST http://a.com/ HTTP/1.0\r\nTransfer-Encoding: identity\r\n\r\n",
+    ] {
+        assert!(
+            matches!(parse(raw.as_bytes()), Err(RequestError::Malformed(_))),
+            "{raw:?}"
+        );
+    }
+    let length = ok("POST http://a.com/ HTTP/1.0\r\nContent-Length: 4\r\n\r\n");
+    assert_eq!((length.host(), length.port()), ("a.com", 80));
+    let chunked = ok("POST http://a.com/ HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n");
+    assert_eq!((chunked.host(), chunked.port()), ("a.com", 80));
+}
+
+#[test]
 fn well_formed_content_length_with_surrounding_whitespace_is_accepted() {
     // RFC 9112 §5.5 lets a receiver trim OWS around a header value; a plain
     // decimal integer is still a legitimate single length.

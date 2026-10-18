@@ -127,12 +127,14 @@ value from `source` and is the only component that uses it.
   that says `plain_http: true`.
 - **Never wider.** A secret opens nothing: its host still needs a `net` or `fetch` allow
   rule, or the proxy refuses it.
-- **Lint.** `moat policy lint` warns in three cases:
+- **Lint.** `moat policy lint` warns in four cases:
   - no allow rule names the host;
   - no deny rule covers a `file` source (`fs.read`) or an `env` source (`env.read`), so
     the agent could read the value itself;
   - `plain_http: true` is set for a host that is not loopback (`localhost`, `*.localhost`,
-    `127.0.0.0/8`).
+    `127.0.0.0/8`);
+  - `plain_http: true` is set for a loopback host: the proxy never connects to a loopback
+    address, so the secret is never injected.
 
 What the proxy does with them:
 
@@ -344,6 +346,8 @@ first. Differences from the hook:
   `10.0.0.5`; a NAT64 or IPv4-compatible address only by its IPv6 text). A deny rule
   matching that text still wins. Patterns starting with `*`, `?`, `[` or `{`, and name
   patterns such as `*.corp.example`, never open a private address.
+- A deny rule naming an address (`net: ["203.0.113.7"]`, `2001:db8::*`) holds for every
+  name that resolves to it, public addresses included: one such address refuses the name.
 
 ### 5.3 What an operating-system layer can enforce
 

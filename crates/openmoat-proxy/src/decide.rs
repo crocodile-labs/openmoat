@@ -6,6 +6,8 @@
 //! `ask` is refused. Cloud metadata and link-local addresses are refused
 //! whatever the policy says, by name and again after DNS resolution. Private
 //! and CGNAT addresses are refused unless an allow rule names the address.
+//! Every resolved address is also checked against the deny rules, so a deny
+//! naming an address holds for a name that resolves to it.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -172,11 +174,8 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
         Some(Forbidden::LinkLocal)
     } else if ip == AWS_METADATA_V6 {
         Some(Forbidden::Metadata)
-    } else if seg[..6] == NAT64 || seg[..6] == [0; 6] {
-        // NAT64 and the deprecated IPv4-compatible form carry an IPv4 address.
-        let [a, b] = seg[6].to_be_bytes();
-        let [c, d] = seg[7].to_be_bytes();
-        forbidden_v4(Ipv4Addr::new(a, b, c, d))
+    } else if let Some(v4) = carried_v4(ip) {
+        forbidden_v4(v4)
     } else if seg[..3] == NAT64_LOCAL {
         // The common /96 layout first, so a metadata or loopback address in it
         // is named as such; any other layout is local network all the same.
@@ -192,13 +191,25 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
     }
 }
 
-/// The part of `policy` that can open a [`Forbidden::Private`] address: its
-/// deny rules, and the allow rules' `net` and `fetch` patterns that name an
-/// address: a pattern starting with a digit or containing `:`, not starting
-/// with a glob metacharacter, and made only of what an address's text and a
-/// glob use. Everything else is denied, so a wildcard such as `*` or
-/// `*.example`, or a name such as `db.internal:5432`, never reaches the
-/// local network by DNS.
+/// The IPv4 address a well-known NAT64 (`64:ff9b::/96`) or deprecated
+/// IPv4-compatible (`::/96`) address reaches.
+fn carried_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let seg = ip.segments();
+    (seg[..6] == NAT64 || seg[..6] == [0; 6]).then(|| {
+        let [a, b] = seg[6].to_be_bytes();
+        let [c, d] = seg[7].to_be_bytes();
+        Ipv4Addr::new(a, b, c, d)
+    })
+}
+
+/// The part of `policy` that decides a resolved address: its deny rules, and
+/// the allow rules' `net` and `fetch` patterns that name an address: a pattern
+/// starting with a digit or containing `:`, not starting with a glob
+/// metacharacter, and made only of what an address's text and a glob use.
+/// Anything else is left undecided (`ask`), which neither opens a
+/// [`Forbidden::Private`] address ([`named`]) nor refuses one ([`denied`]), so
+/// a wildcard such as `*` or `*.example`, or a name such as
+/// `db.internal:5432`, never reaches the local network by DNS.
 #[must_use]
 pub fn address_policy(policy: &Policy) -> Policy {
     let allow = policy
@@ -220,8 +231,9 @@ pub fn address_policy(policy: &Policy) -> Policy {
             }
         })
         .collect();
+    // Not `deny`: only a deny rule may refuse an address the host check passed.
     Policy {
-        defaults: Defaults::All(Verdict::Deny),
+        defaults: Defaults::All(Verdict::Ask),
         deny: policy.deny.clone(),
         allow,
         ask: Vec::new(),
@@ -248,6 +260,28 @@ pub fn named(addresses: &CompiledPolicy<'_>, ip: IpAddr) -> bool {
     addresses
         .evaluate_atomic(&atom)
         .is_some_and(|d| d.verdict == Verdict::Allow)
+}
+
+/// The deny rules of `addresses` (compiled from [`address_policy`]) that
+/// match `ip`, if any: a deny naming an address holds for every name that
+/// resolves to it. Matched in canonical text form, and for a NAT64 or
+/// IPv4-compatible address also as the IPv4 address it reaches. Allow rules
+/// never widen anything here; an address no deny rule matches gives `None`.
+#[must_use]
+pub fn denied(addresses: &CompiledPolicy<'_>, ip: IpAddr) -> Option<Decision> {
+    let ip = ip.to_canonical();
+    let carried = match ip {
+        IpAddr::V6(v6) => carried_v4(v6).map(IpAddr::V4),
+        IpAddr::V4(_) => None,
+    };
+    [Some(ip), carried].into_iter().flatten().find_map(|ip| {
+        let atom = AtomicAction::Fetch {
+            host: ip.to_string(),
+        };
+        addresses
+            .evaluate_atomic(&atom)
+            .filter(|d| d.verdict == Verdict::Deny)
+    })
 }
 
 #[cfg(test)]

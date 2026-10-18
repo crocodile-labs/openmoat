@@ -15,7 +15,12 @@ use openmoat_proxy::{Broker, Connection, Limits, Proxy, RecordError, Recorder, R
 const POLICY: &str = r#"
 version: 1
 defaults: { "*": deny, fetch: ask }
+deny:
+  - id: no-doc-net
+    net: ["203.0.113.7", "2001:db8::*"]
 allow:
+  - id: deny-names
+    net: ["denied.test", "mixed-denied.test", "denied-v6.test"]
   - id: test-hosts
     net: ["allowed.test", "rebind.test", "mixed.test", "loop.test", "169.254.169.254", "owner.test", "127.0.0.1"]
   - id: lan-names
@@ -133,6 +138,10 @@ fn launch(
         ),
         ("x.wild.test", vec![ip("fd12::1")]),
         ("owner.test", vec![local]),
+        ("denied.test", vec![ip("203.0.113.7")]),
+        // the listed local server first: it passes, the denied address after it does not
+        ("mixed-denied.test", vec![local, ip("203.0.113.7")]),
+        ("denied-v6.test", vec![ip("2001:db8::5")]),
     ]));
     let policy: &'static Policy = Box::leak(Box::new(Policy::parse(POLICY).unwrap()));
     let ctx = EvalContext {
