@@ -115,6 +115,10 @@ moat allow --last            # the last ask: allowed for the rest of that agent 
 moat allow --last --always   # or a permanent rule in ~/.moat/policy.d/approved.yaml
 ```
 
+`--last` takes the newest ask of any agent session. It prints which agent, session and
+call that is, and how long ago it asked, then asks `Approve it? [y/N]`; anything but `y`
+approves nothing.
+
 A session grant lasts 24 hours and covers only that agent session: a new session
 asks again. For Claude Code, `claude --continue` resumes the session. A call whose
 agent sent no session id gets no session grant, since it would hold in every session

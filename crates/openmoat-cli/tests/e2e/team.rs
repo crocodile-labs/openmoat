@@ -15,7 +15,7 @@ fn machine(commands: &[&str], approve: bool) -> Sandbox {
     for (n, command) in commands.iter().enumerate() {
         sb.guard("claude-code", &bash_payload("s1", &project, command));
         if approve && n == 0 {
-            let out = sb.moat_as_person(&["allow", "--last"]);
+            let out = sb.moat_approving(&["allow", "--last"]);
             assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
         }
     }

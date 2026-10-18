@@ -126,6 +126,15 @@ impl Sandbox {
         output(self.command().args(args).env("MOAT_ASSUME_TTY", "1"), None)
     }
 
+    /// As [`Sandbox::moat_as_person`], answering `y` to the question the
+    /// command asks (`moat allow --last` asks before it approves).
+    pub fn moat_approving(&self, args: &[&str]) -> Output {
+        output(
+            self.command().args(args).env("MOAT_ASSUME_TTY", "1"),
+            Some("y\n"),
+        )
+    }
+
     /// Run the hook for `host` with `payload`.
     pub fn guard(&self, host: &str, payload: &str) -> Output {
         self.moat_stdin(&["guard", "--host", host], payload)
