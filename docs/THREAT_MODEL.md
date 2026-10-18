@@ -343,6 +343,12 @@ something OpenMoat claims to stop.
 - **No settings veto outside Claude Code.** Codex and Cursor have no `ConfigChange`
   event, so a tampered hook file there is caught on the next tool call, not when it
   is written.
+- **Codex does not send a command's `workdir`.** Codex's shell tools take a `workdir`
+  argument and run the command there, but the `PreToolUse` payload carries only the
+  command, so a relative path in it is checked against the session's directory, not
+  the one Codex runs it in. Absolute paths and `**/` patterns (`.env` anywhere) are
+  unaffected, and Codex's own sandbox (the `moat` profile) still applies to the
+  command where it runs. Until Codex sends `workdir`, OpenMoat cannot see it.
 - **PowerShell is not parsed.** Claude Code `PowerShell` is always `unparseable`, which
   the default policy defers to Claude Code's own prompt (and an `ask` catch-all asks). A
   PowerShell line given to a POSIX shell tool is lexed as POSIX and usually falls through

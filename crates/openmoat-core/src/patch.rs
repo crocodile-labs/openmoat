@@ -1,4 +1,5 @@
-//! Files named by a Codex `apply_patch` envelope.
+//! Files named by a Codex `apply_patch` envelope, whether Codex sends it as
+//! its own tool or the agent runs `apply_patch` in a shell.
 //!
 //! ```text
 //! *** Begin Patch
@@ -24,7 +25,9 @@ const HEADERS: &[&str] = &[
     "*** Move to:",
 ];
 
-pub(crate) fn writes(text: &str) -> Vec<String> {
+/// Every file the patch `text` writes, in the order it names them.
+#[must_use]
+pub fn writes(text: &str) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
     for line in text.lines() {
         let line = line.trim();

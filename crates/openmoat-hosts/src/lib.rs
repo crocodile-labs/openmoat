@@ -12,7 +12,6 @@ mod config_change;
 mod continue_cli;
 mod cursor;
 mod mcp;
-mod patch;
 mod pre_tool_use;
 
 pub use config_change::proposal_target;

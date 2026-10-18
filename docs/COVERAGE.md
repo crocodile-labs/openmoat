@@ -12,10 +12,10 @@ the verdict and rule ids the default policy must produce for it.
 | T3 | Secret exfiltration via environment | 39 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 59 | 57 | 3 |
 | T5 | Supply-chain execution | 6 | 30 | 0 |
-| T6 | Environment poisoning | 20 | 13 | 0 |
+| T6 | Environment poisoning | 21 | 13 | 0 |
 | T7 | Obfuscation and nested execution | 92 | 100 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 140 | 44 | 3 |
+| T9 | Hook / policy tampering by the agent | 141 | 44 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 0 |
 | T12 | Network to unknown hosts | 30 | 16 | 1 |
@@ -428,6 +428,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T6-gofmt-rewrites-shell-rc` (attacks): Deny [shell-rc]
 - `T6-sed-in-place-shell-rc` (attacks): Deny [shell-rc]
 - `T6-loop-variable-named-path` (attacks): Deny [env-poison]
+- `T6-shell-apply-patch-writes-shell-rc` (attacks): Deny [shell-rc]
 
 ## T7: Obfuscation and nested execution
 
@@ -826,6 +827,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-agent-brokers-a-secret-by-path` (attacks): Deny [kernel-self]
 - `T9-moat-in-ansi-c-quotes` (attacks): Deny [kernel-self]
 - `T9-moat-in-ansi-c-hex-escape` (attacks): Deny [kernel-self]
+- `T9-shell-applypatch-writes-hook-settings` (attacks): Deny [kernel-self]
 - `benign-move-project-file` (benign): Allow [dev-shell]
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
 - `benign-python-test-file-named-after-moat` (benign): Allow [dev-shell, project-fs]

@@ -4,6 +4,7 @@ mod locals;
 mod payload;
 mod piped;
 mod pipelines;
+mod recover;
 mod wrappers;
 
 use super::tables::{
@@ -19,9 +20,10 @@ use super::{
 };
 use crate::action::AtomicAction;
 use crate::host;
-use crate::lexer::{self, LexError, Operator, Token, Word};
+use crate::lexer::{self, Operator, Token, Word};
 use crate::paths;
 use piped::Piped;
+use recover::lex_like_bash;
 use wrappers::wrapped_command;
 
 /// A simple command, or the opening or closing parenthesis of a subshell.
@@ -62,25 +64,8 @@ impl SimpleCommand {
     }
 }
 
-/// Lex `command` as bash runs it. Bash ends a here-document that has no
-/// delimiter line at the end of the input (with a warning) and keeps a
-/// backslash that ends the input as a character; the lexer refuses both, which
-/// would leave the whole line unread, so the line is lexed again with the
-/// delimiter line or the backslash written out.
-fn lex_like_bash(command: &str) -> Result<Vec<Token>, LexError> {
-    let mut line = command.to_owned();
-    // one try per here-document left open, and one for a trailing backslash
-    for _ in 0..8 {
-        match lexer::lex(&line) {
-            Err(LexError::UnterminatedHereDoc { delimiter }) => {
-                line = format!("{line}\n{delimiter}\n");
-            }
-            Err(LexError::TrailingBackslash) => line.push('\\'),
-            result => return result,
-        }
-    }
-    lexer::lex(&line)
-}
+/// The names Codex applies a patch under when a shell command runs it.
+const APPLY_PATCH: [&str; 2] = ["apply_patch", "applypatch"];
 
 pub(super) fn classify_into(
     command: &str,
@@ -306,6 +291,18 @@ fn classify_as_written(
         && let Some(file) = argv.get(1)
     {
         sink.read(ctx, file)?;
+    }
+    // `apply_patch <<'EOF'`: Codex applies a patch a shell command hands it,
+    // here-document, piped text or argument alike, so every file it names is
+    // written
+    if APPLY_PATCH.contains(&program) {
+        let texts = cmd
+            .stdin_texts()
+            .chain(cmd.piped.iter().filter_map(Piped::text))
+            .chain(argv[1..].iter().map(String::as_str));
+        for path in texts.flat_map(crate::patch::writes) {
+            sink.write(ctx, &path)?;
+        }
     }
     let mut text_operands = text::classify(&argv, program, ctx, sink)?;
     let stdin = cmd

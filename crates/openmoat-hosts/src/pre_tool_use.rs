@@ -76,7 +76,7 @@ fn map_tool(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Option<Actio
         },
         // Codex file edits: the patch text names every file it touches.
         "apply_patch" => Action::Patch {
-            writes: crate::patch::writes(&field("command")?),
+            writes: openmoat_core::patch_writes(&field("command")?),
         },
         "Glob" => crate::glob_roots(input, cwd),
         "Grep" => crate::search_root(input, cwd),
