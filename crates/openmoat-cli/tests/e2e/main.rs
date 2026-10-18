@@ -28,6 +28,8 @@ mod guard;
 mod home_screen;
 mod host_failures;
 #[cfg(unix)]
+mod human_only;
+#[cfg(unix)]
 mod install_path;
 mod listings;
 mod lock;

@@ -349,7 +349,12 @@ non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
   wrappers (ADR-011, ADR-014).
 - **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`, `moat doctor --accept`,
   `moat sandbox sync`, `moat policy upgrade` and `moat proxy install`/`uninstall` refuse to
-  run without a terminal (`terminal.rs`). The debug-only `MOAT_ASSUME_TTY` override exists for tests.
+  run without a terminal (`terminal.rs`). They also refuse when an agent host (`claude`,
+  `codex`, `cursor-agent`) or `moat` itself (`moat run`) is among their parent processes,
+  or when those cannot be read (`terminal/ancestry.rs`: `/proc` on Linux, `/bin/ps` on
+  macOS; not checked on Windows yet), and the home screen offers no approval there.
+  Their answers are read from the controlling terminal (`/dev/tty`), not stdin. The
+  debug-only `MOAT_ASSUME_TTY` override exists for tests; release builds do not contain it.
 - **Stable hook path** (ADR-016). Hooks run the package manager's stable link to
   `moat`, not a versioned file an upgrade deletes; `doctor` and `status` name a hook
   whose binary is missing or is a different `moat`.

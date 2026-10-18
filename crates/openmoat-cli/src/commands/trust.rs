@@ -18,6 +18,7 @@ use crate::trust::Trust;
 use crate::{context, project, repo};
 
 pub fn run(args: &TrustArgs) -> Result<Code> {
+    crate::terminal::refuse_agent("moat trust")?;
     if !crate::terminal::interactive() {
         bail!("`moat trust` must be run by a person in a terminal, not from a hook or script");
     }

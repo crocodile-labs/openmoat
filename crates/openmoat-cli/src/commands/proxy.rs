@@ -85,6 +85,7 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
 
 /// `moat proxy install`: write and start the per-user service.
 pub fn install() -> Result<Code> {
+    crate::terminal::refuse_agent("moat proxy install")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat proxy install` must be run by a person in a terminal, not from a hook \
@@ -116,6 +117,7 @@ pub fn install() -> Result<Code> {
 
 /// `moat proxy uninstall`: stop and remove the per-user service.
 pub fn uninstall() -> Result<Code> {
+    crate::terminal::refuse_agent("moat proxy uninstall")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat proxy uninstall` must be run by a person in a terminal, not from a hook or script"

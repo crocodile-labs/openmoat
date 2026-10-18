@@ -2,7 +2,7 @@
 //! and its diff shown, and nothing is written or re-pinned until the person agrees.
 
 use std::fs;
-use std::io::{self, BufRead as _, Write as _};
+use std::io::Write as _;
 use std::path::Path;
 use std::process::Command;
 
@@ -19,6 +19,7 @@ use crate::render::Deferred;
 const FALLBACK_EDITOR: &str = if cfg!(windows) { "notepad" } else { "vi" };
 
 pub fn run() -> Result<Code> {
+    crate::terminal::refuse_agent("moat edit")?;
     if !crate::terminal::interactive() {
         bail!("`moat edit` must be run by a person in a terminal, not from a hook or script");
     }
@@ -131,10 +132,6 @@ pub(super) fn confirm(out: &mut Deferred, question: &str) -> Result<bool> {
 pub(super) fn answer(out: &mut Deferred, question: &str) -> Result<String> {
     write!(out, "{question}")?;
     out.flush()?;
-    let mut answer = String::new();
-    io::stdin()
-        .lock()
-        .read_line(&mut answer)
-        .context("reading the answer")?;
+    let answer = crate::terminal::read_answer().context("reading the answer")?;
     Ok(answer.trim().to_ascii_lowercase())
 }

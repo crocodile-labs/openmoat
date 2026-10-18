@@ -291,6 +291,7 @@ fn accept(
     policy_lints: bool,
     intact: bool,
 ) -> Result<()> {
+    crate::terminal::refuse_agent("moat doctor --accept")?;
     if !crate::terminal::interactive() {
         bail!(
             "`moat doctor --accept` must be run by a person in a terminal, not from a hook or script"

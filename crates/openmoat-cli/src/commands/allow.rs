@@ -111,6 +111,7 @@ pub(super) fn run_for(host: &str, session: &str, action: &Action, always: bool) 
 /// The state directory, once a person at a terminal is confirmed and the lock
 /// shows no drift.
 fn checked_home() -> Result<Home> {
+    crate::terminal::refuse_agent("moat allow")?;
     if !crate::terminal::interactive() {
         bail!("`moat allow` must be run by a person in a terminal, not from a hook or script");
     }

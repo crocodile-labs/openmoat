@@ -263,9 +263,9 @@ fn choose_hosts(
             config.dir().display()
         )?;
         out.flush()?;
-        let mut answer = String::new();
         // End of input is a no: nothing is changed that a person did not accept.
-        if std::io::stdin().read_line(&mut answer)? == 0 {
+        let answer = crate::terminal::read_answer()?;
+        if answer.is_empty() {
             writeln!(out)?;
             continue;
         }
