@@ -16,6 +16,8 @@ view at the end of the file.
 - `moat run --isolate` takes bubblewrap from `/usr/bin`, `/bin` or `/usr/local/bin` only, never from `PATH`, where a relative entry let a project ship its own ([#571](https://github.com/crocodile-labs/openmoat/pull/571)).
 - A project root whose path holds a glob character (`*`, `?`, brackets, braces) names no files: spliced into `${project}/**` it widened `project-fs`, with a project at `~/*` to the whole home ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
 - Under `moat run` on macOS, a pattern with `**` inside braces (`~/{.ssh/**,.aws/**}`) and a pattern under a symlinked directory (`/tmp/x/**`, which is `/private/tmp/x`) are enforced as the hook reads them; both were narrower ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
+- A patch handed to `apply_patch` in a shell command, which Codex applies like its own patch tool, is checked as writes to every file it names; a write to a denied file deferred ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
+- MCP arguments named in camel or kebab case (`sourcePath`, `output-dir`, `baseUrl`) are read as paths and URLs, and a write verb anywhere in a tool's name (`file_write`, `download_file`) makes its paths writes ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
 
 ### Changed
 - `moat guard` stays fast in long agent sessions: the session's taint is folded from the calls since the last one, cached in the audit database, instead of from the whole session. Late in a 5,000-call session a call took 158 ms on Linux and 370 ms on macOS; it now takes about 10 and 18 ms ([#571](https://github.com/crocodile-labs/openmoat/pull/571)).
