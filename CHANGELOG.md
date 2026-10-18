@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-10-18
+
+Security hardening: the egress proxy applies deny rules that name an address to every address a host resolves to and refuses two ambiguous plain-HTTP framings, and session grants are ordered by audit row instead of the clock.
+
 ### Security
 - The egress proxy checks a policy deny rule naming an address against every address a host resolves to: a deny such as `net: ["203.0.113.7"]` only matched the name, so an allowed name resolving to that address was connected to; it is refused now ([#565](https://github.com/crocodile-labs/openmoat/pull/565)).
 - The egress proxy refuses plain-HTTP framing a server could read differently: an HTTP/1.0 request that carries `Transfer-Encoding`, and a chunk size over 2^31 - 1 ([#565](https://github.com/crocodile-labs/openmoat/pull/565)).
@@ -546,7 +550,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/crocodile-labs/openmoat/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/crocodile-labs/openmoat/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/crocodile-labs/openmoat/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/crocodile-labs/openmoat/compare/v0.5.2...v0.5.3

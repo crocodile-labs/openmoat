@@ -514,7 +514,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openmoat"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-audit"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "openmoat-core",
  "regex",
@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-core"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "globset",
  "serde",
@@ -564,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-hosts"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "openmoat-core",
  "serde",
@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-proxy"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "httparse",
  "openmoat-core",
