@@ -13,6 +13,12 @@ view at the end of the file.
 - `moat run` removes the environment variables brokered secrets are read from before it starts the agent; the agent and its commands held the real value instead of the placeholder ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
 - `runs-later` asks before the agent writes what its host starts in the next session, outside any sandbox: a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`. Existing policies get it with `moat policy upgrade` ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
 - A tool OpenMoat does not govern is left to the host's own permission flow instead of being approved past it; it is still recorded. Cursor, whose hooks cannot leave a call undecided, keeps the allow ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
+- `moat run --isolate` takes bubblewrap from `/usr/bin`, `/bin` or `/usr/local/bin` only, never from `PATH`, where a relative entry let a project ship its own ([#571](https://github.com/crocodile-labs/openmoat/pull/571)).
+- A project root whose path holds a glob character (`*`, `?`, brackets, braces) names no files: spliced into `${project}/**` it widened `project-fs`, with a project at `~/*` to the whole home ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
+- Under `moat run` on macOS, a pattern with `**` inside braces (`~/{.ssh/**,.aws/**}`) and a pattern under a symlinked directory (`/tmp/x/**`, which is `/private/tmp/x`) are enforced as the hook reads them; both were narrower ([#572](https://github.com/crocodile-labs/openmoat/pull/572)).
+
+### Changed
+- `moat guard` stays fast in long agent sessions: the session's taint is folded from the calls since the last one, cached in the audit database, instead of from the whole session. Late in a 5,000-call session a call took 158 ms on Linux and 370 ms on macOS; it now takes about 10 and 18 ms ([#571](https://github.com/crocodile-labs/openmoat/pull/571)).
 
 ## [0.5.6] - 2026-10-18
 
