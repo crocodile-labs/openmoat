@@ -254,6 +254,12 @@ Two tests prove agreement with the engine:
 - `tests/ir_never_widens.rs` lowers generated policies and checks that an IR allow is
   always an engine allow.
 
+One test checks the OS backends against the IR: `sandbox/differential.rs` evaluates the
+generated Seatbelt profile (a small SBPL reader) and the Landlock grants for the default
+policy and for policies with braces, classes, `?` and `!` exceptions, on paths drawn from
+their patterns, against `Checker::check_os`. Where a backend is wider, its report must
+name the path as an allowance; where it is narrower, it must report a loss.
+
 `moat policy compile` prints the IR.
 
 ## 5. Hook responses and exit codes
