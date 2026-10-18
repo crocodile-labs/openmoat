@@ -547,7 +547,10 @@ host outside TLS termination.
      or not unicast. Also refuse it when an address is private, CGNAT, benchmarking or
      unique-local and no allow rule names that address (POLICY.md §5.2). Those rules are
      compiled once at start-up into a second policy that holds only address patterns.
-     Connect only to an address that was checked.
+     Each resolved address is also matched against the policy's deny rules (in canonical
+     text form, and a NAT64 address also as the IPv4 address it carries); a match refuses
+     the connection (`proxy-address`, the deny rule's id in the reasons), while allow rules
+     on addresses never open more here. Connect only to an address that was checked.
   4. For CONNECT:
      - answer `200`, then read the TLS `ClientHello` (up to 64 KiB, reassembled across
        records);

@@ -232,3 +232,54 @@ allow:
         ["10.0.0.5", "fd12::*"]
     );
 }
+
+#[test]
+fn deny_rules_hold_for_every_resolved_address() {
+    // There is no CIDR syntax; a range is a glob on the address text.
+    let yaml = r#"
+version: 1
+deny:
+  - { id: no-host, net: ["203.0.113.7"] }
+  - { id: no-range, fetch: ["198.51.100.*"] }
+  - { id: no-v6, net: ["2001:db8::*"] }
+allow:
+  - { id: all, net: ["*", "203.0.113.*", "2001:db8::1"] }
+"#;
+    let policy = Policy::parse(yaml).unwrap();
+    let address = address_policy(&policy);
+    let addresses = CompiledPolicy::compile(&address, &ctx()).unwrap();
+    for (ip, rule) in [
+        ("203.0.113.7", Some("no-host")),
+        ("::ffff:203.0.113.7", Some("no-host")),
+        // NAT64 reaches the IPv4 address it carries
+        ("64:ff9b::cb00:7107", Some("no-host")),
+        ("198.51.100.200", Some("no-range")),
+        // an allow naming the address does not lift the deny
+        ("2001:db8::1", Some("no-v6")),
+        ("2001:db8::abcd", Some("no-v6")),
+        // no deny matches: nothing changes, and allows widen nothing here
+        ("203.0.113.8", None),
+        ("198.51.101.1", None),
+        ("2001:db9::1", None),
+        ("93.184.215.14", None),
+    ] {
+        let got = denied(&addresses, ip.parse().unwrap());
+        assert_eq!(
+            got.as_ref().map(|d| d.rules[0].as_str()),
+            rule,
+            "{ip}: {got:?}"
+        );
+    }
+}
+
+#[test]
+fn an_address_without_rules_is_neither_named_nor_denied() {
+    let policy = Policy::parse("version: 1\ndefaults: { \"*\": deny }\n").unwrap();
+    let address = address_policy(&policy);
+    let addresses = CompiledPolicy::compile(&address, &ctx()).unwrap();
+    for ip in ["10.0.0.5", "93.184.215.14", "2606:4700::1111"] {
+        let ip = ip.parse().unwrap();
+        assert!(!named(&addresses, ip), "{ip}");
+        assert_eq!(denied(&addresses, ip), None, "{ip}");
+    }
+}

@@ -213,7 +213,7 @@ impl Proxy<'_> {
             Err(refusal) => {
                 let decision = refusal.decision(request.host());
                 self.record(Some(&request), &decision, started);
-                let status = if matches!(refusal, Refusal::Address(..)) {
+                let status = if matches!(refusal, Refusal::Address(..) | Refusal::Denied(..)) {
                     403
                 } else {
                     502

@@ -35,6 +35,8 @@ impl Resolve for SystemResolver {
 pub enum Refusal {
     /// A resolved address the proxy never connects to.
     Address(SocketAddr, Forbidden),
+    /// A resolved address a policy deny rule matches, with that rule's decision.
+    Denied(SocketAddr, Decision),
     /// The name did not resolve, or no address accepted the connection.
     Unreachable(String),
 }
@@ -49,14 +51,32 @@ impl Refusal {
                 RULE_ADDRESS,
                 format!("{host} resolves to {}, {}", addr.ip(), why.describe()),
             ),
+            Self::Denied(addr, denied) => {
+                let rules = denied
+                    .rules
+                    .iter()
+                    .zip(&denied.reasons)
+                    .map(|(rule, reason)| format!("`{rule}` ({reason})"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Decision::single(
+                    Verdict::Deny,
+                    RULE_ADDRESS,
+                    format!(
+                        "{host} resolves to {}, refused by deny rule {rules}",
+                        addr.ip()
+                    ),
+                )
+            }
             Self::Unreachable(why) => Decision::single(Verdict::Deny, RULE_UPSTREAM, why.clone()),
         }
     }
 }
 
-/// Resolve `host`, refuse if any address is forbidden, then connect to the
-/// first address that answers. A private address passes only when
-/// `addresses` (compiled from [`decide::address_policy`]) names it.
+/// Resolve `host`, refuse if any address is forbidden or matched by a deny
+/// rule of `addresses` (compiled from [`decide::address_policy`]), then
+/// connect to the first address that answers. A private address passes only
+/// when `addresses` names it.
 /// `loopback_ok` lists loopback addresses that may be reached anyway (tests);
 /// nothing exempts link-local or metadata.
 pub fn connect(
@@ -84,6 +104,11 @@ pub fn connect(
             Some(Forbidden::Private(_)) if decide::named(addresses, addr.ip()) => {}
             Some(why) => return Err(Refusal::Address(*addr, why)),
             None => {}
+        }
+        // The host decision matched only the name; a deny naming one of its
+        // addresses still holds.
+        if let Some(denied) = decide::denied(addresses, addr.ip()) {
+            return Err(Refusal::Denied(*addr, denied));
         }
     }
     let mut last = None;

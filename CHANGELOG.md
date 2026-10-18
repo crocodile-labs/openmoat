@@ -9,8 +9,9 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
-- The egress proxy refuses plain-HTTP framing a server could read differently: an HTTP/1.0 request that carries `Transfer-Encoding`, and a chunk size over 2^31 - 1 ([#564](https://github.com/crocodile-labs/openmoat/pull/564)).
-- `moat policy lint` warns when a secret sets `plain_http: true` for a loopback host: the proxy never connects there, so the secret is never injected ([#564](https://github.com/crocodile-labs/openmoat/pull/564)).
+- The egress proxy checks a policy deny rule naming an address against every address a host resolves to: a deny such as `net: ["203.0.113.7"]` only matched the name, so an allowed name resolving to that address was connected to; it is refused now ([#565](https://github.com/crocodile-labs/openmoat/pull/565)).
+- The egress proxy refuses plain-HTTP framing a server could read differently: an HTTP/1.0 request that carries `Transfer-Encoding`, and a chunk size over 2^31 - 1 ([#565](https://github.com/crocodile-labs/openmoat/pull/565)).
+- `moat policy lint` warns when a secret sets `plain_http: true` for a loopback host: the proxy never connects there, so the secret is never injected ([#565](https://github.com/crocodile-labs/openmoat/pull/565)).
 
 ## [0.5.5] - 2026-10-17
 

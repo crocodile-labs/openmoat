@@ -346,6 +346,8 @@ first. Differences from the hook:
   `10.0.0.5`; a NAT64 or IPv4-compatible address only by its IPv6 text). A deny rule
   matching that text still wins. Patterns starting with `*`, `?`, `[` or `{`, and name
   patterns such as `*.corp.example`, never open a private address.
+- A deny rule naming an address (`net: ["203.0.113.7"]`, `2001:db8::*`) holds for every
+  name that resolves to it, public addresses included: one such address refuses the name.
 
 ### 5.3 What an operating-system layer can enforce
 
