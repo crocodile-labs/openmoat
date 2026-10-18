@@ -24,10 +24,6 @@ use std::io;
 
 /// One process: its parent's id and its command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(any(target_os = "macos", target_os = "linux", test)),
-    expect(dead_code, reason = "no process table is read on this system yet")
-)]
 pub(super) struct Process {
     pub ppid: u32,
     pub argv: Vec<String>,
