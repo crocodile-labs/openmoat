@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use openmoat_core::{Taint, TaintSecret};
 
 use super::*;
-use crate::session::tests::{Fixed, TOKEN_A, TOKEN_B, header, two_sessions};
+use crate::session::tests::{Fixed, fresh_token, header, token_a, token_b, two_sessions};
 
 /// One recorded row: its session, rules, and everything it holds as text.
 type Row = (Option<String>, Vec<String>, String);
@@ -99,9 +99,10 @@ fn a_request_without_a_valid_credential_gets_407_and_reaches_nothing() {
     let lookup = Fixed(HashMap::from([("run-a", Taint::default())]));
     for credential in [
         None,
-        Some(header("run-a", "wrong-token-wrong-token-wrong-token")),
+        // A well-formed token that no session holds.
+        Some(header("run-a", &fresh_token())),
         // Session A's token presented as session B.
-        Some(header("run-b", TOKEN_A)),
+        Some(header("run-b", token_a())),
         Some("Basic !!!".to_owned()),
     ] {
         let (reply, forwarded, rows) = exchange(&lookup, credential.as_deref(), 0);
@@ -122,11 +123,11 @@ fn a_request_without_a_valid_credential_gets_407_and_reaches_nothing() {
 #[test]
 fn a_valid_credential_is_recorded_as_its_session_and_never_forwarded() {
     let lookup = Fixed(HashMap::from([("run-a", Taint::default())]));
-    let credential = header("run-a", TOKEN_A);
+    let credential = header("run-a", token_a());
     let (_, forwarded, rows) = exchange(&lookup, Some(&credential), 0);
     let forwarded = String::from_utf8_lossy(&forwarded);
     assert!(forwarded.starts_with("GET /x HTTP/1.1\r\n"), "{forwarded}");
-    assert!(!forwarded.contains(TOKEN_A) && !forwarded.contains(&credential[6..]));
+    assert!(!forwarded.contains(token_a()) && !forwarded.contains(&credential[6..]));
     assert!(
         !forwarded
             .to_ascii_lowercase()
@@ -136,7 +137,7 @@ fn a_valid_credential_is_recorded_as_its_session_and_never_forwarded() {
     assert_eq!(rows[0].0.as_deref(), Some("run-a"));
     assert_eq!(rows[0].1, ["hosts"]);
     // Nothing of the credential is in what the audit log is given.
-    assert!(!rows[0].2.contains(TOKEN_A) && !rows[0].2.contains(&credential[6..]));
+    assert!(!rows[0].2.contains(token_a()) && !rows[0].2.contains(&credential[6..]));
 }
 
 #[test]
@@ -145,14 +146,14 @@ fn a_session_that_read_a_secret_cannot_reach_another_host() {
         ("run-a", secret_read()),
         ("run-b", Taint::default()),
     ]));
-    let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", TOKEN_A)), 0);
+    let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 0);
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
     assert!(reply.contains("session-taint"), "{reply}");
     assert!(forwarded.is_empty());
     assert_eq!(rows[0].0.as_deref(), Some("run-a"));
     assert_eq!(rows[0].1, ["session-taint"]);
     // Session B's own clean history still lets it through.
-    let (_, forwarded, rows) = exchange(&lookup, Some(&header("run-b", TOKEN_B)), 0);
+    let (_, forwarded, rows) = exchange(&lookup, Some(&header("run-b", token_b())), 0);
     assert!(!forwarded.is_empty());
     assert_eq!(rows[0].0.as_deref(), Some("run-b"));
 }
@@ -161,7 +162,7 @@ fn a_session_that_read_a_secret_cannot_reach_another_host() {
 fn a_session_whose_history_cannot_be_read_is_refused() {
     // The lookup knows no `run-a`, as when the audit log cannot be read.
     let lookup = Fixed(HashMap::new());
-    let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", TOKEN_A)), 0);
+    let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 0);
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
     assert!(forwarded.is_empty());
     assert_eq!(rows[0].1, [RULE_SESSION]);
@@ -174,13 +175,13 @@ fn a_session_holding_half_the_slots_gets_503() {
         ("run-b", Taint::default()),
     ]));
     // `max_connections` is 4: run-a already holds its 2.
-    let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", TOKEN_A)), 2);
+    let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 2);
     assert!(reply.starts_with("HTTP/1.1 503"), "{reply}");
     assert!(forwarded.is_empty());
     assert_eq!(
         (rows[0].0.as_deref(), rows[0].1.as_slice()),
         (Some("run-a"), &[RULE_SESSION.to_owned()][..])
     );
-    let (_, forwarded, _) = exchange(&lookup, Some(&header("run-a", TOKEN_A)), 1);
+    let (_, forwarded, _) = exchange(&lookup, Some(&header("run-a", token_a())), 1);
     assert!(!forwarded.is_empty(), "a session under its share is served");
 }

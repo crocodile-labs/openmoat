@@ -2,14 +2,33 @@
 //! per-session share of the connections.
 
 use std::collections::HashMap;
+use std::hash::{BuildHasher as _, Hasher as _, RandomState};
+use std::sync::OnceLock;
 
 use openmoat_core::{Taint, TaintSecret};
 use openmoat_proxy::{Credential, TaintLookup};
 
 use super::*;
 
-const TOKEN_A: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const TOKEN_B: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+/// A 64-character hex token made at run time, so no credential in these
+/// tests is a fixed value: each `RandomState` is freshly keyed.
+fn fresh_token() -> String {
+    (0..4)
+        .map(|_| format!("{:016x}", RandomState::new().build_hasher().finish()))
+        .collect()
+}
+
+/// Session `run-a`'s token, the same for the whole test run.
+fn token_a() -> &'static str {
+    static TOKEN: OnceLock<String> = OnceLock::new();
+    TOKEN.get_or_init(fresh_token)
+}
+
+/// Session `run-b`'s token, the same for the whole test run.
+fn token_b() -> &'static str {
+    static TOKEN: OnceLock<String> = OnceLock::new();
+    TOKEN.get_or_init(fresh_token)
+}
 
 struct Fixed(HashMap<&'static str, Taint>);
 
@@ -64,8 +83,8 @@ fn sessions_harness(a_read_secret: bool, limits: Limits) -> Harness {
     ]))));
     let sessions: &'static Sessions<'static> = Box::leak(Box::new(Sessions::new(
         vec![
-            Credential::new("run-a", TOKEN_A.as_bytes()).unwrap(),
-            Credential::new("run-b", TOKEN_B.as_bytes()).unwrap(),
+            Credential::new("run-a", token_a().as_bytes()).unwrap(),
+            Credential::new("run-b", token_b().as_bytes()).unwrap(),
         ],
         lookup,
     )));
@@ -78,7 +97,7 @@ fn a_tunnel_needs_its_sessions_credential() {
     let host = format!("allowed.test:{}", h.port());
     let reply = h.exchange(&format!("CONNECT {host} HTTP/1.1\r\n\r\n"));
     assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
-    let wrong = basic("run-a", TOKEN_B);
+    let wrong = basic("run-a", token_b());
     let reply = h.exchange(&format!(
         "CONNECT {host} HTTP/1.1\r\nProxy-Authorization: {wrong}\r\n\r\n"
     ));
@@ -86,7 +105,7 @@ fn a_tunnel_needs_its_sessions_credential() {
     assert!(h.nothing_forwarded());
 
     let mut s = h.connect();
-    let right = basic("run-a", TOKEN_A);
+    let right = basic("run-a", token_a());
     write!(
         s,
         "CONNECT {host} HTTP/1.1\r\nProxy-Authorization: {right}\r\n\r\n"
@@ -107,7 +126,7 @@ fn a_tunnel_needs_its_sessions_credential() {
 #[test]
 fn the_credential_never_reaches_the_upstream_or_the_audit_rows() {
     let h = sessions_harness(false, Limits::default());
-    let credential = basic("run-b", TOKEN_B);
+    let credential = basic("run-b", token_b());
     let reply = h.exchange(&format!(
         "GET http://allowed.test:{}/p HTTP/1.1\r\nProxy-Authorization: {credential}\r\n\
          Content-Length: 0\r\n\r\n",
@@ -115,7 +134,7 @@ fn the_credential_never_reaches_the_upstream_or_the_audit_rows() {
     ));
     assert!(reply.contains("ok"), "{reply}");
     let forwarded = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
-    assert!(!forwarded.contains(TOKEN_B), "{forwarded}");
+    assert!(!forwarded.contains(token_b()), "{forwarded}");
     assert!(!forwarded.contains(&credential[6..]), "{forwarded}");
     assert!(
         !forwarded
@@ -124,7 +143,7 @@ fn the_credential_never_reaches_the_upstream_or_the_audit_rows() {
     );
     let rows = format!("{:?}", h.rows());
     assert!(
-        !rows.contains(TOKEN_B) && !rows.contains(&credential[6..]),
+        !rows.contains(token_b()) && !rows.contains(&credential[6..]),
         "{rows}"
     );
 }
@@ -139,11 +158,11 @@ fn a_secret_tainted_session_cannot_reach_another_host_while_others_can() {
             basic(session, token)
         )
     };
-    let reply = h.exchange(&request("run-a", TOKEN_A));
+    let reply = h.exchange(&request("run-a", token_a()));
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
     assert!(reply.contains("session-taint"), "{reply}");
     assert!(h.nothing_forwarded());
-    let reply = h.exchange(&request("run-b", TOKEN_B));
+    let reply = h.exchange(&request("run-b", token_b()));
     assert!(reply.contains("ok"), "{reply}");
 }
 

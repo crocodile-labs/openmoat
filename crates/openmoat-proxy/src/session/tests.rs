@@ -1,11 +1,30 @@
 use std::collections::HashMap;
+use std::hash::{BuildHasher as _, Hasher as _, RandomState};
+use std::sync::OnceLock;
 
 use openmoat_core::TaintSecret;
 
 use super::*;
 
-pub(crate) const TOKEN_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-pub(crate) const TOKEN_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+/// A 64-character hex token made at run time, so no credential in these
+/// tests is a fixed value: each `RandomState` is freshly keyed.
+pub(crate) fn fresh_token() -> String {
+    (0..4)
+        .map(|_| format!("{:016x}", RandomState::new().build_hasher().finish()))
+        .collect()
+}
+
+/// Session `run-a`'s token, the same for the whole test run.
+pub(crate) fn token_a() -> &'static str {
+    static TOKEN: OnceLock<String> = OnceLock::new();
+    TOKEN.get_or_init(fresh_token)
+}
+
+/// Session `run-b`'s token, the same for the whole test run.
+pub(crate) fn token_b() -> &'static str {
+    static TOKEN: OnceLock<String> = OnceLock::new();
+    TOKEN.get_or_init(fresh_token)
+}
 
 /// Fixed taint per session; an unknown session is an error.
 pub(crate) struct Fixed(pub(crate) HashMap<&'static str, Taint>);
@@ -45,27 +64,34 @@ pub(crate) fn header(user: &str, password: &str) -> String {
     format!("Basic {}", encode(format!("{user}:{password}").as_bytes()))
 }
 
-/// Sessions `run-a` (`TOKEN_A`) and `run-b` (`TOKEN_B`).
+/// Sessions `run-a` ([`token_a`]) and `run-b` ([`token_b`]).
 pub(crate) fn two_sessions(lookup: &Fixed) -> Sessions<'_> {
     Sessions::new(
         vec![
-            Credential::new("run-a", TOKEN_A.as_bytes()).unwrap(),
-            Credential::new("run-b", TOKEN_B.as_bytes()).unwrap(),
+            Credential::new("run-a", token_a().as_bytes()).unwrap(),
+            Credential::new("run-b", token_b().as_bytes()).unwrap(),
         ],
         lookup,
     )
 }
 
 #[test]
+fn fresh_tokens_are_valid_and_differ() {
+    assert_eq!(token_a().len(), 64);
+    assert_ne!(token_a(), token_b());
+    assert!(Credential::new("run-a", token_a().as_bytes()).is_ok());
+}
+
+#[test]
 fn a_valid_credential_names_its_own_session() {
     let lookup = Fixed(HashMap::new());
     let sessions = two_sessions(&lookup);
-    assert_eq!(sessions.verify(&[header("run-a", TOKEN_A)]), Ok("run-a"));
-    assert_eq!(sessions.verify(&[header("run-b", TOKEN_B)]), Ok("run-b"));
+    assert_eq!(sessions.verify(&[header("run-a", token_a())]), Ok("run-a"));
+    assert_eq!(sessions.verify(&[header("run-b", token_b())]), Ok("run-b"));
     // The scheme is matched without regard to case, extra blanks are allowed.
     let loose = format!(
         "  bAsIc   {}  ",
-        encode(format!("run-a:{TOKEN_A}").as_bytes())
+        encode(format!("run-a:{}", token_a()).as_bytes())
     );
     assert_eq!(sessions.verify(&[loose]), Ok("run-a"));
 }
@@ -78,24 +104,25 @@ fn a_missing_wrong_or_borrowed_credential_is_refused() {
     assert_eq!(sessions.verify(&none), Err(AuthError::Missing));
     // Session A's token does not open session B, nor the other way round.
     assert_eq!(
-        sessions.verify(&[header("run-b", TOKEN_A)]),
+        sessions.verify(&[header("run-b", token_a())]),
         Err(AuthError::Invalid)
     );
     assert_eq!(
-        sessions.verify(&[header("run-a", TOKEN_B)]),
+        sessions.verify(&[header("run-a", token_b())]),
         Err(AuthError::Invalid)
     );
     assert_eq!(
-        sessions.verify(&[header("run-c", TOKEN_A)]),
+        sessions.verify(&[header("run-c", token_a())]),
         Err(AuthError::Invalid)
     );
-    let short = &TOKEN_A[..40];
+    let short = &token_a()[..40];
     assert_eq!(
         sessions.verify(&[header("run-a", short)]),
         Err(AuthError::Invalid)
     );
+    let empty = String::new();
     assert_eq!(
-        sessions.verify(&[header("run-a", "")]),
+        sessions.verify(&[header("run-a", &empty)]),
         Err(AuthError::Invalid)
     );
 }
@@ -104,14 +131,15 @@ fn a_missing_wrong_or_borrowed_credential_is_refused() {
 fn a_malformed_credential_is_refused() {
     let lookup = Fixed(HashMap::new());
     let sessions = two_sessions(&lookup);
-    let valid = header("run-a", TOKEN_A);
+    let valid = header("run-a", token_a());
+    let pair = format!("run-a:{}", token_a());
     for bad in [
         "Basic".to_owned(),
         "Basic !!!!".to_owned(),
-        format!("Bearer {}", encode(format!("run-a:{TOKEN_A}").as_bytes())),
+        format!("Bearer {}", encode(pair.as_bytes())),
         format!("Basic {}", encode(b"run-a")),
-        format!("Basic {}=", encode(format!("run-a:{TOKEN_A}").as_bytes())),
-        format!("run-a:{TOKEN_A}"),
+        format!("Basic {}=", encode(pair.as_bytes())),
+        pair.clone(),
     ] {
         assert_eq!(
             sessions.verify(std::slice::from_ref(&bad)),
@@ -140,31 +168,30 @@ fn base64_decodes_with_and_without_padding() {
 
 #[test]
 fn equal_bytes_compare_equal_and_any_difference_does_not() {
+    let token = token_a().as_bytes();
     assert!(constant_time_eq(b"", b""));
-    assert!(constant_time_eq(TOKEN_A.as_bytes(), TOKEN_A.as_bytes()));
-    let mut last = TOKEN_A.as_bytes().to_vec();
-    *last.last_mut().unwrap() = b'b';
-    assert!(!constant_time_eq(TOKEN_A.as_bytes(), &last));
-    let mut first = TOKEN_A.as_bytes().to_vec();
-    first[0] = b'b';
-    assert!(!constant_time_eq(TOKEN_A.as_bytes(), &first));
-    assert!(!constant_time_eq(
-        TOKEN_A.as_bytes(),
-        &TOKEN_A.as_bytes()[1..]
-    ));
+    assert!(constant_time_eq(token, token));
+    // Flipping the lowest bit always changes the byte.
+    let mut last = token.to_vec();
+    *last.last_mut().unwrap() ^= 1;
+    assert!(!constant_time_eq(token, &last));
+    let mut first = token.to_vec();
+    first[0] ^= 1;
+    assert!(!constant_time_eq(token, &first));
+    assert!(!constant_time_eq(token, &token[1..]));
 }
 
 #[test]
 fn credentials_refuse_ids_and_tokens_that_need_escaping() {
-    assert!(Credential::new("run-1", TOKEN_A.as_bytes()).is_ok());
+    assert!(Credential::new("run-1", token_a().as_bytes()).is_ok());
     for session in ["", "run a", "run:a", "run@a", "run/a", &"r".repeat(129)] {
         assert_eq!(
-            Credential::new(session, TOKEN_A.as_bytes()).unwrap_err(),
+            Credential::new(session, token_a().as_bytes()).unwrap_err(),
             CredentialError::Session,
             "{session:?}"
         );
     }
-    for token in [&TOKEN_A[..31], &format!("{}:", &TOKEN_A[..40])] {
+    for token in [&token_a()[..31], &format!("{}:", &token_a()[..40])] {
         assert_eq!(
             Credential::new("run-1", token.as_bytes()).unwrap_err(),
             CredentialError::Token
@@ -174,20 +201,20 @@ fn credentials_refuse_ids_and_tokens_that_need_escaping() {
 
 #[test]
 fn the_token_shows_only_in_the_proxy_url() {
-    let credential = Credential::new("run-a", TOKEN_A.as_bytes()).unwrap();
+    let credential = Credential::new("run-a", token_a().as_bytes()).unwrap();
     let debug = format!("{credential:?}");
     assert!(
-        debug.contains("run-a") && !debug.contains(TOKEN_A),
+        debug.contains("run-a") && !debug.contains(token_a()),
         "{debug}"
     );
     let addr = SocketAddr::from(([127, 0, 0, 1], 4242));
     assert_eq!(
         credential.proxy_url(addr).as_str(),
-        format!("http://run-a:{TOKEN_A}@127.0.0.1:4242")
+        format!("http://run-a:{}@127.0.0.1:4242", token_a())
     );
     let lookup = Fixed(HashMap::new());
     let sessions = two_sessions(&lookup);
-    assert!(!format!("{sessions:?}").contains(TOKEN_A));
+    assert!(!format!("{sessions:?}").contains(token_a()));
 }
 
 #[test]
