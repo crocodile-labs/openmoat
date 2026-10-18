@@ -1,0 +1,85 @@
+# Lines for tests/lexer_vs_bash.rs: one command line per line. A line that
+# starts with "# " is a comment. Each line is compared with what bash passes
+# its commands; lines bash would expand are skipped by the test itself.
+# Quoting
+cat 'a b' "c d" e\ f
+cat 'it'"'"'s' "say \"hi\"" a\"b
+cat "a\b" "a\\b" "a\$b" "a\`b" 'a\b'
+cat a'b'"c"d e""f ''g
+cat '' "" x
+cat "multi  space" 'tab	tab'
+cat "#not-comment" a#b '#'
+cat a # a comment
+cat "a;b" 'a|b' "a&b" a\;b a\|b a\&b
+cat "(a)" '(b)' \(c\)
+cat "<in" '>out' \<x \>y
+cat \\ \' \" \  end
+cat \a\b\c
+grep -e "x" -e 'y' -- -z
+git commit -m 'fix: handle "quotes"'
+git commit -m "it's done"
+git log --format='%H %s' -n 3
+# ANSI-C and locale quoting
+cat $'a\tb' $'a\nb' $'\x41\102\u0043'
+cat $'it\'s' $'back\\slash' $'q\"q'
+cat $"plain" x$'y'z
+printf_ $'\e[1m' $'\a'
+# Operators without spaces
+cat a;cat b
+cat a&&cat b
+cat a|cat b
+cat a&cat b
+(cat a)
+(cat a;cat b)|cat c
+cat a ; cat b ; cat c
+cat a && cat b && cat c
+cat a | grep b | sort
+cat a&
+# Redirections
+cat a > out
+cat a >out 2>&1
+cat a 2>err >>log
+cat < in.txt
+cat a >| out
+cat a &> both
+cat a &>> both
+cat <<< 'here string'
+cat <<< "here $'not' string"
+cat 3<in 4>out
+cat a 1>&2
+# Here-documents span lines; the conformance fixtures have them.
+# Words that look like other things
+echo_ -n -e --
+cmd a=b c==d =e
+cmd -- --x=--y
+cmd 'a=$b' "a=\$b"
+cmd 1 2 3 4 5 6 7 8 9 10
+cmd ','  ':' '.' '..'
+cmd @file +x %y ^z
+cmd a,b c:d
+cmd 'a{b,c}d' "{x,y}"
+cmd '*' "?" '[a]'
+cmd 'a~b' "~" '~/x'
+cmd "$'x'" '$"y"'
+cmd é ü 日本
+cmd "é" 'ü'
+cmd '😀' 😀
+npm install left-pad --save-dev
+pip install 'requests>=2' "flask<3"
+docker run --rm -e 'A=1' -v "./x:/y" image:tag
+curl -H 'Accept: application/json' -d '{"a":1}' https://example.com/api
+ssh host 'cat /etc/hosts'
+python3 -c 'print("hi")'
+node -e "console.log('x')"
+sh -c 'cat a; cat b'
+bash -c "cat 'x y'"
+find . -name '*.rs' -exec grep -l TODO '{}' ';'
+xargs -0 -n1 cat
+tar -czf out.tgz ./dir
+awk '{print $1}' file
+sed -e 's/a/b/g' -e "s/c/d/" file
+jq '.items[] | .name' file.json
+make -j4 all
+cargo test -p core -- --nocapture --test-threads=1
+go test ./... -run 'TestX$'
+kubectl get pods -o jsonpath='{.items[*].metadata.name}'

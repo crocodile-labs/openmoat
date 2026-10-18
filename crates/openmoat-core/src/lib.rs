@@ -22,7 +22,10 @@ mod expand;
 mod host;
 pub mod ir;
 mod kind;
-mod lexer;
+// Public only for the differential test against bash (`tests/lexer_vs_bash.rs`);
+// not a stable API.
+#[doc(hidden)]
+pub mod lexer;
 pub mod lint;
 mod paths;
 mod pattern;

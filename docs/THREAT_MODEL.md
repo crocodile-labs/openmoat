@@ -453,6 +453,11 @@ something OpenMoat claims to stop.
   asserted. CI's `standard tier` job runs the host sandboxes with pinned Claude Code
   and Codex binaries, a local fake API and no account. [EVIDENCE.md](EVIDENCE.md) is
   the results table, generated from the same file; known gaps are listed there as gaps.
-- **Planned:** differential testing of the lexer against real `bash` (#461), and the full
-  MoatBench, which measures attack success with and without OpenMoat across live agents ([ROADMAP.md](ROADMAP.md)). Prompt fatigue is measured
+- **Lexer against bash** (`crates/openmoat-core/tests/lexer_vs_bash.rs`): the conformance
+  `shell:` lines and a set of quoting and operator cases run under a real bash with an
+  empty `PATH`, whose `command_not_found_handle` records each command's argv, and the
+  argv is compared with the lexer's words. Lines bash would expand (variables,
+  substitutions, globs, braces, `~`) or that use builtins are skipped. CI's `lexer-vs-bash`
+  job runs it on Linux; it is not a required check yet.
+- **Planned:** the full MoatBench, which measures attack success with and without OpenMoat across live agents ([ROADMAP.md](ROADMAP.md)). Prompt fatigue is measured
   today only by `moat report` (asks per active hour).
