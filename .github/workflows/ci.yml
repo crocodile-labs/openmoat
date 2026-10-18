@@ -107,7 +107,8 @@ jobs:
       - run: cargo build --locked -p openmoat-core --target wasm32-unknown-unknown
 
   # Not a required check: shared runners are noisy. Warns above the 15 ms p95
-  # budget, fails above 3x it (scripts/ci/guard-latency.py).
+  # budget, fails above 3x it (scripts/ci/guard-latency.py). The long-session
+  # step only reports how a session's length adds to that.
   latency:
     name: guard latency (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -126,6 +127,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo build --locked --release -p openmoat
       - run: python3 scripts/ci/guard-latency.py target/release/moat 300
+      - run: python3 scripts/ci/guard-session-latency.py target/release/moat 50
 
   # Not a required check yet: compares the shell lexer's words with the argv
   # bash builds (crates/openmoat-core/tests/lexer_vs_bash.rs). A divergence is
