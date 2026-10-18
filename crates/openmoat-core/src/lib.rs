@@ -27,6 +27,7 @@ mod kind;
 #[doc(hidden)]
 pub mod lexer;
 pub mod lint;
+mod patch;
 mod paths;
 mod pattern;
 mod policy;
@@ -44,6 +45,7 @@ pub use action::{Action, AtomicAction};
 // from the policy's brokered `Secret`.
 pub use engine::{CompiledPolicy, EvalContext, Secret as TaintSecret, Taint, evaluate};
 pub use kind::{Kind, UnknownKind};
+pub use patch::writes as patch_writes;
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
 pub use policy::{Defaults, Policy, PolicyError, RuleGroup, SandboxSettings};

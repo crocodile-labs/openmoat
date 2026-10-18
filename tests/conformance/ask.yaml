@@ -1392,3 +1392,10 @@
   threat: T7
   action: { shell: "cat ~/.ssh/id_rsa\necho 'never closed" }
   expect: { verdict: ask, rules: [unparseable] }
+# A project whose path holds a glob character names no files: spliced into
+# `${project}/**` it would cover the whole home
+- id: ask-glob-in-project-path-does-not-widen-project-fs
+  threat: T4
+  action: { fs_write: "/Users/me/Documents/notes.txt" }
+  context: { cwd: "/Users/me/*", project: "/Users/me/*" }
+  expect: { verdict: defer, rules: [default] }

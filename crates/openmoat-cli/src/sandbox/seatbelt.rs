@@ -221,13 +221,32 @@ fn rules(out: &mut String, rules: &[Rule], operation: &str) {
     let verb = operation.split(' ').next().unwrap_or_default();
     for r in rules {
         let comment = format!("{verb} {} ({})", r.id, r.list);
-        rule(out, &comment, operation, &r.patterns);
+        rule(out, &comment, operation, &with_real_paths(&r.patterns));
     }
+}
+
+/// `patterns` and, for each under a symlinked directory, the same pattern where
+/// the link points: Seatbelt sees the path the kernel opens (`/tmp/x` is
+/// `/private/tmp/x` on macOS). Only for the policy's rules; the platform's own
+/// paths are listed in every spelling already, and the profile must not depend
+/// on links elsewhere on the machine that generates it.
+fn with_real_paths(patterns: &[String]) -> Vec<String> {
+    let mut out = patterns.to_vec();
+    for real in patterns.iter().filter_map(|p| through_links(p)) {
+        if !out.contains(&real) {
+            out.push(real);
+        }
+    }
+    out
 }
 
 /// `(<operation> …)` matching what `patterns` match: at least one positive
 /// pattern and none of the `!` exceptions.
 fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
+    // `~/{.ssh/**,.aws/**}`: each alternative on its own, so `/**` inside braces
+    // is recursive here as it is in the engine
+    let patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
+    let patterns = &patterns[..];
     let (mut positive, mut excluded) = split(patterns);
     // files run later are the hook's to ask about: a deny here would fail installs
     excluded.retain(|p| !runs_later_exclusion(p));
@@ -267,6 +286,105 @@ fn network(p: &mut Generated, net: &Access, port: Option<u16>) {
         None => p.profile.push_str("; network: none\n"),
     }
     p.report.proxy_only(net);
+}
+
+/// Most patterns one brace group may expand to; past it the pattern is
+/// translated as written.
+const MAX_ALTERNATIVES: usize = 64;
+
+/// `pattern` with its brace groups expanded (`src/{a,b}.rs` → `src/a.rs`,
+/// `src/b.rs`), as the
+/// engine's glob reads them; nested groups too. A pattern without braces, with
+/// an unclosed group, or with more than [`MAX_ALTERNATIVES`] results is
+/// returned as it is.
+fn alternatives(pattern: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if expand(pattern, &mut out) {
+        out
+    } else {
+        vec![pattern.to_owned()]
+    }
+}
+
+/// Append every expansion of `pattern` to `out`; `false` when it cannot be
+/// expanded within the bound.
+fn expand(pattern: &str, out: &mut Vec<String>) -> bool {
+    let Some((open, close, options)) = first_group(pattern) else {
+        out.push(pattern.to_owned());
+        return true;
+    };
+    let (head, tail) = (&pattern[..open], &pattern[close + 1..]);
+    options.iter().all(|option| {
+        expand(&format!("{head}{option}{tail}"), out) && out.len() <= MAX_ALTERNATIVES
+    })
+}
+
+/// The first top-level brace group: its byte range and its comma-separated
+/// options (nested groups left in them). `None` without a closed group.
+fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
+    let (mut depth, mut open, mut start) = (0usize, None, 0);
+    let mut options = Vec::new();
+    let mut chars = pattern.char_indices();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '\\' => {
+                chars.next();
+            }
+            '{' => {
+                if depth == 0 {
+                    open = Some(i);
+                    start = i + 1;
+                }
+                depth += 1;
+            }
+            ',' if depth == 1 => {
+                options.push(&pattern[start..i]);
+                start = i + 1;
+            }
+            '}' if depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    options.push(&pattern[start..i]);
+                    return Some((open?, i, options));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `pattern` (an absolute glob, `!` for an exclusion) with its literal
+/// directory prefix written as the filesystem resolves it, when that differs:
+/// `/tmp/x/**` → `/private/tmp/x/**` on macOS. The deepest existing directory
+/// of the prefix is resolved; `None` when nothing changes.
+fn through_links(pattern: &str) -> Option<String> {
+    // Seatbelt runs on macOS only; elsewhere the profile is shown, not enforced,
+    // and resolving there would only write that machine's links into it.
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let (bang, body) = match pattern.strip_prefix('!') {
+        Some(rest) => ("!", rest),
+        None => ("", pattern),
+    };
+    if !body.starts_with('/') {
+        return None;
+    }
+    let literal_end = body.find(['*', '?', '[', '{', '\\']).unwrap_or(body.len());
+    let literal = &body[..literal_end];
+    let dir_end = literal.rfind('/')?;
+    let mut dir = std::path::Path::new(&literal[..dir_end.max(1)]);
+    loop {
+        if let Ok(real) = std::fs::canonicalize(dir) {
+            let (dir, real) = (dir.to_str()?, real.to_str()?.to_owned());
+            if real == dir {
+                return None;
+            }
+            return Some(format!("{bang}{real}{}", &body[dir.len()..]));
+        }
+        dir = dir.parent()?;
+    }
 }
 
 /// One IR glob as a Seatbelt path filter.
