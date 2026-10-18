@@ -70,8 +70,14 @@ const NOW: i64 = 1_790_985_600_000;
 #[test]
 fn grants_match_exactly_per_host_session() {
     let mut g = Grants::default();
-    g.grant("claude-code", "s1", &sh(" npm install left-pad "), NOW);
-    g.grant("claude-code", "s1", &sh("npm install left-pad"), NOW);
+    g.grant(
+        "claude-code",
+        "s1",
+        &sh(" npm install left-pad "),
+        NOW,
+        None,
+    );
+    g.grant("claude-code", "s1", &sh("npm install left-pad"), NOW, None);
     assert_eq!(g.entries.len(), 1, "duplicates collapse");
     assert!(g.matches("claude-code", "s1", &sh("npm install left-pad"), NOW));
     assert!(!g.matches("claude-code", "s2", &sh("npm install left-pad"), NOW));
@@ -85,8 +91,8 @@ fn a_call_without_a_session_id_matches_no_grant() {
     // a grant for that id would hold in all of them. A grants file that has
     // one anyway (written by hand, or by an older moat) must not apply.
     let mut g = Grants::default();
-    g.grant("cursor", "unknown", &sh("npm install left-pad"), NOW);
-    g.grant("cursor", "", &sh("npm install left-pad"), NOW);
+    g.grant("cursor", "unknown", &sh("npm install left-pad"), NOW, None);
+    g.grant("cursor", "", &sh("npm install left-pad"), NOW, None);
     assert!(!g.matches("cursor", "unknown", &sh("npm install left-pad"), NOW));
     assert!(!g.matches("cursor", "", &sh("npm install left-pad"), NOW));
 }
@@ -94,12 +100,12 @@ fn a_call_without_a_session_id_matches_no_grant() {
 #[test]
 fn a_grant_says_when_it_was_made() {
     let mut g = Grants::default();
-    g.grant("claude-code", "s1", &sh("make"), NOW);
+    g.grant("claude-code", "s1", &sh("make"), NOW, None);
     assert_eq!(
         g.granted_at("claude-code", "s1", &sh("make"), NOW + 1),
         Some(NOW)
     );
-    g.grant("claude-code", "s1", &sh("make"), NOW + 5);
+    g.grant("claude-code", "s1", &sh("make"), NOW + 5, None);
     assert_eq!(
         g.granted_at("claude-code", "s1", &sh("make"), NOW + 6),
         Some(NOW + 5)
@@ -117,13 +123,19 @@ fn a_grant_says_when_it_was_made() {
 #[test]
 fn grants_expire_after_the_ttl() {
     let mut g = Grants::default();
-    g.grant("codex", "k1", &sh("cargo add serde"), NOW);
+    g.grant("codex", "k1", &sh("cargo add serde"), NOW, None);
     let ok = |g: &Grants, at| g.matches("codex", "k1", &sh("cargo add serde"), at);
     assert!(ok(&g, NOW + GRANT_TTL_MS - 1));
     assert!(!ok(&g, NOW + GRANT_TTL_MS), "expired at the TTL");
     assert!(!ok(&g, NOW - 1), "a grant from the future is not valid");
 
-    g.grant("codex", "k1", &sh("cargo add serde"), NOW + GRANT_TTL_MS);
+    g.grant(
+        "codex",
+        "k1",
+        &sh("cargo add serde"),
+        NOW + GRANT_TTL_MS,
+        None,
+    );
     assert_eq!(g.entries.len(), 1);
     assert!(ok(&g, NOW + GRANT_TTL_MS + 1), "granting again restarts it");
 }
@@ -147,12 +159,26 @@ fn version_1_grants_migrate_and_one_without_a_timestamp_is_expired() {
 }
 
 #[test]
+fn the_audit_row_a_grant_saw_is_kept_and_an_old_grant_has_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("approvals.json");
+    let mut g = Grants::default();
+    g.grant("codex", "k1", &sh("ls"), NOW, Some(42));
+    g.grant("codex", "k2", &sh("ls"), NOW, None);
+    g.save(&path, NOW).unwrap();
+    let g = Grants::load(&path).unwrap();
+    let row = |s| g.newest("codex", s, &sh("ls"), NOW).unwrap().audit_row;
+    assert_eq!(row("k1"), Some(42));
+    assert_eq!(row("k2"), None);
+}
+
+#[test]
 fn saving_prunes_expired_grants() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("approvals.json");
     let mut g = Grants::default();
-    g.grant("codex", "old", &sh("ls"), NOW - GRANT_TTL_MS);
-    g.grant("codex", "new", &sh("ls"), NOW - 1);
+    g.grant("codex", "old", &sh("ls"), NOW - GRANT_TTL_MS, None);
+    g.grant("codex", "new", &sh("ls"), NOW - 1, None);
     assert_eq!(g.active(NOW).count(), 1);
     g.save(&path, NOW).unwrap();
     let loaded = Grants::load(&path).unwrap();
@@ -165,7 +191,7 @@ fn grants_and_overlay_round_trip() {
     let dir = tempfile::tempdir().unwrap();
     let grants_path = dir.path().join("approvals.json");
     let mut g = Grants::default();
-    g.grant("codex", "k1", &sh("cargo add serde"), NOW);
+    g.grant("codex", "k1", &sh("cargo add serde"), NOW, None);
     g.save(&grants_path, NOW).unwrap();
     assert_eq!(Grants::load(&grants_path).unwrap(), g);
     assert_eq!(

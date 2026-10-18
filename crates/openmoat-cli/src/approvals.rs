@@ -38,6 +38,12 @@ pub struct Grant {
     /// long expired: a grant whose age is unknown must not stay valid forever.
     #[serde(default)]
     pub granted_at_ms: i64,
+    /// The id of the newest audit event when the grant was written (0 for an
+    /// empty log): it saw every event up to this one. Ids only grow, so this
+    /// orders the grant against later calls even if the clock steps back. A
+    /// grant written by an older build has none and is ordered by time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_row: Option<i64>,
 }
 
 /// A version 1 grant: a shell command.
@@ -99,6 +105,7 @@ impl Grants {
                         command: g.command.trim().to_owned(),
                     },
                     granted_at_ms: g.granted_at_ms,
+                    audit_row: None,
                 });
                 Ok(Self {
                     version: GRANTS_VERSION,
@@ -125,8 +132,16 @@ impl Grants {
     }
 
     /// Grant `action` (spelled by [`approvable`]) to the host session as of
-    /// `now_ms`; granting it again restarts its lifetime.
-    pub fn grant(&mut self, host: &str, session_id: &str, action: &Action, now_ms: i64) {
+    /// `now_ms`, having seen the audit log up to `audit_row`; granting it again
+    /// restarts its lifetime.
+    pub fn grant(
+        &mut self,
+        host: &str,
+        session_id: &str,
+        action: &Action,
+        now_ms: i64,
+        audit_row: Option<i64>,
+    ) {
         self.entries
             .retain(|g| !(g.host == host && g.session_id == session_id && g.action == *action));
         self.entries.push(Grant {
@@ -134,6 +149,7 @@ impl Grants {
             session_id: session_id.to_owned(),
             action: action.clone(),
             granted_at_ms: now_ms,
+            audit_row,
         });
     }
 
@@ -155,13 +171,25 @@ impl Grants {
         action: &Action,
         now_ms: i64,
     ) -> Option<i64> {
+        self.newest(host, session_id, action, now_ms)
+            .map(|g| g.granted_at_ms)
+    }
+
+    /// The newest grant [`Grants::matches`] finds, if there is one.
+    #[must_use]
+    pub fn newest(
+        &self,
+        host: &str,
+        session_id: &str,
+        action: &Action,
+        now_ms: i64,
+    ) -> Option<&Grant> {
         if openmoat_hosts::is_unknown_session(session_id) {
             return None;
         }
         self.active(now_ms)
             .filter(|g| g.host == host && g.session_id == session_id && g.action == *action)
-            .map(|g| g.granted_at_ms)
-            .max()
+            .max_by_key(|g| g.granted_at_ms)
     }
 
     /// Grants still valid at `now_ms`.
