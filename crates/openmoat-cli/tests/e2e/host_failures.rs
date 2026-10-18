@@ -133,41 +133,29 @@ fn payloads_guard_cannot_read_are_denied_in_each_hosts_format() {
     }
 }
 
-/// A tool OpenMoat does not know is allowed with rule `ungoverned` and recorded,
-/// a deliberate choice: the installed matchers send Claude Code and Codex only
-/// the tools OpenMoat maps, so an unknown name reaches `guard` only through a
-/// matcher the lock pins. Cursor's `preToolUse` sends every tool, and there an
-/// unknown tool that names a path is checked as reading it (one that names none
-/// asks, `cursor.rs`).
+/// A tool OpenMoat does not know is recorded with rule `ungoverned` and left
+/// to the host: no output, so the host's own prompt and permission rules
+/// decide it, as if no hook had answered. An unknown name can still reach
+/// `guard` through a matcher that also matches it. Cursor's `preToolUse` sends
+/// every tool, and there an unknown tool that names a path is checked as
+/// reading it (one that names none asks, `cursor.rs`).
 #[test]
-fn an_unknown_tool_is_ungoverned_unless_cursor_sees_a_path() {
+fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
     for shape in shapes() {
         let out = shape.guard(&sb, &shape.unknown_tool.to_string());
-        let (code, verdict) = match shape.name {
-            "cursor" => (2, "deny"),
-            _ => (0, "allow"),
-        };
-        assert_eq!(
-            out.status.code(),
-            Some(code),
-            "{}: {}",
-            shape.name,
-            text(&out)
-        );
-        assert_eq!(
-            shape.verdict(&out),
-            verdict,
-            "{}: {}",
-            shape.name,
-            text(&out)
-        );
-        let rule = if code == 0 {
-            "ungoverned"
+        if shape.name == "cursor" {
+            assert_eq!(out.status.code(), Some(2), "cursor: {}", text(&out));
+            assert_eq!(shape.verdict(&out), "deny", "cursor: {}", text(&out));
+            assert!(
+                text(&out).contains("secrets-paths"),
+                "cursor: {}",
+                text(&out)
+            );
         } else {
-            "secrets-paths"
-        };
-        assert!(text(&out).contains(rule), "{}: {}", shape.name, text(&out));
+            assert_eq!(out.status.code(), Some(0), "{}: {}", shape.name, text(&out));
+            assert!(out.stdout.is_empty(), "{}: {}", shape.name, text(&out));
+        }
     }
     let shown = sb.moat(&["show", "--recent", "4"]);
     assert_eq!(

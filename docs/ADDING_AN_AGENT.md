@@ -76,7 +76,7 @@ parser through `Host::wire`, as the Continue CLI does (`continue_cli.rs`).
 | opens a connection that can send data | `Net { url }` | `Monitor` WebSocket |
 | calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `mcp.rs` finds path and URL arguments |
 | a tool the hook receives for every tool and cannot classify | `UnknownTool { host, tool }`: `defaults.tool.unknown` decides, `defer` in the default policy | Cursor `preToolUse` |
-| anything else | `None`: allowed with rule `ungoverned` and recorded | `TodoWrite`, `Task` |
+| anything else | `None`: recorded with rule `ungoverned` and deferred to the host (no output) | `TodoWrite`, `Task` |
 
 Rules the existing adapters follow:
 

@@ -170,18 +170,20 @@ fn guard_allows_ordinary_work_and_defers_installs() {
     );
 }
 
+/// An ungoverned tool is left to Claude Code (no output, exit 0), never
+/// approved past its own prompt, and recorded.
 #[test]
-fn guard_passes_ungoverned_tools_through() {
+fn guard_leaves_ungoverned_tools_to_the_host() {
     let sb = Sandbox::bare(&[".claude"]);
     sb.moat(&["init", "--yes"]);
     let out = sb.guard("claude-code", &fixture("claude-code/ungoverned.json"));
     assert_eq!(out.status.code(), Some(0));
-    assert_eq!(decision(&out)["permissionDecision"], "allow");
+    assert!(out.stdout.is_empty(), "{}", stderr(&out));
+    let shown = sb.moat(&["show", "--recent", "1"]);
     assert!(
-        decision(&out)["permissionDecisionReason"]
-            .as_str()
-            .unwrap()
-            .contains("ungoverned")
+        stdout(&shown).contains("(ungoverned)"),
+        "{}",
+        stdout(&shown)
     );
 }
 

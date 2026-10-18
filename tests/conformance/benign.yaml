@@ -1014,3 +1014,9 @@
   action: { shell: "cd -P lib/.. && cat README.md" }
   links: { /p/lib: /p/vendor/lib }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
+# Bash ends a here-document with no delimiter line at the end of the input and
+# runs the command; it is classified the same way
+- id: benign-unterminated-heredoc-ends-with-the-input
+  threat: T7
+  action: { shell: "cat <<EOF\nno terminator" }
+  expect: { verdict: allow, rules: [dev-shell] }

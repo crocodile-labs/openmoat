@@ -63,8 +63,9 @@ exits. There is no daemon.
    the session, whichever file it names (§6).
 4. **Lock.** `integrity::violation` recomputes every digest in `policy.lock`. Any drift
    denies the call with `kernel-integrity` before the policy is read. Otherwise a tool
-   the adapter does not govern (no action) is allowed with rule `ungoverned` and
-   recorded.
+   the adapter does not govern (no action) is recorded with rule `ungoverned` and
+   deferred: the host decides it as if no hook had answered (Cursor, whose hooks have
+   no such answer, gets an allow).
 5. **Context.** `EvalContext` carries the home directory, the project root (git root
    above the call's working directory, never the home directory, an ancestor of it or
    a filesystem root; `project.rs`), their symlink-resolved spellings, the working

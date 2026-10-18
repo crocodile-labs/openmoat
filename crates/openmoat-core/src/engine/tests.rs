@@ -3,6 +3,7 @@ mod fetch;
 mod glob;
 mod moved_dirs;
 mod taint;
+mod unparseable;
 
 use super::*;
 
@@ -113,36 +114,6 @@ fn negated_allow_patterns_fall_through_to_default() {
         (Verdict::Ask, vec!["default".to_owned()]),
         "the exclusion falls through to the default, not to another rule"
     );
-}
-
-#[test]
-fn unparseable_is_never_allowed() {
-    let p = policy("version: 1\ndefaults: allow\n");
-    let d = evaluate(&p, &ctx(), &shell("echo 'unterminated")).unwrap();
-    assert_eq!(d.verdict, Verdict::Defer);
-    assert_eq!(d.rules, ["unparseable"]);
-    let d = evaluate(
-        &p,
-        &ctx(),
-        &Action::Net {
-            url: "https://".into(),
-        },
-    )
-    .unwrap();
-    assert_eq!(d.verdict, Verdict::Defer);
-    let powershell = Action::ForeignShell {
-        shell: "PowerShell".into(),
-        command: "Get-ChildItem".into(),
-    };
-    let d = evaluate(&p, &ctx(), &powershell).unwrap();
-    assert_eq!(
-        (d.verdict, d.rules),
-        (Verdict::Defer, vec!["unparseable".to_owned()])
-    );
-    // Under an `ask` catch-all it asks, as before ADR-025.
-    let p = policy("version: 1\ndefaults: ask\n");
-    let d = evaluate(&p, &ctx(), &shell("echo 'unterminated")).unwrap();
-    assert_eq!(d.verdict, Verdict::Ask);
 }
 
 /// A part that cannot be parsed asks without hiding the other parts' decisions:

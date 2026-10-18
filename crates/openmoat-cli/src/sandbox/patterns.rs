@@ -38,11 +38,12 @@ pub fn spot(pattern: &str) -> Spot<'_> {
 /// git follows like the root's own `.git`.
 pub const ANY_GIT: &str = "**/.git/**";
 
-/// Files CI, a commit-hook manager or the editor runs later, outside any
-/// sandbox (`runs-later` in the default policy). `project-fs` and `moat allow
-/// --dir` leave them out so the hook asks; an OS sandbox gets no deny for them,
-/// which would also make them unreadable (Codex globs) or refuse a whole
-/// granted directory (Cursor).
+/// Files in a project that CI, a commit-hook manager, the editor or the agent
+/// host runs later, outside any sandbox (`runs-later` in the default policy,
+/// which also lists the hosts' home files). `project-fs` and `moat allow --dir`
+/// leave them out so the hook asks; an OS sandbox gets no deny for them, which
+/// would also make them unreadable (Codex globs) or refuse a whole granted
+/// directory (Cursor).
 pub const RUNS_LATER: &[&str] = &[
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
@@ -55,6 +56,10 @@ pub const RUNS_LATER: &[&str] = &[
     "**/lefthook.yml",
     "**/.lefthook.yml",
     "**/.vscode/tasks.json",
+    "**/.claude/hooks/**",
+    "**/.mcp.json",
+    "**/.cursor/mcp.json",
+    "**/.codex/config.toml",
 ];
 
 /// A write exclusion of one of [`RUNS_LATER`], below the project or below a
@@ -163,5 +168,24 @@ mod tests {
         ] {
             assert!(!domain(bad), "{bad}");
         }
+    }
+
+    /// [`RUNS_LATER`] and the default policy name the same files: `runs-later`
+    /// asks for each, and `project-fs` leaves each out, so the ask is reached.
+    #[test]
+    fn runs_later_matches_the_default_policy() {
+        let policy = openmoat_core::Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+        let group = |groups: &[openmoat_core::RuleGroup], id: &str| {
+            groups.iter().find(|g| g.id == id).unwrap().fs_write.clone()
+        };
+        let asked = group(&policy.ask, "runs-later");
+        let allowed = group(&policy.allow, "project-fs");
+        for file in RUNS_LATER {
+            assert!(asked.iter().any(|p| p == file), "runs-later lacks {file}");
+            let left_out = format!("!${{project}}/{file}");
+            assert!(allowed.contains(&left_out), "project-fs lacks {left_out}");
+        }
+        let in_projects = asked.iter().filter(|p| p.starts_with("**/")).count();
+        assert_eq!(in_projects, RUNS_LATER.len(), "{asked:?}");
     }
 }
