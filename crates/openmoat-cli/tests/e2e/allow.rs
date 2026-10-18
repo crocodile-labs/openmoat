@@ -18,7 +18,7 @@ fn allow_last_grants_the_session_and_repins() {
     let sb = Sandbox::installed_asking(&[".claude"]);
     assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
 
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
         text(&out).contains("session s1 on claude-code may run"),
@@ -45,7 +45,7 @@ fn no_session_grant_for_a_call_without_a_session_id() {
     let sb = Sandbox::installed_asking(&[".claude"]);
     assert_eq!(guard(&sb, "unknown", INSTALL).0, "ask");
 
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert_ne!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(text(&out).contains("no session id"), "{}", text(&out));
 
@@ -63,6 +63,27 @@ fn no_session_grant_for_a_call_without_a_session_id() {
 }
 
 #[test]
+fn allow_last_says_what_it_approves_and_asks_first() {
+    let sb = Sandbox::installed_asking(&[".claude"]);
+    assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
+
+    // No (or no answer): nothing is approved.
+    let out = sb.moat_as_person(&["allow", "--last"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = text(&out);
+    assert!(
+        shown.contains("on claude-code (session s1)") && shown.contains("Approve it? [y/N]"),
+        "{shown}"
+    );
+    assert!(shown.contains("nothing approved"), "{shown}");
+    assert_eq!(guard(&sb, "s1", INSTALL).0, "ask", "declined: still asks");
+
+    let out = sb.moat_approving(&["allow", "--last"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(guard(&sb, "s1", INSTALL).0, "allow");
+}
+
+#[test]
 fn allow_explicit_session_grant() {
     let sb = Sandbox::installed_asking(&[".claude"]);
     let out = sb.moat_as_person(&["allow", INSTALL, "--host", "claude-code", "--session", "s9"]);
@@ -75,7 +96,7 @@ fn allow_explicit_session_grant() {
 fn allow_always_writes_the_overlay_and_keeps_the_lock_intact() {
     let sb = Sandbox::installed_asking(&[".claude"]);
     assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
-    let out = sb.moat_as_person(&["allow", "--last", "--always"]);
+    let out = sb.moat_approving(&["allow", "--last", "--always"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = text(&out);
     assert!(
@@ -128,7 +149,7 @@ fn allow_explains_missing_flags_and_shadowed_rules() {
     assert_eq!(guard(&sb, "s1", "rm -rf /").0, "deny");
 
     guard(&sb, "s1", INSTALL);
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert!(text(&out).contains("wanted to run"), "{}", text(&out));
 }
 

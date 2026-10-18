@@ -46,7 +46,7 @@ fn an_ask_blocks_cn_until_a_person_approves_it() {
     assert_eq!(events[0]["host"], "continue", "{events}");
     assert_eq!(events[0]["verdict"], "ask", "{events}");
 
-    let allow = sb.moat_as_person(&["allow", "--last"]);
+    let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));
     let out = guard_under_cn(&sb, &cn);
     assert_eq!(out.status.code(), Some(OK), "approved for the session");

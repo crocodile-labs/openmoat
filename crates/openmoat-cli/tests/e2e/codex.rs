@@ -34,7 +34,7 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     assert!(reason.contains("[git-internals]"), "{reason}");
     assert!(reason.contains("moat allow --last"), "{reason}");
 
-    let allow = sb.moat_as_person(&["allow", "--last"]);
+    let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));
     let out = sb.guard("codex", &shell("codex-s1", command));
     assert_eq!(out.status.code(), Some(OK), "approved for the session");

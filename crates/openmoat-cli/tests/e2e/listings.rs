@@ -26,7 +26,7 @@ fn allowed_lists_rules_grants_and_trust_without_a_terminal() {
     assert_eq!(site.status.code(), Some(OK), "{}", text(&site));
     let (verdict, _) = sb.guard_bash("s1", &sb.project(), "npm install left-pad");
     assert_eq!(verdict, "ask");
-    let grant = sb.moat_as_person(&["allow", "--last"]);
+    let grant = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(grant.status.code(), Some(OK), "{}", text(&grant));
 
     let out = sb.moat(&["allowed", "--format", "json"]);

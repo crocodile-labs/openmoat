@@ -305,7 +305,7 @@ fn pre_tool_use_ask_is_denied_and_allow_last_approves_the_file() {
     let log = text(&sb.moat(&["audit", "export"]));
     assert!(log.contains("\"verdict\":\"ask\""), "{log}");
 
-    let allow = sb.moat_as_person(&["allow", "--last"]);
+    let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
     assert!(text(&allow).contains("may write"), "{}", text(&allow));
     let (code, doc) = guard(&sb, &write_payload(&sb, &notes));
@@ -334,7 +334,7 @@ fn shell_ask_stays_an_ask_and_allow_last_approves_it() {
         (Some(OK), &Value::from("ask")),
         "{doc}"
     );
-    let allow = sb.moat_as_person(&["allow", "--last"]);
+    let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
     let (code, doc) = guard(&sb, &payload);
     assert_eq!(

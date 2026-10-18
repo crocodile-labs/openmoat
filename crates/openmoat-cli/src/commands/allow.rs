@@ -42,13 +42,21 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
                 .context("no recent `ask` for a shell command or a file in the audit log")?;
             let action = asked(&event)?;
             let last = format!(
-                "last ask: {} on {} (session {}) wanted to {}",
+                "last ask: {} on {} (session {}), {} ago, wanted to {}",
                 event.id,
                 event.host,
                 event.session_id,
+                crate::time::duration(crate::time::now_ms().saturating_sub(event.ts_ms)),
                 approvals::describe(&action)
             );
             render::line(&mut out, &last)?;
+            // The newest ask of any agent session: say which one before approving
+            // it, so a person never approves a call they did not see.
+            if !super::edit::confirm(&mut out, "Approve it? [y/N] ")? {
+                writeln!(out, "nothing approved")?;
+                out.finish()?;
+                return Ok(Code::Ok);
+            }
             (Some(event.host), Some(event.session_id), action)
         }
         _ => bail!("give a command, or --last to take the most recent ask"),

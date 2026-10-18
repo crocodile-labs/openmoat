@@ -35,7 +35,7 @@ fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
         "the ask says how: {reason}"
     );
 
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
 
     let (verdict, reason) = tainted_write(&sb, "s1", "CMakeLists.txt");
@@ -50,7 +50,7 @@ fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
     fetch_untrusted(&sb, "s1");
     let (verdict, reason) = tainted_write(&sb, "s1", "CMakeLists.txt");
     assert_eq!(verdict, "ask", "a later read asks again: {reason}");
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "allow");
 
@@ -69,7 +69,7 @@ fn a_grant_made_before_the_taint_does_not_answer_its_ask() {
     // A workflow write asks in a clean session (`runs-later`); approve it there.
     let workflow = ".github/workflows/ci.yml";
     assert_eq!(tainted_write(&sb, "s1", workflow).0, "ask");
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(tainted_write(&sb, "s1", workflow).0, "allow");
 
@@ -114,7 +114,7 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
     assert!(reason.contains(".ssh/id_rsa"), "{reason}");
 
     // Granting that exact command after both does not answer the secret's ask.
-    let out = sb.moat_as_person(&["allow", "--last"]);
+    let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let (verdict, reason) = send();
     assert_eq!(verdict, "ask", "{reason}");

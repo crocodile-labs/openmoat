@@ -54,6 +54,6 @@ fn logged_escapes_are_shown_as_question_marks() {
     assert_clean("moat", &output(&mut sb.command(), Some("")));
     assert_clean(
         "moat allow --last",
-        &sb.moat_as_person(&["allow", "--last"]),
+        &sb.moat_approving(&["allow", "--last"]),
     );
 }

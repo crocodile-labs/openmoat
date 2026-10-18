@@ -36,7 +36,7 @@ fn codex_apply_patch_ask_is_approved_with_allow_last() {
     assert!(reason.contains("run `moat`"), "{reason}");
     assert!(reason.contains("moat allow --last"), "{reason}");
 
-    let allow = sb.moat_as_person(&["allow", "--last"]);
+    let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
     let shown = text(&allow);
     assert!(
@@ -66,7 +66,7 @@ fn claude_code_read_ask_is_approved_for_good() {
     let plan = read(&sb, "s1", &notes.join("plan.md"));
     assert_eq!(verdict(&sb.guard("claude-code", &plan)), "ask");
 
-    let allow = sb.moat_as_person(&["allow", "--last", "--always"]);
+    let allow = sb.moat_approving(&["allow", "--last", "--always"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
     let shown = text(&allow);
     assert!(shown.contains("wanted to read"), "{shown}");
@@ -105,7 +105,7 @@ fn an_approved_path_that_leads_into_ssh_is_still_denied() {
         verdict(&sb.guard("claude-code", &read(&sb, "s1", &key))),
         "ask"
     );
-    let allow = sb.moat_as_person(&["allow", "--last", "--always"]);
+    let allow = sb.moat_approving(&["allow", "--last", "--always"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
     assert_eq!(
         verdict(&sb.guard("claude-code", &read(&sb, "s1", &key))),
