@@ -39,7 +39,11 @@ pub fn root_key(root: &Path) -> Result<String> {
 pub fn find(home: &Home, root: &Path) -> Result<Option<Found>> {
     let path = root.join(home::DIR_NAME).join("policy.yaml");
     let meta = match fs::metadata(&path) {
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        // `.moat` a file (`moat run --isolate` puts an empty placeholder there
+        // for the session) holds no policy, as when it is missing.
+        Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+            return Ok(None);
+        }
         meta => meta.with_context(|| format!("reading repository policy {}", path.display()))?,
     };
     // `$MOAT_HOME` set to the project's `.moat`: that is OpenMoat's own state.
@@ -121,3 +125,6 @@ pub fn summary(home: &Home) -> Result<Option<String>> {
         found.digest
     )))
 }
+
+#[cfg(test)]
+mod tests;
