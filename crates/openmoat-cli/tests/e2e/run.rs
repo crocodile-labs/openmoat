@@ -10,12 +10,18 @@ use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 /// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
 /// outside the home so that writing the home is not a temp-directory write.
 fn run_sh(sb: &Sandbox, project: &Path, script: &str) -> Output {
+    run_sh_with(sb, project, script, &[])
+}
+
+/// [`run_sh`] with `env` set for `moat run` itself.
+fn run_sh_with(sb: &Sandbox, project: &Path, script: &str, env: &[(&str, &str)]) -> Output {
     let tmp = sb.home.with_file_name("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     output(
         sb.command()
             .current_dir(project)
             .env("TMPDIR", &tmp)
+            .envs(env.iter().copied())
             .args(["run", "--", "/bin/sh", "-c", script]),
         None,
     )
@@ -251,6 +257,32 @@ pub mod confined {
             "{shown}"
         );
         assert!(!stderr(&out).contains("stricter: "), "{shown}");
+    }
+
+    /// The proxy reads a brokered secret from `moat run`'s environment; the agent
+    /// and its commands never see that variable, only the placeholder.
+    #[test]
+    fn an_env_brokered_secret_is_not_in_the_agents_environment() {
+        let (sb, project) = installed_with_secret();
+        let mut add = sb.command();
+        add.args(["secret", "add", "gh"])
+            .env("MOAT_ASSUME_TTY", "1");
+        let added = output(&mut add, Some("y\n"));
+        assert_eq!(added.status.code(), Some(OK), "{}", text(&added));
+        // Generated for the test; no real token is used.
+        let value = "fake-gh-token-3f9a1c";
+        let out = run_sh_with(
+            &sb,
+            &project,
+            "echo \"token=${GITHUB_TOKEN-unset}\"; env | grep -c fake-gh-token",
+            &[("GITHUB_TOKEN", value)],
+        );
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        assert!(stdout(&out).contains("token=unset"), "{shown}");
+        assert!(!shown.contains(value), "{shown}");
     }
 
     #[test]

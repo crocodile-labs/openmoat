@@ -34,6 +34,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result, bail};
+use openmoat_core::{Policy, SecretSource};
 
 use super::proxy::{self, Exit};
 use super::sandbox::write_report;
@@ -86,6 +87,11 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         platform::confine(&policy, &ctx, grants, &program)?
     };
     agent.command().args(rest);
+    // The proxy reads a brokered secret from this process's environment; the
+    // agent gets only the placeholder, never the variable that holds the value.
+    for name in env_secrets(&policy) {
+        agent.command().env_remove(name);
+    }
     let exit = Exit::open(&home, policy, ctx)?;
     notice(&program, port, exit.session(), agent.report(), args)?;
     std::thread::spawn(move || {
@@ -123,6 +129,18 @@ pub fn run(args: &RunArgs) -> Result<Code> {
 /// the Landlock rules and seccomp filter, and start the agent.
 pub fn inside(args: &IsolatedArgs) -> Result<Code> {
     platform::inside(args)
+}
+
+/// The environment variables the policy's brokered secrets are read from.
+fn env_secrets(policy: &Policy) -> Vec<String> {
+    policy
+        .secrets
+        .iter()
+        .filter_map(|s| match &s.source {
+            SecretSource::Env(name) => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The executable `name` starts, symlinks resolved.
