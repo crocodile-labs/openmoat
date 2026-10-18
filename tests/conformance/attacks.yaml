@@ -786,6 +786,11 @@
   threat: T1
   action: { shell: "cd ~ && cat .ssh/id_rsa" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# from `/`, a relative path was joined as `//Users/…`, a UNC path no rule names
+- id: T1-cd-root-then-relative-key
+  threat: T1
+  action: { shell: "cd / && cat Users/me/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T1-cd-twice-then-head-credentials
   threat: T1
   action: { shell: "cd /tmp; cd ~/.aws && head credentials" }
