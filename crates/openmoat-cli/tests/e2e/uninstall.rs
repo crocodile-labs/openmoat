@@ -76,7 +76,7 @@ fn init_shows_each_agents_changes_before_asking() {
     assert!(
         shown
             .lines()
-            .any(|l| l.starts_with('+') && l.contains("guard --host claude-code")),
+            .any(|l| l.starts_with('+') && l.contains("\"--host\"")),
         "{shown}"
     );
     assert!(!sb.home.join(".codex/hooks.json").exists());
