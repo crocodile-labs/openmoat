@@ -250,8 +250,9 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   The trigger matters when your policy moves `secrets-paths` to `ask`: once you approve
   the read, the session is tainted.
 - Protected paths are files whose change runs code or steers the agent later. The built-in
-  list (`taint.rs`) is CI (`.github/workflows/**`, `.gitlab-ci.yml`, `.circleci/**`), git
-  hooks (`.husky/**`, `.githooks/**`), editor tasks (`.vscode/**`), the build and test
+  list (`taint.rs`) is CI (`.github/workflows/**`, `.gitlab-ci.yml`, `.circleci/**`,
+  `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/**`), git hooks (`.husky/**`,
+  `.githooks/**`, `.pre-commit-config.yaml`, `lefthook.yml`), editor tasks (`.vscode/**`), the build and test
   definitions of every ecosystem whose commands the default policy runs: JavaScript
   (`package.json`, `.npmrc`, `.yarnrc`, `.yarnrc.yml`, `pnpm-workspace.yaml`), make, just
   and task (`Makefile`, `makefile`, `GNUmakefile`, `*.mk`, `justfile`, `Taskfile.yml`),
@@ -263,8 +264,10 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   (`composer.json`, `artisan`, `phpunit.xml`), Python (`conftest.py`, `pytest.ini`,
   `pyproject.toml`, `setup.py`, `setup.cfg`, `tox.ini`, `noxfile.py`) and containers
   (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`), and agent instructions and
-  settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.codex/**`, `.cursor/**`,
-  `.cursorrules`, `.mcp.json`), at any depth. Source and test files are not protected,
+  settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.claude.json`, `.codex/**`,
+  `.cursor/**`, `.cursorrules`, `.mcp.json`) and OpenMoat's own `.moat/**`, at any depth:
+  every file `runs-later` asks about and every config file `kernel-self` protects (a
+  test keeps the lists in step). Source and test files are not protected,
   test-runner configs written in JavaScript (`jest.config.js`) included: they are code the
   run executes like any other file, and the command that runs them is named in a
   protected file.
