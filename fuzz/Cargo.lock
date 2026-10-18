@@ -222,7 +222,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-core"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "globset",
  "serde",
@@ -242,7 +242,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-hosts"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "openmoat-core",
  "serde",
@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "openmoat-proxy"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "httparse",
  "openmoat-core",
