@@ -130,7 +130,7 @@ fn a_tainted_session_pushing_a_workflow_change_asks() {
 }
 
 #[test]
-fn a_normal_push_keeps_the_policys_decision() {
+fn a_normal_push_keeps_its_verdict() {
     let sb = Sandbox::installed(&[".claude"]);
     let work = repo(&sb);
     commit(&work, "src/lib.rs", "pub fn f() {}\n", "code");
