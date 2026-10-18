@@ -87,7 +87,8 @@ def main():
             worst = p95
         rows.append(f"| {size:,} | {statistics.median(wall):.1f} / {p95:.1f} | "
                     f"{statistics.median(own):.1f} / {percentile(own, 95):.1f} |")
-        print(f"::notice title=guard latency, {size:,} earlier calls::"
+        # a comma ends a workflow command property, so the title has none
+        print(f"::notice title=guard latency after {size} earlier calls::"
               f"end to end median {statistics.median(wall):.1f} ms, p95 {p95:.1f} ms; "
               f"latency_us median {statistics.median(own):.1f} ms")
 
