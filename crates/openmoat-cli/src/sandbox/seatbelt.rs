@@ -221,8 +221,23 @@ fn rules(out: &mut String, rules: &[Rule], operation: &str) {
     let verb = operation.split(' ').next().unwrap_or_default();
     for r in rules {
         let comment = format!("{verb} {} ({})", r.id, r.list);
-        rule(out, &comment, operation, &r.patterns);
+        rule(out, &comment, operation, &with_real_paths(&r.patterns));
     }
+}
+
+/// `patterns` and, for each under a symlinked directory, the same pattern where
+/// the link points: Seatbelt sees the path the kernel opens (`/tmp/x` is
+/// `/private/tmp/x` on macOS). Only for the policy's rules; the platform's own
+/// paths are listed in every spelling already, and the profile must not depend
+/// on links elsewhere on the machine that generates it.
+fn with_real_paths(patterns: &[String]) -> Vec<String> {
+    let mut out = patterns.to_vec();
+    for real in patterns.iter().filter_map(|p| through_links(p)) {
+        if !out.contains(&real) {
+            out.push(real);
+        }
+    }
+    out
 }
 
 /// `(<operation> …)` matching what `patterns` match: at least one positive
@@ -230,15 +245,7 @@ fn rules(out: &mut String, rules: &[Rule], operation: &str) {
 fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
     // `~/{.ssh/**,.aws/**}`: each alternative on its own, so `/**` inside braces
     // is recursive here as it is in the engine
-    let mut patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
-    // Seatbelt sees the path the kernel opens: a pattern under a symlinked
-    // directory (`/tmp` → `/private/tmp`) is also written where the link points.
-    let real: Vec<String> = patterns.iter().filter_map(|p| through_links(p)).collect();
-    for p in real {
-        if !patterns.contains(&p) {
-            patterns.push(p);
-        }
-    }
+    let patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
     let patterns = &patterns[..];
     let (mut positive, mut excluded) = split(patterns);
     // files run later are the hook's to ask about: a deny here would fail installs
@@ -285,7 +292,8 @@ fn network(p: &mut Generated, net: &Access, port: Option<u16>) {
 /// translated as written.
 const MAX_ALTERNATIVES: usize = 64;
 
-/// `pattern` with its brace groups expanded (`a{b,c}d` → `abd`, `acd`), as the
+/// `pattern` with its brace groups expanded (`src/{a,b}.rs` → `src/a.rs`,
+/// `src/b.rs`), as the
 /// engine's glob reads them; nested groups too. A pattern without braces, with
 /// an unclosed group, or with more than [`MAX_ALTERNATIVES`] results is
 /// returned as it is.
