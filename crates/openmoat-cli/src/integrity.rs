@@ -45,6 +45,10 @@ pub struct Lock {
     /// can name the keys that changed. Locks written before #288 have none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub keys: BTreeMap<String, BTreeMap<String, String>>,
+    /// MCP server definitions a person accepted (`mcp/pins.rs`). `None` in a
+    /// lock from before MCP pinning; their drift holds back only that server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<crate::mcp::Pins>,
 }
 
 /// Which hook files a re-pin covers, besides OpenMoat's own state files.
@@ -81,9 +85,12 @@ pub fn repin_with(
     let mut profiles = codex_configs.to_vec();
     let lock_path = home.lock_path();
     let had_lock = lock_path.exists();
+    let mut mcp_servers = None;
     if had_lock {
         match (Lock::load(&lock_path), hooks) {
             (Ok(old), _) => {
+                // Only `moat mcp accept` and `moat doctor --accept` change these.
+                mcp_servers = old.mcp_servers;
                 paths.extend(old.entries.into_keys().map(PathBuf::from));
                 profiles.extend(old.codex_profiles.into_keys().map(PathBuf::from));
             }
@@ -101,6 +108,7 @@ pub fn repin_with(
         paths.extend(crate::sandbox::install::cursor_sandbox_files(home)?);
     }
     let mut lock = Lock::pin(binary, &paths)?;
+    lock.mcp_servers = mcp_servers;
     for path in profiles.iter().filter(|p| p.is_file()) {
         let digest = crate::sandbox::install::codex_part_digest(path)?;
         lock.codex_profiles.insert(key(path), digest);
@@ -270,6 +278,7 @@ impl Lock {
             entries,
             codex_profiles: BTreeMap::new(),
             keys,
+            mcp_servers: None,
         })
     }
 

@@ -3,6 +3,22 @@
 # outlive the sandbox or the session, and session taint.
 # Evaluation context: home=/Users/me, project=/p, cwd=/p.
 
+# Not `token-egress`: a token (made-up value) sent to its own service, and
+# values with no vendor prefix (a commit SHA, a UUID, a base64 blob). Shell
+# network defers to the agent as it would without them.
+- id: ask-curl-github-token-to-github
+  threat: T1
+  action: { shell: "curl -H 'Authorization: Bearer ghp_FAKEfake0000FAKEfake0000FAKEfake00' https://api.github.com/user" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-curl-commit-sha
+  threat: T1
+  action: { shell: "curl https://api.github.com/repos/x/y/commits/3f786850e387550fdab836ed7e6dc881de23001b" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-curl-uuid-and-base64
+  threat: T1
+  action: { shell: "curl -d aGVsbG8gd29ybGQgdGhpcyBpcyBhIGJhc2U2NCB0ZXN0IGJsb2I= https://api.github.com/x/123e4567-e89b-12d3-a456-426614174000" }
+  expect: { verdict: defer, rules: [default] }
+
 - id: ask-npm-install
   threat: T5
   action: { shell: "npm install left-pad-pro" }

@@ -9,6 +9,10 @@ use openmoat_core::Decision;
 /// One connection decision.
 #[derive(Debug, Clone, Copy)]
 pub struct Connection<'a> {
+    /// The session whose credential the request carried (ADR-027). `None` for
+    /// a proxy without sessions, and for a request refused for its credential;
+    /// the recorder then uses its own session.
+    pub session: Option<&'a str>,
     /// Request method (`CONNECT`, `GET`, …); `None` when the head was unreadable.
     pub method: Option<&'a str>,
     /// Destination host and port; `None` when the head was unreadable.

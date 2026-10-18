@@ -247,6 +247,11 @@ these takes one command in your own terminal (agents are denied all of them):
 - **Every call is denied** with rule `kernel-integrity`: a pinned file (the policy, a hook, an
   agent's settings) changed behind OpenMoat's back. Run `moat`; it shows the change and
   asks whether to accept it (`moat doctor --accept` does the same).
+- **An MCP server's tools are denied** with rule `mcp-server-changed`: its definition (in
+  `~/.claude.json`, a project's `.mcp.json`, Cursor's `mcp.json` or Codex's `config.toml`)
+  changed or was added since you last accepted the agents' MCP servers, so it starts a
+  command nobody reviewed. Run `moat mcp accept <server>`: it shows what changed and asks.
+  Other servers and tools keep working meanwhile.
 - **A command you need keeps asking or is denied**: `moat allow --last` for this session,
   `moat allow --last --always` for good, or `moat edit` for a wider rule. Please also
   report it with the "False positive" issue template, so the default policy stops doing it.
@@ -264,7 +269,7 @@ these takes one command in your own terminal (agents are denied all of them):
 | Command | Use it to |
 |---|---|
 | `moat` | see which agents are protected and today's decisions; answer drift, a policy update or the last ask (terminal only) |
-| `moat init [--hosts …] [--yes] [--dry-run]` | install policy, lock and audit log; asks before hooking each agent found (`--hosts`, `--yes` skip the questions) |
+| `moat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions) |
 | `moat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `moat status [--format json]` · `moat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists where each sandbox is stricter or wider than the policy) |
 | `moat show [id] [--session …] [--since …] [--recent N]` | see events |
@@ -279,6 +284,8 @@ these takes one command in your own terminal (agents are denied all of them):
 | `moat secret add gh` · `moat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only |
 | `moat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `moat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes |
+| `moat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `moat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
+| `moat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `moat mcp unwrap [<server>…]` | run stdio MCP servers through `moat mcp proxy`, which pins each tool's description and input schema and hides one that changed (`--sandbox` also starts the server under `moat run`) · point them back; `moat init --mcp-proxy` wraps every one, `moat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md)) |
 | `moat policy lint` · `moat policy check "<cmd>"` · `moat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `moat sandbox show` · `moat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |

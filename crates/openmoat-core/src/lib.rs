@@ -37,6 +37,7 @@ mod repo;
 mod secret;
 mod shell;
 mod taint;
+pub mod token;
 mod verdict;
 pub mod yaml;
 

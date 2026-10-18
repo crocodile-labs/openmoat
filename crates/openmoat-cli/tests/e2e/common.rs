@@ -26,6 +26,10 @@ pub const ASK: i32 = 3;
 /// Usage or configuration error from a command a person ran.
 pub const USAGE: i32 = 64;
 
+/// The Claude Code version every command is told is installed: one that knows
+/// `onFailure`, so `moat init` writes it.
+pub const CLAUDE_CODE_VERSION: &str = "2.1.295 (Claude Code)";
+
 /// A throwaway home directory.
 pub struct Sandbox {
     _dir: TempDir,
@@ -102,7 +106,10 @@ impl Sandbox {
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", &self.home)
-            .env("USERPROFILE", &self.home);
+            .env("USERPROFILE", &self.home)
+            // Debug builds take Claude Code's version from here instead of
+            // running the `claude` on `PATH` (`install/claude_version.rs`).
+            .env("MOAT_CLAUDE_CODE_VERSION", CLAUDE_CODE_VERSION);
         // Windows sockets cannot start without it (`moat proxy` binds one).
         if let Some(root) = std::env::var_os("SYSTEMROOT") {
             cmd.env("SYSTEMROOT", root);

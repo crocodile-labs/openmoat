@@ -186,6 +186,14 @@ fn evaluate(
     if let Some(decision) = integrity::violation(&home)? {
         return Ok((Some(request), decision));
     }
+    // A server whose definition a person has not accepted runs a command
+    // nobody reviewed; only its own tool calls are held back (ADR-026).
+    if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {
+        let cwd = request.cwd.as_deref().map(std::path::Path::new);
+        if let Some(decision) = crate::mcp::violation(&home, host, cwd, name)? {
+            return Ok((Some(request), decision));
+        }
+    }
     let Some(action) = &request.action else {
         return Ok((Some(request), ungoverned(host)));
     };
@@ -297,6 +305,12 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         latency_us,
     };
     let id = store.record(&event)?;
+    // Under `moat run`, the run's proxy applies this session's taint too
+    // (ADR-027); a link that cannot be written fails the call like the row.
+    let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
+    if let (Some(run), Some(r)) = (taint::run::run_session(run.as_deref()), request) {
+        taint::run::link(&store, run, host, &r.session_id)?;
+    }
     // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
     if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
         eprintln!("moat: trace {id}  (moat show {id})");

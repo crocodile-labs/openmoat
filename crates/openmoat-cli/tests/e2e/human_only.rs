@@ -26,6 +26,9 @@ fn a_human_only_command_started_by_an_agent_is_refused() {
         &["secret", "add", "TOKEN", "--env", "TOKEN"],
         &["uninstall"],
         &["sandbox", "sync"],
+        &["mcp", "accept"],
+        &["mcp", "wrap"],
+        &["mcp", "unwrap"],
     ] {
         // `; exit $?` keeps the shell from replacing itself with `moat`.
         let mut cmd = sb.configure(Command::new(&agent));

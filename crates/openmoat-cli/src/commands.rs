@@ -8,6 +8,7 @@ mod doctor;
 mod edit;
 mod guard;
 mod init;
+mod mcp;
 mod overview;
 mod policy;
 mod proxy;
@@ -26,7 +27,8 @@ mod uninstall;
 use anyhow::Result;
 
 use crate::cli::{
-    AuditCommand, Cli, Command, PolicyCommand, ProxyCommand, SandboxCommand, SecretCommand,
+    AuditCommand, Cli, Command, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand,
+    SecretCommand,
 };
 use crate::exit::Code;
 
@@ -74,6 +76,12 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Sandbox { command } => match command {
             SandboxCommand::Show(args) => sandbox::show(&args),
             SandboxCommand::Sync => sandbox::sync(),
+        },
+        Command::Mcp { command } => match command {
+            McpCommand::Accept(args) => mcp::accept(&args),
+            McpCommand::Proxy(args) => mcp::proxy(&args),
+            McpCommand::Wrap(args) => mcp::wrap(&args),
+            McpCommand::Unwrap(args) => mcp::unwrap(&args),
         },
     }
 }

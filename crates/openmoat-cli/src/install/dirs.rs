@@ -30,6 +30,10 @@ pub struct Recorded {
     /// a file of the user's that has a backup's name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub backups: Vec<PathBuf>,
+    /// The MCP server definitions `moat mcp wrap` pointed at `moat mcp proxy`, so
+    /// `moat uninstall` restores those and no other.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_wrapped: Vec<crate::mcp::wrap::Wrapped>,
 }
 
 impl Recorded {

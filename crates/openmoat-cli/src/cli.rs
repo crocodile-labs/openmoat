@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use openmoat_hosts::Host;
 
+mod mcp;
 mod policy;
 
+pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{ActionKind, CheckArgs, CompileArgs, LintArgs, PolicyCommand, UpgradeArgs};
 
 #[derive(Debug, Parser)]
@@ -100,6 +102,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SandboxCommand,
     },
+    /// The MCP servers the agents start: accept a changed definition, and run a server
+    /// through OpenMoat to pin its tool descriptions.
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -139,6 +147,11 @@ pub struct InitArgs {
     /// Print what would change without writing anything.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Also run every stdio MCP server in the agents' user configuration through
+    /// `moat mcp proxy` (`moat mcp wrap`), which pins its tool descriptions.
+    #[arg(long)]
+    pub mcp_proxy: bool,
 }
 
 #[derive(Debug, Args)]

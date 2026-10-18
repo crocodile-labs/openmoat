@@ -51,6 +51,7 @@ mod cwd;
 mod database;
 mod decoders;
 mod embedded;
+mod error;
 pub(crate) mod git;
 mod invocation;
 mod make;
@@ -65,8 +66,10 @@ mod tests;
 mod text;
 pub(crate) mod tokens;
 
+pub(crate) use error::ClassifyError;
+
 use crate::action::AtomicAction;
-use crate::lexer::{LexError, Token};
+use crate::lexer::Token;
 use crate::paths;
 
 /// Result of classifying a command line.
@@ -107,6 +110,18 @@ impl ParseOutcome {
             } => (atoms, Some(Unparsed { reason, asks })),
         }
     }
+}
+
+/// The program of a command's argv, without its directory (`/usr/bin/curl` → `curl`).
+pub(crate) fn program_name(argv: &[String]) -> &str {
+    argv.first().map_or("", |p| tokens::basename(p))
+}
+
+/// Whether the command connects where its arguments say: a program of
+/// [`tables::HOST_PROGRAMS`], or `git` with a subcommand that names a remote.
+pub(crate) fn names_hosts(argv: &[String]) -> bool {
+    let program = program_name(argv);
+    tables::HOST_PROGRAMS.contains(&program) || (program == "git" && git::names_hosts(argv))
 }
 
 /// What `${project}` is in a shell word: the shell's variable `project`, not
@@ -201,51 +216,6 @@ pub fn classify_globs(command: &str, ctx: &ShellContext<'_>) -> (ParseOutcome, V
         None => ParseOutcome::Parsed(sink.atoms),
     };
     (outcome, sink.globs)
-}
-
-/// Why a command line could not be classified safely; the engine turns it into `ask`.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ClassifyError {
-    #[error(transparent)]
-    Lex(#[from] LexError),
-    #[error("command nesting deeper than {MAX_DEPTH}")]
-    TooDeep,
-    #[error("command expands to more than {MAX_ATOMS} actions")]
-    TooManyActions,
-    #[error("cannot interpret `{option}` for `{program}`")]
-    ShellOption { program: String, option: String },
-    #[error("`{program} {option}` runs code from a file or module the command line names")]
-    LoadsCode { program: String, option: String },
-    #[error("`{0}` names a path relative to a directory that is not known")]
-    UnknownDirectory(String),
-    #[error("`cd` may lead to more than {MAX_DIRS} directories")]
-    TooManyDirectories,
-    #[error("unbalanced parentheses")]
-    UnbalancedParens,
-    #[error("the shell runs text from `{0}` that the command line does not show")]
-    UnknownStdin(String),
-    #[error("`{0}` depends on a variable whose value is not known")]
-    UnknownValue(String),
-    #[error("a variable set on the line may hold more than {MAX_DIRS} combinations of values")]
-    TooManyValues,
-}
-
-impl ClassifyError {
-    /// The line could not be read in full, or a limit of the classifier was
-    /// reached: what follows may be missing from the atoms, and any line can
-    /// be padded to get here, so the call asks instead of taking the policy's
-    /// catch-all. The other errors are one part the classifier cannot model;
-    /// the rest of the line is classified around it.
-    pub(crate) fn asks(&self) -> bool {
-        matches!(
-            self,
-            Self::Lex(_)
-                | Self::TooDeep
-                | Self::TooManyActions
-                | Self::TooManyDirectories
-                | Self::TooManyValues
-        )
-    }
 }
 
 /// All lowercase letters, digits and `_`, with one letter at least: a shell

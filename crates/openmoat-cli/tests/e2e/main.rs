@@ -33,6 +33,7 @@ mod human_only;
 mod install_path;
 mod listings;
 mod lock;
+mod mcp;
 mod moatbench;
 mod paths;
 mod permission_mode;

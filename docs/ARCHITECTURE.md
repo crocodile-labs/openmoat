@@ -28,7 +28,7 @@ openmoat ──► openmoat-hosts ──► openmoat-core
 | `openmoat-hosts` | Host adapters: `pre_tool_use.rs` (Claude Code and Codex `PreToolUse`), `config_change.rs` (Claude Code `ConfigChange`), `cursor.rs`, `mcp.rs` (MCP arguments to paths and URLs), `patch.rs` (Codex `apply_patch` file list) | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
 | `openmoat-proxy` | The egress proxy behind `moat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
-| `openmoat` (`crates/openmoat-cli`) | The `moat` binary: commands, hook installation, the policy lock, approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
+| `openmoat` (`crates/openmoat-cli`) | The `moat` binary: commands, hook installation, the policy lock and its MCP server pins, `moat mcp proxy` (`mcp/relay.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
 
 No crate depends on `openmoat`.
 
@@ -38,6 +38,7 @@ No crate depends on `openmoat`.
 host payload (stdin)
   └─► adapter (openmoat-hosts)             Action, or none for an ungoverned tool
         └─► policy lock check              drift ⇒ deny [kernel-integrity]
+          └─► MCP server pins              McpTool of a changed or new server ⇒ deny [mcp-server-changed]
               └─► load policy + overlay    ~/.moat/policy.yaml + policy.d/approved.yaml
                     + repository policy    <project>/.moat/policy.yaml, tightening only
                     └─► classify (openmoat-core)  Action ⇒ atomic actions
@@ -66,7 +67,11 @@ exits. There is no daemon.
    denies the call with `kernel-integrity` before the policy is read. Otherwise a tool
    the adapter does not govern (no action) is recorded with rule `ungoverned` and
    deferred: the host decides it as if no hook had answered (Cursor, whose hooks have
-   no such answer, gets an allow).
+   no such answer, gets an allow). An `McpTool` call is then checked against the MCP
+   server pins in the lock (`mcp.rs`, `mcp/servers.rs`, `mcp/pins.rs`, ADR-026): the
+   host's MCP configuration files, user and project, are read, and when the server the
+   tool belongs to has a definition that differs from its pin or has none, the call is
+   denied with `mcp-server-changed`. Other servers are not affected.
 5. **Context.** `EvalContext` carries the home directory, the project root (git root
    above the call's working directory, never the home directory, an ancestor of it or
    a filesystem root; `project.rs`), their symlink-resolved spellings, the working
@@ -219,6 +224,16 @@ objects nor vouches: the agent's own permission flow decides. Deny is absolute (
 matches `net` patterns and falls back to the `net` default (ADR-017). The decision
 carries the rule ids that produced the final verdict and weaker matches as context.
 
+Before deciding, the engine adds egress atoms (`engine/egress.rs`). For each URL a fetch
+or network tool opens, MCP URL argument, web search query, and argv of a command that
+connects to a host (with the commands piped into it), it looks for a known token shape
+(`openmoat_core::token`, the same list as `openmoat_audit::TOKEN_SHAPES`, matched by
+hand since core has no regex engine; `openmoat-audit/tests/token_shapes.rs` keeps the
+two in step) and for brokered-secret placeholders. Each one going to a host that is not
+its own becomes `@token-egress <service> <host>` or `@placeholder-egress <id> <host>`,
+which the default policy's `token-egress` and `placeholder-egress` deny. The token
+itself never goes into an atom, so it never reaches a reason.
+
 ### Resolvers
 
 The engine needs two facts that live on the filesystem. `openmoat-core` defines a trait
@@ -342,7 +357,16 @@ check`, 64 usage or configuration error. `moat run` exits 1 when the agent it st
 exits non-zero; never 2 or 3. `guard` never exits 64: an argument it cannot
 parse is a deny with exit 2, because Claude Code and Codex proceed on any other
 non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
-`moat init` sets it on every Cursor hook.
+`moat init` sets it on every Cursor hook. Claude Code 2.1.295 and later block a call
+whose hook fails to start, crashes, exits other than 0 or 2, or times out when the hook
+sets `"onFailure": "block"` (<https://code.claude.com/docs/en/hooks>, "Block the action
+when a hook fails"). `moat init` writes it on its `PreToolUse` entry when `claude --version`
+(the `claude` on `PATH`, 5 s at most, asked once per command) reports 2.1.295 or later
+(`install/claude_version.rs`); `status` and `doctor` then report an entry without it as
+out of date. With an older Claude Code, or none on `PATH`, the key is left out and
+`doctor` warns. A key already there is kept, so a shell without `claude` never takes it
+away. Codex has no such key: a failed hook "continues the tool call"
+(<https://learn.chatgpt.com/docs/hooks>).
 
 ## 6. Self-protection
 
@@ -374,7 +398,8 @@ non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
   allow|doctor|edit|init|policy|secret|trust|uninstall` and `moat sandbox sync` from an agent, including under pseudo-terminal
   wrappers (ADR-011, ADR-014).
 - **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`, `moat doctor --accept`,
-  `moat sandbox sync`, `moat policy upgrade` and `moat proxy install`/`uninstall` refuse to
+  `moat sandbox sync`, `moat policy upgrade`, `moat mcp accept`/`wrap`/`unwrap` and
+  `moat proxy install`/`uninstall` refuse to
   run without a terminal (`terminal.rs`). They also refuse when an agent host (`claude`,
   `codex`, `cursor-agent`) or `moat` itself (`moat run`) is among their parent processes,
   or when those cannot be read (`terminal/ancestry.rs`: `/proc` on Linux, `/bin/ps` on
@@ -585,6 +610,11 @@ host outside TLS termination.
 - **Start-up.** It refuses a non-loopback listen address, a missing installation and a
   drifted policy lock (exit 64). It compiles the policy once, so restart it after a policy
   change. It writes to the audit log under one session id per run (`proxy-<ms>`).
+- **Two modes** (ADR-027). The standalone `moat proxy` serves any local client, since the
+  host sandboxes cannot send a credential, and says so on stderr at start-up. `moat run`
+  serves its proxy in session mode: every request must carry the run's credential,
+  `Proxy-Authorization: Basic base64(<session>:<token>)` (the agent's proxy URL holds it as
+  userinfo), and is recorded under that session (`openmoat-proxy/src/session.rs`).
 - **Brokered secrets** (POLICY.md §2.1). `commands/proxy.rs` has `secrets/` read each
   source (a file, an env var, or a keychain item through the OS tool by absolute path)
   into a zeroed-on-drop buffer and hand it to `openmoat_proxy::Broker`. A source that cannot
@@ -594,12 +624,23 @@ host outside TLS termination.
      - `CONNECT host:port`
      - one absolute-form `http://` request
 
+     In session mode, verify the credential next (constant-time comparison; two
+     `Proxy-Authorization` headers are malformed). A missing, malformed or wrong one gets
+     `407` with `Proxy-Authenticate: Basic realm="moat"` and a `proxy-session` row without
+     a session; nothing else happens. Then take the session's share of the connections
+     (below), or answer `503`.
+
      Refuse (`proxy-secret`) a request whose head, or body bytes read with it, carries a
      brokered secret's placeholder or value when the host is not that secret's own.
   2. Decide the host as a `fetch` atom through `CompiledPolicy` (POLICY.md §4). Only
      `allow` passes. An `ask` or a `defer` is refused, because the proxy cannot prompt.
      `metadata.google.internal` and `metadata.goog` are refused by name whatever the
-     policy says.
+     policy says. In session mode, the session's taint applies next
+     (`decide::tainted`, through `CompiledPolicy::with_taint`). After the session read
+     secret material, a host other than that secret's own is refused (`session-taint`),
+     because the proxy cannot ask. The taint is the fold of every agent session linked to
+     the run (§14), read through the `TaintLookup` the CLI passes in
+     (`taint/run.rs`); a history that cannot be read refuses (`proxy-session`).
   3. Resolve the name with the system resolver (IP literals skip it). Refuse the
      connection when any resolved address is loopback, link-local, a cloud metadata
      address (`100.100.100.200`, `fd00:ec2::254`, NAT64 and IPv4-mapped forms included)
@@ -645,15 +686,18 @@ host outside TLS termination.
   - `proxy-request`: unparseable or unsupported request
   - `proxy-upstream`: DNS or connect failure
   - `proxy-secret`: a brokered secret sent towards a host other than its own
+  - `proxy-session`: in session mode, no valid credential, the session's share of the
+    connections used up, or its history unreadable
   - `proxy-audit`: written to stderr only, since the audit log is what failed
 - **Limits:**
   - 256 concurrent connections; the next is answered `503`.
+  - In session mode, at most half of them per session, and half for the connections that
+    have not presented a credential yet, counted together (`slots.rs`, #555).
   - 10 s to connect upstream.
   - One thread per direction of each connection.
 - **Not yet:** TLS termination for per-host method and path rules and for injecting
-  secrets into HTTPS (opt-in, ADR-020), session taint for proxied connections (they carry
-  no host session; the hook applies taint, §2 step 9), and a policy reload without
-  restart.
+  secrets into HTTPS (opt-in, ADR-020), session taint for the standalone `moat proxy`
+  (its clients carry no session), and a policy reload without restart.
 
 ## 13. Standard tier: host sandboxes
 
@@ -765,7 +809,7 @@ one sandbox generated from the policy. The code is in `crates/openmoat-cli/src/c
 ```
 policy.yaml ─► ir::lower (this project) ─► Enforcement + Grants ─┬─► seatbelt::generate ─► sandbox-exec -p <profile> <agent>
                                                                  └─► landlock::generate + seccomp ─► restricted thread ─► <agent>
-moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>) ◄── HTTP(S)_PROXY ── agent and its commands
+moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄── HTTP(S)_PROXY (with credential) ── agent and its commands
 ```
 
 - **Start-up.** `moat run` refuses a missing installation and a drifted policy lock
@@ -787,7 +831,18 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>) ◄── HTTP(S)_PRO
   loopback destinations, so the open port reaches no other local service.
   `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` (both cases) point at it, and `NO_PROXY`
   is removed. A program that ignores them has no network; that is the one loss for the
-  default policy. The port is ephemeral and the proxy private to the session, unlike
+  default policy.
+- **Session credential** (ADR-027). `moat run` makes one credential per run: session
+  `run-<ms>-<8 hex>` and a 256-bit token from `/dev/urandom`. The proxy variables hold
+  `http://<session>:<token>@127.0.0.1:<port>`, and the proxy serves that session alone
+  (§12), so a program that drops the URL's userinfo gets `407`. The session is the audit
+  session of every proxy row and is printed in the banner. `MOAT_RUN_SESSION` names it
+  for the agent, so `moat guard`, started by the agent, records one link row per agent
+  session in the run's session (host `moat-run`, `taint/run.rs`). The proxy folds the
+  linked sessions' taint from those rows. As the profiles stand, a hook inside the
+  sandbox can neither read nor write the OpenMoat state directory (ADR-027,
+  Consequences), so those links are written only where the hook's audit writes reach
+  the log. The port is ephemeral and the proxy private to the session, unlike
   the Standard tier's opt-in long-running `moat proxy` on `sandbox.proxy_port` (§13).
 - **Seatbelt (macOS).** `(deny default)`, then:
   - process basics (exec, fork, signals and process info in the same sandbox, ttys,

@@ -159,8 +159,8 @@ fn sandbox(
 fn gaps(host: Host) -> &'static str {
     match host {
         Host::ClaudeCode => {
-            "file tools, WebFetch and MCP servers run outside the OS sandbox; calls run \
-             unchecked if the hook binary is missing or crashes"
+            "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
+             Code 2.1.295 calls run unchecked if the hook binary is missing or crashes"
         }
         Host::Codex => {
             "web search and hosted tools are not hooked; asks become denies; calls run \

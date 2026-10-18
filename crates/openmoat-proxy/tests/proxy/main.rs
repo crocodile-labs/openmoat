@@ -10,7 +10,7 @@ use std::thread;
 use std::time::Duration;
 
 use openmoat_core::{CompiledPolicy, EvalContext, Policy, Verdict};
-use openmoat_proxy::{Broker, Connection, Limits, Proxy, RecordError, Recorder, Resolve};
+use openmoat_proxy::{Broker, Connection, Limits, Proxy, RecordError, Recorder, Resolve, Sessions};
 
 const POLICY: &str = r#"
 version: 1
@@ -118,7 +118,17 @@ fn launch(
     recorder: Option<&'static dyn Recorder>,
     limits: Limits,
     broker: Broker,
+    upstream: (SocketAddr, Receiver<Vec<u8>>),
+) -> Harness {
+    launch_with(recorder, limits, broker, upstream, None)
+}
+
+fn launch_with(
+    recorder: Option<&'static dyn Recorder>,
+    limits: Limits,
+    broker: Broker,
     (upstream, received): (SocketAddr, Receiver<Vec<u8>>),
+    sessions: Option<&'static Sessions<'static>>,
 ) -> Harness {
     let rows: &'static MemoryRecorder = Box::leak(Box::default());
     let recorder = recorder.unwrap_or(rows);
@@ -161,6 +171,7 @@ fn launch(
         loopback_ok: Box::leak(Box::new([upstream])),
         broker: Box::leak(Box::new(broker)),
         allow_ech: false,
+        sessions,
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -266,4 +277,5 @@ mod broker;
 mod http;
 mod limits;
 mod private;
+mod sessions;
 mod tunnel;

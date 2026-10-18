@@ -82,7 +82,11 @@ pub fn state(config: &HostConfig, binary: &Path) -> HookState {
             .and_then(Value::as_array)
             .and_then(|entries| entries.iter().find(|e| is_ours(e, config)));
         match ours {
-            Some(entry) if *entry == desired_entry(config, spec, binary) => found += 1,
+            Some(entry)
+                if *entry == desired_entry(config, spec, binary, block(config, spec, entry)) =>
+            {
+                found += 1;
+            }
             Some(entry) => {
                 stale_command.get_or_insert_with(|| {
                     hook_binary(entry, config).unwrap_or_else(|| "?".into())
@@ -101,17 +105,41 @@ pub fn state(config: &HostConfig, binary: &Path) -> HookState {
     }
 }
 
-fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path) -> Value {
+/// Whether our entry for `spec` carries `"onFailure": "block"`: it does when it
+/// already has the key, so a shell without `claude` on `PATH` never takes the
+/// key away, and otherwise when the host's version knows it.
+fn block(config: &HostConfig, spec: &HookSpec, existing: &Value) -> bool {
+    config.format == HookFormat::Nested
+        && (has_block(existing) || (spec.block_on_failure && (config.blocks_on_failure)()))
+}
+
+/// [`block`] for an event with no entry of ours yet.
+fn block_new(config: &HostConfig, spec: &HookSpec) -> bool {
+    config.format == HookFormat::Nested && spec.block_on_failure && (config.blocks_on_failure)()
+}
+
+fn has_block(entry: &Value) -> bool {
+    entry.pointer("/hooks/0/onFailure") == Some(&json!("block"))
+}
+
+fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path, block: bool) -> Value {
     match config.format {
-        HookFormat::Nested => json!({
-            "matcher": spec.matcher,
-            "hooks": [{
+        HookFormat::Nested => {
+            let mut hook = json!({
                 "type": "command",
                 "command": binary.to_string_lossy(),
                 "args": ["guard", "--host", config.host.id()],
                 "timeout": spec.timeout,
-            }]
-        }),
+            });
+            if block {
+                // Claude Code v2.1.295+: a hook that fails to start, crashes,
+                // exits other than 0 or 2, or times out blocks the call as exit 2
+                // does (<https://code.claude.com/docs/en/hooks>, "Block the
+                // action when a hook fails"); without it the call runs.
+                hook["onFailure"] = json!("block");
+            }
+            json!({ "matcher": spec.matcher, "hooks": [hook] })
+        }
         HookFormat::Cursor => json!({
             "command": cursor_command(config, binary),
             "timeout": spec.timeout,
@@ -170,7 +198,6 @@ fn upsert(
     spec: &HookSpec,
     binary: &Path,
 ) -> Result<Outcome> {
-    let desired = desired_entry(config, spec, binary);
     let Value::Object(top) = root else {
         bail!("{} is not a JSON object", config.settings_path.display());
     };
@@ -196,17 +223,35 @@ fn upsert(
             config.settings_path.display()
         );
     };
-    match entries.iter_mut().find(|e| is_ours(e, config)) {
-        Some(existing) if *existing == desired => Ok(Outcome::Unchanged),
-        Some(existing) => {
-            *existing = desired;
-            Ok(Outcome::Updated)
-        }
-        None => {
-            entries.push(desired);
-            Ok(Outcome::Installed)
-        }
+    let Some(existing) = entries.iter_mut().find(|e| is_ours(e, config)) else {
+        entries.push(desired_entry(config, spec, binary, block_new(config, spec)));
+        return Ok(Outcome::Installed);
+    };
+    let desired = desired_entry(config, spec, binary, block(config, spec, existing));
+    if *existing == desired {
+        return Ok(Outcome::Unchanged);
     }
+    *existing = desired;
+    Ok(Outcome::Updated)
+}
+
+/// Whether one of our entries that should block a call when `moat guard`
+/// fails ([`HookSpec::block_on_failure`]) has no `onFailure`.
+pub fn lacks_on_failure(config: &HostConfig) -> bool {
+    let Ok(root) = read_or_empty(&config.settings_path) else {
+        return false;
+    };
+    config.format == HookFormat::Nested
+        && config
+            .hooks
+            .iter()
+            .filter(|spec| spec.block_on_failure)
+            .filter_map(|spec| {
+                root.pointer(&format!("/hooks/{}", spec.event))
+                    .and_then(Value::as_array)
+                    .and_then(|entries| entries.iter().find(|e| is_ours(e, config)))
+            })
+            .any(|entry| !has_block(entry))
 }
 
 /// The inverse of [`install`] on a parsed file: remove every entry of ours, then
@@ -250,240 +295,4 @@ pub fn read_or_empty(path: &Path) -> Result<Value> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use openmoat_hosts::Host;
-
-    /// [`super::install`] with the state directory next to the hook file.
-    fn install(config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
-        super::install(&state_home(config), config, binary, dry_run)
-    }
-
-    fn state_home(config: &HostConfig) -> Home {
-        Home::at(config.dir().join(".moat"))
-    }
-
-    const SPECS: &[HookSpec] = &[
-        HookSpec {
-            event: "PreToolUse",
-            matcher: "Bash|Edit",
-            timeout: 600,
-        },
-        HookSpec {
-            event: "ConfigChange",
-            matcher: "user_settings",
-            timeout: 60,
-        },
-    ];
-
-    fn config(dir: &Path) -> HostConfig {
-        HostConfig {
-            host: Host::ClaudeCode,
-            settings_path: dir.join("settings.json"),
-            hooks: SPECS,
-            format: HookFormat::Nested,
-        }
-    }
-
-    #[test]
-    fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = HostConfig {
-            host: Host::Cursor,
-            settings_path: dir.path().join("hooks.json"),
-            hooks: &[HookSpec {
-                event: "beforeShellExecution",
-                matcher: "",
-                timeout: 600,
-            }],
-            format: HookFormat::Cursor,
-        };
-        let binary = Path::new("/Applications/My Tools/moat");
-        assert_eq!(install(&cfg, binary, false).unwrap(), Outcome::Installed);
-        assert_eq!(install(&cfg, binary, false).unwrap(), Outcome::Unchanged);
-        assert_eq!(state(&cfg, binary), HookState::Installed);
-        let doc = root(&cfg);
-        assert_eq!(doc["version"], 1);
-        let entry = &doc["hooks"]["beforeShellExecution"][0];
-        assert_eq!(
-            entry["command"],
-            "\"/Applications/My Tools/moat\" guard --host cursor"
-        );
-        assert_eq!(entry["failClosed"], true);
-        assert_eq!(entry["timeout"], 600);
-        assert!(entry.get("args").is_none());
-        let moved = Path::new("/usr/local/bin/moat");
-        assert_eq!(
-            state(&cfg, moved),
-            HookState::Stale {
-                command: "/Applications/My Tools/moat".into()
-            }
-        );
-        assert_eq!(install(&cfg, moved, false).unwrap(), Outcome::Updated);
-        assert_eq!(
-            root(&cfg)["hooks"]["beforeShellExecution"]
-                .as_array()
-                .unwrap()
-                .len(),
-            1
-        );
-    }
-
-    fn root(cfg: &HostConfig) -> Value {
-        serde_json::from_str(&fs::read_to_string(&cfg.settings_path).unwrap()).unwrap()
-    }
-
-    #[test]
-    fn installs_every_event_idempotently_and_preserves_other_settings() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        fs::write(
-            &cfg.settings_path,
-            r#"{"theme":"dark","hooks":{"PostToolUse":[{"matcher":"Bash","hooks":[]}]}}"#,
-        )
-        .unwrap();
-        let binary = Path::new("/opt/moat/bin/moat");
-
-        assert_eq!(install(&cfg, binary, false).unwrap(), Outcome::Installed);
-        assert_eq!(install(&cfg, binary, false).unwrap(), Outcome::Unchanged);
-        assert_eq!(state(&cfg, binary), HookState::Installed);
-
-        let moved = Path::new("/usr/local/bin/moat");
-        assert_eq!(
-            state(&cfg, moved),
-            HookState::Stale {
-                command: "/opt/moat/bin/moat".into()
-            }
-        );
-        assert_eq!(install(&cfg, moved, false).unwrap(), Outcome::Updated);
-
-        let root = root(&cfg);
-        assert_eq!(root["theme"], "dark");
-        assert_eq!(root["hooks"]["PostToolUse"].as_array().unwrap().len(), 1);
-        let pre = root["hooks"]["PreToolUse"].as_array().unwrap();
-        assert_eq!(pre.len(), 1, "no duplicates after three installs");
-        assert_eq!(pre[0]["hooks"][0]["command"], "/usr/local/bin/moat");
-        assert_eq!(pre[0]["hooks"][0]["timeout"], 600);
-        let cfg_change = root["hooks"]["ConfigChange"].as_array().unwrap();
-        assert_eq!(cfg_change.len(), 1);
-        assert_eq!(cfg_change[0]["matcher"], "user_settings");
-        assert_eq!(cfg_change[0]["hooks"][0]["timeout"], 60);
-        assert!(
-            cfg.settings_path
-                .with_extension("json.moat-backup")
-                .exists()
-        );
-    }
-
-    #[test]
-    fn install_keeps_the_first_backup_and_makes_a_deleted_one_again() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        let original = r#"{"theme":"dark"}"#;
-        fs::write(&cfg.settings_path, original).unwrap();
-        let backup = cfg.settings_path.with_extension("json.moat-backup");
-
-        install(&cfg, Path::new("/opt/moat/bin/moat"), false).unwrap();
-        install(&cfg, Path::new("/usr/local/bin/moat"), false).unwrap();
-        assert_eq!(
-            fs::read_to_string(&backup).unwrap(),
-            original,
-            "a later edit keeps the copy from before OpenMoat"
-        );
-        let recorded = super::super::Recorded::load(&state_home(&cfg)).unwrap();
-        assert_eq!(recorded.backups, std::slice::from_ref(&backup));
-
-        fs::remove_file(&backup).unwrap();
-        let edited = fs::read_to_string(&cfg.settings_path).unwrap();
-        install(&cfg, Path::new("/opt/moat/bin/moat"), false).unwrap();
-        assert_eq!(fs::read_to_string(&backup).unwrap(), edited);
-    }
-
-    #[test]
-    fn remove_undoes_install_and_keeps_foreign_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        let original = json!({"theme": "dark", "hooks": {"PreToolUse": [
-            {"matcher": "Bash", "hooks": [{"type": "command", "command": "lint.sh"}]}
-        ], "Stop": []}});
-        fs::write(&cfg.settings_path, original.to_string()).unwrap();
-        install(&cfg, Path::new("/x/moat"), false).unwrap();
-        let mut doc = root(&cfg);
-        assert!(remove(&mut doc, &cfg));
-        assert_eq!(doc, original);
-        assert!(!remove(&mut doc, &cfg), "nothing left to remove");
-
-        let created = tempfile::tempdir().unwrap();
-        let cursor = HostConfig {
-            host: Host::Cursor,
-            settings_path: created.path().join("hooks.json"),
-            hooks: &SPECS[..1],
-            format: HookFormat::Cursor,
-        };
-        install(&cursor, Path::new("/x/moat"), false).unwrap();
-        let mut doc = root(&cursor);
-        assert!(remove(&mut doc, &cursor));
-        assert_eq!(doc, json!({}), "a file init created strips to nothing");
-    }
-
-    #[test]
-    fn a_missing_event_entry_is_stale_not_installed() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        let binary = Path::new("/x/moat");
-        install(&cfg, binary, false).unwrap();
-        let mut root = root(&cfg);
-        root["hooks"]
-            .as_object_mut()
-            .unwrap()
-            .remove("ConfigChange");
-        fs::write(&cfg.settings_path, root.to_string()).unwrap();
-        assert!(matches!(state(&cfg, binary), HookState::Stale { .. }));
-        assert_eq!(install(&cfg, binary, false).unwrap(), Outcome::Installed);
-        assert_eq!(state(&cfg, binary), HookState::Installed);
-    }
-
-    #[test]
-    fn dry_run_writes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        assert_eq!(
-            install(&cfg, Path::new("/x/moat"), true).unwrap(),
-            Outcome::Installed
-        );
-        assert!(!cfg.settings_path.exists());
-        assert_eq!(state(&cfg, Path::new("/x/moat")), HookState::Missing);
-    }
-
-    #[test]
-    fn foreign_entries_are_left_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        fs::write(
-            &cfg.settings_path,
-            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"lint.sh"}]}]}}"#,
-        )
-        .unwrap();
-        install(&cfg, Path::new("/x/moat"), false).unwrap();
-        let pre = root(&cfg)["hooks"]["PreToolUse"].clone();
-        let pre = pre.as_array().unwrap();
-        assert_eq!(pre.len(), 2);
-        assert_eq!(pre[0]["hooks"][0]["command"], "lint.sh");
-    }
-
-    #[test]
-    fn malformed_files_are_reported_not_overwritten() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = config(dir.path());
-        fs::write(&cfg.settings_path, "{ not json").unwrap();
-        assert!(install(&cfg, Path::new("/x/moat"), false).is_err());
-        assert!(matches!(
-            state(&cfg, Path::new("/x/moat")),
-            HookState::Unreadable(_)
-        ));
-        assert_eq!(
-            fs::read_to_string(&cfg.settings_path).unwrap(),
-            "{ not json"
-        );
-    }
-}
+mod tests;

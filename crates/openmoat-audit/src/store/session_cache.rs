@@ -52,6 +52,28 @@ impl Store {
         rows.collect::<Result<_, _>>().map_err(Into::into)
     }
 
+    /// Whether `session_id` has an event of `host` with call id `call_id`.
+    /// The ids are redacted as [`Store::record`] redacts them.
+    pub fn session_has(
+        &self,
+        session_id: &str,
+        host: &str,
+        call_id: &str,
+    ) -> Result<bool, StoreError> {
+        let session_id = self.secrets.redact(session_id);
+        let host = self.secrets.redact(host);
+        let call_id = self.secrets.redact(call_id);
+        let found: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM events WHERE session_id = ?1 AND host = ?2 AND call_id = ?3 LIMIT 1",
+                params![session_id, host, call_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(found.is_some())
+    }
+
     /// The cached state of `session_id` on `host`, if one was written.
     pub fn session_cache(
         &self,

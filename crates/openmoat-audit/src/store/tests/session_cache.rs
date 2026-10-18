@@ -33,6 +33,19 @@ fn session_after_returns_only_later_events_of_that_session() {
 }
 
 #[test]
+fn session_has_finds_an_event_by_session_host_and_call_id() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(!store.session_has("s1", "claude-code", "c1").unwrap());
+    let d = decision(Verdict::Allow, "dev-shell", "ok");
+    let action = shell("ls");
+    store.record(&sample(&d, &action)).unwrap();
+    assert!(store.session_has("s1", "claude-code", "c1").unwrap());
+    assert!(!store.session_has("s2", "claude-code", "c1").unwrap());
+    assert!(!store.session_has("s1", "codex", "c1").unwrap());
+    assert!(!store.session_has("s1", "claude-code", "c2").unwrap());
+}
+
+#[test]
 fn the_cache_is_absent_until_written_and_never_moves_back() {
     let store = Store::open_in_memory().unwrap();
     assert_eq!(store.session_cache("s1", "claude-code").unwrap(), None);

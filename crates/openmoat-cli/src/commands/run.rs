@@ -27,7 +27,8 @@ use macos as platform;
 use unsupported as platform;
 
 use std::ffi::OsStr;
-use std::io::Write as _;
+use std::fmt::Write as _;
+use std::io::{Read as _, Write as _};
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -35,6 +36,8 @@ use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Policy, SecretSource};
+use openmoat_proxy::Credential;
+use zeroize::Zeroizing;
 
 use super::proxy::{self, Exit};
 use super::sandbox::write_report;
@@ -45,6 +48,7 @@ use crate::exit::Code;
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
+use crate::taint::run::RUN_SESSION_ENV;
 
 /// What a proxy-aware program reads to find its proxy.
 const PROXY_VARS: [&str; 6] = [
@@ -92,17 +96,23 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     for name in env_secrets(&policy) {
         agent.command().env_remove(name);
     }
-    let exit = Exit::open(&home, policy, ctx)?;
+    // The proxy serves this session alone (ADR-027): each request must carry
+    // the credential in the proxy URL, and the run's id ties the agent's
+    // hook sessions to it, so their taint applies to its requests.
+    let credential = session_credential()?;
+    let url = credential.proxy_url(listener.local_addr()?);
+    let run_session = credential.session().to_owned();
+    let exit = Exit::open(&home, policy, ctx, Some(credential))?;
     notice(&program, port, exit.session(), agent.report(), args)?;
     std::thread::spawn(move || {
         if let Err(error) = exit.serve(&listener) {
             eprintln!("moat run: the proxy stopped, so the agent has no network: {error:#}");
         }
     });
-    let url = format!("http://127.0.0.1:{port}");
     for var in PROXY_VARS {
-        agent.command().env(var, &url);
+        agent.command().env(var, url.as_str());
     }
+    agent.command().env(RUN_SESSION_ENV, &run_session);
     agent
         .command()
         .env_remove("NO_PROXY")
@@ -129,6 +139,29 @@ pub fn run(args: &RunArgs) -> Result<Code> {
 /// the Landlock rules and seccomp filter, and start the agent.
 pub fn inside(args: &IsolatedArgs) -> Result<Code> {
     platform::inside(args)
+}
+
+/// A fresh credential for this run's proxy: session `run-<ms>-<8 hex>` and a
+/// token of 64 hex characters (256 bits), both from the system's random source.
+fn session_credential() -> Result<Credential> {
+    let mut bytes = Zeroizing::new([0u8; 36]);
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut random| random.read_exact(&mut *bytes))
+        .context("reading random bytes for the proxy credential")?;
+    let hex = |b: &[u8]| -> Zeroizing<String> {
+        let mut out = Zeroizing::new(String::with_capacity(b.len() * 2));
+        for byte in b {
+            let _ = write!(out, "{byte:02x}");
+        }
+        out
+    };
+    let session = format!(
+        "run-{}-{}",
+        crate::time::now_ms(),
+        hex(&bytes[..4]).as_str()
+    );
+    let token = hex(&bytes[4..]);
+    Ok(Credential::new(&session, token.as_bytes())?)
 }
 
 /// The environment variables the policy's brokered secrets are read from.

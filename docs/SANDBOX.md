@@ -275,7 +275,10 @@ available, the Standard tier keeps its commands out of the home altogether.
   the ones it inherits, and refuses to start when `GIT_CONFIG_COUNT` is not a number.
 - Network goes only to the proxy on a loopback port (`HTTP_PROXY`, `HTTPS_PROXY`),
   which allows the hosts the policy allows. A tool that ignores those variables has
-  no network.
+  no network. The proxy serves this run alone: the variables carry the run's
+  credential as `http://<session>:<token>@127.0.0.1:<port>`, and a request without it
+  gets `407` (ADR-027). A tool that drops the URL's user and password has no network
+  either.
 - Turn the agent's own sandbox off inside: sandboxes do not nest, so Claude Code's
   `sandbox.enabled` (which `moat init` turns on) fails there and Codex needs
   `--sandbox danger-full-access`. Credentials must not come from the keychain: use
@@ -290,8 +293,9 @@ It is weaker per command than the Standard tier: the agent and its scripts share
 sandbox, so whatever the agent needs, `npm test` gets too. On macOS and Linux alike,
 data can still leave through the hosts the policy allows: the proxy checks the host,
 and the secrets broker blocks a brokered secret it can see, but it cannot read inside
-HTTPS, and connections through it do not count towards session taint
-([THREAT_MODEL.md](THREAT_MODEL.md) §5).
+HTTPS. It applies the session's taint only from the agent sessions whose hooks linked
+themselves to the run, and as the profiles stand a hook inside the sandbox cannot write
+those links ([THREAT_MODEL.md](THREAT_MODEL.md) §5, ADR-027).
 
 [EVIDENCE.md](EVIDENCE.md) lists what `moat run` does to hostile project scripts on
 macOS and Linux (reading keys and credentials, writing outside the project, direct

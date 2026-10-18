@@ -1,10 +1,14 @@
-use std::net::Ipv4Addr;
+use std::io::Read as _;
+use std::net::{Ipv4Addr, Shutdown};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use openmoat_core::{EvalContext, Policy};
 
 use super::*;
 use crate::audit::RecordError;
+
+mod sessions;
 
 /// Every name resolves to loopback, where the test's upstream listens.
 struct Local;
@@ -63,13 +67,18 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
         broker: &Broker::default(),
         loopback_ok: &[upstream.local_addr().unwrap()],
         allow_ech: false,
+        sessions: None,
     };
     let (proxy_end, mut client) = pair();
     let port = upstream.local_addr().unwrap().port();
     write!(client, "CONNECT allowed.test:{port} HTTP/1.1\r\n\r\n").unwrap();
     // The answer to the CONNECT cannot be written.
     proxy_end.shutdown(Shutdown::Write).unwrap();
-    proxy.handle(&proxy_end, &addresses);
+    let served = Served {
+        addresses: &addresses,
+        shares: Shares::new(8),
+    };
+    proxy.handle(&proxy_end, &served, None);
     assert_eq!(*rules.0.lock().unwrap(), [[RULE_SNI]]);
     let (mut opened, _) = upstream.accept().unwrap();
     let mut forwarded = Vec::new();

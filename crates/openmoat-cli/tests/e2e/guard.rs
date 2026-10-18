@@ -28,6 +28,12 @@ fn init_creates_state_and_installs_claude_code_hook() {
         hooks[0]["hooks"][0]["args"],
         serde_json::json!(["guard", "--host", "claude-code"])
     );
+    assert_eq!(hooks[0]["hooks"][0]["onFailure"], "block");
+    assert!(
+        settings(&sb)["hooks"]["ConfigChange"][0]["hooks"][0]
+            .get("onFailure")
+            .is_none()
+    );
     let command = hooks[0]["hooks"][0]["command"].as_str().unwrap();
     assert!(
         command.ends_with("moat") || command.ends_with("moat.exe"),

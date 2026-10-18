@@ -15,6 +15,7 @@ use crate::verdict::{Decision, Verdict};
 
 mod atoms;
 mod context;
+mod egress;
 mod taint;
 
 use atoms::checked_atoms;
@@ -219,8 +220,21 @@ impl CompiledPolicy<'_> {
         action: &Action,
         paths: &dyn PathResolver,
     ) -> (Vec<AtomicAction>, Option<String>) {
-        let (atoms, unparsed) = checked_atoms(action, &self.ctx, paths);
+        let (atoms, unparsed) = self.all_atoms(action, paths);
         (atoms, unparsed.map(|u| u.reason))
+    }
+
+    /// [`checked_atoms`] and the atoms of any token or placeholder they send
+    /// where it does not belong ([`egress`]).
+    fn all_atoms(
+        &self,
+        action: &Action,
+        paths: &dyn PathResolver,
+    ) -> (Vec<AtomicAction>, Option<crate::shell::Unparsed>) {
+        let (mut atoms, unparsed) = checked_atoms(action, &self.ctx, paths);
+        let egress = egress::atoms(action, &atoms, &self.policy.secrets);
+        atoms.extend(egress);
+        (atoms, unparsed)
     }
 
     /// The commands of `action` that publish local commits (`git push`, `gh pr
@@ -250,7 +264,7 @@ impl CompiledPolicy<'_> {
         resolver: &dyn ProgramResolver,
         paths: &dyn PathResolver,
     ) -> Decision {
-        let (atoms, unparsed) = checked_atoms(action, &self.ctx, paths);
+        let (atoms, unparsed) = self.all_atoms(action, paths);
         let pins = atoms.iter().filter_map(|atom| match atom {
             AtomicAction::Shell { argv } => {
                 programs::check(&argv[0], &self.policy.executables, resolver)

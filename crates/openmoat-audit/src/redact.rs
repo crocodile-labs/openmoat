@@ -42,6 +42,12 @@ pub const TOKEN_SHAPES: &[(&str, &str)] = &[
         "an OpenAI or Anthropic key",
         r"\bsk-(?:[a-z]+-)?[A-Za-z0-9]{16,}\b",
     ),
+    // Anthropic (`sk-ant-api03-…`) and OpenAI project, service-account and
+    // admin keys, whose body also holds `-` and `_`.
+    (
+        "an OpenAI or Anthropic key",
+        r"\bsk-(?:ant|proj|svcacct|admin)-[A-Za-z0-9_-]{16,}\b",
+    ),
     ("an AWS access key id", r"\bAKIA[0-9A-Z]{16}\b"),
     ("a Slack token", r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"),
     ("a Google API key", r"\bAIza[0-9A-Za-z_-]{30,}\b"),
@@ -233,14 +239,24 @@ mod tests {
 
     #[test]
     fn token_shapes_are_named_and_ordinary_text_has_none() {
-        // Built at run time, so a push of this file holds no token-shaped line.
-        let aws = format!("AKIA{}", "FAKE0EXAMPLE".repeat(2).get(..16).unwrap());
         assert_eq!(
-            token_shape(&format!("+ key = \"{aws}\"")),
+            token_shape("+ key = \"AKIAIOSFODNN7EXAMPLE\""),
             Some("an AWS access key id")
         );
-        let github = format!("ghp_{}", "Fake0Token".repeat(3));
-        assert_eq!(token_shape(&format!("x={github}")), Some("a GitHub token"));
+        assert_eq!(
+            token_shape("x=ghp_abcdefghijklmnopqrstuvwxyz0123"),
+            Some("a GitHub token")
+        );
+        for key in [
+            "sk-ant-api03-FAKE_fake-0000FAKEfake0000-FAKEfake",
+            "sk-proj-FAKE_fake-0000FAKEfake0000",
+        ] {
+            assert_eq!(
+                token_shape(&format!("k={key}")),
+                Some("an OpenAI or Anthropic key")
+            );
+            assert_eq!(redact(&format!("k={key}")), "k=[redacted]");
+        }
         for text in [
             "fn main() {}",
             "token: ${{ secrets.X }}",

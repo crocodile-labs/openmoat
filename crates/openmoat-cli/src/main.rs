@@ -14,6 +14,7 @@ mod hangs;
 mod home;
 mod install;
 mod integrity;
+mod mcp;
 mod project;
 mod protection;
 mod push;
