@@ -8,6 +8,21 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-10-17
+
+Two security fixes: `moat allow --last` shows which ask it takes and asks before approving, and the egress proxy refuses numeric host spellings and more local addresses. New read-only listings: `moat allowed`, `moat secret list` and `moat doctor --format json`.
+
+### Security
+- `moat allow --last` says which ask it takes (id, host, session, how long ago, what the agent wanted) and asks `Approve it? [y/N]` before it approves anything; another ask could have come in after the one you meant ([#552](https://github.com/crocodile-labs/openmoat/pull/552)).
+- The egress proxy refuses a host whose last label is a number or starts with `0x` (`0x7f.1`, `2130706433`), which some resolvers read as an IP address, and refuses more local addresses: NAT64 local-use `64:ff9b:1::/48`, Azure's WireServer `168.63.129.16` (as metadata) and `192.0.0.0/24` ([#551](https://github.com/crocodile-labs/openmoat/pull/551)).
+
+### Added
+- `moat allowed` lists what you have allowed: policy rules, session grants with what they cover and when they expire, and trusted repositories; `moat secret list` says whether a secret's source is still readable by the agent. Both are read-only and take `--format json` ([#550](https://github.com/crocodile-labs/openmoat/pull/550)).
+- `moat doctor --format json` prints every check with its status and detail, for scripts and the menu bar app ([#549](https://github.com/crocodile-labs/openmoat/pull/549)).
+
+### Changed
+- A session-taint ask answered with `moat allow --last` stays answered for that call for the rest of the session, until the agent reads untrusted content again; secret taint is never answered this way. Claude Code's prompt says how ([#544](https://github.com/crocodile-labs/openmoat/pull/544)).
+
 ## [0.5.4] - 2026-10-17
 
 Two security fixes: the egress proxy no longer passes along a second request pipelined after the first, and a session grant can no longer be made for a call without a session id, where it applied to every such session. Long agent sessions also stay fast.
@@ -525,7 +540,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/crocodile-labs/openmoat/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/crocodile-labs/openmoat/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/crocodile-labs/openmoat/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/crocodile-labs/openmoat/compare/v0.5.1...v0.5.2
