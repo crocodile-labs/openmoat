@@ -166,8 +166,14 @@ pub(crate) fn split_root(path: &str) -> (String, &str) {
 ///
 /// `None` when the pattern names `${project}` and there is no project: such a
 /// pattern names no location, so it can match nothing (and exclude nothing).
+/// A project whose path holds a glob character (`*`, `?`, `[`, `]`, `{`, `}`)
+/// is treated the same way: spliced into a pattern it would match far more
+/// than the project (a directory named `*` in the home would make
+/// `${project}/**` the whole home), so its rules name nothing and its files
+/// are decided by the rest of the policy.
 #[must_use]
 pub fn expand_pattern(raw: &str, home: &str, project: Option<&str>) -> Option<String> {
+    let project = project.filter(|p| !p.contains(['*', '?', '[', ']', '{', '}']));
     let (negated, body) = crate::pattern::split_negation(raw);
     // A pattern naming another user's home (`~alice/.ssh/**`) stays literal:
     // paths are normalised through `resolve`, which refuses `~<otheruser>`

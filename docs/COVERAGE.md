@@ -10,7 +10,7 @@ the verdict and rule ids the default policy must produce for it.
 | T1 | Secret exfiltration via shell | 90 | 44 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 39 | 3 | 0 |
-| T4 | Destructive git / filesystem operations | 59 | 56 | 3 |
+| T4 | Destructive git / filesystem operations | 59 | 57 | 3 |
 | T5 | Supply-chain execution | 6 | 30 | 0 |
 | T6 | Environment poisoning | 20 | 13 | 0 |
 | T7 | Obfuscation and nested execution | 92 | 100 | 3 |
@@ -290,6 +290,7 @@ the verdict and rule ids the default policy must produce for it.
 - `defer-git-rebase-continue` (ask): Defer [default]
 - `defer-push-a-branch` (ask): Defer [default]
 - `defer-tr-absolute-slash-set` (ask): Defer [default]
+- `ask-glob-in-project-path-does-not-widen-project-fs` (ask): Defer [default]
 - `T4-force-push` (attacks): Deny [destructive]
 - `T4-force-with-lease` (attacks): Deny [destructive]
 - `T4-rm-home` (attacks): Deny [destructive]
