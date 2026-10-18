@@ -11,9 +11,10 @@ at each size times `runs` further calls end to end and as recorded in the
 audit log's `latency_us`. The earlier calls go through `moat guard` like any
 other, so the log is the real, hash-chained one.
 
-It reports and warns; it never fails. Above 50 ms at 5,000 calls, keeping
-each call's exposure in its audit row, so the fold reads it instead of
-classifying the call again, is worth doing (#559).
+The session cache (#570) folds only the calls since the last one, so a long
+session should cost what a short one does. Like guard-latency.py, it warns
+when p95 at 5,000 earlier calls is over the 15 ms budget and fails above
+three times it: a regression back to folding the whole session fails here.
 """
 
 import json
@@ -26,7 +27,8 @@ import tempfile
 import time
 
 SIZES = (100, 1_000, 5_000)
-WARN_MS = 50.0
+BUDGET_MS = 15.0
+FAIL_MS = 3 * BUDGET_MS
 SESSION = "long-session"
 
 
@@ -103,9 +105,13 @@ def main():
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
             out.write(table + "\n")
-    if worst > WARN_MS:
-        print(f"::warning::guard p95 at {SIZES[-1]:,} earlier calls is {worst:.1f} ms, "
-              f"over {WARN_MS:.0f} ms")
+    if worst > FAIL_MS:
+        print(f"::error::guard p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
+              f"over {FAIL_MS:.0f} ms (3x the budget)")
+        sys.exit(1)
+    if worst > BUDGET_MS:
+        print(f"::warning::guard p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
+              f"over the {BUDGET_MS:.0f} ms budget")
 
 
 if __name__ == "__main__":
