@@ -169,7 +169,7 @@ fn evaluate(
         return Ok((Some(request), decision));
     }
     let Some(action) = &request.action else {
-        return Ok((Some(request), ungoverned()));
+        return Ok((Some(request), ungoverned(host)));
     };
     let cwd = request
         .cwd
@@ -349,8 +349,18 @@ fn drift_blocks_change(drift: &[crate::integrity::Drift]) -> Decision {
     decision
 }
 
-fn ungoverned() -> Decision {
-    let mut decision = Decision::new(Verdict::Allow);
+/// A tool OpenMoat does not govern is recorded, and the host decides it as if no
+/// hook had answered (ADR-025): an `allow` would skip the host's own prompt and
+/// permission rules for a tool nobody checked. Cursor's hooks have no "no
+/// decision", so there it is an `allow`; the tools it sends ungoverned are
+/// checked by their own hook events or name no path (`cursor/pre_tool.rs`).
+fn ungoverned(host: Host) -> Decision {
+    let verdict = if host == Host::Cursor {
+        Verdict::Allow
+    } else {
+        Verdict::Defer
+    };
+    let mut decision = Decision::new(verdict);
     decision.rules.push(UNGOVERNED_RULE.to_owned());
     decision
         .reasons

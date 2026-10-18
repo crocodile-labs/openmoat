@@ -296,7 +296,7 @@ something OpenMoat claims to stop.
   | Hook prints no or malformed JSON, exit 0 | runs the call | runs the call | blocks (permission hooks) | runs the call |
   | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks |
   | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
-  | Ours: tool OpenMoat does not know | allow, rule `ungoverned`, recorded; the installed matcher sends only mapped tools | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | as Claude Code |
+  | Ours: tool OpenMoat does not know | defer (no output: Claude Code's own prompt and rules decide), rule `ungoverned`, recorded | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | as Claude Code |
   | Ours: no decision within 10 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | not applicable: `cn` fires no hooks (below) |
 
@@ -335,7 +335,8 @@ something OpenMoat claims to stop.
   Codex web search (a hosted tool its hook never sees) and other hosted tools;
   Cursor `Shell` and `MCP:<tool>` under `preToolUse` (governed by `beforeShellExecution`
   and `beforeMCPExecution` instead), `Task`, and to-do tools (`TodoWrite`) that name no path. Ungoverned calls that reach the hook are
-  allowed with rule `ungoverned` and recorded. Any other Cursor tool that names no path
+  recorded with rule `ungoverned` and left to the host's own permission flow (allowed
+  under Cursor, whose hooks cannot leave a call undecided). Any other Cursor tool that names no path
   is `tool.unknown`, which the default policy defers; Cursor's `preToolUse` cannot
   prompt, so there OpenMoat asks (POLICY.md §5). Claude Code and Cursor `WebSearch` are
   governed: `web.search` in `defaults` decides them, and a search after a secret read asks.
