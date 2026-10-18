@@ -359,6 +359,11 @@ fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
 /// `/tmp/x/**` → `/private/tmp/x/**` on macOS. The deepest existing directory
 /// of the prefix is resolved; `None` when nothing changes.
 fn through_links(pattern: &str) -> Option<String> {
+    // Seatbelt runs on macOS only; elsewhere the profile is shown, not enforced,
+    // and resolving there would only write that machine's links into it.
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
     let (bang, body) = match pattern.strip_prefix('!') {
         Some(rest) => ("!", rest),
         None => ("", pattern),

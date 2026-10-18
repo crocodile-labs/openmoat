@@ -204,7 +204,7 @@ fn braces_are_expanded_before_translating() {
 
 /// A pattern under a symlinked directory is also written where the link
 /// points, as Seatbelt compares the path the kernel opens.
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 #[test]
 fn a_pattern_under_a_symlinked_directory_gets_its_real_spelling() {
     let dir = tempfile::tempdir().unwrap();
