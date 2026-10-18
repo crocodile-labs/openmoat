@@ -60,7 +60,7 @@ pub fn reason_line(decision: &Decision) -> String {
 /// the paths such a tool names are checked as written, not read.
 const WRITE_VERBS: &[&str] = &[
     "write", "edit", "create", "move", "rename", "delete", "remove", "append", "mkdir", "copy",
-    "save", "patch", "update",
+    "save", "patch", "update", "download",
 ];
 
 /// A non-empty string field of a tool's input, or the error naming it.

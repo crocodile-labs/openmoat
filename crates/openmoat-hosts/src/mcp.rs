@@ -57,7 +57,9 @@ pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
         .unwrap_or(name)
         .to_ascii_lowercase();
     let mut found = Resources {
-        writes_by_default: crate::WRITE_VERBS.iter().any(|p| tool.starts_with(p)),
+        // any word of the name: `file_write`, `bulk_delete` and `download_file`
+        // write as surely as `write_file`
+        writes_by_default: crate::WRITE_VERBS.iter().any(|verb| tool.contains(verb)),
         ..Resources::default()
     };
     found.walk(args, 0);
@@ -107,7 +109,7 @@ impl Resources {
         match value {
             Value::Object(map) => {
                 for (key, value) in map {
-                    self.key(&key.to_ascii_lowercase(), value);
+                    self.key(&snake(key), value);
                     self.walk(value, depth + 1);
                 }
             }
@@ -121,9 +123,12 @@ impl Resources {
     }
 
     fn key(&mut self, key: &str, value: &Value) {
-        if URL_KEYS.contains(&key) {
+        let ends = |suffixes: &[&str]| suffixes.iter().any(|s| key.ends_with(&format!("_{s}")));
+        if URL_KEYS.contains(&key) || ends(&["url", "uri"]) {
             self.hosts.extend(strings(value));
-        } else if PATH_KEYS.contains(&key) || key.ends_with("_path") || key.ends_with("_dir") {
+        } else if PATH_KEYS.contains(&key)
+            || ends(&["path", "paths", "dir", "directory", "file", "filename"])
+        {
             let is_write = self.writes_by_default || matches!(key, "destination" | "target");
             let sink = if is_write {
                 &mut self.writes
@@ -133,6 +138,25 @@ impl Resources {
             sink.extend(strings(value));
         }
     }
+}
+
+/// `key` in snake case, as the key lists spell it: `sourcePath`, `source-path`
+/// and `SOURCE_PATH` are all `source_path`.
+fn snake(key: &str) -> String {
+    let mut out = String::with_capacity(key.len() + 4);
+    let mut previous_lower = false;
+    for c in key.chars() {
+        if c == '-' {
+            out.push('_');
+        } else if c.is_ascii_uppercase() && previous_lower {
+            out.push('_');
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c.to_ascii_lowercase());
+        }
+        previous_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+    }
+    out
 }
 
 /// Whether `value` is an object or a list holding one at any depth.
@@ -184,6 +208,22 @@ mod tests {
             } => (reads, writes, hosts),
             other => panic!("not an mcp action: {other:?}"),
         }
+    }
+
+    /// Keys in camel or kebab case name paths and URLs like their snake form,
+    /// and a write verb anywhere in the tool's name makes its paths writes.
+    #[test]
+    fn camel_case_keys_and_verbs_anywhere_are_read() {
+        let input =
+            json!({"sourcePath": "/h/key", "output-dir": "/tmp/o", "baseUrl": "https://x.test"});
+        let (reads, writes, hosts) = parts(ok("mcp__fs__stat", &input));
+        assert_eq!(reads, ["/tmp/o", "/h/key"], "keys in sorted order");
+        assert!(writes.is_empty());
+        assert_eq!(hosts, ["https://x.test"]);
+        let (_, writes, _) = parts(ok("mcp__fs__file_write", &json!({"targetFile": "/h/rc"})));
+        assert_eq!(writes, ["/h/rc"]);
+        let (_, writes, _) = parts(ok("mcp__web__download_file", &json!({"path": "/p/a"})));
+        assert_eq!(writes, ["/p/a"], "a download writes its path");
     }
 
     fn unchecked(a: &Action) -> Option<&str> {
