@@ -40,6 +40,7 @@ executables:                        # pin program names to absolute paths (enfor
 sandbox:                            # optional: what the host sandboxes may read beyond the rules (§9)
   read_roots: ["/usr", "~/.cargo"]
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `moat proxy` (§9)
+  proxy_allow_ech: false            # optional: let `moat proxy` forward encrypted server names (ECH) (§9)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 
@@ -321,7 +322,7 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `session-taint` | ask | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
 | `approved-session` | allow | an `ask` for a shell command that a person granted with `moat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `moat allow --always` |
-| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host, a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
+| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
 
 ### 5.2 `moat proxy`
 
@@ -590,6 +591,16 @@ Set the additive `sandbox.proxy_port` key (1–65535) to send sandboxed commands
 traffic through `moat proxy` (§5.2) on `127.0.0.1:<port>` instead. `moat proxy`
 without `--listen` then uses that port, and the policy lock pins it with the rest of
 the file.
+
+`moat proxy` refuses a TLS tunnel whose `ClientHello` carries an encrypted server name
+(ECH, extension `0xfe0d`, or the older ESNI, `0xffce`), rule `proxy-sni`: the server acts
+on the encrypted inner name, so a site the policy does not allow could be reached
+behind an allowed host on the same provider. Browsers send an ECH extension even
+without an ECH key ("GREASE"), so a browser driven through the proxy is refused too.
+`sandbox.proxy_allow_ech: true` forwards such tunnels (the cleartext name must still
+match the CONNECT host), and `moat policy lint` warns about it. Without ECH an allowed
+host can still front for another site through the HTTP `Host` header inside the
+tunnel, which the proxy does not see.
 
 | | What you gain | What it costs |
 |---|---|---|

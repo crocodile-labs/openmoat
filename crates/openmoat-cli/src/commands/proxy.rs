@@ -309,6 +309,11 @@ impl Exit {
             limits: &Limits::default(),
             loopback_ok: &[],
             broker: &self.broker,
+            allow_ech: self
+                .policy
+                .sandbox
+                .as_ref()
+                .is_some_and(|s| s.proxy_allow_ech),
         };
         proxy.serve(listener).context("accepting connections")
     }

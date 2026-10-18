@@ -312,6 +312,11 @@ pub struct SandboxSettings {
     /// their commands' traffic to; absent, the CLI's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_port: Option<std::num::NonZeroU16>,
+    /// Let `moat proxy` forward a TLS `ClientHello` that carries an encrypted
+    /// server name (ECH, ESNI). Off, such a tunnel is refused: the server acts
+    /// on the encrypted name, which may be another site than the allowed host.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub proxy_allow_ech: bool,
 }
 
 fn default_verdict() -> Defaults {

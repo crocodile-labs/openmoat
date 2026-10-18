@@ -109,6 +109,9 @@ pub struct Proxy<'a> {
     /// Loopback addresses the proxy may connect to despite the loopback ban.
     /// Empty in `moat proxy`; integration tests list their local server.
     pub loopback_ok: &'a [SocketAddr],
+    /// Forward a `ClientHello` that carries an encrypted server name (ECH,
+    /// ESNI); refused when false (`sandbox.proxy_allow_ech`).
+    pub allow_ech: bool,
 }
 
 impl std::fmt::Debug for Proxy<'_> {
@@ -117,6 +120,7 @@ impl std::fmt::Debug for Proxy<'_> {
             .field("limits", &self.limits)
             .field("broker", &self.broker)
             .field("loopback_ok", &self.loopback_ok)
+            .field("allow_ech", &self.allow_ech)
             .finish_non_exhaustive()
     }
 }
@@ -288,14 +292,21 @@ impl Proxy<'_> {
             .map_err(|e| format!("answering the CONNECT: {e}"))
             .and_then(|()| read_hello(client, &mut hello, deadline));
         let refusal = match read {
-            Ok(Some(name)) if name == host => None,
-            Ok(Some(name)) => Some(format!(
+            // With ECH the server acts on the encrypted inner name, which may
+            // be another site behind the same provider as the allowed host.
+            Ok((_, true)) if !self.allow_ech => Some(format!(
+                "TLS ClientHello for CONNECT {host} carries an encrypted server name (ECH), \
+                 so the server may serve another site; `sandbox.proxy_allow_ech: true` \
+                 in the policy allows it"
+            )),
+            Ok((Some(name), _)) if name == host => None,
+            Ok((Some(name), _)) => Some(format!(
                 "TLS server name {name} does not match CONNECT {host}"
             )),
             // An IP literal is never sent as SNI (RFC 6066 §3). The bytes are
             // still a complete `ClientHello`: anything else is an `Err`.
-            Ok(None) if host.parse::<std::net::IpAddr>().is_ok() => None,
-            Ok(None) => Some(format!(
+            Ok((None, _)) if host.parse::<std::net::IpAddr>().is_ok() => None,
+            Ok((None, _)) => Some(format!(
                 "TLS ClientHello for CONNECT {host} has no server name"
             )),
             Err(why) => Some(why),
@@ -368,17 +379,19 @@ fn read_head(
     }
 }
 
-/// Read until `buf` holds a complete `ClientHello`; its SNI, if any.
+/// Read until `buf` holds a complete `ClientHello`; its SNI, if any, and
+/// whether it carries an encrypted server name (ECH or ESNI).
 fn read_hello(
     client: &TcpStream,
     buf: &mut Vec<u8>,
     deadline: Instant,
-) -> Result<Option<String>, String> {
+) -> Result<(Option<String>, bool), String> {
     // Records add 5 bytes per 16 KiB of handshake, so this covers MAX_HELLO.
     let max = sni::MAX_HELLO + 1024;
     loop {
         match sni::server_name(buf) {
-            Ok(Hello::ServerName(name)) => return Ok(name),
+            Ok(Hello::ServerName(name)) => return Ok((name, false)),
+            Ok(Hello::Encrypted(name)) => return Ok((name, true)),
             Ok(Hello::Incomplete) if buf.len() >= max => {
                 return Err(sni::HelloError::TooLarge.to_string());
             }

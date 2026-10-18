@@ -160,6 +160,7 @@ fn launch(
         limits: Box::leak(Box::new(limits)),
         loopback_ok: Box::leak(Box::new([upstream])),
         broker: Box::leak(Box::new(broker)),
+        allow_ech: false,
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -210,6 +211,12 @@ fn read_all(s: &mut TcpStream) -> String {
 
 /// A minimal TLS `ClientHello` record naming `sni`.
 fn client_hello(sni: &str) -> Vec<u8> {
+    client_hello_with(sni, &[])
+}
+
+/// [`client_hello`] with `extra` (whole extensions, type and length included)
+/// after the SNI.
+fn client_hello_with(sni: &str, extra: &[u8]) -> Vec<u8> {
     let be = |n: usize| u16::try_from(n).unwrap().to_be_bytes();
     let mut entry = vec![0];
     entry.extend(be(sni.len()));
@@ -218,6 +225,7 @@ fn client_hello(sni: &str) -> Vec<u8> {
     ext.extend(be(entry.len() + 2));
     ext.extend(be(entry.len()));
     ext.extend(entry);
+    ext.extend(extra);
     let mut body = vec![3, 3];
     body.extend([1; 32]);
     body.extend([0, 0, 2, 0x13, 0x01, 1, 0]);
@@ -234,6 +242,11 @@ fn client_hello(sni: &str) -> Vec<u8> {
 
 /// Open a CONNECT tunnel to `host` and send a `ClientHello` naming `sni`.
 fn tunnel(h: &Harness, host: &str, sni: &str) -> (TcpStream, String) {
+    tunnel_with(h, host, &client_hello(sni))
+}
+
+/// Open a CONNECT tunnel to `host` and send `hello`.
+fn tunnel_with(h: &Harness, host: &str, hello: &[u8]) -> (TcpStream, String) {
     let mut s = h.connect();
     write!(
         s,
@@ -244,7 +257,7 @@ fn tunnel(h: &Harness, host: &str, sni: &str) -> (TcpStream, String) {
     let mut established = [0u8; 39];
     s.read_exact(&mut established).unwrap();
     assert_eq!(&established, b"HTTP/1.1 200 Connection Established\r\n\r\n");
-    s.write_all(&client_hello(sni)).unwrap();
+    s.write_all(hello).unwrap();
     let rest = read_all(&mut s);
     (s, rest)
 }

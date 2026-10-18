@@ -95,6 +95,10 @@ fn read_roots_must_be_plain_paths_below_a_root() {
     assert!(Policy::parse("version: 1\nsandbox: { bogus: 1 }\n").is_err());
     assert!(Policy::parse("version: 1\nsandbox: { proxy_port: 18081 }\n").is_ok());
     assert!(Policy::parse("version: 1\nsandbox: { proxy_port: 0 }\n").is_err());
+    let ech = Policy::parse("version: 1\nsandbox: { proxy_allow_ech: true }\n").unwrap();
+    assert!(ech.sandbox.is_some_and(|s| s.proxy_allow_ech));
+    let default = Policy::parse("version: 1\nsandbox: { proxy_port: 18081 }\n").unwrap();
+    assert!(default.sandbox.is_some_and(|s| !s.proxy_allow_ech));
 }
 
 #[test]

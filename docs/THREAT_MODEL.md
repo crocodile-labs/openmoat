@@ -278,6 +278,10 @@ something OpenMoat claims to stop.
   - Codex's own API requests then go through `moat proxy` too. Its API hosts
     (`api.openai.com`, `chatgpt.com`) need a `fetch` allow rule, or Codex cannot reach
     its model.
+- **An allowed host can front for another site on the same provider.** `moat proxy`
+  checks the cleartext TLS server name against the CONNECT host and refuses an
+  encrypted one (ECH, unless `sandbox.proxy_allow_ech`), but it does not see the HTTP
+  `Host` header inside the tunnel, which some CDNs still route by.
 - **When the hook fails, most hosts run the call.** The host rows below come from
   each host's documentation or source as of 2026-10-07 ([Claude Code hooks][cc-hooks],
   [Codex hooks][codex-hooks] and [`pre_tool_use.rs`][codex-pre],

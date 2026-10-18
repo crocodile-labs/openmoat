@@ -62,6 +62,7 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
         limits: &Limits::default(),
         broker: &Broker::default(),
         loopback_ok: &[upstream.local_addr().unwrap()],
+        allow_ech: false,
     };
     let (proxy_end, mut client) = pair();
     let port = upstream.local_addr().unwrap().port();

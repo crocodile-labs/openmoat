@@ -31,6 +31,24 @@ fn a_tunnel_whose_sni_names_another_host_is_closed_unforwarded() {
     );
 }
 
+/// With ECH the server acts on the encrypted inner name, which may be another
+/// site behind the allowed host's provider: such a tunnel is refused.
+#[test]
+fn a_tunnel_whose_hello_carries_ech_is_closed_unforwarded() {
+    let h = start(None, Limits::default());
+    // encrypted_client_hello (0xfe0d) with a few payload bytes
+    let ech = [0xfe, 0x0d, 0, 4, 0, 0, 1, 0];
+    let (_, reply) = tunnel_with(&h, "allowed.test", &client_hello_with("allowed.test", &ech));
+    assert_eq!(reply, "");
+    assert!(h.nothing_forwarded());
+    let rows = h.rows();
+    assert_eq!(
+        (rows[0].verdict, rows[0].rules.as_slice()),
+        (Verdict::Deny, &["proxy-sni".to_owned()][..])
+    );
+    assert!(rows[0].reasons[0].contains("ECH"), "{:?}", rows[0].reasons);
+}
+
 #[test]
 fn a_tunnel_that_is_not_tls_is_closed_unforwarded() {
     let h = start(None, Limits::default());
