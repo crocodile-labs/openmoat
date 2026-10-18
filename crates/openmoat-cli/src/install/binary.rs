@@ -35,7 +35,11 @@ pub fn stale_hint(command: &str) -> String {
         Ok(target) if Some(&target) != running.as_ref() => format!(
             "hook runs {command}, a different moat than this one; run `moat init` with the moat hooks should use"
         ),
-        Ok(_) => format!("hook points at {command}; run `moat init`"),
+        // This moat, so what differs is the entry itself: an older moat wrote
+        // it with fewer tools, another timeout, or without one of its events.
+        Ok(_) => format!(
+            "hook entry for {command} is out of date (written by an older moat); run `moat init`"
+        ),
     }
 }
 

@@ -1,0 +1,8 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Skill",
+  "tool_input": { "skill": "code-review", "args": "low" },
+  "tool_use_id": "toolu_14SK"
+}

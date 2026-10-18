@@ -1,0 +1,8 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "EnterWorktree",
+  "tool_input": { "path": "/p/.claude/worktrees/fix-lexer" },
+  "tool_use_id": "toolu_12WT"
+}

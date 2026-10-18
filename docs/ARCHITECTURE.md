@@ -175,12 +175,19 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | Claude Code, Cursor `preToolUse` `WebFetch` | `url` | `Fetch` |
 | Claude Code, Cursor `preToolUse` `WebSearch` | `query` (`allowed_domains` and `blocked_domains` only filter results) | `WebSearch` |
 | Codex `apply_patch` | `command` (the patch envelope) | `Patch` |
+| Claude Code `ReadMcpResourceTool` | `server`, `uri`: a `file:` URI is a read of its (percent-decoded) path, any other URI a host; a `file:` URI without an absolute path is an adapter error, so `deny` | `McpTool` `mcp__<server>__read_resource` |
+| Claude Code `EnterWorktree` | `path` (an existing worktree becomes the session's directory and project root); with `name` or nothing, ungoverned | `FsRead` |
 | `mcp__<server>__<tool>` (Claude Code, Codex); Cursor `beforeMCPExecution` | tool name and arguments (Cursor: `mcp_server_name`, `tool_name`, `tool_input`) | `McpTool` |
 | any other Cursor `preToolUse` tool that names no path key, except to-do tools (`TodoWrite`, `TodoRead`, `todo_write`: ungoverned) | tool name | `UnknownTool` (`tool.unknown`) |
-| anything else (Claude Code `Task`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`) | — | none: `ungoverned` |
+| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`) | — | none: `ungoverned` |
 
 Claude Code calls only reach OpenMoat for tools in the installed matcher
-(`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen.
+(`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen. `Skill`
+and `EnterWorktree` are in it so they are recorded, and left to Claude Code's own
+permission flow when unmapped. A hook entry written by an older `moat` with a shorter
+list is reported as out of date by `moat doctor` and `moat status`, with "run `moat
+init`", which rewrites it in place; until then the entry keeps working for the tools it
+names.
 Cursor's hook matcher is empty, so every tool reaches `preToolUse`. Cursor's hook
 documentation names `Grep` but not `Glob` and gives no file tool's arguments. A
 third-party capture shows `Grep` and `Read` send `file_path`; the rest is unverified

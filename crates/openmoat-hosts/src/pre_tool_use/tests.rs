@@ -336,6 +336,64 @@ fn response_bytes_are_exact_and_escaped() {
     );
 }
 
+/// Tools the matcher sends since the hook covers them: an MCP resource is read
+/// as its server's `read_resource`, a `file:` one as the (percent-decoded) file;
+/// entering an existing worktree reads its directory; `Skill` and a new worktree
+/// are recorded and left to Claude Code.
+#[test]
+fn claude_code_mcp_resources_worktrees_and_skills() {
+    let parse = |name| {
+        Host::ClaudeCode
+            .parse_request(&fixture("claude-code", name))
+            .unwrap()
+            .action
+    };
+    assert_eq!(
+        parse("read-mcp-resource-file"),
+        Some(Action::McpTool {
+            name: "mcp__filesystem__read_resource".into(),
+            reads: vec!["/Users/me/.ssh/id_rsa".into()],
+            writes: vec![],
+            hosts: vec![],
+            unchecked: None,
+        })
+    );
+    assert_eq!(
+        parse("read-mcp-resource"),
+        Some(Action::McpTool {
+            name: "mcp__github__read_resource".into(),
+            reads: vec![],
+            writes: vec![],
+            hosts: vec!["https://api.github.com/repos/x/y/readme".into()],
+            unchecked: None,
+        })
+    );
+    assert_eq!(
+        parse("enter-worktree-path"),
+        Some(Action::FsRead {
+            path: "/p/.claude/worktrees/fix-lexer".into()
+        })
+    );
+    assert_eq!(parse("enter-worktree-name"), None);
+    assert_eq!(parse("skill"), None);
+
+    for input in [
+        serde_json::json!({"server": "fs", "uri": "file:relative/x"}),
+        serde_json::json!({"server": "fs"}),
+        serde_json::json!({"uri": "file:///etc/hosts"}),
+    ] {
+        let payload = serde_json::json!({
+            "tool_name": "ReadMcpResourceTool", "tool_input": input,
+        });
+        assert!(
+            Host::ClaudeCode
+                .parse_request(&payload.to_string())
+                .is_err(),
+            "{input}"
+        );
+    }
+}
+
 fn bash_in_mode(host: Host, mode: &str) -> HookRequest {
     let payload = serde_json::json!({
         "hook_event_name": "PreToolUse",

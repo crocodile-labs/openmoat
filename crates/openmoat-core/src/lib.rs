@@ -44,6 +44,7 @@ pub use action::{Action, AtomicAction};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart
 // from the policy's brokered `Secret`.
 pub use engine::{CompiledPolicy, EvalContext, Secret as TaintSecret, Taint, evaluate};
+pub use host::file_url_path;
 pub use kind::{Kind, UnknownKind};
 pub use patch::writes as patch_writes;
 pub use paths::resolve as resolve_path;

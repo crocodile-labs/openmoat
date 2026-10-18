@@ -81,7 +81,10 @@ const _: () = assert!(GUARD_BUDGET_S < TOOL_HOOK_TIMEOUT_S);
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
-const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|mcp__.*";
+/// `Skill` and `EnterWorktree` without a `path` are recorded and left to Claude
+/// Code's own permission flow; changing this list makes existing entries stale,
+/// which `moat doctor` and `moat status` report with "run `moat init`".
+const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|mcp__.*";
 
 const CLAUDE_CODE_HOOKS: &[HookSpec] = &[
     HookSpec {

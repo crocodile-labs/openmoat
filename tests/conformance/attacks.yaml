@@ -458,6 +458,12 @@
   threat: T8
   action: { mcp_tool: { name: mcp__filesystem__read_file, reads: ["~/.aws/credentials"] } }
   expect: { verdict: deny, rules: [secrets-paths] }
+# Claude Code `ReadMcpResourceTool` with a `file:` URI: the adapter reads it as
+# the server's `read_resource` reading that file.
+- id: T8-mcp-resource-file-uri-reads-ssh-key
+  threat: T8
+  action: { mcp_tool: { name: mcp__filesystem__read_resource, reads: ["~/.ssh/id_ed25519"] } }
+  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T8-mcp-filesystem-writes-shell-rc
   threat: T8
   action: { mcp_tool: { name: mcp__filesystem__write_file, writes: ["~/.zshrc"] } }

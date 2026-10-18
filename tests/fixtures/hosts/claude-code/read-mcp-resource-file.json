@@ -1,0 +1,8 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ReadMcpResourceTool",
+  "tool_input": { "server": "filesystem", "uri": "file:///Users/me/%2Essh/id_rsa" },
+  "tool_use_id": "toolu_10MCP"
+}
