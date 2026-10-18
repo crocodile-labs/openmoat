@@ -274,7 +274,10 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   reorder them (a grant written by an older version has no row and is compared by time).
   Once the session reads more untrusted content, the file asks again. A grant made before that read does not
   answer it, other files and sessions still ask, and an ask from a secret the session
-  read is never answered by a grant.
+  read is never answered by a grant. Answering `s` instead of `y` at that question approves
+  every protected write of the session the same way: they stand until the session reads
+  untrusted content again, other sessions still ask, and a secret's asks are never
+  answered.
 - `taint: { protected_writes: [<glob>, …] }` adds path globs (§3.2, `~` and `${project}`
   included) to that list. It only extends: a policy cannot remove a built-in path, and
   `moat policy lint` rejects a `!` exclusion as well as a glob that does not compile.

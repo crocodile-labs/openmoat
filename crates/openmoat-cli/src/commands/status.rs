@@ -20,14 +20,30 @@ use crate::{protection, render, time};
 pub fn run(args: &StatusArgs) -> Result<Code> {
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
+    // A newer default policy's changes reach a person only through `moat policy
+    // upgrade`; say so wherever the installation is looked at.
+    let update = crate::upgrade::available(&home);
     if args.format == Format::Json {
-        render::json(&serde_json::json!({ "agents": protection::report(&home, &binary)? }))?;
+        let drift: Vec<String> = Lock::load(&home.lock_path())
+            .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
+            .unwrap_or_default();
+        render::json(&serde_json::json!({
+            "agents": protection::report(&home, &binary)?,
+            "policy_update": update,
+            "lock_drift": drift,
+        }))?;
         return Ok(Code::Ok);
     }
     let mut out = io::stdout().lock();
 
     writeln!(out, "state directory  {}", home.root().display())?;
     let mut healthy = policies(&mut out, &home)?;
+    if let Some(update) = &update {
+        writeln!(
+            out,
+            "policy update    · {update}: `moat policy upgrade` shows them and asks"
+        )?;
+    }
     healthy &= lock(&mut out, &home, &binary)?;
     healthy &= approvals(&mut out, &home)?;
     let recorded = Recorded::load(&home).unwrap_or_default();

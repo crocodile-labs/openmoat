@@ -167,27 +167,32 @@ fn resolved(path: &Path) -> String {
 /// What the user must know before the agent starts, on standard error.
 fn notice(program: &Path, port: u16, session: &str, report: &Report, args: &RunArgs) -> Result<()> {
     let mut err = std::io::stderr().lock();
-    let tier = if args.isolate {
-        "Isolated tier, ADR-018: it sees only the project, the read roots and --write paths"
+    let sees = if args.isolate {
+        "; it sees only the project, the read roots and --write paths"
     } else {
-        "Lightweight tier, ADR-018"
+        ""
     };
     writeln!(
         err,
-        "moat run: {} in a sandbox generated from the policy ({tier})\n  \
-         network: only through OpenMoat's proxy on 127.0.0.1:{port} (audit session {session})\n  \
-         turn the agent's own sandbox off: sandboxes do not nest, so Claude Code's or Codex's \
-         cannot start in here\n  \
-         (Codex: --sandbox danger-full-access). This one confines the agent and every command \
-         it starts as one, so it is weaker per command than the Standard tier.",
+        "moat run: {} in a sandbox made from the policy{sees}, network only through \
+         OpenMoat's proxy (audit session {session})",
         program.display()
     )?;
     if args.verbose {
+        writeln!(
+            err,
+            "  proxy: 127.0.0.1:{port}\n  \
+             turn the agent's own sandbox off (Codex: --sandbox danger-full-access): sandboxes \
+             do not nest, so the agent's cannot start in here. This one holds the agent and \
+             every command it starts together, so it is less precise per command than the \
+             agent's own sandbox."
+        )?;
         write_report(&mut err, report)?;
     } else {
         writeln!(
             err,
-            "moat run: sandbox ready ({} stricter, {} wider; --verbose for details)",
+            "moat run: turn the agent's own sandbox off (Codex: --sandbox danger-full-access); \
+             sandbox ready ({} stricter, {} wider; --verbose for details)",
             report.losses.len(),
             report.allowances.len()
         )?;

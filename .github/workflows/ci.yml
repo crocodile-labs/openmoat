@@ -107,8 +107,8 @@ jobs:
       - run: cargo build --locked -p openmoat-core --target wasm32-unknown-unknown
 
   # Not a required check: shared runners are noisy. Warns above the 15 ms p95
-  # budget, fails above 3x it (scripts/ci/guard-latency.py). The long-session
-  # step only reports how a session's length adds to that.
+  # budget, fails above 3x it (scripts/ci/guard-latency.py), and the same late in
+  # a 5,000-call session (scripts/ci/guard-session-latency.py).
   latency:
     name: guard latency (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

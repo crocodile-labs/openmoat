@@ -56,6 +56,32 @@ fn init_asks_per_agent_and_changes_only_the_accepted_ones() {
     assert!(!declined.home.join(".claude/settings.json").exists());
 }
 
+/// Before asking about an agent, `init` shows the diff of every file it would
+/// change there, hooks and sandbox settings alike, and a declined agent's files
+/// stay as they were.
+#[test]
+fn init_shows_each_agents_changes_before_asking() {
+    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let out = init_answering(&sb, "\nn\n");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = stdout(&out);
+    let claude = shown.find("settings.json (after moat init)").expect(&shown);
+    let codex = shown.find("hooks.json (after moat init)").expect(&shown);
+    assert!(
+        claude < shown.find("Protect Claude Code (").unwrap(),
+        "{shown}"
+    );
+    assert!(codex < shown.find("Protect Codex (").unwrap(), "{shown}");
+    assert!(shown.contains("config.toml (after moat init)"), "{shown}");
+    assert!(
+        shown
+            .lines()
+            .any(|l| l.starts_with('+') && l.contains("\"--host\"")),
+        "{shown}"
+    );
+    assert!(!sb.home.join(".codex/hooks.json").exists());
+}
+
 #[test]
 fn init_hosts_leaves_other_agents_untouched() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);

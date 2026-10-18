@@ -44,6 +44,12 @@ pub struct Grant {
     /// grant written by an older build has none and is ordered by time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_row: Option<i64>,
+    /// Also answers every other session-taint ask of this host session that
+    /// comes from untrusted content, until the session reads untrusted content
+    /// again (`moat allow --last`, answer `s`). Never a secret taint. A build
+    /// that does not know the field reads it as a grant for `action` alone.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub covers_taint: bool,
 }
 
 /// A version 1 grant: a shell command.
@@ -106,6 +112,7 @@ impl Grants {
                     },
                     granted_at_ms: g.granted_at_ms,
                     audit_row: None,
+                    covers_taint: false,
                 });
                 Ok(Self {
                     version: GRANTS_VERSION,
@@ -150,6 +157,7 @@ impl Grants {
             action: action.clone(),
             granted_at_ms: now_ms,
             audit_row,
+            covers_taint: false,
         });
     }
 
@@ -189,6 +197,28 @@ impl Grants {
         }
         self.active(now_ms)
             .filter(|g| g.host == host && g.session_id == session_id && g.action == *action)
+            .max_by_key(|g| g.granted_at_ms)
+    }
+
+    /// Make the grant for `action` in this host session also answer the
+    /// session's other taint asks from untrusted content ([`Grant::covers_taint`]).
+    pub fn cover_taint(&mut self, host: &str, session_id: &str, action: &Action) {
+        for g in &mut self.entries {
+            if g.host == host && g.session_id == session_id && g.action == *action {
+                g.covers_taint = true;
+            }
+        }
+    }
+
+    /// The newest grant of this host session that answers its taint asks from
+    /// untrusted content, if one is still valid at `now_ms`.
+    #[must_use]
+    pub fn covering_taint(&self, host: &str, session_id: &str, now_ms: i64) -> Option<&Grant> {
+        if openmoat_hosts::is_unknown_session(session_id) {
+            return None;
+        }
+        self.active(now_ms)
+            .filter(|g| g.covers_taint && g.host == host && g.session_id == session_id)
             .max_by_key(|g| g.granted_at_ms)
     }
 

@@ -449,3 +449,24 @@ fn status_reports_missing_installation() {
     assert!(stdout(&out).contains("run `moat init`"));
     assert!(!stdout(&out).contains("os error"), "{}", stdout(&out));
 }
+
+/// A tool call larger than the payload limit is refused with a message that
+/// says why and what to do, not as malformed JSON.
+#[test]
+fn a_tool_call_over_the_payload_limit_is_refused_with_its_own_message() {
+    let sb = Sandbox::bare(&[".claude"]);
+    sb.moat(&["init", "--yes"]);
+    let payload = serde_json::json!({
+        "session_id": "s",
+        "cwd": sb.project().to_string_lossy(),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {"file_path": "big.txt", "content": "a".repeat(1_300_000)},
+        "tool_use_id": "t",
+    })
+    .to_string();
+    let out = sb.guard("claude-code", &payload);
+    assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+    let shown = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(shown.contains("larger than 1 MiB"), "{shown}");
+}

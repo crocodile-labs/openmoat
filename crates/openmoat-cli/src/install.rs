@@ -219,6 +219,12 @@ impl HostConfig {
         hook_file::install(home, self, binary, dry_run)
     }
 
+    /// The hook file's text `current` as [`Self::install`] would write it;
+    /// `None` when it would not change.
+    pub fn render(&self, binary: &Path, current: &str) -> Result<Option<String>> {
+        hook_file::render(self, binary, current)
+    }
+
     pub fn state(&self, binary: &std::path::Path) -> HookState {
         hook_file::state(self, binary)
     }

@@ -8,8 +8,8 @@
 **On this page:** [Where it is today](#where-it-is-today) · [Next: 0.5.x](#next-05x) · [Positioning](#positioning) · [Stages](#stages) · [The team wedge](#the-team-wedge) · [Not planned](#not-planned)
 
 Where OpenMoat is, what comes next, and in which order. The release stages and their
-exit criteria come from ADR-013. The live, ordered work list is the pinned issue
-[#144](https://github.com/crocodile-labs/openmoat/issues/144), and each stage is a
+exit criteria come from ADR-013. The live, ordered work list is the roadmap issue
+[#562](https://github.com/crocodile-labs/openmoat/issues/562), and each stage is a
 GitHub milestone. Neither carries dates.
 
 ## Where it is today
@@ -53,15 +53,21 @@ a security bug ([THREAT_MODEL.md](THREAT_MODEL.md) §5).
 
 ## Next: 0.5.x
 
-0.5.0 is the first stable release with the quiet default. What comes next takes fixes
-only, released as 0.5.x:
+0.5.0 is the first stable release with the quiet default. What comes next is making it
+solid end to end in daily use, released as 0.5.x, in the order of
+[#562](https://github.com/crocodile-labs/openmoat/issues/562):
 
-- five or more people outside the project use it for a week on their own work; every
-  false positive that blocks them becomes a fixture and a fix;
-- the private bypass round (#131); every valid report is fixed and credited;
-- the maintainer's own daily use continues, with the same rule.
+- a first run a person can follow and trust: `moat init` shows each change and asks,
+  and messages and help use plain words;
+- installed copies stay current: `moat status` says when a policy update or drift
+  needs a person;
+- the gaps in what each agent's hook shows OpenMoat, and the hardening items found in
+  review, each with a fixture;
+- the maintainer's own daily use continues: every false positive becomes a fixture and
+  a fix.
 
-New features wait until these are done and no P1 or P2 issue is open.
+People outside the project, the bypass round (#131) and the public challenge (#323)
+follow once these are done.
 
 ## Positioning
 
@@ -120,14 +126,13 @@ Milestone `v0.1.0-beta`.
 | #178 | Codex `PermissionRequest`: investigated; Codex runs that hook only after it decides to prompt, so a Codex `ask` stays a deny (ARCHITECTURE §5) |
 | #132, #336, #337 | MoatBench mini, the developer-workflow suite and the host failure matrix |
 | #334 | A protection level per agent in `moat status` and `moat doctor` |
+| #167 | Policy compiler (ADR-019): the IR, `moat policy compile` and the "never widens" tests |
+| #356 | Beta gate: every protection claim has executable evidence |
+| #321, #322 | Landing page ([openmoat.dev](https://openmoat.dev)) and the first non-pre-release |
 
 | Issue | Open |
 |---|---|
-| #167 | Policy compiler (ADR-019): the IR, `moat policy compile` and the "never widens" tests are on `main`; the issue is still open |
-| #356 | Beta gate: every protection claim has executable evidence |
-| #321 | Landing page |
-| #322 | First non-pre-release |
-| #131, #323 | Bypass challenge with security people, then a public challenge and the announcement |
+| #131, #323 | Bypass challenge with security people, then a public challenge and the announcement (on hold until the 0.5.x work above is done) |
 
 Exit (ADR-013): executing fixtures show obfuscated exfiltration failing at the OS
 level, and read-then-exfiltrate fixtures are blocked.

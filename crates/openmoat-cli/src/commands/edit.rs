@@ -123,6 +123,12 @@ fn open_editor(draft: &Path) -> Result<()> {
 
 /// Ask a yes/no question; anything but `y` or `yes`, end of input included, is no.
 pub(super) fn confirm(out: &mut Deferred, question: &str) -> Result<bool> {
+    Ok(matches!(answer(out, question)?.as_str(), "y" | "yes"))
+}
+
+/// Ask `question` and return the answer, trimmed and in lower case; empty at
+/// the end of input.
+pub(super) fn answer(out: &mut Deferred, question: &str) -> Result<String> {
     write!(out, "{question}")?;
     out.flush()?;
     let mut answer = String::new();
@@ -130,8 +136,5 @@ pub(super) fn confirm(out: &mut Deferred, question: &str) -> Result<bool> {
         .lock()
         .read_line(&mut answer)
         .context("reading the answer")?;
-    Ok(matches!(
-        answer.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+    Ok(answer.trim().to_ascii_lowercase())
 }

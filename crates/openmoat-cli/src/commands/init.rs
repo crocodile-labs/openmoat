@@ -17,6 +17,8 @@ use crate::integrity;
 use crate::render::Deferred;
 use crate::sandbox::{self, Plan};
 
+mod preview;
+
 pub fn run(args: &InitArgs) -> Result<Code> {
     let dry_run = args.dry_run;
     let prefix = if dry_run { "would" } else { "✔" };
@@ -26,7 +28,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let mut out = Deferred::default();
     // Asked before anything is written, so declining everything changes nothing
     // but OpenMoat's own state directory.
-    let hosts = choose_hosts(&home, args, &mut out)?;
+    let hosts = choose_hosts(&home, args, &binary, &mut out)?;
 
     state(&home, dry_run, &mut out)?;
     if !dry_run {
@@ -180,7 +182,12 @@ fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
 /// The hosts to set up: `--hosts` as given; else every host found, each confirmed
 /// at the terminal (all of them with `--yes` or `--dry-run`, none without a
 /// terminal, so a script never changes an agent's files unasked).
-fn choose_hosts(home: &Home, args: &InitArgs, out: &mut Deferred) -> Result<Vec<Host>> {
+fn choose_hosts(
+    home: &Home,
+    args: &InitArgs,
+    binary: &std::path::Path,
+    out: &mut Deferred,
+) -> Result<Vec<Host>> {
     if let Some(explicit) = &args.hosts {
         return Ok(explicit.clone());
     }
@@ -241,10 +248,14 @@ fn choose_hosts(home: &Home, args: &InitArgs, out: &mut Deferred) -> Result<Vec<
     writeln!(
         out,
         "OpenMoat adds its hook and sandbox settings to each agent you accept, backing \
-         up every file first; `moat uninstall` undoes it."
+         up every file first; `moat uninstall` undoes it. Each agent's changes are shown \
+         before you are asked."
     )?;
+    // The sandbox settings the policy `init` keeps or installs gives each agent.
+    let plan = sandbox_plan(home, binary).ok();
     let mut chosen = Vec::new();
     for config in &found {
+        preview::show(home, config, binary, plan.as_ref(), out)?;
         write!(
             out,
             "Protect {} ({})? [Y/n] ",
@@ -300,6 +311,17 @@ fn record(home: &Home, hosts: &[Host]) -> Result<()> {
     recorded.save(home)
 }
 
+/// The sandbox plan for the policy in place, or the default one `init` would
+/// install.
+fn sandbox_plan(home: &Home, binary: &std::path::Path) -> Result<Plan> {
+    let policy = if home.policy_path().exists() {
+        home.load_policy()?
+    } else {
+        Policy::parse(DEFAULT_POLICY)?
+    };
+    Plan::for_binary(home, &policy, binary)
+}
+
 /// Standard tier (ADR-018): each selected host's own sandbox, configured from
 /// the policy. A policy that does not lint is reported, not fatal, so `init`
 /// can still repair hooks; `moat sandbox sync` writes the sandboxes later.
@@ -318,12 +340,7 @@ fn sandboxes(
     if selected.is_empty() {
         return Ok(());
     }
-    let policy = if home.policy_path().exists() {
-        home.load_policy()
-    } else {
-        Ok(Policy::parse(DEFAULT_POLICY)?)
-    };
-    let plan = match policy.and_then(|p| Plan::for_binary(home, &p, binary)) {
+    let plan = match sandbox_plan(home, binary) {
         Ok(plan) => plan,
         Err(e) => {
             writeln!(out, "✗ sandbox          not written: {e:#}")?;

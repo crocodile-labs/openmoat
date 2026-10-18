@@ -258,11 +258,20 @@ fn record(
 
 fn read_stdin() -> Result<String> {
     let mut payload = String::new();
+    // One byte past the limit tells a payload that is too large from one that
+    // only ends there; cut off, it would fail as malformed JSON instead.
     io::stdin()
         .lock()
-        .take(MAX_PAYLOAD_BYTES)
+        .take(MAX_PAYLOAD_BYTES + 1)
         .read_to_string(&mut payload)
         .context("reading hook payload from stdin (must be UTF-8)")?;
+    if payload.len() as u64 > MAX_PAYLOAD_BYTES {
+        bail!(
+            "this tool call is larger than {} MiB, more than OpenMoat reads, so it is \
+             refused; ask the agent to write the file in smaller parts",
+            MAX_PAYLOAD_BYTES / (1024 * 1024)
+        );
+    }
     if payload.trim().is_empty() {
         bail!("empty hook payload on stdin");
     }

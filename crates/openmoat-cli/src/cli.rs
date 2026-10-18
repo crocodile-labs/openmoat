@@ -33,8 +33,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Install the kernel: default policy, audit log and host hooks. At a terminal it
-    /// asks before changing each agent it finds.
+    /// Set up OpenMoat: the default policy, the audit log and the hooks in each agent it
+    /// finds. At a terminal it shows each change and asks before making it.
     Init(InitArgs),
     /// Remove OpenMoat's hooks and sandbox settings from the agents, restoring the
     /// backups `moat init` took. Refused unless run from an interactive terminal.
@@ -78,9 +78,9 @@ pub enum Command {
         #[command(subcommand)]
         command: AuditCommand,
     },
-    /// Run an agent in a sandbox generated from the policy, its network only through
-    /// OpenMoat's proxy (Lightweight tier, ADR-018; macOS, Linux; `--isolate`: Isolated
-    /// tier, Linux). The agent's own sandbox must be off. On Linux without `--isolate`,
+    /// Run an agent and everything it starts in one sandbox made from the policy, with
+    /// network only through OpenMoat's proxy (macOS, Linux; `--isolate` for a stricter
+    /// one on Linux). Turn the agent's own sandbox off. On Linux without `--isolate`,
     /// files inside the project (`.env`, `.git`, `.moat`) are not protected.
     Run(RunArgs),
     /// What `moat run --isolate` starts inside its sandbox (not for people).
@@ -95,7 +95,7 @@ pub enum Command {
     /// host's hook payloads in a throwaway home, and print the scorecard. The scenarios'
     /// commands never run; only the hook does.
     Bench(BenchArgs),
-    /// The host sandboxes OpenMoat configures from the policy (Standard tier, ADR-018).
+    /// The agents' own sandboxes, which OpenMoat configures from the policy.
     Sandbox {
         #[command(subcommand)]
         command: SandboxCommand,
@@ -257,7 +257,7 @@ pub struct AllowArgs {
     pub site: Option<String>,
 
     /// Permanently allow reading and writing in this directory and below it; deny
-    /// rules (secrets, kernel files) still win.
+    /// rules (secrets, OpenMoat's own files) still win.
     #[arg(long, value_name = "PATH", conflicts_with_all = ["command", "last", "session", "remove"])]
     pub dir: Option<PathBuf>,
 
@@ -295,7 +295,7 @@ pub struct DoctorArgs {
 #[derive(Debug, Args)]
 pub struct ProxyArgs {
     /// `install` / `uninstall` / `status` manage the user service that keeps the proxy
-    /// running; without a subcommand the proxy runs in this terminal (ADR-020).
+    /// running; without a subcommand the proxy runs in this terminal.
     #[command(subcommand)]
     pub command: Option<ProxyCommand>,
 
@@ -338,7 +338,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub verbose: bool,
 
-    /// Isolated tier (Linux, bubblewrap): the agent sees only the project without its
+    /// Stricter sandbox (Linux, bubblewrap): the agent sees only the project without its
     /// denied paths, the policy's read roots and `--write` paths, and reaches only
     /// OpenMoat's proxy. Refused where bubblewrap cannot run.
     #[arg(long)]
