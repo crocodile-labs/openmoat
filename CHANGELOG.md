@@ -8,6 +8,12 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A deny can no longer be turned into a defer by padding the rest of a command line until the classifier stops. A here-document with no delimiter line and a trailing backslash are read as bash runs them, a command substitution that cannot be classified keeps its command's own reads and writes, and a line not read in full or past a classifier limit (64 KB, nesting depth, 2048 actions) asks instead of taking the catch-all ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
+- `moat run` removes the environment variables brokered secrets are read from before it starts the agent; the agent and its commands held the real value instead of the placeholder ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
+- `runs-later` asks before the agent writes what its host starts in the next session, outside any sandbox: a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`. Existing policies get it with `moat policy upgrade` ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
+- A tool OpenMoat does not govern is left to the host's own permission flow instead of being approved past it; it is still recorded. Cursor, whose hooks cannot leave a call undecided, keeps the allow ([#569](https://github.com/crocodile-labs/openmoat/pull/569)).
+
 ## [0.5.6] - 2026-10-18
 
 Security hardening: the egress proxy applies deny rules that name an address to every address a host resolves to and refuses two ambiguous plain-HTTP framings, and session grants are ordered by audit row instead of the clock.
