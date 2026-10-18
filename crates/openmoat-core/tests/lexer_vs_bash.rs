@@ -53,7 +53,7 @@ fn the_lexer_splits_words_as_bash_does() {
     let bash = std::env::var("OPENMOAT_BASH").unwrap_or_else(|_| "/bin/bash".to_owned());
     let probe = vec![vec!["probe".to_owned(), "a b".to_owned()]];
     assert!(
-        matches!(under_bash(&bash, "probe 'a b'"), Outcome::Ran(c) if c == probe),
+        matches!(under_bash(&bash, "probe 'a b'", &[]), Outcome::Ran(c) if c == probe),
         "{bash} did not report a command to its command_not_found_handle; \
          the test needs bash 4.0 or newer (set OPENMOAT_BASH)"
     );
@@ -67,14 +67,14 @@ fn the_lexer_splits_words_as_bash_does() {
             skipped += 1;
             continue;
         };
-        match under_bash(&bash, &line) {
+        match under_bash(&bash, &line, &expected.files) {
             // Bash refused the line before running anything: nothing to compare,
             // and nothing an agent could run past the classifier.
             Outcome::Rejected => skipped += 1,
-            Outcome::Ran(actual) if actual == sorted(expected.clone()) => checked += 1,
+            Outcome::Ran(actual) if actual == sorted(expected.commands.clone()) => checked += 1,
             outcome => {
                 checked += 1;
-                write_divergence(&mut report, &line, &expected, &outcome);
+                write_divergence(&mut report, &line, &expected.commands, &outcome);
                 divergent.push(line);
             }
         }
@@ -82,7 +82,8 @@ fn the_lexer_splits_words_as_bash_does() {
     eprintln!("lexer vs bash: {checked} lines checked, {skipped} skipped");
     if std::env::var_os("GITHUB_ACTIONS").is_some() {
         // Annotations show on the run without reading its log; Actions keeps
-        // the first ten of a step.
+        // the first ten errors of a step.
+        println!("::notice title=lexer vs bash::{checked} lines checked, {skipped} skipped");
         for line in divergent.iter().take(10) {
             let quoted = serde_json::to_string(line).unwrap();
             println!("::error title=lexer and bash disagree::{quoted}");
@@ -154,11 +155,20 @@ fn bash_builtins(bash: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// The lexer's commands for `line`, or `None` when bash would expand or run
+/// What the lexer makes of a line.
+struct Lexed {
+    commands: Commands,
+    /// Files the line redirects from or to. They exist before bash runs it:
+    /// a missing one makes bash skip the command, which is no word split.
+    files: Vec<String>,
+}
+
+/// The lexer's view of `line`, or `None` when bash would expand or run
 /// something the comparison cannot see.
-fn lexed(line: &str, skip_programs: &BTreeSet<String>) -> Option<Commands> {
+fn lexed(line: &str, skip_programs: &BTreeSet<String>) -> Option<Lexed> {
     let tokens = lex(line).ok()?;
     let mut commands = Vec::new();
+    let mut files = Vec::new();
     let mut current: Vec<String> = Vec::new();
     let mut redirect: Option<Operator> = None;
     for token in tokens {
@@ -168,10 +178,11 @@ fn lexed(line: &str, skip_programs: &BTreeSet<String>) -> Option<Commands> {
                     return None;
                 }
                 match redirect.take() {
-                    // Here-string data is stdin, not a file.
+                    // Here-string data is stdin, and a duplicated descriptor
+                    // is a number: neither names a file.
                     Some(Operator::HereString | Operator::DuplicateDescriptor) => {}
                     Some(_) if !scratch_path(&word.text) => return None,
-                    Some(_) => {}
+                    Some(_) => files.push(word.text),
                     None => current.push(word.text),
                 }
             }
@@ -191,7 +202,8 @@ fn lexed(line: &str, skip_programs: &BTreeSet<String>) -> Option<Commands> {
         let program = &argv[0];
         skip_programs.contains(program) || program.contains('/') || program.contains('=')
     };
-    (!commands.is_empty() && !commands.iter().any(runs_elsewhere)).then_some(commands)
+    (!commands.is_empty() && !commands.iter().any(runs_elsewhere))
+        .then_some(Lexed { commands, files })
 }
 
 fn finish(current: &mut Vec<String>) -> Option<Vec<String>> {
@@ -229,12 +241,24 @@ enum Outcome {
     Failed(String),
 }
 
-fn under_bash(bash: &str, line: &str) -> Outcome {
+/// Run `line` in a fresh scratch directory holding `files` (empty), each a
+/// path [`scratch_path`] accepted.
+fn under_bash(bash: &str, line: &str, files: &[String]) -> Outcome {
     let scratch = tempfile::tempdir().unwrap();
     let empty_path = scratch.path().join("bin");
     let cwd = scratch.path().join("work");
     fs::create_dir(&empty_path).unwrap();
     fs::create_dir(&cwd).unwrap();
+    for file in files {
+        let path = cwd.join(file);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        // A target such as `.` or `dir/` is a directory already.
+        if !path.is_dir() {
+            fs::File::create(&path).unwrap();
+        }
+    }
     let log = scratch.path().join("argv");
     // A file, not a pipe: nothing reads a pipe while bash runs, so a full one
     // would stall it.
