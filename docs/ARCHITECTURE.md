@@ -104,9 +104,16 @@ exits. There is no daemon.
 
 A panic inside steps 1–10 is caught and answered with a deny and exit 2, because
 Claude Code treats exit 101 as a non-blocking error. A `guard` with no answer after
-10 s (`GUARD_BUDGET_S`, below every hook timeout `moat init` sets) writes a deny,
+30 s (`GUARD_BUDGET_S`, below every hook timeout `moat init` sets) writes a deny,
 unrecorded, and exits 2, since a host that times the hook out runs the call
-(THREAT_MODEL §5, "When the hook fails"). Only one response is ever written.
+(THREAT_MODEL §5, "When the hook fails"). Only one response is ever written. The
+limit is wall-clock time, which includes waiting for a CPU and for the audit
+database's lock, so it is set well above the 10–20 ms a call takes: on a machine
+loaded by parallel builds a call can take seconds without being stuck. The deny
+appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
+phase being the step the guard was in (`stdin`, `lock`, `context`, `compile`,
+`taint`, `cache`, `record`, `answer`); `moat doctor` reports the hangs of the last
+week and the phase most of them were in.
 
 ## 3. Classification
 
@@ -428,7 +435,12 @@ earlier events (POLICY.md §4.1). `guard` keeps that fold per session and host i
 `session_cache` table, with the newest event it covers and a digest of what it
 depends on: this build's version, the effective policy and context, and the working
 directory. A call reads the cache, folds only the events recorded since, and writes
-it back, so a late call in a long session stays fast (#570). A cache under another
+it back, so a late call in a long session stays fast (#570). The write goes on the
+connection the call then records with, just before the record's transaction, and
+does not wait for the database's lock: while another call holds it, the write is
+skipped and the older row stays, so the next call folds a few more events. A row
+is replaced only by one further on (or under another digest), so a skipped or late
+write never moves it back. A cache under another
 digest, or one that cannot be read, is ignored and the session is folded from its
 first event. The cache is outside the hash chain and never a source of truth: it can
 only hold what the events folded to. The table is created on first use, without

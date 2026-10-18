@@ -171,7 +171,7 @@ fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
 #[test]
 fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
-    let budget = Duration::from_secs(10);
+    let budget = Duration::from_secs(30);
     let started = Instant::now();
     let running: Vec<_> = shapes()
         .into_iter()
@@ -203,7 +203,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         );
         assert_denied(&shape, &out, "stuck");
         assert!(
-            stderr(&out).contains("no decision within 10 s"),
+            stderr(&out).contains("no decision within 30 s"),
             "{}",
             text(&out)
         );
@@ -213,6 +213,13 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     let log = sb.home.join(".moat/guard-hangs.log");
     let lines = fs::read_to_string(&log).unwrap();
     assert_eq!(lines.lines().count(), 4, "{lines}");
+    // Each line names the phase the guard was stuck in, and how long it ran.
+    for line in lines.lines() {
+        let fields: Vec<&str> = line.split(' ').collect();
+        assert_eq!(fields.len(), 4, "{line}");
+        assert_eq!(fields[2], "stdin", "{line}");
+        assert!(fields[3].parse::<u128>().unwrap() >= 30_000, "{line}");
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
@@ -221,7 +228,12 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     }
     let doctor = sb.moat(&["doctor"]);
     assert!(
-        text(&doctor).contains("! guard            4 call(s) denied with no decision within 10 s"),
+        text(&doctor).contains("! guard            4 call(s) denied with no decision within 30 s"),
+        "{}",
+        text(&doctor)
+    );
+    assert!(
+        text(&doctor).contains("most while reading the tool call (phase stdin)"),
         "{}",
         text(&doctor)
     );

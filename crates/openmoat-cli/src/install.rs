@@ -75,7 +75,13 @@ const CONFIG_HOOK_TIMEOUT_S: u64 = 60;
 /// Seconds `moat guard` may take before it denies on its own. A host that times
 /// a hook out treats it as failed, and Claude Code, Codex and the Continue CLI
 /// then run the call; below every timeout above, so the host gets the deny.
-pub const GUARD_BUDGET_S: u64 = 10;
+///
+/// The watchdog measures wall-clock time, which includes the time the guard
+/// waits to be scheduled. A guard decides in 10–20 ms, but on a machine loaded
+/// by parallel builds (load average near 100) a call can wait seconds for a CPU
+/// and for the audit database's lock; 10 s denied such calls that were only
+/// slow. 30 s leaves room for that and stays half the settings-change timeout.
+pub const GUARD_BUDGET_S: u64 = 30;
 const _: () = assert!(GUARD_BUDGET_S < CONFIG_HOOK_TIMEOUT_S);
 const _: () = assert!(GUARD_BUDGET_S < TOOL_HOOK_TIMEOUT_S);
 

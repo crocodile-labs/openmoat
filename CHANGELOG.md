@@ -35,6 +35,9 @@ view at the end of the file.
 - A tool call over the 1 MiB payload limit is refused with a message naming the limit, instead of failing as malformed input ([#573](https://github.com/crocodile-labs/openmoat/pull/573)).
 - `moat guard` stays fast in long agent sessions: the session's taint is folded from the calls since the last one, cached in the audit database, instead of from the whole session. Late in a 5,000-call session a call took 158 ms on Linux and 370 ms on macOS; it now takes about 10 and 18 ms ([#571](https://github.com/crocodile-labs/openmoat/pull/571)).
 
+### Fixed
+- `moat guard` no longer denies slow calls on a heavily loaded machine as `no decision within 10 s`: the time limit is 30 s (still a deny when it runs out), the session-cache write skips instead of waiting for the audit database's lock and shares the record's connection, and `moat doctor` names the step most such calls were stuck in ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+
 ## [0.5.6] - 2026-10-18
 
 Security hardening: the egress proxy applies deny rules that name an address to every address a host resolves to and refuses two ambiguous plain-HTTP framings, and session grants are ordered by audit row instead of the clock.

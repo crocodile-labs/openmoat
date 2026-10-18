@@ -12,7 +12,7 @@ use std::collections::hash_map::Entry;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_audit::{Cached, Event, EventId};
+use openmoat_audit::{Cached, Event, EventId, Store};
 use openmoat_core::{Action, CompiledPolicy, Decision, Taint, Verdict};
 use openmoat_hosts::{HookEvent, Host};
 use serde::{Deserialize, Serialize};
@@ -49,13 +49,16 @@ pub struct SessionTaint {
 /// The cache applies only under the same OpenMoat version, policy, context and
 /// directory it was computed with; otherwise, or when it cannot be read, the
 /// session is folded from its first event, as it always was.
+///
+/// The read is on a read-only handle; the new cache row, when there is one, is
+/// returned for the caller to write on the handle it records the call with.
 pub fn of_session(
     home: &Home,
     host: Host,
     session: &str,
     policy: &CompiledPolicy<'_>,
     cwd: &str,
-) -> Result<SessionTaint> {
+) -> Result<(SessionTaint, Option<CacheWrite>)> {
     let store = home.open_audit()?;
     let digest = digest(host, policy, cwd)?;
     let (mut out, after) = store
@@ -69,18 +72,35 @@ pub fn of_session(
         .session_after(session, after)
         .context("reading this session from the audit log")?;
     fold(&mut out, &events, host, policy, cwd)?;
-    if let Some(last) = events.last() {
-        // Best effort: without the cache the next call folds more, nothing else.
-        let cached = Cached {
-            digest,
-            upto: last.id,
-            state: serde_json::to_string(&out)?,
-        };
-        if let Ok(writable) = openmoat_audit::Store::open_existing(&home.audit_path()) {
-            let _ = writable.set_session_cache(session, host.id(), &cached);
-        }
+    let write = match events.last() {
+        Some(last) => Some(CacheWrite {
+            session: session.to_owned(),
+            host,
+            cached: Cached {
+                digest,
+                upto: last.id,
+                state: serde_json::to_string(&out)?,
+            },
+        }),
+        None => None,
+    };
+    Ok((out, write))
+}
+
+/// A session's fold to store in the cache.
+pub struct CacheWrite {
+    session: String,
+    host: Host,
+    cached: Cached,
+}
+
+impl CacheWrite {
+    /// Best effort and without waiting: without the cache the next call folds
+    /// more, nothing else. `store` must not mask secrets: the row is keyed by
+    /// the session id as [`of_session`] reads it, on a handle that masks none.
+    pub fn write(&self, store: &Store) {
+        let _ = store.try_set_session_cache(&self.session, self.host.id(), &self.cached);
     }
-    Ok(out)
 }
 
 /// What the fold of a session depends on besides its events: this build's

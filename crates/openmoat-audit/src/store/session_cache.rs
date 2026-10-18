@@ -8,7 +8,9 @@
 //! first write, so the schema version (and older builds' view of the
 //! database) is unchanged.
 
-use rusqlite::{OptionalExtension as _, params};
+use std::time::Duration;
+
+use rusqlite::{ErrorCode, OptionalExtension as _, params};
 
 use super::{EventId, Store, StoreError, row_to_event};
 use crate::store::Event;
@@ -104,5 +106,37 @@ impl Store {
             params![session_id, host, cached.digest, cached.upto.0, cached.state],
         )?;
         Ok(())
+    }
+
+    /// [`Store::set_session_cache`], without waiting for the database's write
+    /// lock: when another connection holds it, nothing is written and this
+    /// returns `Ok(false)`. The cache is only a shortcut, and the guard that
+    /// writes it is about to wait for the same lock to record its call, so it
+    /// must not wait twice. A skipped write leaves the older row, which the
+    /// next fold reads on from (the row only moves forward, never back).
+    pub fn try_set_session_cache(
+        &self,
+        session_id: &str,
+        host: &str,
+        cached: &Cached,
+    ) -> Result<bool, StoreError> {
+        self.conn.busy_timeout(Duration::ZERO)?;
+        let written = self.set_session_cache(session_id, host, cached);
+        // Restored whatever happened: a later write on this handle (the
+        // guard's record) waits for the lock as usual.
+        self.conn
+            .busy_timeout(Duration::from_millis(super::BUSY_TIMEOUT_MS))?;
+        match written {
+            Ok(()) => Ok(true),
+            Err(StoreError::Sqlite(rusqlite::Error::SqliteFailure(error, _)))
+                if matches!(
+                    error.code,
+                    ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked
+                ) =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
     }
 }

@@ -45,11 +45,15 @@ pub(super) fn tiocsti(codex: bool, setting: Option<&str>) -> Option<String> {
 /// Calls the guard denied in the last week because no decision came in time.
 pub(super) fn hangs(home: &Home, now_ms: i64) -> Option<String> {
     let path = home.hangs_path();
-    let (count, newest) = hangs::since(&path, now_ms - HANG_WINDOW_MS)?;
+    let found = hangs::since(&path, now_ms - HANG_WINDOW_MS)?;
+    let phase = found.common_phase.map_or_else(String::new, |p| {
+        format!(", most while {} (phase {})", p.doing(), p.name())
+    });
     Some(format!(
-        "guard            {count} call(s) denied with no decision within {GUARD_BUDGET_S} s \
-         in the last 7 days, the latest at {}; not in the audit log, listed in {}",
-        time::timestamp(newest),
+        "guard            {} call(s) denied with no decision within {GUARD_BUDGET_S} s \
+         in the last 7 days, the latest at {}{phase}; not in the audit log, listed in {}",
+        found.count,
+        time::timestamp(found.newest_ms),
         path.display()
     ))
 }
@@ -82,5 +86,17 @@ mod tests {
         fs::write(home.hangs_path(), format!("1 codex\n{now} cursor\n")).unwrap();
         let row = hangs(&home, now).unwrap();
         assert!(row.contains("1 call(s) denied"), "{row}");
+        assert!(!row.contains("most while"), "{row}");
+        fs::write(
+            home.hangs_path(),
+            format!("{now} codex taint 30010\n{now} cursor\n"),
+        )
+        .unwrap();
+        let row = hangs(&home, now).unwrap();
+        assert!(row.contains("2 call(s) denied"), "{row}");
+        assert!(
+            row.contains("most while reading the session's earlier calls (phase taint)"),
+            "{row}"
+        );
     }
 }

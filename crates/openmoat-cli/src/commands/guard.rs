@@ -18,11 +18,12 @@ use crate::cli::GuardArgs;
 use crate::context;
 use crate::environment::Snapshot;
 use crate::exit::Code;
+use crate::hangs::{self, Phase};
 use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, INTEGRITY_RULE, Lock};
 use crate::realpath::FsPathResolver;
-use crate::{hangs, render, secrets, taint, time};
+use crate::{render, secrets, taint, time};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const UNGOVERNED_RULE: &str = "ungoverned";
@@ -32,7 +33,7 @@ const SESSION_GRANT_RULE: &str = "approved-session";
 
 pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
-    deny_when_over_budget(host);
+    deny_when_over_budget(host, Instant::now());
     // A panic would exit 101, which Claude Code treats as a non-blocking hook
     // failure, i.e. the call would proceed. Turn it into an explicit deny.
     if let Ok(code) = std::panic::catch_unwind(|| decide_and_respond(host)) {
@@ -46,15 +47,19 @@ pub fn run(args: &GuardArgs) -> Code {
 /// call, so after [`GUARD_BUDGET_S`] the guard denies on its own, in the
 /// default event's format; exit 2 denies whatever the event. The deny goes to
 /// the side file of [`hangs`], not the audit log: what is stuck may be the log.
-fn deny_when_over_budget(host: Host) {
+/// The line names the phase the guard was in and how long it had run, so a
+/// slow machine can be told from a stuck step.
+fn deny_when_over_budget(host: Host, started: Instant) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(GUARD_BUDGET_S));
+        let phase = hangs::current();
         let decision = kernel_error(&anyhow::Error::msg(format!(
             "no decision within {GUARD_BUDGET_S} s"
         )));
         if let Some(code) = answer_once(host, &HookEvent::default(), &decision) {
             if let Ok(home) = Home::locate() {
-                hangs::record(&home, host, time::now_ms());
+                let elapsed_ms = started.elapsed().as_millis();
+                hangs::record(&home, host, time::now_ms(), phase, elapsed_ms);
             }
             std::process::exit(code as i32);
         }
@@ -111,13 +116,15 @@ fn decide_and_respond(installed_for: Host) -> Code {
     let mut host = installed_for;
     let mut event = HookEvent::default();
     let mut known = KnownSecrets::default();
+    let mut cache = None;
+    hangs::enter(Phase::Stdin);
     let (request, mut decision) = match read_stdin() {
         Ok(payload) => {
             // The Continue CLI runs the Claude Code hook but cannot ask.
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             event = host.event_of(&payload);
-            evaluate(host, &payload, &mut known)
+            evaluate(host, &payload, &mut known, &mut cache)
                 .unwrap_or_else(|error| (None, kernel_error(&error)))
         }
         Err(error) => (None, kernel_error(&error)),
@@ -129,10 +136,18 @@ fn decide_and_respond(installed_for: Host) -> Code {
     }
     // The audit log is part of the decision: a call that cannot be recorded
     // is not allowed, so a missing or unwritable log cannot hide activity.
-    if let Err(error) = record(host, request.as_ref(), &decision, started, known) {
+    let recorded = Recorded {
+        request: request.as_ref(),
+        decision: &decision,
+        started,
+        known,
+        cache,
+    };
+    if let Err(error) = record(host, recorded) {
         decision = kernel_error(&error.context("audit log unavailable"));
     }
 
+    hangs::enter(Phase::Answer);
     let event = request.as_ref().map_or(event, |r| r.event.clone());
     // What the host receives can be stricter than what was decided and recorded
     // (Codex and the Continue CLI cannot ask, so an `ask` reaches them as a `deny`).
@@ -142,12 +157,15 @@ fn decide_and_respond(installed_for: Host) -> Code {
 
 /// Decide one hook payload. `known` gets the brokered secret values to mask in
 /// the audit row as soon as the policy is loaded, so it holds them even when a
-/// later step fails.
+/// later step fails. `cache` gets the session's fold to store, written with
+/// the record so the call opens one writable handle.
 fn evaluate(
     host: Host,
     payload: &str,
     known: &mut KnownSecrets,
+    cache: &mut Option<taint::CacheWrite>,
 ) -> Result<(Option<HookRequest>, Decision)> {
+    hangs::enter(Phase::Lock);
     let request = host
         .parse_request(payload)
         .context("parsing hook payload")?;
@@ -177,10 +195,12 @@ fn evaluate(
         .map(std::path::PathBuf::from)
         .map_or_else(std::env::current_dir, Ok)
         .context("resolving working directory")?;
+    hangs::enter(Phase::Context);
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
     let policy = crate::repo::effective_policy(&home, &ctx)?;
     *known = secrets::known(&policy.secrets, &ctx.home)?;
     let snapshot = Snapshot::load(&home.environment_path())?;
+    hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
     let mut decision = compiled.decide_with(action, &snapshot, &FsPathResolver);
     // A grant a person made with `moat allow` turns an `ask` or a `defer` into an
@@ -204,7 +224,10 @@ fn evaluate(
     // session read a secret did not approve sending that secret anywhere.
     // A grant made after the session read untrusted content answers that
     // content's ask for this exact call (taint.rs).
-    let session = taint::of_session(&home, host, &request.session_id, &compiled, &ctx.cwd)?;
+    hangs::enter(Phase::Taint);
+    let (session, write) =
+        taint::of_session(&home, host, &request.session_id, &compiled, &ctx.cwd)?;
+    *cache = write;
     let tainted = compiled.with_taint(decision.clone(), action, &FsPathResolver, &session.taint);
     let call = taint::Call {
         home: &home,
@@ -225,18 +248,40 @@ fn evaluate(
     Ok((Some(request), decision))
 }
 
-fn record(
-    host: Host,
-    request: Option<&HookRequest>,
-    decision: &Decision,
+/// What [`record`] writes.
+struct Recorded<'a> {
+    request: Option<&'a HookRequest>,
+    decision: &'a Decision,
     started: Instant,
     known: KnownSecrets,
-) -> Result<()> {
+    cache: Option<taint::CacheWrite>,
+}
+
+/// Record the decision, after the session cache on the same handle. The cache
+/// write never waits for the lock and its result is ignored; it is a separate
+/// statement before the record's own transaction, so it cannot touch the
+/// hash chain.
+fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
+    let Recorded {
+        request,
+        decision,
+        started,
+        known,
+        cache,
+    } = recorded;
+    hangs::enter(Phase::Record);
     let home = Home::locate()?;
     if !home.exists() {
         bail!("{} does not exist; run `moat init`", home.root().display());
     }
-    let store = Store::open_existing(&home.audit_path())?.with_secrets(known);
+    let store = Store::open_existing(&home.audit_path())?;
+    if let Some(cache) = cache {
+        hangs::enter(Phase::Cache);
+        // Before `with_secrets`: the cache is keyed as the unmasked reader reads it.
+        cache.write(&store);
+        hangs::enter(Phase::Record);
+    }
+    let store = store.with_secrets(known);
     let latency_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
     let event = NewEvent {
         host: host.id(),

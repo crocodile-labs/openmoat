@@ -301,7 +301,7 @@ something OpenMoat claims to stop.
   | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks |
   | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
   | Ours: tool OpenMoat does not know | defer (no output: Claude Code's own prompt and rules decide), rule `ungoverned`, recorded | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | as Claude Code |
-  | Ours: no decision within 10 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
+  | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | not applicable: `cn` fires no hooks (below) |
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
@@ -309,10 +309,13 @@ something OpenMoat claims to stop.
   memory) or a missing binary leaves Claude Code, Codex and `cn` with no way to block:
   none of them has a fail-closed setting; Claude Code's own deny rules for secrets and
   OpenMoat's files, which `moat init` writes on every OS, still hold for its file tools
-  then. A `guard` that hangs denies after 10 s, well
-  before any host timeout `moat init` sets, so the host never reaches the timeout that
-  would run the call; that deny goes to a side file (`~/.moat/guard-hangs.log`, which
-  `moat doctor` reports), not the audit log, because what hangs may be the audit log.
+  then. A `guard` that hangs denies after 30 s, well
+  before any host timeout `moat init` sets (60 s for the settings-change hook, 600 s
+  for tool calls), so the host never reaches the timeout that would run the call; that
+  deny goes to a side file (`~/.moat/guard-hangs.log`, which `moat doctor` reports with
+  the step the guard was stuck in), not the audit log, because what hangs may be the
+  audit log. The limit is wall-clock time, so a heavily loaded machine can reach it
+  with a call that is only slow; the call is then denied, never allowed.
 
   [cc-hooks]: https://code.claude.com/docs/en/hooks
   [codex-hooks]: https://developers.openai.com/codex/hooks
