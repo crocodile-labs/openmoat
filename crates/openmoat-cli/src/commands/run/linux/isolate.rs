@@ -11,7 +11,6 @@
 //! Then it applies the same Landlock rules and seccomp filter as the
 //! Lightweight tier to a thread of its own, which starts the agent.
 
-use std::ffi::OsStr;
 use std::fs::{DirBuilder, File, Permissions};
 use std::io;
 use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream};
@@ -31,6 +30,17 @@ use crate::context::path_string;
 use crate::exit::Code;
 use crate::sandbox::{Grants, Report, bwrap, bwrap_mounts};
 
+/// Where bubblewrap is taken from. Not `PATH`: `bwrap` starts unconfined and
+/// builds the sandbox, so a `bwrap` a project ships (a relative `PATH` entry,
+/// `node_modules/.bin`) must never be the one that runs.
+const BWRAP_DIRS: [&str; 3] = ["/usr/bin", "/bin", "/usr/local/bin"];
+
+/// The system's bubblewrap, symlinks resolved.
+fn system_bwrap() -> Option<PathBuf> {
+    let dirs: Vec<PathBuf> = BWRAP_DIRS.iter().map(PathBuf::from).collect();
+    crate::environment::find_in(&dirs, &[], "bwrap").and_then(|p| std::fs::canonicalize(p).ok())
+}
+
 /// Namespaces bubblewrap creates; a user namespace is required, not tried.
 const UNSHARE: [&str; 3] = ["--unshare-all", "--unshare-user", "--die-with-parent"];
 
@@ -40,9 +50,9 @@ pub fn isolate(
     grants: Grants,
     program: &Path,
 ) -> Result<Confined> {
-    let bwrap = super::super::resolve(OsStr::new("bwrap")).context(
-        "`moat run --isolate` needs bubblewrap (`bwrap` on PATH; `apt install bubblewrap`); \
-         refusing rather than starting the agent in a weaker tier",
+    let bwrap = system_bwrap().context(
+        "`moat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
+         `apt install bubblewrap`); refusing rather than starting the agent in a weaker tier",
     )?;
     usable(&bwrap)?;
     let port = grants.proxy_port.context("no proxy port")?;

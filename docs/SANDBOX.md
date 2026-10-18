@@ -326,7 +326,7 @@ moat run --isolate --write ~/.claude --write ~/.claude.json -- claude
   Linux 6.7 or later is needed. The agent's own sandbox must be off, as under
   `moat run`.
 
-It needs `bwrap` on `PATH` (`apt install bubblewrap`, `dnf install bubblewrap`) and
+It needs `bwrap` in `/usr/bin`, `/bin` or `/usr/local/bin` (`apt install bubblewrap`, `dnf install bubblewrap`; never taken from `PATH`, since it starts outside the sandbox) and
 unprivileged user namespaces; on Ubuntu 24.04 AppArmor restricts them unless
 `kernel.apparmor_restrict_unprivileged_userns` is 0 or an AppArmor profile allows
 `bwrap`. Where bubblewrap is missing or cannot create its namespaces, `moat run

@@ -18,10 +18,12 @@ mod chain;
 mod export;
 mod export_verify;
 mod schema;
+mod session_cache;
 
 pub use chain::{BreakKind, ChainBreak, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
+pub use session_cache::Cached;
 
 const BUSY_TIMEOUT_MS: u64 = 2000;
 

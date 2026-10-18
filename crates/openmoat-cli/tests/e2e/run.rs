@@ -58,7 +58,7 @@ fn refuses_to_start_over_a_drifted_lock() {
 }
 
 /// `moat run --isolate -- /bin/sh -c 'echo ran'` with `PATH` set to `path`.
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 fn run_isolated(path: &str) -> Output {
     let (sb, project) = installed_with_secret();
     output(
@@ -85,14 +85,33 @@ fn isolate_is_refused_on_macos() {
     assert!(!text(&out).contains("ran\n"), "{}", text(&out));
 }
 
-/// Without bubblewrap the agent does not start, not even in the Lightweight tier.
+/// bubblewrap starts unconfined, so it comes from the system's directories,
+/// never from `PATH`: a `bwrap` the project ships on a relative entry does
+/// not run. Without a system one the agent does not start at all.
 #[cfg(target_os = "linux")]
 #[test]
-fn isolate_without_bubblewrap_is_refused() {
-    let out = run_isolated("/nonexistent");
-    assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
-    assert!(stderr(&out).contains("needs bubblewrap"), "{}", text(&out));
-    assert!(!text(&out).contains("ran\n"), "{}", text(&out));
+fn isolate_never_runs_a_bwrap_from_path() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let (sb, project) = installed_with_secret();
+    let marker = project.join("project-bwrap-ran");
+    let fake = project.join("bin/bwrap");
+    std::fs::create_dir_all(project.join("bin")).unwrap();
+    std::fs::write(&fake, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = output(
+        sb.command()
+            .current_dir(&project)
+            .env("PATH", "bin:/usr/bin:/bin")
+            .args(["run", "--isolate", "--", "/bin/sh", "-c", "echo ran"]),
+        None,
+    );
+    assert!(!marker.exists(), "the project's bwrap ran: {}", text(&out));
+    let system = ["/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap"];
+    if !system.iter().any(|p| Path::new(p).exists()) {
+        assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
+        assert!(stderr(&out).contains("needs bubblewrap"), "{}", text(&out));
+    }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
