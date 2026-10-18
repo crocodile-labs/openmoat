@@ -156,3 +156,48 @@ fn globs_become_anchored_regexes_with_the_engine_semantics() {
     assert_eq!(filter("/h/a\"b"), r#"(literal "/h/a\"b")"#);
     assert_eq!(filter("**/.env"), r#"(regex "^(.*/)?\\.env$")"#);
 }
+
+/// `**` inside braces is recursive in the engine, so each brace alternative
+/// is translated on its own: `~/{.ssh/**,.aws/**}` covers both trees.
+#[test]
+fn braces_are_expanded_before_translating() {
+    let owned = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    assert_eq!(
+        alternatives("/h/{.ssh/**,.aws/**}"),
+        owned(&["/h/.ssh/**", "/h/.aws/**"])
+    );
+    assert_eq!(
+        alternatives("/a/{b,{c,d}e}/f"),
+        owned(&["/a/b/f", "/a/ce/f", "/a/de/f"])
+    );
+    assert_eq!(
+        alternatives("!/p/{x,y}/**"),
+        owned(&["!/p/x/**", "!/p/y/**"])
+    );
+    assert_eq!(
+        alternatives("/a/{b"),
+        owned(&["/a/{b"]),
+        "unclosed: as written"
+    );
+    assert_eq!(
+        alternatives(r"/a/\{b,c}"),
+        owned(&[r"/a/\{b,c}"]),
+        "escaped"
+    );
+    let wide = "/{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}";
+    assert_eq!(
+        alternatives(wide),
+        owned(&[wide]),
+        "past the bound: as written"
+    );
+
+    let mut profile = String::new();
+    rule(
+        &mut profile,
+        "deny keys",
+        "deny file-read-data",
+        &["/h/{.ssh/**,.aws/**}".to_owned()],
+    );
+    assert!(profile.contains("(subpath \"/h/.ssh\")"), "{profile}");
+    assert!(profile.contains("(subpath \"/h/.aws\")"), "{profile}");
+}
