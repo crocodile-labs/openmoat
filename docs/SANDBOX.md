@@ -235,6 +235,13 @@ from the policy, with network only through a `moat proxy` it starts (ADR-018):
 moat run --write ~/.claude --write ~/.claude.json -- claude
 ```
 
+The two `--write` paths are Claude Code's own state, which it must write to run. They
+also hold what Claude Code starts in its next session, outside any sandbox (MCP servers
+in `~/.claude.json`, plugins in `~/.claude/plugins/`), and in this tier every command the
+agent runs shares that grant. The hook asks before the agent's own tools write one
+(`runs-later`); a script it runs is not asked. Where the agent's own sandbox is
+available, the Standard tier keeps its commands out of the home altogether.
+
 - **macOS:** a Seatbelt profile, started with `/usr/bin/sandbox-exec`. On some
   macOS 14 machines, Seatbelt itself sometimes refuses the connection to the proxy
   that the profile allows. This happens for a few milliseconds about every 15 seconds,

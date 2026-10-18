@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 20 | 13 | 0 |
 | T7 | Obfuscation and nested execution | 88 | 99 | 2 |
 | T8 | MCP tool poisoning / over-privileged tools | 10 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 140 | 35 | 3 |
+| T9 | Hook / policy tampering by the agent | 140 | 44 | 3 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 0 |
 | T12 | Network to unknown hosts | 30 | 16 | 1 |
@@ -670,6 +670,15 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-write-vscode-tasks` (ask): Ask [runs-later]
 - `ask-workflow-in-an-allowed-directory` (ask): Ask [runs-later]
 - `ask-husky-in-an-allowed-directory` (ask): Ask [runs-later]
+- `ask-write-claude-code-hook-script` (ask): Ask [runs-later]
+- `ask-echo-into-claude-code-hook-script` (ask): Ask [runs-later]
+- `ask-write-project-mcp-servers` (ask): Ask [runs-later]
+- `ask-copy-over-project-cursor-mcp-servers` (ask): Ask [runs-later]
+- `ask-write-project-codex-config` (ask): Ask [runs-later]
+- `ask-write-claude-json-mcp-servers` (ask): Ask [runs-later]
+- `ask-write-claude-code-plugin-hook` (ask): Ask [runs-later]
+- `ask-write-cursor-home-mcp-servers` (ask): Ask [runs-later]
+- `ask-write-cursor-cli-config` (ask): Ask [runs-later]
 - `T9-edit-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-project-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-moat-policy` (attacks): Deny [kernel-self]

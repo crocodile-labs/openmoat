@@ -230,8 +230,9 @@ allow:
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted
     # directory), so writing one asks like the root's own `.git`
     fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
-      # what CI or a commit runs later, outside any sandbox (`runs-later` asks)
-      "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json"]
+      # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` asks)
+      "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
+      "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -583,11 +584,15 @@ ask:
     shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*"]
   # CI configuration runs with the repository's secrets once a branch is pushed, and
   # commit-hook managers and editor tasks run on this machine outside any sandbox;
-  # `project-fs` leaves them out, so a write asks wherever it is. Hook only: the OS
-  # sandboxes list them as writable (`sandbox/patterns.rs`)
+  # so do the agent hosts' hook scripts, MCP server lists and Codex's project config,
+  # in the next session. `project-fs` leaves them out, so a write asks wherever it is.
+  # Hook only: the OS sandboxes list them as writable (`sandbox/patterns.rs`), and the
+  # home files are the hosts' own state, which `moat run --write` may grant
   - id: runs-later
-    reason: CI, commit hooks or the editor run this later, outside any sandbox
-    fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json"]
+    reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
+    fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json",
+      "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
+      "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]
