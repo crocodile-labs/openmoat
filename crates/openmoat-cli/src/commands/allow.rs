@@ -254,17 +254,18 @@ fn will_allow(rule: &RuleGroup) -> String {
             .iter()
             .map(String::as_str)
             .partition(|p| p.starts_with("@package-near-miss "));
-        let mut what = format!(
-            "{} (and the same command with extra arguments)",
+        let notes: String = near_misses
+            .iter()
+            .filter_map(|atom| {
+                let mut words = atom.split(' ').skip(2);
+                let (name, popular) = (words.next()?, words.next()?);
+                Some(format!(", even though \"{name}\" is not \"{popular}\""))
+            })
+            .collect();
+        format!(
+            "{} (and the same command with extra arguments){notes}",
             commands.join(", ")
-        );
-        for atom in near_misses {
-            let mut words = atom.split(' ').skip(2);
-            if let (Some(name), Some(popular)) = (words.next(), words.next()) {
-                what.push_str(&format!(", even though \"{name}\" is not \"{popular}\""));
-            }
-        }
-        what
+        )
     };
     format!("will allow: {what}; deny rules still win")
 }
