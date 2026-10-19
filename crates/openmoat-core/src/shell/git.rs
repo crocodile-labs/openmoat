@@ -12,6 +12,9 @@
 //! names, which may be one planted in the project with ordinary file writes.
 //!
 //! `git restore PATH` rewrites `PATH` in the working tree, so each path is an `fs.write`.
+//! A local repository that `clone`, `fetch`, `pull`, `ls-remote` or `archive --remote`
+//! names is an `fs.read`; the directory `clone` creates and a local repository
+//! `push` updates are `fs.write`s (`remote_paths`).
 
 use super::tables::GIT_HOST_SUBCOMMANDS;
 use super::{ClassifyError, ShellContext, Sink};
@@ -193,6 +196,13 @@ pub(super) fn push_shell(
             }
         }
     }
+    for (path, writes) in remote_paths(&git.subcommand) {
+        if writes {
+            sink.write(ctx, path)?;
+        } else {
+            sink.read(ctx, path)?;
+        }
+    }
     sink.push(AtomicAction::Shell {
         argv: git.subcommand,
     })?;
@@ -204,9 +214,132 @@ pub(super) fn push_shell(
     Ok(())
 }
 
+/// Options of `clone`, `fetch`, `pull`, `push`, `ls-remote` and `archive` whose
+/// value is the next word unless given with `=`.
+const REMOTE_VALUED: &[&str] = &[
+    "-o",
+    "--origin",
+    "-b",
+    "--branch",
+    "-u",
+    "--upload-pack",
+    "--receive-pack",
+    "--exec",
+    "--reference",
+    "--reference-if-able",
+    "--separate-git-dir",
+    "--depth",
+    "--deepen",
+    "--shallow-since",
+    "--shallow-exclude",
+    "-c",
+    "--config",
+    "--template",
+    "-j",
+    "--jobs",
+    "--filter",
+    "--server-option",
+    "--bundle-uri",
+    "--revision",
+    "--ref-format",
+    "--negotiation-tip",
+    "--refmap",
+    "--repo",
+    "--push-option",
+    "--sort",
+    "--format",
+    "--prefix",
+    "--output",
+    "--remote",
+];
+
+/// The local repositories a subcommand (`git` first) uses, with true when it
+/// writes them: the repository of `clone`, `fetch`, `pull` and `ls-remote` and
+/// the value of `git archive --remote` are read, the directory `clone` creates
+/// and the repository `push` updates are written. A URL, `host:path` and a bare
+/// name (a configured remote such as `origin`) are not local paths.
+fn remote_paths(sub: &[String]) -> Vec<(&str, bool)> {
+    let Some(name) = sub.get(1).map(String::as_str) else {
+        return Vec::new();
+    };
+    let mut operands = Vec::new();
+    let mut remote = None;
+    let mut words = sub[2..].iter();
+    let mut options = true;
+    while let Some(word) = words.next() {
+        if options && word == "--" {
+            options = false;
+        } else if options && word.starts_with('-') {
+            // `fetch -u` and `pull -u` are `--update-head-ok`, a flag
+            let flag = word == "-u" && matches!(name, "fetch" | "pull");
+            let (option, value) = match word.split_once('=') {
+                Some((option, value)) => (option, Some(value)),
+                None if !flag && REMOTE_VALUED.contains(&word.as_str()) => {
+                    (word.as_str(), words.next().map(String::as_str))
+                }
+                None => (word.as_str(), None),
+            };
+            if option == "--remote" {
+                remote = value;
+            }
+        } else {
+            operands.push(word.as_str());
+        }
+    }
+    let mut paths = Vec::new();
+    match name {
+        "clone" => {
+            paths.extend(operands.first().map(|r| (*r, false)));
+            paths.extend(operands.get(1).map(|d| (*d, true)));
+        }
+        "fetch" | "pull" | "ls-remote" => paths.extend(operands.first().map(|r| (*r, false))),
+        "push" => paths.extend(operands.first().map(|r| (*r, true))),
+        "archive" => paths.extend(remote.map(|r| (r, false))),
+        _ => {}
+    }
+    let is_dest = |path: &str, writes: bool| name == "clone" && writes && !path.is_empty();
+    paths.retain(|&(path, writes)| is_dest(path, writes) || is_local_repository(path));
+    paths
+}
+
+/// A repository git reaches as a path: not a URL, not `host:path` (a `:` before
+/// any `/`), and not a bare name, which git takes for a configured remote.
+fn is_local_repository(remote: &str) -> bool {
+    let head = remote.split('/').next().unwrap_or(remote);
+    !remote.is_empty()
+        && !remote.contains("://")
+        && !head.contains(':')
+        && (remote.contains('/') || remote.starts_with(['.', '~']))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{config_name, parse};
+    use super::{config_name, parse, remote_paths};
+
+    #[test]
+    fn local_remotes_are_read_and_clone_and_push_targets_written() {
+        for (cmd, paths) in [
+            ("git clone ../r", &[("../r", false)][..]),
+            (
+                "git clone --depth 1 /srv/r ~/.claude",
+                &[("/srv/r", false), ("~/.claude", true)],
+            ),
+            ("git clone https://x.example/r d", &[("d", true)]),
+            ("git clone host:r", &[]),
+            ("git fetch origin main", &[]),
+            ("git fetch ~/.ssh/r", &[("~/.ssh/r", false)]),
+            ("git fetch -u ../r", &[("../r", false)]),
+            ("git ls-remote -u up .", &[(".", false)]),
+            ("git push ../mirror main", &[("../mirror", true)]),
+            ("git push origin main", &[]),
+            ("git archive --remote=../r HEAD", &[("../r", false)]),
+            ("git archive --remote ~/r HEAD", &[("~/r", false)]),
+            ("git log ../r", &[]),
+        ] {
+            let argv = argv(cmd);
+            assert_eq!(remote_paths(&argv), paths, "{cmd}");
+        }
+    }
 
     fn argv(cmd: &str) -> Vec<String> {
         cmd.split(' ').map(str::to_owned).collect()

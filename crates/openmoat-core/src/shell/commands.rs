@@ -24,7 +24,6 @@ use crate::lexer::{self, Operator, Token, Word};
 use crate::paths;
 use piped::Piped;
 use recover::lex_like_bash;
-use wrappers::wrapped_command;
 
 /// A simple command, or the opening or closing parenthesis of a subshell.
 #[derive(Debug)]
@@ -267,6 +266,7 @@ fn classify_as_written(
     }
     let argv: Vec<String> = words.iter().map(|w| w.text.clone()).collect();
     let program = basename(&argv[0]);
+    sink.refuse_dot_dirs(program);
     super::push::note(&argv, program, ctx, sink);
 
     if program == "git" {
@@ -360,8 +360,8 @@ fn classify_as_written(
     {
         return classify_into(payload, ctx, sink, depth + 1);
     }
-    if let Some(inner) = wrapped_command(&argv, program) {
-        return classify_wrapped(inner, ctx, sink, depth);
+    if let Some(done) = wrappers::classify(cmd, &argv, program, ctx, sink, depth) {
+        return done;
     }
     let inline = inline_flags(program);
     if let Some(flags) = inline
@@ -448,17 +448,18 @@ fn classify_arguments(
             continue;
         }
         let candidate = strip_at(tok);
-        let file = if paths::looks_like_path(candidate) {
-            Some(candidate)
-        } else if program == "dd"
-            && let Some((key, value)) = tok.split_once('=')
+        // `dd of=~/x`: bash expands the `~` after `=`, and the word is no path
+        let file = if program == "dd"
+            && let Some((key @ ("if" | "of"), value)) = tok.split_once('=')
         {
-            match key {
-                "if" => sink.read(ctx, value)?,
-                "of" => sink.write(ctx, value)?,
-                _ => {}
+            if key == "if" {
+                sink.read(ctx, value)?;
+            } else {
+                sink.write(ctx, value)?;
             }
             continue;
+        } else if paths::looks_like_path(candidate) {
+            Some(candidate)
         } else if (!word.quoted || names_hosts || tok.contains("://"))
             && let Some(host) = host::of_argument(program, tok)
         {

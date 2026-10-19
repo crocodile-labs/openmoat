@@ -1028,3 +1028,11 @@
   threat: T7
   action: { shell: "cat <<EOF\nno terminator" }
   expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-dot-glob-without-the-parent
+  threat: T4
+  action: { shell: "ls -d .git*" }
+  files: [/p/.gitignore]
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-git-fetch-named-remote
+  action: { shell: "git fetch origin main" }
+  expect: { verdict: allow, rules: [dev-shell] }

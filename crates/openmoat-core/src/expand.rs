@@ -15,6 +15,9 @@
 //! - other components match the entries of their directory; `*`, `?` and
 //!   classes do not match a leading `.` unless the component starts with one
 //!   (no `dotglob`), and `[^…]` negates like `[!…]`;
+//! - a component that starts with `.` also names `.` and `..` when it matches
+//!   them (`.*`, `.?`), as bash before 5.2 does, so the directory itself and
+//!   its parent are checked;
 //! - `**` matches any number of directories, as with `globstar` or in `zsh`,
 //!   which only adds paths to check;
 //! - a component the matcher cannot compile (an unclosed `[`, which the shell
@@ -39,6 +42,8 @@ pub(crate) struct Expansion<'r> {
     matches: usize,
     listings: usize,
     exhausted: bool,
+    /// Whether the last component of the pattern being expanded may name `.` and `..`.
+    dot_dirs: bool,
     /// Why the first pattern that was not expanded in full was not.
     overflow: Option<String>,
 }
@@ -50,12 +55,16 @@ impl<'r> Expansion<'r> {
             matches: 0,
             listings: 0,
             exhausted: false,
+            dot_dirs: true,
             overflow: None,
         }
     }
 
-    /// The paths the canonical absolute `pattern` names (module docs).
-    pub(crate) fn paths(&mut self, pattern: &str) -> Vec<String> {
+    /// The paths the canonical absolute `pattern` names (module docs). Without
+    /// `dot_dirs` its last component does not name `.` and `..`: the command
+    /// refuses them (`rm`, `rmdir`).
+    pub(crate) fn paths(&mut self, pattern: &str, dot_dirs: bool) -> Vec<String> {
+        self.dot_dirs = dot_dirs;
         let (root, rest) = paths::split_root(pattern);
         let components: Vec<&str> = rest.split('/').filter(|c| !c.is_empty()).collect();
         let mut out = Vec::new();
@@ -113,6 +122,20 @@ impl<'r> Expansion<'r> {
             });
             return;
         };
+        // bash before 5.2 (macOS `/bin/bash` is 3.2) also matches `.` and `..`
+        // with a pattern that starts with `.` (`.*`), so `cp -r .* /x` copies
+        // the directory and its parent; directory listings never name them
+        if first.starts_with('.') && (self.dot_dirs || !rest.is_empty()) {
+            let mut named: Vec<String> = Vec::new();
+            for special in [".", ".."].into_iter().filter(|s| glob.is_match(s)) {
+                // at the root, `..` is the root again
+                let path = paths::collapse(&join(&dir, special));
+                if !named.contains(&path) {
+                    named.push(path.clone());
+                    self.walk(path, rest, depth, out);
+                }
+            }
+        }
         for name in self.list(&dir) {
             let visible = first.starts_with('.') || !name.starts_with('.');
             // The name itself also counts: a project root spelled with `[`
@@ -221,7 +244,7 @@ mod tests {
     }
 
     fn expand(resolver: &MapPathResolver, pattern: &str) -> Vec<String> {
-        let mut paths = Expansion::new(resolver).paths(pattern);
+        let mut paths = Expansion::new(resolver).paths(pattern, true);
         paths.sort();
         paths
     }
@@ -264,6 +287,25 @@ mod tests {
     }
 
     #[test]
+    fn a_leading_dot_pattern_names_the_directory_and_its_parent() {
+        let fs = files(&["/h/.ssh/keys/.old", "/h/.ssh/keys/a"]);
+        assert_eq!(
+            expand(&fs, "/h/.ssh/keys/.*"),
+            ["/h/.ssh", "/h/.ssh/keys", "/h/.ssh/keys/.old"]
+        );
+        assert_eq!(expand(&fs, "/h/.ssh/keys/.?"), ["/h/.ssh"]);
+        assert_eq!(expand(&fs, "/.*"), ["/"]);
+        // neither `.` nor `..` matches these
+        assert_eq!(expand(&fs, "/h/.ssh/keys/.o*"), ["/h/.ssh/keys/.old"]);
+        assert_eq!(expand(&fs, "/h/.ssh/keys/*"), ["/h/.ssh/keys/a"]);
+        // `rm` refuses `.` and `..` as operands, not as directories on the way
+        let mut e = Expansion::new(&fs);
+        assert_eq!(e.paths("/h/.ssh/keys/.*", false), ["/h/.ssh/keys/.old"]);
+        let mut e = Expansion::new(&fs);
+        assert_eq!(e.paths("/h/.ssh/keys/.?/x", false), ["/h/.ssh/x"]);
+    }
+
+    #[test]
     fn a_literal_name_under_a_glob_root_is_kept() {
         let fs = files(&["/w/a[1]/x.rs", "/w/a1/y.rs"]);
         assert_eq!(expand(&fs, "/w/a[1]/*.rs"), ["/w/a1/y.rs", "/w/a[1]/x.rs"]);
@@ -274,7 +316,7 @@ mod tests {
         let fs = files(&["/p/.e[x", "/p/.env"]);
         for pattern in ["/p/.e[*", "/p/.e[", "/p/[z-a]*"] {
             let mut e = Expansion::new(&fs);
-            assert!(e.paths(pattern).is_empty(), "{pattern}");
+            assert!(e.paths(pattern, true).is_empty(), "{pattern}");
             assert!(
                 e.overflow()
                     .is_some_and(|r| r.contains("cannot be matched")),
@@ -306,7 +348,7 @@ mod tests {
     #[test]
     fn nothing_listed_names_nothing() {
         let mut e = Expansion::new(&NoResolver);
-        assert!(e.paths("/p/.en?").is_empty());
+        assert!(e.paths("/p/.en?", true).is_empty());
         assert_eq!(e.overflow(), None);
     }
 
@@ -318,13 +360,13 @@ mod tests {
             ..MapPathResolver::default()
         };
         let mut e = Expansion::new(&fs);
-        assert_eq!(e.paths("/p/*").len(), MAX_MATCHES + 1);
+        assert_eq!(e.paths("/p/*", true).len(), MAX_MATCHES + 1);
         assert!(e.overflow().is_some_and(|r| r.contains("`/p/*`")));
 
         let deep = format!("/p/{}x", "d/".repeat(MAX_GLOBSTAR_DEPTH + 1));
         let fs = files(&[&deep]);
         let mut e = Expansion::new(&fs);
-        e.paths("/p/**/x");
+        e.paths("/p/**/x", true);
         assert!(e.overflow().is_some());
     }
 }

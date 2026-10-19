@@ -411,11 +411,14 @@ something OpenMoat claims to stop.
   'print(os.environ)'`, ADR-010), and options that run programs (ADR-012) are matched
   by lists. Spellings outside the lists defer to the agent's own prompt or, if a broad allow covers them, are
   allowed.
+- **Interpreter code is scanned, not parsed.** A file that inline `python -c`, `node -e`
+  or similar code opens for writing is not checked as a write.
 - **TOCTOU and hard links.** A link swapped between the check and the command
   running, and hard links, are not seen (ADR-009).
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand
   is checked as every file it matches when the hook runs (POLICY.md §4), with
-  `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`). A
+  `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`;
+  a pattern starting with `.` also names `.` and `..`, as bash before 5.2 does). A
   file created between the check and the command that a pattern's last component
   matches is not seen. Shell options that change matching (`shopt -s dotglob
   nocaseglob extglob`, `zsh` `EXTENDED_GLOB` and `GLOB_DOTS`), `zsh` qualifiers and

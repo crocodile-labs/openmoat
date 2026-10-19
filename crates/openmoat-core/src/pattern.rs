@@ -4,6 +4,7 @@ use globset::GlobBuilder;
 
 mod lazy;
 mod literal;
+mod sequence;
 mod word;
 pub use literal::literal_shell_pattern;
 
@@ -247,25 +248,10 @@ impl ShellPattern {
     }
 }
 
-/// Classic wildcard matching over token sequences with prefix semantics:
-/// once every pattern token is consumed the match succeeds regardless of
-/// remaining argv.
+/// Wildcard matching over token sequences with prefix semantics: once every
+/// pattern token is consumed the match succeeds regardless of remaining argv.
 fn matches_from(pattern: &[Token], argv: &[String]) -> bool {
-    match pattern.split_first() {
-        None => true,
-        Some((Token::Any, rest)) => {
-            // `*` as the last token matches everything that remains.
-            if rest.is_empty() {
-                return true;
-            }
-            (0..=argv.len()).any(|skip| matches_from(rest, &argv[skip..]))
-        }
-        Some((Token::One(glob, _), rest)) => match argv.split_first() {
-            Some((head, tail)) if glob.is_match(head) => matches_from(rest, tail),
-            _ => false,
-        },
-        Some((Token::End, _)) => argv.is_empty(),
-    }
+    sequence::prefix_match(pattern, argv, |glob, _, word| glob.is_match(word))
 }
 
 /// Does every argv `words` (a pattern's own tokens) can match also match
@@ -273,17 +259,9 @@ fn matches_from(pattern: &[Token], argv: &[String]) -> bool {
 /// covered by an equal glob, a broader `literal*` glob or a bare `*`, so the
 /// answer errs towards "no".
 fn covers_from(pattern: &[Token], words: &[&str]) -> bool {
-    match pattern.split_first() {
-        None => true,
-        Some((Token::Any, rest)) => {
-            rest.is_empty() || (0..=words.len()).any(|skip| covers_from(rest, &words[skip..]))
-        }
-        Some((Token::One(glob, source), rest)) => match words.split_first() {
-            Some((word, tail)) if glob_covers(glob, source, word) => covers_from(rest, tail),
-            _ => false,
-        },
-        Some((Token::End, _)) => words.is_empty(),
-    }
+    sequence::prefix_match(pattern, words, |glob, source, word| {
+        glob_covers(glob, source, word)
+    })
 }
 
 fn has_glob_syntax(text: &str) -> bool {

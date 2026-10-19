@@ -1,6 +1,8 @@
 //! Arguments that are a command line the program runs through a shell:
 //! `watch 'cmd'`, `git rebase --exec 'cmd'`, `git submodule foreach 'cmd'`,
 //! `git bisect run cmd`, `git difftool --extcmd`, `git filter-branch --tree-filter`,
+//! `git clone`/`fetch`/`pull`/`ls-remote --upload-pack`, `git push --receive-pack`,
+//! `git archive --exec`,
 //! `ssh -o ProxyCommand='cmd'` (and `LocalCommand`, `KnownHostsCommand`) and
 //! `rsync -e 'cmd'`. Each one is classified as a command line of its own.
 
@@ -10,9 +12,19 @@ use super::git;
 const WATCH_VALUES: &[&str] = &["-n", "--interval", "-q", "--equexit"];
 /// `git rebase` and `git difftool` options whose value is a command, and the
 /// shortest abbreviation git accepts for the long one (`--exe=cmd`).
+/// The program a fetch, clone or push runs for the other side of a local
+/// remote (`--upload-pack`, `--receive-pack`, `git archive --exec`) is one too:
+/// git hands it to a shell.
 const GIT_COMMAND_OPTIONS: &[(&str, &str, &str, &str)] = &[
     ("rebase", "-x", "--exec", "--ex"),
     ("difftool", "-x", "--extcmd", "--ex"),
+    ("clone", "-u", "--upload-pack", "--u"),
+    ("ls-remote", "-u", "--upload-pack", "--u"),
+    ("fetch", "", "--upload-pack", "--upl"),
+    ("pull", "", "--upload-pack", "--upl"),
+    ("push", "", "--receive-pack", "--rece"),
+    ("push", "", "--exec", "--e"),
+    ("archive", "", "--exec", "--e"),
 ];
 /// `git filter-branch` options whose value is shell code.
 const FILTER_BRANCH: &[&str] = &[
@@ -201,5 +213,22 @@ mod tests {
         assert_eq!(run("rsync -av a b"), Vec::<String>::new());
         assert_eq!(run("git rebase main"), Vec::<String>::new());
         assert_eq!(run("git bisect start"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn finds_the_program_git_runs_for_the_other_side() {
+        for (line, found) in [
+            ("git clone -u up ./r x", &["up"][..]),
+            ("git clone --upload-pack=up ./r", &["up"]),
+            ("git ls-remote --u up .", &["up"]),
+            ("git fetch --upl=up ../r", &["up"]),
+            ("git fetch -u ../r", &[]),
+            ("git pull --upload-pack up ../r", &["up"]),
+            ("git push --receive-pack=rp ../r", &["rp"]),
+            ("git push --exec rp ../r", &["rp"]),
+            ("git archive --exec=ua --remote=../r HEAD", &["ua"]),
+        ] {
+            assert_eq!(run(line), found, "{line}");
+        }
     }
 }
