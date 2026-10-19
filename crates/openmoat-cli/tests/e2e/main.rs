@@ -37,6 +37,7 @@ mod lock;
 mod lock_settings;
 mod mcp;
 mod moatbench;
+mod openclaw;
 #[cfg(unix)]
 mod packs;
 mod paths;

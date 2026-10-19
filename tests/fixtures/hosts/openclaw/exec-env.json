@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "before_tool_call",
+  "toolName": "exec",
+  "params": { "command": "node build.js", "workdir": "app", "env": { "NODE_OPTIONS": "--require /tmp/x.js" } },
+  "toolCallId": "call-exec-2", "runId": "run-1",
+  "sessionId": "sess-1", "sessionKey": "agent:main:main", "agentId": "main",
+  "cwd": "/p", "configPath": "/Users/me/.openclaw/openclaw.json", "platform": "linux"
+}

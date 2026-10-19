@@ -66,6 +66,12 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             let path = crate::sandbox::install::settings_path(&home, host)?;
             files.push((path.clone(), undo_json(&path, ours, cursor::remove)?));
         }
+        // OpenClaw's hook is the plugin file `init` wrote, which nothing else owns.
+        if host == Host::OpenClaw
+            && let Some(plugin) = install::openclaw::remove_plugin(&config)?
+        {
+            files.push((plugin, Some(Undone::Deleted)));
+        }
         if files.iter().all(|(_, done)| done.is_none()) {
             writeln!(out, "· {:<16} not set up", host.display_name())?;
         }

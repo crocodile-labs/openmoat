@@ -290,7 +290,8 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   `pyproject.toml`, `setup.py`, `setup.cfg`, `tox.ini`, `noxfile.py`) and containers
   (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`), and agent instructions and
   settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.claude.json`, `.codex/**`,
-  `.cursor/**`, `.cursorrules`, `.mcp.json`) and OpenMoat's own `.moat/**`, at any depth:
+  `.cursor/**`, `.cursorrules`, `.mcp.json`, OpenClaw's `.openclaw/openclaw.json`,
+  `.openclaw/openmoat/**` and `.openclaw/extensions/**`) and OpenMoat's own `.moat/**`, at any depth:
   every file `runs-later` asks about and every config file `kernel-self` protects (a
   test keeps the lists in step). Source and test files are not protected,
   test-runner configs written in JavaScript (`jest.config.js`) included: they are code the

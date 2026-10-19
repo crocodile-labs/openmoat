@@ -200,7 +200,25 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | Claude Code `EnterWorktree` | `path` (an existing worktree becomes the session's directory and project root); with `name` or nothing, ungoverned | `FsRead` |
 | `mcp__<server>__<tool>` (Claude Code, Codex); Cursor `beforeMCPExecution` | tool name and arguments (Cursor: `mcp_server_name`, `tool_name`, `tool_input`) | `McpTool` |
 | any other Cursor `preToolUse` tool that names no path key, except to-do tools (`TodoWrite`, `TodoRead`, `todo_write`: ungoverned) | tool name | `UnknownTool` (`tool.unknown`) |
-| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`) | — | none: `ungoverned` |
+| OpenClaw `exec` | `command`, with each `env` entry written as `NAME='value'` before it; `workdir` as the working directory; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
+| OpenClaw `read` / `write`, `edit` | `path` and `file_path` when both are given; a relative path with no workspace (`cwd`) is an adapter error | `FsRead`, `ReadFiles` / `FsWrite`, `Patch` |
+| OpenClaw `apply_patch` | `input` (the patch envelope) | `Patch` |
+| OpenClaw `web_fetch` / `web_search`, `x_search` | `url` / `query` | `Fetch` / `WebSearch` |
+| OpenClaw `browser` | `open`, `navigate`: `url` or `targetUrl`; `upload`: `paths`; any other action | `Net`; `ReadFiles`; `UnknownTool` |
+| OpenClaw `gateway` / `plugins` | `config.get` / `install`, `enable`, `disable`, `uninstall`, `reload`, `reloadAndResume`: the plugin's `configPath` | `FsRead` / `FsWrite` (`kernel-self` denies it) |
+| OpenClaw `process` input (`send-keys`, `submit`, `paste`, …), Code Mode `exec` | the params as JSON | `ForeignShell` (`unparseable`) |
+| OpenClaw `<server>__<tool>` | `mcp__<server>__<tool>` and `params` | `McpTool` |
+| any other OpenClaw tool (`message`, `nodes`, `cron`, `sessions_*`, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |
+| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`) | — | none: `ungoverned` |
+
+OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,
+written by `moat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
+listed in `plugins.load.paths`, pinned in the lock) handles `before_tool_call` for every tool,
+runs `moat guard --host openclaw` with the event, the context's session ids, the agent's
+workspace (`cwd`), the configuration path and the platform on stdin, and maps the answer:
+`deny` (exit 2) to `block`, `ask` to `requireApproval`, `allow` or nothing to no decision.
+Anything else (no `moat`, a crash, another exit code, an unreadable answer, no answer in 45 s)
+blocks the call (ADR-033).
 
 Claude Code calls only reach OpenMoat for tools in the installed matcher
 (`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen. `Skill`
@@ -299,6 +317,7 @@ name the path as an allowance; where it is narrower, it must report a loss.
 |---|---|---|
 | Claude Code, Codex, Continue CLI `PreToolUse` | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":…,"permissionDecisionReason":…}}`; nothing for a `defer` | 0, or 2 on deny |
 | Cursor `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | `{"permission":…,"user_message":…,"agent_message":…}` | 0, or 2 on deny |
+| OpenClaw `before_tool_call` (OpenMoat's plugin) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
 
 A `defer` (ADR-025) writes no output for Claude Code, Codex and the Continue CLI and

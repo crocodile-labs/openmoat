@@ -1,0 +1,7 @@
+{
+  "hook_event_name": "before_tool_call",
+  "toolName": "process", "params": { "action": "send-keys", "sessionId": "proc-7", "literal": "ls", "keys": ["Enter"] },
+  "toolCallId": "call-process-1", "runId": "run-1",
+  "sessionId": "sess-1", "sessionKey": "agent:main:main", "agentId": "main",
+  "cwd": "/p", "configPath": "/Users/me/.openclaw/openclaw.json", "platform": "darwin"
+}

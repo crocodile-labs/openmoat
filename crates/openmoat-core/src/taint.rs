@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 84] = [
+const PROTECTED_WRITES: [&str; 89] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -113,6 +113,13 @@ const PROTECTED_WRITES: [&str; 84] = [
     "**/.cursor/**",
     "**/.cursorrules",
     "**/.mcp.json",
+    // OpenClaw: its configuration, OpenMoat's plugin and the plugin directories the
+    // Gateway loads; not the whole state directory, whose workspace is ordinary work
+    "**/.openclaw",
+    "**/.openclaw/openclaw.json",
+    "**/.openclaw/openmoat",
+    "**/.openclaw/openmoat/**",
+    "**/.openclaw/extensions/**",
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",
 ];

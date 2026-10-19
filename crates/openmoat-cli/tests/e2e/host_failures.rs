@@ -27,7 +27,7 @@ struct Shape {
     unknown_event: Value,
 }
 
-fn shapes() -> [Shape; 4] {
+fn shapes() -> [Shape; 5] {
     let pre_tool_use = |tool: &str| {
         json!({"session_id": "s", "cwd": "/p", "hook_event_name": "PreToolUse",
                "tool_name": tool, "tool_input": {"file_path": "~/.ssh/id_rsa"}})
@@ -69,6 +69,18 @@ fn shapes() -> [Shape; 4] {
             unknown_tool: pre_tool_use("FutureTool"),
             unknown_event: post_tool_use,
         },
+        // OpenMoat's OpenClaw plugin: an unknown tool is `tool.unknown`, which
+        // the default policy leaves to OpenClaw (no output).
+        Shape {
+            name: "openclaw",
+            hook: "openclaw",
+            env: None,
+            governed: "openclaw/exec.json",
+            unknown_tool: json!({"hook_event_name": "before_tool_call", "toolName": "future_tool",
+                "params": {"path": "~/.ssh/id_rsa"}, "sessionId": "s", "cwd": "/p"}),
+            unknown_event: json!({"hook_event_name": "after_tool_call", "toolName": "exec",
+                "params": {"command": "ls"}}),
+        },
     ]
 }
 
@@ -91,6 +103,7 @@ impl Shape {
         let doc = json(out);
         let verdict = match self.hook {
             "cursor" => &doc["permission"],
+            "openclaw" => &doc["decision"],
             _ => &doc["hookSpecificOutput"]["permissionDecision"],
         };
         verdict.as_str().unwrap_or_default().to_owned()
@@ -157,7 +170,8 @@ fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
             assert!(out.stdout.is_empty(), "{}: {}", shape.name, text(&out));
         }
     }
-    let shown = sb.moat(&["show", "--recent", "4"]);
+    // OpenClaw's unknown tool is `default.tool.unknown`, not `ungoverned`.
+    let shown = sb.moat(&["show", "--recent", "5"]);
     assert_eq!(
         text(&shown).matches("(ungoverned)").count(),
         3,
@@ -212,7 +226,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     // file, owner-only, which `moat doctor` reports without failing.
     let log = sb.home.join(".moat/guard-hangs.log");
     let lines = fs::read_to_string(&log).unwrap();
-    assert_eq!(lines.lines().count(), 4, "{lines}");
+    assert_eq!(lines.lines().count(), shapes().len(), "{lines}");
     // Each line names the phase the guard was stuck in, and how long it ran.
     for line in lines.lines() {
         let fields: Vec<&str> = line.split(' ').collect();
@@ -228,7 +242,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     }
     let doctor = sb.moat(&["doctor"]);
     assert!(
-        text(&doctor).contains("! guard            4 call(s) denied with no decision within 30 s"),
+        text(&doctor).contains("! guard            5 call(s) denied with no decision within 30 s"),
         "{}",
         text(&doctor)
     );
@@ -265,10 +279,14 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
     }
 
     let status = sb.moat(&["status", "--format", "json"]);
-    let agents = json(&status)["agents"]
+    // OpenClaw has no directory in this sandbox, so it is `not-found`.
+    let agents: Vec<Value> = json(&status)["agents"]
         .as_array()
         .cloned()
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|a| a["level"] != "not-found")
+        .collect();
     assert_eq!(agents.len(), 3, "{}", text(&status));
     for agent in &agents {
         assert_eq!(agent["level"], "not-protected", "{agent}");

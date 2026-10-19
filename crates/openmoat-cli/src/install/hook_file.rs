@@ -12,7 +12,7 @@ use std::path::Path;
 use anyhow::{Context as _, Result, bail};
 use serde_json::{Map, Value, json};
 
-use super::{HOOK_BACKUP, HookFormat, HookSpec, HostConfig};
+use super::{HOOK_BACKUP, HookFormat, HookSpec, HostConfig, openclaw};
 use crate::home::{Home, write_private};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -36,13 +36,25 @@ pub enum HookState {
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
     let path = &config.settings_path;
     let mut root = read_or_empty(path)?;
-    let outcome = upsert_all(&mut root, config, binary)?;
+    let edited = upsert_all(&mut root, config, binary)?;
+    // OpenClaw's hook is a plugin file beside the configuration.
+    let plugin = config.format == HookFormat::OpenClaw && !openclaw::plugin_current(config, binary);
+    let outcome = if plugin {
+        edited.max(Outcome::Updated)
+    } else {
+        edited
+    };
     if outcome == Outcome::Unchanged || dry_run {
         return Ok(outcome);
     }
-    super::back_up(home, path, HOOK_BACKUP)?;
-    let text = serde_json::to_string_pretty(&root)? + "\n";
-    write_private(path, text.as_bytes())?;
+    if plugin {
+        openclaw::write_plugin(config, binary)?;
+    }
+    if edited != Outcome::Unchanged {
+        super::back_up(home, path, HOOK_BACKUP)?;
+        let text = serde_json::to_string_pretty(&root)? + "\n";
+        write_private(path, text.as_bytes())?;
+    }
     Ok(outcome)
 }
 
@@ -58,6 +70,9 @@ pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Optio
 }
 
 fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Outcome> {
+    if config.format == HookFormat::OpenClaw {
+        return openclaw::upsert(root, config);
+    }
     let mut outcome = Outcome::Unchanged;
     for spec in config.hooks {
         outcome = outcome.max(upsert(root, config, spec, binary)?);
@@ -74,6 +89,9 @@ pub fn state(config: &HostConfig, binary: &Path) -> HookState {
         Ok(v) => v,
         Err(e) => return HookState::Unreadable(format!("{e:#}")),
     };
+    if config.format == HookFormat::OpenClaw {
+        return openclaw::state(config, binary, &root);
+    }
     let mut found = 0;
     let mut stale_command = None;
     for spec in config.hooks {
@@ -140,7 +158,8 @@ fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path, block: boo
             }
             json!({ "matcher": spec.matcher, "hooks": [hook] })
         }
-        HookFormat::Cursor => json!({
+        // OpenClaw's file is edited by `openclaw`, before any entry is built here.
+        HookFormat::Cursor | HookFormat::OpenClaw => json!({
             "command": cursor_command(config, binary),
             "timeout": spec.timeout,
             "failClosed": true,
@@ -258,6 +277,9 @@ pub fn lacks_on_failure(config: &HostConfig) -> bool {
 /// the events and `hooks` object that leaves empty, and Cursor's `version` when
 /// nothing else remains. Returns whether anything was removed.
 pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
+    if config.format == HookFormat::OpenClaw {
+        return openclaw::remove(root);
+    }
     let Value::Object(top) = root else {
         return false;
     };

@@ -155,6 +155,7 @@ to OpenMoat itself.
 | Claude Code | hooks and its OS sandbox |
 | Codex | hooks and its OS sandbox; an `ask` becomes a deny you approve with `moat allow --last`; a deferred call follows Codex's own approval policy |
 | Cursor | hooks and its OS sandbox (macOS, Linux); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
+| OpenClaw | hook only, through OpenMoat's `before_tool_call` plugin; an `ask` is OpenClaw's own approval request; not yet tested against a running Gateway |
 | Continue CLI (`cn`) | partial: the released `cn` does not run hooks yet; use `moat run` |
 
 What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes (Standard,

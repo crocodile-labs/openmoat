@@ -416,6 +416,34 @@ something OpenMoat claims to stop.
   | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | not applicable: `cn` fires no hooks (below) |
 
+  OpenClaw (2026.10.5, [hook reference][openclaw-hooks], *unverified* against a
+  running Gateway): a `before_tool_call` handler that throws or does not answer within
+  its timeout blocks the call (its default is 15 s; `moat init` sets 60 s in
+  `plugins.entries.openmoat.hooks.timeouts`). OpenMoat's plugin blocks the call itself
+  when `moat` is missing or cannot start, crashes, exits other than 0 or 2, prints an
+  answer it cannot read, or takes more than 45 s, and an `ask` with no one to answer
+  it (no approval route, timeout) is blocked by OpenClaw. **OpenClaw runs every call
+  unchecked when the Gateway does not load the plugin**: `plugins.enabled: false`,
+  `openmoat` in `plugins.deny` or missing from `plugins.allow`, the file or its
+  `plugins.load.paths` entry removed, or a Gateway started with `OPENCLAW_CONFIG_PATH`
+  pointing at another file. `moat init` refuses `plugins.enabled: false` and fixes the
+  allow and deny lists; `kernel-self` denies the agent writes to `openclaw.json`, the
+  plugin and the state directory, and the lock pins both files, so a change is caught
+  on the next call the plugin sends, not when the Gateway reloads. OpenClaw versions
+  before 2026.5.6 skip the hook for skill commands (CVE-2026-53845).
+- **OpenClaw tools OpenMoat does not check.** Another plugin's `before_tool_call` can
+  rewrite a call's parameters after OpenMoat saw them (OpenClaw gives each handler the
+  original call; only an approval freezes them), and plugins run inside the Gateway
+  with its rights. `process` input to a running `exec` session and Code Mode `exec`
+  are `unparseable`, so they are left to OpenClaw; so is `exec` on Windows
+  (PowerShell). `nodes` (commands on paired devices), `cron`, `message`,
+  `sessions_*`, `subagents` and other plugins' tools are `tool.unknown`, left to
+  OpenClaw by the default policy. `code_execution` runs at the model provider and
+  is not checked. A defer leaves `read`, `write` and `edit` to OpenClaw, which does
+  not ask for them. OpenClaw's MCP servers live in `openclaw.json` and are pinned with
+  it, not one by one (ADR-026). There is no OS sandbox from OpenMoat for OpenClaw;
+  run the Gateway under `moat run` for one.
+
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
   turns its own panics into a deny. A crash that bypasses that (killed, aborted, out of
   memory) or a missing binary leaves Codex and `cn` with no way to block: neither has a
@@ -443,6 +471,7 @@ something OpenMoat claims to stop.
   [codex-pre]: https://github.com/openai/codex/blob/main/codex-rs/hooks/src/events/pre_tool_use.rs
   [codex-runner]: https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs
   [cursor-hooks]: https://cursor.com/docs/agent/hooks
+  [openclaw-hooks]: https://docs.openclaw.ai/plugins/hooks/reference
   [cn-runner]: https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts
 - **The Continue CLI.** The released Continue CLI does not run hooks: `cn` 1.5.47 (continuedev/continue
   `main` at `5522c6f`) loads them but fires no event (continuedev/continue#11043 closed

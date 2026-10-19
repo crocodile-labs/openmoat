@@ -174,6 +174,13 @@ deny:
       - "**/.cursor/hooks.json"
       - "**/.cursor/sandbox.json"
       - "**/.codex/hooks.json"
+      # OpenClaw: the state directory, its configuration (which loads OpenMoat's
+      # plugin) and the plugin `moat init` writes; its workspace inside stays
+      # writable, and its `.env` is `secrets-paths`' (`**/.env`)
+      - "~/.openclaw"
+      - "~/.openclaw/openclaw.json"
+      - "~/.openclaw/openmoat"
+      - "~/.openclaw/openmoat/**"
       - "**/.moat/**"
       # the binary every installed hook runs
       - "**/bin/moat"
@@ -262,7 +269,8 @@ allow:
     fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
       # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` asks)
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
-      "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml"]
+      "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
+      "!${project}/**/.openclaw/extensions/**"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -622,7 +630,9 @@ ask:
     reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
     fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json",
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
-      "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json"]
+      "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
+      # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
+      "~/.openclaw/extensions/**", "**/.openclaw/extensions/**"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

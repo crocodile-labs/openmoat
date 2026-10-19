@@ -1432,6 +1432,15 @@
   threat: T9
   action: { fs_write: "/Users/me/.cursor/cli-config.json" }
   expect: { verdict: ask, rules: [runs-later] }
+# OpenClaw plugins: the Gateway loads and runs them, the user's and a workspace's
+- id: ask-write-openclaw-plugin
+  threat: T9
+  action: { fs_write: "~/.openclaw/extensions/helper/index.js" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-echo-into-project-openclaw-plugin
+  threat: T9
+  action: { shell: "echo 'export default {}' > .openclaw/extensions/x/index.mjs" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A line the lexer cannot read in full asks, whatever the catch-all: the atoms of
 # the part not read are missing, so a deny there must not become a defer
 - id: ask-deny-next-to-an-ansi-c-nul

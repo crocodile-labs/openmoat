@@ -320,6 +320,9 @@ fn host_files(config: &HostConfig) -> Vec<PathBuf> {
     if config.host == Host::Cursor {
         files.push(config.settings_path.with_file_name("sandbox.json"));
     }
+    if config.host == Host::OpenClaw {
+        files.push(crate::install::openclaw::plugin_path(config));
+    }
     files
 }
 

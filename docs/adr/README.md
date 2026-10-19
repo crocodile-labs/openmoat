@@ -40,6 +40,7 @@ each ADR records the outcome it needs.
 | [030](ADR-030-package-install-checks.md) | Package installs are read for the names they fetch; a name close to one on a bundled offline list of popular packages asks (`package-near-miss`); `moat run` sets npm's and uv's release-age settings (`sandbox.package_min_release_age_days`, 7 days) | accepted; refines ADR-025 |
 | [031](ADR-031-audit-anchors-and-signed-policy.md) | `moat audit anchor` records the log's head in a git ref or file the person names, and `moat audit verify --against` checks the log against it, with nothing sent anywhere; policy packs and, where the policy asks, repository policies are trusted by OpenSSH signatures (`ssh-keygen -Y`, namespace `openmoat-policy`) from keys `moat policy trust-key` pinned; `kernel-self` also denies reading the state beside the policy | accepted; implements the signed packs of #136 |
 | [032](ADR-032-mcp-proxy-holds-first-sight.md) | `moat mcp proxy` holds every tool of a server it has no pins for until a person runs `moat mcp accept`; existing pins stay; `mcp: { trust_first_sight: true }` restores pinning on first sight, and `moat policy lint` warns about it | accepted; supersedes the first-sight part of ADR-026 |
+| [033](ADR-033-openclaw-plugin-hook.md) | OpenClaw is supported through a dependency-free plugin whose `before_tool_call` handler runs `moat guard --host openclaw` and blocks on any failure; `moat init` installs and pins it and its `openclaw.json` entries; an ask is OpenClaw's own approval request | accepted |
 
 ## Names in older ADRs
 
