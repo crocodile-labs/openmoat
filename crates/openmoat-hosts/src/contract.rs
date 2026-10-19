@@ -4,7 +4,38 @@
 
 use openmoat_core::{Decision, Verdict};
 
-use crate::{HookEvent, Host};
+use crate::{HookEvent, HookRequest, Host, HostError};
+
+/// The code each host format needs beyond its [`HostSpec`]: reading a payload
+/// and writing the response. One per format; a host that sends another's
+/// format ([`HostSpec::speaks`]) uses that host's adapter.
+pub(crate) trait HostAdapter: Sync {
+    /// The facts about the host whose format this is.
+    fn spec(&self) -> &'static HostSpec;
+
+    /// The request in `payload`, sent by `host` for the hook named `event`
+    /// (`None` when the payload names none).
+    fn parse(
+        &self,
+        host: Host,
+        event: Option<&str>,
+        payload: &str,
+    ) -> Result<HookRequest, HostError>;
+
+    /// The event a payload whose hook is named `event` is answered for, even
+    /// when it fails [`HostAdapter::parse`].
+    fn event_of(&self, _event: &str) -> HookEvent {
+        HookEvent::PreToolUse
+    }
+
+    /// The response document the host expects on stdout.
+    fn render(&self, event: &HookEvent, decision: &Decision) -> String;
+}
+
+/// The error for a payload whose hook this format does not handle.
+pub(crate) fn wrong_event(event: Option<&str>) -> HostError {
+    HostError::WrongEvent(event.unwrap_or_default().to_owned())
+}
 
 /// How a person approves a call a host could not ask about. Every host that
 /// receives an `ask` as a `deny` ends its reason with this.

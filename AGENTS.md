@@ -97,7 +97,7 @@ allowed command ask. Put the saved time into enforcement (`docs/SANDBOX.md`).
 
 ### Add a host adapter
 The full guide is `docs/ADDING_AN_AGENT.md`.
-1. New module in `crates/openmoat-hosts/src/host/<host>.rs` with its `SPEC`; add the variant to `Host` and its arm in `registry::spec`.
+1. New module in `crates/openmoat-hosts/src/host/<host>.rs` with its `SPEC` and `ADAPTER` (`HostAdapter`: `parse`, `render`); add the variant to `Host` and its arm in `registry::adapter`.
 2. Golden payloads in `tests/fixtures/hosts/<host>/`; tests cover every tool kind the host exposes, a malformed payload, and an ungoverned tool.
 3. Installer config in `crates/openmoat-cli/src/install.rs` (settings path, matcher, env override). If the host is fail-open by default, the installer must set its fail-closed flag. A host without a command hook gets a plugin that runs `moat guard --host <id>` and blocks on every failure (OpenClaw, ADR-033).
 4. End-to-end tests in a module per agent (`crates/openmoat-cli/tests/e2e/cursor.rs` is the model, registered in `e2e/main.rs`) running the real binary against the fixture.

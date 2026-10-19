@@ -20,7 +20,7 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::contract::{Asks, HostSpec};
+use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod tools;
@@ -38,6 +38,33 @@ pub(crate) static SPEC: HostSpec = HostSpec {
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";
+
+/// What OpenMoat's plugin sends from `before_tool_call`.
+pub(crate) struct Adapter;
+
+pub(crate) static ADAPTER: Adapter = Adapter;
+
+impl HostAdapter for Adapter {
+    fn spec(&self) -> &'static HostSpec {
+        &SPEC
+    }
+
+    fn parse(
+        &self,
+        host: Host,
+        event: Option<&str>,
+        payload: &str,
+    ) -> Result<HookRequest, HostError> {
+        match event {
+            Some(EVENT) => parse(host, payload),
+            other => Err(wrong_event(other)),
+        }
+    }
+
+    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
+        render(decision)
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

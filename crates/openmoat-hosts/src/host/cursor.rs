@@ -11,7 +11,7 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::contract::{Asks, HostSpec};
+use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod pre_tool;
@@ -32,6 +32,33 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_ask_on_no_ask: true,
     },
 };
+
+/// Cursor's hooks, each named in the payload.
+pub(crate) struct Adapter;
+
+pub(crate) static ADAPTER: Adapter = Adapter;
+
+impl HostAdapter for Adapter {
+    fn spec(&self) -> &'static HostSpec {
+        &SPEC
+    }
+
+    fn parse(
+        &self,
+        host: Host,
+        event: Option<&str>,
+        payload: &str,
+    ) -> Result<HookRequest, HostError> {
+        match event {
+            Some(event) if EVENTS.contains(&event) => parse(host, payload),
+            other => Err(wrong_event(other)),
+        }
+    }
+
+    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
+        render(decision)
+    }
+}
 
 pub(crate) const EVENTS: &[&str] = &[
     "beforeShellExecution",

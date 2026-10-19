@@ -42,9 +42,9 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`), `parse` (payload → `HookRequest`) and `render` (`Decision` → response), with unit tests; `mod` in `host.rs` |
-| `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `spec` |
-| `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the dispatch in `parse_request` and `render_response`, the host list in `HostError::UnknownHost` |
+| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response), with unit tests; `mod` in `host.rs` |
+| `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `adapter` |
+| `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
 | `crates/openmoat-cli/src/install.rs` | a `HookSpec` list, `dir_variable`, the file name and `HookFormat` in `HostConfig::at` |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
 | `crates/openmoat-cli/src/context.rs` | the config directory and its variable in `moved_dirs` |
