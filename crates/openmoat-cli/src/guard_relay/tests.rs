@@ -65,7 +65,7 @@ fn bytes_of(write: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
 
 #[test]
 fn a_request_and_a_reply_read_back_as_written() {
-    let sent = request(token(),"{\"tool_name\":\"Bash\"}");
+    let sent = request(token(), "{\"tool_name\":\"Bash\"}");
     let wire = bytes_of(|out| sent.write_to(out).unwrap());
     assert!(wire.starts_with(REQUEST_MAGIC));
     assert_eq!(Request::read_from(&mut Cursor::new(&wire)).unwrap(), sent);
@@ -79,10 +79,10 @@ fn a_request_and_a_reply_read_back_as_written() {
 #[test]
 fn an_oversize_payload_is_refused_before_it_is_read() {
     let limit = usize::try_from(MAX_PAYLOAD_BYTES).unwrap();
-    let at_limit = request(token(),&"x".repeat(limit));
+    let at_limit = request(token(), &"x".repeat(limit));
     let wire = bytes_of(|out| at_limit.write_to(out).unwrap());
     assert!(Request::read_from(&mut Cursor::new(&wire)).is_ok());
-    let over = request(token(),&"x".repeat(limit + 1));
+    let over = request(token(), &"x".repeat(limit + 1));
     let wire = bytes_of(|out| over.write_to(out).unwrap());
     let error = Request::read_from(&mut Cursor::new(&wire)).unwrap_err();
     assert!(
@@ -129,7 +129,7 @@ fn a_malformed_or_forged_reply_is_refused() {
 
 #[test]
 fn a_request_that_is_not_one_is_refused() {
-    let sent = request(token(),"{}");
+    let sent = request(token(), "{}");
     let mut short_nonce = sent.clone();
     short_nonce.nonce = "abc".to_owned();
     let mut not_hex = sent.clone();
@@ -146,11 +146,11 @@ fn no_answer_in_time_is_an_error() {
     let (ours, _silent) = UnixStream::pair().unwrap();
     let started = Instant::now();
     let deadline = started + Duration::from_millis(200);
-    let error = exchange(ours, &request(token(),"{}"), deadline).unwrap_err();
+    let error = exchange(ours, &request(token(), "{}"), deadline).unwrap_err();
     assert!(started.elapsed() < Duration::from_secs(5), "{error:#}");
     // A deadline already past fails before anything is sent.
     let (ours, mut theirs) = UnixStream::pair().unwrap();
-    assert!(exchange(ours, &request(token(),"{}"), Instant::now()).is_err());
+    assert!(exchange(ours, &request(token(), "{}"), Instant::now()).is_err());
     let mut sent = Vec::new();
     theirs.read_to_end(&mut sent).unwrap();
     assert!(sent.is_empty(), "nothing was sent");
@@ -215,7 +215,7 @@ fn ask(service: &Service, sent: &Request) -> Result<Reply> {
 #[test]
 fn a_call_with_the_token_is_decided_outside_with_the_runs_session() {
     let (_dir, home, service) = service(0);
-    let reply = ask(&service, &request(token(),"{\"payload\":1}")).unwrap();
+    let reply = ask(&service, &request(token(), "{\"payload\":1}")).unwrap();
     assert_eq!(reply.code, 0);
     let out = String::from_utf8(reply.stdout).unwrap();
     assert!(out.contains("args=guard --host claude-code"), "{out}");
@@ -229,7 +229,7 @@ fn a_call_with_the_token_is_decided_outside_with_the_runs_session() {
 #[test]
 fn a_failing_guard_is_a_deny() {
     let (_dir, _home, service) = service(7);
-    let reply = ask(&service, &request(token(),"{}")).unwrap();
+    let reply = ask(&service, &request(token(), "{}")).unwrap();
     assert_eq!(reply.code, 2);
 }
 
