@@ -26,12 +26,9 @@ pub(super) fn noted(
 
 /// Whether an earlier call of `session` already recorded the settings drift.
 fn drift_noted(store: &Store, session: &str) -> Result<bool> {
-    let events = store
-        .session(session)
-        .context("reading this session from the audit log")?;
-    Ok(events
-        .iter()
-        .any(|e| e.rules.iter().any(|r| r == SETTINGS_DRIFT_RULE)))
+    store
+        .session_has_rule(session, SETTINGS_DRIFT_RULE)
+        .context("reading this session from the audit log")
 }
 
 /// `decision` with the settings drift it was decided through added.

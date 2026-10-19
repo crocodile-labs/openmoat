@@ -20,6 +20,9 @@ view at the end of the file.
 ### Changed
 - `moat sandbox show` says a `file` secret on macOS is denied rather than masked, and that nothing is masked on native Windows, where it used to say Claude Code injects it ([#580](https://github.com/crocodile-labs/openmoat/pull/580)).
 
+### Fixed
+- `moat guard` looks up whether a session already recorded settings drift with one indexed query that stops at the first match instead of reading the whole session, and the long-session latency check in CI takes the median p95 of three batches and shows the `latency_us` p95 beside it ([#585](https://github.com/crocodile-labs/openmoat/pull/585)).
+
 ## [0.6.0] - 2026-10-19
 
 File provenance taint, package name checks and release age, agents cannot read OpenMoat's state, audit anchors, signed policy packs, and fixes. Breaking for the library crates' API; the moat command is unchanged for users.

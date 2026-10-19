@@ -18,6 +18,7 @@ mod chain;
 mod export;
 mod export_verify;
 mod provenance;
+mod rules;
 mod schema;
 mod session_cache;
 
