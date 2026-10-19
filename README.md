@@ -17,8 +17,7 @@
 
 OpenMoat checks every command, file access, web request and MCP call your coding agent
 makes, and blocks the dangerous ones before they run. It works with **Claude Code**,
-**Codex** and **Cursor**; **OpenClaw** support is on `main` and comes in the next
-release. Everything it has no rule for it leaves to your agent's own
+**Codex**, **Cursor** and **OpenClaw**. Everything it has no rule for it leaves to your agent's own
 prompt, so your work goes on as before.
 
 **Local, and open to inspection.** One Rust binary, about 10 ms per check on macOS and Linux. No AI model
@@ -32,8 +31,7 @@ limit is in this repository.
 
 ## Features
 
-- **Agent hooks** for Claude Code, Codex and Cursor (OpenClaw on `main`, in the next
-  release): every command, file read and write, web request and MCP call is checked
+- **Agent hooks** for Claude Code, Codex, Cursor and OpenClaw: every command, file read and write, web request and MCP call is checked
   before it runs.
 - **A real shell parser.** Variables, `$'…'` quoting, base64 and other decoders,
   globs, braces, symlinks, here-documents and `$(…)` are checked as what they open,
@@ -159,7 +157,7 @@ to OpenMoat itself.
 | Claude Code | hooks and its OS sandbox |
 | Codex | hooks and its OS sandbox; an `ask` becomes a deny you approve with `moat allow --last`; a deferred call follows Codex's own approval policy |
 | Cursor | hooks and its OS sandbox (macOS, Linux); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
-| OpenClaw | on `main`, in the next release: hook only, through OpenMoat's `before_tool_call` plugin; an `ask` is OpenClaw's own approval request; not yet tested against a running Gateway |
+| OpenClaw | hook only, through OpenMoat's `before_tool_call` plugin; an `ask` is OpenClaw's own approval request; not yet tested against a running Gateway |
 | Continue CLI (`cn`) | partial: the released `cn` does not run hooks yet; use `moat run` |
 
 What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes (Standard,
@@ -208,7 +206,7 @@ configures the sandbox and fills the gaps between them.
   before 2.1.295 run the call unchecked; `moat status` reports it. With Claude Code
   2.1.295 or later, `moat init` sets the hook's `onFailure: "block"`, so the call is
   blocked.
-- **OpenClaw** (on `main`, in the next release) gets no OS sandbox from OpenMoat. A
+- **OpenClaw** gets no OS sandbox from OpenMoat. A
   parameter rewrite by another plugin and OpenClaw's process input are not checked,
   and calls run unchecked when the Gateway does not load the plugin.
 
@@ -259,7 +257,7 @@ Found a way past OpenMoat? Report it privately, as described in [SECURITY.md](SE
 
 ## Status
 
-**Stable.** The latest release is `0.6.0`; the policy format and commands may still
+**Stable.** The latest release is `0.7.0`; the policy format and commands may still
 change before 1.0. What is planned: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License

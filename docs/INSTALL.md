@@ -138,7 +138,7 @@ a file of yours that already has one of those names is left alone, and
 `moat uninstall` never deletes it.
 
 To choose without questions, name the agents: `moat init --hosts claude-code` (or
-`codex`, `cursor`, and `openclaw` from the next release on; comma-separated). `moat init --yes` sets up every agent found, for
+`codex`, `cursor`, `openclaw`; comma-separated). `moat init --yes` sets up every agent found, for
 scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
 files and says how to go on. `moat init --dry-run` prints what would change first.
 

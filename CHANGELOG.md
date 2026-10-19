@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-19
+
+The host adapters behind one contract, `moat doctor --bundle` for bug reports, and a round of checks: `tar` and `su` options that run a program, bash network redirections, more credential files, variables and secret-printing commands, MCP pins under `CLAUDE_CONFIG_DIR`, model switches that no longer freeze a session, and long sessions that no longer time out `moat guard`.
+
 ### Security
 - MCP server pinning reads Claude Code's `.claude.json` inside `~/.claude` as well as the one beside it: Claude Code uses the inner one whenever `CLAUDE_CONFIG_DIR` is set, even to the default directory, and its servers were left unpinned, so a changed server was not held back ([#598](https://github.com/crocodile-labs/openmoat/pull/598)).
 - `moat run` on Linux refuses to start when OpenMoat's state directory (`MOAT_HOME`) is inside a tree the sandbox grants (the project, a read root such as `/tmp`, a `--write` path, the temp directory), or a granted path is inside it: Landlock cannot deny inside a grant, so commands could read the audit log and the lock there. The message names the tree to move `MOAT_HOME` out of; `--isolate` still starts when the state directory is below the temp directory, which it hides. The default `~/.moat` is unaffected, and `moat doctor` warns on Linux when the state directory is inside a grant ([#580](https://github.com/crocodile-labs/openmoat/pull/580)).
@@ -666,7 +670,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/crocodile-labs/openmoat/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/crocodile-labs/openmoat/compare/v0.5.7...v0.6.0
 [0.5.7]: https://github.com/crocodile-labs/openmoat/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/crocodile-labs/openmoat/compare/v0.5.5...v0.5.6
