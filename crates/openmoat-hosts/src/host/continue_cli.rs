@@ -10,6 +10,19 @@
 use serde::Deserialize;
 
 use crate::Host;
+use crate::contract::{Asks, HostSpec};
+
+/// `cn` sends Claude Code's hooks, ignores `ask` and runs the call.
+pub(crate) static SPEC: HostSpec = HostSpec {
+    id: "continue",
+    display_name: "Continue CLI",
+    speaks: Some(Host::ClaudeCode),
+    asks: Asks {
+        on_pre_tool_use: Some("the Continue CLI runs a call its hook asks about"),
+        on_no_ask: None,
+        defer_is_ask_on_no_ask: false,
+    },
+};
 
 /// Set by `cn` for every command hook it runs, next to `CLAUDE_PROJECT_DIR`
 /// (`executeCommandHook` in `hookRunner.ts`); Claude Code never sets it.

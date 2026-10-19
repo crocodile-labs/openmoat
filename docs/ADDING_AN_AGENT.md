@@ -42,8 +42,9 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/<agent>.rs` | `parse` (payload → `HookRequest`) and `render` (`Decision` → response), with unit tests |
-| `crates/openmoat-hosts/src/lib.rs` | `mod`, a `Host` variant, `id()`, `display_name()`, `Host::ALL`, the dispatch in `parse_request` and `render_response`, `answer` if the agent cannot ask, the host list in `HostError::UnknownHost` |
+| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`), `parse` (payload → `HookRequest`) and `render` (`Decision` → response), with unit tests; `mod` in `host.rs` |
+| `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `spec` |
+| `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the dispatch in `parse_request` and `render_response`, the host list in `HostError::UnknownHost` |
 | `crates/openmoat-cli/src/install.rs` | a `HookSpec` list, `dir_variable`, the file name and `HookFormat` in `HostConfig::at` |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
 | `crates/openmoat-cli/src/context.rs` | the config directory and its variable in `moved_dirs` |
@@ -59,9 +60,10 @@ the new agent without further code.
 
 ## Map the payload to an `Action`
 
-Copy the shape of `cursor.rs` (its own format) or `pre_tool_use.rs` (the Claude Code
-format). If the agent sends Claude Code's `PreToolUse` document unchanged, reuse that
-parser through `Host::wire`, as the Continue CLI does (`continue_cli.rs`).
+Copy the shape of `host/cursor.rs` (its own format) or `wire/pre_tool_use.rs` (the
+Claude Code format). If the agent sends Claude Code's `PreToolUse` document unchanged,
+set `speaks: Some(Host::ClaudeCode)` in its spec to reuse that parser, as the Continue
+CLI does (`host/continue_cli.rs`).
 
 | The tool | `Action` | Example |
 |---|---|---|
@@ -74,7 +76,7 @@ parser through `Host::wire`, as the Continue CLI does (`continue_cli.rs`).
 | applies a multi-file patch | `Patch { writes }` | Codex `apply_patch` (`patch.rs`) |
 | fetches a URL with no request body | `Fetch { url }` | `WebFetch` (ADR-017) |
 | opens a connection that can send data | `Net { url }` | `Monitor` WebSocket |
-| calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `mcp.rs` finds path and URL arguments |
+| calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `wire/mcp.rs` finds path and URL arguments |
 | a tool the hook receives for every tool and cannot classify | `UnknownTool { host, tool }`: `defaults.tool.unknown` decides, `defer` in the default policy | Cursor `preToolUse` |
 | anything else | `None`: recorded with rule `ungoverned` and deferred to the host (no output) | `TodoWrite`, `Task` |
 
@@ -102,18 +104,20 @@ exits 2, so write the response even if the agent only reads the exit code.
 
 A `defer` (ADR-025) means OpenMoat neither objects nor vouches: the agent's own
 permission flow decides, as it would without OpenMoat. For an agent that runs its own
-flow when a hook gives no answer, render nothing and exit 0, as `pre_tool_use.rs` does.
+flow when a hook gives no answer, render nothing and exit 0, as `wire/pre_tool_use.rs` does.
 An agent with no such answer needs a mapping: Cursor's shell and MCP hooks send it as
-`ask` (`cursor.rs`), and for events that cannot prompt `Host::decided` records and
-answers it as `ask`. Find out from the agent's source which applies.
+`ask` (`host/cursor.rs`), and for events that cannot prompt, `Asks::defer_is_ask_on_no_ask`
+in its spec makes `Host::decided` record and answer it as `ask`. Find out from the
+agent's source which applies.
 
 Some agents cannot ask. Codex rejects `ask` and runs the call; the Continue CLI ignores
 it; Cursor accepts `ask` on `preToolUse` but runs the call, and `beforeReadFile` takes
-only allow or deny. For these, `Host::answer` turns an `ask` into a `deny` and adds a
-line saying how to approve it (`CODEX_ASK`, `CONTINUE_ASK`, `CURSOR_ASK`). The audit
-log keeps the `ask`, which is what `moat` and `moat allow --last` look for. If the
-agent cannot ask, add a constant and an arm to `answer`. If it can ask only on some
-events, return `HookEvent::PreToolUseNoAsk` for the others, as `cursor.rs` does.
+only allow or deny. For these, the spec's `Asks` says why the agent cannot ask, and
+`Host::answer` turns an `ask` into a `deny` with that reason and the line saying how to
+approve it. The audit log keeps the `ask`, which is what `moat` and `moat allow --last`
+look for. If the agent cannot ask, fill in `Asks::on_pre_tool_use`. If it can ask only
+on some events, return `HookEvent::PreToolUseNoAsk` for the others and fill in
+`Asks::on_no_ask`, as `host/cursor.rs` does.
 Verify from the agent's documentation or source code what it does with each answer.
 When the documentation and the agent disagree, trust the agent, and say which you
 checked in the fixtures `README.md`.

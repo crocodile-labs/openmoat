@@ -116,7 +116,7 @@ fn map_tool(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Option<Actio
             },
             None => return Ok(None),
         },
-        name if name.starts_with("mcp__") => crate::mcp::action(name, input)?,
+        name if name.starts_with("mcp__") => crate::wire::mcp::action(name, input)?,
         _ => return Ok(None),
     };
     Ok(Some(action))
