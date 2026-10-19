@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-10-18
+
+Push check for tokens and secrets, token egress, MCP server and tool pinning, a Claude Code hook that blocks when it fails, per-session proxy credentials, hooks inside moat run, human-only commands, and classifier fixes.
+
 ### Security
 - `git push` and `gh pr create` are checked for what they would publish: a commit that adds a known token format or a brokered secret's value is denied (`push-secret`), a change to a CI workflow or another `runs-later` file asks in a session that read untrusted content or a secret (`push-runs-later`), and a push that cannot be checked within 2 s or 8 MiB asks (`push-unchecked`); any other push is decided as before ([#574](https://github.com/crocodile-labs/openmoat/pull/574)).
 - With Claude Code 2.1.295 or later, `moat init` sets `"onFailure": "block"` on OpenMoat's `PreToolUse` hook, so a call is blocked when `moat` cannot start, crashes or times out instead of running unchecked. The key is written only when the `claude` on `PATH` reports that version; `moat status` and `moat doctor` report a hook without it as out of date (run `moat init`), and `moat doctor` warns when Claude Code is older or not found ([#574](https://github.com/crocodile-labs/openmoat/pull/574)).
@@ -603,7 +607,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.7...HEAD
+[0.5.7]: https://github.com/crocodile-labs/openmoat/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/crocodile-labs/openmoat/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/crocodile-labs/openmoat/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/crocodile-labs/openmoat/compare/v0.5.3...v0.5.4
