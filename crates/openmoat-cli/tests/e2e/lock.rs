@@ -375,7 +375,7 @@ fn repin_from_another_config_dir_keeps_the_pinned_hook_file() {
     }
 
     let settings = std::fs::read_to_string(agent.join("settings.json")).unwrap();
-    let settings = settings.replacen('{', r#"{"model":"x","#, 1);
+    let settings = settings.replacen('{', r#"{"apiKeyHelper":"x","#, 1);
     std::fs::write(agent.join("settings.json"), settings).unwrap();
     let d = guard_read_src(&sb);
     assert_eq!(d["permissionDecision"], "deny", "{d}");

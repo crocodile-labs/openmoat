@@ -9,6 +9,9 @@ pub const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
 pub const WRAPPERS: &[&str] = &[
     "sudo",
     "doas",
+    "pkexec",
+    // `runuser -u USER cmd…` only; `runuser [-] USER -c cmd` is `shell/embedded.rs`'s
+    "runuser",
     "env",
     "nohup",
     "time",
@@ -52,6 +55,11 @@ pub const WRAPPER_OPTIONS_WITH_VALUE: &[(&str, &[&str])] = &[
         &["-u", "-g", "-C", "-h", "-p", "-U", "-r", "-t", "-D"],
     ),
     ("doas", &["-u", "-C"]),
+    ("pkexec", &["--user"]),
+    (
+        "runuser",
+        &["-u", "--user", "-g", "--group", "-G", "--supp-group", "-w"],
+    ),
     ("env", &["-u", "-C", "-S", "--unset", "--chdir"]),
     ("nice", &["-n"]),
     ("npx", &["-p", "--package"]),

@@ -1,5 +1,5 @@
 //! Self-protection of Claude Code's `settings.json`: drift in Claude Code's own
-//! toggles and permission lists is reported but the guard keeps deciding; any
+//! toggles, permission lists and model choice is reported but the guard keeps deciding; any
 //! other drift (hooks, keys that run a program or redirect the agent, a removed
 //! OpenMoat rule, an unknown key, a file that no longer parses) denies every call.
 
@@ -106,6 +106,27 @@ fn claude_codes_own_lists_and_toggles_leave_calls_decided() {
     });
     assert_eq!(read_src(&sb).0, "allow");
     assert_eq!(read_ssh_key(&sb).0, "deny");
+}
+
+/// Claude Code writes these when the person switches models (#591).
+#[test]
+fn switching_models_leaves_calls_decided_and_is_reported() {
+    let sb = sandbox();
+    edit_settings(&sb, |s| {
+        s["model"] = json!("opus");
+        s["switchModelsOnFlag"] = json!(true);
+    });
+    assert_eq!(read_src(&sb).0, "allow");
+    assert_eq!(read_ssh_key(&sb).0, "deny");
+    let doctor = sb.moat(&["doctor"]);
+    let expected = "settings.json was modified: added model, switchModelsOnFlag";
+    assert!(text(&doctor).contains(expected), "{}", text(&doctor));
+
+    // The same switch next to a status line command freezes every call.
+    edit_settings(&sb, |s| {
+        s["statusLine"] = json!({"type": "command", "command": "/tmp/run-me"});
+    });
+    assert_frozen(&sb);
 }
 
 #[test]

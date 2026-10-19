@@ -3,8 +3,11 @@
 //! `git bisect run cmd`, `git difftool --extcmd`, `git filter-branch --tree-filter`,
 //! `git clone`/`fetch`/`pull`/`ls-remote --upload-pack`, `git push --receive-pack`,
 //! `git archive --exec`,
-//! `ssh -o ProxyCommand='cmd'` (and `LocalCommand`, `KnownHostsCommand`) and
-//! `rsync -e 'cmd'`. Each one is classified as a command line of its own.
+//! `ssh -o ProxyCommand='cmd'` (and `LocalCommand`, `KnownHostsCommand`),
+//! `rsync -e 'cmd'`, GNU tar's `--to-command`, `-I`/`--use-compress-program`,
+//! `--checkpoint-action=exec=`, `-F`/`--info-script`/`--new-volume-script` and
+//! remote-tape `--rsh-command`/`--rmt-command`, and `su`/`runuser -c 'cmd'`.
+//! Each one is classified as a command line of its own.
 
 use super::git;
 
@@ -39,6 +42,23 @@ const FILTER_BRANCH: &[&str] = &[
 /// ssh options (`-o Key=value`) whose value is a local command.
 const SSH_COMMAND_KEYS: &[&str] = &["proxycommand", "localcommand", "knownhostscommand"];
 const SSH_PROGRAMS: &[&str] = &["ssh", "scp", "sftp", "autossh"];
+/// GNU tar options whose value is a program tar starts (through `/bin/sh -c`, but
+/// for the remote-tape ones), and the shortest prefix of the long one that no other
+/// tar option shares (`--use` is `--use-compress-program`, `--to-c` `--to-command`).
+/// bsdtar has `--use-compress-program` too, and none of the others.
+const TAR_COMMAND_OPTIONS: &[(&str, &str, &str)] = &[
+    ("", "--to-command", "--to-c"),
+    ("-I", "--use-compress-program", "--use"),
+    ("-F", "--info-script", "--inf"),
+    ("", "--new-volume-script", "--new-"),
+    ("", "--rsh-command", "--rs"),
+    ("", "--rmt-command", "--rm"),
+];
+/// `su` and `runuser` options whose value is a command line for the user's shell.
+const SU_COMMAND_OPTIONS: &[(&str, &str, &str)] = &[
+    ("-c", "--command", "--c"),
+    ("", "--session-command", "--se"),
+];
 
 /// Every command line `argv` hands to a shell, as written.
 pub(super) fn commands(argv: &[String], program: &str) -> Vec<String> {
@@ -46,9 +66,30 @@ pub(super) fn commands(argv: &[String], program: &str) -> Vec<String> {
         "watch" => watch(argv).into_iter().collect(),
         "git" => git_commands(&git::parse(argv).subcommand),
         "rsync" => option_values(argv, "-e", "--rsh", "--rsh"),
+        "tar" | "gtar" => tar(argv),
+        "su" | "runuser" => all_values(argv, SU_COMMAND_OPTIONS),
         p if SSH_PROGRAMS.contains(&p) => ssh(argv),
         _ => Vec::new(),
     }
+}
+
+fn all_values(argv: &[String], options: &[(&str, &str, &str)]) -> Vec<String> {
+    options
+        .iter()
+        .flat_map(|(short, long, shortest)| option_values(argv, short, long, shortest))
+        .collect()
+}
+
+/// The programs a tar command line starts, `--checkpoint-action=exec=cmd` included;
+/// the other checkpoint actions (`dot`, `echo`, `sleep`, …) run nothing.
+fn tar(argv: &[String]) -> Vec<String> {
+    let mut found = all_values(argv, TAR_COMMAND_OPTIONS);
+    found.extend(
+        option_values(argv, "", "--checkpoint-action", "--checkpoint-")
+            .into_iter()
+            .filter_map(|action| action.strip_prefix("exec=").map(str::to_owned)),
+    );
+    found
 }
 
 /// `watch -n 1 'cmd'`: the words after the options, joined as `watch` does.
@@ -227,6 +268,49 @@ mod tests {
             ("git push --receive-pack=rp ../r", &["rp"]),
             ("git push --exec rp ../r", &["rp"]),
             ("git archive --exec=ua --remote=../r HEAD", &["ua"]),
+        ] {
+            assert_eq!(run(line), found, "{line}");
+        }
+    }
+
+    #[test]
+    fn finds_the_programs_tar_starts() {
+        for (line, found) in [
+            ("tar --to-command=cmd -xf x", &["cmd"][..]),
+            ("tar -xf x --to-c cmd", &["cmd"]),
+            ("tar --to-stdout -xf x", &[]),
+            ("tar -I zstd -cf x .", &["zstd"]),
+            ("tar -cvIzstd -f x .", &["zstd"]),
+            ("tar -cvf x -I zstd .", &["zstd"]),
+            ("tar --use-compress-program zstd -cf x .", &["zstd"]),
+            ("tar --use=zstd -cf x .", &["zstd"]),
+            ("tar --checkpoint-action=exec=cmd -cf x .", &["cmd"]),
+            ("tar --checkpoint-a exec=cmd -cf x .", &["cmd"]),
+            ("tar --checkpoint=1 --checkpoint-action=dot -cf x .", &[]),
+            ("tar -cMf x -F cmd .", &["cmd"]),
+            ("tar -cMf x --info-script=cmd .", &["cmd"]),
+            ("tar -cMf x --new-volume-script cmd .", &["cmd"]),
+            ("tar -cf h:x --rsh-command=cmd .", &["cmd"]),
+            ("tar -czf out.tgz src", &[]),
+            ("tar -xf x.tar", &[]),
+        ] {
+            assert_eq!(run(line), found, "{line}");
+        }
+    }
+
+    #[test]
+    fn finds_the_command_su_runs() {
+        for (line, found) in [
+            ("su -c cmd", &["cmd"][..]),
+            ("su root -c cmd", &["cmd"]),
+            ("su - me -c cmd", &["cmd"]),
+            ("su -lc cmd me", &["cmd"]),
+            ("su --command=cmd", &["cmd"]),
+            ("su --comm cmd me", &["cmd"]),
+            ("su --session-command=cmd me", &["cmd"]),
+            ("runuser - me -c cmd", &["cmd"]),
+            ("su - me", &[]),
+            ("su -s /bin/zsh me", &[]),
         ] {
             assert_eq!(run(line), found, "{line}");
         }

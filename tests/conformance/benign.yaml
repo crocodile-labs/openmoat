@@ -1056,3 +1056,32 @@
 - id: benign-git-fetch-named-remote
   action: { shell: "git fetch origin main" }
   expect: { verdict: allow, rules: [dev-shell] }
+# tar's own compression and checkpoints run no command of the caller's choosing
+- id: benign-tar-create-gzip
+  action: { shell: "tar -czf out.tgz src" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-tar-extract
+  action: { shell: "tar -xf x.tar" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-tar-checkpoint-dot
+  action: { shell: "tar --checkpoint=100 --checkpoint-action=dot -cf x.tar src" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-su-without-command
+  action: { shell: "su - me" }
+  expect: { verdict: defer, rules: [default] }
+# the Maven and Gradle caches and downloaded artifacts
+- id: benign-read-maven-repository
+  action: { shell: "cat ~/.m2/repository/org/x/x/1.0/x-1.0.pom" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-gradle-cache
+  action: { shell: "ls ~/.gradle/caches/modules-2" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-echo-database-host
+  action: { shell: "echo $DATABASE_HOST" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-echo-api-url
+  action: { shell: "echo $API_URL" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-kubectl-config-view
+  action: { shell: "kubectl config view --minify" }
+  expect: { verdict: defer, rules: [default] }

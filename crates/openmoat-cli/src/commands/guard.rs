@@ -33,6 +33,11 @@ const UNGOVERNED_RULE: &str = "ungoverned";
 const KERNEL_ERROR_RULE: &str = "kernel-error";
 const SESSION_GRANT_RULE: &str = "approved-session";
 
+/// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
+/// time to record: a session too long to fold in time is denied with a
+/// recorded reason, its progress kept, rather than by the budget's deny.
+const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
+
 pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
     deny_when_over_budget(host, Instant::now());
@@ -129,7 +134,8 @@ fn decide_and_respond(installed_for: Host) -> Code {
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             event = host.event_of(&payload);
-            evaluate(host, &payload, &mut out).unwrap_or_else(|error| (None, kernel_error(&error)))
+            evaluate(host, &payload, &mut out, started)
+                .unwrap_or_else(|error| (None, kernel_error(&error)))
         }
         Err(error) => (None, kernel_error(&error)),
     };
@@ -165,6 +171,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
 /// and its answer is printed as it came. Whatever fails denies here, in the
 /// format the payload's hook expects; nothing is recorded from in here.
 fn relayed(installed_for: Host, endpoint: Result<guard_relay::Endpoint>, started: Instant) -> Code {
+    hangs::enter(Phase::Stdin);
     let payload = match read_stdin() {
         Ok(payload) => payload,
         Err(error) => {
@@ -175,8 +182,12 @@ fn relayed(installed_for: Host, endpoint: Result<guard_relay::Endpoint>, started
     let host = installed_for.sender(&payload, continue_env);
     let event = host.event_of(&payload);
     let budget = Duration::from_secs(GUARD_BUDGET_S).saturating_sub(started.elapsed());
+    hangs::enter(Phase::Relay);
     match endpoint.and_then(|e| e.decide(installed_for, &payload, continue_env, budget)) {
-        Ok(reply) => relay_once(&reply),
+        Ok(reply) => {
+            hangs::enter(Phase::Answer);
+            relay_once(&reply)
+        }
         Err(error) => {
             let error = error.context("`moat run` did not decide this call");
             respond(host, &event, &kernel_error(&error))
@@ -224,11 +235,13 @@ struct Evaluated {
     provenance: taint::provenance::Seen,
 }
 
-/// Decide one hook payload, filling `out` as it goes.
+/// Decide one hook payload, filling `out` as it goes. `started` is when the
+/// guard started, which its budget counts from.
 fn evaluate(
     host: Host,
     payload: &str,
     out: &mut Evaluated,
+    started: Instant,
 ) -> Result<(Option<HookRequest>, Decision)> {
     hangs::enter(Phase::Lock);
     let request = host
@@ -303,8 +316,29 @@ fn evaluate(
     // content's ask for this exact call (taint.rs).
     hangs::enter(Phase::Taint);
     let store = home.open_audit()?;
-    let (session, write) =
-        taint::of_session(&store, host, &request.session_id, &compiled, &ctx.cwd)?;
+    // A long fold saves what it reached as it goes, on a writable handle, so
+    // the next call reads on even if this one runs out of time.
+    let audit = home.audit_path();
+    let mut save = |write: &taint::CacheWrite| {
+        if let Ok(writable) = Store::open_existing(&audit) {
+            write.write(&writable);
+        }
+    };
+    // A call that got here late on a loaded machine still gets a moment to
+    // read on a few events from its cache row.
+    let mut progress = taint::Progress {
+        deadline: (started + TAINT_BUDGET).max(Instant::now() + Duration::from_secs(1)),
+        save: &mut save,
+        folded: 0,
+    };
+    let (session, write) = taint::of_session(
+        &store,
+        host,
+        &request.session_id,
+        &compiled,
+        &ctx.cwd,
+        &mut progress,
+    )?;
     out.cache = write;
     let seen = taint::provenance::Call {
         session: &request.session_id,

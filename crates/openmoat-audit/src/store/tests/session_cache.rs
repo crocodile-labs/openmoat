@@ -1,5 +1,5 @@
 //! The session cache (#570): a convenience beside the events, never ahead of
-//! them and never moved back.
+//! them and never moved back, with a row per digest of a session.
 
 use super::*;
 
@@ -46,14 +46,42 @@ fn session_has_finds_an_event_by_session_host_and_call_id() {
 }
 
 #[test]
-fn the_cache_is_absent_until_written_and_never_moves_back() {
+fn session_page_returns_at_most_limit_events_in_order() {
     let store = Store::open_in_memory().unwrap();
-    assert_eq!(store.session_cache("s1", "claude-code").unwrap(), None);
-    let cached = |digest: &str, upto, state: &str| Cached {
+    let d = decision(Verdict::Allow, "dev-shell", "ok");
+    let action = shell("ls");
+    let ids: Vec<i64> = (0..5)
+        .map(|_| store.record(&sample(&d, &action)).unwrap().0)
+        .collect();
+    let page = |after, limit| -> Vec<i64> {
+        store
+            .session_page("s1", EventId(after), limit)
+            .unwrap()
+            .iter()
+            .map(|e| e.id.0)
+            .collect()
+    };
+    assert_eq!(page(0, 2), ids[..2]);
+    assert_eq!(page(ids[1], 2), ids[2..4]);
+    assert_eq!(page(ids[3], 2), ids[4..]);
+    assert_eq!(page(0, usize::MAX), ids);
+}
+
+fn cached(digest: &str, upto: i64, state: &str) -> Cached {
+    Cached {
         digest: digest.into(),
         upto: EventId(upto),
         state: state.into(),
-    };
+    }
+}
+
+#[test]
+fn the_cache_is_absent_until_written_and_never_moves_back() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(
+        store.session_cache("s1", "claude-code", "d1").unwrap(),
+        None
+    );
     store
         .set_session_cache("s1", "claude-code", &cached("d1", 5, "five"))
         .unwrap();
@@ -62,18 +90,62 @@ fn the_cache_is_absent_until_written_and_never_moves_back() {
         .set_session_cache("s1", "claude-code", &cached("d1", 3, "three"))
         .unwrap();
     assert_eq!(
-        store.session_cache("s1", "claude-code").unwrap(),
+        store.session_cache("s1", "claude-code", "d1").unwrap(),
         Some(cached("d1", 5, "five"))
     );
-    // another digest (policy, version) replaces it whatever its row
+    // another digest (a working directory, a policy) has a row of its own
     store
         .set_session_cache("s1", "claude-code", &cached("d2", 2, "two"))
         .unwrap();
     assert_eq!(
-        store.session_cache("s1", "claude-code").unwrap(),
+        store.session_cache("s1", "claude-code", "d2").unwrap(),
         Some(cached("d2", 2, "two"))
     );
-    assert_eq!(store.session_cache("s1", "codex").unwrap(), None);
+    assert_eq!(
+        store.session_cache("s1", "claude-code", "d1").unwrap(),
+        Some(cached("d1", 5, "five"))
+    );
+    assert_eq!(store.session_cache("s1", "codex", "d1").unwrap(), None);
+    assert_eq!(
+        store.session_cache("s2", "claude-code", "d1").unwrap(),
+        None
+    );
+}
+
+/// A session keeps its most recently written rows; the oldest digest goes,
+/// and other sessions keep theirs.
+#[test]
+fn a_session_keeps_a_bounded_number_of_rows() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .set_session_cache("s2", "claude-code", &cached("d0", 1, "other"))
+        .unwrap();
+    for n in 0..=16 {
+        store
+            .set_session_cache("s1", "claude-code", &cached(&format!("d{n}"), 1, "x"))
+            .unwrap();
+    }
+    // d0 is written again (a later event), so d1 is the least recent
+    store
+        .set_session_cache("s1", "claude-code", &cached("d0", 2, "y"))
+        .unwrap();
+    assert_eq!(
+        store.session_cache("s1", "claude-code", "d1").unwrap(),
+        None
+    );
+    for n in [0, 2, 16] {
+        assert!(
+            store
+                .session_cache("s1", "claude-code", &format!("d{n}"))
+                .unwrap()
+                .is_some(),
+            "d{n}"
+        );
+    }
+    assert_eq!(
+        store.session_cache("s2", "claude-code", "d0").unwrap(),
+        Some(cached("d0", 1, "other"))
+    );
 }
 
 /// Another guard holding the write lock (it is recording) makes the cache
@@ -108,7 +180,7 @@ fn a_cache_write_is_skipped_not_blocked_while_another_connection_writes() {
         "waited {waited:?}"
     );
     assert_eq!(
-        store.session_cache("s1", "claude-code").unwrap(),
+        store.session_cache("s1", "claude-code", "d1").unwrap(),
         Some(cached(1, "one"))
     );
 
@@ -127,7 +199,7 @@ fn a_cache_write_is_skipped_not_blocked_while_another_connection_writes() {
             .unwrap()
     );
     assert_eq!(
-        store.session_cache("s1", "claude-code").unwrap(),
+        store.session_cache("s1", "claude-code", "d1").unwrap(),
         Some(cached(2, "two"))
     );
 }

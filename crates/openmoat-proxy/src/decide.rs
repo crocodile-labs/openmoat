@@ -218,6 +218,8 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
         Some(Forbidden::Metadata)
     } else if let Some(v4) = carried_v4(ip) {
         forbidden_v4(v4)
+    } else if let Some(why) = tunnelled_v4(ip).find_map(forbidden_v4) {
+        Some(why)
     } else if seg[..3] == NAT64_LOCAL {
         // The common /96 layout first, so a metadata or loopback address in it
         // is named as such; any other layout is local network all the same.
@@ -242,6 +244,18 @@ fn carried_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
         let [c, d] = seg[7].to_be_bytes();
         Ipv4Addr::new(a, b, c, d)
     })
+}
+
+/// The IPv4 addresses a 6to4 (`2002::/16`: the address in bits 16..48) or
+/// Teredo (`2001::/32`: the server in bits 32..64, the client inverted in the
+/// last 32 bits) address leads to: a relay or the server delivers it there.
+fn tunnelled_v4(ip: Ipv6Addr) -> impl Iterator<Item = Ipv4Addr> {
+    let o = ip.octets();
+    let six_to_four = (o[..2] == [0x20, 0x02]).then(|| Ipv4Addr::new(o[2], o[3], o[4], o[5]));
+    let teredo = o[..4] == [0x20, 0x01, 0, 0];
+    let client = teredo.then(|| Ipv4Addr::new(!o[12], !o[13], !o[14], !o[15]));
+    let server = teredo.then(|| Ipv4Addr::new(o[4], o[5], o[6], o[7]));
+    [six_to_four, client, server].into_iter().flatten()
 }
 
 /// The part of `policy` that decides a resolved address: its deny rules, and
@@ -306,17 +320,22 @@ pub fn named(addresses: &CompiledPolicy<'_>, ip: IpAddr) -> bool {
 
 /// The deny rules of `addresses` (compiled from [`address_policy`]) that
 /// match `ip`, if any: a deny naming an address holds for every name that
-/// resolves to it. Matched in canonical text form, and for a NAT64 or
-/// IPv4-compatible address also as the IPv4 address it reaches. Allow rules
-/// never widen anything here; an address no deny rule matches gives `None`.
+/// resolves to it. Matched in canonical text form, and for a NAT64,
+/// IPv4-compatible, 6to4 or Teredo address also as the IPv4 addresses it
+/// reaches. Allow rules never widen anything here; an address no deny rule
+/// matches gives `None`.
 #[must_use]
 pub fn denied(addresses: &CompiledPolicy<'_>, ip: IpAddr) -> Option<Decision> {
     let ip = ip.to_canonical();
-    let carried = match ip {
-        IpAddr::V6(v6) => carried_v4(v6).map(IpAddr::V4),
-        IpAddr::V4(_) => None,
+    let carried: Vec<IpAddr> = match ip {
+        IpAddr::V6(v6) => carried_v4(v6)
+            .into_iter()
+            .chain(tunnelled_v4(v6))
+            .map(IpAddr::V4)
+            .collect(),
+        IpAddr::V4(_) => Vec::new(),
     };
-    [Some(ip), carried].into_iter().flatten().find_map(|ip| {
+    std::iter::once(ip).chain(carried).find_map(|ip| {
         let atom = AtomicAction::Fetch {
             host: ip.to_string(),
         };

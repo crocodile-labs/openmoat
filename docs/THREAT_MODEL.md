@@ -555,8 +555,13 @@ something OpenMoat claims to stop.
 - **Some Claude Code settings may drift without stopping the guard.** Claude Code's
   `settings.json` is pinned, but a change limited to an allowlist of its keys
   (`crates/openmoat-cli/src/integrity/relaxed.rs`) does not deny every call: display
-  and reply toggles, and Claude Code's own `permissions.allow`, `ask`, `deny`,
+  and reply toggles, the model Claude Code writes when the person switches models
+  (`model` as a string, `switchModelsOnFlag` as a string, number or boolean), and
+  Claude Code's own `permissions.allow`, `ask`, `deny`,
   `defaultMode`, `additionalDirectories` and `blockReadsOutsideWorkingDirectories`.
+  A changed model changes which model answers, not where requests go (`env`) or what
+  runs; an object or list under either model key, or a key of another name such as
+  `availableModels`, still denies.
   The hook still decides every call by the policy, and Claude Code obeys a hook deny in
   every permission mode, so these change only when Claude Code asks the person about a
   call the hook left to it. Two of them widen more than prompts: with
@@ -567,7 +572,7 @@ something OpenMoat claims to stop.
   policy, and `moat doctor` reports the drift until a person runs `moat doctor --accept`.
   A change under `hooks`, a key that runs a program or redirects the agent (`env`,
   `apiKeyHelper`, `awsAuthRefresh`, `awsCredentialExport`, `otelHeadersHelper`,
-  `statusLine`, `fileSuggestion`, the model, plugins, MCP servers, `sandbox`), a
+  `statusLine`, `fileSuggestion`, plugins, MCP servers, `sandbox`), a
   removed `permissions.deny` rule OpenMoat wrote, an unknown key, a symlink or a file
   that no longer parses still denies every call. The kernel-self rules deny the agent
   writes to the settings file in any case.
