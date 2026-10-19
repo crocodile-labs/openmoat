@@ -405,7 +405,8 @@ something OpenMoat claims to stop.
   command hook: its "hook" is OpenMoat's plugin, which runs `moat guard` and turns the
   outcome into OpenClaw's answer. The rows marked "ours" are tested end to end with
   the real binary (`crates/openmoat-cli/tests/e2e/host_failures.rs`), and
-  `protection.rs` (`gaps`) repeats the host rows in each agent's `known gaps` line.
+  each host's `HostSpec` (`on_hook_failure`, and `gaps` for its `known gaps` line, in
+  `crates/openmoat-hosts/src/host/<id>.rs`) repeats the host rows.
 
   | Case | Claude Code | Codex | Cursor | OpenClaw | Continue CLI |
   |---|---|---|---|---|---|
