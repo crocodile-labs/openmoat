@@ -179,7 +179,7 @@ fn claude_code_on_native_windows_is_hook_only() {
 /// order they print: the label column after `skip` leading characters (the
 /// check mark in `doctor`).
 fn sections(out: &str, skip: usize) -> Vec<String> {
-    const KNOWN: [&str; 9] = [
+    const KNOWN: [&str; 10] = [
         "state directory",
         "policy",
         "lock",
@@ -188,6 +188,7 @@ fn sections(out: &str, skip: usize) -> Vec<String> {
         "Claude Code",
         "Codex",
         "Cursor",
+        "OpenClaw",
         "audit log",
     ];
     let mut seen: Vec<String> = Vec::new();
@@ -215,6 +216,7 @@ fn status_and_doctor_print_their_sections_in_order() {
             "Claude Code",
             "Codex",
             "Cursor",
+            "OpenClaw",
             "audit log"
         ],
         "{status}"
@@ -230,6 +232,7 @@ fn status_and_doctor_print_their_sections_in_order() {
             "Claude Code",
             "Codex",
             "Cursor",
+            "OpenClaw",
             "audit log"
         ],
         "{doctor}"
