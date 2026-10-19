@@ -144,6 +144,13 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
         let new = match layout {
             Layout::Json | Layout::ClaudeJson => edit_json(&text, &dones)?,
             Layout::Toml => edit_toml(&text, &dones)?,
+            Layout::OpenClaw => {
+                // JSON5 is written back as JSON, so a file with comments is not.
+                let parsed = crate::install::openclaw::parse(&text)
+                    .with_context(|| format!("parsing {}", path.display()))?;
+                crate::install::openclaw::refuse_comments(&parsed, &path)?;
+                edit_value(parsed.value, &dones)?
+            }
         };
         if dry_run {
             continue;
@@ -155,7 +162,10 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
 }
 
 fn edit_json(text: &str, dones: &[&Done]) -> Result<String> {
-    let mut root: Value = serde_json::from_str(text).context("parsing JSON")?;
+    edit_value(serde_json::from_str(text).context("parsing JSON")?, dones)
+}
+
+fn edit_value(mut root: Value, dones: &[&Done]) -> Result<String> {
     for done in dones {
         let slot = root
             .pointer_mut(&done.server.pointer)

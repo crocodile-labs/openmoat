@@ -1441,6 +1441,17 @@
   threat: T9
   action: { shell: "echo 'export default {}' > .openclaw/extensions/x/index.mjs" }
   expect: { verdict: ask, rules: [runs-later] }
+# OpenClaw's control-plane database holds the cron jobs its Gateway runs later; the
+# adapter decides a `cron` add or update as a write of it
+- id: ask-write-openclaw-state-database
+  threat: T9
+  action: { fs_write: "~/.openclaw/state/openclaw.sqlite" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-moved-openclaw-state-database
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.openclaw": /srv/openclaw } }
+  action: { fs_write: "/srv/openclaw/state/openclaw.sqlite-wal" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A line the lexer cannot read in full asks, whatever the catch-all: the atoms of
 # the part not read are missing, so a deny there must not become a defer
 - id: ask-deny-next-to-an-ansi-c-nul

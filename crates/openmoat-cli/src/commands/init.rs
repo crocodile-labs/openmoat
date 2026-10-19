@@ -331,10 +331,7 @@ fn host_files(config: &HostConfig) -> Vec<PathBuf> {
 fn record(home: &Home, hosts: &[Host]) -> Result<()> {
     let mut recorded = Recorded::load(home)?;
     for host in hosts {
-        let config = HostConfig::for_init(home, *host)?;
-        recorded
-            .dirs
-            .insert(host.id().to_owned(), config.dir().to_path_buf());
+        recorded.insert(&HostConfig::for_init(home, *host)?);
     }
     recorded.save(home)
 }

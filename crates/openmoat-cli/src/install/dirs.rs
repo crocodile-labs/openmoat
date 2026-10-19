@@ -22,6 +22,10 @@ pub struct Recorded {
     pub version: u32,
     /// Host id → configuration directory.
     pub dirs: BTreeMap<String, PathBuf>,
+    /// Host id → configuration file, for one that is not the default file in
+    /// its directory (OpenClaw's `OPENCLAW_CONFIG_PATH`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub files: BTreeMap<String, PathBuf>,
     /// The `permissions.deny` rules OpenMoat added to Claude Code's settings,
     /// so `moat uninstall` removes those and never a rule of the user's.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -70,6 +74,26 @@ impl Recorded {
 
     pub fn dir(&self, host: Host) -> Option<PathBuf> {
         self.dirs.get(host.id()).cloned()
+    }
+
+    /// The configuration file recorded for `host` when it is not the default
+    /// one in [`Self::dir`].
+    pub fn file(&self, host: Host) -> Option<PathBuf> {
+        self.files.get(host.id()).cloned()
+    }
+
+    /// Record `config`'s directory, and its file when that is not the default.
+    pub fn insert(&mut self, config: &super::HostConfig) {
+        let id = config.host.id().to_owned();
+        self.dirs.insert(id.clone(), config.dir().to_path_buf());
+        match config.openclaw_location() {
+            Some(location) if !location.config_is_default() => {
+                self.files.insert(id, location.config);
+            }
+            _ => {
+                self.files.remove(&id);
+            }
+        }
     }
 
     /// Whether `moat init` set up other agents and left `host` out: the person

@@ -208,17 +208,25 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | OpenClaw `gateway` / `plugins` | `config.get` / `install`, `enable`, `disable`, `uninstall`, `reload`, `reloadAndResume`: the plugin's `configPath` | `FsRead` / `FsWrite` (`kernel-self` denies it) |
 | OpenClaw `process` input (`send-keys`, `submit`, `paste`, …), Code Mode `exec` | the params as JSON | `ForeignShell` (`unparseable`) |
 | OpenClaw `<server>__<tool>` | `mcp__<server>__<tool>` and `params` | `McpTool` |
-| any other OpenClaw tool (`message`, `nodes`, `cron`, `sessions_*`, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |
-| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`) | — | none: `ungoverned` |
+| OpenClaw `cron` `add`, `update`, `next_check` | the state database: `<stateDir>/state/openclaw.sqlite` (beside `configPath` from a plugin that sends no `stateDir`) | `FsWrite` (`runs-later` asks) |
+| OpenClaw `nodes` `invoke` / an action with `outPath` | the params as JSON / `outPath` | `ForeignShell` (`unparseable`) / `FsWrite` |
+| OpenClaw `view_image` | `path` and each of `paths`: local files (a `file://` URL as its path); `http(s)` URLs when no file is named; `data:` images touch nothing | `FsRead`, `ReadFiles`; `Fetch` for one URL, `UnknownTool` for several |
+| any other OpenClaw tool (`message`, `sessions_*`, `cron` `run`/`remove`/`wake`, the other `nodes` actions, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |
+| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`) | — | none: `ungoverned` |
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,
 written by `moat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
 listed in `plugins.load.paths`, pinned in the lock) handles `before_tool_call` for every tool,
 runs `moat guard --host openclaw` with the event, the context's session ids, the agent's
-workspace (`cwd`), the configuration path and the platform on stdin, and maps the answer:
+workspace (`cwd`), the configuration path, the state directory and the platform on stdin
+(`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` resolved as OpenClaw
+does, `install/openclaw/location.rs`), and maps the answer:
 `deny` (exit 2) to `block`, `ask` to `requireApproval`, `allow` or nothing to no decision.
 Anything else (no `moat`, a crash, another exit code, an unreadable answer, no answer in 45 s)
-blocks the call (ADR-033).
+blocks the call (ADR-033). `openclaw.json` is JSON5; OpenMoat reads it with its own
+JSON5 reader (`crates/openmoat-cli/src/json5.rs`) and writes it back as plain JSON, and
+refuses to write a file with comments. The lock pins it without `mcp.servers`, whose
+servers are pinned one by one with the other hosts' (ADR-026).
 
 Claude Code calls only reach OpenMoat for tools in the installed matcher
 (`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen. `Skill`

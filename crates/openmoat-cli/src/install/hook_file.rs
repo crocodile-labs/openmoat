@@ -35,9 +35,12 @@ pub enum HookState {
 
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
     let path = &config.settings_path;
-    let mut root = read_or_empty(path)?;
+    let mut root = read_host(config)?;
     let edited = upsert_all(&mut root, config, binary)?;
-    // OpenClaw's hook is a plugin file beside the configuration.
+    if edited != Outcome::Unchanged && config.format == HookFormat::OpenClaw {
+        openclaw::read_for_edit(path)?;
+    }
+    // OpenClaw's hook is a plugin file in its state directory.
     let plugin = config.format == HookFormat::OpenClaw && !openclaw::plugin_current(config, binary);
     let outcome = if plugin {
         edited.max(Outcome::Updated)
@@ -62,6 +65,16 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
 /// with OpenMoat's hooks in it, as [`install`] would write it; `None` when it
 /// would not change. Writes nothing.
 pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Option<String>> {
+    if config.format == HookFormat::OpenClaw {
+        let parsed = openclaw::parse(current)
+            .with_context(|| format!("parsing {}", config.settings_path.display()))?;
+        let mut root = parsed.value.clone();
+        if upsert_all(&mut root, config, binary)? == Outcome::Unchanged {
+            return Ok(None);
+        }
+        openclaw::refuse_comments(&parsed, &config.settings_path)?;
+        return Ok(Some(serde_json::to_string_pretty(&root)? + "\n"));
+    }
     let mut root = crate::sandbox::install::parse_json(current)?;
     if upsert_all(&mut root, config, binary)? == Outcome::Unchanged {
         return Ok(None);
@@ -85,7 +98,7 @@ pub fn state(config: &HostConfig, binary: &Path) -> HookState {
     if !path.exists() {
         return HookState::Missing;
     }
-    let root = match read_or_empty(path) {
+    let root = match read_host(config) {
         Ok(v) => v,
         Err(e) => return HookState::Unreadable(format!("{e:#}")),
     };
@@ -303,6 +316,15 @@ pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
         top.retain(|key, value| key != "version" || *value != json!(1));
     }
     removed
+}
+
+/// `config`'s hook file parsed, an empty object when there is none; OpenClaw's
+/// as JSON5.
+pub fn read_host(config: &HostConfig) -> Result<Value> {
+    if config.format == HookFormat::OpenClaw {
+        return openclaw::read(&config.settings_path);
+    }
+    read_or_empty(&config.settings_path)
 }
 
 pub fn read_or_empty(path: &Path) -> Result<Value> {

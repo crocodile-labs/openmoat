@@ -48,8 +48,37 @@ pub(super) fn digests(path: &Path, settings: bool) -> Result<Vec<String>> {
     if settings && let Some(canonical) = without_cosmetic_key(&contents) {
         out.push(sha256_hex(&[link.as_slice(), &canonical].concat()));
     }
+    if !settings && let Some(canonical) = openclaw_without_servers(&contents) {
+        out.push(sha256_hex(&[link.as_slice(), &canonical].concat()));
+    }
     out.push(sha256_hex(&[link, contents].concat()));
     Ok(out)
+}
+
+/// An OpenClaw configuration that loads OpenMoat's plugin
+/// (`plugins.entries.openmoat`), read as JSON5, without `mcp.servers` and
+/// serialised compactly with sorted keys. The MCP pins (ADR-026) hold each
+/// server's definition, so a changed server holds back only its own tools;
+/// every other change, and one that removes OpenMoat's entry, is drift.
+/// Comments and formatting are not part of it: they change nothing OpenClaw
+/// reads.
+fn openclaw_without_servers(contents: &[u8]) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(contents).ok()?;
+    let mut value = crate::json5::parse(text).ok()?.value;
+    let plugin = format!("/plugins/entries/{}", crate::install::openclaw::PLUGIN_ID);
+    value.pointer(&plugin)?;
+    let top = value.as_object_mut()?;
+    if let Some(mcp) = top
+        .get_mut("mcp")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        mcp.remove("servers");
+        // The first server added brings `mcp` with it.
+        if mcp.is_empty() {
+            top.remove("mcp");
+        }
+    }
+    serde_json::to_vec(&value).ok()
 }
 
 /// The JSON object in `contents` without [`COSMETIC_KEY`], serialised compactly
@@ -135,6 +164,35 @@ mod tests {
             lock.verify_one(&path).is_some(),
             "an old pin is whole-file until re-pinned"
         );
+    }
+
+    #[test]
+    fn an_openclaw_configuration_is_pinned_without_its_mcp_servers() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("openclaw.json");
+        let ours = r#""plugins":{"entries":{"openmoat":{"enabled":true}}}"#;
+        fs::write(&path, format!("{{{ours}}}")).unwrap();
+        let lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&path)).unwrap();
+        // A server added, then changed, and comments: not drift (the MCP pins
+        // decide servers).
+        for text in [
+            format!(r#"{{{ours},"mcp":{{"servers":{{"a":{{"command":"x"}}}}}}}}"#),
+            format!(
+                r#"// note{}{{{ours},"mcp":{{"servers":{{"a":{{"command":"y"}}}}}}}}"#,
+                "\n"
+            ),
+        ] {
+            fs::write(&path, text).unwrap();
+            assert_eq!(lock.verify_one(&path), None);
+        }
+        // Anything else is.
+        let other_mcp = format!(r#"{{{ours},"mcp":{{"servers":{{}},"x":1}}}}"#);
+        let plugins_off = r#"{"plugins":{"entries":{"openmoat":{"enabled":false}}}}"#.to_owned();
+        let entry_gone = r#"{"mcp":{"servers":{}}}"#.to_owned();
+        for text in [other_mcp, plugins_off, entry_gone, "{".to_owned()] {
+            fs::write(&path, &text).unwrap();
+            assert!(lock.verify_one(&path).is_some(), "{text}");
+        }
     }
 
     #[test]

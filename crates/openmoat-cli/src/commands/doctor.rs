@@ -364,7 +364,13 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
         let name = host.display_name();
         // Every command follows the record; a variable naming another directory
         // is reported rather than silently ignored or followed.
-        if let (Some(env), Some(dir)) = (env_config_dir(host)?, recorded.dir(host))
+        if let Some(set_up) = config.openclaw_location() {
+            if recorded.dir(host).is_some()
+                && let Some(line) = crate::install::openclaw::location::env_disagrees(&set_up)?
+            {
+                report.line(Area::Hook, false, format!("{name:<16} {line}"));
+            }
+        } else if let (Some(env), Some(dir)) = (env_config_dir(host)?, recorded.dir(host))
             && env != dir
         {
             let (var, _) = dir_variable(host)?;

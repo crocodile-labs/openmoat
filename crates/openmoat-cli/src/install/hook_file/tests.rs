@@ -30,6 +30,7 @@ fn config(dir: &Path) -> HostConfig {
     HostConfig {
         host: Host::ClaudeCode,
         settings_path: dir.join("settings.json"),
+        dir: dir.to_path_buf(),
         hooks: SPECS,
         format: HookFormat::Nested,
         blocks_on_failure: || false,
@@ -131,6 +132,7 @@ fn codex_and_cursor_never_get_on_failure() {
     let codex = HostConfig {
         host: Host::Codex,
         settings_path: dir.path().join("hooks.json"),
+        dir: dir.path().to_path_buf(),
         hooks: &SPECS[..1],
         format: HookFormat::Nested,
         blocks_on_failure: || false,
@@ -156,6 +158,7 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
     let cfg = HostConfig {
         host: Host::Cursor,
         settings_path: dir.path().join("hooks.json"),
+        dir: dir.path().to_path_buf(),
         hooks: &[HookSpec {
             event: "beforeShellExecution",
             matcher: "",
@@ -284,6 +287,7 @@ fn remove_undoes_install_and_keeps_foreign_entries() {
     let cursor = HostConfig {
         host: Host::Cursor,
         settings_path: created.path().join("hooks.json"),
+        dir: created.path().to_path_buf(),
         hooks: &SPECS[..1],
         format: HookFormat::Cursor,
         blocks_on_failure: || true,

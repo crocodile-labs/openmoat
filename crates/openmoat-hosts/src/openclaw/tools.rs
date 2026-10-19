@@ -35,6 +35,36 @@ const PROCESS_READS: &[&str] = &["list", "poll", "log", "kill", "clear", "remove
 /// `plugins` actions that change nothing.
 const PLUGINS_READS: &[&str] = &["list", "inspect", "search"];
 
+/// `cron` actions that only read the scheduler, its jobs and their runs.
+const CRON_READS: &[&str] = &["status", "list", "get", "runs"];
+/// `cron` actions that store work the Gateway runs later: a job (`add`,
+/// `update`) or a job's next run (`next_check`). A job's payload is an agent
+/// turn, a system event, a script, or a command that "execute[s] directly in
+/// the Gateway process, not as an agent `tools.exec` tool call"
+/// (<https://docs.openclaw.ai/cli/cron>), so no later hook sees it.
+const CRON_SCHEDULES: &[&str] = &["add", "update", "next_check"];
+
+/// `nodes` actions that read the state of paired devices or of their pairing
+/// (<https://github.com/openclaw/openclaw/blob/main/src/agents/tools/nodes-tool.ts>).
+/// Media capture, location, notifications, pairing approval and the other
+/// actions act on the device or its owner: `tool.unknown`.
+const NODES_READS: &[&str] = &[
+    "status",
+    "describe",
+    "pending",
+    "camera_list",
+    "device_status",
+    "device_info",
+    "device_permissions",
+    "device_health",
+    "which",
+];
+
+/// OpenClaw's control-plane database in its state directory, which holds its
+/// automation jobs, approvals and plugin state
+/// (<https://docs.openclaw.ai/reference/database-schemas/layout>).
+const STATE_DATABASE: &str = "state/openclaw.sqlite";
+
 pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
     let tool = call.tool;
     let field = |name: &'static str| crate::input_str(call.params, tool, name);
@@ -95,6 +125,17 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
                 path: config_path(call)?,
             },
         },
+        // A job runs later from the Gateway, outside any hook: decided as a
+        // write to the database it is stored in, which `runs-later` asks for.
+        "cron" => match field("action")?.as_str() {
+            action if CRON_READS.contains(&action) => return Ok(None),
+            action if CRON_SCHEDULES.contains(&action) => Action::FsWrite {
+                path: state_database(call)?,
+            },
+            _ => unknown(call),
+        },
+        "nodes" => return nodes(call),
+        "view_image" => return view_image(call),
         name if UNGOVERNED.contains(&name) => return Ok(None),
         // OpenClaw names an MCP tool `<server>__<tool>`; built-in and plugin
         // tool ids have no `__`.
@@ -191,6 +232,112 @@ fn browser(call: &Call<'_>) -> Result<Action, HostError> {
         }
         _ => Ok(unknown(call)),
     }
+}
+
+/// `nodes` acts on paired devices. `invoke` relays `invokeCommand` to one,
+/// where it runs and no rule of this machine applies: a shell OpenMoat cannot
+/// read. OpenClaw keeps `system.run` out of `invoke`; a command on a node goes
+/// through `exec` with `host=node` (<https://docs.openclaw.ai/nodes/node-exec>),
+/// which is checked as a command. A capture saved to `outPath` is a write of it.
+fn nodes(call: &Call<'_>) -> Result<Option<Action>, HostError> {
+    let action = crate::input_str(call.params, call.tool, "action")?;
+    if NODES_READS.contains(&action.as_str()) {
+        return Ok(None);
+    }
+    if action == "invoke" {
+        crate::input_str(call.params, call.tool, "invokeCommand")?;
+        return Ok(Some(Action::ForeignShell {
+            shell: "OpenClaw node command".to_owned(),
+            command: call.params.to_string(),
+        }));
+    }
+    match call.params.get("outPath") {
+        None | Some(Value::Null) => Ok(Some(unknown(call))),
+        Some(Value::String(path)) if !path.is_empty() => Ok(Some(Action::FsWrite {
+            path: checked(call, path.clone())?,
+        })),
+        Some(_) => Err(malformed(call, "`outPath` is not a path".to_owned())),
+    }
+}
+
+/// `view_image` shows the model `path` or each of `paths`: a local image or a
+/// URL OpenClaw permits (<https://docs.openclaw.ai/tools>, "Media"). Local
+/// files are read; a URL alone is fetched; an inline `data:` image touches
+/// nothing. Several URLs alone name no one host: `tool.unknown`.
+fn view_image(call: &Call<'_>) -> Result<Option<Action>, HostError> {
+    let mut entries: Vec<String> = Vec::new();
+    match call.params.get("path") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(path)) if !path.is_empty() => entries.push(path.clone()),
+        Some(_) => return Err(malformed(call, "`path` is not a path".to_owned())),
+    }
+    match call.params.get("paths") {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(list)) => {
+            for item in list {
+                match item.as_str().filter(|p| !p.is_empty()) {
+                    Some(path) => entries.push(path.to_owned()),
+                    None => {
+                        return Err(malformed(call, "`paths` is not a list of paths".to_owned()));
+                    }
+                }
+            }
+        }
+        Some(_) => return Err(malformed(call, "`paths` is not a list of paths".to_owned())),
+    }
+    if entries.is_empty() {
+        return Err(HostError::MissingField {
+            tool: call.tool.to_owned(),
+            field: "path",
+        });
+    }
+    let scheme = |entry: &str, prefix: &str| {
+        entry
+            .get(..prefix.len())
+            .is_some_and(|s| s.eq_ignore_ascii_case(prefix))
+    };
+    let mut files = Vec::new();
+    let mut urls = Vec::new();
+    for entry in entries {
+        if scheme(&entry, "data:") {
+            continue;
+        }
+        if scheme(&entry, "http://") || scheme(&entry, "https://") {
+            urls.push(entry);
+        } else if scheme(&entry, "file://") {
+            files.push(checked(call, entry["file://".len()..].to_owned())?);
+        } else {
+            files.push(checked(call, entry)?);
+        }
+    }
+    Ok(match (files.as_slice(), urls.as_slice()) {
+        ([], []) => None,
+        ([], [url]) => Some(Action::Fetch { url: url.clone() }),
+        ([], _) => Some(unknown(call)),
+        ([one], _) => Some(Action::FsRead { path: one.clone() }),
+        (many, _) => Some(Action::ReadFiles {
+            paths: many.to_vec(),
+        }),
+    })
+}
+
+/// OpenClaw's control-plane database: in `stateDir`, or beside `configPath`
+/// for a plugin from before the plugin sent `stateDir` (the default layout
+/// keeps the configuration in the state directory).
+fn state_database(call: &Call<'_>) -> Result<String, HostError> {
+    let missing = || HostError::MissingField {
+        tool: call.tool.to_owned(),
+        field: "stateDir",
+    };
+    let dir = match (call.state_dir, call.config_path) {
+        (Some(dir), _) => dir.trim_end_matches(['/', '\\']),
+        (None, Some(config)) => config.rsplit_once(['/', '\\']).ok_or_else(missing)?.0,
+        (None, None) => return Err(missing()),
+    };
+    if dir.is_empty() || is_relative(dir) {
+        return Err(missing());
+    }
+    Ok(format!("{dir}/{STATE_DATABASE}"))
 }
 
 /// The file tools take `path`; their renderers also read `file_path`, so both

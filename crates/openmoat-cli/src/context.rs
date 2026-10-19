@@ -99,10 +99,21 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
     let recorded = crate::install::Recorded::load(state)?;
     let mut out = Vec::new();
     let mut dirs = vec![(home::ENV, home::DIR_NAME, None)];
-    for host in Host::ALL {
+    // OpenClaw's variables do more than name a directory (`openclaw_moved`).
+    for host in Host::ALL.into_iter().filter(|h| *h != Host::OpenClaw) {
         let (var, name) = crate::install::dir_variable(host)?;
         dirs.push((var, name, Some(host)));
     }
+    let mut add = |default: &str, dir: &Path| -> Result<()> {
+        let dir = path_string(&absolute(dir)?);
+        for spelling in real_root(&dir).into_iter().chain([dir]) {
+            let pair = (default.to_owned(), spelling);
+            if !out.contains(&pair) {
+                out.push(pair);
+            }
+        }
+        Ok(())
+    };
     for (var, name, host) in dirs {
         let default = format!("~/{name}");
         let from_env = std::env::var_os(var)
@@ -111,13 +122,33 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
         let at_home = home::user_home()?.join(name);
         let from_record = host.and_then(|h| recorded.dir(h)).filter(|d| *d != at_home);
         for dir in from_env.into_iter().chain(from_record) {
-            let dir = path_string(&absolute(&dir)?);
-            for spelling in real_root(&dir).into_iter().chain([dir]) {
-                let pair = (default.clone(), spelling);
-                if !out.contains(&pair) {
-                    out.push(pair);
-                }
-            }
+            add(&default, &dir)?;
+        }
+    }
+    for (default, dir) in openclaw_moved(&recorded)? {
+        add(default, &dir)?;
+    }
+    Ok(out)
+}
+
+/// OpenClaw's state directory and configuration file where this shell's
+/// environment (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR`, `OPENCLAW_CONFIG_PATH`)
+/// or `moat init`'s record puts them, each paired with the default it replaces
+/// when it is not there.
+fn openclaw_moved(recorded: &crate::install::Recorded) -> Result<Vec<(&'static str, PathBuf)>> {
+    use crate::install::openclaw::Location;
+    let mut locations: Vec<Location> = Location::from_env()?.into_iter().collect();
+    if let Some(dir) = recorded.dir(Host::OpenClaw) {
+        locations.push(Location::at(dir, recorded.file(Host::OpenClaw)));
+    }
+    let default = Location::default_for(&home::user_home()?);
+    let mut out = Vec::new();
+    for location in locations {
+        if location.state_dir != default.state_dir {
+            out.push(("~/.openclaw", location.state_dir.clone()));
+        }
+        if !location.config_is_default() {
+            out.push(("~/.openclaw/openclaw.json", location.config));
         }
     }
     Ok(out)

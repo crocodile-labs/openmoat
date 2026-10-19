@@ -57,7 +57,8 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         let strip =
             |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root, owned));
         let path = &config.settings_path;
-        let mut files = vec![(path.clone(), undo_json(path, ours, strip)?)];
+        let openclaw = host == Host::OpenClaw;
+        let mut files = vec![(path.clone(), undo_host_json(path, ours, strip, openclaw)?)];
         if host == Host::Codex {
             let path = codex_config_path(&home)?;
             files.push((path.clone(), undo_toml(&path, ours)?));
@@ -91,6 +92,9 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
     let before = recorded.dirs.len();
     recorded
         .dirs
+        .retain(|id, _| !hosts.iter().any(|h| h.id() == id));
+    recorded
+        .files
         .retain(|id, _| !hosts.iter().any(|h| h.id() == id));
     let forgot_rules = hosts.contains(&Host::ClaudeCode) && !recorded.claude_rules.is_empty();
     if forgot_rules {
@@ -164,21 +168,42 @@ fn undo_json(
     ours: &[PathBuf],
     strip: impl Fn(&mut Value) -> bool,
 ) -> Result<Option<Undone>> {
+    undo_host_json(path, ours, strip, false)
+}
+
+/// [`undo_json`]; `openclaw` reads the file and its backups as JSON5 and
+/// refuses to write back a file whose comments that would drop.
+fn undo_host_json(
+    path: &Path,
+    ours: &[PathBuf],
+    strip: impl Fn(&mut Value) -> bool,
+    openclaw: bool,
+) -> Result<Option<Undone>> {
     if !path.is_file() {
         return Ok(None);
     }
-    let mut root = read_or_empty(path)?;
+    let read = |p: &Path| {
+        if openclaw {
+            install::openclaw::read(p)
+        } else {
+            read_or_empty(p)
+        }
+    };
+    let mut root = read(path)?;
     if !strip(&mut root) {
         return Ok(None);
     }
     let backups = install::backups(path);
     let originals: Vec<(&PathBuf, Value)> = backups
         .iter()
-        .filter_map(|b| Some((b, read_or_empty(b).ok()?)))
+        .filter_map(|b| Some((b, read(b).ok()?)))
         .filter(|(_, v)| !strip(&mut v.clone()))
         .collect();
     let original = originals.iter().find(|(_, v)| *v == root).map(|(b, _)| *b);
     let created = originals.is_empty() && root == json!({});
+    if openclaw && original.is_none() && !created {
+        install::openclaw::read_for_edit(path)?;
+    }
     let text = serde_json::to_string_pretty(&root)? + "\n";
     finish(path, &owned(&backups, ours), original, created, &text).map(Some)
 }

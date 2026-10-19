@@ -631,8 +631,10 @@ ask:
     fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json",
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
-      # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
-      "~/.openclaw/extensions/**", "**/.openclaw/extensions/**"]
+      # OpenClaw plugins, which its Gateway loads and runs with the agent's rights, and
+      # its control-plane database, which holds the cron jobs the Gateway runs later
+      # (an OpenClaw `cron` add or update is decided as a write of it)
+      "~/.openclaw/extensions/**", "**/.openclaw/extensions/**", "~/.openclaw/state/**"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

@@ -6,6 +6,12 @@
 //! - Codex: `config.toml` beside its hook file (`[mcp_servers.<name>]`), and a
 //!   project's `.codex/config.toml`.
 //! - Cursor: `mcp.json` beside its hook file, and a project's `.cursor/mcp.json`.
+//! - OpenClaw: `mcp.servers.<name>` in `openclaw.json` (JSON5), wherever
+//!   `OPENCLAW_CONFIG_PATH` or the state directory puts it
+//!   (<https://docs.openclaw.ai/tools/mcp>, "Server definitions live under
+//!   `mcp.servers`"). The lock pins the rest of that file whole
+//!   (`integrity/digest.rs`). Plugin bundles bring their own `.mcp.json`; they
+//!   are plugin code, which `runs-later` asks before an agent writes.
 //!
 //! Project files are looked for in the working directory and each directory above
 //! it up to the project root. A file that does not exist lists no servers.
@@ -30,6 +36,8 @@ pub enum Layout {
     ClaudeJson,
     /// Codex `config.toml`: `[mcp_servers.<name>]`.
     Toml,
+    /// OpenClaw `openclaw.json`, JSON5: `{mcp: {servers: {"<name>": {...}}}}`.
+    OpenClaw,
 }
 
 /// A file one host reads MCP servers from.
@@ -82,10 +90,16 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
             Some((cursor_mcp_json(home)?, Layout::Json)),
             Some((PathBuf::from(".cursor/mcp.json"), Layout::Json)),
         ),
+        // OpenClaw's documentation names no project file of MCP servers.
+        Host::OpenClaw => (
+            Some((
+                HostConfig::for_host(home, Host::OpenClaw)?.settings_path,
+                Layout::OpenClaw,
+            )),
+            None,
+        ),
         // `cn` reads its own configuration and fires no hook (install.rs).
-        // OpenClaw keeps its MCP servers in `openclaw.json` (JSON5), which the
-        // lock pins whole; its servers are not pinned one by one yet.
-        Host::Continue | Host::OpenClaw => (None, None),
+        Host::Continue => (None, None),
     };
     let mut out = Vec::new();
     if let Some((path, layout)) = user {
@@ -203,8 +217,38 @@ pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
                 }
             }
         }
+        Layout::OpenClaw => {
+            let root = crate::install::openclaw::parse(text)
+                .context("parsing JSON5")?
+                .value;
+            refuse_include(&root)?;
+            if let Some(servers) = root.pointer("/mcp/servers").and_then(Value::as_object) {
+                for (name, entry) in servers {
+                    add(format!("/mcp/servers/{}", escape(name)), name, entry);
+                }
+            }
+        }
     }
     Ok(out)
+}
+
+/// OpenClaw merges in the files an `$include` key names; one where MCP
+/// servers may come from hides which servers OpenClaw starts.
+fn refuse_include(root: &Value) -> Result<()> {
+    for at in ["", "/mcp", "/mcp/servers"] {
+        if root
+            .pointer(at)
+            .and_then(Value::as_object)
+            .is_some_and(|o| o.contains_key("$include"))
+        {
+            let place = if at.is_empty() { "the top level" } else { at };
+            anyhow::bail!(
+                "`$include` at {place} may bring MCP servers from another file, which OpenMoat \
+                 does not read; move `mcp.servers` into this file"
+            );
+        }
+    }
+    Ok(())
 }
 
 /// The `(name, entry)` pairs of the object at `key` in `value`.
@@ -311,6 +355,36 @@ mod tests {
             serde_json::json!({"command": "docs-server", "args": ["--port", "4000"],
                 "env": {"TOKEN": "t"}, "startup_timeout_sec": 20})
         );
+    }
+
+    #[test]
+    fn openclaw_servers_are_read_from_json5() {
+        let openclaw = Source {
+            host: Host::OpenClaw,
+            path: PathBuf::from("/h/.openclaw/openclaw.json"),
+            ..source(Layout::OpenClaw)
+        };
+        let text = "// mine\n{ mcp: { servers: { 'my/docs': { url: 'https://x/mcp', \
+                    transport: 'streamable-http', }, }, }, gateway: { port: 1 } }";
+        let servers = parse(&openclaw, text).unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(
+            servers[0].id,
+            "/h/.openclaw/openclaw.json#/mcp/servers/my~1docs"
+        );
+        assert_eq!(servers[0].name, "my/docs");
+        assert_eq!(servers[0].entry["transport"], "streamable-http");
+        assert!(parse(&openclaw, "").unwrap().is_empty());
+        assert!(parse(&openclaw, "{ gateway: {} }").unwrap().is_empty());
+        for include in [
+            r#"{"$include": "./more.json5"}"#,
+            r#"{"mcp": {"servers": {"$include": ["./a.json5"]}}}"#,
+        ] {
+            let refused = parse(&openclaw, include).unwrap_err().to_string();
+            assert!(refused.contains("$include"), "{refused}");
+        }
+        // An `$include` elsewhere cannot bring servers.
+        assert!(parse(&openclaw, r#"{"agents": {"$include": "./a.json5"}}"#).is_ok());
     }
 
     #[test]
