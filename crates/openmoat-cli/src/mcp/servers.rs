@@ -70,12 +70,15 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
     let Some(mcp) = &host.spec().mcp else {
         return Ok(Vec::new());
     };
-    let mut out = vec![Source {
-        host,
-        path: user_file(home, host, mcp.user_file)?,
-        layout: mcp.user_layout,
-        user: true,
-    }];
+    let mut out: Vec<Source> = user_files(home, host, mcp.user_file)?
+        .into_iter()
+        .map(|path| Source {
+            host,
+            path,
+            layout: mcp.user_layout,
+            user: true,
+        })
+        .collect();
     if let (Some((relative, layout)), Some(cwd)) = (mcp.project_file, cwd) {
         for dir in project_dirs(cwd)? {
             out.push(Source {
@@ -89,19 +92,25 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
     Ok(out)
 }
 
-/// Where `file`, `host`'s user-level MCP server file, is.
-fn user_file(home: &Home, host: Host, file: McpFile) -> Result<PathBuf> {
+/// Where `file`, `host`'s user-level MCP server file, can be. Claude Code reads
+/// `.claude.json` from the home directory unless `CLAUDE_CONFIG_DIR` is set, and
+/// from inside that directory when it is, even when it names the default
+/// `~/.claude`. A moved directory is always named by the variable; for the
+/// default one the environment `moat` runs in need not be the agent's, so both
+/// files are read.
+fn user_files(home: &Home, host: Host, file: McpFile) -> Result<Vec<PathBuf>> {
     let config = HostConfig::for_host(home, host)?;
     Ok(match file {
-        McpFile::HookFile => config.settings_path,
-        McpFile::BesideHookFile(name) => config.settings_path.with_file_name(name),
+        McpFile::HookFile => vec![config.settings_path],
+        McpFile::BesideHookFile(name) => vec![config.settings_path.with_file_name(name)],
         McpFile::BesideDefaultDir(name) => {
             let user = user_home()?;
             let default = host.spec().install.as_ref().map(|i| user.join(i.dir_name));
+            let inside = config.dir().join(name);
             if default.is_some_and(|d| config.dir() == d) {
-                user.join(name)
+                vec![user.join(name), inside]
             } else {
-                config.dir().join(name)
+                vec![inside]
             }
         }
     })
