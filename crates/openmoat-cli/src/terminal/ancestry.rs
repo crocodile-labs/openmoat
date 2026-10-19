@@ -31,11 +31,18 @@ pub(super) struct Process {
 
 /// Executable names of the agent hosts, and `moat` itself: `moat run` is the
 /// parent of the agent it starts.
-const AGENTS: &[&str] = &["claude", "codex", "cursor-agent", "moat"];
+const AGENTS: &[&str] = &["claude", "codex", "cursor-agent", "openclaw", "moat"];
 
 /// Directories the agents install their code under, for an agent that runs
 /// as `node <dir>/…/cli.js` or from a versioned file (`claude/versions/2.1.0`).
-const AGENT_DIRS: &[&[&str]] = &[&["claude", "versions"], &["claude-code"], &["cursor-agent"]];
+/// OpenClaw's command is `openclaw.mjs` (its package `bin`); `openclaw/dist`
+/// covers a Gateway started from the package's built files.
+const AGENT_DIRS: &[&[&str]] = &[
+    &["claude", "versions"],
+    &["claude-code"],
+    &["cursor-agent"],
+    &["openclaw", "dist"],
+];
 
 /// More ancestors than any real process tree has; a longer chain is a loop.
 const MAX_DEPTH: usize = 256;

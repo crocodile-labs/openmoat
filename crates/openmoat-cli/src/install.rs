@@ -4,6 +4,7 @@ mod binary;
 mod claude_version;
 mod dirs;
 mod hook_file;
+pub mod openclaw;
 pub mod self_paths;
 
 use std::fs;
@@ -153,6 +154,24 @@ const CURSOR_HOOKS: &[HookSpec] = &[
     },
 ];
 
+/// Milliseconds OpenClaw waits for OpenMoat's `before_tool_call` handler
+/// before it blocks the call (`plugins.entries.openmoat.hooks.timeouts`; its
+/// own default is 15 s). OpenClaw asks the person after the handler returns,
+/// so this only has to outlast the plugin's wait for `moat guard` (45 s,
+/// `integrations/openclaw/openmoat.mjs`), which outlasts [`GUARD_BUDGET_S`].
+pub const OPENCLAW_HOOK_TIMEOUT_S: u64 = 60;
+const _: () = assert!(GUARD_BUDGET_S < OPENCLAW_HOOK_TIMEOUT_S);
+
+/// OpenClaw runs `before_tool_call` for every tool, and blocks the call when
+/// the handler throws or times out
+/// (<https://docs.openclaw.ai/plugins/hooks/reference>, "Fail closed").
+const OPENCLAW_HOOKS: &[HookSpec] = &[HookSpec {
+    event: "before_tool_call",
+    matcher: "",
+    timeout: OPENCLAW_HOOK_TIMEOUT_S,
+    block_on_failure: false,
+}];
+
 /// How a host's hook file is laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookFormat {
@@ -162,6 +181,9 @@ pub enum HookFormat {
     /// `{"version": 1, "hooks": {"<event>": [{"command": "<shell string>", "timeout", "failClosed"}]}}`
     /// (Cursor `hooks.json`). Cursor is fail-open unless `failClosed` is set.
     Cursor,
+    /// OpenClaw `openclaw.json`: OpenMoat's plugin file in `plugins.load.paths`
+    /// and its `plugins.entries.openmoat` ([`openclaw`]).
+    OpenClaw,
 }
 
 /// Where a host keeps its hook configuration and which events we subscribe to.
@@ -184,6 +206,9 @@ pub fn dir_variable(host: Host) -> Result<(&'static str, &'static str)> {
         Host::ClaudeCode => ("CLAUDE_CONFIG_DIR", ".claude"),
         Host::Codex => ("CODEX_HOME", ".codex"),
         Host::Cursor => ("CURSOR_CONFIG_DIR", ".cursor"),
+        // OpenClaw's state directory, which holds `openclaw.json`
+        // (<https://docs.openclaw.ai/help/environment>).
+        Host::OpenClaw => ("OPENCLAW_STATE_DIR", ".openclaw"),
         Host::Continue => {
             bail!("the Continue CLI runs the Claude Code hook; it has none of its own")
         }
@@ -222,6 +247,7 @@ impl HostConfig {
         let (file, hooks, format) = match host {
             Host::ClaudeCode => ("settings.json", CLAUDE_CODE_HOOKS, HookFormat::Nested),
             Host::Codex => ("hooks.json", CODEX_HOOKS, HookFormat::Nested),
+            Host::OpenClaw => ("openclaw.json", OPENCLAW_HOOKS, HookFormat::OpenClaw),
             _ => ("hooks.json", CURSOR_HOOKS, HookFormat::Cursor),
         };
         let blocks_on_failure: fn() -> bool = match host {

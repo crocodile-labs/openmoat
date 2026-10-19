@@ -172,6 +172,11 @@ fn gaps(host: Host) -> &'static str {
              are not confined; file-tool asks become denies; Task and tools that name no path \
              are not hooked; a failed hook blocks the call"
         }
+        Host::OpenClaw => {
+            "no OS sandbox from OpenMoat; a parameter rewrite by another plugin and \
+             OpenClaw's process input are not checked; calls run unchecked if the Gateway does \
+             not load the plugin; a failed or slow hook blocks the call"
+        }
         Host::Continue => CONTINUE_CLI_WARNING,
     }
 }

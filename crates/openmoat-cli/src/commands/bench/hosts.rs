@@ -100,6 +100,17 @@ pub fn classify(host: Host, call: &Call, reply: &Reply) -> Answer {
             (Some("ask"), Call::Shell(_) | Call::Mcp { .. }) => Answer::Ask,
             _ => Answer::Error,
         },
+        // OpenMoat's OpenClaw plugin: nothing on exit 0 is no decision, an ask
+        // becomes OpenClaw's approval request, exit 2 with a deny blocks, and
+        // anything else blocks too (`integrations/openclaw/openmoat.mjs`).
+        (Host::OpenClaw, Some(0)) if stdout.trim().is_empty() => Answer::Passthrough,
+        (Host::OpenClaw, Some(0)) => match document["decision"].as_str() {
+            Some("allow") => Answer::Passthrough,
+            Some("ask") => Answer::Ask,
+            _ => Answer::Error,
+        },
+        (Host::OpenClaw, Some(2)) if document["decision"] == "deny" => Answer::Deny,
+        (Host::OpenClaw, _) => Answer::Error,
         // Codex blocks on exit 2 only with a reason on stderr.
         (Host::Codex, Some(2)) if stderr.trim().is_empty() => Answer::Error,
         (_, Some(2)) => Answer::Deny,
@@ -135,6 +146,12 @@ pub fn failure(host: Host) -> &'static str {
             "runs the call when the hook is missing, crashes or times out, unless the hook \
              entry sets `failClosed: true`; then it blocks the call"
         }
+        Host::OpenClaw => {
+            "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
+             `before_tool_call` fails closed), and the plugin blocks when `moat` is missing, \
+             crashes or does not answer; runs the call unchecked when the Gateway does not \
+             load the plugin"
+        }
         Host::ClaudeCode | Host::Continue => {
             "runs the call when the hook is missing, cannot start, exits non-zero other \
              than 2, or times out (default 600 s)"
@@ -147,6 +164,7 @@ pub fn failure(host: Host) -> &'static str {
 pub fn payload(host: Host, call: &Call, at: &Place<'_>) -> Option<String> {
     let (tool, input) = match (host, call) {
         (Host::Cursor, _) => return cursor(call, at).map(|v| v.to_string()),
+        (Host::OpenClaw, _) => return Some(openclaw(call, at).to_string()),
         (_, Call::Shell(command)) => ("Bash".to_owned(), json!({ "command": command })),
         (Host::ClaudeCode, Call::Read(path)) => {
             ("Read".to_owned(), json!({ "file_path": at.file(path) }))
@@ -216,6 +234,32 @@ impl Place<'_> {
         };
         full.to_string_lossy().into_owned()
     }
+}
+
+/// What OpenMoat's OpenClaw plugin sends (`openmoat-hosts` `openclaw.rs`). The
+/// platform is always a POSIX one: on Windows OpenClaw's `exec` runs PowerShell,
+/// which OpenMoat leaves to OpenClaw, so the bench scores the shell it reads.
+fn openclaw(call: &Call, at: &Place<'_>) -> Value {
+    let (tool, params) = match call {
+        Call::Shell(command) => ("exec".to_owned(), json!({ "command": command })),
+        Call::Read(path) => ("read".to_owned(), json!({ "path": at.file(path) })),
+        Call::Write(path) => (
+            "write".to_owned(),
+            json!({ "path": at.file(path), "content": CONTENT }),
+        ),
+        Call::Edit(path) => (
+            "edit".to_owned(),
+            json!({ "path": at.file(path), "edits": [{ "oldText": "old", "newText": CONTENT }] }),
+        ),
+        Call::Fetch(url) => ("web_fetch".to_owned(), json!({ "url": url })),
+        Call::Mcp { server, tool, args } => (format!("{server}__{tool}"), args.clone()),
+    };
+    let config = at.home.join(".openclaw").join("openclaw.json");
+    json!({
+        "hook_event_name": "before_tool_call", "toolName": tool, "params": params,
+        "toolCallId": at.call_id, "sessionId": at.session, "cwd": at.cwd(),
+        "configPath": config.to_string_lossy(), "platform": "linux",
+    })
 }
 
 fn cursor(call: &Call, at: &Place<'_>) -> Option<Value> {

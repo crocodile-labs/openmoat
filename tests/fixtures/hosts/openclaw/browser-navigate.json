@@ -1,0 +1,7 @@
+{
+  "hook_event_name": "before_tool_call",
+  "toolName": "browser", "params": { "action": "navigate", "url": "https://example.com/" },
+  "toolCallId": "call-browser-1", "runId": "run-1",
+  "sessionId": "sess-1", "sessionKey": "agent:main:main", "agentId": "main",
+  "cwd": "/p", "configPath": "/Users/me/.openclaw/openclaw.json", "platform": "darwin"
+}

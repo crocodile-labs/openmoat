@@ -290,9 +290,13 @@ these takes one command in your own terminal (agents are denied all of them):
   set up and puts each settings file back as it was; restart the agent afterwards. Your
   policy and audit log stay in `~/.moat` (add `--purge` to delete them too). For one agent
   only: `moat uninstall --hosts claude-code`. `moat init` sets it up again.
+- **OpenClaw**: `moat init --hosts openclaw` writes OpenMoat's plugin and adds it to
+  `~/.openclaw/openclaw.json`; restart the Gateway (`openclaw gateway restart`) so it
+  loads it. An `ask` arrives as OpenClaw's own approval request (`/approve`, the Control
+  UI or your channel's buttons).
 - **The `moat` binary is missing or broken**: Claude Code and Codex then run tool calls
   without the hook ("When the hook fails" in [THREAT_MODEL.md](THREAT_MODEL.md)), and Cursor
-  blocks them. Reinstall it (`brew reinstall crocodile-labs/tap/moat`, or the installer in
+  and OpenClaw block them. Reinstall it (`brew reinstall crocodile-labs/tap/moat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `moat uninstall` if you want it off.
 
 ## Commands

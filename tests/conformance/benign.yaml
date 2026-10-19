@@ -68,6 +68,16 @@
   threat: T9
   action: { fs_read: "~/.moat/policy.yaml" }
   expect: { verdict: defer, rules: [default] }
+# OpenClaw's default workspace is inside its state directory: `kernel-self`
+# guards the directory, its configuration and OpenMoat's plugin, not the work
+- id: benign-write-openclaw-workspace
+  threat: T9
+  action: { fs_write: "~/.openclaw/workspace/notes.md" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-openclaw-config
+  threat: T9
+  action: { fs_read: "~/.openclaw/openclaw.json" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-read-repository-policy
   threat: T9
   action: { fs_read: "/p/.moat/policy.yaml" }

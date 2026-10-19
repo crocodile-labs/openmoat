@@ -124,6 +124,8 @@
         "/**/.cursor/hooks.json",
         "/**/.cursor/sandbox.json",
         "/**/.codex/hooks.json",
+        "/Users/me/.openclaw/openclaw.json",
+        "/Users/me/.openclaw/openmoat",
         "/**/.moat/**",
         "/**/bin/moat",
         "/**/bin/moat.exe",

@@ -12,6 +12,7 @@ mod config_change;
 mod continue_cli;
 mod cursor;
 mod mcp;
+mod openclaw;
 mod pre_tool_use;
 
 pub use config_change::proposal_target;
@@ -160,11 +161,13 @@ pub enum Host {
     /// of its own to install, so it is not in [`Host::ALL`]; `guard` recognises
     /// it with [`Host::sender`].
     Continue,
+    /// OpenClaw, through OpenMoat's plugin and its `before_tool_call` hook.
+    OpenClaw,
 }
 
 impl Host {
     /// Every host with a hook to install, in the order commands list them.
-    pub const ALL: [Host; 3] = [Host::ClaudeCode, Host::Codex, Host::Cursor];
+    pub const ALL: [Host; 4] = [Host::ClaudeCode, Host::Codex, Host::Cursor, Host::OpenClaw];
 
     /// The identifier used on the command line and in the audit log.
     #[must_use]
@@ -174,6 +177,7 @@ impl Host {
             Self::Codex => "codex",
             Self::Cursor => "cursor",
             Self::Continue => "continue",
+            Self::OpenClaw => "openclaw",
         }
     }
 
@@ -185,6 +189,7 @@ impl Host {
             Self::Codex => "Codex",
             Self::Cursor => "Cursor",
             Self::Continue => "Continue CLI",
+            Self::OpenClaw => "OpenClaw",
         }
     }
 
@@ -209,7 +214,8 @@ impl Host {
             (Self::Cursor, Some(event)) if cursor::EVENTS.contains(&event) => {
                 cursor::parse(self, payload)
             }
-            (Self::Cursor, _) => Err(HostError::WrongEvent(
+            (Self::OpenClaw, Some(openclaw::EVENT)) => openclaw::parse(self, payload),
+            (Self::Cursor | Self::OpenClaw, _) => Err(HostError::WrongEvent(
                 envelope.hook_event_name.unwrap_or_default(),
             )),
             (_, None | Some(pre_tool_use::EVENT)) => pre_tool_use::parse(self, payload),
@@ -287,6 +293,7 @@ impl Host {
     pub fn render_response(self, event: &HookEvent, decision: &Decision) -> String {
         match (self, event) {
             (Self::Cursor, _) => cursor::render(decision),
+            (Self::OpenClaw, _) => openclaw::render(decision),
             (_, HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk) => {
                 pre_tool_use::render(decision)
             }
@@ -366,7 +373,7 @@ pub struct HookRequest {
 #[non_exhaustive]
 pub enum HostError {
     /// `--host` named no supported host.
-    #[error("unknown host `{0}`; supported: claude-code, codex, cursor")]
+    #[error("unknown host `{0}`; supported: claude-code, codex, cursor, openclaw")]
     UnknownHost(String),
     /// The payload is not JSON or does not fit the host's schema.
     #[error("{problem}: {0}", problem = json_problem(.0))]

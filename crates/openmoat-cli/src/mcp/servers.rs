@@ -83,7 +83,9 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
             Some((PathBuf::from(".cursor/mcp.json"), Layout::Json)),
         ),
         // `cn` reads its own configuration and fires no hook (install.rs).
-        Host::Continue => (None, None),
+        // OpenClaw keeps its MCP servers in `openclaw.json` (JSON5), which the
+        // lock pins whole; its servers are not pinned one by one yet.
+        Host::Continue | Host::OpenClaw => (None, None),
     };
     let mut out = Vec::new();
     if let Some((path, layout)) = user {

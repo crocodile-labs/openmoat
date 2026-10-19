@@ -28,6 +28,14 @@ fn agent_hosts_are_known_by_program_or_script() {
             "cursor-agent",
         ),
         ("cursor-agent", "cursor-agent"),
+        (
+            "node /usr/local/lib/node_modules/openclaw/openclaw.mjs gateway",
+            "openclaw",
+        ),
+        (
+            "/usr/local/bin/node /Users/me/.npm-global/lib/node_modules/openclaw/dist/index.js gateway",
+            "openclaw",
+        ),
         ("/usr/local/bin/moat run -- claude", "moat"),
     ] {
         assert_eq!(agent_name(&argv(line)).as_deref(), Some(agent), "{line}");
@@ -44,6 +52,7 @@ fn a_persons_shell_and_tools_are_not_agents() {
         "tmux new -s claude",
         "/Users/me/moat/bin/build.sh",
         "/Users/me/src/openmoat/target/debug/deps/e2e-1234",
+        "/Users/me/work/openclaw/scripts/ci/quality-gate.sh",
         "vim claude.md",
         "sshd: me@pts/0",
     ] {
