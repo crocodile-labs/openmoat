@@ -154,6 +154,19 @@ fn verify_names_the_edited_line() {
     assert_eq!(missing.status.code(), Some(USAGE), "{}", text(&missing));
 }
 
+/// Every string in `value`, keys included.
+fn strings_of(value: &Value) -> Vec<String> {
+    match value {
+        Value::String(s) => vec![s.clone()],
+        Value::Array(items) => items.iter().flat_map(strings_of).collect(),
+        Value::Object(map) => map
+            .iter()
+            .flat_map(|(k, v)| std::iter::once(k.clone()).chain(strings_of(v)))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 #[test]
 fn the_doctor_bundle_keeps_no_command_path_or_token() {
     let sb = seeded();
@@ -170,6 +183,10 @@ fn the_doctor_bundle_keeps_no_command_path_or_token() {
         text(&out)
     );
     let bundle = std::fs::read_to_string(&file).unwrap();
+    let value: Value = serde_json::from_str(&bundle).unwrap();
+    // The decoded strings, so a Windows path is checked as written, not as
+    // JSON escapes it (`C:\\Users`).
+    let strings = strings_of(&value).join("\n");
     for absent in [
         token.as_str(),
         TOKEN,
@@ -179,13 +196,13 @@ fn the_doctor_bundle_keeps_no_command_path_or_token() {
         "git status",
         "gamma",
     ] {
-        assert!(!bundle.contains(absent), "`{absent}` in {bundle}");
+        assert!(!strings.contains(absent), "`{absent}` in {bundle}");
     }
-    let value: Value = serde_json::from_str(&bundle).unwrap();
     let decisions = value["audit"]["recent_decisions"].as_array().unwrap();
     assert!(decisions.len() >= 4, "{bundle}");
     assert_eq!(decisions[0]["tool"], "Bash");
-    assert!(bundle.contains("~/.moat"), "{bundle}");
+    let state = std::path::Path::new("~").join(".moat");
+    assert!(strings.contains(&*state.to_string_lossy()), "{bundle}");
 
     let again = sb.moat_as_person(&["doctor", "--bundle", &file.to_string_lossy()]);
     assert_eq!(again.status.code(), Some(USAGE), "{}", text(&again));
