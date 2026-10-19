@@ -371,7 +371,7 @@ mod tests {
                 other("ex", None, Some("~/.config/example/token")),
                 "fs.read",
             ),
-            (other("db", Some("DATABASE_URL"), None), "env.read"),
+            (other("db", Some("WEBHOOK_SALT"), None), "env.read"),
         ] {
             let with = with_entry(DEFAULT_POLICY, &s).unwrap();
             assert!(exposed_source(&Policy::parse(&with).unwrap(), &s).is_some());
@@ -385,9 +385,11 @@ mod tests {
                 "the id is taken"
             );
         }
-        // `*_KEY` is already denied by `env-secrets`, and `~/.ssh` by `secrets-paths`
+        // `*_KEY` and `DATABASE_URL` are already denied by `env-secrets`, and
+        // `~/.ssh` by `secrets-paths`
         for s in [
             other("stripe", Some("STRIPE_API_KEY"), None),
+            other("db", Some("DATABASE_URL"), None),
             other("ssh", None, Some("~/.ssh/deploy_token")),
         ] {
             let with = with_entry(DEFAULT_POLICY, &s).unwrap();

@@ -1069,7 +1069,7 @@
 - id: benign-su-without-command
   action: { shell: "su - me" }
   expect: { verdict: defer, rules: [default] }
-# the Maven and Gradle caches and downloaded artifacts
+# the Maven and Gradle caches and downloaded artefacts
 - id: benign-read-maven-repository
   action: { shell: "cat ~/.m2/repository/org/x/x/1.0/x-1.0.pom" }
   expect: { verdict: defer, rules: [default] }
