@@ -23,6 +23,7 @@ view at the end of the file.
 ### Changed
 - The push check gives git 10 s instead of 2 s before a push asks as unchecked (`push-unchecked`): starting git can take seconds on Windows and on a loaded machine ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
 - The audit database moves to schema version 4 to record file provenance. Older `moat` builds cannot open a version-4 audit database ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
+- `moat run`'s first line names its proxy's loopback port again (`network only through OpenMoat's proxy on 127.0.0.1:<port>`) ([#578](https://github.com/crocodile-labs/openmoat/pull/578)).
 
 ## [0.5.7] - 2026-10-18
 

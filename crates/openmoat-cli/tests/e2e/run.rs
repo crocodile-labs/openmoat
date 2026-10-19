@@ -216,8 +216,9 @@ pub mod confined {
     #[test]
     fn only_a_refused_connection_to_the_proxy_is_retried() {
         use std::os::unix::process::ExitStatusExt as _;
-        let notice = "moat run: /bin/sh in a sandbox\n  network: only through OpenMoat's \
-                      proxy on 127.0.0.1:49205 (audit session proxy-1)\n";
+        // The notice `moat run` prints (commands/run.rs): the retry finds the port in it.
+        let notice = "moat run: /bin/sh in a sandbox made from the policy, network only \
+                      through OpenMoat's proxy on 127.0.0.1:49205 (audit session run-1)\n";
         let output = |curl: &str| Output {
             status: std::process::ExitStatus::from_raw(0),
             stdout: Vec::new(),

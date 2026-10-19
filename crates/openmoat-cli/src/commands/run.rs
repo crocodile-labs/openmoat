@@ -239,7 +239,7 @@ fn notice(program: &Path, port: u16, session: &str, report: &Report, args: &RunA
     writeln!(
         err,
         "moat run: {} in a sandbox made from the policy{sees}, network only through \
-         OpenMoat's proxy (audit session {session})",
+         OpenMoat's proxy on 127.0.0.1:{port} (audit session {session})",
         program.display()
     )?;
     if args.verbose {
