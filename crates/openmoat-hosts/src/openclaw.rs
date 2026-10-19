@@ -6,9 +6,10 @@
 //! `moat guard --host openclaw` with this JSON on stdin:
 //! `hook_event_name` (`before_tool_call`), OpenClaw's own `toolName`, `params`,
 //! `toolCallId`, `runId`, `toolKind`, `sessionId`, `sessionKey` and `agentId`,
-//! and three fields the plugin adds: `cwd` (the agent's workspace, where
+//! and four fields the plugin adds: `cwd` (the agent's workspace, where
 //! OpenClaw resolves relative paths), `configPath` (the `openclaw.json` the
-//! Gateway reads) and `platform` (Node's `process.platform`).
+//! Gateway reads), `stateDir` (its state directory) and `platform` (Node's
+//! `process.platform`).
 //!
 //! Output: nothing for `defer`, else `{"decision": "allow" | "ask" | "deny",
 //! "reason"}`. The plugin returns no decision for `allow`, `requireApproval`
@@ -44,6 +45,8 @@ struct Payload {
     #[serde(default)]
     config_path: Option<String>,
     #[serde(default)]
+    state_dir: Option<String>,
+    #[serde(default)]
     platform: Option<String>,
 }
 
@@ -54,6 +57,7 @@ pub(super) struct Call<'a> {
     pub tool_kind: Option<&'a str>,
     pub cwd: Option<&'a str>,
     pub config_path: Option<&'a str>,
+    pub state_dir: Option<&'a str>,
     pub windows: bool,
 }
 
@@ -72,6 +76,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool_kind: p.tool_kind.as_deref(),
         cwd: cwd.as_deref(),
         config_path: p.config_path.as_deref().filter(|c| !c.is_empty()),
+        state_dir: p.state_dir.as_deref().filter(|c| !c.is_empty()),
         windows: p.platform.as_deref() == Some("win32"),
     };
     let action = tools::map(&call)?;

@@ -9,7 +9,7 @@ use std::fs;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, json as parse, stdout, text};
+use crate::common::{DENY, OK, Sandbox, fixture, json as parse, output, stdout, text};
 
 fn sandbox() -> Sandbox {
     Sandbox::installed(&[".openclaw"])
@@ -159,6 +159,106 @@ fn malformed_arguments_and_payloads_are_denied() {
     );
     assert_eq!(code, Some(DENY), "{reply}");
     assert_eq!(reply["decision"], "deny");
+}
+
+#[test]
+fn a_changed_openclaw_mcp_server_holds_back_only_its_own_tools() {
+    let sb = Sandbox::bare(&[".openclaw"]);
+    let config = sb.home.join(".openclaw/openclaw.json");
+    // JSON5 without comments: read, and written back as JSON.
+    fs::write(
+        &config,
+        "{\n  mcp: { servers: { docs: { command: 'docs-server' }, db: { command: 'db' }, }, },\n}\n",
+    )
+    .unwrap();
+    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains("2 definitions pinned"),
+        "{}",
+        text(&out)
+    );
+    let (code, reply) = guard(&sb, &payload(&sb, "docs__search", &json!({})));
+    assert_eq!(code, Some(OK), "{reply}");
+
+    let now = fs::read_to_string(&config).unwrap();
+    assert!(now.contains("\"docs-server\""), "{now}");
+    fs::write(&config, now.replacen("\"docs-server\"", "\"sh\"", 1)).unwrap();
+    let (code, reply) = guard(&sb, &payload(&sb, "docs__search", &json!({})));
+    assert_eq!(code, Some(DENY), "{reply}");
+    let reason = reply["reason"].to_string();
+    assert!(reason.contains("mcp-server-changed"), "{reply}");
+    assert!(reason.contains("moat mcp accept docs"), "{reply}");
+    // Only that server: not drift of the whole file.
+    let (code, reply) = guard(&sb, &payload(&sb, "db__query", &json!({})));
+    assert_eq!(code, Some(OK), "{reply}");
+    let (code, reply) = guard(
+        &sb,
+        &payload(&sb, "exec", &json!({"command": "git status"})),
+    );
+    assert_eq!(code, Some(OK), "{reply}");
+}
+
+#[test]
+fn a_cron_job_is_denied_and_listing_jobs_is_left_to_openclaw() {
+    let sb = sandbox();
+    let add = json!({"action": "add", "job": {"schedule": {"kind": "cron", "expr": "0 3 * * *"},
+        "payload": {"kind": "agentTurn", "message": "sync"}}});
+    let (code, reply) = guard(&sb, &payload(&sb, "cron", &add));
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert_eq!(reply["decision"], "deny", "{reply}");
+    assert!(
+        reply["reason"].to_string().contains("kernel-self"),
+        "{reply}"
+    );
+    let (code, reply) = guard(&sb, &payload(&sb, "cron", &json!({"action": "list"})));
+    assert_eq!((code, reply), (Some(OK), Value::Null));
+}
+
+#[test]
+fn openclaw_config_path_is_followed_and_protected() {
+    let sb = Sandbox::bare(&[".openclaw"]);
+    let config = sb.home.join("etc/main.json5");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "{ gateway: { port: 18789 } }\n").unwrap();
+    let out = output(
+        sb.command()
+            .args(["init", "--yes", "--hosts", "openclaw"])
+            .env("OPENCLAW_CONFIG_PATH", "~/etc/main.json5"),
+        None,
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let written: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert_eq!(written["gateway"]["port"], 18789);
+    assert!(
+        written["plugins"]["entries"]["openmoat"].is_object(),
+        "{written}"
+    );
+    assert!(sb.home.join(".openclaw/openmoat/openmoat.mjs").is_file());
+    assert!(!sb.home.join(".openclaw/openclaw.json").exists());
+
+    // Later commands follow the record, without the variable.
+    let edit = json!({"path": config, "content": "{}"});
+    let (code, reply) = guard(&sb, &payload(&sb, "write", &edit));
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert!(
+        reply["reason"].to_string().contains("kernel-self"),
+        "{reply}"
+    );
+    let doctor = text(&sb.moat(&["doctor"]));
+    assert!(doctor.contains("main.json5"), "{doctor}");
+}
+
+#[test]
+fn a_configuration_with_comments_is_not_rewritten() {
+    let sb = Sandbox::bare(&[".openclaw"]);
+    let config = sb.home.join(".openclaw/openclaw.json");
+    let original = "// my gateway\n{ gateway: { port: 18789 } }\n";
+    fs::write(&config, original).unwrap();
+    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
+    assert!(text(&out).contains("comments"), "{}", text(&out));
+    assert_eq!(fs::read_to_string(&config).unwrap(), original);
+    assert!(!sb.home.join(".openclaw/openmoat").exists());
 }
 
 #[test]

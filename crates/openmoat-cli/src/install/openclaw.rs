@@ -11,17 +11,69 @@
 //! - `openmoat` to `plugins.allow` when the file has that allowlist, and out
 //!   of `plugins.deny`, since either would keep the plugin from loading.
 //!
-//! `openclaw.json` is JSON5 to OpenClaw; `init` edits only a file that is
-//! plain JSON and stops on one with comments or unquoted keys.
+//! `openclaw.json` is JSON5 to OpenClaw (`location.rs` says where it is). It is
+//! read as JSON5 ([`read`]) and written back as plain JSON, which keeps every
+//! value; a file with comments is not written, since that would drop them.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use serde_json::{Map, Value, json};
 
 use super::{HookState, HostConfig, Outcome};
 use crate::home::write_private;
+
+pub mod location;
+
+pub use location::Location;
+
+/// The parsed `openclaw.json` at `path`, an empty object when there is none.
+pub fn read(path: &Path) -> Result<Value> {
+    Ok(read_parsed(path)?.value)
+}
+
+fn read_parsed(path: &Path) -> Result<crate::json5::Parsed> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    parse(&text).with_context(|| format!("parsing {}", path.display()))
+}
+
+/// `text` (an `openclaw.json`, empty when there is none) as JSON5.
+pub fn parse(text: &str) -> Result<crate::json5::Parsed> {
+    if text.trim().is_empty() {
+        return Ok(crate::json5::Parsed {
+            value: Value::Object(Map::new()),
+            comments: false,
+        });
+    }
+    crate::json5::parse(text)
+}
+
+/// Refuse to write `file` back when `parsed` has comments: plain JSON has
+/// none, so writing it would drop them.
+pub fn refuse_comments(parsed: &crate::json5::Parsed, file: &Path) -> Result<()> {
+    if parsed.comments {
+        bail!(
+            "{} has comments (JSON5), and OpenMoat writes it back as plain JSON, which would \
+             drop them; move the comments out of the file (or delete them), then run the \
+             command again. No file was changed",
+            file.display()
+        );
+    }
+    Ok(())
+}
+
+/// The parsed `openclaw.json` at `path` for an edit: refused when writing it
+/// back would drop comments.
+pub fn read_for_edit(path: &Path) -> Result<Value> {
+    let parsed = read_parsed(path)?;
+    refuse_comments(&parsed, path)?;
+    Ok(parsed.value)
+}
 
 /// The plugin's id: the file name of the standalone plugin.
 pub const PLUGIN_ID: &str = "openmoat";

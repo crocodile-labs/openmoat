@@ -191,6 +191,10 @@ pub enum HookFormat {
 pub struct HostConfig {
     pub host: Host,
     pub settings_path: PathBuf,
+    /// The configuration directory `hosts.json` records: the hook file's, or
+    /// OpenClaw's state directory, which holds OpenMoat's plugin and holds
+    /// `openclaw.json` unless `OPENCLAW_CONFIG_PATH` puts it elsewhere.
+    pub dir: PathBuf,
     pub hooks: &'static [HookSpec],
     pub format: HookFormat,
     /// Whether the host's version knows `onFailure`; asked only when an
@@ -216,8 +220,11 @@ pub fn dir_variable(host: Host) -> Result<(&'static str, &'static str)> {
 }
 
 /// `host`'s configuration directory as named by this shell's environment,
-/// when its variable is set.
+/// when its variable is set (for OpenClaw, any of `openclaw::location::VARIABLES`).
 pub fn env_config_dir(host: Host) -> Result<Option<PathBuf>> {
+    if host == Host::OpenClaw {
+        return Ok(openclaw::Location::from_env()?.map(|l| l.state_dir));
+    }
     Ok(env_dir(dir_variable(host)?.0))
 }
 
@@ -226,16 +233,51 @@ impl HostConfig {
     /// where this shell's environment or the default puts it.
     pub fn for_host(home: &Home, host: Host) -> Result<Self> {
         let recorded = Recorded::load(home)?;
+        if host == Host::OpenClaw {
+            let location = match recorded.dir(host) {
+                Some(dir) => openclaw::Location::at(dir, recorded.file(host)),
+                None => match openclaw::Location::from_env()? {
+                    Some(location) => location,
+                    None => openclaw::Location::default_for(&user_home()?),
+                },
+            };
+            return Ok(Self::openclaw(location));
+        }
         Self::at(host, recorded.dir(host).or(env_config_dir(host)?))
     }
 
     /// For `moat init`: this shell's environment wins over the record, so a
     /// person moves an agent by running `init` with its variable set.
     pub fn for_init(home: &Home, host: Host) -> Result<Self> {
+        if host == Host::OpenClaw
+            && let Some(location) = openclaw::Location::from_env()?
+        {
+            return Ok(Self::openclaw(location));
+        }
         match env_config_dir(host)? {
             Some(dir) => Self::at(host, Some(dir)),
             None => Self::for_host(home, host),
         }
+    }
+
+    /// OpenClaw at `location`: `openclaw.json` wherever it is, the state
+    /// directory as [`Self::dir`].
+    fn openclaw(location: openclaw::Location) -> Self {
+        Self {
+            host: Host::OpenClaw,
+            settings_path: location.config,
+            dir: location.state_dir,
+            hooks: OPENCLAW_HOOKS,
+            format: HookFormat::OpenClaw,
+            blocks_on_failure: || false,
+        }
+    }
+
+    /// OpenClaw's state directory and configuration file; `None` for any
+    /// other host.
+    pub fn openclaw_location(&self) -> Option<openclaw::Location> {
+        (self.host == Host::OpenClaw)
+            .then(|| openclaw::Location::at(self.dir.clone(), Some(self.settings_path.clone())))
     }
 
     fn at(host: Host, dir: Option<PathBuf>) -> Result<Self> {
@@ -257,6 +299,7 @@ impl HostConfig {
         Ok(Self {
             host,
             settings_path: dir.join(file),
+            dir,
             hooks,
             format,
             blocks_on_failure,
@@ -265,14 +308,12 @@ impl HostConfig {
 
     /// The configuration directory, the one `hosts.json` records.
     pub fn dir(&self) -> &Path {
-        self.settings_path.parent().unwrap_or(&self.settings_path)
+        &self.dir
     }
 
     /// The host is considered present when its configuration directory exists.
     pub fn host_present(&self) -> bool {
-        self.settings_path
-            .parent()
-            .is_some_and(std::path::Path::is_dir)
+        self.dir.is_dir()
     }
 
     /// Install the hook, recording any backup in `home`'s `hosts.json`.

@@ -11,7 +11,7 @@
 
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const MOAT = __MOAT_BINARY__;
 // Above `moat guard`'s own 30 s budget, below the hook timeout `moat init` sets.
@@ -22,20 +22,33 @@ function block(why) {
   return { block: true, blockReason: `OpenMoat blocked this call: ${why}` };
 }
 
+// A variable as OpenClaw reads it: trimmed; blank, `undefined` and `null` are unset.
+function variable(env, name) {
+  const value = env[name]?.trim();
+  return value && value !== "undefined" && value !== "null" ? value : undefined;
+}
+
+// `~` (alone or before a separator) as `base`, and the path made absolute.
+function expand(path, base) {
+  const tilde = path === "~" || path.startsWith("~/") || path.startsWith("~\\");
+  return resolve(tilde ? join(base, path.slice(1)) : path);
+}
+
 function home(env) {
-  return env.OPENCLAW_HOME?.trim() || homedir();
+  const explicit = variable(env, "OPENCLAW_HOME");
+  return explicit ? expand(explicit, homedir()) : homedir();
 }
 
-function expand(path, env) {
-  return path.startsWith("~") ? join(home(env), path.slice(1)) : path;
+// Where the Gateway keeps its state and reads its configuration
+// (docs.openclaw.ai/help/environment), as `moat init` finds them.
+function stateDir(env) {
+  const explicit = variable(env, "OPENCLAW_STATE_DIR");
+  return explicit ? expand(explicit, home(env)) : join(home(env), ".openclaw");
 }
 
-// Where the Gateway reads its configuration (docs.openclaw.ai/help/environment).
 function configPath(env) {
-  const explicit = env.OPENCLAW_CONFIG_PATH?.trim();
-  if (explicit) return expand(explicit, env);
-  const state = env.OPENCLAW_STATE_DIR?.trim();
-  return join(state ? expand(state, env) : join(home(env), ".openclaw"), "openclaw.json");
+  const explicit = variable(env, "OPENCLAW_CONFIG_PATH");
+  return explicit ? expand(explicit, home(env)) : join(stateDir(env), "openclaw.json");
 }
 
 // The agent's workspace, where OpenClaw's file tools resolve relative paths.
@@ -143,6 +156,7 @@ export default {
             agentId: ctx?.agentId,
             cwd,
             configPath: configPath(process.env),
+            stateDir: stateDir(process.env),
             platform: process.platform,
           };
           return await guard(payload, cwd, ctx?.abortSignal);

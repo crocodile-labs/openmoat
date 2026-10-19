@@ -101,7 +101,7 @@ pub fn violation(
     for change in found
         .changes
         .iter()
-        .filter(|c| c.blocks() && pins::tool_of(tool, &c.name))
+        .filter(|c| c.blocks() && tool_of(host, tool, &c.name))
     {
         reasons.push(change.describe());
         names.push(change.name.clone());
@@ -118,6 +118,61 @@ pub fn violation(
     decision.rules.push(SERVER_RULE.to_owned());
     decision.reasons = reasons;
     Ok(Some(decision))
+}
+
+/// Whether `tool` (`mcp__…` as the adapter names it) is one of server `name`'s
+/// tools as `host` names them. Matching too much holds back another server's
+/// tools while this one is unaccepted; matching too little would let a changed
+/// server run, so OpenClaw's spellings are all tried.
+pub fn tool_of(host: Host, tool: &str, name: &str) -> bool {
+    pins::tool_of(tool, name) || (host == Host::OpenClaw && openclaw_tool_of(tool, name))
+}
+
+/// OpenClaw names a server's tools `<prefix>__<tool>`
+/// (<https://docs.openclaw.ai/plugins/bundles>, "Tool naming"; its
+/// `agent-bundle-mcp-names` module): the prefix is the server's name with
+/// every character but letters, digits, `_` and `-` as `-`, `mcp` in front of
+/// one that does not start with a letter, at most 30 characters, and `-2`,
+/// `-3`, … on a shortened base when another server's prefix is the same
+/// without regard to case.
+fn openclaw_tool_of(tool: &str, name: &str) -> bool {
+    const MAX_PREFIX: usize = 30;
+    let Some(rest) = tool.strip_prefix("mcp__") else {
+        return false;
+    };
+    let spelled: String = name
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let mut bases = vec![spelled.clone()];
+    if !spelled.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        bases.extend(["mcp", "mcp-", "mcp_"].map(|fallback| format!("{fallback}{spelled}")));
+    }
+    let bases: Vec<String> = bases
+        .into_iter()
+        .map(|b| b.chars().take(MAX_PREFIX).collect())
+        .collect();
+    // Every `__` in the tool may end the prefix: a prefix may hold `__` too.
+    let lower = rest.to_ascii_lowercase();
+    lower.match_indices("__").any(|(end, _)| {
+        let prefix = &lower[..end];
+        bases.iter().any(|base| {
+            prefix == base
+                || prefix.rsplit_once('-').is_some_and(|(stem, n)| {
+                    !stem.is_empty()
+                        && prefix.len() <= MAX_PREFIX
+                        && n.parse::<u32>().is_ok_and(|n| n >= 2)
+                        && base.starts_with(stem)
+                })
+        })
+    })
 }
 
 /// Store `changes` as accepted in the lock at `home`. A lock without MCP pins

@@ -126,6 +126,7 @@
         "/**/.codex/hooks.json",
         "/Users/me/.openclaw/openclaw.json",
         "/Users/me/.openclaw/openmoat",
+        "/Users/me/.openclaw/state",
         "/**/.moat/**",
         "/**/bin/moat",
         "/**/bin/moat.exe",

@@ -257,11 +257,13 @@ fn openclaw(call: &Call, at: &Place<'_>) -> Value {
         Call::Fetch(url) => ("web_fetch".to_owned(), json!({ "url": url })),
         Call::Mcp { server, tool, args } => (format!("{server}__{tool}"), args.clone()),
     };
-    let config = at.home.join(".openclaw").join("openclaw.json");
+    let state = at.home.join(".openclaw");
+    let config = state.join("openclaw.json");
     json!({
         "hook_event_name": "before_tool_call", "toolName": tool, "params": params,
         "toolCallId": at.call_id, "sessionId": at.session, "cwd": at.cwd(),
-        "configPath": config.to_string_lossy(), "platform": "linux",
+        "configPath": config.to_string_lossy(), "stateDir": state.to_string_lossy(),
+        "platform": "linux",
     })
 }
 

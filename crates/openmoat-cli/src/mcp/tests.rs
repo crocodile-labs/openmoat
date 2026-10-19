@@ -126,3 +126,70 @@ fn other_repins_keep_the_mcp_pins() {
     let pins = Lock::load(&home.lock_path()).unwrap().mcp_servers.unwrap();
     assert_eq!(pins.len(), 1);
 }
+
+#[test]
+fn openclaw_tool_names_map_to_their_server() {
+    let of = |tool: &str, name: &str| tool_of(Host::OpenClaw, tool, name);
+    assert!(of("mcp__docs__search", "docs"));
+    assert!(of("mcp__vigil-harbor__memory_search", "vigil-harbor"));
+    // Characters outside letters, digits, `_` and `-` become `-`; case is ignored.
+    assert!(of("mcp__my-server__run", "my.server"));
+    assert!(of("mcp__GitHub__get", "github"));
+    // A name that does not start with a letter gets `mcp` in front.
+    assert!(of("mcp__mcp-1password__get", "1password"));
+    // At most 30 characters, and a collision's numeric suffix.
+    let long = "a".repeat(40);
+    assert!(of(&format!("mcp__{}__x", "a".repeat(30)), &long));
+    assert!(of("mcp__docs-2__search", "docs"));
+    assert!(of("mcp__a__b__run", "a__b"));
+    assert!(!of("mcp__other__search", "docs"));
+    assert!(!of("mcp__docsx__search", "docs"));
+    assert!(!of("docs__search", "docs"));
+    // Other hosts keep their own spelling only.
+    assert!(!tool_of(
+        Host::ClaudeCode,
+        "mcp__my-server__run",
+        "my.server"
+    ));
+}
+
+#[test]
+fn a_changed_openclaw_server_holds_back_only_its_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = Home::at(dir.path().join("state"));
+    let state = dir.path().join("openclaw");
+    fs::create_dir_all(&state).unwrap();
+    let mut recorded = Recorded::default();
+    recorded
+        .dirs
+        .insert(Host::OpenClaw.id().to_owned(), state.clone());
+    recorded.save(&home).unwrap();
+    Lock::pin(Path::new("/x/moat"), &[])
+        .unwrap()
+        .save(&home.lock_path())
+        .unwrap();
+    let file = state.join("openclaw.json");
+    let config = |docs: &str| {
+        format!(
+            "// JSON5, as OpenClaw reads it\n{{ mcp: {{ servers: {{ docs: {{ command: '{docs}' }}, \
+             db: {{ url: 'https://db.example/mcp' }}, }} }} }}"
+        )
+    };
+    fs::write(&file, config("docs-server")).unwrap();
+    let lock = Lock::load(&home.lock_path()).unwrap();
+    let found = review(&home, &lock, &[Host::OpenClaw], None).unwrap();
+    assert_eq!(found.changes.len(), 2, "{:?}", found.unreadable);
+    accept(&home, &found.changes).unwrap();
+    let denied = |tool| violation(&home, Host::OpenClaw, None, tool).unwrap();
+    assert!(denied("mcp__docs__search").is_none());
+
+    fs::write(&file, config("sh")).unwrap();
+    let deny = denied("mcp__docs__search").expect("changed server");
+    assert_eq!(deny.rules, [SERVER_RULE]);
+    assert!(denied("mcp__db__query").is_none(), "other servers run");
+
+    // An `$include` could hold servers OpenMoat cannot see.
+    fs::write(&file, r#"{"mcp": {"$include": "./mcp.json5"}}"#).unwrap();
+    let deny = denied("mcp__db__query").expect("unreadable");
+    assert!(deny.reasons[0].contains("$include"), "{:?}", deny.reasons);
+}

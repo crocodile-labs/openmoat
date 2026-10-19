@@ -19,6 +19,7 @@ fn config(dir: &Path) -> HostConfig {
     HostConfig {
         host: Host::OpenClaw,
         settings_path: dir.join("openclaw.json"),
+        dir: dir.to_path_buf(),
         hooks: SPECS,
         format: HookFormat::OpenClaw,
         blocks_on_failure: || false,
@@ -116,8 +117,56 @@ fn a_file_openmoat_cannot_load_its_plugin_from_is_refused() {
         format!("{refused:#}").contains("plugins.enabled"),
         "{refused:#}"
     );
-    // JSON5 (a comment) is OpenClaw's, but not a file `init` edits.
-    fs::write(&cfg.settings_path, "{ // mine\n}").unwrap();
-    assert!(hook_file::install(&home, &cfg, Path::new("/x/moat"), false).is_err());
+    // Writing a file with comments back as JSON would drop them: refused,
+    // in the preview as well, and nothing is written.
+    let commented = "{ // mine\n  gateway: { port: 18789 },\n}";
+    fs::write(&cfg.settings_path, commented).unwrap();
+    let refused = hook_file::install(&home, &cfg, Path::new("/x/moat"), false).unwrap_err();
+    assert!(format!("{refused:#}").contains("comments"), "{refused:#}");
+    let preview = hook_file::render(&cfg, Path::new("/x/moat"), commented).unwrap_err();
+    assert!(format!("{preview:#}").contains("comments"), "{preview:#}");
     assert!(!plugin_path(&cfg).exists(), "nothing written");
+    assert_eq!(fs::read_to_string(&cfg.settings_path).unwrap(), commented);
+}
+
+#[test]
+fn json5_without_comments_is_read_and_written_back_as_json() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = config(dir.path());
+    fs::write(
+        &cfg.settings_path,
+        "{\n  gateway: { port: 18789, },\n  plugins: { allow: ['memory'] },\n}\n",
+    )
+    .unwrap();
+    let binary = Path::new("/x/moat");
+    assert_eq!(install(&cfg, binary), Outcome::Installed);
+    let doc = root(&cfg);
+    assert_eq!(doc["gateway"]["port"], 18789);
+    assert_eq!(doc["plugins"]["allow"], json!(["memory", "openmoat"]));
+    assert_eq!(hook_file::state(&cfg, binary), HookState::Installed);
+    // Comments added after `init` change nothing to read: still installed,
+    // and nothing to write.
+    let text = fs::read_to_string(&cfg.settings_path).unwrap();
+    fs::write(&cfg.settings_path, format!("// kept\n{text}")).unwrap();
+    assert_eq!(hook_file::state(&cfg, binary), HookState::Installed);
+    assert_eq!(install(&cfg, binary), Outcome::Unchanged);
+}
+
+#[test]
+fn a_configuration_outside_the_state_directory_keeps_the_plugin_in_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = HostConfig {
+        settings_path: dir.path().join("etc/main.json5"),
+        ..config(&dir.path().join("state"))
+    };
+    fs::create_dir_all(dir.path().join("etc")).unwrap();
+    fs::create_dir_all(dir.path().join("state")).unwrap();
+    assert_eq!(install(&cfg, Path::new("/x/moat")), Outcome::Installed);
+    assert_eq!(
+        plugin_path(&cfg),
+        dir.path().join("state/openmoat/openmoat.mjs")
+    );
+    assert!(plugin_path(&cfg).is_file());
+    let ours = crate::context::path_string(&plugin_path(&cfg));
+    assert_eq!(root(&cfg)["plugins"]["load"]["paths"], json!([ours]));
 }

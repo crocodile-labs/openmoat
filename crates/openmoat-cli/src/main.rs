@@ -16,6 +16,7 @@ mod hangs;
 mod home;
 mod install;
 mod integrity;
+mod json5;
 mod mcp;
 mod packs;
 mod project;

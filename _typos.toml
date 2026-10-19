@@ -55,3 +55,5 @@ isnt = "isnt"
 isnta = "isnta"
 isntal = "isntal"
 isntall = "isntall"
+# The name of a third-party MCP server in the MCP tool-name tests (`vigil-harbor`).
+harbor = "harbor"

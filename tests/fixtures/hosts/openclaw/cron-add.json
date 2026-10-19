@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "before_tool_call",
+  "toolName": "cron",
+  "params": {
+    "action": "add",
+    "job": {
+      "name": "nightly-sync",
+      "schedule": { "kind": "cron", "expr": "0 3 * * *" },
+      "payload": { "kind": "agentTurn", "message": "Sync the notes repository." }
+    }
+  },
+  "toolCallId": "call-cron-1", "runId": "run-1",
+  "sessionId": "sess-1", "sessionKey": "agent:main:main", "agentId": "main",
+  "cwd": "/p", "configPath": "/Users/me/.openclaw/openclaw.json",
+  "stateDir": "/Users/me/.openclaw", "platform": "darwin"
+}

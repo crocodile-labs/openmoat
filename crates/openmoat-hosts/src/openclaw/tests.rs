@@ -205,6 +205,147 @@ fn openclaws_own_controls_are_decided_as_its_configuration() {
 }
 
 #[test]
+fn a_cron_job_is_a_write_of_the_store_it_runs_from() {
+    let database = "/Users/me/.openclaw/state/openclaw.sqlite".to_owned();
+    assert_eq!(
+        fixture("cron-add").action,
+        Some(Action::FsWrite {
+            path: database.clone()
+        })
+    );
+    for scheduled in ["update", "next_check"] {
+        assert_eq!(
+            action("cron", json!({"action": scheduled, "jobId": "j"})),
+            Some(Action::FsWrite {
+                path: database.clone()
+            }),
+            "{scheduled}"
+        );
+    }
+    // `stateDir` wins; a plugin without it names the configuration's directory.
+    let moved = call(
+        "cron",
+        json!({"action": "add"}),
+        json!({"stateDir": "/srv/oc/"}),
+    );
+    assert_eq!(
+        moved.unwrap().action,
+        Some(Action::FsWrite {
+            path: "/srv/oc/state/openclaw.sqlite".into()
+        })
+    );
+    for read in ["status", "list", "get", "runs"] {
+        assert_eq!(action("cron", json!({"action": read})), None, "{read}");
+    }
+    assert!(matches!(
+        action("cron", json!({"action": "run", "jobId": "j"})),
+        Some(Action::UnknownTool { .. })
+    ));
+    let nowhere = call(
+        "cron",
+        json!({"action": "add"}),
+        json!({"configPath": null}),
+    );
+    assert!(matches!(
+        nowhere,
+        Err(HostError::MissingField {
+            field: "stateDir",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn nodes_invoke_is_a_foreign_shell_and_device_reads_are_ungoverned() {
+    match fixture("nodes-invoke").action {
+        Some(Action::ForeignShell { shell, command }) => {
+            assert_eq!(shell, "OpenClaw node command");
+            assert!(command.contains("device.info"), "{command}");
+        }
+        other => panic!("{other:?}"),
+    }
+    for read in ["status", "describe", "device_info", "which"] {
+        assert_eq!(action("nodes", json!({"action": read})), None, "{read}");
+    }
+    for other in [
+        "camera_snap",
+        "location_get",
+        "notifications_list",
+        "approve",
+    ] {
+        assert!(
+            matches!(
+                action("nodes", json!({"action": other, "node": "phone"})),
+                Some(Action::UnknownTool { .. })
+            ),
+            "{other}"
+        );
+    }
+    assert_eq!(
+        action(
+            "nodes",
+            json!({"action": "screen_record", "outPath": "/Users/me/.zshrc"})
+        ),
+        Some(Action::FsWrite {
+            path: "/Users/me/.zshrc".into()
+        })
+    );
+    assert!(matches!(
+        call("nodes", json!({"action": "invoke"}), json!({})),
+        Err(HostError::MissingField {
+            field: "invokeCommand",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn view_image_reads_local_images_and_fetches_a_url() {
+    assert_eq!(
+        fixture("view_image").action,
+        Some(Action::FsRead {
+            path: "/Users/me/.ssh/id_ed25519".into()
+        })
+    );
+    assert_eq!(
+        action(
+            "view_image",
+            json!({"paths": ["shot.png", "https://x.example/a.png", "file:///tmp/b.png"]})
+        ),
+        Some(Action::ReadFiles {
+            paths: vec!["shot.png".into(), "/tmp/b.png".into()]
+        })
+    );
+    assert_eq!(
+        action("view_image", json!({"path": "HTTPS://x.example/a.png"})),
+        Some(Action::Fetch {
+            url: "HTTPS://x.example/a.png".into()
+        })
+    );
+    assert_eq!(
+        action("view_image", json!({"path": "data:image/png;base64,AAAA"})),
+        None
+    );
+    assert!(matches!(
+        action(
+            "view_image",
+            json!({"paths": ["https://a.example/1.png", "https://b.example/2.png"]})
+        ),
+        Some(Action::UnknownTool { .. })
+    ));
+    for bad in [json!({}), json!({"paths": []})] {
+        assert!(matches!(
+            call("view_image", bad, json!({})),
+            Err(HostError::MissingField { .. })
+        ));
+    }
+    assert!(matches!(
+        call("view_image", json!({"paths": "a.png"}), json!({})),
+        Err(HostError::MalformedArguments { .. })
+    ));
+}
+
+#[test]
 fn process_input_is_a_shell_openmoat_cannot_read() {
     assert!(matches!(
         fixture("process-send-keys").action,

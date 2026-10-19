@@ -181,6 +181,10 @@ deny:
       - "~/.openclaw/openclaw.json"
       - "~/.openclaw/openmoat"
       - "~/.openclaw/openmoat/**"
+      # OpenClaw's control-plane database: its exec approvals, plugin state and the
+      # cron jobs its Gateway runs (an OpenClaw `cron` add or update is decided as a
+      # write of it), so an agent cannot approve its own commands there
+      - "~/.openclaw/state/**"
       - "**/.moat/**"
       # the binary every installed hook runs
       - "**/bin/moat"
