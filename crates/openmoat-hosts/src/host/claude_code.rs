@@ -5,7 +5,7 @@ use openmoat_core::Decision;
 use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
+use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -24,6 +24,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2, or times out (default 600 s)",
+    gaps: "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
+         Code 2.1.295 calls run unchecked if the hook binary is missing or crashes",
+    install: Some(InstallSpec {
+        dir_variable: "CLAUDE_CONFIG_DIR",
+        dir_name: ".claude",
+        config_file: "settings.json",
+    }),
 };
 
 /// Claude Code's format, also sent by the Continue CLI.

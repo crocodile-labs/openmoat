@@ -10,7 +10,7 @@ use openmoat_hosts::Host;
 use serde::Serialize;
 
 use crate::home::Home;
-use crate::install::{CONTINUE_CLI_WARNING, HookState, HostConfig, Recorded};
+use crate::install::{HookState, HostConfig, Recorded};
 use crate::integrity::Lock;
 use crate::sandbox::{Plan, install as host_sandbox};
 
@@ -55,7 +55,8 @@ pub struct Protection {
     pub level: Level,
     /// Why the level is `hook-only` or `not-protected`.
     pub reason: Option<String>,
-    /// What the hook and sandbox do not cover for this agent ([`gaps`]).
+    /// What the hook and sandbox do not cover for this agent
+    /// ([`HostSpec::gaps`](openmoat_hosts::HostSpec::gaps)).
     pub gaps: &'static str,
 }
 
@@ -96,7 +97,7 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                 name: host.display_name(),
                 level,
                 reason,
-                gaps: gaps(host),
+                gaps: host.spec().gaps,
             })
         })
         .collect()
@@ -150,34 +151,6 @@ fn sandbox(
         },
         Ok(None) => Err("sandbox settings missing".to_owned()),
         Err(error) => Err(format!("sandbox: {error:#}")),
-    }
-}
-
-/// What each agent's hook and sandbox do not cover, and what the agent does when
-/// the hook fails. Mirrors README "Limits" and `docs/THREAT_MODEL.md` §5 (the
-/// "When the hook fails" table); change them together.
-fn gaps(host: Host) -> &'static str {
-    match host {
-        Host::ClaudeCode => {
-            "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
-             Code 2.1.295 calls run unchecked if the hook binary is missing or crashes"
-        }
-        Host::Codex => {
-            "web search and hosted tools are not hooked; asks become denies; calls run \
-             unchecked if the hook binary is missing or crashes"
-        }
-        Host::Cursor => {
-            "commands Cursor runs outside its sandbox (a rerun or call its Auto-review \
-             classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) \
-             are not confined; file-tool asks become denies; Task and tools that name no path \
-             are not hooked; a failed hook blocks the call"
-        }
-        Host::OpenClaw => {
-            "no OS sandbox from OpenMoat; a parameter rewrite by another plugin and \
-             OpenClaw's process input are not checked; calls run unchecked if the Gateway does \
-             not load the plugin; a failed or slow hook blocks the call"
-        }
-        Host::Continue => CONTINUE_CLI_WARNING,
     }
 }
 

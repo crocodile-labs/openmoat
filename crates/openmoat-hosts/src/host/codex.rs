@@ -5,7 +5,7 @@ use openmoat_core::{Decision, Verdict};
 use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
+use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -22,6 +22,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
+    gaps: "web search and hosted tools are not hooked; asks become denies; calls run \
+         unchecked if the hook binary is missing or crashes",
+    install: Some(InstallSpec {
+        dir_variable: "CODEX_HOME",
+        dir_name: ".codex",
+        config_file: "hooks.json",
+    }),
 };
 
 /// Codex sends only `PreToolUse`.

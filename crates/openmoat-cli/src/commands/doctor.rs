@@ -12,7 +12,7 @@ use crate::cli::{DoctorArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::install::{
-    CONTINUE_CLI_WARNING, HookState, HostConfig, Recorded, dir_variable, env_config_dir, stale_hint,
+    HookState, HostConfig, Recorded, continue_cli_warning, dir_variable, env_config_dir, stale_hint,
 };
 use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
@@ -437,7 +437,8 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
     if let Some(found) = crate::install::continue_cli()? {
         let name = Host::Continue.display_name();
         report.note(&format!(
-            "{name:<16} {CONTINUE_CLI_WARNING}  {}",
+            "{name:<16} {}  {}",
+            continue_cli_warning(),
             found.display()
         ));
     }

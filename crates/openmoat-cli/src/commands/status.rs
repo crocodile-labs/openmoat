@@ -278,7 +278,7 @@ fn hooks(
             out,
             "{:<16} · {}  {}",
             Host::Continue.display_name(),
-            crate::install::CONTINUE_CLI_WARNING,
+            crate::install::continue_cli_warning(),
             found.display()
         )?;
     }

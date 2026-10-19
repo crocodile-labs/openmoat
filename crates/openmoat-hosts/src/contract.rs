@@ -70,6 +70,24 @@ pub struct HostSpec {
     /// What the host does when its hook is missing, crashes or times out, as
     /// `docs/THREAT_MODEL.md` §5 ("When the hook fails") says; change them together.
     pub on_hook_failure: &'static str,
+    /// What the hook and sandbox do not cover for this host, and what it does
+    /// when the hook fails, as `moat status` and `moat doctor` report it.
+    /// Mirrors README "Limits" and `docs/THREAT_MODEL.md` §5; change them together.
+    pub gaps: &'static str,
+    /// Where `moat init` installs the hook; `None` for a host that runs another
+    /// host's hook.
+    pub install: Option<InstallSpec>,
+}
+
+/// Where a host keeps the configuration `moat init` writes its hook into.
+#[derive(Debug)]
+pub struct InstallSpec {
+    /// The environment variable that moves the configuration directory.
+    pub dir_variable: &'static str,
+    /// The directory's name under the home directory otherwise.
+    pub dir_name: &'static str,
+    /// The file in that directory the hook goes into.
+    pub config_file: &'static str,
 }
 
 /// What a host does with an `ask` (and a `defer`, ADR-025) on a tool hook.
