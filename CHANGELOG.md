@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
+File provenance taint, package name checks and release age, agents cannot read OpenMoat's state, audit anchors, signed policy packs, and fixes. Breaking for the library crates' API; the moat command is unchanged for users.
+
 ### Security
 - Session taint follows the files a tainted session writes. A file written by a session that read untrusted content is recorded in the audit log (with the content's hash for `Write`); a later session that reads or runs it (`Read`, `cat`, `source`, `bash run.sh`, `./run.sh`, `python x.py`) while it still holds that content is tainted too, so its writes to CI, build and agent files ask, with a reason naming the file and the session that wrote it. No new asks of its own; a clean `Write` of the file clears it, and `taint: { provenance: false }` turns it off ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
 - An install of a package whose name is one typo or a common trick away from a popular package (`pip install reqeusts`, `npm i lodahs`, `npm i react_dom`, `pip install python-requests`) asks, naming the package that was probably meant (`package-near-miss`). The check is offline, against a bundled list of popular names for npm, PyPI, crates.io, RubyGems and Go; popular names and names that resemble none are decided exactly as before. `moat allow --always` for such an install also answers its near-miss ask. Existing policies get the group with `moat policy upgrade` ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
@@ -624,7 +628,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.5.7...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/crocodile-labs/openmoat/compare/v0.5.7...v0.6.0
 [0.5.7]: https://github.com/crocodile-labs/openmoat/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/crocodile-labs/openmoat/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/crocodile-labs/openmoat/compare/v0.5.4...v0.5.5
