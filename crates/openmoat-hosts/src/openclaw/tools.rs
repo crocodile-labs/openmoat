@@ -39,7 +39,7 @@ const PLUGINS_READS: &[&str] = &["list", "inspect", "search"];
 const CRON_READS: &[&str] = &["status", "list", "get", "runs"];
 /// `cron` actions that store work the Gateway runs later: a job (`add`,
 /// `update`) or a job's next run (`next_check`). A job's payload is an agent
-/// turn, a system event, a script, or a command that "execute[s] directly in
+/// turn, a system event, a script, or a command that "execute\[s\] directly in
 /// the Gateway process, not as an agent `tools.exec` tool call"
 /// (<https://docs.openclaw.ai/cli/cron>), so no later hook sees it.
 const CRON_SCHEDULES: &[&str] = &["add", "update", "next_check"];
