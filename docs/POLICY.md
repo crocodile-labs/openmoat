@@ -50,6 +50,9 @@ taint:                              # optional: more paths session taint protect
   provenance: true                  # optional, default true: taint follows written files (§4.1.1)
 
 require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
+
+mcp:                                # optional: how `moat mcp proxy` treats a new server (§8)
+  trust_first_sight: false          # optional, default false: pin its first tool listing unseen
 ```
 
 `approval:` (`channel`, `remember`, `timeout_s`) and `scope:` (`project_roots`) are reserved:
@@ -119,7 +122,8 @@ source, so the agent cannot read the value it brokers. For another secret: `moat
 
 A brokered secret is kept by OpenMoat, not by the agent (ADR-020). The agent holds the
 placeholder `moat-secret:<id>:placeholder` instead of the value. `moat proxy` reads the
-value from `source` and is the only component that uses it.
+value from `source` and is the only OpenMoat component that uses it (Claude Code's
+sandbox can broker it too, below).
 
 - **`source`.** `file` is absolute or under `~/`; the value is its contents without the
   trailing newline. `env` is a variable of the `moat proxy` process. `keychain` is an item
@@ -171,6 +175,17 @@ placeholder, which is what to give the agent (for example
 `GITHUB_TOKEN=moat-secret:gh:placeholder`), and never the value. A keychain source uses
 `/usr/bin/security` on macOS and `/usr/bin/secret-tool` (libsecret) on Linux. Keychain
 sources are not supported on Windows yet.
+
+Claude Code's sandbox can also broker them itself, inside HTTPS. `moat sandbox sync`
+writes each secret with an `env` or `file` source whose host a `net` allow rule names
+as a Claude Code `mask` entry for that one host, and turns on Claude Code's
+`network.tlsTerminate`, which masking needs. Sandboxed commands then see Claude Code's
+own placeholder in that variable or file, and Claude Code's proxy sends the value to the
+host. The value is read by Claude Code from the same source, not by `moat proxy`. A
+secret Claude Code cannot mask (a `keychain` source, a host outside `net` allow, or a
+`plain_http: true` secret beside HTTPS-only ones) is left to `moat proxy` as above; on
+macOS a `file` source is denied rather than masked. `moat sandbox show` and
+`moat doctor` list what Claude Code does with each secret ([SANDBOX.md](SANDBOX.md#host-sandboxes-standard-tier)).
 
 ## 3. Pattern syntax
 
@@ -608,10 +623,22 @@ that cannot be parsed holds back every MCP call of its agent. `moat init` pins w
 finds. The other re-pinning commands keep the MCP pins as they are.
 
 `moat mcp proxy` (opt-in per server with `moat mcp wrap`) pins each tool's name,
-description and input schema the first time a server lists it, in `~/.moat/mcp/`. Later,
-a tool that changed, or a new one, is left out of `tools/list`, and a `tools/call` for it
-is answered with an error naming `moat mcp accept <server>` (rule `mcp-tool-held` in the
-audit log, host `mcp-proxy`).
+description and input schema in `~/.moat/mcp/`. A tool with no pin, or one that changed,
+is left out of `tools/list`, and a `tools/call` for it is answered with an error naming
+`moat mcp accept <server>` (rule `mcp-tool-held` in the audit log, host `mcp-proxy`).
+The first time the proxy sees a server, that is every tool it lists (ADR-032): `moat mcp
+accept <server>` shows each one's name, description and input schema, asks, and pins
+them. A server the proxy already pinned keeps its pins.
+
+```yaml
+mcp:
+  trust_first_sight: false          # optional, default false: pin a new server's tools unseen
+```
+
+`trust_first_sight: true` has the proxy pin a new server's first listing as it is, as
+releases before ADR-032 did. A server that is malicious from its first start then gets
+its tool descriptions pinned as good, so `moat policy lint` warns while it is on. The
+proxy honours it only while the policy lock is intact.
 
 ### 8.1 Executable pinning and the environment snapshot
 

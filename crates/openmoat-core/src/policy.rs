@@ -297,6 +297,9 @@ pub struct Policy {
     /// repository policy allow.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub require_signed_repo_policy: bool,
+    /// How `moat mcp proxy` treats tool definitions (ADR-032). Absent in older policies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp: Option<McpSettings>,
     /// Ask rules merged in from a repository policy ([`crate::RepoPolicy`],
     /// ADR-022) or a policy pack (ADR-031). Tried after `deny` and before
     /// `allow`, so a repository can make an action the user allows ask. Never
@@ -332,6 +335,18 @@ pub struct SandboxSettings {
     pub package_min_release_age_days: Option<u16>,
 }
 
+/// The `mcp:` section (ADR-032).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpSettings {
+    /// Pin every tool `moat mcp proxy` sees from a server it has no pins for,
+    /// as it is, instead of holding them until `moat mcp accept`. Off by
+    /// default: a server that is malicious on first contact would get its
+    /// tool descriptions pinned as good.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub trust_first_sight: bool,
+}
+
 /// The release age `moat run` asks of new package versions when the policy
 /// does not say (ADR-030).
 pub const DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS: u16 = 7;
@@ -345,6 +360,13 @@ impl Policy {
             .as_ref()
             .and_then(|s| s.package_min_release_age_days)
             .unwrap_or(DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS)
+    }
+
+    /// Whether `moat mcp proxy` pins a new server's tools without a person
+    /// accepting them (`mcp.trust_first_sight`, ADR-032).
+    #[must_use]
+    pub fn trust_mcp_first_sight(&self) -> bool {
+        self.mcp.as_ref().is_some_and(|m| m.trust_first_sight)
     }
 }
 

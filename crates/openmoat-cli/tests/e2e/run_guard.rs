@@ -151,8 +151,9 @@ fn the_sandbox_still_cannot_touch_the_home_or_take_the_port() {
     let (sb, project) = installed_with_secret();
     let lock = std::fs::read(sb.home.join(".moat/policy.lock")).unwrap();
     // `kernel-self` denies writing OpenMoat's home wherever it is, and reading
-    // the audit log and the lock: this test's home is in the temp directory,
-    // a read root, so only that read deny keeps them from the agent.
+    // the audit log and the lock. On macOS this test's home is in the temp
+    // directory, a read root, so only that read deny keeps them from the
+    // agent; on Linux it is outside every grant, where `moat run` must keep it.
     let script = r#"echo forged >> "$HOME/.moat/audit.db" 2>/dev/null; echo "audit=$?"
          echo forged > "$HOME/.moat/policy.lock" 2>/dev/null; echo "lock=$?"
          cat "$HOME/.moat/audit.db" > /dev/null 2>&1; echo "read_audit=$?"
@@ -174,15 +175,21 @@ except OSError:
     }
     let shown = text(&out);
     // Held by `moat run` and outside what the sandbox lets anything bind.
-    for refused in ["bind=open", "audit=0", "lock=0"] {
+    // Seatbelt denies a path inside a granted tree; Landlock only grants, so on
+    // Linux `moat run` refuses to start where a grant holds the state directory
+    // (`a_state_directory_inside_the_project_is_refused`): either way the agent
+    // cannot read the audit log or the lock.
+    for refused in [
+        "bind=open",
+        "audit=0",
+        "lock=0",
+        "read_audit=0",
+        "read_lock=0",
+    ] {
         assert!(!stdout(&out).contains(refused), "{refused}: {shown}");
     }
-    // Seatbelt denies a path inside a granted tree; Landlock only grants, so on
-    // Linux a deny inside a read root is a listed allowance the hook decides.
+    // Seatbelt keeps the policy readable; outside every Landlock grant it is not.
     if cfg!(target_os = "macos") {
-        for refused in ["read_audit=0", "read_lock=0"] {
-            assert!(!stdout(&out).contains(refused), "{refused}: {shown}");
-        }
         assert!(stdout(&out).contains("read_policy=0"), "{shown}");
     }
     assert_eq!(
@@ -195,6 +202,32 @@ except OSError:
         "{}",
         text(&doctor)
     );
+}
+
+/// Landlock cannot deny inside a granted tree: with OpenMoat's state directory
+/// in the project, `moat run` refuses to start rather than leave the audit log
+/// and the lock readable to the agent, and names the way out.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_state_directory_inside_the_project_is_refused() {
+    use crate::common::USAGE;
+
+    let sb = Sandbox::bare_in(Path::new(env!("CARGO_TARGET_TMPDIR")), &[]);
+    let project = sb.project();
+    let state = project.join("state");
+    let moved = state.to_string_lossy().into_owned();
+    let init = output(
+        sb.command()
+            .env("MOAT_HOME", &state)
+            .args(["init", "--yes"]),
+        None,
+    );
+    assert_eq!(init.status.code(), Some(OK), "moat init: {}", text(&init));
+    let out = run_sh_with(&sb, &project, "echo ran", &[("MOAT_HOME", moved.as_str())]);
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(USAGE), "{shown}");
+    assert!(stderr(&out).contains("Move MOAT_HOME out of"), "{shown}");
+    assert!(!stdout(&out).contains("ran"), "{shown}");
 }
 
 /// A server at the address that does not answer as this run's service: a

@@ -2,11 +2,13 @@
 
 use std::fs;
 
+use openmoat_core::Policy;
 use openmoat_hosts::Host;
 
 use crate::hangs;
 use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
+use crate::sandbox::{self, Grants, exposure};
 use crate::time;
 
 /// The Linux setting that lets a process type into a terminal it shares.
@@ -42,6 +44,21 @@ pub(super) fn tiocsti(codex: bool, setting: Option<&str>) -> Option<String> {
     })
 }
 
+/// On Linux, a warning when a tree `moat run` grants in this directory (the
+/// project, a read root, the temp directory) holds the state directory:
+/// Landlock cannot keep the audit log and the lock from commands there, so
+/// `moat run` refuses to start.
+pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Option<String> {
+    if !linux {
+        return None;
+    }
+    let ctx = crate::context::eval_context(home, None, None).ok()?;
+    let rules = sandbox::landlock_rules(policy, &ctx, Grants::default()).ok()?;
+    let tmpdir = sandbox::session_tmpdir();
+    let why = exposure::refusal(home.root(), &rules.rules, tmpdir.as_deref(), false)?;
+    Some(format!("moat run         {why}"))
+}
+
 /// Calls the guard denied in the last week because no decision came in time.
 pub(super) fn hangs(home: &Home, now_ms: i64) -> Option<String> {
     let path = home.hangs_path();
@@ -75,6 +92,20 @@ mod tests {
         let old_kernel = tiocsti(true, Some("")).unwrap();
         assert!(old_kernel.contains("before Linux 6.2"), "{old_kernel}");
         assert_eq!(tiocsti(false, Some("1\n")), None);
+    }
+
+    /// A state directory in the temp directory, a read root on every system.
+    #[cfg(unix)]
+    #[test]
+    fn a_state_directory_inside_a_grant_is_a_warning_on_linux_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        fs::create_dir_all(home.root()).unwrap();
+        let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+        let row = state_in_grant(&home, &policy, true).unwrap();
+        assert!(row.starts_with("moat run         "), "{row}");
+        assert!(row.contains("Move MOAT_HOME out of /"), "{row}");
+        assert_eq!(state_in_grant(&home, &policy, false), None);
     }
 
     #[test]

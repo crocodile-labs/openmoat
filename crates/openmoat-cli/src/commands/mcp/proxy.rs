@@ -30,11 +30,18 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
     let home = Home::locate()?;
     let path = tools::path(&home, &args.server);
     let pins = ToolPins::load(&path)?;
+    // A policy that cannot be read, or one the lock no longer matches, trusts
+    // nothing: a new server's tools are held, as they are by default (ADR-032).
+    let trust_first_sight = crate::integrity::refuse_drift(&home, "trust first sight").is_ok()
+        && home
+            .load_policy()
+            .is_ok_and(|policy| policy.trust_mcp_first_sight());
     let save: Save = Box::new(move |p: &ToolPins| p.save(&path));
     let recorder = Audit::open(&home, &args.server);
     let relay = Arc::new(Relay::new(
         &args.server,
         pins,
+        trust_first_sight,
         Box::new(recorder),
         save,
         crate::time::now_ms,

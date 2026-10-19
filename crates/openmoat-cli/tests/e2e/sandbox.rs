@@ -62,7 +62,7 @@ fn show_prints_the_settings_and_their_losses_without_writing() {
 }
 
 /// Each policy secret gets one line: where it is read, and whether Claude Code
-/// injects it or why it skips it. No value is read or shown.
+/// masks it or why it skips it. No value is read or shown.
 #[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
 #[test]
 fn show_lists_each_secret_and_what_claude_code_does_with_it() {
@@ -82,11 +82,54 @@ fn show_lists_each_secret_and_what_claude_code_does_with_it() {
     let shown = stdout(&out);
     for expected in [
         "Secrets  values are never shown",
-        "  gh  api.github.com Authorization from env MOAT_E2E_FAKE; Claude Code injects it",
+        "  gh  api.github.com Authorization from env MOAT_E2E_FAKE; Claude Code masks it",
         "  other  api.example.org X-Api-Key from env MOAT_E2E_OTHER; Claude Code skips it: ",
     ] {
         assert!(shown.contains(expected), "{expected}: {shown}");
     }
+}
+
+/// #363: once synced, `doctor` says per secret whether Claude Code masks it,
+/// and names a hand-set `allowPlaintextInject` the policy did not ask for.
+#[cfg(not(windows))] // #327: no Claude Code sandbox on native Windows
+#[test]
+fn doctor_says_whether_claude_code_masks_each_secret() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let policy = sb.home.join(".moat/policy.yaml");
+    let mut yaml = std::fs::read_to_string(&policy).unwrap();
+    yaml.push_str(
+        "\nsecrets:\n  - id: gh\n    host: api.github.com\n    header: Authorization\n    \
+         source: { env: MOAT_E2E_FAKE }\n  - id: other\n    host: api.example.org\n    \
+         header: X-Api-Key\n    source: { env: MOAT_E2E_OTHER }\n",
+    );
+    std::fs::write(&policy, yaml).unwrap();
+    for args in [&["doctor", "--accept"][..], &["sandbox", "sync"]] {
+        let out = sb.moat_as_person(args);
+        assert_eq!(out.status.code(), Some(OK), "{args:?}: {}", text(&out));
+    }
+
+    let doctor = sb.moat(&["doctor"]);
+    assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
+    let shown = stdout(&doctor);
+    for expected in [
+        "✔ Claude Code      secret `gh` (api.github.com): Claude Code masks it",
+        "· Claude Code      secret `other` (api.example.org): Claude Code skips it: ",
+    ] {
+        assert!(shown.contains(expected), "{expected}: {shown}");
+    }
+
+    let settings = sb.home.join(".claude/settings.json");
+    let mut root: Value =
+        serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+    root["sandbox"]["credentials"]["allowPlaintextInject"] = Value::Bool(true);
+    std::fs::write(&settings, root.to_string()).unwrap();
+    let doctor = sb.moat(&["doctor"]);
+    assert_ne!(doctor.status.code(), Some(OK), "{}", text(&doctor));
+    assert!(
+        stdout(&doctor).contains("sandbox.credentials.allowPlaintextInject is true"),
+        "{}",
+        stdout(&doctor)
+    );
 }
 
 /// The Claude Code settings `sandbox show --format json` prints, parsed.

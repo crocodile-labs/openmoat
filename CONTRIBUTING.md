@@ -174,6 +174,44 @@ locally.
   it; if it is used in a way machete cannot see, list it under
   `[package.metadata.cargo-machete] ignored` with a comment saying where it is used.
 
+## Testing with real agents
+
+Most end-to-end tests hand `moat guard` a hook payload the test wrote. CI's
+`standard tier` job also runs the pinned Claude Code and Codex binaries
+(`scripts/ci/host-binaries.sh`, then `scripts/ci/differential.sh`), with no account and
+no traffic leaving the machine:
+
+- `differential::claude` and `differential::codex` run the attack scenarios under each
+  agent's own sandbox, without OpenMoat's hook.
+- `differential::agents` runs Claude Code with OpenMoat's hook installed by `moat init`.
+  A local fake Anthropic API (`tests/differential/fake_api.py --calls`) asks for a fixed
+  sequence of tool calls, and a stdio MCP server (`tests/differential/fake_mcp.py`)
+  answers MCP calls. The scenarios are token egress, a push of a committed token, the
+  package near-miss ask, a changed MCP server, file provenance across two sessions and
+  `onFailure: block`, which is asserted only from Claude Code 2.1.295 (with an older pin
+  the test reports what happened). The same calls also run through `moat guard` alone,
+  on every machine.
+- Codex is driven only through `codex sandbox`, and inside `moat run` the only network
+  is the run's proxy, which refuses loopback, so no fake model API is reachable there.
+  For hooks inside `moat run`, CI checks that the real `codex` starts inside the run and
+  that a Codex hook call made in the run is decided and recorded outside it.
+
+To try the same checks with your own agents and model keys, run:
+
+```bash
+ANTHROPIC_API_KEY=… OPENAI_API_KEY=… scripts/smoke-real-agents.sh   # or name steps: egress push mcp
+```
+
+It creates a throwaway `HOME`, `MOAT_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` under a
+new temporary directory, runs `moat init` there, and walks through each check in
+headless mode (`claude -p`, `codex exec` inside `moat run`). Before each step it says what
+to expect, and after it prints PASS, FAIL or LOOK (the model did not make the call).
+Before any agent starts it checks that none of those variables resolves to your real
+home, `~/.claude`, `~/.codex`, `~/.cursor`, `~/.moat` or `~/.ssh`, or to a config
+directory you had set, and refuses to run if one does. The steps make real model calls
+billed to your keys. They use made-up tokens, a fake SSH key and a `pip` that only
+prints. The temporary directory is kept so you can inspect it.
+
 ## Fuzzing
 
 `fuzz/` holds `cargo fuzz` targets for every surface that takes untrusted input:

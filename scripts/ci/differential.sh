@@ -13,8 +13,9 @@
 # touches the network.
 #
 #   MOAT_CODEX_BIN   codex binary for the `codex sandbox -P moat` layer
-#   MOAT_CLAUDE_BIN  claude binary for the fake-API `claude -p` layer
-#   MOAT_FAKE_API    python3 for the fake Anthropic API the claude layer needs
+#   MOAT_CLAUDE_BIN  claude binary for the fake-API `claude -p` layer and the
+#                    hook scenarios with the real agent (`differential::agents`)
+#   MOAT_FAKE_API    python3 for the fake Anthropic API and MCP server they need
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

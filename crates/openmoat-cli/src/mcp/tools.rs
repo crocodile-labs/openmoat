@@ -2,11 +2,13 @@
 //! for one server.
 //!
 //! A tool is pinned by the SHA-256 of its name, description and input schema in
-//! canonical JSON. The first time the proxy sees a server, every tool it lists
-//! is pinned as it is. After that, a tool whose definition differs from its pin,
-//! or a tool the server did not list before, is held: the proxy hides it from
-//! `tools/list` and refuses `tools/call` for it until a person accepts it with
-//! `moat mcp accept <server>`, which shows what changed.
+//! canonical JSON. A tool whose definition differs from its pin, or a tool with
+//! no pin, is held: the proxy hides it from `tools/list` and refuses
+//! `tools/call` for it until a person accepts it with `moat mcp accept
+//! <server>`, which shows what changed. So the first time the proxy sees a
+//! server, every tool it lists is held (ADR-032). Only a policy with
+//! `mcp.trust_first_sight` has the first listing pinned as it is (ADR-026's
+//! original behaviour, kept as an opt-in by ADR-032).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -121,8 +123,9 @@ impl ToolPins {
         )
     }
 
-    /// Check the `tools` array of a `tools/list` result. `first` is a server
-    /// never seen before: everything it lists is pinned as it is.
+    /// Check the `tools` array of a `tools/list` result. `first` pins
+    /// everything listed as it is: a server never seen before, under a policy
+    /// with `mcp.trust_first_sight`. Otherwise a tool with no pin is held.
     pub fn list(&mut self, tools: &[Value], first: bool, now_ms: i64) -> Listing {
         let mut listing = Listing::default();
         for (name, pin) in tools.iter().filter_map(ToolPin::of) {
@@ -258,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn first_sight_pins_everything_and_later_changes_are_held() {
+    fn a_trusted_first_sight_pins_everything_and_later_changes_are_held() {
         let mut pins = ToolPins::new("docs");
         let first = pins.list(&[tool("search", "Search the docs.")], true, 1);
         assert!(first.hidden.is_empty() && first.changed);
@@ -288,6 +291,28 @@ mod tests {
         pins.accept_held();
         assert!(pins.held.is_empty());
         assert!(pins.list(&[poisoned], false, 5).hidden.is_empty());
+    }
+
+    #[test]
+    fn a_new_server_has_every_tool_held_until_accepted() {
+        let mut pins = ToolPins::new("docs");
+        let listed = [tool("search", "Search the docs."), tool("read", "Read.")];
+        let first = pins.list(&listed, false, 1);
+        let hidden: Vec<&str> = first.hidden.iter().map(String::as_str).collect();
+        assert_eq!(hidden, ["read", "search"]);
+        assert!(first.changed && pins.tools.is_empty());
+
+        let shown = pins.describe_held().join("\n");
+        assert!(
+            shown.contains("`search` of MCP server `docs` is new"),
+            "{shown}"
+        );
+        assert!(shown.contains("+Search the docs."), "{shown}");
+        assert!(shown.contains("+  \"type\": \"object\""), "{shown}");
+
+        pins.accept_held();
+        assert_eq!(pins.tools.len(), 2);
+        assert!(pins.list(&listed, false, 2).hidden.is_empty());
     }
 
     #[test]

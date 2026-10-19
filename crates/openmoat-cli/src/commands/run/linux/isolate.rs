@@ -24,7 +24,7 @@ use std::sync::atomic::AtomicBool;
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{EvalContext, Policy};
 
-use super::{Confined, Rules, restricted};
+use super::{Confined, Rules, refuse_exposed, restricted};
 use crate::cli::IsolatedArgs;
 use crate::context::path_string;
 use crate::exit::Code;
@@ -49,6 +49,7 @@ pub fn isolate(
     ctx: &EvalContext,
     grants: Grants,
     program: &Path,
+    state: &Path,
 ) -> Result<Confined> {
     let bwrap = system_bwrap().context(
         "`moat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
@@ -57,6 +58,8 @@ pub fn isolate(
     usable(&bwrap)?;
     let port = grants.proxy_port.context("no proxy port")?;
     let generated = bwrap_mounts(policy, ctx, grants)?;
+    // The mounts hide the state directory only under the empty temp directory.
+    refuse_exposed(state, &generated.rules, true)?;
     let session = Session::create(&generated.placeholders)?;
     let listener = UnixListener::bind(&session.socket)
         .with_context(|| format!("listening on {}", session.socket.display()))?;

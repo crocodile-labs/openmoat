@@ -279,6 +279,10 @@ these takes one command in your own terminal (agents are denied all of them):
   changed or was added since you last accepted the agents' MCP servers, so it starts a
   command nobody reviewed. Run `moat mcp accept <server>`: it shows what changed and asks.
   Other servers and tools keep working meanwhile.
+- **A wrapped MCP server shows no tools**, or its calls fail with error -32602 naming
+  `moat mcp accept`: `moat mcp proxy` holds every tool of a server until you have read
+  it, the first time the server starts through the proxy too. Run `moat mcp accept
+  <server>`: it shows each tool's name, description and input schema and asks.
 - **A command you need keeps asking or is denied**: `moat allow --last` for this session,
   `moat allow --last --always` for good, or `moat edit` for a wider rule. Please also
   report it with the "False positive" issue template, so the default policy stops doing it.
@@ -314,7 +318,7 @@ these takes one command in your own terminal (agents are denied all of them):
 | `moat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `moat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes |
 | `moat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `moat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
-| `moat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `moat mcp unwrap [<server>…]` | run stdio MCP servers through `moat mcp proxy`, which pins each tool's description and input schema and hides one that changed (`--sandbox` also starts the server under `moat run`) · point them back; `moat init --mcp-proxy` wraps every one, `moat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md)) |
+| `moat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `moat mcp unwrap [<server>…]` | run stdio MCP servers through `moat mcp proxy`, which pins each tool's description and input schema and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included (`--sandbox` also starts the server under `moat run`) · point them back; `moat init --mcp-proxy` wraps every one, `moat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `moat policy lint` · `moat policy check "<cmd>"` · `moat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `moat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them) |

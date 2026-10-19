@@ -146,7 +146,18 @@ from Claude Code's mask block (lifting TLS for them would widen the others, whic
 ADR-019 forbids); they still work through `moat proxy`, whose broker is per-secret,
 and `moat sandbox show` names each dropped id (#401). Its text output starts with a
 `Secrets` list: one line per secret with its host, header and source, never the value,
-and whether Claude Code injects it or why it skips it.
+and whether Claude Code masks it or why it skips it. `moat doctor` prints the same per
+secret from the settings file on disk: masked (the `mask` entry for its host and
+`tlsTerminate` are both there), denied instead of masked (a `file` source on macOS),
+skipped with the loss, or not yet written, until `moat sandbox sync`. A secret Claude
+Code does not mask keeps the hook and `moat proxy`'s handling. `tlsTerminate` is on only
+while at least one secret is masked: Claude Code calls it experimental, and its
+proxy then terminates TLS for sandboxed commands
+([sandboxing](https://code.claude.com/docs/en/sandboxing#mask-credentials)). Claude
+Code honours `mask` entries and `tlsTerminate` only from user, managed or `--settings`
+settings, which is where OpenMoat writes them. `moat doctor` also flags
+`credentials.allowPlaintextInject: true` in the file when the policy did not ask for it,
+since it lets every masked secret go to a plain-HTTP host.
 
 Other settings and comments are kept, and each file is copied to
 `<file>.moat-sandbox-backup` before moat changes it. `moat sandbox show` prints what
@@ -260,6 +271,14 @@ available, the Standard tier keeps its commands out of the home altogether.
   (`~/.cargo/credentials.toml`). [EVIDENCE.md](EVIDENCE.md) marks each as a gap. The
   hook still decides the agent's own tool calls on them. `moat run --isolate` covers
   these paths where bubblewrap runs (below).
+- **OpenMoat's state directory.** For the same reason, `moat run` on Linux refuses to
+  start when a tree it grants (the project, a read root, a `--write` path, the temp
+  directory) holds the state directory (`MOAT_HOME`, default `~/.moat`) or lies inside
+  it, symlinks resolved: commands could otherwise read the audit log and the lock.
+  Move `MOAT_HOME` out of the tree it names. `moat run --isolate` starts when the
+  state directory is below the temp directory, which it covers with an empty `tmpfs`;
+  anywhere else it refuses too. `~/.moat` is in none of the default grants, and
+  `moat doctor` warns on Linux when the state directory is inside one.
 - **The terminal.** The agent runs in the terminal it was started in. Neither it nor
   a command it starts may type into that terminal: Seatbelt denies `ioctl(TIOCSTI)`,
   and the seccomp filter (also inside `--isolate`) denies `TIOCSTI` and `TIOCLINUX`,

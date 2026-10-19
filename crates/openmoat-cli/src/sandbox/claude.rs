@@ -43,6 +43,7 @@ mod credentials;
 mod deny_list;
 mod git_env;
 mod git_internals;
+pub mod mask;
 mod owned;
 mod rules;
 mod settings;

@@ -23,6 +23,7 @@ pub mod codex;
 pub mod cursor;
 #[cfg(test)]
 mod differential;
+pub mod exposure;
 pub mod git_env;
 pub mod install;
 pub mod landlock;
@@ -124,13 +125,21 @@ fn lower_for_session(
     grants: Grants,
 ) -> anyhow::Result<(Enforcement, Grants)> {
     let (policy, _) = with_read_roots(policy)?;
-    let tmpdir = std::fs::canonicalize(std::env::temp_dir())
-        .ok()
-        .map(|dir| crate::context::path_string(&dir));
     Ok((
         openmoat_core::ir::lower(&policy, ctx)?,
-        Grants { tmpdir, ..grants },
+        Grants {
+            tmpdir: session_tmpdir(),
+            ..grants
+        },
     ))
+}
+
+/// This process's temp directory, resolved: what a `moat run` session grants
+/// (and `--isolate` covers with an empty `tmpfs`).
+pub fn session_tmpdir() -> Option<String> {
+    std::fs::canonicalize(std::env::temp_dir())
+        .ok()
+        .map(|dir| crate::context::path_string(&dir))
 }
 
 /// The Seatbelt profile `moat run` applies on macOS.

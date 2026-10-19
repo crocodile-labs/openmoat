@@ -4,12 +4,14 @@
 use std::path::Path;
 
 use openmoat_core::Policy;
+use openmoat_hosts::Host;
 
 use super::{Area, Report};
 use crate::commands::sandbox::write_report;
 use crate::home::Home;
 use crate::install::HostConfig;
 use crate::integrity::Lock;
+use crate::sandbox::claude::mask::{self, Mask};
 use crate::sandbox::{Plan, install as host_sandbox};
 
 /// The Standard tier: each present host's sandbox settings against the policy,
@@ -71,6 +73,9 @@ pub(super) fn sandboxes(
             }
             Err(e) => report.line(Area::Sandbox, false, format!("{name:<16} sandbox: {e:#}")),
         }
+        if host == Host::ClaudeCode {
+            masks(report, home, policy, &plan);
+        }
         if verbose {
             let _ = write_report(&mut report.out, translation);
         }
@@ -83,6 +88,42 @@ pub(super) fn sandboxes(
             report.line(Area::Service, true, line);
         } else {
             report.warn(&line);
+        }
+    }
+}
+
+/// One row per policy secret: whether Claude Code's own broker masks it in
+/// the settings on disk (#363). A secret it does not mask keeps the hook's
+/// and `moat proxy`'s handling, so none of these is a problem: a missing
+/// entry is already the "differs from the policy" problem above.
+fn masks(report: &mut Report, home: &Home, policy: &Policy, plan: &Plan) {
+    if policy.secrets.is_empty() {
+        return;
+    }
+    let root = match host_sandbox::claude_settings(home) {
+        Ok(root) => root,
+        Err(e) => {
+            report.warn(&format!("Claude Code      secrets: {e:#}"));
+            return;
+        }
+    };
+    let states = mask::states(
+        &root,
+        &policy.secrets,
+        &plan.claude.report,
+        host_sandbox::MASK_FILES_DENIED,
+    );
+    for (secret, state) in states {
+        let text = format!(
+            "Claude Code      secret `{}` ({}): {}",
+            secret.id,
+            secret.host,
+            state.describe()
+        );
+        match state {
+            Mask::Active => report.line(Area::Sandbox, true, text),
+            Mask::NotWritten => report.warn(&text),
+            Mask::FileDenied | Mask::Skipped(_) => report.note(&text),
         }
     }
 }

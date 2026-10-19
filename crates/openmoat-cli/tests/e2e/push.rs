@@ -12,7 +12,7 @@ use crate::taint::{call, decide};
 
 /// A fake GitHub token of the right shape, built at run time so this source
 /// holds no token-shaped text.
-fn fake_token() -> String {
+pub(crate) fn fake_token() -> String {
     format!("ghp_{}", "Fake0Token".repeat(4))
 }
 
@@ -39,7 +39,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// `~/repo` on `main`, one commit pushed to `~/origin.git` and tracked.
-fn repo(sb: &Sandbox) -> PathBuf {
+pub(crate) fn repo(sb: &Sandbox) -> PathBuf {
     let work = sb.home.join("repo");
     let origin = sb.home.join("origin.git");
     let init = ["init", "-q", "--template=", "-b", "main"];
@@ -57,7 +57,7 @@ fn repo(sb: &Sandbox) -> PathBuf {
     work
 }
 
-fn commit(work: &Path, file: &str, text: &str, message: &str) {
+pub(crate) fn commit(work: &Path, file: &str, text: &str, message: &str) {
     let path = work.join(file);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, text).unwrap();

@@ -32,6 +32,10 @@ impl Recorder for Failing {
 type Saved = Arc<Mutex<Vec<ToolPins>>>;
 
 fn relay(pins: Option<ToolPins>, log: &Log) -> (Relay, Saved) {
+    relay_trusting(pins, false, log)
+}
+
+fn relay_trusting(pins: Option<ToolPins>, trust: bool, log: &Log) -> (Relay, Saved) {
     let saved: Saved = Arc::default();
     let sink = Arc::clone(&saved);
     let save: Save = Box::new(move |p| {
@@ -39,7 +43,7 @@ fn relay(pins: Option<ToolPins>, log: &Log) -> (Relay, Saved) {
         Ok(())
     });
     (
-        Relay::new("docs", pins, Box::new(log.clone()), save, || 7),
+        Relay::new("docs", pins, trust, Box::new(log.clone()), save, || 7),
         saved,
     )
 }
@@ -71,14 +75,93 @@ fn names(line: &str) -> Vec<String> {
         .collect()
 }
 
-/// A first session pins the tools; returns those pins.
+/// A first session holds the tools and a person accepts them (what `moat mcp
+/// accept` does); returns those pins.
 fn first_session(tools: &[(&str, &str)]) -> ToolPins {
     let log = Log::default();
     let (relay, saved) = relay(None, &log);
     relay.host_line(&list_request(1));
     let out = relay.server_line(&list_response(1, tools));
-    assert_eq!(names(&out).len(), tools.len(), "first sight hides nothing");
-    saved.lock().unwrap().pop().expect("first sight is saved")
+    assert!(names(&out).is_empty(), "first sight hides every tool");
+    let mut pins = saved.lock().unwrap().pop().expect("first sight is saved");
+    assert_eq!(pins.held.len(), tools.len());
+    pins.accept_held();
+    pins
+}
+
+#[test]
+fn a_new_server_has_every_tool_held_and_its_calls_refused() {
+    let log = Log::default();
+    let (relay, saved) = relay(None, &log);
+    // Before any listing, too: the host may call a tool it remembers.
+    let early = relay.host_line(&call(1, "search"));
+    assert!(matches!(early.as_slice(), [Routed::Host(r)] if r.contains("moat mcp accept docs")));
+
+    relay.host_line(&list_request(2));
+    let out = relay.server_line(&list_response(
+        2,
+        &[("search", "Search."), ("read", "Read.")],
+    ));
+    assert!(names(&out).is_empty(), "{out}");
+    let pins = saved
+        .lock()
+        .unwrap()
+        .pop()
+        .expect("the held tools are saved");
+    assert!(pins.tools.is_empty() && pins.is_held("search") && pins.is_held("read"));
+
+    let refused = relay.host_line(&call(3, "read"));
+    let [Routed::Host(reply)] = refused.as_slice() else {
+        panic!("{refused:?}")
+    };
+    let reply: Value = serde_json::from_str(reply).unwrap();
+    assert_eq!(reply["error"]["code"], -32602);
+    let log = log.0.lock().unwrap();
+    assert!(log.iter().all(|(_, refused)| refused.is_some()), "{log:?}");
+}
+
+#[test]
+fn accepting_a_new_servers_tools_releases_them() {
+    let pins = first_session(&[("search", "Search."), ("read", "Read.")]);
+    let log = Log::default();
+    let (relay, saved) = relay(Some(pins), &log);
+    relay.host_line(&list_request(1));
+    let out = relay.server_line(&list_response(
+        1,
+        &[("search", "Search."), ("read", "Read.")],
+    ));
+    assert_eq!(names(&out), ["search", "read"]);
+    assert!(saved.lock().unwrap().is_empty(), "nothing changed");
+    assert_eq!(
+        relay.host_line(&call(2, "search")),
+        [Routed::Server(call(2, "search"))]
+    );
+}
+
+#[test]
+fn pins_from_an_earlier_first_sight_keep_working() {
+    // Pins a release that trusted first sight wrote: the file exists, so the
+    // tools in it pass, and only a change is held.
+    let log = Log::default();
+    let (trusting, saved) = relay_trusting(None, true, &log);
+    trusting.host_line(&list_request(1));
+    let out = trusting.server_line(&list_response(1, &[("search", "Search.")]));
+    assert_eq!(
+        names(&out),
+        ["search"],
+        "a trusted first sight hides nothing"
+    );
+    let pins = saved.lock().unwrap().pop().expect("first sight is saved");
+    assert!(pins.held.is_empty());
+
+    let (relay, _) = relay(Some(pins), &log);
+    relay.host_line(&list_request(2));
+    let out = relay.server_line(&list_response(2, &[("search", "Search."), ("new", "N.")]));
+    assert_eq!(names(&out), ["search"]);
+    assert_eq!(
+        relay.host_line(&call(3, "search")),
+        [Routed::Server(call(3, "search"))]
+    );
 }
 
 #[test]
@@ -133,7 +216,7 @@ fn a_tool_never_accepted_is_refused_even_unlisted() {
 #[test]
 fn a_call_that_cannot_be_recorded_is_refused() {
     let save: Save = Box::new(|_| Ok(()));
-    let relay = Relay::new("docs", None, Box::new(Failing), save, || 0);
+    let relay = Relay::new("docs", None, false, Box::new(Failing), save, || 0);
     let out = relay.host_line(&call(1, "search"));
     let [Routed::Host(reply)] = out.as_slice() else {
         panic!("{out:?}")
@@ -144,7 +227,7 @@ fn a_call_that_cannot_be_recorded_is_refused() {
 #[test]
 fn pins_that_cannot_be_saved_refuse_every_call() {
     let save: Save = Box::new(|_| bail!("read-only"));
-    let relay = Relay::new("docs", None, Box::new(Log::default()), save, || 0);
+    let relay = Relay::new("docs", None, false, Box::new(Log::default()), save, || 0);
     relay.host_line(&list_request(1));
     relay.server_line(&list_response(1, &[("search", "Search.")]));
     let out = relay.host_line(&call(2, "search"));

@@ -49,20 +49,20 @@ const LAYER: &str = if cfg!(target_os = "linux") {
 };
 
 /// What bounds each `claude` run (`claude_output`).
-const PERL: &str = "/usr/bin/perl";
+pub(super) const PERL: &str = "/usr/bin/perl";
 
 /// The issue tracking the headless benign-verification limitation.
 const BENIGN_GAP: u32 = 238;
 
 /// `MOAT_CLAUDE_BIN` only (scripts/ci/differential.sh sets it from `PATH`): the
 /// quality gate must not run whatever Claude Code a developer has installed.
-fn claude_binary() -> Option<PathBuf> {
+pub(super) fn claude_binary() -> Option<PathBuf> {
     std::env::var_os("MOAT_CLAUDE_BIN")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
 }
 
-fn python() -> Option<PathBuf> {
+pub(super) fn python() -> Option<PathBuf> {
     which("MOAT_FAKE_API", "python3")
 }
 
@@ -75,20 +75,26 @@ fn which(var: &str, name: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// The fake Anthropic API, serving one Bash command, on a loopback port.
-struct FakeApi {
+/// The fake Anthropic API, serving one Bash command or a sequence of tool
+/// calls, on a loopback port.
+pub(super) struct FakeApi {
     child: Child,
-    port: u16,
+    pub(super) port: u16,
 }
 
 impl FakeApi {
-    /// Start the fake API on a port the OS picks and read that port from its
-    /// first stdout line, so no other process can take the port in between.
+    /// Start the fake API serving one Bash `command`.
     fn start(python: &Path, script: &Path, command: &str) -> Self {
+        Self::spawn(python, script, &["--bash", command])
+    }
+
+    /// Start the fake API with `args` on a port the OS picks and read that port
+    /// from its first stdout line, so no other process can take the port in between.
+    pub(super) fn spawn(python: &Path, script: &Path, args: &[&str]) -> Self {
         let mut child = Command::new(python)
             .arg("-I")
             .arg(script)
-            .args(["--bash", command])
+            .args(args)
             .stdout(Stdio::piped())
             .spawn()
             .expect("starting fake api");
