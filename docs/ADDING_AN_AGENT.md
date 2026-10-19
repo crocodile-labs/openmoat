@@ -7,8 +7,8 @@
 
 **On this page:** [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
-How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex
-and Cursor are maintained by the project; other agents come from contributors and are
+How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
+Cursor and OpenClaw are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of
 this guide; this file explains each step.
 
@@ -47,7 +47,6 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 | `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
 | `crates/openmoat-cli/src/install.rs` | a `HookSpec` list and `HookFormat` in `HostConfig::at`; the directory, its variable and the file come from the spec's `install` |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
-| `crates/openmoat-cli/src/context.rs` | the config directory and its variable in `moved_dirs` |
 | `tests/fixtures/hosts/<agent>/` | captured payloads and a `README.md` naming each one's source |
 | `crates/openmoat-cli/tests/e2e/<agent>.rs` | end-to-end tests, registered in `e2e/main.rs` |
 | `docs/INSTALL.md`, `README.md` | a row in the hooks table and in "Supported agents" |
@@ -107,13 +106,13 @@ permission flow decides, as it would without OpenMoat. For an agent that runs it
 flow when a hook gives no answer, render nothing and exit 0, as `wire/pre_tool_use.rs` does.
 An agent with no such answer needs a mapping: Cursor's shell and MCP hooks send it as
 `ask` (`host/cursor.rs`), and for events that cannot prompt, `Asks::defer_is_ask_on_no_ask`
-in its spec makes `Host::decided` record and answer it as `ask`. Find out from the
+in its spec makes `Host::decided` (`contract::decided`, driven by the spec's `Asks`) record and answer it as `ask`. Find out from the
 agent's source which applies.
 
 Some agents cannot ask. Codex rejects `ask` and runs the call; the Continue CLI ignores
 it; Cursor accepts `ask` on `preToolUse` but runs the call, and `beforeReadFile` takes
 only allow or deny. For these, the spec's `Asks` says why the agent cannot ask, and
-`Host::answer` turns an `ask` into a `deny` with that reason and the line saying how to
+`Host::answer` (`contract::answer`) turns an `ask` into a `deny` with that reason and the line saying how to
 approve it. The audit log keeps the `ask`, which is what `moat` and `moat allow --last`
 look for. If the agent cannot ask, fill in `Asks::on_pre_tool_use`. If it can ask only
 on some events, return `HookEvent::PreToolUseNoAsk` for the others and fill in
@@ -155,8 +154,10 @@ can be a separate PR.
 ## The config directory variable
 
 Most agents let a variable move their config directory (`CLAUDE_CONFIG_DIR`,
-`CODEX_HOME`, `CURSOR_CONFIG_DIR`). Add the agent's variable and default directory to
-`dir_variable` and `moved_dirs`. `moat init` installs where that variable points and
+`CODEX_HOME`, `CURSOR_CONFIG_DIR`). Put the agent's variable and default directory in
+its spec's `install` (`InstallSpec`): `dir_variable` and `moved_dirs`
+(`crates/openmoat-cli/src/context.rs`) read them from there for every host in
+`Host::ALL`. `moat init` installs where that variable points and
 records the directory in `~/.moat/hosts.json`, and later commands use the record. An
 agent counts as present when its directory exists; `init` names an agent whose variable
 points at a missing directory instead of skipping it silently.

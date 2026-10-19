@@ -30,14 +30,14 @@ cargo install openmoat --locked
 Then run `moat init` ([below](#set-up-with-moat-init)).
 
 > [!IMPORTANT]
-> **macOS version.** `moat run` needs macOS 14 or later: its Seatbelt profile names
+> **macOS version.** `moat run` is supported on macOS 14 or later, the oldest macOS
+> CI tests (`macos-14` and `macos-15-intel`). Its Seatbelt profile names
 > `(ioctl-command TIOCSTI)` (CVE-2017-5226 class), an identifier `sandbox-exec`
-> only recognises from macOS 13 onwards. On macOS 12 and earlier, `sandbox-exec`
+> only recognises from macOS 13 onwards, so on macOS 12 and earlier `sandbox-exec`
 > refuses to parse the profile and `moat run` exits without starting the agent
-> (fail closed). The hook, `moat init` and `moat status` work on earlier macOS;
-> only `moat run` has this floor. CI covers `macos-14` and `macos-15-intel`;
-> GitHub Actions no longer offers a `macos-13` runner, so macOS 13 is not
-> exercised in CI and is unsupported in practice.
+> (fail closed). GitHub Actions no longer offers a `macos-13` runner, so macOS 13
+> is not tested. The hook, `moat init` and `moat status` work on earlier macOS;
+> only `moat run` has this floor.
 
 To build from a clone instead (Rust 1.95, pinned by `rust-toolchain.toml`):
 
@@ -89,7 +89,7 @@ a file of yours that already has one of those names is left alone, and
 `moat uninstall` never deletes it.
 
 To choose without questions, name the agents: `moat init --hosts claude-code` (or
-`codex`, `cursor`, comma-separated). `moat init --yes` sets up every agent found, for
+`codex`, `cursor`, and `openclaw` from the next release on; comma-separated). `moat init --yes` sets up every agent found, for
 scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
 files and says how to go on. `moat init --dry-run` prints what would change first.
 

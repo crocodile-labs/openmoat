@@ -30,6 +30,7 @@ view at the end of the file.
 
 ### Fixed
 - `moat guard` looks up whether a session already recorded settings drift with one indexed query that stops at the first match instead of reading the whole session, and the long-session latency check in CI takes the median p95 of three batches and shows the `latency_us` p95 beside it ([#585](https://github.com/crocodile-labs/openmoat/pull/585)).
+- `moat bench`'s hook-failure line for Claude Code says that from Claude Code 2.1.295 a hook that is missing, crashes or times out blocks the call (`moat init` sets `onFailure: "block"`); it said only that the call runs ([#592](https://github.com/crocodile-labs/openmoat/pull/592)).
 
 ## [0.6.0] - 2026-10-19
 

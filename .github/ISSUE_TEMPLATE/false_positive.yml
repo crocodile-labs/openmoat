@@ -18,7 +18,7 @@ body:
     id: host
     attributes:
       label: Host
-      options: [Claude Code, Codex, Cursor, policy check only, other]
+      options: [Claude Code, Codex, Cursor, OpenClaw, policy check only, other]
     validations:
       required: true
   - type: textarea
@@ -33,7 +33,7 @@ body:
     id: check
     attributes:
       label: "`moat policy check` output"
-      description: Run `moat policy check "<command>"` (add `--kind fs-read|fs-write|net|mcp` for other tools) and paste the verdict, rules and reasons.
+      description: Run `moat policy check "<command>"` (add `--kind fs-read|fs-write|net|fetch|mcp` for other tools) and paste the verdict, rules and reasons.
       render: text
     validations:
       required: true
