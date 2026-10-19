@@ -1,15 +1,46 @@
-//! Which [`HostSpec`] describes each supported host.
+//! Which [`HostSpec`] describes each supported host, and which
+//! [`HostAdapter`] reads its format.
 
-use crate::contract::HostSpec;
+use crate::contract::{HostAdapter, HostSpec};
 use crate::{Host, host};
 
-/// The facts about `host`, from its module under `host/`.
+/// The facts about `host`, from its module under `host/`: its adapter's, unless
+/// it sends another host's format.
 pub(crate) fn spec(host: Host) -> &'static HostSpec {
     match host {
-        Host::ClaudeCode => &host::claude_code::SPEC,
-        Host::Codex => &host::codex::SPEC,
-        Host::Cursor => &host::cursor::SPEC,
         Host::Continue => &host::continue_cli::SPEC,
-        Host::OpenClaw => &host::openclaw::SPEC,
+        own => adapter(own).spec(),
+    }
+}
+
+/// The adapter for the format `host` sends: its own, or the one its spec
+/// [`speaks`](HostSpec::speaks).
+pub(crate) fn adapter(host: Host) -> &'static dyn HostAdapter {
+    match host {
+        Host::ClaudeCode | Host::Continue => &host::claude_code::ADAPTER,
+        Host::Codex => &host::codex::ADAPTER,
+        Host::Cursor => &host::cursor::ADAPTER,
+        Host::OpenClaw => &host::openclaw::ADAPTER,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{adapter, spec};
+    use crate::Host;
+
+    /// A host's adapter is its own, or the one of the host it speaks.
+    #[test]
+    fn each_host_reads_the_format_its_spec_names() {
+        for host in [
+            Host::ClaudeCode,
+            Host::Codex,
+            Host::Cursor,
+            Host::Continue,
+            Host::OpenClaw,
+        ] {
+            let format = spec(host).speaks.unwrap_or(host);
+            assert_eq!(adapter(host).spec().id, format.id(), "{host:?}");
+        }
     }
 }

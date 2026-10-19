@@ -13,12 +13,8 @@ mod host;
 mod registry;
 mod wire;
 
-use host::claude_code::config_change;
-use host::{cursor, openclaw};
-use wire::pre_tool_use;
-
-pub use config_change::proposal_target;
 pub use contract::{Asks, HostSpec};
+pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
 
 use std::fmt;
@@ -169,11 +165,6 @@ impl Host {
         self.spec().display_name
     }
 
-    /// The host whose hook format this host speaks: `cn` sends Claude Code's.
-    fn wire(self) -> Self {
-        self.spec().speaks.unwrap_or(self)
-    }
-
     /// Parse a hook payload read from the host. The event name selects the format;
     /// Claude Code and Codex may omit it on `PreToolUse`.
     pub fn parse_request(self, payload: &str) -> Result<HookRequest, HostError> {
@@ -183,18 +174,7 @@ impl Host {
             hook_event_name: Option<String>,
         }
         let envelope: Envelope = serde_json::from_str(payload)?;
-        match (self.wire(), envelope.hook_event_name.as_deref()) {
-            (Self::Cursor, Some(event)) if cursor::EVENTS.contains(&event) => {
-                cursor::parse(self, payload)
-            }
-            (Self::OpenClaw, Some(openclaw::EVENT)) => openclaw::parse(self, payload),
-            (Self::Cursor | Self::OpenClaw, _) => Err(HostError::WrongEvent(
-                envelope.hook_event_name.unwrap_or_default(),
-            )),
-            (_, None | Some(pre_tool_use::EVENT)) => pre_tool_use::parse(self, payload),
-            (Self::ClaudeCode, Some(config_change::EVENT)) => config_change::parse(self, payload),
-            (_, Some(other)) => Err(HostError::WrongEvent(other.to_owned())),
-        }
+        registry::adapter(self).parse(self, envelope.hook_event_name.as_deref(), payload)
     }
 
     /// The event a payload claims to be for, read as leniently as possible, so a
@@ -207,15 +187,8 @@ impl Host {
             hook_event_name: String,
         }
         match serde_json::from_str::<Envelope>(payload) {
-            Ok(e)
-                if self.wire() == Self::ClaudeCode && e.hook_event_name == config_change::EVENT =>
-            {
-                HookEvent::ConfigChange {
-                    source: String::new(),
-                    change_type: None,
-                }
-            }
-            _ => HookEvent::PreToolUse,
+            Ok(e) => registry::adapter(self).event_of(&e.hook_event_name),
+            Err(_) => HookEvent::PreToolUse,
         }
     }
 
@@ -238,14 +211,7 @@ impl Host {
     /// Render the response document the host expects on stdout for `event`.
     #[must_use]
     pub fn render_response(self, event: &HookEvent, decision: &Decision) -> String {
-        match (self, event) {
-            (Self::Cursor, _) => cursor::render(decision),
-            (Self::OpenClaw, _) => openclaw::render(decision),
-            (_, HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk) => {
-                pre_tool_use::render(decision)
-            }
-            (_, HookEvent::ConfigChange { .. }) => config_change::render(decision),
-        }
+        registry::adapter(self).render(event, decision)
     }
 }
 
