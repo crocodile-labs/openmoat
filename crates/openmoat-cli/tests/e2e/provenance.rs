@@ -48,7 +48,12 @@ fn a_script_a_tainted_session_wrote_taints_the_session_that_runs_it() {
     run(&sb, &proj, "b", "bash run.sh");
     let (verdict, reason) = workflow(&sb, &proj, "b");
     assert_eq!(verdict, "ask", "{reason}");
-    assert!(reason.contains("[session-taint]"), "{reason}");
+    // `runs-later` asks for any workflow write too; the taint must be among the rules
+    let rules = reason
+        .split_once('[')
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map_or("", |(rules, _)| rules);
+    assert!(rules.split(", ").any(|r| r == "session-taint"), "{reason}");
     assert!(
         reason.contains("run.sh") && reason.contains("session a"),
         "{reason}"
