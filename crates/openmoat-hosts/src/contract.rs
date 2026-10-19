@@ -78,6 +78,12 @@ pub struct HostSpec {
     /// Where `moat init` installs the hook; `None` for a host that runs another
     /// host's hook.
     pub install: Option<InstallSpec>,
+    /// Where the host reads its MCP server definitions; `None` for a host
+    /// OpenMoat reads none of.
+    pub mcp: Option<McpSpec>,
+    /// The OS sandbox OpenMoat configures inside the host (the Standard tier);
+    /// `None` for a host it configures none for.
+    pub sandbox: Option<SandboxSpec>,
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.
@@ -90,6 +96,74 @@ pub struct InstallSpec {
     pub dir_name: &'static str,
     /// The file in that directory the hook goes into.
     pub config_file: &'static str,
+}
+
+/// Where a host reads its MCP server definitions. A file that does not exist
+/// lists no servers.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct McpSpec {
+    /// The user-level file, in or beside the host's configuration.
+    pub user_file: McpFile,
+    /// How that file lays out its servers.
+    pub user_layout: McpLayout,
+    /// A project's file, relative to the working directory and each directory
+    /// above it up to the project root, and its layout; `None` when the host
+    /// documents none.
+    pub project_file: Option<(&'static str, McpLayout)>,
+}
+
+/// Where a host's user-level MCP server file is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpFile {
+    /// The file the hook goes into, wherever the host's configuration puts it.
+    HookFile,
+    /// The file of this name beside the hook file.
+    BesideHookFile(&'static str),
+    /// The file of this name in the home directory while the configuration
+    /// directory is the default `~/<dir_name>`, inside the configuration
+    /// directory otherwise (Claude Code's `~/.claude.json`).
+    BesideDefaultDir(&'static str),
+}
+
+/// How a file lays out its MCP servers. The CLI has one reader per layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpLayout {
+    /// `{"mcpServers": {"<name>": {...}}}`: `.mcp.json`, Cursor's `mcp.json`.
+    Json,
+    /// `~/.claude.json`: `mcpServers`, and `projects.<path>.mcpServers`.
+    ClaudeJson,
+    /// Codex `config.toml`: `[mcp_servers.<name>]`.
+    Toml,
+    /// OpenClaw `openclaw.json`, JSON5: `{mcp: {servers: {"<name>": {...}}}}`.
+    OpenClaw,
+}
+
+/// The OS sandbox OpenMoat writes into a host's own settings.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct SandboxSpec {
+    /// The format of the settings, which names the backend that writes them.
+    pub format: SandboxFormat,
+    /// The file beside the hook file the settings go into (the hook file
+    /// itself when it has the hook file's name).
+    pub file: &'static str,
+    /// Why the sandbox is not written on native Windows, as `init`, `sandbox`,
+    /// `doctor` and `status` print it; `None` when it is written there.
+    pub unavailable_on_windows: Option<&'static str>,
+}
+
+/// A host's sandbox settings format. The CLI has one backend per format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxFormat {
+    /// Claude Code's `sandbox` block and permission rules, in the file that
+    /// holds its hooks; `moat uninstall` removes them with the hooks.
+    ClaudeSettings,
+    /// OpenMoat's permissions profile in Codex's `config.toml`, which the lock
+    /// pins by the part OpenMoat owns.
+    CodexProfile,
+    /// Cursor's `sandbox.json`, which the lock pins whole.
+    CursorSandbox,
 }
 
 /// What a host does with an `ask` (and a `defer`, ADR-025) on a tool hook.

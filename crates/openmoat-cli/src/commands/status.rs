@@ -329,8 +329,7 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
     let lock = Lock::load(&home.lock_path()).ok();
     let mut healthy = true;
     let mut present = false;
-    for host in host_sandbox::HOSTS
-        .into_iter()
+    for host in host_sandbox::hosts()
         .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
     {
         let name = host.display_name();

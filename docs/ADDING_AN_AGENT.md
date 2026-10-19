@@ -42,10 +42,11 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `moat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
+| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives; `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user and the project file; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `moat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
 | `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `adapter` |
 | `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
 | `crates/openmoat-cli/src/install.rs` | a `HookSpec` list and `HookFormat` in `HostConfig::at`; the directory, its variable and the file come from the spec's `install` |
+| `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec names a new `McpLayout` (a reader in `parse`) or `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
 | `crates/openmoat-cli/src/context.rs` | the config directory and its variable in `moved_dirs` |
 | `tests/fixtures/hosts/<agent>/` | captured payloads and a `README.md` naming each one's source |

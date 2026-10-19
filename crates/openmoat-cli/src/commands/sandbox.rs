@@ -4,7 +4,7 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, SandboxFormat};
 use serde_json::{Value, json};
 use toml_edit::DocumentMut;
 
@@ -15,8 +15,7 @@ use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
 use crate::sandbox::{
-    Grants, Plan, Report, claude, codex, codex_config_path, install, landlock_rules,
-    seatbelt_profile,
+    Grants, Plan, Report, claude, codex, install, landlock_rules, seatbelt_profile,
 };
 
 /// One host's generated settings, ready to print.
@@ -46,26 +45,24 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     codex::apply(&mut codex_doc, &plan.codex)?;
     let mut claude_doc = json!({});
     claude::apply(&mut claude_doc, &plan.claude, &mut Vec::new())?;
-    let hosts = [
-        Shown {
-            host: Host::ClaudeCode,
-            path: HostConfig::for_host(&home, Host::ClaudeCode)?.settings_path,
-            text: serde_json::to_string_pretty(&claude_doc)?,
-            report: &plan.claude.report,
-        },
-        Shown {
-            host: Host::Codex,
-            path: codex_config_path(&home)?,
-            text: codex_doc.to_string(),
-            report: &plan.codex.report,
-        },
-        Shown {
-            host: Host::Cursor,
-            path: install::settings_path(&home, Host::Cursor)?,
-            text: serde_json::to_string_pretty(&plan.cursor.settings)?,
-            report: &plan.cursor.report,
-        },
-    ];
+    let mut hosts = Vec::new();
+    for host in install::hosts() {
+        let text = match install::format(host) {
+            Some(SandboxFormat::CodexProfile) => codex_doc.to_string(),
+            Some(SandboxFormat::CursorSandbox) => {
+                serde_json::to_string_pretty(&plan.cursor.settings)?
+            }
+            Some(SandboxFormat::ClaudeSettings) | None => {
+                serde_json::to_string_pretty(&claude_doc)?
+            }
+        };
+        hosts.push(Shown {
+            host,
+            path: install::settings_path(&home, host)?,
+            text,
+            report: install::report(host, &plan),
+        });
+    }
     if args.format == Format::Json {
         let doc: serde_json::Map<String, Value> = hosts
             .iter()
@@ -138,7 +135,7 @@ pub fn sync() -> Result<Code> {
     let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
     let (mut files, mut codex_configs) = (Vec::new(), Vec::new());
-    for host in install::HOSTS {
+    for host in install::hosts() {
         let path = install::settings_path(&home, host)?;
         if !path.parent().is_some_and(std::path::Path::is_dir) {
             writeln!(out, "· {:<16} host not found", host.display_name())?;
@@ -172,8 +169,10 @@ pub fn sync() -> Result<Code> {
             path.display()
         )?;
         write_report(&mut out, install::report(host, &plan))?;
-        match host {
-            Host::Codex => codex_configs.push(path),
+        // The lock pins a Codex profile by the part OpenMoat owns, any other
+        // sandbox file whole.
+        match install::format(host) {
+            Some(SandboxFormat::CodexProfile) => codex_configs.push(path),
             _ => files.push(path),
         }
     }

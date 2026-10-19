@@ -5,7 +5,10 @@ use openmoat_core::{Decision, Verdict};
 use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
+use crate::contract::{
+    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
+    SandboxSpec, wrong_event,
+};
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -28,6 +31,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "CODEX_HOME",
         dir_name: ".codex",
         config_file: "hooks.json",
+    }),
+    mcp: Some(McpSpec {
+        user_file: McpFile::BesideHookFile("config.toml"),
+        user_layout: McpLayout::Toml,
+        project_file: Some((".codex/config.toml", McpLayout::Toml)),
+    }),
+    sandbox: Some(SandboxSpec {
+        format: SandboxFormat::CodexProfile,
+        file: "config.toml",
+        unavailable_on_windows: None,
     }),
 };
 

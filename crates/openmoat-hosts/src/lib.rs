@@ -14,7 +14,9 @@ mod host;
 mod registry;
 mod wire;
 
-pub use contract::{Asks, HostSpec, InstallSpec};
+pub use contract::{
+    Asks, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat, SandboxSpec,
+};
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
 

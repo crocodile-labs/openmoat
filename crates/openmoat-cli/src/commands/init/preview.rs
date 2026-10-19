@@ -67,7 +67,7 @@ fn changes(
     }];
     let host = config.host;
     if let Some(plan) = plan
-        && sandbox::install::HOSTS.contains(&host)
+        && sandbox::install::format(host).is_some()
     {
         let path = sandbox::install::settings_path(home, host)?;
         if let Some(shared) = changes.iter_mut().find(|c| c.path == path) {
