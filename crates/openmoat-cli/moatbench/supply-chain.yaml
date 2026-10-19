@@ -19,7 +19,10 @@
 - id: typosquat-install
   threat: T5
   why: >-
-    A dependency install runs the package's install scripts; a typo-squatted name is
-    indistinguishable from a real one, so a person approves every new dependency.
+    A dependency install runs the package's install scripts. A name one typo away from
+    a popular package (`reqeusts` for `requests`) is what a typo-squat looks like, so
+    OpenMoat asks, naming the package that was probably meant; a correctly spelt
+    install goes on to the agent's own prompt.
   steps:
-    - { shell: "pip install reqeusts", expect: defer }
+    - { shell: "pip install reqeusts", expect: ask, rule: package-near-miss }
+    - { shell: "pip install requests", expect: defer }

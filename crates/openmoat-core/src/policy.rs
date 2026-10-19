@@ -317,6 +317,27 @@ pub struct SandboxSettings {
     /// on the encrypted name, which may be another site than the allowed host.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub proxy_allow_ech: bool,
+    /// Days a package version must have been published before the package
+    /// managers `moat run` starts install it (ADR-030); `0` turns this off,
+    /// absent is 7 days ([`Policy::package_min_release_age_days`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_min_release_age_days: Option<u16>,
+}
+
+/// The release age `moat run` asks of new package versions when the policy
+/// does not say (ADR-030).
+pub const DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS: u16 = 7;
+
+impl Policy {
+    /// The days a package version must have been published before `moat run`
+    /// lets npm and uv install it; `0` is off.
+    #[must_use]
+    pub fn package_min_release_age_days(&self) -> u16 {
+        self.sandbox
+            .as_ref()
+            .and_then(|s| s.package_min_release_age_days)
+            .unwrap_or(DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS)
+    }
 }
 
 fn default_verdict() -> Defaults {

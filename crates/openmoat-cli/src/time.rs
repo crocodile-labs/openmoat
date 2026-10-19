@@ -38,6 +38,14 @@ pub fn timestamp(ts_ms: i64) -> String {
     )
 }
 
+/// The start of the UTC day `days` days before `ts_ms`, in RFC 3339
+/// (`2026-10-11T00:00:00Z`), the form npm and uv read.
+#[must_use]
+pub fn day_start_before(ts_ms: i64, days: u16) -> String {
+    let day = ts_ms.div_euclid(MS_PER_DAY) - i64::from(days);
+    format!("{}T00:00:00Z", date(day))
+}
+
 /// A span as `24h`, `2h 5m` or `45m`, rounded down to the minute.
 #[must_use]
 pub fn duration(ms: i64) -> String {
@@ -127,6 +135,9 @@ mod tests {
         assert_eq!(timestamp(0), "1970-01-01 00:00:00 UTC");
         assert_eq!(timestamp(OCT_3_2026), "2026-10-03 00:00:00 UTC");
         assert_eq!(clock(90_061_000), "01:01:01");
+        let afternoon = OCT_3_2026 + 15 * MS_PER_HOUR;
+        assert_eq!(day_start_before(afternoon, 7), "2026-09-26T00:00:00Z");
+        assert_eq!(day_start_before(afternoon, 0), "2026-10-03T00:00:00Z");
     }
 
     #[test]

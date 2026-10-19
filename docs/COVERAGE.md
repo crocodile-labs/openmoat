@@ -11,7 +11,7 @@ the verdict and rule ids the default policy must produce for it.
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 39 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
-| T5 | Supply-chain execution | 6 | 30 | 0 |
+| T5 | Supply-chain execution | 12 | 35 | 0 |
 | T6 | Environment poisoning | 31 | 20 | 0 |
 | T7 | Obfuscation and nested execution | 96 | 101 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 11 | 0 | 0 |
@@ -383,6 +383,11 @@ the verdict and rule ids the default policy must produce for it.
 
 - `ask-npm-install` (ask): Defer [default]
 - `ask-pip-install` (ask): Defer [default]
+- `ask-pip-install-popular-name` (ask): Defer [default]
+- `ask-npm-install-unknown-name` (ask): Defer [default]
+- `ask-pip-install-two-popular-names` (ask): Defer [default]
+- `ask-npm-install-react-and-react-dom` (ask): Defer [default]
+- `ask-npm-install-from-the-lockfile` (ask): Defer [default]
 - `ask-npm-publish` (ask): Defer [default]
 - `ask-pnpm-exec-unlisted-tool` (ask): Defer [default]
 - `ask-cargo-add` (ask): Defer [default]
@@ -414,6 +419,12 @@ the verdict and rule ids the default policy must produce for it.
 - `T5-curl-pipe-sh` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-bash-unspaced` (attacks): Deny [pipe-to-shell]
 - `T5-wget-pipe-sh-with-args` (attacks): Deny [pipe-to-shell]
+- `T5-pip-typosquat` (attacks): Ask [package-near-miss]
+- `T5-npm-typosquat` (attacks): Ask [package-near-miss]
+- `T5-pip-prefix-trick` (attacks): Ask [package-near-miss]
+- `T5-npm-separator-trick-among-good-names` (attacks): Ask [package-near-miss]
+- `T5-cargo-typosquat-in-a-subshell` (attacks): Ask [package-near-miss]
+- `T5-uv-typosquat` (attacks): Ask [package-near-miss]
 - `T5-repo-asks-for-what-the-user-allows` (attacks): Ask [repo:deploy]
 - `T5-host-through-a-shell-variable` (attacks): Deny [default.net]
 - `T5-host-through-an-uppercase-variable` (attacks): Deny [default.net]

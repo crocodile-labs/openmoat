@@ -27,6 +27,7 @@ mod kind;
 #[doc(hidden)]
 pub mod lexer;
 pub mod lint;
+mod packages;
 mod patch;
 mod paths;
 mod pattern;

@@ -37,6 +37,7 @@ each ADR records the outcome it needs.
 | [027](ADR-027-per-session-proxy-credentials.md) | Per-session proxy credentials: `moat run`'s proxy serves its session alone (`Proxy-Authorization: Basic`), records each row under it, refuses hosts other than a secret's own after the session read secret material, and caps each session at half the connections; the standalone `moat proxy` stays open for the host sandboxes | accepted; refines ADR-020 |
 | [028](ADR-028-hook-decisions-inside-moat-run.md) | Hooks inside `moat run` send their payload with a per-run token over the proxy's port; the `moat run` process decides with its own access (lock, policy, taint, audit row), so the sandbox stays closed to `~/.moat`; any failure denies | accepted; refines ADR-018 and ADR-027 |
 | [029](ADR-029-file-provenance-taint.md) | Session taint follows written files: a write by a tainted session is recorded by path (and `Write`'s content hash) in an append-only audit table; a later session that reads or runs the file while it still holds that content is tainted; a clean `Write` clears it; `taint: { provenance: false }` turns it off | accepted; refines ADR-020 |
+| [030](ADR-030-package-install-checks.md) | Package installs are read into `@package-install` atoms; a name close to one on a bundled offline list of popular packages asks (`package-near-miss`); `moat run` sets npm's and uv's release-age settings (`sandbox.package_min_release_age_days`, 7 days) | accepted; refines ADR-025 |
 
 ## Names in older ADRs
 

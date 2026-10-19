@@ -55,7 +55,7 @@ sandboxes and `moat run` add today, or the planned answer from the
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, and MCP path arguments | Only under `moat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
-| T5 | Supply-chain execution (`curl … \| sh`, unknown installs) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; package installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries) |
+| T5 | Supply-chain execution (`curl … \| sh`, unknown installs, typo-squats, made-up package names, fresh malicious versions) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; an install of a name one typo or a common trick away from a popular package asks (`package-near-miss`, ADR-030), other installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries); inside `moat run`, npm and uv install no version published in the last 7 days (`sandbox.package_min_release_age_days`) |
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) ask (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and asks under an `ask` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands; a line not read in full or past a classifier limit asks, so padding cannot turn a deny into a defer | The sandbox bounds what any spelling can reach |
 | T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `moat mcp accept` (ADR-026) | Opt-in: `moat mcp proxy` pins each tool's description and input schema, hides a changed or new tool until `moat mcp accept`, and with `--sandbox` starts the server under `moat run` |
@@ -86,6 +86,24 @@ something OpenMoat claims to stop.
   `moat mcp proxy`, a server can change its tool descriptions unseen. With it, the
   first listing is trusted, and prompts, resources, tool results and remote (HTTP)
   servers are not pinned. Plugin and managed MCP servers are not read (ADR-026).
+
+- **Package checks are offline and name-based (ADR-030).** `package-near-miss` compares
+  each installed name with a bundled list of popular names per registry, written by
+  hand and refreshed with `scripts/refresh-top-packages.py`; nothing asks a registry.
+  So: a squat on a name that is not on the list, or one more than one edit away
+  (`reqests2`, another GitHub owner of the same Go repository), is not asked about; a
+  real but less popular package close to a listed one asks once; the list goes stale
+  between releases; names of four letters or fewer are never compared; a package the
+  agent made up that resembles nothing is a normal unknown name and defers; and
+  what a package does (install scripts, maintainer changes, a compromised popular
+  package) is not looked at. Installs from a lockfile or a requirements file
+  (`npm ci`, `npm install`, `pip install -r`) and dependencies pulled in by a package
+  are not checked; nor are `npx`, `uvx`, `pnpm dlx` and `bunx`, which download and run
+  a package. The release age `moat run` asks for (`sandbox.package_min_release_age_days`)
+  reaches only npm (`npm_config_before`) and uv (`UV_EXCLUDE_NEWER`), not pip, pnpm,
+  Yarn or Bun, nothing outside `moat run`, and not uv in a project with a `uv.lock`;
+  it delays a malicious version rather than detecting it, and a program that resets
+  the variables escapes it.
 
 - **Outside the sandboxes, the hook decides alone.** `moat run` (below) is the one
   place OpenMoat applies a sandbox itself. In the Standard tier (ADR-018), `moat init`

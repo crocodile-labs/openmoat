@@ -635,6 +635,12 @@ ask:
     # and `<shell> @stdin`: text piped into a shell that the command line does not show
     shell: ["awk @*", "gawk @*", "mawk @*", "nawk @*", "sed @*", "gsed @*", "sort @*", "uniq @*", "cut @*", "printf -v *", "{sh,bash,zsh,dash,ksh,fish} @stdin"]
     env.set: ["CDPATH"]
+  # `@package-near-miss <ecosystem> <name> <popular>` atoms (ADR-030): an install of a
+  # name that is not on the bundled list of popular packages but is one typo or a
+  # common trick away from one on it. Other installs defer, unknown names included
+  - id: package-near-miss
+    reason: looks like a typo of a popular package's name, as typo-squats and made-up names do; check which one you meant
+    shell: ["@package-near-miss *"]
   - id: docker-secrets
     reason: hands secrets, the SSH agent or the host to a build
     # `dev-shell` allows `docker build` without these options
@@ -655,6 +661,9 @@ executables: {}
 # the hook still applies the rules above to these reads (defer), and secrets-paths
 # still wins inside them. Writes stay project-only. Missing paths are harmless.
 sandbox:
+  # `moat run` tells npm and uv to install no version published in the last 7 days
+  # (ADR-030); 0 turns it off
+  package_min_release_age_days: 7
   read_roots:
     - /usr
     - /bin

@@ -41,6 +41,7 @@ sandbox:                            # optional: what the host sandboxes may read
   read_roots: ["/usr", "~/.cargo"]
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `moat proxy` (§9)
   proxy_allow_ech: false            # optional: let `moat proxy` forward encrypted server names (ECH) (§9)
+  package_min_release_age_days: 7   # optional: `moat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 
@@ -198,6 +199,7 @@ Tokenised with the same lexer as commands, so `a|b` and `a | b` are equal.
 - A `sed` script is data too (`shell/sed/`): its words are not files (`sed -n '/^fn/,/^}/p' f` reads only `f`). The script is read with the commands and addresses GNU and BSD sed share (`p`, `d`, `s///`, `y`, `a`/`i`/`c`, `b`/`t`/`:`, `q`, `l`, `=`, `n`, `N`, `g`, `h`, `x`, `{}`, …). `r FILE`/`R FILE` are `fs.read`s and `w FILE`/`W FILE`/the `s///w FILE` flag `fs.write`s of `FILE` taken literally (sed does not expand `~`). A script that runs a command (`e`, the `s///e` flag), uses any other command, or cannot be read completely becomes a `sed @<script>` shell action, as do `-f FILE` (whose `FILE` is also an `fs.read`) and unknown options. `-i`/`--in-place` makes every file operand an `fs.write`, and its backup too (`-i.bak` writes `f.bak`; a suffix with `/` or `*`, which GNU sed reads as another directory, is reported). A bare `-i` is read both ways: GNU sed takes no suffix, BSD sed takes the next word. `-i ''` is the BSD empty suffix (the next operand is checked as a script and as a file), `-i -e …` gives BSD the suffix `-e`, and any other word after a bare `-i` (`sed -i 's/a/b/' f g`, a script to GNU and a suffix to BSD) is reported, except as the last two words with no script before them: in `sed -i 's/a/b/' f` BSD sed takes `f` as its script, has no file left to edit and stops before reading input, so when `f` holds no `w` (the only command that acts while the script is compiled) the command is GNU's reading alone and writes `f`.
 - An `awk` program is data as well (`shell/awk.rs`); its words are not files (`awk '/error/ {print}' log` reads only `log`). awk stops reading options at the program, so only `-F` and `-v` before it are options, and every later word is a file or an assignment. A program containing `system`, a `|` that is not part of `||`, `getline`, `ENVIRON`, `ARGV` or `@` (gawk's `@include`, `@load`, indirect calls), or a `>` after its first `print` (output redirection), becomes an `awk @<program>` shell action, as do `-f FILE` and any other option. These words are looked for in the raw text, strings and regexes included, so quoting cannot hide them, and a string that happens to contain one asks.
 - Only a `$` the shell expands is an `env.read`: an unquoted or double-quoted `$NAME`/`${NAME}` (`"$AWS_SECRET_ACCESS_KEY"` is a read), one in an unquoted here-document body, or one in a `<<<` word outside single quotes. The lexer records which part of each word came from single quotes, so `$p` in `sed -n '$p'` and `$NF` in `awk '{print $NF}'` read nothing, and in `'$p'"$TOKEN"` only `TOKEN` is read. Code handed to another shell is classified again as that shell sees it: `sh -c 'echo $SECRET'` and `eval 'echo $SECRET'` read `SECRET`. `$'…'` (ANSI-C quoting) is decoded the way bash decodes it (`\x2f` and `\057` are `/`, `\'` a quote), so `cat $'\x2f'Users/me/.ssh/id_rsa` is a read of that key and `$'moat'` is `moat`; a `$` in the decoded text is still scanned as if unquoted. `$"…"` (locale quoting) is read as `"…"`. A quoted here-document delimiter (`<<'EOF'`) keeps the body literal. `$1`-style field references are not variables and stay allowed. Where GNU and BSD sed would split a script differently (a delimiter inside a bracket expression, text after a label), or take a different word for the script (BSD stops at the first operand, so in `sed p -e x f` it runs `p` and reads `-e` and `x`), every reading is checked and the word stays a file too.
+- A package install is read for the names it fetches from a registry (`shell/installs.rs`, ADR-030): `npm install|i|add`, `pnpm add`, `yarn add`, `yarn global add`, `bun add` (npm); `pip install` (`pip3`, `pip3.12`, `python -m pip`), `uv pip install`, `uv add`, `uv tool install`, `poetry add`, `pipx install` (PyPI); `cargo add` and `cargo install` (crates.io); `gem install` (RubyGems); `go get` and `go install` (Go modules). Each name is the atom `@package-install <ecosystem> <name>`, with the ecosystem `npm`, `pypi`, `crates`, `rubygems` or `go`, and versions, extras, markers and options taken off (`requests==2.32`, `uvicorn[standard]`, `@types/node@20`, `serde@1`, `cobra@v1.8.0`). No rule of the default policy names it, so it defers; a rule can (`deny: shell: ["@package-install npm event-stream"]`). Paths, URLs, archives, git sources (`--git`, `--path`, `github:user/repo`) and requirement files name no registry package, and an install from the lockfile (`npm install`, `pip install -r requirements.txt`) gives no atom. A name that is not on the bundled list of popular names for its registry but is one edit away from a listed name of five characters or more (a letter added, dropped, changed or two swapped), differs from it only in `-`, `_` and `.` or in doubled letters, or adds or drops a squatter's prefix or suffix (`node-`, `-js`, `.js`, `python-`, `py`, `-py`, `rust-`, `-rs`, `ruby-`, …) is also `@package-near-miss <ecosystem> <name> <popular name>`, which `package-near-miss` asks for (§6). Names are compared as each registry compares them: PyPI ignores case and treats `-`, `_` and `.` alike, crates.io ignores case and `-`/`_`, and a Go module's `/v2` suffix does not count.
 
 ### 3.2 Path, host and name globs
 - `*` matches within one path segment; `**` matches across segments: `~/.ssh/**`, `**/.env.*`.
@@ -515,6 +517,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | ask | `secret-names` | a path through a variable whose value is not known (the `@unknown-path` atom, §3.1) whose file name is a key's, a token file's or a `.env` (`cat $X/id_rsa`, `cat "$d"/.env`); other such paths defer |
 | ask | `other-home` | any path in another user's home (`~alice/.ssh/id_rsa`, the `@other-home` atom), which OpenMoat cannot place and which may hold that user's secrets |
 | ask | `opaque-code` | `<program> @<argument>` atoms of `awk`, `sed`, `sort`, `uniq`, `cut` (a program or option the classifier cannot prove harmless, §3.1), `printf -v`, setting `CDPATH`, and `<shell> @stdin`: text piped into a shell that the command line does not show (`printf '\x63at .env' \| sh`) |
+| ask | `package-near-miss` | installing a package whose name is not on the bundled list of popular names for its registry but is one typo or a common trick away from one that is (the `@package-near-miss` atom, §3.1): `pip install reqeusts`, `npm i lodahs`, `npm i react_dom`, `pip install python-requests`, `cargo add tokio-rs`. The reason names the popular package. A popular name, or one far from every popular name, is not asked about: unknown packages are normal, so those installs defer like any other |
 | ask | `docker-secrets` | `docker build` with the options `dev-shell` leaves out (`--secret`, `--ssh`, `--build-context`, `--network`, `--output`, …) |
 | defer | `local-net` | network to `localhost`, `127.0.0.1`, `::1`, fetches included: without it the `net` default would deny local services |
 | defaults | `default`, `default.net`, `default.fetch`, `default.web.search`, `default.tool.unknown` | everything else defers to the agent's own permission prompt (installs, pushes and publishing included); outbound network to unlisted hosts is denied; a `WebFetch` of an unlisted URL defers (ADR-017); a `WebSearch` is allowed and recorded, and asks once the session read secret material; a tool the adapter cannot classify defers |
@@ -784,6 +787,31 @@ above (`claude-code.git-internals`), and a `.git` file or directory below the pr
 root under Codex (`codex.nested-git`: a Codex glob can only deny, which would also
 block reading every `.git`); the hook still asks for file-tool writes to any `.git`. Run
 `moat sandbox show` for the exact list your policy produces.
+
+### 9.1 Package release age (`moat run`)
+
+A malicious package version is usually found and taken down within days of its
+release. `moat run` therefore tells the package managers the agent starts not to
+install a version published in the last `sandbox.package_min_release_age_days`
+days (ADR-030). The default is 7, also when the key is absent; `0` turns it off.
+
+It sets two variables in the agent's environment, each a timestamp at the start of
+the UTC day that many days back (`2026-10-11T00:00:00Z`); no configuration file is
+written or changed:
+
+| Variable | Tool | What the tool does |
+|---|---|---|
+| `npm_config_before` | npm (its `before` setting) | resolves each package to the newest version published before that time; a package with no such version fails to install |
+| `UV_EXCLUDE_NEWER` | uv (`--exclude-newer`) | leaves out distributions uploaded after that time |
+
+A cut-off the person set is kept: either variable already in `moat run`'s
+environment (`NPM_CONFIG_BEFORE` too), a `before=` line in the project's `.npmrc`,
+or `exclude-newer` in the project's `pyproject.toml` or `uv.toml`. A project with a
+`uv.lock` gets no `UV_EXCLUDE_NEWER`: uv records the setting in its lockfile, so a
+cut-off that moves every day would make uv resolve the lockfile again. pip, pnpm,
+Yarn and Bun are not covered, and the host sandboxes of the Standard tier set nothing.
+To install a version released this week inside `moat run`, start `moat run` with
+your own cut-off in the variable, or set the key to `0`.
 
 ## 10. Repository policy
 

@@ -27,6 +27,28 @@
   threat: T5
   action: { shell: "pip install requests==2.32.0" }
   expect: { verdict: defer, rules: [default] }
+# Popular names and names that resemble no popular one are installed as before:
+# the agent's own prompt decides (`package-near-miss` asks only for near misses)
+- id: ask-pip-install-popular-name
+  threat: T5
+  action: { shell: "pip install requests" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-npm-install-unknown-name
+  threat: T5
+  action: { shell: "npm i some-new-internal-pkg" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-pip-install-two-popular-names
+  threat: T5
+  action: { shell: "pip install numpy pandas" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-npm-install-react-and-react-dom
+  threat: T5
+  action: { shell: "npm i react react-dom" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-npm-install-from-the-lockfile
+  threat: T5
+  action: { shell: "npm install" }
+  expect: { verdict: defer, rules: [default] }
 - id: ask-git-push
   threat: T4
   action: { shell: "git push origin HEAD" }
