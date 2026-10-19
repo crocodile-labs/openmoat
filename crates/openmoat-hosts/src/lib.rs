@@ -8,18 +8,19 @@
 // A library reports to its caller; only the `moat` binary prints.
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
-mod config_change;
-mod continue_cli;
 mod contract;
-mod cursor;
-mod mcp;
+mod host;
 mod openclaw;
-mod pre_tool_use;
 mod registry;
+mod wire;
+
+use host::claude_code::config_change;
+use host::cursor;
+use wire::{mcp, pre_tool_use};
 
 pub use config_change::proposal_target;
-pub use continue_cli::CONTINUE_ENV;
 pub use contract::{Asks, HostSpec};
+pub use host::continue_cli::CONTINUE_ENV;
 
 use std::fmt;
 use std::str::FromStr;
@@ -154,13 +155,7 @@ impl Host {
     /// The facts about this host.
     #[must_use]
     pub fn spec(self) -> &'static HostSpec {
-        match self {
-            Self::ClaudeCode => &registry::CLAUDE_CODE,
-            Self::Codex => &registry::CODEX,
-            Self::Cursor => &registry::CURSOR,
-            Self::Continue => &registry::CONTINUE,
-            Self::OpenClaw => &registry::OPENCLAW,
-        }
+        registry::spec(self)
     }
 
     /// The identifier used on the command line and in the audit log.
