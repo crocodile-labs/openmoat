@@ -5,7 +5,10 @@ use openmoat_core::Decision;
 use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
+use crate::contract::{
+    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
+    SandboxSpec, wrong_event,
+};
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -31,6 +34,22 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "CLAUDE_CONFIG_DIR",
         dir_name: ".claude",
         config_file: "settings.json",
+    }),
+    mcp: Some(McpSpec {
+        user_file: McpFile::BesideDefaultDir(".claude.json"),
+        user_layout: McpLayout::ClaudeJson,
+        project_file: Some((".mcp.json", McpLayout::Json)),
+    }),
+    // Claude Code's sandbox runs on macOS, Linux and WSL2 only, and with
+    // `failIfUnavailable` Claude Code exits at startup where it cannot run:
+    // native Windows (#327).
+    sandbox: Some(SandboxSpec {
+        format: SandboxFormat::ClaudeSettings,
+        file: "settings.json",
+        unavailable_on_windows: Some(
+            "sandbox not available on native Windows; the hook still applies the policy \
+             (use WSL2 for OS confinement)",
+        ),
     }),
 };
 

@@ -21,7 +21,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
+use crate::contract::{
+    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, wrong_event,
+};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
@@ -52,6 +54,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".openclaw",
         config_file: "openclaw.json",
     }),
+    // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
+    // `mcp.servers`"; the documentation names no project file of them.
+    mcp: Some(McpSpec {
+        user_file: McpFile::HookFile,
+        user_layout: McpLayout::OpenClaw,
+        project_file: None,
+    }),
+    sandbox: None,
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";

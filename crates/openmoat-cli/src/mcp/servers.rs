@@ -20,7 +20,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, McpFile};
 use serde_json::{Map, Value};
 use toml_edit::{DocumentMut, Item};
 
@@ -28,17 +28,7 @@ use crate::home::{Home, user_home};
 use crate::install::HostConfig;
 
 /// How a file lays out its servers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Layout {
-    /// `{"mcpServers": {"<name>": {...}}}`: `.mcp.json`, Cursor's `mcp.json`.
-    Json,
-    /// `~/.claude.json`: `mcpServers`, and `projects.<path>.mcpServers`.
-    ClaudeJson,
-    /// Codex `config.toml`: `[mcp_servers.<name>]`.
-    Toml,
-    /// OpenClaw `openclaw.json`, JSON5: `{mcp: {servers: {"<name>": {...}}}}`.
-    OpenClaw,
-}
+pub use openmoat_hosts::McpLayout as Layout;
 
 /// A file one host reads MCP servers from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,44 +67,20 @@ pub struct Scan {
 /// The files `host` reads servers from, for a session in `cwd` (none of a
 /// project's when `cwd` is `None` or in no project).
 pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source>> {
-    let (user, project) = match host {
-        Host::ClaudeCode => (
-            Some((claude_json(home)?, Layout::ClaudeJson)),
-            Some((PathBuf::from(".mcp.json"), Layout::Json)),
-        ),
-        Host::Codex => (
-            Some((crate::sandbox::codex_config_path(home)?, Layout::Toml)),
-            Some((PathBuf::from(".codex/config.toml"), Layout::Toml)),
-        ),
-        Host::Cursor => (
-            Some((cursor_mcp_json(home)?, Layout::Json)),
-            Some((PathBuf::from(".cursor/mcp.json"), Layout::Json)),
-        ),
-        // OpenClaw's documentation names no project file of MCP servers.
-        Host::OpenClaw => (
-            Some((
-                HostConfig::for_host(home, Host::OpenClaw)?.settings_path,
-                Layout::OpenClaw,
-            )),
-            None,
-        ),
-        // `cn` reads its own configuration and fires no hook (install.rs).
-        Host::Continue => (None, None),
+    let Some(mcp) = &host.spec().mcp else {
+        return Ok(Vec::new());
     };
-    let mut out = Vec::new();
-    if let Some((path, layout)) = user {
-        out.push(Source {
-            host,
-            path,
-            layout,
-            user: true,
-        });
-    }
-    if let (Some((relative, layout)), Some(cwd)) = (project, cwd) {
+    let mut out = vec![Source {
+        host,
+        path: user_file(home, host, mcp.user_file)?,
+        layout: mcp.user_layout,
+        user: true,
+    }];
+    if let (Some((relative, layout)), Some(cwd)) = (mcp.project_file, cwd) {
         for dir in project_dirs(cwd)? {
             out.push(Source {
                 host,
-                path: dir.join(&relative),
+                path: dir.join(relative),
                 layout,
                 user: false,
             });
@@ -123,21 +89,22 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
     Ok(out)
 }
 
-/// Claude Code's `~/.claude.json`: in the home directory for the default
-/// configuration directory, inside `CLAUDE_CONFIG_DIR` otherwise.
-fn claude_json(home: &Home) -> Result<PathBuf> {
-    let config = HostConfig::for_host(home, Host::ClaudeCode)?;
-    let user = user_home()?;
-    Ok(if config.dir() == user.join(".claude") {
-        user.join(".claude.json")
-    } else {
-        config.dir().join(".claude.json")
+/// Where `file`, `host`'s user-level MCP server file, is.
+fn user_file(home: &Home, host: Host, file: McpFile) -> Result<PathBuf> {
+    let config = HostConfig::for_host(home, host)?;
+    Ok(match file {
+        McpFile::HookFile => config.settings_path,
+        McpFile::BesideHookFile(name) => config.settings_path.with_file_name(name),
+        McpFile::BesideDefaultDir(name) => {
+            let user = user_home()?;
+            let default = host.spec().install.as_ref().map(|i| user.join(i.dir_name));
+            if default.is_some_and(|d| config.dir() == d) {
+                user.join(name)
+            } else {
+                config.dir().join(name)
+            }
+        }
     })
-}
-
-fn cursor_mcp_json(home: &Home) -> Result<PathBuf> {
-    let config = HostConfig::for_host(home, Host::Cursor)?;
-    Ok(config.settings_path.with_file_name("mcp.json"))
 }
 
 /// `cwd` and each directory above it up to its project root; none outside a project.

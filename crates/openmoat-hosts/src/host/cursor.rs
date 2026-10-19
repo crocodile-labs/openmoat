@@ -12,7 +12,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
+use crate::contract::{
+    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
+    SandboxSpec, wrong_event,
+};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
@@ -43,6 +46,19 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "CURSOR_CONFIG_DIR",
         dir_name: ".cursor",
         config_file: "hooks.json",
+    }),
+    mcp: Some(McpSpec {
+        user_file: McpFile::BesideHookFile("mcp.json"),
+        user_layout: McpLayout::Json,
+        project_file: Some((".cursor/mcp.json", McpLayout::Json)),
+    }),
+    // Cursor documents its sandbox for macOS and Linux only.
+    sandbox: Some(SandboxSpec {
+        format: SandboxFormat::CursorSandbox,
+        file: "sandbox.json",
+        unavailable_on_windows: Some(
+            "Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy",
+        ),
     }),
 };
 
