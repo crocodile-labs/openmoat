@@ -22,7 +22,7 @@ moat bench --hook '<command>' --host claude-code    # against any hook command
 
 `moat bench` creates a throwaway home under the system temporary directory, runs
 `moat init --yes` there, and for each scenario and each host that has a tool for
-every step (Claude Code, Codex, Cursor) sends the steps to `moat guard --host <host>`
+every step (Claude Code, Codex, Cursor, OpenClaw) sends the steps to `moat guard --host <host>`
 as that host's hook payload. The scenarios' commands are never executed: only the
 hook runs. It reads the kernel verdict of each step back from the throwaway audit
 log and checks:
@@ -30,25 +30,27 @@ log and checks:
 - the verdict, and the rule when the step names one;
 - that the host would read the reply as that verdict: Claude Code and Cursor get
   `allow`, `ask` or `deny`; Codex cannot ask, nor can Cursor's file hooks, so there an
-  `ask` must arrive as a `deny`, which exits 2.
+  `ask` must arrive as a `deny`, which exits 2. OpenMoat's OpenClaw plugin returns no
+  decision for an `allow`, so OpenClaw's own checks still run and an `allow` reads as
+  `passthrough` there.
 
 `--hook <command> --host <host>` sends the same payloads on stdin to any hook command
 instead, run through the system shell the way hosts run hooks (`sh -c`, `cmd /C` on
 Windows), and reads each reply by that host's hook protocol
 (`docs/ARCHITECTURE.md` §5):
 
-| Answer | Claude Code | Codex | Cursor |
-|---|---|---|---|
-| `allow` | exit 0, `permissionDecision: allow` (or `decision: approve`) | same | exit 0, `permission: allow` |
-| `ask` | exit 0, `permissionDecision: ask` | none: Codex runs the call (`passthrough`) | exit 0, `permission: ask` on a shell or MCP call; on `preToolUse` Cursor runs the call (`passthrough`) |
-| `deny` | exit 2, or `permissionDecision: deny` (or `decision: block`) | same; exit 2 only with a reason on stderr | exit 2, or `permission: deny` |
-| `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none |
-| `error` | any other exit, a timeout (10 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) |
+| Answer | Claude Code | Codex | Cursor | OpenClaw |
+|---|---|---|---|---|
+| `allow` | exit 0, `permissionDecision: allow` (or `decision: approve`) | same | exit 0, `permission: allow` | none: exit 0 with `decision: allow` is read as `passthrough` |
+| `ask` | exit 0, `permissionDecision: ask` | none: Codex runs the call (`passthrough`) | exit 0, `permission: ask` on a shell or MCP call; on `preToolUse` Cursor runs the call (`passthrough`) | exit 0, `decision: ask` (OpenClaw's approval request) |
+| `deny` | exit 2, or `permissionDecision: deny` (or `decision: block`) | same; exit 2 only with a reason on stderr | exit 2, or `permission: deny` | exit 2 with `decision: deny` |
+| `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none | exit 0 with no output, or `decision: allow`: OpenClaw's own checks decide |
+| `error` | any other exit, a timeout (10 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) | the same, or exit 0 with any other output (the plugin blocks the call) |
 
 A step is then compared with what the host must end up doing: an expected `ask`
 becomes a `deny` where the host cannot ask, and an expected `allow` is also met by
-`passthrough`. An expected `defer` (ADR-025) is `passthrough` on Claude Code and
-Codex; on Cursor it is `ask` for a shell or MCP call and `deny` for a file tool,
+`passthrough`. An expected `defer` (ADR-025) is `passthrough` on Claude Code,
+Codex and OpenClaw; on Cursor it is `ask` for a shell or MCP call and `deny` for a file tool,
 where OpenMoat asks itself. Gap markers name OpenMoat issues, so they apply only to OpenMoat. The
 report ends with what that host does when its hook is missing, crashes or times out,
 as documented in `docs/THREAT_MODEL.md` §5; that part is host behaviour, not a test of
@@ -64,7 +66,7 @@ scripts. `moat bench` exits 0 whenever it ran, whatever the scores; 64 on a usag
 error (`--hook` without `--host`).
 
 ```text
-MoatBench mini: openmoat (claude-code, codex, cursor)
+MoatBench mini: openmoat (claude-code, codex, cursor, openclaw)
 category          runs  blocked  asked  allowed  passthrough  error
 benign              20        0      0       20            0      0
 exfiltration        18       17      0        0            1      0
@@ -86,7 +88,7 @@ allow`, followed by:
 
 ```text
 hook failure (host behaviour from docs/THREAT_MODEL.md §5, not tested here):
-  claude-code: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s)
+  claude-code: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`moat init` sets `onFailure: "block"`)
 ```
 
 The end-to-end test `cargo test -p openmoat --test e2e moatbench` runs `moat bench`

@@ -22,8 +22,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: Some("Claude Code's permission mode does not ask"),
         defer_is_ask_on_no_ask: false,
     },
-    on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
-         other than 2, or times out (default 600 s)",
+    on_hook_failure: "before 2.1.295 runs the call when the hook is missing, cannot start, \
+         exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it \
+         (`moat init` sets `onFailure: \"block\"`)",
     gaps: "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
          Code 2.1.295 calls run unchecked if the hook binary is missing or crashes",
     install: Some(InstallSpec {

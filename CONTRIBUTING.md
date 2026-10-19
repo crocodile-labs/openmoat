@@ -234,26 +234,26 @@ crash becomes a unit test or fixture next to the fix.
 `.github/workflows/release.yml` is driven by [dist](https://axodotdev.github.io/cargo-dist/)
 (config in `dist-workspace.toml`). A `v*` tag builds the seven targets, writes the shell and
 PowerShell installers, the Homebrew formula and `sha256.sum`, attests every file, creates
-the GitHub release, pushes `Formula/moat.rb` to `crocodile-labs/homebrew-tap` and, after an owner
+the GitHub release, pushes `Formula/moat.rb` to `crocodile-labs/homebrew-tap` and, after a maintainer
 approves the `release` environment, publishes the crates to crates.io. Pull requests that
 touch the manifests or the workflow run `dist plan` only. Running the workflow by hand
 (Actions → release → Run workflow) is a dry run: it builds every target and publishes nothing.
 
 1. Dry-run the workflow on `main` if the build changed since the last release.
-2. In a PR (`build: release vX.Y.Z-pre.N`): bump `version` in `[workspace.package]` and
+2. In a PR (`build: release vX.Y.Z`): bump `version` in `[workspace.package]` and
    the four `openmoat-*` entries of `[workspace.dependencies]` in `Cargo.toml`, run
    `cargo check` to update `Cargo.lock` (and `fuzz/Cargo.lock`), move the `[Unreleased]`
-   entries of `CHANGELOG.md` under `## [X.Y.Z-pre.N] - YYYY-MM-DD` (add its compare
+   entries of `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD` (add its compare
    link at the end of the file and point `[Unreleased]` at the new tag), and update the
-   version in the README status line, the install commands of `docs/INSTALL.md`,
-   `crates/openmoat-cli/README.md` and `docs/ROADMAP.md` "Where it is today". The
+   version in the README status line and in `docs/ROADMAP.md` "Where it is today"
+   (the "The latest release is" lines; the install commands carry no version). The
    release fails without that CHANGELOG section; its text becomes the release notes,
    after a line saying what the operating system does and does not enforce (ADR-013).
    `python3 scripts/ci/check-versions.py` (in the quality gate and the `crates package`
    CI job) fails until the manifests, both lockfiles, the README and ROADMAP "The latest
    release is" lines and the CHANGELOG headings agree.
-3. After the merge, tag the merge commit: `git tag -s vX.Y.Z-pre.N -m vX.Y.Z-pre.N`
-   and `git push origin vX.Y.Z-pre.N`.
+3. After the merge, tag the merge commit: `git tag -s vX.Y.Z -m vX.Y.Z`
+   and `git push origin vX.Y.Z`.
 4. Check the GitHub release and the tap commit, then approve the `release` environment in
    the workflow run; `publish-crates` publishes openmoat-core, then openmoat-hosts,
    openmoat-audit and openmoat-proxy, then openmoat.
@@ -267,7 +267,7 @@ for a crate that exists. Reject the `release` deployment in the workflow run, th
 2. From a clean checkout of the tag:
 
    ```bash
-   git checkout vX.Y.Z-pre.N
+   git checkout vX.Y.Z
    cargo login                                   # paste the token
    cargo publish --locked --workspace --dry-run
    cargo publish --locked --workspace            # openmoat-core, then openmoat-hosts,
