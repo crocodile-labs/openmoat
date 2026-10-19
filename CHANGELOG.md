@@ -8,6 +8,12 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- Session taint follows the files a tainted session writes. A file written by a session that read untrusted content is recorded in the audit log (with the content's hash for `Write`); a later session that reads or runs it (`Read`, `cat`, `source`, `bash run.sh`, `./run.sh`, `python x.py`) while it still holds that content is tainted too, so its writes to CI, build and agent files ask, with a reason naming the file and the session that wrote it. No new asks of its own; a clean `Write` of the file clears it, and `taint: { provenance: false }` turns it off ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+
+### Changed
+- The audit database moves to schema version 4 to record file provenance. Older `moat` builds cannot open a version-4 audit database ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+
 ## [0.5.7] - 2026-10-18
 
 Push check for tokens and secrets, token egress, MCP server and tool pinning, a Claude Code hook that blocks when it fails, per-session proxy credentials, hooks inside moat run, human-only commands, and classifier fixes.

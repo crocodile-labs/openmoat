@@ -495,6 +495,24 @@ first event. The cache is outside the hash chain and never a source of truth: it
 only hold what the events folded to. The table is created on first use, without
 changing the schema version, so older builds still open the database.
 
+**File provenance** (schema 4, `store/provenance.rs`, `crates/openmoat-cli/src/taint/provenance.rs`,
+ADR-029, POLICY.md §4.1.1). A `provenance` table holds one row per file a call wrote or
+read that matters for taint: the event id, time, host, session, kind (`tainted-write`,
+`clean-write`, `tainted-read`), the path (lowercased where paths are case-insensitive),
+the SHA-256 of a `Write`'s whole content when known, and the untrusted content behind it.
+Its texts are redacted as an event's are. Triggers refuse an `UPDATE` or `DELETE`, so
+rows are only appended, and the table lives in `~/.moat`, which `kernel-self` denies to
+the agent. While a call is decided, `guard` classifies it once more, looks up the newest
+write row of each file it reads or runs through the index on `(path, id)`, and hashes
+the file on disk only when that row is tainted and carries a hash (files over 1 MiB, the
+largest payload, cannot match). The rows the call adds are written after its event, in
+their own transaction, and only when the call may have run; a failed write fails the
+call like the event. A session's `tainted-read` rows (index on `(session_id, host, id)`)
+are added to its taint on every call, outside the session cache. A clean session with
+no provenance rows in the log skips the lookups. The upgrade from schema 3 creates the
+table; a read-only handle on an older database reads it as empty. A schema-4 database
+is refused by builds before it (`SchemaTooNew`), as every schema bump is.
+
 **Export** (`moat audit export`, `crates/openmoat-audit/src/store/export.rs`). JSON Lines,
 oldest first, one object per chained event with the filters `--since`, `--host` and
 `--session`. Every line has `"format": "moat-audit-export-v1"` and the fields `id`

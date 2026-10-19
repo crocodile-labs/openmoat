@@ -17,12 +17,14 @@ use crate::KnownSecrets;
 mod chain;
 mod export;
 mod export_verify;
+mod provenance;
 mod schema;
 mod session_cache;
 
 pub use chain::{BreakKind, ChainBreak, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
+pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use session_cache::Cached;
 
 const BUSY_TIMEOUT_MS: u64 = 2000;
@@ -205,6 +207,9 @@ pub struct Store {
     /// The schema has the chain columns. Only a read-only handle on a database
     /// no newer build has opened yet lacks them.
     chained: bool,
+    /// The schema has the provenance table (version 4). Only a read-only
+    /// handle on a database no newer build has opened yet lacks it.
+    provenance: bool,
     /// Masked in every event this handle records.
     secrets: KnownSecrets,
 }
@@ -242,10 +247,10 @@ impl Store {
                 supported: schema::SCHEMA_VERSION,
             });
         }
-        let chained = found >= 2;
         Ok(Self {
             conn,
-            chained,
+            chained: found >= 2,
+            provenance: found >= 4,
             secrets: KnownSecrets::default(),
         })
     }
@@ -263,6 +268,7 @@ impl Store {
         Ok(Self {
             conn,
             chained: true,
+            provenance: true,
             secrets: KnownSecrets::default(),
         })
     }

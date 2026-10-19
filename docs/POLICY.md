@@ -46,6 +46,7 @@ secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§
 
 taint:                              # optional: more paths session taint protects (§4.1)
   protected_writes: ["**/deploy/**"]
+  provenance: true                  # optional, default true: taint follows written files (§4.1.1)
 ```
 
 `approval:` (`channel`, `remember`, `timeout_s`) and `scope:` (`project_roots`) are reserved:
@@ -308,6 +309,37 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   A hook inside `moat run` writes these links through the `moat run` process, which
   decides its calls outside the sandbox (ADR-028).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
+
+#### 4.1.1 File provenance
+
+Session taint also follows what a tainted session writes into a file (ADR-029). It
+adds no ask of its own: it taints a later session, and that session's calls then
+tighten as in §4.1.
+
+- **Recorded.** When a session that read untrusted content (§4.1) makes a call that may
+  have run and that writes a file by a literal path (`Write`, `Edit`, `MultiEdit`,
+  `NotebookEdit`, `apply_patch`, an MCP tool's file argument, or a shell write such as
+  `> file`, `tee`, `cp`), the audit log records the path, the session and what it had
+  read. For `Write`, which sends the whole file, it also records the SHA-256 of the
+  content (CRLF line ends hashed as LF); for every other write the hash is unknown.
+- **Followed.** When any later session reads or runs that path (an `fs.read`, which
+  covers `Read`, `cat`, `source`/`.`, `bash file`, `python file` and the other script
+  forms the classifier knows, and a program named by a path such as `./run.sh`), and the
+  file is a regular file that still holds the recorded content (or the hash is unknown),
+  that session is tainted as if it had read untrusted content. The reason names the file
+  and the session that wrote it: `read /p/run.sh, which session a wrote after it read
+  untrusted content (fetch crates.io)`. What the same call writes (`bash run.sh >
+  out.txt`) is recorded as tainted too.
+- **Cleared.** A `Write` by a session that read no untrusted content replaces the whole
+  file and makes it clean. A partial change by such a session (`Edit`, a shell write)
+  may leave what the tainted session wrote, so the file stays tainted whatever its hash
+  becomes. A change no session made (an editor, `git checkout`) gives a hashed file
+  another content, and it no longer taints. A `session-taint` ask that results is
+  answered with `moat allow --last` as in §4.1.
+- `taint: { provenance: false }` turns it off: nothing is recorded or followed.
+- Not tracked: content copied, renamed or produced indirectly (a build that writes
+  output, a script that writes another file), and files under a directory a search
+  tool reads (`Grep`, `Glob`).
 
 ### 4.2 The push check
 

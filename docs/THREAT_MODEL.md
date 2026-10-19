@@ -267,6 +267,21 @@ something OpenMoat claims to stop.
   default policy, `secrets-paths` denies, so only the secrets broker (#172) or a policy
   that asks for secret reads can taint a session. An edited or deleted audit event
   clears taint until `moat doctor` reports the broken chain.
+- **Taint follows written files only partly.** An injected session can write a payload
+  to a script or a config that another session (or a person's later session) reads or
+  runs. File provenance (ADR-029, POLICY.md §4.1.1) records each file a tainted
+  session writes by a literal path and taints a later session that reads or runs it,
+  so that session's protected writes ask. A file is tracked by its path, not its
+  content: a copy or a rename is followed only when the command shows the source as a
+  read in the same call (the session is then tainted and the destination recorded), and
+  not at all when a clean session's command does it out of sight. Content produced
+  indirectly (a script or a build that writes another file, a download a command saves)
+  and files read through a directory search (`Grep`, `Glob`) are not tracked. An `Edit`, a shell write and an `apply_patch` carry no hash, so such a file
+  taints every later reader until a clean session rewrites it with `Write`; a `Write`'s
+  hash stops matching when anything changes the file, a change no session made
+  included, and then the file no longer taints. Provenance rows are outside the hash
+  chain: they sit in the same OpenMoat-only database, append-only by trigger, but an
+  edit with write access to `~/.moat` is not reported by `moat doctor`.
 - **A proxy credential is shared by everything in its session.** `moat run`'s proxy
   serves only requests that carry the run's credential (ADR-027), which keeps other
   local programs and other runs off it. The credential sits in the agent's environment,

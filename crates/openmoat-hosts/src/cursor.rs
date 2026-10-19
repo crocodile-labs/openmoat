@@ -98,6 +98,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         cwd,
         tool,
         action,
+        content: None,
         event: event_kind(event),
     })
 }

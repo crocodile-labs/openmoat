@@ -40,6 +40,7 @@ mod paths;
 mod permission_mode;
 mod policy_upgrade;
 mod protection;
+mod provenance;
 mod proxy;
 mod push;
 mod replay_report;

@@ -37,6 +37,15 @@ const MODES_WITHOUT_PROMPT: &[&str] = &["bypassPermissions", "dontAsk"];
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let action = map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?;
+    // `Write` replaces the whole file with `content` (an empty file included).
+    let content = match p.tool_name.as_str() {
+        "Write" => p
+            .tool_input
+            .get("content")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        _ => None,
+    };
     let event = match p.permission_mode.as_deref() {
         Some(mode) if host == Host::ClaudeCode && MODES_WITHOUT_PROMPT.contains(&mode) => {
             HookEvent::PreToolUseNoAsk
@@ -50,6 +59,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         cwd: p.cwd,
         tool: p.tool_name,
         action,
+        content,
         event,
     })
 }
