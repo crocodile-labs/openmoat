@@ -136,6 +136,20 @@ fn signed_repository_policies_are_trusted_only_when_asked_for() {
 }
 
 #[test]
+fn mcp_first_sight_is_held_unless_the_policy_trusts_it() {
+    assert!(
+        !Policy::parse("version: 1\n")
+            .unwrap()
+            .trust_mcp_first_sight()
+    );
+    let off = Policy::parse("version: 1\nmcp: {}\n").unwrap();
+    assert!(!off.trust_mcp_first_sight());
+    let on = Policy::parse("version: 1\nmcp: { trust_first_sight: true }\n").unwrap();
+    assert!(on.trust_mcp_first_sight());
+    assert!(Policy::parse("version: 1\nmcp: { bogus: true }\n").is_err());
+}
+
+#[test]
 fn rejects_unknown_keys() {
     assert!(Policy::parse("version: 1\nbogus: 1\n").is_err());
 }

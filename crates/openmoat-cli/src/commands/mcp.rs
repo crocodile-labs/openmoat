@@ -175,7 +175,39 @@ pub(super) fn wrap_servers(
         }
         edits.push((source, Done { server, entry }));
     }
-    finish_edits(home, hosts, &edits, dry_run, true, out)
+    let done = finish_edits(home, hosts, &edits, dry_run, true, out)?;
+    first_sight_note(home, &edits, out)?;
+    Ok(done)
+}
+
+/// One line on what a wrapped server with no tool pins yet does first: the
+/// proxy holds every tool it lists until a person accepts them (ADR-032).
+fn first_sight_note(
+    home: &Home,
+    edits: &[(crate::mcp::servers::Source, Done)],
+    out: &mut Deferred,
+) -> Result<()> {
+    if home
+        .load_policy()
+        .is_ok_and(|policy| policy.trust_mcp_first_sight())
+    {
+        return Ok(());
+    }
+    let new: BTreeSet<&str> = edits
+        .iter()
+        .map(|(_, done)| done.server.name.as_str())
+        .filter(|name| !tools::path(home, name).exists())
+        .collect();
+    if new.is_empty() {
+        return Ok(());
+    }
+    let names: Vec<String> = new.iter().map(|n| format!("`{n}`")).collect();
+    writeln!(
+        out,
+        "· the tools of {} wait for `moat mcp accept <server>` after the server's first start",
+        names.join(", ")
+    )?;
+    Ok(())
 }
 
 pub fn unwrap(args: &McpUnwrapArgs) -> Result<Code> {

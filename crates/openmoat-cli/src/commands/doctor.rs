@@ -139,7 +139,11 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let codex = HostConfig::for_host(&home, Host::Codex)?.state(&binary) == HookState::Installed;
     let tiocsti = warnings::tiocsti(codex, warnings::legacy_tiocsti().as_deref());
     let hangs = warnings::hangs(&home, crate::time::now_ms());
-    for warning in [tiocsti, hangs].into_iter().flatten() {
+    let linux = cfg!(target_os = "linux");
+    let state = policy
+        .as_ref()
+        .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
+    for warning in [tiocsti, hangs, state].into_iter().flatten() {
         report.warn(&warning);
     }
     for agent in protection::report(&home, &binary)? {

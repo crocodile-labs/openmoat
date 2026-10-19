@@ -25,6 +25,16 @@ pub fn unavailable(host: Host) -> Option<&'static str> {
     unavailable_on(host, cfg!(windows))
 }
 
+/// Whether Claude Code runs on macOS here, where it applies a `file` mask entry
+/// as a read deny (the sandboxing docs, "Mask credential files").
+pub const MASK_FILES_DENIED: bool = cfg!(target_os = "macos");
+
+/// Claude Code's user settings under this shell's environment, an empty
+/// object when the file does not exist.
+pub fn claude_settings(home: &Home) -> Result<serde_json::Value> {
+    read_or_empty(&settings_path(home, Host::ClaudeCode)?)
+}
+
 /// What `init` and `sandbox sync` print when [`write()`] changed the settings
 /// of a host whose sandbox is [`unavailable`]: Claude Code's deny rules are
 /// written there, and the sandbox settings of an older version removed.
@@ -215,6 +225,7 @@ pub fn problems(
     } else {
         let root = read_or_empty(&path)?;
         let mut found = claude::weaknesses(&root, plan.claude.block_reads, plan.proxy_port);
+        found.extend(claude::mask::weaknesses(&root, &plan.claude));
         let owned = Recorded::load(home)?.claude_rules;
         if !claude::in_sync(&root, &plan.claude, &owned) {
             found.push(out_of_date);

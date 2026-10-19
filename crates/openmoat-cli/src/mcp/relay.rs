@@ -5,7 +5,8 @@
 //! reads each line from the host and from the server. It changes two things only:
 //!
 //! - the result of a `tools/list` request leaves out tools held by the pins
-//!   (`tools.rs`): changed since a person accepted them, or new;
+//!   (`tools.rs`): changed since a person accepted them, or new, which every
+//!   tool of a server with no pins yet is (ADR-032);
 //! - a `tools/call` for a held tool, or for a tool the pins never accepted, is
 //!   answered by the relay with error -32602 (unknown tool, as the MCP
 //!   specification has it) naming `moat mcp accept`, and never reaches the server.
@@ -48,7 +49,8 @@ pub struct Relay {
 
 struct State {
     pins: ToolPins,
-    /// No pins existed when the session started and no listing came yet.
+    /// No pins existed when the session started, the policy trusts first
+    /// sight, and no listing came yet: the first listing is pinned as it is.
     first: bool,
     /// Ids of `tools/list` requests whose responses are still to come.
     lists: BTreeSet<String>,
@@ -66,15 +68,19 @@ pub enum Routed {
 }
 
 impl Relay {
-    /// `pins` as loaded; `None` for a server never seen.
+    /// `pins` as loaded; `None` for a server never seen. A server never seen
+    /// has every tool held until a person accepts it (ADR-032), unless
+    /// `trust_first_sight` (the policy's `mcp.trust_first_sight`) pins its
+    /// first listing as it is.
     pub fn new(
         server: &str,
         pins: Option<ToolPins>,
+        trust_first_sight: bool,
         recorder: Box<dyn Recorder>,
         save: Save,
         now_ms: fn() -> i64,
     ) -> Self {
-        let first = pins.is_none();
+        let first = pins.is_none() && trust_first_sight;
         Self {
             server: server.to_owned(),
             state: Mutex::new(State {

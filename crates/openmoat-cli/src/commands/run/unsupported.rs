@@ -14,7 +14,7 @@ use crate::sandbox::{Grants, Report};
 /// Never constructed.
 pub enum Confined {}
 
-pub fn confine(_: &Policy, _: &EvalContext, _: Grants, _: &Path) -> Result<Confined> {
+pub fn confine(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Result<Confined> {
     bail!(
         "`moat run` needs an operating-system sandbox OpenMoat can generate (Seatbelt on macOS, \
          Landlock on Linux); there is none on {}. Use the Standard tier: `moat init` \
@@ -23,7 +23,7 @@ pub fn confine(_: &Policy, _: &EvalContext, _: Grants, _: &Path) -> Result<Confi
     )
 }
 
-pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path) -> Result<Confined> {
+pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Result<Confined> {
     bail!(
         "`moat run --isolate` runs on Linux only (bubblewrap); there is no Isolated tier on {}",
         std::env::consts::OS

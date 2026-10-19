@@ -9,6 +9,8 @@
 //! Where a host binary is missing the layer prints a visible skip and the suite
 //! still passes on the layers it can run. Hostile project scripts run under
 //! `moat run` in `scripts`, which also generates `docs/EVIDENCE.md` (#335).
+//! `agents` runs the pinned Claude Code with OpenMoat's hook installed, so the
+//! hook checks themselves meet the real agent rather than a payload.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -17,6 +19,8 @@ use serde::Deserialize;
 
 use crate::common::{Sandbox, bash_payload, hook_output, json};
 
+#[cfg(unix)]
+pub mod agents;
 #[cfg(unix)]
 pub mod claude;
 #[cfg(unix)]

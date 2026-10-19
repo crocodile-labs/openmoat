@@ -9,8 +9,9 @@
 //! reach OpenMoat's home from in there, have their calls decided on that same
 //! port by this process (`crate::guard_relay`, ADR-028).
 
-// `platform` is this OS's module: `confine(policy, ctx, grants, program) ->
-// Confined` (Lightweight) and `isolate(…)` (Isolated), whose `command()` takes
+// `platform` is this OS's module: `confine(policy, ctx, grants, program, state)
+// -> Confined` (Lightweight) and `isolate(…)` (Isolated), refused on Linux where
+// a grant would show the state directory `state`, whose `command()` takes
 // the agent's arguments and environment, `report()` lists the losses and
 // allowances, and `status()` runs the agent in its sandbox; `inside(args)` is
 // what `isolate` starts in its sandbox.
@@ -89,10 +90,11 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     };
     let mut policy = home.load_policy()?;
     crate::install::self_paths::protect_recorded(&home, &mut policy)?;
+    let state = home.root();
     let mut agent = if args.isolate {
-        platform::isolate(&policy, &ctx, grants, &program)?
+        platform::isolate(&policy, &ctx, grants, &program, state)?
     } else {
-        platform::confine(&policy, &ctx, grants, &program)?
+        platform::confine(&policy, &ctx, grants, &program, state)?
     };
     agent.command().args(rest);
     agent

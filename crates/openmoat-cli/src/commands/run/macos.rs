@@ -39,6 +39,9 @@ pub fn confine(
     ctx: &EvalContext,
     grants: Grants,
     program: &Path,
+    // Seatbelt denies inside a granted tree, so `kernel-self` keeps the state
+    // directory wherever it is.
+    _state: &Path,
 ) -> Result<Confined> {
     let generated = seatbelt_profile(policy, ctx, grants)?;
     let mut command = Command::new(SANDBOX_EXEC);
@@ -58,7 +61,7 @@ pub fn confine(
 ///
 /// Never a silent fallback to the Lightweight tier; the owner asked for the
 /// Isolated boundary, so refusing is fail-closed.
-pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path) -> Result<Confined> {
+pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Result<Confined> {
     bail!("{}", stub_message(&search_path(), CONTAINER))
 }
 

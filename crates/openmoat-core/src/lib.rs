@@ -51,7 +51,7 @@ pub use kind::{Kind, UnknownKind};
 pub use patch::writes as patch_writes;
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
-pub use policy::{Defaults, Policy, PolicyError, RuleGroup, SandboxSettings};
+pub use policy::{Defaults, McpSettings, Policy, PolicyError, RuleGroup, SandboxSettings};
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};

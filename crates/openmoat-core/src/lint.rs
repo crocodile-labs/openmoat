@@ -74,6 +74,15 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    if policy.trust_mcp_first_sight() {
+        out.push(Warning {
+            rule: "mcp.trust_first_sight".to_owned(),
+            message: "`moat mcp proxy` pins a new server's tools as it first lists them: a \
+                      server that is malicious from the start gets its tool descriptions \
+                      pinned without a person reading them"
+                .to_owned(),
+        });
+    }
     out
 }
 
@@ -409,6 +418,14 @@ mod tests {
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("ECH"), "{w:?}");
         assert!(warn("version: 1\nsandbox: { proxy_allow_ech: false }\n").is_empty());
+    }
+
+    #[test]
+    fn trusting_a_new_mcp_servers_tools_is_reported() {
+        let w = warn("version: 1\nmcp: { trust_first_sight: true }\n");
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("mcp.trust_first_sight"), "{w:?}");
+        assert!(warn("version: 1\nmcp: { trust_first_sight: false }\n").is_empty());
     }
 
     #[test]

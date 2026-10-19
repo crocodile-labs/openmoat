@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use landlock::{
     ABI, Access, AccessFs, AccessNet, CompatLevel, Compatible, NetPort, Ruleset, RulesetAttr,
     RulesetCreated, RulesetCreatedAttr, RulesetError, Scope, path_beneath_rules,
@@ -22,7 +22,7 @@ use seccompiler::{
 
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::SOCKET_ARGS;
-use crate::sandbox::{Grants, Report, landlock_rules};
+use crate::sandbox::{Grants, Report, exposure, landlock_rules, session_tmpdir};
 
 /// `moat run --isolate`: bubblewrap around the same rules.
 mod isolate;
@@ -84,12 +84,24 @@ pub fn confine(
     ctx: &EvalContext,
     grants: Grants,
     program: &Path,
+    state: &Path,
 ) -> Result<Confined> {
     let generated = landlock_rules(policy, ctx, grants)?;
+    refuse_exposed(state, &generated.rules, false)?;
     restricted(&generated.rules, generated.report, Command::new(program))
 }
 
 pub use isolate::{inside, isolate};
+
+/// Refuse to start where `rules` would show OpenMoat's state directory `state`
+/// to the agent: Landlock cannot deny inside a grant (`crate::sandbox::exposure`).
+fn refuse_exposed(state: &Path, rules: &Rules, isolated: bool) -> Result<()> {
+    let tmpdir = session_tmpdir();
+    match exposure::refusal(state, rules, tmpdir.as_deref(), isolated) {
+        Some(why) => bail!("{why}"),
+        None => Ok(()),
+    }
+}
 
 /// `command`, to start with `rules` and the seccomp filter applied.
 fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confined> {

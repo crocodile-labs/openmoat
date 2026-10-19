@@ -9,6 +9,13 @@ differential/claude.rs) and scripts/ci/differential.sh. Trimmed from the
 #119 sandbox spike.
 
   fake_api.py --bash 'cat ~/.ssh/id_rsa'
+  fake_api.py --calls '[{"name": "WebFetch", "input": {...}}, {"name": "Write", ...}]'
+
+--calls serves a sequence instead (crates/openmoat-cli/tests/e2e/differential/
+agents.rs): the Nth call once the conversation holds N tool results, then a
+text reply quoting the last result. A call whose tool the request does not offer
+becomes a text reply naming the tools it did offer, so a test sees why. The
+conversation itself carries the step, so the server keeps no state.
 
 With no --port (or --port 0) the OS picks a free loopback port. Either way the
 bound port is printed as the first stdout line, once the socket is listening,
@@ -22,22 +29,52 @@ MSG = {"id": "msg_fake", "type": "message", "role": "assistant", "model": "fake"
        "stop_reason": "end_turn", "stop_sequence": None,
        "usage": {"input_tokens": 1, "output_tokens": 1}}
 BASH = None
+CALLS = None
+
+
+def tool_results(content):
+    if not isinstance(content, list):
+        return []
+    return [b for b in content if isinstance(b, dict) and b.get("type") == "tool_result"]
+
+
+def result_text(result):
+    out = result.get("content")
+    if not isinstance(out, str):
+        out = " ".join(c.get("text", "") for c in out or [])
+    return out
 
 
 def reply_content(req):
+    if CALLS is not None:
+        return scripted_reply(req)
     msgs = req.get("messages", [])
     last = msgs[-1]["content"] if msgs else ""
-    results = [b for b in last if isinstance(b, dict) and b.get("type") == "tool_result"] \
-        if isinstance(last, list) else []
+    results = tool_results(last)
     if BASH and results:
-        out = results[0].get("content")
-        if not isinstance(out, str):
-            out = " ".join(c.get("text", "") for c in out or [])
-        return {"type": "text", "text": f"tool result: {out}"}
+        return {"type": "text", "text": f"tool result: {result_text(results[0])}"}
     if BASH and any(t.get("name") == "Bash" for t in req.get("tools", [])):
         return {"type": "tool_use", "id": "toolu_fake", "name": "Bash",
                 "input": {"command": BASH, "description": "differential probe"}}
     return {"type": "text", "text": "ok"}
+
+
+def scripted_reply(req):
+    msgs = req.get("messages", [])
+    results = [r for m in msgs for r in tool_results(m.get("content"))]
+    offered = [t.get("name") for t in req.get("tools", [])]
+    if not offered:
+        # a side request of the agent's own (a title, a summary): no tools
+        return {"type": "text", "text": "ok"}
+    step = len(results)
+    if step < len(CALLS):
+        call = CALLS[step]
+        if call["name"] not in offered:
+            return {"type": "text", "text": f"fake api: {call['name']} not offered: {offered}"}
+        return {"type": "tool_use", "id": f"toolu_fake_{step}", "name": call["name"],
+                "input": call["input"]}
+    last = result_text(results[-1]) if results else ""
+    return {"type": "text", "text": f"tool result: {last}"}
 
 
 def stream_events(block):
@@ -95,8 +132,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--bash")
+    ap.add_argument("--calls", type=json.loads)
     a = ap.parse_args()
     BASH = a.bash
+    CALLS = a.calls
     server = ThreadingHTTPServer(("127.0.0.1", a.port), H)
     print(server.server_address[1], flush=True)
     server.serve_forever()

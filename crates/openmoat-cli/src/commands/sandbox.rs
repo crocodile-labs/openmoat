@@ -94,7 +94,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
             "note: the policy has no `sandbox.read_roots`; the default policy's list applies"
         )?;
     }
-    write_secrets(&mut out, &policy.secrets, &plan.claude.report)?;
+    write_secrets(&mut out, &policy.secrets, &claude_doc, &plan.claude.report)?;
     for shown in hosts {
         if let Some(note) = install::unavailable(shown.host) {
             writeln!(out, "{}  {note}", shown.host.display_name())?;
@@ -199,33 +199,31 @@ pub fn sync() -> Result<Code> {
     Ok(Code::Ok)
 }
 
-/// Losses and allowances, as `sandbox show`, `sandbox sync` and `doctor` print them.
 /// One line per policy secret: where its value is read (never the value) and
-/// whether Claude Code's broker injects it, or why not (the `secrets.<id>` loss).
+/// whether Claude Code's broker masks it in `claude_doc` (the settings as
+/// `sync` writes them), or why not (the `secrets.<id>` loss).
 fn write_secrets(
     out: &mut impl io::Write,
     secrets: &[openmoat_core::Secret],
+    claude_doc: &Value,
     claude: &Report,
 ) -> io::Result<()> {
     if secrets.is_empty() {
         return Ok(());
     }
     writeln!(out, "Secrets  values are never shown")?;
-    for secret in secrets {
+    let states = claude::mask::states(claude_doc, secrets, claude, install::MASK_FILES_DENIED);
+    for (secret, state) in states {
         let source = match &secret.source {
             openmoat_core::SecretSource::Env(name) => format!("env {name}"),
             openmoat_core::SecretSource::File(path) => format!("file {path}"),
             openmoat_core::SecretSource::Keychain { service, .. } => format!("keychain {service}"),
         };
-        let rule = format!("secrets.{}", secret.id);
-        let claude = claude
-            .losses
-            .iter()
-            .find(|loss| loss.rule == rule)
-            .map_or_else(
-                || "Claude Code injects it".to_owned(),
-                |loss| format!("Claude Code skips it: {}", loss.message),
-            );
+        let claude = if install::unavailable(Host::ClaudeCode).is_some() {
+            "Claude Code's sandbox is not available here, so it masks nothing".to_owned()
+        } else {
+            state.describe()
+        };
         writeln!(
             out,
             "  {}  {} {} from {source}; {claude}",
@@ -235,6 +233,7 @@ fn write_secrets(
     Ok(())
 }
 
+/// Losses and allowances, as `sandbox show`, `sandbox sync` and `doctor` print them.
 pub(super) fn write_report(out: &mut impl io::Write, report: &Report) -> io::Result<()> {
     for loss in &report.losses {
         writeln!(out, "  stricter: {loss}")?;
