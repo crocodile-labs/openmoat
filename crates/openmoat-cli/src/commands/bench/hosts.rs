@@ -67,10 +67,13 @@ impl Answer {
 /// nor can Cursor's `beforeReadFile` and `preToolUse` (file reads and writes), so
 /// there an `ask` has to arrive as a blocking `deny`. Cursor's hooks have no "no
 /// decision", so a `defer` is Cursor's own prompt, or OpenMoat's ask for file tools.
+/// OpenMoat's OpenClaw plugin returns no decision for an `allow`, so OpenClaw's own
+/// checks still run: an allow is a passthrough there.
 pub fn seen(host: Host, call: &Call, verdict: Verdict) -> Answer {
     let file_tool = matches!(call, Call::Read(_) | Call::Write(_) | Call::Edit(_));
     match (host, verdict) {
         (Host::Codex, Verdict::Ask) => Answer::Deny,
+        (Host::OpenClaw, Verdict::Allow) => Answer::Passthrough,
         // a `defer` there is OpenMoat's ask (`Host::decided`), and the ask arrives as a deny
         (Host::Cursor, Verdict::Ask | Verdict::Defer) if file_tool => Answer::Deny,
         (Host::Cursor, Verdict::Defer) => Answer::Ask,

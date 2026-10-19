@@ -78,6 +78,29 @@ fn cursor_reads_permission_and_asks_only_for_shell_and_mcp() {
 }
 
 #[test]
+fn openclaw_reads_each_guard_reply_as_the_verdict_it_carries() {
+    use openmoat_core::Verdict;
+    let read = |reply: &Reply| hosts::classify(Host::OpenClaw, &shell(), reply);
+    let seen = |verdict| hosts::seen(Host::OpenClaw, &shell(), verdict);
+    // `moat guard --host openclaw`: nothing for defer, else the decision as JSON.
+    let allow = exited(0, r#"{"decision":"allow","reason":"r"}"#, "");
+    let ask = exited(0, r#"{"decision":"ask","reason":"r"}"#, "");
+    let deny = exited(2, r#"{"decision":"deny","reason":"r"}"#, "");
+    // The plugin returns no decision for an allow, so OpenClaw's own checks run.
+    assert_eq!(read(&allow), Answer::Passthrough);
+    assert_eq!(read(&allow), seen(Verdict::Allow));
+    assert_eq!(read(&exited(0, "", "")), seen(Verdict::Defer));
+    assert_eq!(read(&ask), Answer::Ask);
+    assert_eq!(read(&ask), seen(Verdict::Ask));
+    assert_eq!(read(&deny), Answer::Deny);
+    assert_eq!(read(&deny), seen(Verdict::Deny));
+    assert!(seen(Verdict::Allow).meets(Answer::Allow));
+    assert_eq!(read(&exited(0, "not json", "")), Answer::Error);
+    assert_eq!(read(&exited(2, "", "")), Answer::Error);
+    assert_eq!(read(&Reply::TimedOut), Answer::Error);
+}
+
+#[test]
 fn an_ask_reaches_hosts_that_cannot_ask_as_a_deny() {
     use openmoat_core::Verdict;
     let file = Call::Edit("a".to_owned());
