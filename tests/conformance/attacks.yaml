@@ -2998,10 +2998,6 @@
   threat: T1
   action: { shell: "cat ~/.config/containers/auth.json" }
   expect: { verdict: deny, rules: [secrets-paths] }
-- id: T1-cat-runtime-containers-auth
-  threat: T1
-  action: { shell: "cat /run/user/501/containers/auth.json" }
-  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T1-cat-doctl-config
   threat: T1
   action: { shell: "cat ~/.config/doctl/config.yaml" }

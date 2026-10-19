@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 120 | 51 | 3 |
+| T1 | Secret exfiltration via shell | 119 | 51 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 62 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
@@ -191,7 +191,6 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-cat-authinfo` (attacks): Deny [secrets-paths]
 - `T1-cat-authinfo-gpg` (attacks): Deny [secrets-paths]
 - `T1-cat-containers-auth` (attacks): Deny [secrets-paths]
-- `T1-cat-runtime-containers-auth` (attacks): Deny [secrets-paths]
 - `T1-cat-doctl-config` (attacks): Deny [secrets-paths]
 - `benign-cd-src-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-cd-crate-then-ls` (benign): Allow [dev-shell]

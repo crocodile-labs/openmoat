@@ -26,9 +26,10 @@ deny:
       - "~/.authinfo"
       - "~/.authinfo.gpg"
       - "~/.docker/config.json"
-      # Podman, Buildah and Skopeo registry logins (`/run/user/<uid>` is $XDG_RUNTIME_DIR)
+      # Podman, Buildah and Skopeo registry logins. The copy under
+      # $XDG_RUNTIME_DIR is left out: a glob there makes Codex's Linux sandbox
+      # scan /run/user, which fails on directories it cannot read.
       - "~/.config/containers/auth.json"
-      - "/run/user/*/containers/auth.json"
       # the DigitalOcean CLI's API token
       - "~/.config/doctl/config.yaml"
       - "~/.kube/**"
