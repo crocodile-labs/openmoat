@@ -24,8 +24,9 @@ use crate::install::Recorded;
 /// Top-level keys of a Claude Code `settings.json` that may change while the
 /// guard keeps deciding. Each changes only how Claude Code looks, words its
 /// replies or asks the person itself. None runs a program, loads code, sets
-/// the model or endpoint, or changes a hook, and the hook still decides every
-/// call. `theme` is left out of the digest altogether (`digest.rs`).
+/// the endpoint, or changes a hook, and the hook still decides every call.
+/// `theme` is left out of the digest altogether (`digest.rs`); the model the
+/// person picks is in [`MODEL_KEYS`].
 const RELAXED_KEYS: &[&str] = &[
     // The JSON schema an editor validates the file with; Claude Code ignores it.
     "$schema",
@@ -52,6 +53,20 @@ const RELAXED_KEYS: &[&str] = &[
     // Whether Claude Code's file picker lists ignored files; the hook decides
     // every read whatever the picker shows.
     "respectGitignore",
+];
+
+/// Whether a value has the shape a key allows.
+type Shape = fn(&Value) -> bool;
+
+/// Top-level keys Claude Code writes itself when the person switches models
+/// (`/model`, #591), each with the only shape its value may take. The model
+/// is a name: the endpoint it is sent to (`env`), the key (`apiKeyHelper`) and
+/// every hook stay pinned, so it changes which model answers, never what runs
+/// or what OpenMoat allows. A value of any other shape, an object or a list,
+/// is drift like any other key's. A removed key has no value and may go.
+const MODEL_KEYS: &[(&str, Shape)] = &[
+    ("model", Value::is_string),
+    ("switchModelsOnFlag", is_scalar),
 ];
 
 /// The top-level key whose own keys are checked one by one.
@@ -151,9 +166,23 @@ fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String]) -> bool {
     let had_permissions = pinned.contains_key(PERMISSIONS);
     differing(pinned, &now).all(|key| {
         RELAXED_KEYS.contains(&key.as_str())
+            || model_key_relaxed(key, &root)
             || (key == PERMISSIONS
                 && permissions_relaxed(pinned_permissions, had_permissions, &root, owned))
     })
+}
+
+/// Whether `key` is one of [`MODEL_KEYS`] and its value in `root`, if any,
+/// has the shape that key allows.
+fn model_key_relaxed(key: &str, root: &Map<String, Value>) -> bool {
+    MODEL_KEYS
+        .iter()
+        .any(|(name, shape)| *name == key && root.get(key).is_none_or(shape))
+}
+
+/// A string, number or boolean: a value with no structure inside it.
+fn is_scalar(value: &Value) -> bool {
+    value.is_string() || value.is_number() || value.is_boolean()
 }
 
 /// The settings object at `path`, read once; `None` unless it is a regular

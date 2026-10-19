@@ -20,7 +20,7 @@ use openmoat_core::{CompiledPolicy, Decision, Taint, Verdict};
 use openmoat_hosts::Host;
 use openmoat_proxy::TaintLookup;
 
-use super::{SessionTaint, fold};
+use super::{Pass, SessionTaint, fold};
 use crate::home::Home;
 
 /// What `moat run` names its audit session in for the agent and its hooks.
@@ -151,6 +151,7 @@ impl<'p> RunTaint<'p> {
                 linked.host,
                 self.policy,
                 &self.cwd,
+                &mut Pass::default(),
             )?;
             if let Some(last) = events.last() {
                 linked.upto = last.id;

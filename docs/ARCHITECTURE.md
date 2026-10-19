@@ -125,8 +125,9 @@ limit is wall-clock time, which includes waiting for a CPU and for the audit
 database's lock, so it is set well above the 10–20 ms a call takes: on a machine
 loaded by parallel builds a call can take seconds without being stuck. The deny
 appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
-phase being the step the guard was in (`stdin`, `lock`, `context`, `compile`,
-`taint`, `cache`, `record`, `answer`); `moat doctor` reports the hangs of the last
+phase being the step the guard was in (`stdin`, `relay` for a hook inside `moat run`
+waiting for the run to decide, `lock`, `context`, `compile`, `taint`, `cache`,
+`record`, `answer`); `moat doctor` reports the hangs of the last
 week and the phase most of them were in.
 
 ## 3. Classification
@@ -415,12 +416,13 @@ away. Codex has no such key: a failed hook "continues the tool call"
   Claude Code `settings.json` the lock also records a digest per key of `permissions`.
   With them, `guard` (and `moat policy check`) keep deciding while the only drift is in
   an allowlist of Claude Code keys (`integrity/relaxed.rs`): display and reply toggles
-  (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …) and Claude Code's own
+  (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …), the model the person
+  switches to (`model` as a string, `switchModelsOnFlag` as a scalar) and Claude Code's own
   permission lists and modes (`permissions.allow`, `ask`, `deny`, `defaultMode`,
   `additionalDirectories`, `blockReadsOutsideWorkingDirectories`). They change only
   Claude Code's own prompts; the hook still decides every call. A `deny` list that
   lost a rule OpenMoat wrote (recorded as `claude_rules` in `hosts.json`), any other or
-  unknown key (`hooks`, `env`, `apiKeyHelper`, `model`, plugin, MCP and `sandbox` keys),
+  unknown key (`hooks`, `env`, `apiKeyHelper`, `statusLine`, plugin, MCP and `sandbox` keys),
   a file that no longer parses or is a symlink, a lock without the `permissions` digests,
   or drift in any other pinned file still denies every call. Allowlisted drift stays
   drift: `status` and `doctor` report it until a person re-pins, the commands that
@@ -527,20 +529,30 @@ edited (contents do not match its hash), unlinked (an event before it was delete
 inserted, or events were reordered) or unhashed, and exits 64.
 
 **Session cache** (`store/session_cache.rs`). Session taint is the fold of a session's
-earlier events (POLICY.md §4.1). `guard` keeps that fold per session and host in a
-`session_cache` table, with the newest event it covers and a digest of what it
-depends on: this build's version, the effective policy and context, and the working
-directory. A call reads the cache, folds only the events recorded since, and writes
-it back, so a late call in a long session stays fast (#570). The write goes on the
+earlier events (POLICY.md §4.1). `guard` keeps that fold in a `session_folds` table,
+one row per session, host and digest of what the fold depends on: this build's
+version, the effective policy and context, and the working directory. Each row holds
+the newest event it covers. A call reads the row of its own digest, folds only the
+events recorded since, and writes it back, so a late call in a long session stays
+fast (#570). Calls of one session from different working directories fold under
+different digests and keep a row each (up to 16 per session and host, the least
+recently written going first), so they read on from their own row instead of
+replacing each other's and folding the whole session again. The write goes on the
 connection the call then records with, just before the record's transaction, and
 does not wait for the database's lock: while another call holds it, the write is
 skipped and the older row stays, so the next call folds a few more events. A row
-is replaced only by one further on (or under another digest), so a skipped or late
-write never moves it back. A cache under another
-digest, or one that cannot be read, is ignored and the session is folded from its
-first event. The cache is outside the hash chain and never a source of truth: it can
-only hold what the events folded to. The table is created on first use, without
-changing the schema version, so older builds still open the database.
+is replaced only by one further on, so a skipped or late write never moves it back.
+Without a row for the digest, or when it cannot be read, the session is folded from
+its first event. A fold reads the events 512 at a time; one that runs long saves
+what it has reached every 2 s, on a writable handle of its own, and at 20 s into
+the guard's 30 s budget it stops, saves, and the call is denied (`kernel-error`,
+recorded) rather than answered from part of the session, which may lack the event
+that tainted it. The next call reads on from the saved row, so a session too long to
+fold in one call catches up over a few calls instead of timing out on every one. The
+cache is outside the hash chain and never a source of truth: it can only hold what
+the events folded to. The table is created on first use, without changing the schema
+version, so older builds still open the database (they keep using the one-row
+`session_cache` table of earlier versions, which this build no longer reads).
 
 **File provenance** (schema 4, `store/provenance.rs`, `crates/openmoat-cli/src/taint/provenance.rs`,
 ADR-029, POLICY.md §4.1.1). A `provenance` table holds one row per file a call wrote or
@@ -747,12 +759,14 @@ host outside TLS termination.
      (`taint/run.rs`); a history that cannot be read refuses (`proxy-session`).
   3. Resolve the name with the system resolver (IP literals skip it). Refuse the
      connection when any resolved address is loopback, link-local, a cloud metadata
-     address (`100.100.100.200`, `fd00:ec2::254`, NAT64 and IPv4-mapped forms included)
+     address (`100.100.100.200`, `fd00:ec2::254`; NAT64, IPv4-mapped, 6to4 and Teredo
+     forms included)
      or not unicast. Also refuse it when an address is private, CGNAT, benchmarking or
      unique-local and no allow rule names that address (POLICY.md §5.2). Those rules are
      compiled once at start-up into a second policy that holds only address patterns.
      Each resolved address is also matched against the policy's deny rules (in canonical
-     text form, and a NAT64 address also as the IPv4 address it carries); a match refuses
+     text form, and a NAT64, 6to4 or Teredo address also as the IPv4 addresses it
+     carries); a match refuses
      the connection (`proxy-address`, the deny rule's id in the reasons), while allow rules
      on addresses never open more here. Connect only to an address that was checked.
   4. For CONNECT:

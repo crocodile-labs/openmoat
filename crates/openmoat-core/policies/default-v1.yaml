@@ -32,6 +32,17 @@ deny:
       - "~/.pypirc"
       - "~/.cargo/credentials"
       - "~/.cargo/credentials.toml"
+      - "~/.gem/credentials"
+      # database client passwords, Vault and Terraform tokens
+      - "~/.pgpass"
+      - "~/.my.cnf"
+      - "~/.mylogin.cnf"
+      - "~/.vault-token"
+      - "~/.terraform.d/credentials.tfrc.json"
+      # password managers and keyrings: 1Password CLI, pass, GNOME Keyring
+      - "~/.config/op/**"
+      - "~/.password-store/**"
+      - "~/.local/share/keyrings/**"
       # shell history holds pasted tokens and passwords
       - "~/.zsh_history"
       - "~/.bash_history"
@@ -56,6 +67,8 @@ deny:
       - "{az,*/az} account get-access-token*"
       - "{aws,*/aws} configure export-credentials*"
       - "{aws,*/aws} configure get *secret*"
+      # `--raw` prints the kubeconfig's tokens and keys, which it otherwise redacts
+      - "{kubectl,*/kubectl} * config view * --raw*"
       - "git credential fill*"
       - "git credential-* get*"
       - "{security,*/security} find-{generic,internet}-password -{w,g}*"
@@ -63,7 +76,10 @@ deny:
       - "{security,*/security} dump-keychain*"
   - id: env-secrets
     reason: secret environment variable
-    env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN"]
+    env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN",
+      # passwords and connection strings that carry one; other `*_URL`s are not secret
+      "*_PASS", "*_PASSWD", "*_PWD", "PGPASSWORD", "*_CREDENTIALS", "*_DSN",
+      "DATABASE_URL", "*_DATABASE_URL", "REDIS_URL", "MONGODB_URI", "MONGO_URL"]
   - id: env-dump
     reason: prints every environment variable, secrets included
     shell:

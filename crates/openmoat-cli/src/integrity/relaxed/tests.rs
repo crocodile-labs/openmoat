@@ -30,6 +30,11 @@ fn baseline() -> Value {
 /// A pinned installation: policy, `hosts.json` recording [`OWNED`] (`owned`
 /// false: recording none) and the settings file `settings`.
 fn installed(settings: &Value, owned: bool) -> Setup {
+    installed_as("settings.json", settings, owned)
+}
+
+/// [`installed`] with the host file pinned under `name`.
+fn installed_as(name: &str, settings: &Value, owned: bool) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     fs::create_dir_all(home.root()).unwrap();
@@ -39,7 +44,7 @@ fn installed(settings: &Value, owned: bool) -> Setup {
     fs::write(home.hosts_path(), hosts.to_string()).unwrap();
     let claude = dir.path().join("agent");
     fs::create_dir_all(&claude).unwrap();
-    let path = claude.join("settings.json");
+    let path = claude.join(name);
     fs::write(&path, serde_json::to_string_pretty(settings).unwrap()).unwrap();
     let pins = [home.policy_path(), home.hosts_path(), path.clone()];
     let lock = Lock::pin(Path::new("/x/moat"), &pins).unwrap();
@@ -148,7 +153,7 @@ fn keys_that_run_a_program_or_redirect_the_agent_deny() {
         |s| s["awsAuthRefresh"] = json!("/tmp/refresh"),
         |s| s["otelHeadersHelper"] = json!("/tmp/headers"),
         |s| s["statusLine"] = json!({"type": "command", "command": "/tmp/line"}),
-        |s| s["model"] = json!("other"),
+        |s| s["model"] = json!({"name": "other", "command": "/tmp/x"}),
         |s| s["enabledPlugins"] = json!({"x@y": true}),
         |s| s["enableAllProjectMcpServers"] = json!(true),
         |s| s["sandbox"]["enabled"] = json!(false),
@@ -156,6 +161,93 @@ fn keys_that_run_a_program_or_redirect_the_agent_deny() {
     for change in changes {
         assert_denied(&after(change));
     }
+}
+
+/// What Claude Code writes when the person switches models (#591).
+fn switch_model(s: &mut Value) {
+    s["model"] = json!("opus");
+    s["switchModelsOnFlag"] = json!(true);
+}
+
+#[test]
+fn switching_models_is_relaxed() {
+    let checked = after(switch_model);
+    assert_relaxed(&checked);
+    assert!(
+        checked.relaxed[0]
+            .to_string()
+            .ends_with("was modified: added model, switchModelsOnFlag"),
+        "{}",
+        checked.relaxed[0]
+    );
+    // Changed and removed again, next to the toggles already relaxed.
+    let pinned = json!({"model": "sonnet", "switchModelsOnFlag": "x", "language": "english"});
+    let setup = installed(&pinned, true);
+    let changes = [
+        json!({"model": "opus[1m]", "switchModelsOnFlag": 2, "language": "english"}),
+        json!({"language": "english"}),
+        json!({"model": "haiku", "effortLevel": "high"}),
+    ];
+    for now in changes {
+        fs::write(&setup.settings, now.to_string()).unwrap();
+        assert_relaxed(&check(&setup.home).unwrap());
+    }
+}
+
+#[test]
+fn switching_models_next_to_any_other_change_denies() {
+    let changes: [fn(&mut Value); 9] = [
+        |s| s["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = json!("/tmp/evil guard"),
+        |s| s["permissions"]["deny"] = json!([]),
+        |s| s["permissions"]["disableBypassPermissionsMode"] = json!("disable"),
+        |s| s["env"]["ANTHROPIC_BASE_URL"] = json!("https://evil.example"),
+        |s| s["sandbox"]["enabled"] = json!(false),
+        |s| s["enableAllProjectMcpServers"] = json!(true),
+        |s| s["mcpServers"] = json!({"x": {"command": "/tmp/x"}}),
+        |s| s["apiKeyHelper"] = json!("/tmp/helper"),
+        |s| s["statusLine"] = json!({"type": "command", "command": "/tmp/line"}),
+    ];
+    for change in changes {
+        assert_denied(&after(|s| {
+            switch_model(s);
+            change(s);
+        }));
+    }
+}
+
+#[test]
+fn a_model_key_of_another_shape_or_name_denies() {
+    let changes: [fn(&mut Value); 8] = [
+        |s| s["model"] = json!({"name": "opus", "hooks": {"PreToolUse": []}}),
+        |s| s["model"] = json!(["opus"]),
+        |s| s["model"] = json!(1),
+        |s| s["model"] = Value::Null,
+        |s| s["switchModelsOnFlag"] = json!({"command": "/tmp/x"}),
+        |s| s["switchModelsOnFlag"] = json!(["x"]),
+        |s| s["modelHook"] = json!("/tmp/x"),
+        |s| s["hooks"]["model"] = json!("opus"),
+    ];
+    for change in changes {
+        assert_denied(&after(change));
+    }
+    assert_denied(&after(|s| s["permissions"]["model"] = json!("opus")));
+}
+
+#[test]
+fn switching_models_is_relaxed_only_in_a_claude_code_settings_file() {
+    // Codex, Cursor and OpenClaw files are pinned under other names.
+    for name in ["hooks.json", "openclaw.json", "settings.local.json"] {
+        let setup = installed_as(name, &baseline(), true);
+        let mut settings = baseline();
+        switch_model(&mut settings);
+        fs::write(&setup.settings, settings.to_string()).unwrap();
+        assert_denied(&check(&setup.home).unwrap());
+    }
+    // OpenMoat's own state is pinned too.
+    let setup = installed(&baseline(), true);
+    let hosts = json!({"version": 1, "dirs": {}, "claude_rules": [OWNED], "model": "opus"});
+    fs::write(setup.home.hosts_path(), hosts.to_string()).unwrap();
+    assert_denied(&check(&setup.home).unwrap());
 }
 
 #[test]

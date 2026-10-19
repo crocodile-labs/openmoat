@@ -120,6 +120,17 @@ fn uv_run_classifies_the_wrapped_command() {
 }
 
 #[test]
+fn pkexec_and_runuser_classify_the_wrapped_command() {
+    assert!(has_shell(&parsed("pkexec --user me id -u"), "id -u"));
+    assert!(has_shell(&parsed("runuser -u me -- id -u"), "id -u"));
+    assert!(has_shell(&parsed("runuser --user=me id -u"), "id -u"));
+    // without `-u` the first operand is a user, and `-c` its command line
+    let atoms = parsed("runuser - me -c 'id -u'");
+    assert!(has_shell(&atoms, "id -u"));
+    assert!(!has_shell(&atoms, "me -c id -u"));
+}
+
+#[test]
 fn interpreter_scripts_are_reads() {
     assert!(has_read(&parsed("python script.py"), "/p/script.py"));
     assert!(has_read(&parsed("cd /tmp && python3 x.py"), "/tmp/x.py"));

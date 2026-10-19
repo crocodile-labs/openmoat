@@ -34,6 +34,9 @@ const WRITE_WAIT: Duration = Duration::from_millis(200);
 pub enum Phase {
     /// Reading the hook payload.
     Stdin,
+    /// Inside `moat run`: waiting for the run's process outside the sandbox
+    /// to decide (its own guard records the phase it reached).
+    Relay,
     /// Checking the policy lock.
     Lock,
     /// Loading the policy, its context, secrets and search path.
@@ -50,8 +53,9 @@ pub enum Phase {
     Answer,
 }
 
-const PHASES: [Phase; 8] = [
+const PHASES: [Phase; 9] = [
     Phase::Stdin,
+    Phase::Relay,
     Phase::Lock,
     Phase::Context,
     Phase::Compile,
@@ -66,6 +70,7 @@ impl Phase {
     pub fn name(self) -> &'static str {
         match self {
             Self::Stdin => "stdin",
+            Self::Relay => "relay",
             Self::Lock => "lock",
             Self::Context => "context",
             Self::Compile => "compile",
@@ -80,6 +85,7 @@ impl Phase {
     pub fn doing(self) -> &'static str {
         match self {
             Self::Stdin => "reading the tool call",
+            Self::Relay => "waiting for `moat run` to decide",
             Self::Lock => "checking the policy lock",
             Self::Context => "loading the policy",
             Self::Compile => "deciding",

@@ -158,6 +158,35 @@ fn local_and_metadata_addresses_are_forbidden() {
 }
 
 #[test]
+fn tunnelled_ipv4_addresses_are_checked_as_the_address_they_reach() {
+    for (ip, why) in [
+        // 6to4: the IPv4 address in bits 16..48
+        ("2002:a9fe:a9fe::", Some(Forbidden::LinkLocal)),
+        ("2002:a9fe:a9fe:1::5", Some(Forbidden::LinkLocal)),
+        ("2002:7f00:1::1", Some(Forbidden::Loopback)),
+        (
+            "2002:a00:5::",
+            Some(Forbidden::Private("a private address (10.0.0.0/8)")),
+        ),
+        ("2002:808:808::1", None),
+        // Teredo: the client, inverted, in the last 32 bits (169.254.169.254 and
+        // 127.0.0.1 here) and the server in bits 32..64
+        (
+            "2001:0:4136:e378:8000:63bf:5601:5601",
+            Some(Forbidden::LinkLocal),
+        ),
+        (
+            "2001:0:4136:e378:8000:63bf:80ff:fffe",
+            Some(Forbidden::Loopback),
+        ),
+        ("2001:0:a9fe:a9fe::f7f7:f7f7", Some(Forbidden::LinkLocal)),
+        ("2001:0:4136:e378:8000:63bf:f7f7:f7f7", None),
+    ] {
+        assert_eq!(forbidden(ip.parse().unwrap()), why, "{ip}");
+    }
+}
+
+#[test]
 fn ordinary_addresses_are_not_forbidden() {
     for ip in [
         "93.184.215.14",
@@ -298,6 +327,10 @@ allow:
         ("::ffff:203.0.113.7", Some("no-host")),
         // NAT64 reaches the IPv4 address it carries
         ("64:ff9b::cb00:7107", Some("no-host")),
+        // so do 6to4 and a Teredo client (inverted) or server
+        ("2002:cb00:7107::1", Some("no-host")),
+        ("2001:0:4136:e378:8000:63bf:34ff:8ef8", Some("no-host")),
+        ("2001:0:cb00:7107::f7f7:f7f7", Some("no-host")),
         ("198.51.100.200", Some("no-range")),
         // an allow naming the address does not lift the deny
         ("2001:db8::1", Some("no-v6")),

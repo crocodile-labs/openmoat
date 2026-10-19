@@ -2,11 +2,15 @@
 //! long session reads only the events recorded since (#570).
 //!
 //! The cache is a convenience beside the events, never a source of truth: it
-//! is outside the hash chain, a caller compares its `digest` with what the
-//! fold depends on and folds from the first event when they differ, and a
-//! cache that cannot be read is treated as absent. The table is created on
-//! first write, so the schema version (and older builds' view of the
-//! database) is unchanged.
+//! is outside the hash chain, a caller looks a row up by the `digest` of what
+//! the fold depends on and folds from the first event when there is none, and
+//! a cache that cannot be read is treated as absent. A session keeps one row
+//! per digest (up to `ROWS_PER_SESSION`), so calls of one session that fold
+//! under different digests, such as calls from two working directories, each
+//! read on from their own row instead of replacing each other's. The table is
+//! created on first write, so the schema version (and older builds' view of
+//! the database) is unchanged; the `session_cache` table older builds wrote,
+//! one row per session, is left to them.
 
 use std::time::Duration;
 
@@ -15,20 +19,26 @@ use rusqlite::{ErrorCode, OptionalExtension as _, params};
 use super::{EventId, Store, StoreError, row_to_event};
 use crate::store::Event;
 
-const TABLE: &str = "CREATE TABLE IF NOT EXISTS session_cache (
+const TABLE: &str = "CREATE TABLE IF NOT EXISTS session_folds (
     session_id  TEXT    NOT NULL,
     host        TEXT    NOT NULL,
     digest      TEXT    NOT NULL,
     upto        INTEGER NOT NULL,
     state       TEXT    NOT NULL,
-    PRIMARY KEY (session_id, host)
+    touched     INTEGER NOT NULL,
+    PRIMARY KEY (session_id, host, digest)
 )";
+
+/// The rows one session keeps on one host; the least recently written goes
+/// first. Each digest is a working directory or a policy the session's calls
+/// were decided under, so a handful covers a session.
+const ROWS_PER_SESSION: i64 = 16;
 
 /// A session's folded state as of event `upto`, computed under `digest`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cached {
-    /// What the fold depended on (the caller's own spelling); a different
-    /// digest means the state no longer applies.
+    /// What the fold depended on (the caller's own spelling); a state under
+    /// another digest does not apply.
     pub digest: String,
     /// The newest event of the session the state includes.
     pub upto: EventId,
@@ -43,12 +53,24 @@ impl Store {
         session_id: &str,
         after: EventId,
     ) -> Result<Vec<Event>, StoreError> {
+        self.session_page(session_id, after, usize::MAX)
+    }
+
+    /// At most `limit` events of one session recorded after `after`, oldest
+    /// first.
+    pub fn session_page(
+        &self,
+        session_id: &str,
+        after: EventId,
+        limit: usize,
+    ) -> Result<Vec<Event>, StoreError> {
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
         let mut stmt = self.conn.prepare(&format!(
-            "{} WHERE session_id = ?1 AND id > ?2 ORDER BY id",
+            "{} WHERE session_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3",
             self.select()
         ))?;
         let session_id = self.secrets.redact(session_id);
-        let rows = stmt.query_map(params![session_id, after.0], row_to_event)?;
+        let rows = stmt.query_map(params![session_id, after.0, limit], row_to_event)?;
         rows.collect::<Result<_, _>>().map_err(Into::into)
     }
 
@@ -74,16 +96,18 @@ impl Store {
         Ok(found.is_some())
     }
 
-    /// The cached state of `session_id` on `host`, if one was written.
+    /// The cached state of `session_id` on `host` under `digest`, if one was
+    /// written.
     pub fn session_cache(
         &self,
         session_id: &str,
         host: &str,
+        digest: &str,
     ) -> Result<Option<Cached>, StoreError> {
         let exists: Option<i64> = self
             .conn
             .query_row(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_cache'",
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_folds'",
                 [],
                 |r| r.get(0),
             )
@@ -95,8 +119,9 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT digest, upto, state FROM session_cache WHERE session_id = ?1 AND host = ?2",
-                params![session_id, host],
+                "SELECT digest, upto, state FROM session_folds
+                 WHERE session_id = ?1 AND host = ?2 AND digest = ?3",
+                params![session_id, host, digest],
                 |r| {
                     Ok(Cached {
                         digest: r.get(0)?,
@@ -108,9 +133,9 @@ impl Store {
             .optional()?)
     }
 
-    /// Store `cached` for `session_id` on `host`. A row computed under another
-    /// digest is replaced; under the same digest only a later `upto` wins, so a
-    /// slower concurrent guard cannot move the cache back.
+    /// Store `cached` for `session_id` on `host` under its digest. Only a
+    /// later `upto` replaces a row, so a slower concurrent guard cannot move
+    /// it back. The session keeps its 16 most recently written rows on `host`.
     pub fn set_session_cache(
         &self,
         session_id: &str,
@@ -120,12 +145,19 @@ impl Store {
         self.conn.execute_batch(TABLE)?;
         let session_id = self.secrets.redact(session_id);
         self.conn.execute(
-            "INSERT INTO session_cache (session_id, host, digest, upto, state)
-             VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT (session_id, host) DO UPDATE SET
-                 digest = excluded.digest, upto = excluded.upto, state = excluded.state
-             WHERE excluded.digest != session_cache.digest OR excluded.upto > session_cache.upto",
+            "INSERT INTO session_folds (session_id, host, digest, upto, state, touched)
+             VALUES (?1, ?2, ?3, ?4, ?5,
+                     (SELECT IFNULL(MAX(touched), 0) + 1 FROM session_folds))
+             ON CONFLICT (session_id, host, digest) DO UPDATE SET
+                 upto = excluded.upto, state = excluded.state, touched = excluded.touched
+             WHERE excluded.upto > session_folds.upto",
             params![session_id, host, cached.digest, cached.upto.0, cached.state],
+        )?;
+        self.conn.execute(
+            "DELETE FROM session_folds WHERE session_id = ?1 AND host = ?2 AND touched NOT IN
+                 (SELECT touched FROM session_folds WHERE session_id = ?1 AND host = ?2
+                  ORDER BY touched DESC LIMIT ?3)",
+            params![session_id, host, ROWS_PER_SESSION],
         )?;
         Ok(())
     }

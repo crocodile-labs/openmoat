@@ -130,6 +130,10 @@ pub(super) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&
     if !WRAPPERS.contains(&program) || options::only_describes(argv, program) {
         return None;
     }
+    // without `-u`, runuser's first operand is a user, as in `su`
+    if program == "runuser" && !argv.iter().any(|a| a == "-u" || a.starts_with("--user")) {
+        return None;
+    }
     let options_with_value = WRAPPER_OPTIONS_WITH_VALUE
         .iter()
         .find(|(name, _)| *name == program)
