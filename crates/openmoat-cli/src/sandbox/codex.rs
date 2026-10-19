@@ -41,8 +41,8 @@ use openmoat_core::{AtomicAction, Kind};
 use toml_edit::{Item, Table, value};
 
 use super::patterns::{
-    ANY_GIT, RUNS_LATER, Spot, is_below, literal_tree, push_unique, runs_later_exclusion, split,
-    spot,
+    ANY_GIT, RUNS_LATER, Spot, has_glob, is_below, literal_tree, push_unique, runs_later_exclusion,
+    split, spot,
 };
 use super::{PROJECT, Report};
 
@@ -253,6 +253,7 @@ impl Filesystem {
             }
         }
         fs.drop_directory_nodes(report);
+        fs.drop_masked();
         if fs.denies_anywhere && !fs.outside_home.is_empty() {
             report.allowance(
                 Kind::FsRead,
@@ -416,6 +417,24 @@ impl Filesystem {
              only the files below them are denied; renaming or deleting the directory itself is \
              left to the hook",
         );
+    }
+
+    /// Leave out a deny below a directory the profile already denies whole
+    /// (`~/.moat/approvals.json` below `~/.moat`): it withholds nothing more,
+    /// and on Linux it breaks every command. bubblewrap hides a missing deny
+    /// path by creating a mount point at it, which fails inside the
+    /// directory's own read-only mask (`Can't create file …: Read-only file
+    /// system`), so Codex starts no command until the file exists.
+    fn drop_masked(&mut self) {
+        let denied_dirs: Vec<String> = self
+            .paths
+            .iter()
+            .filter(|(key, mode)| *mode == Mode::Deny && !key.starts_with(':') && !has_glob(key))
+            .map(|(key, _)| key.clone())
+            .collect();
+        self.paths.retain(|(key, mode)| {
+            *mode != Mode::Deny || !denied_dirs.iter().any(|dir| is_below(key, dir))
+        });
     }
 
     fn into_table(self) -> Table {
