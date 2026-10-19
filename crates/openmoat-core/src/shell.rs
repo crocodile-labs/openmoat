@@ -26,7 +26,7 @@
 //! | text tool options (`text.rs`): `sort -o FILE`, `uniq in out`; an unknown option | `FsWrite`; `<program> @<option>` `Shell` atom |
 //! | `sed` scripts (`sed/`): `r FILE`, `w FILE`; `e`, anything not understood | `FsRead`, `FsWrite`; `sed @<script>` `Shell` atom |
 //! | `awk` programs (`awk.rs`) with `system`, `\|`, `getline`, `ENVIRON`, `ARGV`, `@`, `print … >` | `awk @<program>` `Shell` atom |
-//! | package installs (`installs.rs`): `npm install x`, `pip install y`, `cargo add z`, … | `@package-install <ecosystem> <name>`; for a near miss of a popular name also `@package-near-miss <ecosystem> <name> <popular>` |
+//! | package installs (`installs.rs`): `npm install x`, `pip install y`, `cargo add z`, … | for a near miss of a popular name, `@package-near-miss <ecosystem> <name> <popular>`; nothing for any other name |
 //!
 //! Classification is conservative by design: when the input cannot be parsed
 //! safely the result is [`ParseOutcome::Unparseable`], which the engine maps to

@@ -1,13 +1,16 @@
 //! Package installs and the names they fetch from a registry (ADR-030).
 //!
-//! `npm install x`, `pip install y`, `cargo add z` and the like give one atom
-//! `@package-install <ecosystem> <name>` per package the command line names,
-//! and a name that is a near miss of a popular package (`crate::packages`)
-//! also gives `@package-near-miss <ecosystem> <name> <popular name>`, which
-//! the default policy's `package-near-miss` group asks for. Versions, extras
-//! and options are taken off; paths, URLs, git sources and requirement files
-//! name no registry package. An install from the lockfile or a requirements
-//! file (`npm install`, `pip install -r requirements.txt`) gives no atom.
+//! `npm install x`, `pip install y`, `cargo add z` and the like are read for
+//! the packages the command line names. A name that is a near miss of a
+//! popular package (`crate::packages`) gives `@package-near-miss <ecosystem>
+//! <name> <popular name>`, which the default policy's `package-near-miss`
+//! group asks for. Any other install gives no atom of its own, so it decides
+//! exactly as the command alone does: an atom for every install would fall to
+//! the catch-all, and under strictest-wins re-ask an install a rule allows.
+//! Versions, extras and options are taken off; paths, URLs, git sources and
+//! requirement files name no registry package, and an install from the
+//! lockfile or a requirements file (`npm install`, `pip install -r
+//! requirements.txt`) names none.
 
 mod tools;
 
@@ -16,35 +19,66 @@ use crate::action::AtomicAction;
 use crate::packages::{self, Ecosystem};
 use tools::Tool;
 
-/// The atom for a package a command installs.
-pub(crate) const INSTALL: &str = "@package-install";
 /// The atom for an installed name that is a near miss of a popular package.
 pub(crate) const NEAR_MISS: &str = "@package-near-miss";
 
 /// At most this many names of one command are checked.
 const MAX_NAMES: usize = 64;
 
-/// The install atoms of `argv`, whose program's base name is `program`.
+/// The near-miss atoms of `argv`, whose program's base name is `program`.
 pub(super) fn note(argv: &[String], program: &str, sink: &mut Sink) -> Result<(), ClassifyError> {
-    let Some((ecosystem, names)) = requested(argv, program) else {
-        return Ok(());
-    };
-    for name in names.into_iter().take(MAX_NAMES) {
-        if let Some(popular) = packages::near_miss(ecosystem, &name) {
-            sink.push(AtomicAction::Shell {
-                argv: vec![
-                    NEAR_MISS.to_owned(),
-                    ecosystem.id().to_owned(),
-                    name.clone(),
-                    popular.to_owned(),
-                ],
-            })?;
-        }
-        sink.push(AtomicAction::Shell {
-            argv: vec![INSTALL.to_owned(), ecosystem.id().to_owned(), name],
-        })?;
+    for argv in near_misses(argv, program) {
+        sink.push(AtomicAction::Shell { argv })?;
     }
     Ok(())
+}
+
+/// Each `@package-near-miss <ecosystem> <name> <popular>` atom `command`
+/// gives, as one line, wherever on the line the install is (`cd app && pip
+/// install …`, `sh -c '…'`): what `moat allow --always` adds to its rule so the
+/// install a person approved is not asked about again. Package names are not
+/// paths, so the directories the command runs in do not matter here.
+#[must_use]
+pub fn near_miss_atoms(command: &str) -> Vec<String> {
+    let cwd = [Some("/".to_owned())];
+    let ctx = super::ShellContext {
+        home: "/",
+        cwd: &cwd,
+    };
+    let (atoms, _) = super::classify_globs(command, &ctx).0.into_parts();
+    let mut lines: Vec<String> = Vec::new();
+    for atom in atoms {
+        if let AtomicAction::Shell { argv } = atom
+            && argv.first().is_some_and(|tag| tag == NEAR_MISS)
+        {
+            let line = argv.join(" ");
+            if !lines.contains(&line) {
+                lines.push(line);
+            }
+        }
+    }
+    lines
+}
+
+/// The `@package-near-miss <ecosystem> <name> <popular>` argv of each name
+/// `argv` installs that is a near miss of a popular package.
+fn near_misses(argv: &[String], program: &str) -> Vec<Vec<String>> {
+    let Some((ecosystem, names)) = requested(argv, program) else {
+        return Vec::new();
+    };
+    names
+        .into_iter()
+        .take(MAX_NAMES)
+        .filter_map(|name| {
+            let popular = packages::near_miss(ecosystem, &name)?;
+            Some(vec![
+                NEAR_MISS.to_owned(),
+                ecosystem.id().to_owned(),
+                name,
+                popular.to_owned(),
+            ])
+        })
+        .collect()
 }
 
 /// The registry and the package names `argv` installs from it, if it is an

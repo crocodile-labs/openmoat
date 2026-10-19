@@ -1,6 +1,7 @@
 mod defer;
 mod fetch;
 mod glob;
+mod installs;
 mod moved_dirs;
 mod taint;
 mod unparseable;

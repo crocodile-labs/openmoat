@@ -26,19 +26,20 @@ OpenMoat cannot ask a registry whether a name exists, how old it is or who owns 
 1. **The classifier reads installs** (`shell/installs.rs`): `npm install|i|add`,
    `pnpm add`, `yarn add`, `bun add`; `pip install` (also `pip3`, `python -m pip`),
    `uv pip install`, `uv add`, `uv tool install`, `poetry add`, `pipx install`;
-   `cargo add`, `cargo install`; `gem install`; `go get`, `go install`. Each package
-   named on the line becomes the atom `@package-install <ecosystem> <name>`, with
-   versions, extras, markers and options removed. Paths, URLs, archives, git sources
-   and requirement files name no registry package, and an install from the lockfile
-   gives no atom. No default rule names this atom, so installs still defer; a person
-   can write rules for it.
+   `cargo add`, `cargo install`; `gem install`; `go get`, `go install`. The package
+   names on the line are read with versions, extras, markers and options removed.
+   Paths, URLs, archives, git sources and requirement files name no registry package,
+   and an install from the lockfile names none. An install whose names are not near
+   misses (point 2) gives no atom of its own and decides exactly as its command does:
+   an atom for every install would fall to the policy's catch-all and, since the
+   strictest atom wins, ask again for an install a rule allows.
 2. **A bundled list of popular names per registry** (`openmoat-core/data/top-packages/`,
    a few hundred to about a thousand names each, plain text with its source and date).
    A name not on its list that is one edit (Damerau, optimal string alignment) from a
    listed name of at least five characters, differs from one only in `-`, `_`, `.` or
    doubled letters, or adds or drops a squatter's prefix or suffix (`node-`, `-js`,
-   `python-`, `py`, `-rs`, `ruby-`, …) is also `@package-near-miss <ecosystem> <name>
-   <popular name>`. Names are compared as each registry compares them (PEP 503 for
+   `python-`, `py`, `-rs`, `ruby-`, …) gives the atom `@package-near-miss <ecosystem>
+   <name> <popular name>`. Names are compared as each registry compares them (PEP 503 for
    PyPI, `-`/`_` alike for crates.io, no `/vN` for Go). The default policy asks for that
    atom (`package-near-miss`), and the reason names the popular package. An exact
    popular name, or a name far from every popular one, gets nothing new.

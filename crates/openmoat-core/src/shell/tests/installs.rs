@@ -139,15 +139,19 @@ fn a_near_miss_of_a_popular_package_is_its_own_atom() {
         &parsed("sh -c 'cargo add tokoi'"),
         "@package-near-miss crates tokoi tokio"
     ));
-    // every install is an atom too, so a rule can name a package
-    assert!(has_shell(
-        &parsed("npm i lodahs"),
-        "@package-install npm lodahs"
-    ));
-    assert!(has_shell(
-        &parsed("pip install requests"),
-        "@package-install pypi requests"
-    ));
+}
+
+#[test]
+fn an_ordinary_install_is_only_its_command() {
+    // no atom of its own: one would fall to the catch-all and, strictest
+    // wins, re-ask an install a rule allows
+    for cmd in ["npm i left-pad", "pip install requests", "cargo add serde"] {
+        let argv: Vec<String> = cmd.split(' ').map(str::to_owned).collect();
+        assert_eq!(parsed(cmd), vec![AtomicAction::Shell { argv }], "{cmd}");
+    }
+    let atoms = parsed("npm i lodahs");
+    assert_eq!(atoms.len(), 2, "{atoms:?}");
+    assert!(has_shell(&atoms, "npm i lodahs"));
 }
 
 #[test]
