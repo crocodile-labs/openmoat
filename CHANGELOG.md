@@ -18,6 +18,7 @@ view at the end of the file.
 - `moat doctor` shows, for each policy secret, whether Claude Code's own broker masks it in the settings on disk: masked, denied instead of masked (a `file` source on macOS), skipped with the reason, or not yet written (run `moat sandbox sync`). It also names `sandbox.credentials.allowPlaintextInject: true` as a weakness when the policy did not ask for it, since it lets every masked secret go to a plain-HTTP host ([#580](https://github.com/crocodile-labs/openmoat/pull/580)).
 
 ### Changed
+- `openmoat-hosts` keeps each host's facts (id, name, the hook format it sends, what it does with an `ask`) in one `HostSpec`, returned by `Host::spec`, and turns an `ask` into a `deny` in one place from it; every host's answers are unchanged ([#586](https://github.com/crocodile-labs/openmoat/pull/586)).
 - `moat sandbox show` says a `file` secret on macOS is denied rather than masked, and that nothing is masked on native Windows, where it used to say Claude Code injects it ([#580](https://github.com/crocodile-labs/openmoat/pull/580)).
 
 ## [0.6.0] - 2026-10-19
