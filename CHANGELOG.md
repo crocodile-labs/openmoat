@@ -24,6 +24,7 @@ view at the end of the file.
 ### Changed
 - `moat init` follows `OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` as OpenClaw does (`~`, blank, `undefined` and `null` included) and records where it set OpenClaw up, so later commands find it without them; `moat doctor` reports a shell whose variables name another OpenClaw. The plugin goes in the state directory, wherever the configuration is ([#584](https://github.com/crocodile-labs/openmoat/pull/584)).
 - `openclaw.json` is read as JSON5 (comments, unquoted keys, single quotes, trailing commas), so `moat init` sets up a JSON5 configuration and writes it back as plain JSON with every value kept. A file with comments is not written, since that would drop them: `init`, `uninstall` and `moat mcp wrap` say so and change nothing. No new dependency ([#584](https://github.com/crocodile-labs/openmoat/pull/584)).
+- `openmoat-hosts` keeps each host's facts (id, name, the hook format it sends, what it does with an `ask`) in one `HostSpec`, returned by `Host::spec`, and turns an `ask` into a `deny` in one place from it; every host's answers are unchanged ([#586](https://github.com/crocodile-labs/openmoat/pull/586)).
 - `moat sandbox show` says a `file` secret on macOS is denied rather than masked, and that nothing is masked on native Windows, where it used to say Claude Code injects it ([#580](https://github.com/crocodile-labs/openmoat/pull/580)).
 
 ### Fixed

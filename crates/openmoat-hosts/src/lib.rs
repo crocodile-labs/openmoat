@@ -10,44 +10,26 @@
 
 mod config_change;
 mod continue_cli;
+mod contract;
 mod cursor;
 mod mcp;
 mod openclaw;
 mod pre_tool_use;
+mod registry;
 
 pub use config_change::proposal_target;
 pub use continue_cli::CONTINUE_ENV;
+pub use contract::{Asks, HostSpec};
 
 use std::fmt;
 use std::str::FromStr;
 
-use openmoat_core::{Action, Decision, Verdict};
+use openmoat_core::{Action, Decision};
 use serde_json::Value;
 use thiserror::Error;
 
 /// Session id recorded when a host omits it.
 const UNKNOWN_SESSION: &str = "unknown";
-
-/// Appended to an `ask` that Codex receives as a `deny` ([`Host::answer`]).
-const CODEX_ASK: &str = "this needs your approval and Codex hooks cannot ask: run `moat` to \
-     approve it, or `moat allow --last` (this session) or `moat allow --last --always`, then retry";
-
-/// Appended to an `ask` that the Continue CLI receives as a `deny` ([`Host::answer`]).
-const CONTINUE_ASK: &str = "this needs your approval and the Continue CLI runs a call its \
-     hook asks about: run `moat` to approve it, or `moat allow --last` (this session) or \
-     `moat allow --last --always`, then retry";
-
-/// Appended to an `ask` that Cursor receives as a `deny` ([`Host::answer`]). Only
-/// file tools reach these hooks; `moat allow --last` approves the exact file.
-const CURSOR_ASK: &str = "this needs your approval and Cursor does not prompt for this \
-     hook: run `moat` to approve it, or `moat allow --last` (this session) or \
-     `moat allow --last --always`, then retry";
-
-/// Appended to an `ask` that Claude Code receives as a `deny` because its
-/// permission mode (`bypassPermissions`, `dontAsk`) puts no question to a person.
-const CLAUDE_NO_PROMPT_ASK: &str = "this needs your approval and Claude Code's permission \
-     mode does not ask: run `moat` to approve it, or `moat allow --last` (this session) or \
-     `moat allow --last --always`, then retry";
 
 /// One line the model can act on: verdict, rule ids, then the reasons.
 #[must_use]
@@ -169,36 +151,33 @@ impl Host {
     /// Every host with a hook to install, in the order commands list them.
     pub const ALL: [Host; 4] = [Host::ClaudeCode, Host::Codex, Host::Cursor, Host::OpenClaw];
 
+    /// The facts about this host.
+    #[must_use]
+    pub fn spec(self) -> &'static HostSpec {
+        match self {
+            Self::ClaudeCode => &registry::CLAUDE_CODE,
+            Self::Codex => &registry::CODEX,
+            Self::Cursor => &registry::CURSOR,
+            Self::Continue => &registry::CONTINUE,
+            Self::OpenClaw => &registry::OPENCLAW,
+        }
+    }
+
     /// The identifier used on the command line and in the audit log.
     #[must_use]
     pub fn id(self) -> &'static str {
-        match self {
-            Self::ClaudeCode => "claude-code",
-            Self::Codex => "codex",
-            Self::Cursor => "cursor",
-            Self::Continue => "continue",
-            Self::OpenClaw => "openclaw",
-        }
+        self.spec().id
     }
 
     /// The product name shown to people.
     #[must_use]
     pub fn display_name(self) -> &'static str {
-        match self {
-            Self::ClaudeCode => "Claude Code",
-            Self::Codex => "Codex",
-            Self::Cursor => "Cursor",
-            Self::Continue => "Continue CLI",
-            Self::OpenClaw => "OpenClaw",
-        }
+        self.spec().display_name
     }
 
     /// The host whose hook format this host speaks: `cn` sends Claude Code's.
     fn wire(self) -> Self {
-        match self {
-            Self::Continue => Self::ClaudeCode,
-            other => other,
-        }
+        self.spec().speaks.unwrap_or(self)
     }
 
     /// Parse a hook payload read from the host. The event name selects the format;
@@ -246,46 +225,20 @@ impl Host {
         }
     }
 
-    /// The decision to record and answer for `event`. A `defer` (ADR-025) needs a
-    /// host flow that decides by itself; Cursor's `preToolUse` and `beforeReadFile`
-    /// have none and run file tools outside Cursor's sandbox, so there OpenMoat asks
-    /// itself: the `ask` is recorded, and [`Self::answer`] sends it as a deny that
-    /// says how to approve it.
+    /// The decision to record and answer for `event` (ADR-025): a `defer` where
+    /// the host has no flow that decides by itself is an `ask`
+    /// ([`Asks::defer_is_ask_on_no_ask`]).
     #[must_use]
-    pub fn decided(self, event: &HookEvent, mut decision: Decision) -> Decision {
-        if self == Self::Cursor
-            && *event == HookEvent::PreToolUseNoAsk
-            && decision.verdict == Verdict::Defer
-        {
-            decision.verdict = Verdict::Ask;
-        }
-        decision
+    pub fn decided(self, event: &HookEvent, decision: Decision) -> Decision {
+        contract::decided(self.spec(), event, decision)
     }
 
-    /// The decision as this host has to receive it. Codex's `PreToolUse` rejects
-    /// `permissionDecision: "ask"` as unsupported and then runs the call, the
-    /// Continue CLI ignores it and runs the call, and Cursor does not enforce
-    /// `ask` on `preToolUse` or `beforeReadFile` ([`HookEvent::PreToolUseNoAsk`]);
-    /// nor does Claude Code in `bypassPermissions` or `dontAsk` mode.
-    /// There an `ask` reaches the host as a `deny` that says how to approve it;
-    /// the audit log keeps the `ask`, which is what `moat allow --last` looks for.
+    /// The decision as this host has to receive it: where the host cannot ask
+    /// ([`HostSpec::asks`]), an `ask` reaches it as a `deny` that says how to
+    /// approve it.
     #[must_use]
     pub fn answer(self, event: &HookEvent, decision: &Decision) -> Decision {
-        let how = match (self, event) {
-            (Self::Codex, HookEvent::PreToolUse) => Some(CODEX_ASK),
-            (Self::Continue, HookEvent::PreToolUse) => Some(CONTINUE_ASK),
-            (Self::Cursor, HookEvent::PreToolUseNoAsk) => Some(CURSOR_ASK),
-            (Self::ClaudeCode, HookEvent::PreToolUseNoAsk) => Some(CLAUDE_NO_PROMPT_ASK),
-            _ => None,
-        };
-        let mut answer = decision.clone();
-        if let Some(how) = how
-            && decision.verdict == Verdict::Ask
-        {
-            answer.verdict = Verdict::Deny;
-            answer.reasons.push(how.to_owned());
-        }
-        answer
+        contract::answer(self.spec(), event, decision)
     }
 
     /// Render the response document the host expects on stdout for `event`.
@@ -418,6 +371,31 @@ mod tests {
     use openmoat_core::{Decision, Verdict};
 
     use super::{HookEvent, Host};
+
+    /// Every host's spec names it once and round-trips through its id; a host
+    /// that speaks another's format speaks a host with a format of its own.
+    #[test]
+    fn every_spec_names_its_host() {
+        let all = [
+            Host::ClaudeCode,
+            Host::Codex,
+            Host::Cursor,
+            Host::Continue,
+            Host::OpenClaw,
+        ];
+        for (i, host) in all.into_iter().enumerate() {
+            let spec = host.spec();
+            assert_eq!(host.to_string(), spec.id);
+            assert!(!spec.display_name.is_empty(), "{host:?}");
+            assert!(all[..i].iter().all(|h| h.id() != spec.id), "{host:?}");
+            if Host::ALL.contains(&host) {
+                assert_eq!(spec.id.parse::<Host>().unwrap(), host);
+            }
+            if let Some(wire) = spec.speaks {
+                assert_eq!(wire.spec().speaks, None, "{host:?}");
+            }
+        }
+    }
 
     /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
     /// run their own permission flow; hosts that cannot ask do not turn it into a deny.
