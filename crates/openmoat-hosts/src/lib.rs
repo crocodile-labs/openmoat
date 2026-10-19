@@ -8,23 +8,22 @@
 // A library reports to its caller; only the `moat` binary prints.
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod bench;
 mod contract;
 mod host;
 mod registry;
 mod wire;
 
-use host::claude_code::config_change;
-use host::{cursor, openclaw};
-use wire::pre_tool_use;
-
-pub use config_change::proposal_target;
-pub use contract::{Asks, HostSpec};
+pub use contract::{
+    Asks, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat, SandboxSpec,
+};
+pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
 
 use std::fmt;
 use std::str::FromStr;
 
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, Verdict};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -169,11 +168,6 @@ impl Host {
         self.spec().display_name
     }
 
-    /// The host whose hook format this host speaks: `cn` sends Claude Code's.
-    fn wire(self) -> Self {
-        self.spec().speaks.unwrap_or(self)
-    }
-
     /// Parse a hook payload read from the host. The event name selects the format;
     /// Claude Code and Codex may omit it on `PreToolUse`.
     pub fn parse_request(self, payload: &str) -> Result<HookRequest, HostError> {
@@ -183,18 +177,7 @@ impl Host {
             hook_event_name: Option<String>,
         }
         let envelope: Envelope = serde_json::from_str(payload)?;
-        match (self.wire(), envelope.hook_event_name.as_deref()) {
-            (Self::Cursor, Some(event)) if cursor::EVENTS.contains(&event) => {
-                cursor::parse(self, payload)
-            }
-            (Self::OpenClaw, Some(openclaw::EVENT)) => openclaw::parse(self, payload),
-            (Self::Cursor | Self::OpenClaw, _) => Err(HostError::WrongEvent(
-                envelope.hook_event_name.unwrap_or_default(),
-            )),
-            (_, None | Some(pre_tool_use::EVENT)) => pre_tool_use::parse(self, payload),
-            (Self::ClaudeCode, Some(config_change::EVENT)) => config_change::parse(self, payload),
-            (_, Some(other)) => Err(HostError::WrongEvent(other.to_owned())),
-        }
+        registry::adapter(self).parse(self, envelope.hook_event_name.as_deref(), payload)
     }
 
     /// The event a payload claims to be for, read as leniently as possible, so a
@@ -207,15 +190,8 @@ impl Host {
             hook_event_name: String,
         }
         match serde_json::from_str::<Envelope>(payload) {
-            Ok(e)
-                if self.wire() == Self::ClaudeCode && e.hook_event_name == config_change::EVENT =>
-            {
-                HookEvent::ConfigChange {
-                    source: String::new(),
-                    change_type: None,
-                }
-            }
-            _ => HookEvent::PreToolUse,
+            Ok(e) => registry::adapter(self).event_of(&e.hook_event_name),
+            Err(_) => HookEvent::PreToolUse,
         }
     }
 
@@ -238,14 +214,28 @@ impl Host {
     /// Render the response document the host expects on stdout for `event`.
     #[must_use]
     pub fn render_response(self, event: &HookEvent, decision: &Decision) -> String {
-        match (self, event) {
-            (Self::Cursor, _) => cursor::render(decision),
-            (Self::OpenClaw, _) => openclaw::render(decision),
-            (_, HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk) => {
-                pre_tool_use::render(decision)
-            }
-            (_, HookEvent::ConfigChange { .. }) => config_change::render(decision),
-        }
+        registry::adapter(self).render(event, decision)
+    }
+
+    /// The hook payload this host sends for `call` at `at`, or `None` when it
+    /// has no tool for it (Codex reads files through its shell; only Claude
+    /// Code and OpenClaw fetch).
+    #[must_use]
+    pub fn bench_payload(self, call: &bench::Call, at: &bench::Place<'_>) -> Option<String> {
+        registry::adapter(self).bench_payload(call, at)
+    }
+
+    /// What this host does with the hook's reply to `call`.
+    #[must_use]
+    pub fn read_reply(self, call: &bench::Call, exit: &bench::Exit<'_>) -> bench::Answer {
+        registry::adapter(self).read_reply(call, exit)
+    }
+
+    /// What this host must end up doing when OpenMoat decides `verdict` on
+    /// `call`: where it cannot ask, an `ask` arrives as a blocking `deny`.
+    #[must_use]
+    pub fn seen(self, call: &bench::Call, verdict: Verdict) -> bench::Answer {
+        registry::adapter(self).seen(call, verdict)
     }
 }
 

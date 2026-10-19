@@ -20,9 +20,13 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::contract::{Asks, HostSpec};
+use crate::bench::{Answer, Call as BenchCall, Exit, Place};
+use crate::contract::{
+    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, wrong_event,
+};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod bench;
 mod tools;
 
 /// OpenClaw puts an `ask` to the person itself (`requireApproval`).
@@ -35,9 +39,71 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
     },
+    on_hook_failure: "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
+         `before_tool_call` fails closed), and the plugin blocks when `moat` is missing, \
+         crashes or does not answer; runs the call unchecked when the Gateway does not \
+         load the plugin",
+    gaps: "no OS sandbox from OpenMoat; a parameter rewrite by another plugin and \
+         OpenClaw's process input are not checked; calls run unchecked if the Gateway does \
+         not load the plugin; a failed or slow hook blocks the call",
+    // The state directory, which holds `openclaw.json` unless
+    // `OPENCLAW_CONFIG_PATH` puts it elsewhere
+    // (<https://docs.openclaw.ai/help/environment>).
+    install: Some(InstallSpec {
+        dir_variable: "OPENCLAW_STATE_DIR",
+        dir_name: ".openclaw",
+        config_file: "openclaw.json",
+    }),
+    // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
+    // `mcp.servers`"; the documentation names no project file of them.
+    mcp: Some(McpSpec {
+        user_file: McpFile::HookFile,
+        user_layout: McpLayout::OpenClaw,
+        project_file: None,
+    }),
+    sandbox: None,
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";
+
+/// What OpenMoat's plugin sends from `before_tool_call`.
+pub(crate) struct Adapter;
+
+pub(crate) static ADAPTER: Adapter = Adapter;
+
+impl HostAdapter for Adapter {
+    fn spec(&self) -> &'static HostSpec {
+        &SPEC
+    }
+
+    fn parse(
+        &self,
+        host: Host,
+        event: Option<&str>,
+        payload: &str,
+    ) -> Result<HookRequest, HostError> {
+        match event {
+            Some(EVENT) => parse(host, payload),
+            other => Err(wrong_event(other)),
+        }
+    }
+
+    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
+        render(decision)
+    }
+
+    fn bench_payload(&self, call: &BenchCall, at: &Place<'_>) -> Option<String> {
+        Some(bench::payload(call, at))
+    }
+
+    fn read_reply(&self, _call: &BenchCall, exit: &Exit<'_>) -> Answer {
+        bench::read_reply(exit)
+    }
+
+    fn seen(&self, _call: &BenchCall, verdict: Verdict) -> Answer {
+        bench::seen(verdict)
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

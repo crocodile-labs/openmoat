@@ -1,7 +1,16 @@
 //! Anthropic's Claude Code: `PreToolUse` ([`crate::wire::pre_tool_use`]) and
 //! `ConfigChange` ([`config_change`]).
 
-use crate::contract::{Asks, HostSpec};
+use openmoat_core::Decision;
+use serde_json::json;
+
+use crate::bench::{Answer, CONTENT, Call, Exit, Place};
+use crate::contract::{
+    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
+    SandboxSpec, wrong_event,
+};
+use crate::wire::pre_tool_use::{self, bench};
+use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) mod config_change;
 
@@ -16,4 +25,97 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: Some("Claude Code's permission mode does not ask"),
         defer_is_ask_on_no_ask: false,
     },
+    on_hook_failure: "before 2.1.295 runs the call when the hook is missing, cannot start, \
+         exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it \
+         (`moat init` sets `onFailure: \"block\"`)",
+    gaps: "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
+         Code 2.1.295 calls run unchecked if the hook binary is missing or crashes",
+    install: Some(InstallSpec {
+        dir_variable: "CLAUDE_CONFIG_DIR",
+        dir_name: ".claude",
+        config_file: "settings.json",
+    }),
+    mcp: Some(McpSpec {
+        user_file: McpFile::BesideDefaultDir(".claude.json"),
+        user_layout: McpLayout::ClaudeJson,
+        project_file: Some((".mcp.json", McpLayout::Json)),
+    }),
+    // Claude Code's sandbox runs on macOS, Linux and WSL2 only, and with
+    // `failIfUnavailable` Claude Code exits at startup where it cannot run:
+    // native Windows (#327).
+    sandbox: Some(SandboxSpec {
+        format: SandboxFormat::ClaudeSettings,
+        file: "settings.json",
+        unavailable_on_windows: Some(
+            "sandbox not available on native Windows; the hook still applies the policy \
+             (use WSL2 for OS confinement)",
+        ),
+    }),
 };
+
+/// Claude Code's format, also sent by the Continue CLI.
+pub(crate) struct Adapter;
+
+pub(crate) static ADAPTER: Adapter = Adapter;
+
+impl HostAdapter for Adapter {
+    fn spec(&self) -> &'static HostSpec {
+        &SPEC
+    }
+
+    /// `PreToolUse` may come without its event name.
+    fn parse(
+        &self,
+        host: Host,
+        event: Option<&str>,
+        payload: &str,
+    ) -> Result<HookRequest, HostError> {
+        match event {
+            None | Some(pre_tool_use::EVENT) => pre_tool_use::parse(host, payload),
+            Some(config_change::EVENT) => config_change::parse(host, payload),
+            other => Err(wrong_event(other)),
+        }
+    }
+
+    fn event_of(&self, event: &str) -> HookEvent {
+        if event == config_change::EVENT {
+            HookEvent::ConfigChange {
+                source: String::new(),
+                change_type: None,
+            }
+        } else {
+            HookEvent::PreToolUse
+        }
+    }
+
+    fn render(&self, event: &HookEvent, decision: &Decision) -> String {
+        match event {
+            HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk => pre_tool_use::render(decision),
+            HookEvent::ConfigChange { .. } => config_change::render(decision),
+        }
+    }
+
+    fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {
+        let (tool, input) = match call {
+            Call::Read(path) => ("Read".to_owned(), json!({ "file_path": at.file(path) })),
+            Call::Write(path) => (
+                "Write".to_owned(),
+                json!({ "file_path": at.file(path), "content": CONTENT }),
+            ),
+            Call::Edit(path) => (
+                "Edit".to_owned(),
+                json!({ "file_path": at.file(path), "old_string": "old", "new_string": CONTENT }),
+            ),
+            Call::Fetch(url) => (
+                "WebFetch".to_owned(),
+                json!({ "url": url, "prompt": "summarise" }),
+            ),
+            other => bench::common_tool(other)?,
+        };
+        Some(bench::payload(&tool, &input, at))
+    }
+
+    fn read_reply(&self, _call: &Call, exit: &Exit<'_>) -> Answer {
+        bench::read_reply(exit, true)
+    }
+}

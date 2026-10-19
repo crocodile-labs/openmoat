@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you want to know what exists today and what comes next, in order.
 
-**On this page:** [Where it is today](#where-it-is-today) · [Next: 0.5.x](#next-05x) · [Positioning](#positioning) · [Stages](#stages) · [The team wedge](#the-team-wedge) · [Not planned](#not-planned)
+**On this page:** [Where it is today](#where-it-is-today) · [Next](#next) · [Positioning](#positioning) · [Stages](#stages) · [The team wedge](#the-team-wedge) · [Not planned](#not-planned)
 
 Where OpenMoat is, what comes next, and in which order. The release stages and their
 exit criteria come from ADR-013. The live, ordered work list is the roadmap issue
@@ -18,6 +18,8 @@ The latest release is `0.6.0` (stable), from GitHub Releases, the Homebrew tap a
 crates.io (README, Install). What exists:
 
 - One policy for Claude Code, Codex and Cursor, checked through each host's own hooks.
+  OpenClaw support (a `before_tool_call` plugin, ADR-033) is on `main` and comes in the
+  next release.
 - Policy kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`, `mcp`,
   `web.search` and `tool.unknown`, and four verdicts: `allow`, `defer` (the agent's own
   prompt decides, the default for anything no rule names, ADR-025), `ask` and `deny`.
@@ -29,7 +31,19 @@ crates.io (README, Install). What exists:
 - Self-protection: a policy lock checked on every call (ADR-006), `kernel-self`
   rules, the Claude Code `ConfigChange` veto, and stable hook binary paths (ADR-016).
 - Session taint: after a secret read or untrusted content, risky follow-up calls ask
-  (ADR-020).
+  (ADR-020), and it follows the files a tainted session writes (file provenance,
+  ADR-029).
+- Package installs: a name one typo away from a popular package asks
+  (`package-near-miss`, ADR-030), and `moat run` keeps npm and uv off versions
+  published in the last 7 days.
+- MCP: the policy lock pins each MCP server definition the agents read, and
+  `moat mcp proxy` runs a stdio server through OpenMoat with its tools pinned, holding
+  a new server's tools until `moat mcp accept` (ADR-026, ADR-032).
+- Audit anchors: `moat audit anchor` records the log's head in a git repository or a
+  file you keep, and `moat audit verify --against` checks the log against them
+  (ADR-031).
+- Signed policy packs: `moat policy trust-key`, `install` and `remove`, verified with
+  OpenSSH signatures (ADR-031).
 - Repository policy (`<repo>/.moat/policy.yaml`) that only tightens until `moat trust`
   (ADR-022).
 - Standard tier: Claude Code's, Codex's and Cursor's own sandboxes configured and
@@ -38,6 +52,8 @@ crates.io (README, Install). What exists:
   rules and a seccomp filter (Linux), around the whole agent. On Linux it does not
   protect paths inside the project (`.env`, `.git`, `.moat`); `moat run --isolate`
   does.
+- Isolated tier on Linux: `moat run --isolate` starts the agent under bubblewrap in
+  new namespaces, rootless (ADR-018). On macOS it refuses until ADR-023 is built.
 - `moat proxy`: default-deny egress with an SNI check, its own DNS and an audit row
   per connection, and a secrets broker that blocks a brokered secret on its way to the
   wrong host (ADR-020). HTTPS injection is not built yet (#247).
@@ -51,12 +67,13 @@ What it does not do: confine every call. Only commands inside the host sandboxes
 your permissions and the hook's decision is the only check, so a classifier mistake is
 a security bug ([THREAT_MODEL.md](THREAT_MODEL.md) §5).
 
-## Next: 0.5.x
+## Next
 
-0.5.0 is the first stable release with the quiet default. What comes next is making it
-solid end to end in daily use, released as 0.5.x, in the order of
+0.5.0 was the first stable release with the quiet default. What comes next is making
+it solid end to end in daily use, in the order of
 [#562](https://github.com/crocodile-labs/openmoat/issues/562):
 
+- OpenClaw support, on `main`, in the next release;
 - a first run a person can follow and trust: `moat init` shows each change and asks,
   and messages and help use plain words;
 - installed copies stay current: `moat status` says when a policy update or drift
@@ -132,7 +149,7 @@ Milestone `v0.1.0-beta`.
 
 | Issue | Open |
 |---|---|
-| #131, #323 | Bypass challenge with security people, then a public challenge and the announcement (on hold until the 0.5.x work above is done) |
+| #131, #323 | Bypass challenge with security people, then a public challenge and the announcement (on hold until the work in "Next" above is done) |
 
 Exit (ADR-013): executing fixtures show obfuscated exfiltration failing at the OS
 level, and read-then-exfiltrate fixtures are blocked.
@@ -143,12 +160,18 @@ Milestone `v1.0.0`.
 
 | Issue | Work |
 |---|---|
-| #133 | MCP stdio proxy with tool description pinning, for hosts whose hooks skip MCP |
-| #134, #320 | OpenClaw plugin and `moat serve` |
+| #320 | `moat serve` |
 | #135 | Windows enforcement |
-| #136 | Stable policy schema, `moat policy migrate`, signed policy packs |
-| #174, #175 | Isolated tier: `moat run --isolate` in a rootless container (Linux) or an Apple Virtualization guest (macOS) |
-| #363 | Policy secrets compiled into Claude Code's credential masking |
+| #136 | Stable policy schema and `moat policy migrate` |
+| #175 | Isolated tier on macOS: `moat run --isolate` in an Apple Virtualization guest (ADR-023) |
+
+| Issue | Done |
+|---|---|
+| #133 | `moat mcp proxy`: MCP stdio proxy with tool description pinning, for hosts whose hooks skip MCP (0.5.7) |
+| #134 | OpenClaw plugin (on `main`, in the next release) |
+| #136 | Signed policy packs (0.6.0) |
+| #174 | Isolated tier on Linux: `moat run --isolate` under bubblewrap (0.1.1) |
+| #363 | Policy secrets compiled into Claude Code's credential masking (0.2.0) |
 
 Exit (ADR-013): MoatBench meets its gate and the policy schema is stable.
 

@@ -32,8 +32,7 @@ pub(super) fn sandboxes(
         }
     };
     let mut present = false;
-    for host in host_sandbox::HOSTS
-        .into_iter()
+    for host in host_sandbox::hosts()
         .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
     {
         let name = host.display_name();

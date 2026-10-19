@@ -358,8 +358,7 @@ fn sandboxes(
     out: &mut Deferred,
 ) -> Result<()> {
     let prefix = if dry_run { "would" } else { "✔" };
-    let selected: Vec<Host> = sandbox::install::HOSTS
-        .into_iter()
+    let selected: Vec<Host> = sandbox::install::hosts()
         .filter(|h| hosts.contains(h))
         .collect();
     if selected.is_empty() {

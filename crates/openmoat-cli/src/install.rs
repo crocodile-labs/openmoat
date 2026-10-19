@@ -11,7 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, InstallSpec};
 
 pub use binary::{hook_binary, stale_hint};
 pub use dirs::Recorded;
@@ -206,17 +206,19 @@ pub struct HostConfig {
 /// The environment variable that moves `host`'s configuration directory, and
 /// the directory's name under the home directory otherwise.
 pub fn dir_variable(host: Host) -> Result<(&'static str, &'static str)> {
-    Ok(match host {
-        Host::ClaudeCode => ("CLAUDE_CONFIG_DIR", ".claude"),
-        Host::Codex => ("CODEX_HOME", ".codex"),
-        Host::Cursor => ("CURSOR_CONFIG_DIR", ".cursor"),
-        // OpenClaw's state directory, which holds `openclaw.json`
-        // (<https://docs.openclaw.ai/help/environment>).
-        Host::OpenClaw => ("OPENCLAW_STATE_DIR", ".openclaw"),
-        Host::Continue => {
-            bail!("the Continue CLI runs the Claude Code hook; it has none of its own")
-        }
-    })
+    let install = install_spec(host)?;
+    Ok((install.dir_variable, install.dir_name))
+}
+
+/// Where `host` keeps the configuration its hook goes into.
+fn install_spec(host: Host) -> Result<&'static InstallSpec> {
+    match &host.spec().install {
+        Some(install) => Ok(install),
+        None => bail!(
+            "{} runs another agent's hook; it has none of its own",
+            host.display_name()
+        ),
+    }
 }
 
 /// `host`'s configuration directory as named by this shell's environment,
@@ -281,16 +283,16 @@ impl HostConfig {
     }
 
     fn at(host: Host, dir: Option<PathBuf>) -> Result<Self> {
-        let (_, default) = dir_variable(host)?;
+        let install = install_spec(host)?;
         let dir = match dir {
             Some(dir) => dir,
-            None => user_home()?.join(default),
+            None => user_home()?.join(install.dir_name),
         };
-        let (file, hooks, format) = match host {
-            Host::ClaudeCode => ("settings.json", CLAUDE_CODE_HOOKS, HookFormat::Nested),
-            Host::Codex => ("hooks.json", CODEX_HOOKS, HookFormat::Nested),
-            Host::OpenClaw => ("openclaw.json", OPENCLAW_HOOKS, HookFormat::OpenClaw),
-            _ => ("hooks.json", CURSOR_HOOKS, HookFormat::Cursor),
+        let (hooks, format) = match host {
+            Host::ClaudeCode => (CLAUDE_CODE_HOOKS, HookFormat::Nested),
+            Host::Codex => (CODEX_HOOKS, HookFormat::Nested),
+            Host::OpenClaw => (OPENCLAW_HOOKS, HookFormat::OpenClaw),
+            _ => (CURSOR_HOOKS, HookFormat::Cursor),
         };
         let blocks_on_failure: fn() -> bool = match host {
             Host::ClaudeCode => claude_version::blocks_on_failure,
@@ -298,7 +300,7 @@ impl HostConfig {
         };
         Ok(Self {
             host,
-            settings_path: dir.join(file),
+            settings_path: dir.join(install.config_file),
             dir,
             hooks,
             format,
@@ -352,8 +354,9 @@ impl HostConfig {
 }
 
 /// What `moat doctor` and `moat status` say when the Continue CLI is present.
-pub const CONTINUE_CLI_WARNING: &str = "the released Continue CLI does not run hooks, so \
-     OpenMoat cannot check its tool calls; run it under `moat run`";
+pub fn continue_cli_warning() -> &'static str {
+    Host::Continue.spec().gaps
+}
 
 /// Where the Continue CLI (`cn`) shows itself: its global directory
 /// (`CONTINUE_GLOBAL_DIR`, else `~/.continue`, as `cn` resolves it), or `cn`

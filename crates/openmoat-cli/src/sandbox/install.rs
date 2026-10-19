@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, SandboxFormat};
 use toml_edit::DocumentMut;
 
 use super::{Plan, Report, claude, codex, codex_config_path, cursor};
@@ -13,14 +13,21 @@ use crate::home::{Home, write_private};
 use crate::install::{HostConfig, Recorded, SANDBOX_BACKUP, read_or_empty};
 use crate::integrity::Lock;
 
-/// Hosts with a sandbox backend, in the order OpenMoat writes them.
-pub const HOSTS: [Host; 3] = [Host::ClaudeCode, Host::Codex, Host::Cursor];
+/// Hosts with a sandbox backend ([`openmoat_hosts::HostSpec::sandbox`]), in
+/// the order OpenMoat writes them.
+pub fn hosts() -> impl Iterator<Item = Host> {
+    Host::ALL.into_iter().filter(|h| format(*h).is_some())
+}
+
+/// The format of `host`'s sandbox settings, which names its backend; `None`
+/// for a host OpenMoat writes no sandbox for.
+pub fn format(host: Host) -> Option<SandboxFormat> {
+    host.spec().sandbox.as_ref().map(|s| s.format)
+}
 
 /// Why `host`'s sandbox is not written on this OS, as `init`, `sandbox`,
-/// `doctor` and `status` print it; `None` when it is written. Claude Code's
-/// sandbox runs on macOS, Linux and WSL2 only, and with `failIfUnavailable`
-/// Claude Code exits at startup where it cannot run: native Windows (#327).
-/// Cursor documents its sandbox for macOS and Linux only.
+/// `doctor` and `status` print it; `None` when it is written
+/// ([`openmoat_hosts::SandboxSpec::unavailable_on_windows`]).
 pub fn unavailable(host: Host) -> Option<&'static str> {
     unavailable_on(host, cfg!(windows))
 }
@@ -42,27 +49,17 @@ pub const OLD_SANDBOX_REMOVED: &str = "deny rules written for Claude Code's file
      sandbox settings (an older moat's are removed), so Claude Code can start";
 
 fn unavailable_on(host: Host, windows: bool) -> Option<&'static str> {
-    match host {
-        Host::ClaudeCode if windows => Some(
-            "sandbox not available on native Windows; the hook still applies the policy \
-             (use WSL2 for OS confinement)",
-        ),
-        Host::Cursor if windows => {
-            Some("Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy")
-        }
-        _ => None,
-    }
+    let sandbox = host.spec().sandbox.as_ref()?;
+    sandbox.unavailable_on_windows.filter(|_| windows)
 }
 
-/// The file `host`'s sandbox settings live in.
+/// The file `host`'s sandbox settings live in, beside its hook file.
 pub fn settings_path(home: &Home, host: Host) -> Result<PathBuf> {
-    match host {
-        Host::Codex => codex_config_path(home),
-        Host::Cursor => Ok(HostConfig::for_host(home, host)?
-            .settings_path
-            .with_file_name("sandbox.json")),
-        _ => Ok(HostConfig::for_host(home, host)?.settings_path),
-    }
+    let hooks = HostConfig::for_host(home, host)?.settings_path;
+    Ok(match &host.spec().sandbox {
+        Some(sandbox) => hooks.with_file_name(sandbox.file),
+        None => hooks,
+    })
 }
 
 /// Merge the plan's settings for `host` into its file, or, where the host's
@@ -106,30 +103,34 @@ pub struct Rendered {
 /// would not change. Reads `hosts.json` for the Claude Code rules OpenMoat
 /// owns, writes nothing.
 pub fn render(home: &Home, host: Host, plan: &Plan, current: &str) -> Result<Option<Rendered>> {
-    let (changed, text, claude_rules) = if host == Host::Codex {
-        let mut doc: DocumentMut = current.parse().context("parsing the settings")?;
-        let changed = codex::apply(&mut doc, &plan.codex)?;
-        (changed, doc.to_string(), None)
-    } else if host == Host::Cursor {
-        if unavailable(host).is_some() {
-            return Ok(None);
+    let (changed, text, claude_rules) = match format(host) {
+        Some(SandboxFormat::CodexProfile) => {
+            let mut doc: DocumentMut = current.parse().context("parsing the settings")?;
+            let changed = codex::apply(&mut doc, &plan.codex)?;
+            (changed, doc.to_string(), None)
         }
-        let mut root = parse_json(current)?;
-        let changed = cursor::apply(&mut root, &plan.cursor)?;
-        (changed, serde_json::to_string_pretty(&root)? + "\n", None)
-    } else {
-        let mut owned = Recorded::load(home)?.claude_rules;
-        let mut root = parse_json(current)?;
-        let changed = if unavailable(host).is_some() {
-            claude::apply_rules(&mut root, &plan.claude, &mut owned)
-        } else {
-            claude::apply(&mut root, &plan.claude, &mut owned)
-        }?;
-        (
-            changed,
-            serde_json::to_string_pretty(&root)? + "\n",
-            Some(owned),
-        )
+        Some(SandboxFormat::CursorSandbox) => {
+            if unavailable(host).is_some() {
+                return Ok(None);
+            }
+            let mut root = parse_json(current)?;
+            let changed = cursor::apply(&mut root, &plan.cursor)?;
+            (changed, serde_json::to_string_pretty(&root)? + "\n", None)
+        }
+        Some(SandboxFormat::ClaudeSettings) | None => {
+            let mut owned = Recorded::load(home)?.claude_rules;
+            let mut root = parse_json(current)?;
+            let changed = if unavailable(host).is_some() {
+                claude::apply_rules(&mut root, &plan.claude, &mut owned)
+            } else {
+                claude::apply(&mut root, &plan.claude, &mut owned)
+            }?;
+            (
+                changed,
+                serde_json::to_string_pretty(&root)? + "\n",
+                Some(owned),
+            )
+        }
     };
     Ok(changed.then_some(Rendered { text, claude_rules }))
 }
@@ -152,10 +153,10 @@ pub fn parse_json(text: &str) -> Result<serde_json::Value> {
 
 /// The backend report for `host`.
 pub fn report(host: Host, plan: &Plan) -> &Report {
-    match host {
-        Host::Codex => &plan.codex.report,
-        Host::Cursor => &plan.cursor.report,
-        _ => &plan.claude.report,
+    match format(host) {
+        Some(SandboxFormat::CodexProfile) => &plan.codex.report,
+        Some(SandboxFormat::CursorSandbox) => &plan.cursor.report,
+        Some(SandboxFormat::ClaudeSettings) | None => &plan.claude.report,
     }
 }
 
@@ -202,35 +203,39 @@ pub fn problems(
         return Ok(None);
     }
     let out_of_date = "differs from the policy; run `moat sandbox sync`".to_owned();
-    let mut problems = if host == Host::Codex {
-        let doc = read_toml(&path)?;
-        let mut found = codex::weaknesses(&doc, plan.proxy_port.is_some());
-        if !codex::in_sync(&doc, &plan.codex) {
-            found.push(out_of_date);
+    let mut problems = match format(host) {
+        Some(SandboxFormat::CodexProfile) => {
+            let doc = read_toml(&path)?;
+            let mut found = codex::weaknesses(&doc, plan.proxy_port.is_some());
+            if !codex::in_sync(&doc, &plan.codex) {
+                found.push(out_of_date);
+            }
+            if lock.is_some_and(|l| !l.pins_codex_profile(&path)) {
+                found.push("not pinned by the lock; run `moat sandbox sync`".to_owned());
+            }
+            found
         }
-        if lock.is_some_and(|l| !l.pins_codex_profile(&path)) {
-            found.push("not pinned by the lock; run `moat sandbox sync`".to_owned());
+        Some(SandboxFormat::CursorSandbox) => {
+            let root = read_or_empty(&path)?;
+            let mut found = cursor::weaknesses(&root);
+            if !cursor::in_sync(&root, &plan.cursor) {
+                found.push(out_of_date);
+            }
+            if lock.is_some_and(|l| path.is_file() && !l.pins(&path)) {
+                found.push("not pinned by the lock; run `moat sandbox sync`".to_owned());
+            }
+            found
         }
-        found
-    } else if host == Host::Cursor {
-        let root = read_or_empty(&path)?;
-        let mut found = cursor::weaknesses(&root);
-        if !cursor::in_sync(&root, &plan.cursor) {
-            found.push(out_of_date);
+        Some(SandboxFormat::ClaudeSettings) | None => {
+            let root = read_or_empty(&path)?;
+            let mut found = claude::weaknesses(&root, plan.claude.block_reads, plan.proxy_port);
+            found.extend(claude::mask::weaknesses(&root, &plan.claude));
+            let owned = Recorded::load(home)?.claude_rules;
+            if !claude::in_sync(&root, &plan.claude, &owned) {
+                found.push(out_of_date);
+            }
+            found
         }
-        if lock.is_some_and(|l| path.is_file() && !l.pins(&path)) {
-            found.push("not pinned by the lock; run `moat sandbox sync`".to_owned());
-        }
-        found
-    } else {
-        let root = read_or_empty(&path)?;
-        let mut found = claude::weaknesses(&root, plan.claude.block_reads, plan.proxy_port);
-        found.extend(claude::mask::weaknesses(&root, &plan.claude));
-        let owned = Recorded::load(home)?.claude_rules;
-        if !claude::in_sync(&root, &plan.claude, &owned) {
-            found.push(out_of_date);
-        }
-        found
     };
     problems.dedup();
     Ok(Some(problems))
@@ -246,16 +251,4 @@ pub fn read_toml(path: &Path) -> Result<DocumentMut> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn claude_code_and_cursor_on_native_windows_go_without_a_sandbox() {
-        assert!(unavailable_on(Host::ClaudeCode, true).is_some_and(|n| n.contains("WSL2")));
-        assert_eq!(unavailable_on(Host::Codex, true), None);
-        assert_eq!(unavailable_on(Host::ClaudeCode, false), None);
-        assert!(unavailable_on(Host::Cursor, true).is_some());
-        assert_eq!(unavailable_on(Host::Cursor, false), None);
-        assert_eq!(unavailable(Host::ClaudeCode).is_some(), cfg!(windows));
-    }
-}
+mod tests;

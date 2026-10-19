@@ -309,6 +309,17 @@ pub struct DoctorArgs {
     /// Output format; `json` prints every check as one document, for tools that show them.
     #[arg(long, value_enum, default_value_t = Format::Text, conflicts_with_all = ["accept", "verbose"])]
     pub format: Format,
+
+    /// Write a diagnostic file for a bug report instead of printing the checks:
+    /// version, system, agents, policy findings, the checks and recent decisions
+    /// (verdict, rule ids, host and tool name only). Nothing is sent; the file must
+    /// not exist yet. Refused when an agent is among the parent processes.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["accept", "format"])]
+    pub bundle: Option<PathBuf>,
+
+    /// How many recent audit decisions the bundle lists.
+    #[arg(long, value_name = "N", default_value_t = 20, requires = "bundle")]
+    pub bundle_events: usize,
 }
 
 #[derive(Debug, Args)]

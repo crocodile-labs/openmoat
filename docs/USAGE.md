@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** an agent was stopped or asked, you want to review what it did, change the policy or share rules with a team. Every command and exit code is here.
 
-**On this page:** [What the default policy does](#what-the-default-policy-does) · [Run moat when something needs you](#run-moat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call asks](#a-call-asks) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Commands](#commands)
+**On this page:** [What the default policy does](#what-the-default-policy-does) · [Run moat when something needs you](#run-moat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call asks](#a-call-asks) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
 
 ## What the default policy does
 
@@ -302,6 +302,18 @@ these takes one command in your own terminal (agents are denied all of them):
   and OpenClaw block them. Reinstall it (`brew reinstall crocodile-labs/tap/moat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `moat uninstall` if you want it off.
 
+## Report a bug
+
+`moat doctor --bundle moat-bundle.json` writes one file for a bug report and prints
+where it is. Nothing is sent; you attach the file to the issue yourself, after reading
+it. It holds the `moat` version and build target, the operating system and its
+version, each agent's hook state and protection level, the policy's version, lint
+warnings and pending default-policy changes, the `moat doctor` checks, and the last 20
+audit decisions (`--bundle-events N` for another number). Each decision keeps only its
+time, host, tool name, verdict and rule ids: no command, path, URL, arguments or file
+contents. Every text passes through the audit log's redaction, and your home directory
+reads `~`. The file must not exist yet, and an agent cannot run it.
+
 ## Commands
 
 | Command | Use it to |
@@ -310,6 +322,7 @@ these takes one command in your own terminal (agents are denied all of them):
 | `moat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions) |
 | `moat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `moat status [--format json]` · `moat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists where each sandbox is stricter or wider than the policy) |
+| `moat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |
 | `moat show [id] [--session …] [--since …] [--recent N]` | see events |
 | `moat replay --since today` · `moat report --since 7d` | per-session timeline · summary |
 | `moat audit export [--since …] [--host …] [--session …]` | write events as JSON Lines with their chain hashes |
