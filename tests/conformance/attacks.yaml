@@ -2686,6 +2686,17 @@
   threat: T9
   action: { shell: "git clone https://github.com/x/y ~/.claude" }
   expect: { verdict: deny, rules: [kernel-self] }
+# OpenClaw's control-plane database holds its exec approvals and the cron jobs its
+# Gateway runs; the adapter decides a `cron` add or update as a write of it
+- id: T9-write-openclaw-state-database
+  threat: T9
+  action: { fs_write: "~/.openclaw/state/openclaw.sqlite" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-moved-openclaw-state-database
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.openclaw": /srv/openclaw } }
+  action: { fs_write: "/srv/openclaw/state/openclaw.sqlite-wal" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # commands that rewrite the files they name write them
 - id: T6-perl-in-place-writes-shell-rc
   threat: T6

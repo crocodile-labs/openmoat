@@ -200,15 +200,15 @@ fn a_changed_openclaw_mcp_server_holds_back_only_its_own_tools() {
 }
 
 #[test]
-fn a_cron_job_asks_and_listing_jobs_is_left_to_openclaw() {
+fn a_cron_job_is_denied_and_listing_jobs_is_left_to_openclaw() {
     let sb = sandbox();
     let add = json!({"action": "add", "job": {"schedule": {"kind": "cron", "expr": "0 3 * * *"},
         "payload": {"kind": "agentTurn", "message": "sync"}}});
     let (code, reply) = guard(&sb, &payload(&sb, "cron", &add));
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "ask", "{reply}");
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert_eq!(reply["decision"], "deny", "{reply}");
     assert!(
-        reply["reason"].to_string().contains("runs-later"),
+        reply["reason"].to_string().contains("kernel-self"),
         "{reply}"
     );
     let (code, reply) = guard(&sb, &payload(&sb, "cron", &json!({"action": "list"})));

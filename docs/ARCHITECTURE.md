@@ -208,7 +208,7 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | OpenClaw `gateway` / `plugins` | `config.get` / `install`, `enable`, `disable`, `uninstall`, `reload`, `reloadAndResume`: the plugin's `configPath` | `FsRead` / `FsWrite` (`kernel-self` denies it) |
 | OpenClaw `process` input (`send-keys`, `submit`, `paste`, …), Code Mode `exec` | the params as JSON | `ForeignShell` (`unparseable`) |
 | OpenClaw `<server>__<tool>` | `mcp__<server>__<tool>` and `params` | `McpTool` |
-| OpenClaw `cron` `add`, `update`, `next_check` | the state database: `<stateDir>/state/openclaw.sqlite` (beside `configPath` from a plugin that sends no `stateDir`) | `FsWrite` (`runs-later` asks) |
+| OpenClaw `cron` `add`, `update`, `next_check` | the state database: `<stateDir>/state/openclaw.sqlite` (beside `configPath` from a plugin that sends no `stateDir`) | `FsWrite` (`kernel-self` denies) |
 | OpenClaw `nodes` `invoke` / an action with `outPath` | the params as JSON / `outPath` | `ForeignShell` (`unparseable`) / `FsWrite` |
 | OpenClaw `view_image` | `path` and each of `paths`: local files (a `file://` URL as its path); `http(s)` URLs when no file is named; `data:` images touch nothing | `FsRead`, `ReadFiles`; `Fetch` for one URL, `UnknownTool` for several |
 | any other OpenClaw tool (`message`, `sessions_*`, `cron` `run`/`remove`/`wake`, the other `nodes` actions, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |

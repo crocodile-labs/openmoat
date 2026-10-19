@@ -183,6 +183,7 @@
   (literal "/Users/me/.openclaw")
   (literal "/Users/me/.openclaw/openclaw.json")
   (subpath "/Users/me/.openclaw/openmoat")
+  (subpath "/Users/me/.openclaw/state")
   (regex "^(.*/)?\\.moat(/.*)?$")
   (regex "^(.*/)?bin/moat$")
   (regex "^(.*/)?bin/moat\\.exe$")
