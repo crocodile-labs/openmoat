@@ -57,6 +57,7 @@ const HOW_TO_APPROVE: &str = "run `moat` to approve it, or `moat allow --last` (
 
 /// The facts about one host. Code covers only what a fact cannot say.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct HostSpec {
     /// The identifier used on the command line and in the audit log.
     pub id: &'static str,
@@ -81,6 +82,7 @@ pub struct HostSpec {
 
 /// Where a host keeps the configuration `moat init` writes its hook into.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct InstallSpec {
     /// The environment variable that moves the configuration directory.
     pub dir_variable: &'static str,
@@ -92,6 +94,7 @@ pub struct InstallSpec {
 
 /// What a host does with an `ask` (and a `defer`, ADR-025) on a tool hook.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Asks {
     /// On [`HookEvent::PreToolUse`]: `None` when the host puts the question to a
     /// person, else why it cannot, which the `deny` it receives instead says.
