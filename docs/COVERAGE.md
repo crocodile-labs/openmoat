@@ -7,9 +7,9 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 115 | 51 | 3 |
+| T1 | Secret exfiltration via shell | 119 | 51 | 3 |
 | T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
-| T3 | Secret exfiltration via environment | 52 | 3 | 0 |
+| T3 | Secret exfiltration via environment | 62 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
 | T5 | Supply-chain execution | 12 | 35 | 0 |
 | T6 | Environment poisoning | 31 | 20 | 0 |
@@ -18,7 +18,7 @@ the verdict and rule ids the default policy must produce for it.
 | T9 | Hook / policy tampering by the agent | 165 | 46 | 7 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 0 |
-| T12 | Network to unknown hosts | 35 | 16 | 1 |
+| T12 | Network to unknown hosts | 47 | 17 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -188,6 +188,10 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-read-password-store` (attacks): Deny [secrets-paths]
 - `T1-read-gnome-keyring` (attacks): Deny [secrets-paths]
 - `T1-cat-gem-credentials` (attacks): Deny [secrets-paths]
+- `T1-cat-authinfo` (attacks): Deny [secrets-paths]
+- `T1-cat-authinfo-gpg` (attacks): Deny [secrets-paths]
+- `T1-cat-containers-auth` (attacks): Deny [secrets-paths]
+- `T1-cat-doctl-config` (attacks): Deny [secrets-paths]
 - `benign-cd-src-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-cd-crate-then-ls` (benign): Allow [dev-shell]
 - `benign-recursive-read-of-project-root` (benign): Allow [dev-shell, project-fs]
@@ -276,6 +280,16 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-kubectl-config-view-raw` (attacks): Deny [secrets-paths]
 - `T3-kubectl-config-view-minify-raw` (attacks): Deny [secrets-paths]
 - `T3-kubectl-global-option-config-view-raw` (attacks): Deny [secrets-paths]
+- `T3-vault-kv-get` (attacks): Deny [secrets-paths]
+- `T3-vault-read` (attacks): Deny [secrets-paths]
+- `T3-vault-print-token` (attacks): Deny [secrets-paths]
+- `T3-pass-show` (attacks): Deny [secrets-paths]
+- `T3-pass-bare-name` (attacks): Deny [secrets-paths]
+- `T3-pass-copy` (attacks): Deny [secrets-paths]
+- `T3-pass-grep` (attacks): Deny [secrets-paths]
+- `T3-heroku-auth-token` (attacks): Deny [secrets-paths]
+- `T3-op-read` (attacks): Deny [secrets-paths]
+- `T3-op-item-get-reveal` (attacks): Deny [secrets-paths]
 
 ## T4: Destructive git / filesystem operations
 
@@ -1032,6 +1046,7 @@ the verdict and rule ids the default policy must produce for it.
 - `defer-json-path-that-looks-like-a-host` (ask): Defer [default]
 - `defer-attribute-in-inline-code` (ask): Defer [default]
 - `defer-python-attached-code-option` (ask): Defer [default]
+- `ask-dev-tcp-loopback` (ask): Defer [local-net]
 - `T12-webfetch-unknown-host` (attacks): Deny [default.net]
 - `T12-curl-unknown-host` (attacks): Deny [default.net]
 - `T12-netcat-ip` (attacks): Deny [default.net]
@@ -1067,4 +1082,16 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-socat-address-unlisted-host` (attacks): Deny [default.net]
 - `T12-psql-host-option-unlisted-host` (attacks): Deny [default.net]
 - `T12-quoted-host-in-inline-code` (attacks): Deny [default.net]
+- `T12-dev-tcp-redirect-out` (attacks): Deny [default.net]
+- `T12-dev-tcp-in-bash-c` (attacks): Deny [default.net]
+- `T12-dev-tcp-exec-descriptor` (attacks): Deny [default.net]
+- `T12-dev-udp-redirect-out` (attacks): Deny [default.net]
+- `T12-dev-tcp-append` (attacks): Deny [default.net]
+- `T12-dev-tcp-redirect-in` (attacks): Deny [default.net]
+- `T12-dev-tcp-duplicate-to-path` (attacks): Deny [default.net]
+- `T12-dev-tcp-descriptor-write` (attacks): Deny [default.net]
+- `T12-dev-tcp-after-here-string` (attacks): Deny [default.net]
+- `T12-dev-tcp-ip-literal` (attacks): Deny [default.net]
+- `T12-dev-tcp-cloud-metadata` (attacks): Deny [cloud-metadata]
+- `T12-dev-tcp-through-variable` (attacks): Deny [default.net]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]

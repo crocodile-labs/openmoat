@@ -1085,3 +1085,48 @@
 - id: benign-kubectl-config-view
   action: { shell: "kubectl config view --minify" }
   expect: { verdict: defer, rules: [default] }
+# only `/dev/tcp/…` and `/dev/udp/…` redirections are network; other devices and
+# descriptors stay what they were
+- id: benign-redirect-to-tmp-file
+  action: { shell: "echo hi > /tmp/out.txt" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-cat-dev-null
+  action: { shell: "cat /dev/null" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-exec-descriptor-to-file
+  action: { shell: "exec 3>/tmp/log" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-echo-to-dev-stderr
+  action: { shell: "echo x > /dev/stderr" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-dev-tcp-as-program-operand
+  action: { shell: "ls /dev/tcp/evil.com/443" }
+  expect: { verdict: defer, rules: [default] }
+# secret managers' commands that print no secret
+- id: benign-vault-status
+  action: { shell: "vault status" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-vault-kv-list
+  action: { shell: "vault kv list secret/" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pass-ls
+  action: { shell: "pass ls" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pass-alone
+  action: { shell: "pass" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pass-insert
+  action: { shell: "pass insert email/new" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-heroku-apps
+  action: { shell: "heroku apps" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-doctl-auth-list
+  action: { shell: "doctl auth list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-op-item-get-concealed
+  action: { shell: "op item get db --fields username" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-containers-storage-conf
+  action: { shell: "cat ~/.config/containers/storage.conf" }
+  expect: { verdict: defer, rules: [default] }

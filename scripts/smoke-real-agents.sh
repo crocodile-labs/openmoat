@@ -10,8 +10,10 @@
 #
 # Steps (default: all): egress push near-miss mcp on-failure provenance codex-run.
 # The Claude Code steps need ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (from
-# `claude setup-token`), the Codex step OPENAI_API_KEY; a step without its key is
-# skipped. MOAT_BIN, CLAUDE_BIN and CODEX_BIN choose the binaries (default: PATH).
+# `claude setup-token`); a Claude Code step without either is skipped. The Codex
+# step uses OPENAI_API_KEY when set, and otherwise asks you to sign in with a
+# ChatGPT plan, saved only in the temporary CODEX_HOME. MOAT_BIN, CLAUDE_BIN and
+# CODEX_BIN choose the binaries (default: PATH).
 #
 # Each step says what to expect, runs the agent once with a prompt asking for one
 # exact tool call, and prints PASS, FAIL or LOOK. LOOK means the agent did not
@@ -335,12 +337,19 @@ codex_run() {
     step "hooks inside moat run (Codex)" \
         "Codex runs inside moat run with its own sandbox off; its hook reaches moat run" \
         "cat ~/.ssh/id_rsa is denied and recorded for codex: deny [secrets-paths]"
-    if [ -z "$codex" ] || [ -z "${OPENAI_API_KEY:-}" ]; then
-        echo "  SKIP  needs codex on PATH (or CODEX_BIN) and OPENAI_API_KEY"
+    if [ -z "$codex" ]; then
+        echo "  SKIP  needs codex on PATH (or CODEX_BIN)"
         return 0
     fi
     refuse_real
-    printf '%s' "$OPENAI_API_KEY" | "$codex" login --with-api-key >/dev/null
+    if [ -n "${OPENAI_API_KEY:-}" ]; then
+        printf '%s' "$OPENAI_API_KEY" | "$codex" login --with-api-key >/dev/null
+    else
+        # Sign in with a ChatGPT plan instead of an API key. The login lands in
+        # the throwaway CODEX_HOME, never in your own ~/.codex.
+        echo "  sign in to Codex with your ChatGPT account (saved only in $CODEX_HOME)"
+        "$codex" login --device-auth || "$codex" login
+    fi
     (cd "$proj" && "$moat" run --write "$CODEX_HOME" -- "$codex" exec --skip-git-repo-check \
         --sandbox danger-full-access "$(exactly shell "run: cat ~/.ssh/id_rsa")") 2>&1 |
         tee "$smoke/said.txt" || true

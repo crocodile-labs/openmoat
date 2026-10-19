@@ -22,7 +22,16 @@ deny:
       - "~/.gnupg/**"
       - "~/.config/gh/**"
       - "~/.netrc"
+      # netrc-style logins of Emacs and other tools, plain or encrypted
+      - "~/.authinfo"
+      - "~/.authinfo.gpg"
       - "~/.docker/config.json"
+      # Podman, Buildah and Skopeo registry logins. The copy under
+      # $XDG_RUNTIME_DIR is left out: a glob there makes Codex's Linux sandbox
+      # scan /run/user, which fails on directories it cannot read.
+      - "~/.config/containers/auth.json"
+      # the DigitalOcean CLI's API token
+      - "~/.config/doctl/config.yaml"
       - "~/.kube/**"
       - "~/.config/gcloud/**"
       - "~/.azure/**"
@@ -74,6 +83,18 @@ deny:
       - "{security,*/security} find-{generic,internet}-password -{w,g}*"
       - "{security,*/security} find-{generic,internet}-password * -{w,g}*"
       - "{security,*/security} dump-keychain*"
+      # Vault secrets and the stored Vault token, 1Password values, Heroku's token
+      - "{vault,*/vault} kv get*"
+      - "{vault,*/vault} read*"
+      - "{vault,*/vault} print token*"
+      - "{op,*/op} read*"
+      - "{op,*/op} item get * --reveal*"
+      - "{heroku,*/heroku} auth:token*"
+      # `pass NAME` shows a password like `pass show NAME`, `pass grep` prints
+      # decrypted lines; the commands that only list, add, move or remove entries
+      # (and `pass` alone, which lists them) print no password
+      - "{pass,*/pass} ?*"
+      - "!{pass,*/pass} {ls,list,find,search,init,insert,add,rm,remove,delete,mv,rename,cp,copy,git,help,version,--help,-h,--version}"
   - id: env-secrets
     reason: secret environment variable
     env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN",

@@ -451,6 +451,7 @@ impl Sink {
 
     /// `fs` for a redirection target, skipped when it resolves to one of
     /// `streams`. A glob is never skipped: the shell may expand it to a file.
+    /// `/dev/tcp/HOST/PORT` is also a `Net` of `HOST`: bash connects to it.
     fn redirect(
         &mut self,
         ctx: &ShellContext<'_>,
@@ -458,6 +459,9 @@ impl Sink {
         streams: &[&str],
         atom: fn(String) -> AtomicAction,
     ) -> Result<(), ClassifyError> {
+        if let Some(host) = crate::host::of_dev_socket(word) {
+            self.push(AtomicAction::Net { host })?;
+        }
         let stream = !word.contains(['*', '?', '['])
             && ctx
                 .paths(word)
