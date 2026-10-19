@@ -1505,3 +1505,8 @@
   threat: T6
   action: { shell: "echo x | dd of=out.bin" }
   expect: { verdict: defer, rules: [default] }
+# T12: a `/dev/tcp` redirection to a local service defers like `curl` to it
+- id: ask-dev-tcp-loopback
+  threat: T12
+  action: { shell: "echo ping > /dev/tcp/127.0.0.1/8080" }
+  expect: { verdict: defer, rules: [local-net] }

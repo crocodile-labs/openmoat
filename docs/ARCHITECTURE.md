@@ -142,7 +142,7 @@ week and the phase most of them were in.
   atom per pipeline suffix. It recurses into `sh -c`, `eval`, substitutions and
   wrappers (`sudo`, `env`, `xargs`, `timeout`, …) to depth 4. It adds `fs.read`/`fs.write`
   atoms for redirections and file operands (`operands.rs`), relative paths resolved
-  through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs and the hosts of programs that name hosts (any other host-shaped word is a `NetWord`), and `env.*` atoms
+  through `cd`/`pushd` (`cwd.rs`), `net` atoms for URLs, the hosts of programs that name hosts (any other host-shaped word is a `NetWord`) and the host of a `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT` redirection, which bash opens as a connection (`host::of_dev_socket`), and `env.*` atoms
   for assignments and `$VAR` reads. Leading reserved words (`do`, `then`, `if`, …) are skipped, and a
   variable set earlier on the line with a known value is substituted where it is used
   (`commands/locals.rs`); a path through one whose value is not known is `unparseable`. Shell options are read per shell

@@ -101,6 +101,22 @@ pub fn of_argument(program: &str, token: &str) -> Option<String> {
     of_word(address)
 }
 
+/// Host of a redirection target `/dev/tcp/HOST/PORT` or `/dev/udp/HOST/PORT`,
+/// which bash and ksh open as a network connection instead of a file. Only that
+/// exact spelling counts, as in bash: `/dev/../dev/tcp/…` is a path. A host the
+/// line does not show (`$H`) is kept as written, so no allow rule names it.
+pub(crate) fn of_dev_socket(target: &str) -> Option<String> {
+    let rest = target
+        .strip_prefix("/dev/tcp/")
+        .or_else(|| target.strip_prefix("/dev/udp/"))?;
+    let (host, port) = rest.split_once('/')?;
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.');
+    (!host.is_empty() && !port.is_empty()).then(|| host.to_ascii_lowercase())
+}
+
 /// `[userinfo@]host[:port]` up to the first `/`, `?` or `#`. `_` is kept: DNS
 /// itself allows it and resolvers look such names up (`a_b.evil.com`), so a
 /// rule must still see the host.
