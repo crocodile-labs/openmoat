@@ -8,6 +8,7 @@
 // A library reports to its caller; only the `moat` binary prints.
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod bench;
 mod contract;
 mod host;
 mod registry;
@@ -20,7 +21,7 @@ pub use host::continue_cli::CONTINUE_ENV;
 use std::fmt;
 use std::str::FromStr;
 
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, Verdict};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -212,6 +213,27 @@ impl Host {
     #[must_use]
     pub fn render_response(self, event: &HookEvent, decision: &Decision) -> String {
         registry::adapter(self).render(event, decision)
+    }
+
+    /// The hook payload this host sends for `call` at `at`, or `None` when it
+    /// has no tool for it (Codex reads files through its shell; only Claude
+    /// Code and OpenClaw fetch).
+    #[must_use]
+    pub fn bench_payload(self, call: &bench::Call, at: &bench::Place<'_>) -> Option<String> {
+        registry::adapter(self).bench_payload(call, at)
+    }
+
+    /// What this host does with the hook's reply to `call`.
+    #[must_use]
+    pub fn read_reply(self, call: &bench::Call, exit: &bench::Exit<'_>) -> bench::Answer {
+        registry::adapter(self).read_reply(call, exit)
+    }
+
+    /// What this host must end up doing when OpenMoat decides `verdict` on
+    /// `call`: where it cannot ask, an `ask` arrives as a blocking `deny`.
+    #[must_use]
+    pub fn seen(self, call: &bench::Call, verdict: Verdict) -> bench::Answer {
+        registry::adapter(self).seen(call, verdict)
     }
 }
 

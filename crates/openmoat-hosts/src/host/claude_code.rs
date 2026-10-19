@@ -2,9 +2,11 @@
 //! `ConfigChange` ([`config_change`]).
 
 use openmoat_core::Decision;
+use serde_json::json;
 
+use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
-use crate::wire::pre_tool_use;
+use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) mod config_change;
@@ -20,6 +22,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: Some("Claude Code's permission mode does not ask"),
         defer_is_ask_on_no_ask: false,
     },
+    on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
+         other than 2, or times out (default 600 s)",
 };
 
 /// Claude Code's format, also sent by the Continue CLI.
@@ -62,5 +66,29 @@ impl HostAdapter for Adapter {
             HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk => pre_tool_use::render(decision),
             HookEvent::ConfigChange { .. } => config_change::render(decision),
         }
+    }
+
+    fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {
+        let (tool, input) = match call {
+            Call::Read(path) => ("Read".to_owned(), json!({ "file_path": at.file(path) })),
+            Call::Write(path) => (
+                "Write".to_owned(),
+                json!({ "file_path": at.file(path), "content": CONTENT }),
+            ),
+            Call::Edit(path) => (
+                "Edit".to_owned(),
+                json!({ "file_path": at.file(path), "old_string": "old", "new_string": CONTENT }),
+            ),
+            Call::Fetch(url) => (
+                "WebFetch".to_owned(),
+                json!({ "url": url, "prompt": "summarise" }),
+            ),
+            other => bench::common_tool(other)?,
+        };
+        Some(bench::payload(&tool, &input, at))
+    }
+
+    fn read_reply(&self, _call: &Call, exit: &Exit<'_>) -> Answer {
+        bench::read_reply(exit, true)
     }
 }

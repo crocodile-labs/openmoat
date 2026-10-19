@@ -22,6 +22,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
     },
+    on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
+         other than 2, or times out (default 600 s)",
 };
 
 /// Set by `cn` for every command hook it runs, next to `CLAUDE_PROJECT_DIR`

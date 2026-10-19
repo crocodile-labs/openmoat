@@ -86,19 +86,7 @@ struct Mcp {
     args: Value,
 }
 
-/// A tool call, independent of the host that makes it.
-pub enum Call {
-    Shell(String),
-    Read(String),
-    Write(String),
-    Edit(String),
-    Fetch(String),
-    Mcp {
-        server: String,
-        tool: String,
-        args: Value,
-    },
-}
+pub use openmoat_hosts::bench::Call;
 
 impl Step {
     pub fn call(&self) -> Result<Call> {
