@@ -99,15 +99,24 @@ fn a_secret_later_in_a_streamed_body_closes_the_connection() {
     .unwrap();
     // The value straddles two writes, after padding the proxy relays.
     let (first, second) = VALUE.split_at(9);
-    let _ = s.write_all(format!("{}{first}", "a".repeat(20_000)).as_bytes());
+    let safe = format!("{}{first}", "a".repeat(20_000));
+    let _ = s.write_all(safe.as_bytes());
     thread::sleep(Duration::from_millis(100));
     let _ = s.write_all(second.as_bytes());
     let reply = read_all(&mut s);
     assert_no_value(&h, &reply);
     let forwarded = String::from_utf8(h.received.recv_timeout(SINK_WAIT).unwrap()).unwrap();
     assert!(forwarded.starts_with("POST / HTTP/1.1"), "{forwarded}");
-    assert!(forwarded.ends_with(first), "relayed up to the split");
     assert!(!forwarded.contains(VALUE));
+    // The chunk the value completes in is never forwarded. On a slow machine
+    // the proxy reads the end of the first write with the second (#590), so
+    // what went upstream is the safe part, or less of it, never more.
+    let (_, body) = forwarded.split_once("\r\n\r\n").expect("a forwarded head");
+    assert!(
+        safe.starts_with(body),
+        "only the safe part, {} bytes forwarded",
+        body.len()
+    );
     let rows = h.rows();
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[0].rules, ["test-hosts"]);

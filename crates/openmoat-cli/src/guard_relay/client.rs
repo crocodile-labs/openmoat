@@ -52,8 +52,11 @@ impl Endpoint {
         budget: Duration,
     ) -> Result<Reply> {
         let deadline = Instant::now() + budget;
-        let stream = TcpStream::connect_timeout(&self.addr, budget)
-            .with_context(|| format!("connecting to `moat run` at {}", self.addr))?;
+        let stream = connect_retrying(
+            |limit| TcpStream::connect_timeout(&self.addr, limit),
+            deadline,
+        )
+        .with_context(|| format!("connecting to `moat run` at {}", self.addr))?;
         let cwd = std::env::current_dir()
             .ok()
             .and_then(|d| d.to_str().map(str::to_owned))
@@ -67,6 +70,40 @@ impl Endpoint {
             payload: payload.to_owned(),
         };
         exchange(stream, &request, deadline)
+    }
+}
+
+/// How long to wait before connecting again after the sandbox refused.
+const REFUSED_PAUSE: Duration = Duration::from_millis(20);
+/// The most connects one call makes.
+const CONNECT_ATTEMPTS: u32 = 10;
+
+/// `connect(limit)` until it opens, before `deadline`. On some macOS 14
+/// machines Seatbelt refuses, with EPERM, a connect that the profile's
+/// `localhost:<port>` rule allows, for a few milliseconds about every 15 s
+/// (#280, #588); only that refusal is tried again, a few times, and anything
+/// else, or a refusal that lasts, is the error the guard denies with.
+pub fn connect_retrying<S>(
+    mut connect: impl FnMut(Duration) -> std::io::Result<S>,
+    deadline: Instant,
+) -> std::io::Result<S> {
+    let mut attempt = 1;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(std::io::ErrorKind::TimedOut.into());
+        }
+        match connect(left) {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::PermissionDenied
+                    && attempt < CONNECT_ATTEMPTS
+                    && left > REFUSED_PAUSE * 2 =>
+            {
+                attempt += 1;
+                std::thread::sleep(REFUSED_PAUSE);
+            }
+            result => return result,
+        }
     }
 }
 
