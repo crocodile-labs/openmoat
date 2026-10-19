@@ -15,11 +15,26 @@ vulnerability, not a usability bug.
 
 | Version | Security fixes |
 |---|---|
-| latest release | yes |
-| older versions | no; upgrade to the latest release |
+| the latest minor release (the newest `0.x.y`) | yes, in its next release |
+| older minor releases | no; upgrade to the latest minor |
+| pre-releases (`-rc.N`) | no; upgrade to the release they led to |
 | `main` | yes, fixes land here first |
 
-Only the latest release and `main` are supported. There are no backports before 1.0.
+Before 1.0 only the latest minor release line gets security fixes, and there are no
+backports to older minors.
+
+How a fix ships:
+
+- It lands on `main` first, with an attack fixture in `tests/conformance/` that shows
+  the bypass is closed, and a `### Security` line in [CHANGELOG.md](CHANGELOG.md).
+- It goes out in the next release, from GitHub Releases, the Homebrew tap and crates.io,
+  with a GitHub Security Advisory for a confirmed issue in a released version
+  ([What happens next](#what-happens-next)).
+- A fix in the default policy reaches an existing `policy.yaml` only through
+  `moat policy upgrade`, because an upgrade keeps your policy as it is. The CHANGELOG
+  line says "Existing policies get it with `moat policy upgrade`" when that applies.
+- After upgrading, run `moat doctor` and `moat policy upgrade`
+  ([docs/INSTALL.md](docs/INSTALL.md#upgrading) says what each one may ask for).
 
 ## Reporting
 
@@ -29,7 +44,9 @@ Only the maintainers see it.
 
 Do not open public issues or pull requests for bypasses. A useful report contains:
 
-- the `moat --version` or commit, the host and the operating system;
+- the `moat --version` or commit, the host and the operating system
+  (`moat doctor --bundle moat-bundle.json` writes these, and the agents' hook state, to
+  one local file you can attach after reading it);
 - the exact tool call: the hook payload, or the command line for `moat policy check`;
 - the policy in use (default, or the file) and the verdict and rule ids you got;
 - what actually executes and why that crosses a boundary the policy promises.

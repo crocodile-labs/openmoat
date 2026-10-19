@@ -5,6 +5,18 @@ body:
   - type: markdown
     attributes:
       value: For a policy bypass or anything security-relevant, use the private advisory link instead of this form.
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Diagnostic bundle
+      description: >-
+        Run `moat doctor --bundle moat-bundle.json` in a terminal of your own. It writes one
+        local file with the moat version, the operating system, each agent's hook state and
+        protection level, the policy version and lint findings, the doctor checks, and the
+        last 20 decisions (time, host, tool name, verdict and rule ids only; no commands,
+        paths or arguments). Nothing is sent. Read the file, then drag it here.
+    validations:
+      required: false
   - type: input
     id: version
     attributes:

@@ -18,6 +18,7 @@ use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
 
+mod bundle;
 mod json;
 mod mcp;
 mod sandboxes;
@@ -95,7 +96,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let as_json = args.format == Format::Json;
     let mut report = Report {
         problems: Vec::new(),
-        out: if as_json {
+        out: if as_json || args.bundle.is_some() {
             Deferred::quiet()
         } else {
             Deferred::default()
@@ -167,6 +168,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     if args.accept {
         let intact = drift.is_empty() && lock.is_some();
         accept(&mut report, &home, &binary, policy.is_some(), intact)?;
+    }
+    if let Some(path) = &args.bundle {
+        return bundle::write(&home, &binary, &report.rows, path, args.bundle_events);
     }
     if as_json {
         return json::finish(&report.rows, report.problems.len());

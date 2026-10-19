@@ -55,6 +55,8 @@ pub fn run() -> Result<Code> {
             accept: true,
             verbose: false,
             format: crate::cli::Format::Text,
+            bundle: None,
+            bundle_events: 20,
         })?;
         if !Lock::load(&lock_path)?.verify().is_empty() {
             return Ok(code);

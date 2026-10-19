@@ -3,9 +3,9 @@
 [README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
 
 > [!NOTE]
-> **Read this when** you install OpenMoat on macOS, Linux or Windows, run `moat init`, want to know what each agent's hook covers, or use other config directories.
+> **Read this when** you install or upgrade OpenMoat on macOS, Linux or Windows, run `moat init`, want to know what each agent's hook covers, or use other config directories.
 
-**On this page:** [Install](#install) · [Set up with moat init](#set-up-with-moat-init) · [Keep moat proxy running as a user service](#keep-moat-proxy-running-as-a-user-service) · [Undo with moat uninstall](#undo-with-moat-uninstall) · [Non-default config directories](#non-default-config-directories)
+**On this page:** [Install](#install) · [Upgrading](#upgrading) · [Set up with moat init](#set-up-with-moat-init) · [Keep moat proxy running as a user service](#keep-moat-proxy-running-as-a-user-service) · [Undo with moat uninstall](#undo-with-moat-uninstall) · [Non-default config directories](#non-default-config-directories)
 
 ## Install
 
@@ -49,16 +49,65 @@ cargo install --locked --path crates/openmoat-cli    # installs the `moat` binar
 Each release carries `sha256.sum` and GitHub build attestations:
 `gh attestation verify <archive> --repo crocodile-labs/openmoat`.
 
-### Upgrade
+## Upgrading
+
+Upgrade the binary the way you installed it:
 
 ```bash
 brew update && brew upgrade moat                              # Homebrew: update the tap first
 cargo install openmoat --locked --force                       # crates.io
 ```
 
-With the installers, run the installer of the new release. Hooks keep working after an
-upgrade in the same place; `moat doctor` confirms it. Your policy is kept as it is;
-`moat policy upgrade` shows what the new default policy adds and asks before applying it.
+With the installers, run the installer again: its URL always fetches the latest release.
+From a clone, pull and run `cargo install --locked --path crates/openmoat-cli` again.
+
+Then, in a terminal of your own:
+
+1. **`moat doctor`.** After an upgrade in the same place the hooks keep working, because
+   they run `moat` by its stable path (ADR-016), and nothing has to be re-pinned. Doctor
+   names what is left, if anything:
+   - `hook entry for … is out of date (written by an older moat); run moat init`: the new
+     release writes its hook entry differently (more tools, another timeout, a new event).
+     Run `moat init`. It keeps your policy, backs up the agent's file before it changes
+     OpenMoat's own entry, and re-pins.
+   - `hook runs …, which does not exist`, `a different moat than this one`, or
+     `lock expects …, running …`: `moat` now lives at another path (another
+     install method, another Cargo `--root`). Run `moat init` with the `moat` the hooks
+     should use, and `moat proxy install` again if the proxy runs as a service
+     ([Upgrade note](#upgrade-note)).
+   - a sandbox line ending `run moat sandbox sync`: the new release writes the agents'
+     sandbox settings differently. Run `moat sandbox sync`.
+   - `policy update  N changes from the OpenMoat … default`: see step 2.
+
+   Re-run `moat init` only when doctor asks for it.
+2. **`moat policy upgrade`.** `moat init` and an upgrade keep your `policy.yaml` as it
+   is, so rules the new default policy gained, security fixes among them, reach you only
+   this way. It shows the diff and asks; `--dry-run` only shows it, `--undo` puts the
+   previous policy back ([USAGE.md](USAGE.md#after-upgrading-openmoat)). `moat` alone
+   offers the same at a terminal.
+
+### What can change between 0.x minor releases
+
+Before 1.0 a minor release (0.5 → 0.6) may change things a patch release does not.
+Read the [CHANGELOG](../CHANGELOG.md) entries since your version first; so far these
+kinds of change have happened:
+
+- **The audit log schema moves forward** (version 3 in 0.5.0, version 4 in 0.6.0). The
+  new `moat` updates the log when it first opens it; an older `moat` then refuses to
+  open it (`schema too new`), and its hook denies every call. Going back to an older
+  release is not supported.
+- **The default policy changes.** In 0.5.0, calls no rule names moved from `ask` to
+  `defer` (the agent's own prompt decides, ADR-025). Your policy keeps its own rules
+  until you run `moat policy upgrade`.
+- **Hook entries change.** `moat doctor` then says the hook is out of date, and
+  `moat init` rewrites it (step 1).
+- **The library crates' API** (`openmoat-core`, `openmoat-hosts`, `openmoat-audit`,
+  `openmoat-proxy`) breaks in minor releases, marked **Breaking** in the CHANGELOG. This
+  matters only to Rust code that depends on them; the `moat` command is not affected.
+- **The minimum Rust version** for `cargo install` is raised only in a minor release.
+
+The policy format and the commands may still change before 1.0
+([README](../README.md#status)); every such change has a CHANGELOG line.
 
 ## Set up with `moat init`
 
