@@ -144,14 +144,17 @@ fn a_secret_read_inside_the_run_taints_its_egress() {
     );
 }
 
-/// The sandbox still keeps OpenMoat's home from the agent and its hooks, and
-/// nothing in it can take over the port the decisions come from.
+/// The sandbox still keeps the agent and its hooks from changing OpenMoat's
+/// home, and nothing in it can take over the port the decisions come from.
 #[test]
 fn the_sandbox_still_cannot_touch_the_home_or_take_the_port() {
     let (sb, project) = installed_with_secret();
     let lock = std::fs::read(sb.home.join(".moat/policy.lock")).unwrap();
-    let script = r#"cat "$HOME/.moat/policy.yaml" > /dev/null 2>&1; echo "read=$?"
-         echo forged >> "$HOME/.moat/audit.db" 2>/dev/null; echo "audit=$?"
+    // Writes only: `kernel-self` denies writing OpenMoat's home wherever it is.
+    // Nothing denies reading it; a real `~/.moat` is unreadable because no
+    // read root covers the home, but this test's home is in the temp
+    // directory, which commands may read.
+    let script = r#"echo forged >> "$HOME/.moat/audit.db" 2>/dev/null; echo "audit=$?"
          echo forged > "$HOME/.moat/policy.lock" 2>/dev/null; echo "lock=$?"
          python3 -c '
 import os, socket
@@ -169,7 +172,7 @@ except OSError:
     }
     let shown = text(&out);
     // Held by `moat run` and outside what the sandbox lets anything bind.
-    for refused in ["bind=open", "read=0", "audit=0", "lock=0"] {
+    for refused in ["bind=open", "audit=0", "lock=0"] {
         assert!(!stdout(&out).contains(refused), "{refused}: {shown}");
     }
     assert_eq!(
