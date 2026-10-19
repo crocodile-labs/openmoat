@@ -91,6 +91,28 @@ impl Home {
         self.root.join("trust.json")
     }
 
+    /// The OpenSSH allowed-signers file of the keys `moat policy trust-key`
+    /// trusted to sign policy (`signing.rs`); pinned by the lock.
+    pub fn signers_path(&self) -> PathBuf {
+        self.root.join("allowed_signers")
+    }
+
+    /// The installed policy packs and their digests (`packs.rs`); pinned by the lock.
+    pub fn packs_path(&self) -> PathBuf {
+        self.root.join("packs.json")
+    }
+
+    /// Where installed packs and their signatures are kept.
+    pub fn packs_dir(&self) -> PathBuf {
+        self.root.join("policy.d").join("packs")
+    }
+
+    /// When and where `moat audit anchor` last recorded the log's head; for
+    /// `moat doctor` only, so not pinned.
+    pub fn anchor_path(&self) -> PathBuf {
+        self.root.join("anchor.json")
+    }
+
     /// Calls the guard denied because no decision came in time (`hangs.rs`).
     pub fn hangs_path(&self) -> PathBuf {
         self.root.join("guard-hangs.log")
@@ -140,6 +162,7 @@ impl Home {
                 .lint()
                 .with_context(|| format!("merging {}", self.overlay_path().display()))?;
         }
+        crate::packs::merge_installed(self, &mut policy)?;
         Ok(policy)
     }
 

@@ -65,6 +65,15 @@ pub fn run(args: &TrustArgs) -> Result<Code> {
             found.digest,
             found.policy.allow.len()
         )?;
+        if home
+            .load_policy()
+            .is_ok_and(|user| user.require_signed_repo_policy)
+        {
+            writeln!(
+                out,
+                "  note: your policy sets `require_signed_repo_policy: true`, so they apply only while a trusted key signs the file"
+            )?;
+        }
         trust.repos.insert(found.root, found.digest);
     }
     trust.save(&path)?;

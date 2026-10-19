@@ -8,6 +8,7 @@ mod common;
 
 mod allow;
 mod allow_files;
+mod anchor;
 mod approvals;
 mod audit;
 #[cfg(unix)]
@@ -36,6 +37,8 @@ mod lock;
 mod lock_settings;
 mod mcp;
 mod moatbench;
+#[cfg(unix)]
+mod packs;
 mod paths;
 mod permission_mode;
 mod policy_upgrade;

@@ -729,10 +729,11 @@
   threat: T7
   action: { shell: "make SHELL=/tmp/evil" }
   expect: { verdict: defer, rules: [default] }
-# a database shell asks even read-only: dot-commands such as `.shell` run programs
-- id: ask-sqlite-readonly-audit-db
-  threat: T9
-  action: { shell: "sqlite3 -readonly ~/.moat/audit.db 'select count(*) from events'" }
+# a database shell defers even read-only: dot-commands such as `.shell` run programs
+# (read-only on the audit log is a `kernel-self` read deny, attacks.yaml)
+- id: ask-sqlite-readonly-project-db
+  threat: T7
+  action: { shell: "sqlite3 -readonly dev.db 'select count(*) from events'" }
   expect: { verdict: defer, rules: [default] }
 - id: ask-sqlite-project-db
   threat: T7

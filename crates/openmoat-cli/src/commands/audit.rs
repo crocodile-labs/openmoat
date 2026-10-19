@@ -12,6 +12,10 @@ use crate::home::Home;
 use crate::render;
 use crate::time;
 
+mod anchor;
+
+pub use anchor::run as anchor;
+
 pub fn export(args: &ExportArgs) -> Result<Code> {
     let since_ms = time::parse_since(&args.since, time::now_ms())?;
     let store = Home::locate()?.open_audit()?;
@@ -25,10 +29,16 @@ pub fn export(args: &ExportArgs) -> Result<Code> {
 }
 
 /// Exit 0 when every line verifies and the anchor, if given, is among them, else 64.
-/// `--require-anchor` also fails a verify without an anchor.
+/// `--require-anchor` also fails a verify without an anchor. With `--against`,
+/// the database is checked against the recorded anchors instead.
 pub fn verify(args: &VerifyArgs) -> Result<Code> {
-    let text = std::fs::read_to_string(&args.file)
-        .with_context(|| format!("reading {}", args.file.display()))?;
+    let file = match (&args.against, &args.file) {
+        (Some(against), _) => return anchor::verify_against(against, args.format),
+        (None, Some(file)) => file,
+        (None, None) => anyhow::bail!("give the export file, or --against <git repo or file>"),
+    };
+    let text =
+        std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let anchor = args.anchor.as_deref().map(str::trim);
     let report = openmoat_audit::verify_export(&text, anchor);
     match args.format {

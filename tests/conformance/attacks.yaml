@@ -417,6 +417,41 @@
   threat: T9
   action: { shell: "echo 'allow: []' > ~/.moat/policy.yaml" }
   expect: { verdict: deny, rules: [kernel-self] }
+# Reading OpenMoat's state: the audit log shows what was denied and why, the
+# lock and the trust records what is pinned and trusted
+- id: T9-read-audit-db
+  threat: T9
+  action: { fs_read: "~/.moat/audit.db" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-audit-db-wal
+  threat: T9
+  action: { fs_read: "~/.moat/audit.db-wal" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-policy-lock
+  threat: T9
+  action: { shell: "cat ~/.moat/policy.lock" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-trust-records
+  threat: T9
+  action: { shell: "cat ~/.moat/trust.json ~/.moat/allowed_signers" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-sqlite-readonly-audit-db
+  threat: T9
+  action: { shell: "sqlite3 -readonly ~/.moat/audit.db 'select count(*) from events'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-mcp-pins
+  threat: T9
+  action: { fs_read: "~/.moat/mcp/tools.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-moved-audit-db
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/audit.db" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-anchors-audit-log
+  threat: T9
+  action: { shell: "moat audit anchor --file /tmp/anchors" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-sed-in-place-cursor-hooks
   threat: T9
   action: { shell: "sed -i '' 's/failClosed/x/' ~/.cursor/hooks.json" }

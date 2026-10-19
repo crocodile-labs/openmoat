@@ -290,10 +290,18 @@ pub struct Policy {
     /// What session taint protects beyond the built-in list. Absent in older policies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub taint: Option<TaintSettings>,
+    /// Trust a repository policy only when its detached signature
+    /// (`policy.yaml.sig`) verifies against a key the person trusted (ADR-031):
+    /// a signed one needs no `moat trust`, and an unsigned one is not trusted even
+    /// after `moat trust`. Off by default: then only `moat trust` lets a
+    /// repository policy allow.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub require_signed_repo_policy: bool,
     /// Ask rules merged in from a repository policy ([`crate::RepoPolicy`],
-    /// ADR-022). Tried after `deny` and before `allow`, so a repository can make
-    /// an action the user allows ask. Never read from or written to a file, and
-    /// not lowered to OS layers, which are generated from the user policy alone.
+    /// ADR-022) or a policy pack (ADR-031). Tried after `deny` and before
+    /// `allow`, so a repository can make an action the user allows ask. Never
+    /// read from or written to a file, and not lowered to OS layers, which are
+    /// generated from the user policy alone.
     #[serde(skip)]
     pub repo_ask: Vec<RuleGroup>,
 }

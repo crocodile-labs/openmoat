@@ -124,6 +124,18 @@ fn package_release_age_defaults_to_seven_days_and_zero_turns_it_off() {
 }
 
 #[test]
+fn signed_repository_policies_are_trusted_only_when_asked_for() {
+    assert!(
+        !Policy::parse("version: 1\n")
+            .unwrap()
+            .require_signed_repo_policy
+    );
+    let on = Policy::parse("version: 1\nrequire_signed_repo_policy: true\n").unwrap();
+    assert!(on.require_signed_repo_policy);
+    assert!(Policy::parse("version: 1\nrequire_signed_repo_policy: 1\n").is_err());
+}
+
+#[test]
 fn rejects_unknown_keys() {
     assert!(Policy::parse("version: 1\nbogus: 1\n").is_err());
 }

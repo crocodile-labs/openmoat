@@ -137,6 +137,16 @@ fn state_files(home: &Home) -> Vec<PathBuf> {
     ]
 }
 
+/// The signing files only `moat policy trust-key`, `install` and `remove` pin
+/// (ADR-031): the allowed signers, the pack record and each installed pack.
+/// Another re-pin keeps their pins and never adds them, so a file planted
+/// there is never trusted by a re-pin made for something else.
+pub fn signing_files(home: &Home) -> Vec<PathBuf> {
+    let mut files = vec![home.signers_path(), home.packs_path()];
+    files.extend(crate::packs::installed_files(home));
+    files
+}
+
 /// Hook files with a current `moat` hook under this shell's environment.
 pub fn installed_hook_files(home: &Home, binary: &Path) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
@@ -162,6 +172,7 @@ impl HookPinGap {
     pub fn new(lock: &Lock, home: &Home, installed: &[PathBuf]) -> Self {
         // This shell's Cursor `sandbox.json` is pinned whole, but is no hook file.
         let mut state = state_files(home);
+        state.extend(signing_files(home));
         state.extend(crate::sandbox::install::cursor_sandbox_files(home).unwrap_or_default());
         let state: Vec<String> = state.iter().map(|p| key(p)).collect();
         let here: Vec<String> = installed.iter().map(|p| key(p)).collect();

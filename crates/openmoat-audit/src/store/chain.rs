@@ -271,6 +271,58 @@ impl Store {
     }
 }
 
+/// The newest chained event: what an anchor records (ADR-031).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainHead {
+    /// Row id of the newest chained event.
+    pub id: super::EventId,
+    /// When it was recorded (ms since the epoch).
+    pub ts_ms: i64,
+    /// Its chain hash.
+    pub hash: String,
+}
+
+impl Store {
+    /// The newest event that has a hash, or `None` for a log without one. It is
+    /// the chain's head only when [`Store::verify_chain`] finds no break.
+    pub fn head(&self) -> Result<Option<ChainHead>, StoreError> {
+        if !self.chained {
+            return Ok(None);
+        }
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id, ts_ms, hash FROM events WHERE hash IS NOT NULL ORDER BY id DESC LIMIT 1",
+                [],
+                |r| {
+                    Ok(ChainHead {
+                        id: super::EventId(r.get(0)?),
+                        ts_ms: r.get(1)?,
+                        hash: r.get(2)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// The stored chain hash of event `id`; `None` when there is no such
+    /// event or it has no hash.
+    pub fn hash_of(&self, id: super::EventId) -> Result<Option<String>, StoreError> {
+        if !self.chained {
+            return Ok(None);
+        }
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT hash FROM events WHERE id = ?1",
+                params![id.0],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten())
+    }
+}
+
 /// Check one row against the chain so far; advance `report.head` when it holds.
 fn check(row: &Row, report: &mut ChainReport, legacy_last_id: i64) -> Option<BreakKind> {
     let Some(hash) = &row.hash else {

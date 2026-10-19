@@ -62,6 +62,16 @@
 - id: benign-search-project-root
   action: { fs_read: "/p" }
   expect: { verdict: allow, rules: [project-fs] }
+# The policy stays readable: `kernel-self` denies reading only the state beside
+# it, so the agent's own prompt decides as before (ADR-025)
+- id: benign-read-moat-policy
+  threat: T9
+  action: { fs_read: "~/.moat/policy.yaml" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-repository-policy
+  threat: T9
+  action: { fs_read: "/p/.moat/policy.yaml" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-github-api
   action: { net: "https://api.github.com/repos/x/y" }
   expect: { verdict: allow, rules: [registries] }

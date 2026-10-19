@@ -48,6 +48,8 @@ secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§
 taint:                              # optional: more paths session taint protects (§4.1)
   protected_writes: ["**/deploy/**"]
   provenance: true                  # optional, default true: taint follows written files (§4.1.1)
+
+require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
 ```
 
 `approval:` (`channel`, `remember`, `timeout_s`) and `scope:` (`project_roots`) are reserved:
@@ -496,7 +498,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | deny | `env-poison` | setting `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `GIT_*`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `MOAT_*` |
 | deny | `pipe-to-shell` | `curl`/`wget` output, or any decoded/decompressed stream (`base64 -d/-D/--decode`, `openssl … -d`, `xxd -r`, `gunzip`, `zcat`, `gzip -d`, …), piped into a shell or interpreter that reads its program from stdin (`sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `python*`, `node`, `perl`, `ruby`, `php`, `deno`, `bun`, `pwsh`); `eval` |
 | deny | `destructive` | any write to a raw disk (`/dev/disk*`, `/dev/sd*`, `/dev/nvme*`, …), and any write to the home directory or the root itself (`fs.write` of exactly `~` and `/`, however the path is spelt: `~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`), so removing, moving or replacing them with any program and flags; this also denies a command that changes that directory itself (`touch ~`, `chmod 700 ~`) or copies into it entries whose names the command line does not show (`rsync -a dist/ ~/`, `cp * ~/`), while a copy or move of named files into it writes those entries (`cp f ~/` writes `~/f`, which the default policy defers, §3.1), as do writes below them (`mkdir ~/x`, `rm -rf ~/tmp/build`) are unaffected; `rm` of an unexpanded `/*`, `~/*`, `$HOME/*`, `${HOME}/*` or of `//`, and `rm -rf --no-preserve-root`, `git push --force*`/`-f*` (also after the remote, bundled as `-uf`, and a `+refspec` such as `+main` or `+HEAD:main`), remote branch deletion (`git push origin :main`, `--delete`, `-d`), the prefixes of `--force` and `--delete` git accepts as abbreviations (`--for*`, `--de*`; `--mirror` and `--prune` are not denied and defer like any other push), `git reset --hard`, `git clean -fdx`, `git branch -D`, `git stash drop/clear`, `sudo`, `mkfs`, `dd if=`, `shutdown`, `reboot` |
-| deny | `kernel-self` | writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/secret/trust/uninstall` and `moat sandbox sync` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
+| deny | `kernel-self` | reads of OpenMoat's state beside the policy: `~/.moat/audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`, `allowed_signers` and `mcp/` (and `audit.db*` and `policy.lock` in any `.moat/`), while `~/.moat/policy.yaml` stays readable; writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/secret/trust/uninstall`, `moat sandbox sync` and `moat audit anchor` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
 | deny | `shell-rc` | writes to `~/.zshrc`, `~/.bashrc`, `~/.profile` and friends |
 | deny | `cloud-metadata` | network to instance metadata and link-local services (`169.254.*`, `fe80:*`, `fd00:ec2::254`, `100.100.100.200`, `metadata.google.internal`, `metadata.goog`), for shell network and for a host fetch tool alike |
 | deny | `token-egress` | a token of a well-known prefixed format sent to a host that is not its service's, allowed hosts included: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`; own hosts `github.com`, `githubusercontent.com`, `ghcr.io`), OpenAI and Anthropic (`sk-`, `sk-proj-`, `sk-ant-`, `sk-svcacct-`, `sk-admin-`; `openai.com`, `anthropic.com`), AWS access key ids (`AKIA…`; `amazonaws.com`, `aws.amazon.com`), Slack (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`; `slack.com`), Google API keys (`AIza…`; `googleapis.com`, `google.com`), npm (`npm_`; `npmjs.org`, `npmjs.com`) and GitLab (`glpat-`; `gitlab.com`), each with its subdomains. Checked in a fetch or network tool's URL, an MCP URL argument, a web search query, and the arguments of a command that connects to a host (the `curl`, `wget`, `nc`, `ssh` family, `git clone/fetch/pull/push/ls-remote`) and of every command piped into one; the destination is every host those arguments name, `--connect-to`/`--resolve` targets and `Host:` headers included, and a destination that cannot be read counts as another host. The atom is `@token-egress <service> <host>`; the token is never in it. Only prefixed formats, the same list audit redaction masks: a commit SHA, a UUID or a base64 blob is never a token. A self-hosted GitLab or GitHub Enterprise server is not the service's host: to send tokens there, narrow the group (`shell: ["@token-egress github *", …]` without that service) |
@@ -869,8 +871,63 @@ allow`, `moat trust` must be run from a terminal, refuses while the lock shows d
 (exit 64), and is denied to agents by `kernel-self`. A `trust.json` the lock does not
 pin is ignored.
 
+Where your policy says `require_signed_repo_policy: true`, a signature decides instead
+of `moat trust` (ADR-031). A repository policy's allow rules apply only when its
+detached signature `<project>/.moat/policy.yaml.sig` verifies, with `ssh-keygen -Y verify`
+in the namespace `openmoat-policy`, against a key you trusted with `moat policy trust-key`
+(§11). A file with no signature, a signature from another key, or a change to the file
+after signing is not trusted, even where you ran `moat trust`: its allow rules are
+ignored and its deny and ask rules apply, as for any untrusted repository policy.
+`moat trust` still records the file, and says that the setting overrides it. Without the
+setting, which is the default, a signature changes nothing and `moat trust` alone
+decides. The signature is checked on each call in the project, outside the agent's
+sandbox.
+
 `moat status` and `moat doctor`, run inside the project, name the repository policy and
-its digest, and say which form applies: `trusted`, `not trusted: tightening only`,
-`changed since moat trust: tightening only`, or `tightening only` for a file without
+its digest, and say which form applies: `trusted`, `trusted: signed by <name>`, `not trusted: tightening only`,
+`changed since moat trust: tightening only`, `not signed by a trusted key: tightening only`
+(with `require_signed_repo_policy: true`), or `tightening only` for a file without
 allow rules. A file that does not parse is reported as a problem (exit 64), because
 every call in the project is denied.
+
+## 11. Signed policy packs
+
+A policy pack is a team's rules that you install for every project (ADR-031). It has a
+repository policy's shape (only `version`, `deny`, `ask` and `allow`, §10) and a
+detached OpenSSH signature. OpenMoat has no signature code of its own: it runs the
+system `ssh-keygen` (OpenSSH 8.1 or later), found through the environment snapshot
+`moat init` records (§8.1), in the namespace `openmoat-policy`.
+
+```bash
+# whoever maintains the pack signs it
+ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-policy team.yaml   # writes team.yaml.sig
+
+# each person trusts the maintainer's public key once, then installs the pack
+moat policy trust-key alice.pub --name alice@example.com
+moat policy install team.yaml               # the signature defaults to team.yaml.sig
+moat policy install team.yaml --sig other.sig --name team
+moat policy remove team
+```
+
+- `moat policy trust-key` checks the key with `ssh-keygen -l`, prints its fingerprint,
+  and adds it to `~/.moat/allowed_signers` for the namespace `openmoat-policy` only, so
+  a key's signature over anything else (a git commit) is never a policy signature.
+- `moat policy install` verifies the signature over the exact bytes it then installs.
+  A signature that does not verify, or one from a key you did not trust, is refused
+  (exit 64) and nothing is written. The pack and its signature are copied to
+  `~/.moat/policy.d/packs/<name>.yaml` and `.yaml.sig`, and recorded with their SHA-256
+  and signer in `~/.moat/packs.json`. Installing a pack again under the same name
+  replaces it.
+- The pack's rules merge like a trusted repository policy's, under the prefix
+  `pack:<name>:` (`pack:team:no-deploy`): its deny rules join yours, its ask rules are
+  tried before your allow rules, and its allow rules are added after yours, so your
+  deny rules still win. Deny and allow rules also reach the host sandboxes at the next
+  `moat sandbox sync`; ask rules are hook only.
+- The allowed signers, `packs.json` and each installed pack are pinned by the lock
+  (§8). A pack changed after install is drift, and every call is denied with
+  `kernel-integrity`. Only these three commands add those pins; another re-pin keeps
+  them and never adds them, so a file planted there is not trusted. An unpinned
+  `allowed_signers` or `packs.json` is ignored.
+- All three commands must be run from a terminal, refuse while the lock shows drift, and
+  are denied to agents by `kernel-self` (`moat policy *`). Without `ssh-keygen` they
+  refuse with a message saying so; nothing else changes.

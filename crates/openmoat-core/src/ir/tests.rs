@@ -38,7 +38,13 @@ fn default_policy_lowers_paths_and_hosts() {
     )
     .unwrap();
     assert_eq!(ir.fs.read.default, Effect::Deny);
-    assert_eq!(ids(&ir.fs.read.deny), ["secrets-paths"]);
+    // `kernel-self` also denies reads of OpenMoat's state beside the policy.
+    assert_eq!(ids(&ir.fs.read.deny), ["secrets-paths", "kernel-self"]);
+    assert!(
+        ir.fs.read.deny[1]
+            .patterns
+            .contains(&"/Users/me/.moat/policy.lock".to_owned())
+    );
     assert_eq!(ids(&ir.fs.read.allow), ["project-fs", "agent-temp"]);
     let secrets = &ir.fs.read.deny[0].patterns;
     assert!(secrets.contains(&"/Users/me/.ssh/**".to_owned()));

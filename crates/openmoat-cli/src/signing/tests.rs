@@ -1,0 +1,131 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use super::*;
+
+/// `ssh-keygen` from this process's search path; `None` where OpenSSH is
+/// missing, and those tests stop early (CI runners have it).
+fn program() -> Option<PathBuf> {
+    let path: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    let found = crate::environment::find_in(&path, &[], PROGRAM);
+    if found.is_none() {
+        eprintln!("ssh-keygen not found; skipping");
+    }
+    found
+}
+
+/// A fresh ed25519 key pair in `dir`, made at run time: no key is committed.
+fn keypair(program: &Path, dir: &Path, name: &str) -> PathBuf {
+    let key = dir.join(name);
+    let status = Command::new(program)
+        .args(["-q", "-t", "ed25519", "-N", "", "-C", name, "-f"])
+        .arg(&key)
+        .stdin(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    key
+}
+
+/// Sign `file` with `key` in `namespace`; the signature is `<file>.sig`.
+fn sign(program: &Path, key: &Path, namespace: &str, file: &Path) -> PathBuf {
+    let status = Command::new(program)
+        .args(["-Y", "sign", "-n", namespace, "-f"])
+        .arg(key)
+        .arg(file)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let mut sig = file.as_os_str().to_owned();
+    sig.push(".sig");
+    PathBuf::from(sig)
+}
+
+fn signers_for(dir: &Path, entries: &[(&str, &Path)]) -> PathBuf {
+    let mut text = String::new();
+    for (name, key) in entries {
+        let public = fs::read_to_string(key.with_extension("pub")).unwrap();
+        text.push_str(&signer_line(name, &public).unwrap());
+        text.push('\n');
+    }
+    let path = dir.join("allowed_signers");
+    fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn a_signature_from_a_trusted_key_names_its_signer() {
+    let Some(program) = program() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let alice = keypair(&program, dir.path(), "alice");
+    let bob = keypair(&program, dir.path(), "bob");
+    let pack = dir.path().join("pack.yaml");
+    fs::write(&pack, "version: 1\n").unwrap();
+    let sig = sign(&program, &alice, NAMESPACE, &pack);
+    let data = fs::read(&pack).unwrap();
+
+    let both = signers_for(dir.path(), &[("bob@x", &bob), ("alice@x", &alice)]);
+    assert_eq!(
+        verify(&program, &both, &data, &sig).unwrap().as_deref(),
+        Some("alice@x")
+    );
+    let only_bob = signers_for(dir.path(), &[("bob@x", &bob)]);
+    assert_eq!(verify(&program, &only_bob, &data, &sig).unwrap(), None);
+    assert!(
+        fingerprint(&program, &alice.with_extension("pub"))
+            .unwrap()
+            .contains("SHA256:")
+    );
+}
+
+#[test]
+fn changed_data_and_another_namespace_do_not_verify() {
+    let Some(program) = program() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let alice = keypair(&program, dir.path(), "alice");
+    let signers = signers_for(dir.path(), &[("alice@x", &alice)]);
+    let pack = dir.path().join("pack.yaml");
+    fs::write(&pack, "version: 1\n").unwrap();
+    let sig = sign(&program, &alice, NAMESPACE, &pack);
+    let changed = b"version: 1\nallow: []\n";
+    assert_eq!(verify(&program, &signers, changed, &sig).unwrap(), None);
+
+    let commit = dir.path().join("commit.txt");
+    fs::write(&commit, "version: 1\n").unwrap();
+    let git_sig = sign(&program, &alice, "git", &commit);
+    let data = fs::read(&commit).unwrap();
+    assert_eq!(verify(&program, &signers, &data, &git_sig).unwrap(), None);
+}
+
+#[test]
+fn a_signature_that_is_not_a_file_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let signers = dir.path().join("allowed_signers");
+    fs::write(&signers, "").unwrap();
+    let error = verify(Path::new("ssh-keygen"), &signers, b"", dir.path()).unwrap_err();
+    assert!(error.to_string().contains("not a regular file"), "{error}");
+}
+
+#[test]
+fn signer_lines_are_limited_to_the_policy_namespace() {
+    let line = signer_line("alice@example.com", "ssh-ed25519 AAAAC3Nza+/= alice\n").unwrap();
+    assert_eq!(
+        line,
+        "alice@example.com namespaces=\"openmoat-policy\" ssh-ed25519 AAAAC3Nza+/="
+    );
+    for bad in ["", "a b", "a\"b", "x,y"] {
+        assert!(signer_line(bad, "ssh-ed25519 AAAA").is_err(), "{bad:?}");
+    }
+    for bad in ["", "not a key", "rsa AAAA", "ssh-ed25519 AA\"AA"] {
+        assert!(signer_line("a", bad).is_err(), "{bad:?}");
+    }
+    assert_eq!(
+        principals("# c\nb x\na y\nb z\n\n"),
+        ["b".to_owned(), "a".to_owned()]
+    );
+}

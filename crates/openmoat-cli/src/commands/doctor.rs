@@ -152,6 +152,14 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         Ok(chain) => audit_line(&mut report, &chain),
         Err(e) => report.line(Area::Audit, false, format!("audit log        {e}")),
     }
+    if let Some(last) = crate::anchor::Last::load(&home) {
+        report.note(&format!(
+            "audit anchor     last made {} (event {}) in {}",
+            crate::time::timestamp(last.anchored_ms),
+            last.event,
+            last.to
+        ));
+    }
     if args.accept {
         let intact = drift.is_empty() && lock.is_some();
         accept(&mut report, &home, &binary, policy.is_some(), intact)?;
@@ -450,7 +458,7 @@ fn audit_line(report: &mut Report, chain: &ChainReport) {
     );
     if let Some(head) = &chain.head {
         report.note(&format!(
-            "audit log        head {head}; record it elsewhere, then `moat audit verify --anchor` a later export"
+            "audit log        head {head}; record it elsewhere (`moat audit anchor`), then `moat audit verify --against` it later"
         ));
     }
     if chain.unchained > 0 {

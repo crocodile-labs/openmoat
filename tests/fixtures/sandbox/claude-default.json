@@ -73,7 +73,16 @@
         "/**/.env",
         "/**/.env.*",
         "/**/.envrc",
-        "/Users/me/Library/Keychains"
+        "/Users/me/Library/Keychains",
+        "/Users/me/.moat/audit.db*",
+        "/Users/me/.moat/policy.lock",
+        "/Users/me/.moat/hosts.json",
+        "/Users/me/.moat/approvals.json",
+        "/Users/me/.moat/trust.json",
+        "/Users/me/.moat/allowed_signers",
+        "/Users/me/.moat/mcp",
+        "/**/.moat/audit.db*",
+        "/**/.moat/policy.lock"
       ],
       "denyWrite": [
         "/Users/me/.ssh",

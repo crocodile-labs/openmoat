@@ -148,6 +148,19 @@ moat show 1                  # one event in full
 Credentials are redacted before anything is stored. The log is a SQLite file in
 `~/.moat`; nothing leaves your machine.
 
+Someone who can write that file can delete its newest events and leave a log that
+still checks out. To catch that later, record the log's head outside it now and then:
+
+```bash
+moat audit anchor --git ~/notes          # a commit on refs/moat/anchors there; nothing is pushed
+moat audit anchor --file ~/anchors.jsonl # or one line appended to a file you keep
+moat audit verify --against ~/notes      # later: fails, naming the anchor, if anchored events are gone
+```
+
+An anchor protects only as well as the place you keep it: push the ref
+(`git -C ~/notes push origin refs/moat/anchors`) or copy the file somewhere else.
+`moat doctor` shows when you last anchored.
+
 ## Change the policy
 
 The common changes are one command each. Each prints the rule it added and the
@@ -238,6 +251,20 @@ Any later change to the file drops it back to deny and ask only, until you trust
 again. Repository rules apply in the hook, not in the host sandboxes
 ([POLICY.md](POLICY.md) §10).
 
+For rules that should apply in every project, a team can sign a policy pack with an
+SSH key, and each person installs it once ([POLICY.md](POLICY.md) §11):
+
+```bash
+moat policy trust-key alice.pub --name alice@example.com   # once per signing key
+moat policy install team.yaml                              # checks team.yaml.sig first
+```
+
+A pack whose signature does not verify against a key you trusted is refused, and a
+pack changed after you installed it stops every call until you look (`moat doctor`).
+If your policy says `require_signed_repo_policy: true`, a repository policy is trusted
+only when a trusted key signed it (`.moat/policy.yaml.sig`): a signed one needs no
+`moat trust`, and an unsigned one only tightens, even after `moat trust`.
+
 ## If OpenMoat gets in your way
 
 OpenMoat leaves to your agent's own prompt what it has no rule for, and blocks only
@@ -276,6 +303,8 @@ these takes one command in your own terminal (agents are denied all of them):
 | `moat replay --since today` · `moat report --since 7d` | per-session timeline · summary |
 | `moat audit export [--since …] [--host …] [--session …]` | write events as JSON Lines with their chain hashes |
 | `moat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |
+| `moat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
+| `moat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
 | `moat audit report <file>…` | one report over verified exports from several machines |
 | `moat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h) or a permanent rule for exactly that command or those paths |
 | `moat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |
@@ -288,6 +317,8 @@ these takes one command in your own terminal (agents are denied all of them):
 | `moat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `moat mcp unwrap [<server>…]` | run stdio MCP servers through `moat mcp proxy`, which pins each tool's description and input schema and hides one that changed (`--sandbox` also starts the server under `moat run`) · point them back; `moat init --mcp-proxy` wraps every one, `moat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md)) |
 | `moat policy lint` · `moat policy check "<cmd>"` · `moat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `moat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
+| `moat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them) |
+| `moat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `moat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
 | `moat sandbox show` · `moat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |
 | `moat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-moat-bench)) |
 | `moat run [--isolate] [--write PATH]… [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; on Linux it does not protect `.env`, `.git` or `.moat` inside the project); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp ([SANDBOX.md](SANDBOX.md)) |

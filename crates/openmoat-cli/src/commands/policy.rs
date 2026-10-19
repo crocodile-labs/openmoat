@@ -16,8 +16,10 @@ use crate::integrity;
 use crate::realpath::FsPathResolver;
 use crate::render;
 
+mod pack;
 mod upgrade;
 
+pub use pack::{install, remove, trust_key};
 pub use upgrade::run as upgrade;
 
 pub fn lint(args: &LintArgs) -> Result<Code> {

@@ -413,10 +413,30 @@ away. Codex has no such key: a failed hook "continues the tool call"
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
   `CURSOR_CONFIG_DIR` moved them, and where `moat init` recorded them in `hosts.json`), hook
   files and any `bin/moat`, and denies `moat
-  allow|doctor|edit|init|policy|secret|trust|uninstall` and `moat sandbox sync` from an agent, including under pseudo-terminal
-  wrappers (ADR-011, ADR-014).
+  allow|doctor|edit|init|policy|secret|trust|uninstall`, `moat sandbox sync` and `moat audit
+  anchor` from an agent, including under pseudo-terminal
+  wrappers (ADR-011, ADR-014). It also denies agent reads of the state beside the
+  policy (`audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`,
+  `allowed_signers`, `mcp/`), and every host sandbox and `moat run` profile carries the
+  same read denies; `policy.yaml` stays readable. Nothing that decides needs those reads
+  from inside a sandbox: host hooks run outside the host's sandbox, a `moat guard`
+  inside `moat run` relays the payload to the `moat run` process outside before it
+  touches OpenMoat's home (ADR-028), and the commands that read them (`show`, `status`,
+  `doctor`, `audit`) are a person's, run outside any sandbox.
+- **Signed policy** (ADR-031, `signing.rs`, `packs.rs`). `moat policy trust-key` adds an
+  OpenSSH key to `allowed_signers` for the namespace `openmoat-policy`; `moat policy
+  install` checks a pack's detached signature with the system `ssh-keygen -Y verify`
+  (resolved through `environment.json`) before copying it to `policy.d/packs/` and
+  recording it in `packs.json`. `Home::load_policy` merges every pack `packs.json` lists
+  under `pack:<name>:` ids, only while the lock pins `packs.json` and each pack still has
+  its recorded SHA-256. Those files are pinned only by `trust-key`, `install` and
+  `remove` (`integrity::signing_files`); other re-pins keep the pins without adding them.
+  With `require_signed_repo_policy: true`, `repo.rs` trusts a repository policy only
+  when its `policy.yaml.sig` verifies against `allowed_signers`; a `trust.json` record
+  alone no longer counts (`repo::is_trusted`).
 - **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`, `moat doctor --accept`,
-  `moat sandbox sync`, `moat policy upgrade`, `moat mcp accept`/`wrap`/`unwrap` and
+  `moat sandbox sync`, `moat policy upgrade`, `moat policy install`/`trust-key`/`remove`,
+  `moat audit anchor`, `moat mcp accept`/`wrap`/`unwrap` and
   `moat proxy install`/`uninstall` refuse to
   run without a terminal (`terminal.rs`). They also refuse when an agent host (`claude`,
   `codex`, `cursor-agent`) or `moat` itself (`moat run`) is among their parent processes,
@@ -534,6 +554,22 @@ head is the last line's `hash`. `moat doctor` prints the database head. With
 Without one, the result says the export is not anchored (`"anchor": "not_anchored"`
 in JSON), and `--require-anchor` turns that into exit 64.
 
+**Anchors** (`moat audit anchor`, `crates/openmoat-cli/src/anchor.rs`, ADR-031). A
+person-only command records the database head (`Store::head`: newest event id, its
+time and hash) after `verify_chain` finds no break, as one JSON line `{"format":
+"moat-audit-anchor-v1", "event", "hash", "event_ms", "anchored_ms"}`. With `--file` the
+line is appended to a file the person keeps. With `--git <repo>` it is appended to
+`anchors.jsonl` in the tree of `refs/moat/anchors` in that repository, as a new commit
+built with plumbing only (`hash-object`, `mktree`, `commit-tree`, then `update-ref`
+against the old tip), with a `Signed-off-by` trailer from git's committer identity; the
+working tree, index, `HEAD` and branches are not touched, and nothing is pushed.
+`~/.moat/anchor.json` remembers the last anchor for `moat doctor`. `moat audit verify
+--against <repo|file>` reads every anchor back and checks each, oldest first, against
+the database: the event must still exist (`Store::hash_of`) with the anchored hash, and
+the chain must not break at or before it. The first anchor that fails is named
+(`missing`: deleted, `rewritten`: another hash, `chain_broken`) and the command exits
+64. No code here opens a network connection.
+
 **Team report** (`moat audit report <file>…`, `crates/openmoat-cli/src/commands/team.rs`).
 It verifies every file first and refuses (exit 64) if one fails. Events with the
 same `hash` are counted once, so overlapping exports do not double-count. The report
@@ -560,9 +596,13 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
   policy.d/approved.yaml       permanent rules from `moat allow --always/--site/--dir`
   approvals.json               session grants from `moat allow` (24 h each)
   trust.json                   repository policies trusted with `moat trust`: root → SHA-256
+  allowed_signers              keys trusted with `moat policy trust-key` (OpenSSH format)
+  packs.json                   installed policy packs: name → SHA-256, signer, time
+  policy.d/packs/<name>.yaml   each installed pack, and its `.yaml.sig`
   environment.json             search path and program locations recorded at init
   policy.lock                  digests of the files above and of installed hook files
   audit.db                     audit log
+  anchor.json                  when and where `moat audit anchor` last recorded the head
 ~/.claude/settings.json        Claude Code hooks and sandbox block ($CLAUDE_CONFIG_DIR overrides)
 ~/.codex/hooks.json            Codex hooks ($CODEX_HOME overrides)
 ~/.codex/config.toml           Codex [permissions.moat] profile, default_permissions
@@ -572,6 +612,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 ~/.cursor/hooks.json           Cursor hooks ($CURSOR_CONFIG_DIR overrides)
 ~/.cursor/sandbox.json         Cursor sandbox keys, next to hooks.json
 <project>/.moat/policy.yaml    repository policy, committed by the team (ADR-022)
+<project>/.moat/policy.yaml.sig  its optional detached signature (ADR-031)
 ```
 
 Host sandboxes and `moat proxy` are generated from the user policy only. Repository

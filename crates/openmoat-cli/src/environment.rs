@@ -28,6 +28,8 @@ pub const PINNED_PROGRAMS: &[&str] = &[
     "gh",
     "ssh",
     "scp",
+    // checks policy signatures (`signing.rs`, ADR-031)
+    "ssh-keygen",
     "curl",
     "wget",
     "sudo",
@@ -129,6 +131,18 @@ impl ProgramResolver for Snapshot {
     fn pinned(&self, program: &str) -> Option<String> {
         self.programs.get(program).map(|p| path_string(p))
     }
+}
+
+/// Where `program` is, as the snapshot `moat init` recorded resolves it: the
+/// pinned location, else the first on the recorded search path. `None`
+/// without a snapshot, so a poisoned `PATH` never picks the program.
+pub fn program(home: &crate::home::Home, program: &str) -> Option<PathBuf> {
+    let snapshot = Snapshot::load(&home.environment_path()).ok()?;
+    snapshot
+        .programs
+        .get(program)
+        .cloned()
+        .or_else(|| find_in(&snapshot.path, &snapshot.pathext, program))
 }
 
 /// `PATHEXT` (`.COM;.EXE;…`) as lowercase extensions; the default list when empty.

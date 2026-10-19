@@ -139,6 +139,19 @@ deny:
       - "reboot"
   - id: kernel-self
     reason: OpenMoat protects its own policy, hooks and binary
+    # the state an agent has no reason to read: the audit log, the lock and what
+    # it pins of trust, approvals and MCP pins. The policy itself stays readable;
+    # moat's own commands read these as the person, outside any sandbox
+    fs.read:
+      - "~/.moat/audit.db*"
+      - "~/.moat/policy.lock"
+      - "~/.moat/hosts.json"
+      - "~/.moat/approvals.json"
+      - "~/.moat/trust.json"
+      - "~/.moat/allowed_signers"
+      - "~/.moat/mcp/**"
+      - "**/.moat/audit.db*"
+      - "**/.moat/policy.lock"
     fs.write:
       # the state and host directories themselves: renaming, deleting or replacing
       # one with a link removes every pinned file and hook inside it at once
@@ -189,6 +202,9 @@ deny:
       # a brokered secret's host is where its value goes
       - "moat secret*"
       - "*/moat secret*"
+      # an audit anchor is the person's record of the log, kept outside it (ADR-031)
+      - "moat audit anchor*"
+      - "*/moat audit anchor*"
       # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
       - "moat mcp {accept,wrap,unwrap}*"
       - "*/moat mcp {accept,wrap,unwrap}*"

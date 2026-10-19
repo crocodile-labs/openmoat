@@ -26,3 +26,16 @@ pub fn tamper_with_event(
     .map_err(StoreError::from)?;
     Ok(())
 }
+
+/// Delete every event after `id`, as someone who wants the newest decisions
+/// gone would: what is left is a valid, shorter chain.
+///
+/// # Errors
+///
+/// Returns [`StoreError`] if the database cannot be opened or written.
+pub fn truncate_after(path: &Path, id: i64) -> Result<(), StoreError> {
+    let conn = rusqlite::Connection::open(path).map_err(StoreError::from)?;
+    conn.execute("DELETE FROM events WHERE id > ?1", rusqlite::params![id])
+        .map_err(StoreError::from)?;
+    Ok(())
+}

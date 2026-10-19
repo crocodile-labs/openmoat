@@ -5,11 +5,16 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use openmoat_hosts::Host;
 
+mod audit;
 mod mcp;
 mod policy;
 
+pub use audit::{AnchorArgs, AuditCommand, ExportArgs, TeamReportArgs, VerifyArgs};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
-pub use policy::{ActionKind, CheckArgs, CompileArgs, LintArgs, PolicyCommand, UpgradeArgs};
+pub use policy::{
+    ActionKind, CheckArgs, CompileArgs, InstallArgs, LintArgs, PolicyCommand, RemoveArgs,
+    TrustKeyArgs, UpgradeArgs,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -75,7 +80,8 @@ pub enum Command {
     /// so it stays up without a person running it (macOS launchd, Linux systemd user unit).
     /// `moat proxy` alone runs the proxy; `install`, `uninstall` and `status` manage the service.
     Proxy(ProxyArgs),
-    /// Export the audit log for review elsewhere, and verify an export.
+    /// Export the audit log for review elsewhere, verify an export, and anchor the
+    /// log's head outside it.
     Audit {
         #[command(subcommand)]
         command: AuditCommand,
@@ -427,63 +433,6 @@ pub struct ShowArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum AuditCommand {
-    /// Write events to stdout as JSON Lines, oldest first, each with its chain hashes.
-    Export(ExportArgs),
-    /// Check an export's hash chain without the database and print its head hash.
-    Verify(VerifyArgs),
-    /// Report over exports from several machines: per host, per rule, top asks and
-    /// denies, false-positive candidates. Every file must verify first.
-    Report(TeamReportArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct TeamReportArgs {
-    /// Files `moat audit export` wrote; events present in several are counted once.
-    #[arg(required = true)]
-    pub files: Vec<PathBuf>,
-
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = Format::Text)]
-    pub format: Format,
-}
-
-#[derive(Debug, Args)]
-pub struct VerifyArgs {
-    /// The file `moat audit export` wrote.
-    pub file: PathBuf,
-
-    /// A head hash recorded earlier (`moat audit verify` or `moat doctor` printed it);
-    /// fail unless a verified event carries it.
-    #[arg(long)]
-    pub anchor: Option<String>,
-
-    /// Fail when no `--anchor` is given: without one, an export whose newest
-    /// events were dropped still verifies.
-    #[arg(long)]
-    pub require_anchor: bool,
-
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = Format::Text)]
-    pub format: Format,
-}
-
-#[derive(Debug, Args)]
-pub struct ExportArgs {
-    /// Window start: all, today, yesterday, 12h, 7d, 2w or YYYY-MM-DD (UTC).
-    #[arg(long, default_value = "all")]
-    pub since: String,
-
-    /// Only this host.
-    #[arg(long, value_parser = parse_host)]
-    pub host: Option<Host>,
-
-    /// Only this session id.
-    #[arg(long)]
-    pub session: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

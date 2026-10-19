@@ -21,7 +21,7 @@ mod provenance;
 mod schema;
 mod session_cache;
 
-pub use chain::{BreakKind, ChainBreak, ChainReport, GENESIS};
+pub use chain::{BreakKind, ChainBreak, ChainHead, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};

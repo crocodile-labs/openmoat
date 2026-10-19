@@ -18,6 +18,50 @@ pub enum PolicyCommand {
     /// line you changed; shows the diff and asks first. Refused unless run from an
     /// interactive terminal, except with --dry-run.
     Upgrade(UpgradeArgs),
+    /// Install a team's signed policy pack: verify its OpenSSH signature against the
+    /// keys `moat policy trust-key` trusted, then merge its rules into the policy and
+    /// pin the pack. Refused unless run from an interactive terminal, and over a
+    /// drifted lock.
+    Install(InstallArgs),
+    /// Trust an OpenSSH public key to sign policy packs (and, where the policy sets
+    /// `require_signed_repo_policy`, repository policies). Refused unless run from an
+    /// interactive terminal, and over a drifted lock.
+    TrustKey(TrustKeyArgs),
+    /// Remove an installed policy pack by name. Refused unless run from an
+    /// interactive terminal, and over a drifted lock.
+    Remove(RemoveArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct InstallArgs {
+    /// The pack: a policy file with only `version`, `deny`, `ask` and `allow`.
+    pub pack: PathBuf,
+
+    /// Its detached signature (`ssh-keygen -Y sign -n openmoat-policy`). Defaults
+    /// to the pack's path with `.sig` appended.
+    #[arg(long, value_name = "PATH")]
+    pub sig: Option<PathBuf>,
+
+    /// The name the pack is installed and its rules prefixed under (`pack:<name>:`).
+    /// Defaults to the file name without its extension.
+    #[arg(long)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct TrustKeyArgs {
+    /// The public key file (`id_ed25519.pub`).
+    pub key: PathBuf,
+
+    /// Who the key belongs to, as signatures will name them (`alice@example.com`).
+    #[arg(long)]
+    pub name: String,
+}
+
+#[derive(Debug, Args)]
+pub struct RemoveArgs {
+    /// The installed pack's name.
+    pub name: String,
 }
 
 #[derive(Debug, Args)]
