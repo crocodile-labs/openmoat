@@ -18,6 +18,7 @@ use crate::cli::GuardArgs;
 use crate::context;
 use crate::environment::Snapshot;
 use crate::exit::Code;
+use crate::guard_relay::{self, MAX_PAYLOAD_BYTES};
 use crate::hangs::{self, Phase};
 use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
@@ -25,7 +26,6 @@ use crate::integrity::{self, INTEGRITY_RULE, Lock};
 use crate::realpath::FsPathResolver;
 use crate::{push, render, secrets, taint, time};
 
-const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const UNGOVERNED_RULE: &str = "ungoverned";
 const KERNEL_ERROR_RULE: &str = "kernel-error";
 const CONFIG_CHANGE_RULE: &str = "config-change";
@@ -110,6 +110,10 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
 
 fn decide_and_respond(installed_for: Host) -> Code {
     let started = Instant::now();
+    // Inside `moat run` the sandbox holds no OpenMoat home: the run decides (ADR-028).
+    if let Some(endpoint) = guard_relay::configured(&|var| std::env::var(var).ok()) {
+        return relayed(installed_for, endpoint, started);
+    }
 
     // The event is read separately so a payload that cannot be parsed is still
     // refused in the format its hook expects.
@@ -153,6 +157,53 @@ fn decide_and_respond(installed_for: Host) -> Code {
     // (Codex and the Continue CLI cannot ask, so an `ask` reaches them as a `deny`).
     let decision = host.answer(&event, &decision);
     respond(host, &event, &decision)
+}
+
+/// Under `moat run`: the call goes to the run's process outside the sandbox,
+/// and its answer is printed as it came. Whatever fails denies here, in the
+/// format the payload's hook expects; nothing is recorded from in here.
+fn relayed(installed_for: Host, endpoint: Result<guard_relay::Endpoint>, started: Instant) -> Code {
+    let payload = match read_stdin() {
+        Ok(payload) => payload,
+        Err(error) => {
+            return respond(installed_for, &HookEvent::default(), &kernel_error(&error));
+        }
+    };
+    let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
+    let host = installed_for.sender(&payload, continue_env);
+    let event = host.event_of(&payload);
+    let budget = Duration::from_secs(GUARD_BUDGET_S).saturating_sub(started.elapsed());
+    match endpoint.and_then(|e| e.decide(installed_for, &payload, continue_env, budget)) {
+        Ok(reply) => relay_once(&reply),
+        Err(error) => {
+            let error = error.context("`moat run` did not decide this call");
+            respond(host, &event, &kernel_error(&error))
+        }
+    }
+}
+
+/// Print `reply` as the guard outside the sandbox wrote it, unless the
+/// budget's deny came first.
+fn relay_once(reply: &guard_relay::Reply) -> Code {
+    let mut responded = RESPONDED.lock().unwrap_or_else(PoisonError::into_inner);
+    if *responded {
+        return Code::Deny;
+    }
+    *responded = true;
+    let mut stdout = io::stdout().lock();
+    let written = stdout
+        .write_all(&reply.stdout)
+        .and_then(|()| stdout.flush());
+    let _ = io::stderr().lock().write_all(&reply.stderr);
+    if let Err(error) = written {
+        eprintln!("moat: could not write the hook response: {error}");
+        return Code::Deny;
+    }
+    if reply.code == 0 {
+        Code::Ok
+    } else {
+        Code::Deny
+    }
 }
 
 /// Decide one hook payload. `known` gets the brokered secret values to mask in

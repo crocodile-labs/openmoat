@@ -293,9 +293,23 @@ It is weaker per command than the Standard tier: the agent and its scripts share
 sandbox, so whatever the agent needs, `npm test` gets too. On macOS and Linux alike,
 data can still leave through the hosts the policy allows: the proxy checks the host,
 and the secrets broker blocks a brokered secret it can see, but it cannot read inside
-HTTPS. It applies the session's taint only from the agent sessions whose hooks linked
-themselves to the run, and as the profiles stand a hook inside the sandbox cannot write
-those links ([THREAT_MODEL.md](THREAT_MODEL.md) §5, ADR-027).
+HTTPS. It applies the session's taint from the agent sessions whose hooks linked
+themselves to the run ([THREAT_MODEL.md](THREAT_MODEL.md) §5, ADR-027).
+
+The agent's hooks run inside the sandbox too, where `~/.moat` is closed to them. They
+send each tool call to the `moat run` process over the proxy's port, with a token made
+for the run (`MOAT_GUARD_SOCKET`, `MOAT_GUARD_TOKEN`), and that process decides and
+records it outside the sandbox (ADR-028). The sandbox gets no new rule for this:
+
+- macOS: the profile's one way out stays `(allow network-outbound (remote ip
+  "localhost:<port>"))`; no Unix socket is allowed.
+- Linux: Landlock does not restrict connecting to a Unix socket by path at the ABI
+  `moat run` uses (ABI 6 scopes only abstract sockets), which is why the seccomp
+  filter refuses Unix sockets altogether. The relay uses the proxy's TCP port, so that
+  filter and the Landlock port rule stay as they are, under `--isolate` too.
+
+If the token is wrong, the connection fails or no answer comes within the hook's
+10 s, the hook denies the call.
 
 [EVIDENCE.md](EVIDENCE.md) lists what `moat run` does to hostile project scripts on
 macOS and Linux (reading keys and credentials, writing outside the project, direct

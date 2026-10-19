@@ -14,7 +14,12 @@ fn run_sh(sb: &Sandbox, project: &Path, script: &str) -> Output {
 }
 
 /// [`run_sh`] with `env` set for `moat run` itself.
-fn run_sh_with(sb: &Sandbox, project: &Path, script: &str, env: &[(&str, &str)]) -> Output {
+pub(crate) fn run_sh_with(
+    sb: &Sandbox,
+    project: &Path,
+    script: &str,
+    env: &[(&str, &str)],
+) -> Output {
     let tmp = sb.home.with_file_name("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     output(
@@ -27,7 +32,7 @@ fn run_sh_with(sb: &Sandbox, project: &Path, script: &str, env: &[(&str, &str)])
     )
 }
 
-fn installed_with_secret() -> (Sandbox, PathBuf) {
+pub(crate) fn installed_with_secret() -> (Sandbox, PathBuf) {
     // Landlock cannot deny inside a granted tree, and `/tmp` is a read root, so
     // on Linux the home must live elsewhere for its secrets to be out of reach,
     // as a real home is.

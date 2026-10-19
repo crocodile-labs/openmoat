@@ -42,6 +42,7 @@ view at the end of the file.
 - An unquoted glob that starts with `.` (`.*`) also names `.` and `..`, as macOS `/bin/bash` and other bash before 5.2 expand it, so the directory and its parent are checked; `rm` and `rmdir`, which refuse those two operands, are unchanged ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 - Shell rule patterns match in time bounded by the pattern length times the command length; a pattern with many `*` against a long command took exponential time ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 - The program git runs for the other side of a remote, `--upload-pack` and `-u` for `clone`, `fetch`, `pull` and `ls-remote`, `push --receive-pack`/`--exec` and `archive --exec`, is checked as a command line. A local repository that `clone`, `fetch`, `pull`, `ls-remote` or `archive --remote` names is a read, and the directory `clone` creates and a local repository `push` updates are writes ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- Hooks inside `moat run` send each tool call to the `moat run` process over the proxy's port with a token made for the run, and that process decides and records it; the sandbox stays closed to `~/.moat`, a wrong token is recorded and gets no decision, and any failure denies ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 
 ### Added
 - `moat mcp proxy`, opt-in per server with `moat mcp wrap` or `moat init --mcp-proxy`: it runs a stdio MCP server through OpenMoat, pins each tool's description and input schema on first sight, hides a tool that changed or is new until `moat mcp accept`, and records every tool call in the audit log. With `--sandbox` the server runs under `moat run`. `moat uninstall` and `moat mcp unwrap` restore the original command ([#574](https://github.com/crocodile-labs/openmoat/pull/574)).
@@ -57,6 +58,7 @@ view at the end of the file.
 
 ### Fixed
 - `moat guard` no longer denies slow calls on a heavily loaded machine as `no decision within 10 s`: the time limit is 30 s (still a deny when it runs out), the session-cache write skips instead of waiting for the audit database's lock and shares the record's connection, and `moat doctor` names the step most such calls were stuck in ([#574](https://github.com/crocodile-labs/openmoat/pull/574)).
+- Under `moat run`, every governed tool call was denied as a `kernel-error` and nothing was recorded, because the hook could not read the policy lock or write the audit log from inside the sandbox; hooks now get the real decision, and session taint reaches the run's proxy ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 
 ## [0.5.6] - 2026-10-18
 

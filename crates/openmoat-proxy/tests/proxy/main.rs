@@ -172,6 +172,7 @@ fn launch_with(
         broker: Box::leak(Box::new(broker)),
         allow_ech: false,
         sessions,
+        local: None,
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();

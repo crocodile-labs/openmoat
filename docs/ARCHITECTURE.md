@@ -810,6 +810,7 @@ one sandbox generated from the policy. The code is in `crates/openmoat-cli/src/c
 policy.yaml ─► ir::lower (this project) ─► Enforcement + Grants ─┬─► seatbelt::generate ─► sandbox-exec -p <profile> <agent>
                                                                  └─► landlock::generate + seccomp ─► restricted thread ─► <agent>
 moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄── HTTP(S)_PROXY (with credential) ── agent and its commands
+         └► hook decisions (same port, MOAT-GUARD/1) ─► moat guard (outside) ◄── MOAT_GUARD_SOCKET + MOAT_GUARD_TOKEN ── moat guard (agent's hook, inside)
 ```
 
 - **Start-up.** `moat run` refuses a missing installation and a drifted policy lock
@@ -839,11 +840,24 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   session of every proxy row and is printed in the banner. `MOAT_RUN_SESSION` names it
   for the agent, so `moat guard`, started by the agent, records one link row per agent
   session in the run's session (host `moat-run`, `taint/run.rs`). The proxy folds the
-  linked sessions' taint from those rows. As the profiles stand, a hook inside the
-  sandbox can neither read nor write the OpenMoat state directory (ADR-027,
-  Consequences), so those links are written only where the hook's audit writes reach
-  the log. The port is ephemeral and the proxy private to the session, unlike
-  the Standard tier's opt-in long-running `moat proxy` on `sandbox.proxy_port` (§13).
+  linked sessions' taint from those rows. The port is ephemeral and the proxy private
+  to the session, unlike the Standard tier's opt-in long-running `moat proxy` on
+  `sandbox.proxy_port` (§13).
+- **Hook decisions** (ADR-028, `crates/openmoat-cli/src/guard_relay/`). The agent's
+  hooks run `moat guard` inside the sandbox, which can neither read nor write the
+  OpenMoat state directory. `moat run` sets `MOAT_GUARD_SOCKET` (the proxy's address)
+  and `MOAT_GUARD_TOKEN` (256 bits from `/dev/urandom`, made per run). A guard with
+  both sends its raw payload, `--host`, working directory, a random nonce and the token
+  over the proxy's port, behind the prefix `MOAT-GUARD/1\n`, which the proxy hands to
+  the service (`openmoat_proxy::LocalService`) instead of reading HTTP. The service
+  compares the token in constant time. A wrong one is recorded in the run's session
+  (rule `run-guard-token`) and gets no answer. The right one starts `moat guard` outside
+  the sandbox with the payload and `MOAT_RUN_SESSION`; that guard checks the lock,
+  decides, and writes the audit and link rows as anywhere else. The inside guard prints
+  the reply (standard output, standard error, exit 0 or 2) only when it repeats the
+  nonce; a missing variable, a non-loopback address, a failed connection, the guard's
+  10 s budget, a payload over 1 MiB or a malformed reply each deny (`kernel-error`).
+  The sandbox profiles are unchanged: no Unix socket and no second port.
 - **Seatbelt (macOS).** `(deny default)`, then:
   - process basics (exec, fork, signals and process info in the same sandbox, ttys,
     POSIX shm, the two directory-service lookups `opendirectoryd.libinfo` and
@@ -909,4 +923,6 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   the session's grants are added. The executing tests in `tests/e2e/run.rs` run
   `/bin/sh` payloads under the real sandbox on macOS and Linux; on Linux they show Unix
   and UDP sockets and `io_uring` failing with `EPERM` while TCP to the proxy works, and
-  `run/linux.rs` applies the filter to a test thread.
+  `run/linux.rs` applies the filter to a test thread. `tests/e2e/run_guard.rs` runs a
+  hook inside `moat run` and checks its decision, audit row, link row and the egress
+  taint that follows, and that a wrong token or a forged reply denies.

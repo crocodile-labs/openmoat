@@ -257,9 +257,8 @@ something OpenMoat claims to stop.
 - **Session taint is minimal.** It follows host tool calls only. `moat run`'s proxy
   applies it to the run's connections (ADR-027): after a hook-visible call of a linked
   agent session read secret material, a request to any host but that secret's own is
-  refused. As the run's profiles stand, a hook inside `moat run` cannot reach the
-  OpenMoat state directory, so it writes no links and the proxy has no history to apply
-  (ADR-027, Consequences). Connections through the standalone `moat proxy` (the host
+  refused. A hook inside `moat run` gets its decision from the `moat run` process
+  (ADR-028), which writes the links. Connections through the standalone `moat proxy` (the host
   sandboxes' `sandbox.proxy_port`) carry no session, and taint does not apply to them.
   It does not count these as untrusted content: shell network to
   allowed hosts (`gh pr view`, `git pull`), an allowed command that reads secrets at run
@@ -275,6 +274,32 @@ something OpenMoat claims to stop.
   the same user outside the sandbox that can read the agent's environment (`ps eww` on
   some systems, `/proc/<pid>/environ` on Linux) can use the session too. The standalone
   `moat proxy` asks for no credential, so any local process may use it.
+- **The hook relay of `moat run` is attack surface (ADR-028).** Hooks inside the run's
+  sandbox cannot open `~/.moat`, so they send each payload to the `moat run` process
+  over the proxy's loopback port with the run's `MOAT_GUARD_TOKEN`, and that process
+  decides with its own access. What it trusts and why:
+  - *The token, for who may ask.* It is 256 bits, made per run and never written to
+    disk, compared in constant time. A wrong one is recorded (`run-guard-token`) and
+    gets no decision. As with the proxy credential, every process in the sandbox holds
+    it and a same-user process that can read the agent's environment could take it.
+    That is enough because what the token buys is small: a real decision on a payload
+    the asker chose, recorded as such. Any process outside `moat run` gets the same by
+    running `moat guard` itself. It cannot choose the verdict of a row, change the
+    lock or the policy, read a secret source, or make taint looser: link rows only add
+    sessions to the run, and taint only tightens.
+  - *Nothing in the payload beyond what `moat guard` already trusts.* The payload,
+    host, Continue flag and working directory are the hook's input, parsed and decided
+    as outside `moat run`; each field has a size limit checked before it is read.
+  - *The endpoint, for the hook.* The sandboxed guard trusts the reply only from the
+    address in its environment, which its host set, and only when the reply repeats
+    the request's random nonce and carries exit 0 or 2. `moat run` holds the port for
+    the whole run and the sandbox lets nothing bind one, so a command in it cannot
+    take the port over. A command can point a guard it starts itself at a server of its
+    own, which then answers that guard. That gains nothing: the command could skip the
+    guard altogether, a forged answer leaves no audit row, and the hooks the host
+    starts keep the host's environment.
+  - Everything that goes wrong denies in the sandboxed guard, and the sandbox stays
+    closed to `~/.moat` (tested in `tests/e2e/run_guard.rs`).
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**
   `openmoat-proxy` holds the value of each `secrets:` entry. It refuses and records
   (`proxy-secret`) any request to another host whose head, or plain-HTTP body, carries

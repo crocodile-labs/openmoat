@@ -5,7 +5,9 @@
 //! policy for the project in the current directory. Their only network is a
 //! `moat proxy` this process serves on a loopback port: the sandbox allows that
 //! port alone, and the proxy refuses loopback destinations, so no other local
-//! service is reachable through it either.
+//! service is reachable through it either. The agent's hooks, which cannot
+//! reach OpenMoat's home from in there, have their calls decided on that same
+//! port by this process (`crate::guard_relay`, ADR-028).
 
 // `platform` is this OS's module: `confine(policy, ctx, grants, program) ->
 // Confined` (Lightweight) and `isolate(…)` (Isolated), whose `command()` takes
@@ -27,8 +29,7 @@ use macos as platform;
 use unsupported as platform;
 
 use std::ffi::OsStr;
-use std::fmt::Write as _;
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -45,6 +46,8 @@ use crate::cli::{IsolatedArgs, RunArgs};
 use crate::context::{self, path_string};
 use crate::environment::find_in;
 use crate::exit::Code;
+use crate::guard_relay::{self, Service, random_hex};
+use crate::home::Home;
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
@@ -100,9 +103,13 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // the credential in the proxy URL, and the run's id ties the agent's
     // hook sessions to it, so their taint applies to its requests.
     let credential = session_credential()?;
-    let url = credential.proxy_url(listener.local_addr()?);
+    let listener_addr = listener.local_addr()?;
+    let url = credential.proxy_url(listener_addr);
     let run_session = credential.session().to_owned();
-    let exit = Exit::open(&home, policy, ctx, Some(credential))?;
+    // The hooks the agent starts run in its sandbox, without OpenMoat's home:
+    // this process decides their calls on the proxy's port (ADR-028).
+    let (guard, guard_token) = guard_service(&home, &run_session)?;
+    let exit = Exit::open(&home, policy, ctx, Some(credential))?.with_guard(guard);
     notice(&program, port, exit.session(), agent.report(), args)?;
     std::thread::spawn(move || {
         if let Err(error) = exit.serve(&listener) {
@@ -113,6 +120,10 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         agent.command().env(var, url.as_str());
     }
     agent.command().env(RUN_SESSION_ENV, &run_session);
+    agent
+        .command()
+        .env(guard_relay::SOCKET_ENV, listener_addr.to_string())
+        .env(guard_relay::TOKEN_ENV, guard_token.as_str());
     agent
         .command()
         .env_remove("NO_PROXY")
@@ -144,24 +155,20 @@ pub fn inside(args: &IsolatedArgs) -> Result<Code> {
 /// A fresh credential for this run's proxy: session `run-<ms>-<8 hex>` and a
 /// token of 64 hex characters (256 bits), both from the system's random source.
 fn session_credential() -> Result<Credential> {
-    let mut bytes = Zeroizing::new([0u8; 36]);
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut random| random.read_exact(&mut *bytes))
-        .context("reading random bytes for the proxy credential")?;
-    let hex = |b: &[u8]| -> Zeroizing<String> {
-        let mut out = Zeroizing::new(String::with_capacity(b.len() * 2));
-        for byte in b {
-            let _ = write!(out, "{byte:02x}");
-        }
-        out
-    };
-    let session = format!(
-        "run-{}-{}",
-        crate::time::now_ms(),
-        hex(&bytes[..4]).as_str()
-    );
-    let token = hex(&bytes[4..]);
-    Ok(Credential::new(&session, token.as_bytes())?)
+    let random = random_hex(36).context("making the proxy credential")?;
+    let session = format!("run-{}-{}", crate::time::now_ms(), &random[..8]);
+    Ok(Credential::new(&session, random[8..].as_bytes())?)
+}
+
+/// The service that decides the agent's hook calls on the proxy's port
+/// (ADR-028), and its token of 64 hex characters (256 bits).
+fn guard_service(home: &Home, run_session: &str) -> Result<(Service, Zeroizing<String>)> {
+    let token = random_hex(32).context("making the hook token")?;
+    let moat = std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .context("locating the moat binary")?;
+    let service = Service::new(home.clone(), run_session, token.as_bytes(), moat);
+    Ok((service, token))
 }
 
 /// The environment variables the policy's brokered secrets are read from.

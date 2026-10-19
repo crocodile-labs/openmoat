@@ -10,6 +10,7 @@ mod commands;
 mod context;
 mod environment;
 mod exit;
+mod guard_relay;
 mod hangs;
 mod home;
 mod install;

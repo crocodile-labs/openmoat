@@ -79,6 +79,22 @@ fn the_keychain_is_never_reachable_and_the_proxy_is_the_only_exit() {
     assert!(!closed.contains("network-outbound"), "{closed}");
 }
 
+/// ADR-028: the hooks' decisions come over the proxy's port, so the profile
+/// has one way out and no Unix socket at all, and the golden is unchanged.
+#[test]
+fn the_hook_relay_adds_no_rule() {
+    let profile = generated(DEFAULT_POLICY, Some(18080)).profile;
+    assert_eq!(profile.matches("network-outbound").count(), 1, "{profile}");
+    for absent in [
+        "unix-socket",
+        "network-bind",
+        "network-inbound",
+        "path-literal",
+    ] {
+        assert!(!profile.contains(absent), "{absent}");
+    }
+}
+
 #[test]
 fn losses_and_allowances_are_listed() {
     let report = generated(DEFAULT_POLICY, None).report;

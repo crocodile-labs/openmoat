@@ -35,6 +35,7 @@ each ADR records the outcome it needs.
 | [025](ADR-025-quiet-by-default.md) | Quiet by default: a `defer` verdict leaves calls no rule names to the agent's own permission prompt; OpenMoat asks only where the effect outlives the sandbox or the session; words that only look like hosts are not network evidence | accepted |
 | [026](ADR-026-mcp-server-and-tool-pinning.md) | MCP server definitions are pinned per server in the lock; a changed or new one has its tool calls denied until `moat mcp accept`; an opt-in `moat mcp proxy` pins tool descriptions and can confine the server under `moat run` | accepted; implements #133, deferred by ADR-013 |
 | [027](ADR-027-per-session-proxy-credentials.md) | Per-session proxy credentials: `moat run`'s proxy serves its session alone (`Proxy-Authorization: Basic`), records each row under it, refuses hosts other than a secret's own after the session read secret material, and caps each session at half the connections; the standalone `moat proxy` stays open for the host sandboxes | accepted; refines ADR-020 |
+| [028](ADR-028-hook-decisions-inside-moat-run.md) | Hooks inside `moat run` send their payload with a per-run token over the proxy's port; the `moat run` process decides with its own access (lock, policy, taint, audit row), so the sandbox stays closed to `~/.moat`; any failure denies | accepted; refines ADR-018 and ADR-027 |
 
 ## Names in older ADRs
 

@@ -305,8 +305,8 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   cannot ask, so it refuses (`session-taint`), the package registries included. A grant
   does not answer it; a new `moat run` starts clean. Untrusted content changes nothing at
   the proxy. The standalone `moat proxy` has no sessions, so taint does not apply there.
-  As the run's profiles stand, a hook inside `moat run` cannot write these links
-  (ADR-027, Consequences).
+  A hook inside `moat run` writes these links through the `moat run` process, which
+  decides its calls outside the sandbox (ADR-028).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
 
 ### 4.2 The push check
