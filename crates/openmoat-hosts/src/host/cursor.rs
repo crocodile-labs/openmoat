@@ -11,11 +11,27 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::contract::{Asks, HostSpec};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod pre_tool;
 
 use pre_tool::pre_tool_action;
+
+/// `preToolUse` accepts `ask` but runs the call, and `beforeReadFile` takes
+/// only allow or deny; both run file tools outside Cursor's sandbox, so a
+/// `defer` there is an `ask`. Only file tools reach these hooks, and
+/// `moat allow --last` approves the exact file.
+pub(crate) static SPEC: HostSpec = HostSpec {
+    id: "cursor",
+    display_name: "Cursor",
+    speaks: None,
+    asks: Asks {
+        on_pre_tool_use: None,
+        on_no_ask: Some("Cursor does not prompt for this hook"),
+        defer_is_ask_on_no_ask: true,
+    },
+};
 
 pub(crate) const EVENTS: &[&str] = &[
     "beforeShellExecution",
@@ -75,7 +91,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             let tool = required(p.tool_name, "tool_name")?;
             let server = p.mcp_server_name.unwrap_or_else(|| "unknown".to_owned());
             let name = format!("mcp__{server}__{tool}");
-            let action = crate::mcp::action(&name, &p.tool_input)?;
+            let action = crate::wire::mcp::action(&name, &p.tool_input)?;
             (name, Some(action))
         }
         "beforeReadFile" => (

@@ -159,7 +159,7 @@ week and the phase most of them were in.
   `fs.write` per added, updated, deleted or moved-to file; a patch naming no file is `unparseable`.
   A header line is matched trimmed and in any case, as Codex reads it, wherever it is.
 - **McpTool.** An `mcp` atom for the tool name, plus `fs.*` and `net` atoms for path-
-  and URL-shaped arguments found down to 8 levels of nesting (`openmoat-hosts/src/mcp.rs`).
+  and URL-shaped arguments found down to 8 levels of nesting (`openmoat-hosts/src/wire/mcp.rs`).
   When deeper nesting stops the search, the adapter names the limit in `unchecked`, and
   the engine adds an `unparseable` atom to the decision.
 - **Fetch** (Claude Code `WebFetch`). A `fetch` atom for the URL's host (ADR-017).
