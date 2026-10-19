@@ -45,6 +45,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         cwd: p.cwd,
         tool: EVENT.to_owned(),
         action: p.file_path.map(|path| Action::FsWrite { path }),
+        content: None,
         event: HookEvent::ConfigChange {
             source: p.source,
             change_type: p.change_type,

@@ -24,7 +24,7 @@ openmoat ──► openmoat-hosts ──► openmoat-core
 
 | Crate | Role | Rules |
 |---|---|---|
-| `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
+| `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists and near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
 | `openmoat-hosts` | Host adapters: `pre_tool_use.rs` (Claude Code and Codex `PreToolUse`), `config_change.rs` (Claude Code `ConfigChange`), `cursor.rs`, `mcp.rs` (MCP arguments to paths and URLs), `patch.rs` (Codex `apply_patch` file list) | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
 | `openmoat-proxy` | The egress proxy behind `moat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
@@ -107,7 +107,7 @@ exits. There is no daemon.
    or deleted event is found by the hash chain (`moat doctor`), not on every call.
 10. **Push.** `CompiledPolicy::pushes` lists the shell command's pushes (`git push`,
     `gh pr create`; core `shell/push.rs`) with the directories each may run in. Unless the
-    call is already denied, `push.rs` runs git read-only there, within 2 s for the whole
+    call is already denied, `push.rs` runs git read-only there, within 10 s for the whole
     call, and tightens the decision: `push-secret` deny, `push-runs-later` or
     `push-unchecked` ask (POLICY.md §4.2). With no finding the decision is unchanged.
 11. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot
@@ -413,10 +413,30 @@ away. Codex has no such key: a failed hook "continues the tool call"
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
   `CURSOR_CONFIG_DIR` moved them, and where `moat init` recorded them in `hosts.json`), hook
   files and any `bin/moat`, and denies `moat
-  allow|doctor|edit|init|policy|secret|trust|uninstall` and `moat sandbox sync` from an agent, including under pseudo-terminal
-  wrappers (ADR-011, ADR-014).
+  allow|doctor|edit|init|policy|secret|trust|uninstall`, `moat sandbox sync` and `moat audit
+  anchor` from an agent, including under pseudo-terminal
+  wrappers (ADR-011, ADR-014). It also denies agent reads of the state beside the
+  policy (`audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`,
+  `allowed_signers`, `mcp/`), and every host sandbox and `moat run` profile carries the
+  same read denies; `policy.yaml` stays readable. Nothing that decides needs those reads
+  from inside a sandbox: host hooks run outside the host's sandbox, a `moat guard`
+  inside `moat run` relays the payload to the `moat run` process outside before it
+  touches OpenMoat's home (ADR-028), and the commands that read them (`show`, `status`,
+  `doctor`, `audit`) are a person's, run outside any sandbox.
+- **Signed policy** (ADR-031, `signing.rs`, `packs.rs`). `moat policy trust-key` adds an
+  OpenSSH key to `allowed_signers` for the namespace `openmoat-policy`; `moat policy
+  install` checks a pack's detached signature with the system `ssh-keygen -Y verify`
+  (resolved through `environment.json`) before copying it to `policy.d/packs/` and
+  recording it in `packs.json`. `Home::load_policy` merges every pack `packs.json` lists
+  under `pack:<name>:` ids, only while the lock pins `packs.json` and each pack still has
+  its recorded SHA-256. Those files are pinned only by `trust-key`, `install` and
+  `remove` (`integrity::signing_files`); other re-pins keep the pins without adding them.
+  With `require_signed_repo_policy: true`, `repo.rs` trusts a repository policy only
+  when its `policy.yaml.sig` verifies against `allowed_signers`; a `trust.json` record
+  alone no longer counts (`repo::is_trusted`).
 - **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`, `moat doctor --accept`,
-  `moat sandbox sync`, `moat policy upgrade`, `moat mcp accept`/`wrap`/`unwrap` and
+  `moat sandbox sync`, `moat policy upgrade`, `moat policy install`/`trust-key`/`remove`,
+  `moat audit anchor`, `moat mcp accept`/`wrap`/`unwrap` and
   `moat proxy install`/`uninstall` refuse to
   run without a terminal (`terminal.rs`). They also refuse when an agent host (`claude`,
   `codex`, `cursor-agent`) or `moat` itself (`moat run`) is among their parent processes,
@@ -495,6 +515,24 @@ first event. The cache is outside the hash chain and never a source of truth: it
 only hold what the events folded to. The table is created on first use, without
 changing the schema version, so older builds still open the database.
 
+**File provenance** (schema 4, `store/provenance.rs`, `crates/openmoat-cli/src/taint/provenance.rs`,
+ADR-029, POLICY.md §4.1.1). A `provenance` table holds one row per file a call wrote or
+read that matters for taint: the event id, time, host, session, kind (`tainted-write`,
+`clean-write`, `tainted-read`), the path (lowercased where paths are case-insensitive),
+the SHA-256 of a `Write`'s whole content when known, and the untrusted content behind it.
+Its texts are redacted as an event's are. Triggers refuse an `UPDATE` or `DELETE`, so
+rows are only appended, and the table lives in `~/.moat`, which `kernel-self` denies to
+the agent. While a call is decided, `guard` classifies it once more, looks up the newest
+write row of each file it reads or runs through the index on `(path, id)`, and hashes
+the file on disk only when that row is tainted and carries a hash (files over 1 MiB, the
+largest payload, cannot match). The rows the call adds are written after its event, in
+their own transaction, and only when the call may have run; a failed write fails the
+call like the event. A session's `tainted-read` rows (index on `(session_id, host, id)`)
+are added to its taint on every call, outside the session cache. A clean session with
+no provenance rows in the log skips the lookups. The upgrade from schema 3 creates the
+table; a read-only handle on an older database reads it as empty. A schema-4 database
+is refused by builds before it (`SchemaTooNew`), as every schema bump is.
+
 **Export** (`moat audit export`, `crates/openmoat-audit/src/store/export.rs`). JSON Lines,
 oldest first, one object per chained event with the filters `--since`, `--host` and
 `--session`. Every line has `"format": "moat-audit-export-v1"` and the fields `id`
@@ -515,6 +553,22 @@ head is the last line's `hash`. `moat doctor` prints the database head. With
 `--anchor <hash>`, verify also fails unless a verified line carries that hash.
 Without one, the result says the export is not anchored (`"anchor": "not_anchored"`
 in JSON), and `--require-anchor` turns that into exit 64.
+
+**Anchors** (`moat audit anchor`, `crates/openmoat-cli/src/anchor.rs`, ADR-031). A
+person-only command records the database head (`Store::head`: newest event id, its
+time and hash) after `verify_chain` finds no break, as one JSON line `{"format":
+"moat-audit-anchor-v1", "event", "hash", "event_ms", "anchored_ms"}`. With `--file` the
+line is appended to a file the person keeps. With `--git <repo>` it is appended to
+`anchors.jsonl` in the tree of `refs/moat/anchors` in that repository, as a new commit
+built with plumbing only (`hash-object`, `mktree`, `commit-tree`, then `update-ref`
+against the old tip), with a `Signed-off-by` trailer from git's committer identity; the
+working tree, index, `HEAD` and branches are not touched, and nothing is pushed.
+`~/.moat/anchor.json` remembers the last anchor for `moat doctor`. `moat audit verify
+--against <repo|file>` reads every anchor back and checks each, oldest first, against
+the database: the event must still exist (`Store::hash_of`) with the anchored hash, and
+the chain must not break at or before it. The first anchor that fails is named
+(`missing`: deleted, `rewritten`: another hash, `chain_broken`) and the command exits
+64. No code here opens a network connection.
 
 **Team report** (`moat audit report <file>…`, `crates/openmoat-cli/src/commands/team.rs`).
 It verifies every file first and refuses (exit 64) if one fails. Events with the
@@ -542,9 +596,13 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
   policy.d/approved.yaml       permanent rules from `moat allow --always/--site/--dir`
   approvals.json               session grants from `moat allow` (24 h each)
   trust.json                   repository policies trusted with `moat trust`: root → SHA-256
+  allowed_signers              keys trusted with `moat policy trust-key` (OpenSSH format)
+  packs.json                   installed policy packs: name → SHA-256, signer, time
+  policy.d/packs/<name>.yaml   each installed pack, and its `.yaml.sig`
   environment.json             search path and program locations recorded at init
   policy.lock                  digests of the files above and of installed hook files
   audit.db                     audit log
+  anchor.json                  when and where `moat audit anchor` last recorded the head
 ~/.claude/settings.json        Claude Code hooks and sandbox block ($CLAUDE_CONFIG_DIR overrides)
 ~/.codex/hooks.json            Codex hooks ($CODEX_HOME overrides)
 ~/.codex/config.toml           Codex [permissions.moat] profile, default_permissions
@@ -554,6 +612,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 ~/.cursor/hooks.json           Cursor hooks ($CURSOR_CONFIG_DIR overrides)
 ~/.cursor/sandbox.json         Cursor sandbox keys, next to hooks.json
 <project>/.moat/policy.yaml    repository policy, committed by the team (ADR-022)
+<project>/.moat/policy.yaml.sig  its optional detached signature (ADR-031)
 ```
 
 Host sandboxes and `moat proxy` are generated from the user policy only. Repository

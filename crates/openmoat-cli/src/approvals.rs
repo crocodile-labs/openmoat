@@ -287,10 +287,19 @@ impl Overlay {
     /// Append an allow rule for one shell command, matched literally: glob
     /// characters in the command are not wildcards in the rule. Shell rules are
     /// prefixes, so extra arguments after the approved command are accepted.
+    /// An install of a name close to a popular package also gets its
+    /// `@package-near-miss` atom, which `package-near-miss` asks for on its
+    /// own: approving the command answers that ask too.
     pub fn allow_command(&mut self, command: &str) -> Result<&RuleGroup> {
-        let pattern = openmoat_core::literal_shell_pattern(command)
-            .with_context(|| format!("cannot approve `{command}`"))?;
-        Ok(self.push("moat allow --always", |g| g.shell = vec![pattern]))
+        let mut patterns = Vec::new();
+        for line in
+            std::iter::once(command.to_owned()).chain(openmoat_core::package_near_misses(command))
+        {
+            let pattern = openmoat_core::literal_shell_pattern(&line)
+                .with_context(|| format!("cannot approve `{line}`"))?;
+            patterns.push(pattern);
+        }
+        Ok(self.push("moat allow --always", |g| g.shell = patterns))
     }
 
     /// Append an `fs.read` and `fs.write` allow for exactly these paths. A path

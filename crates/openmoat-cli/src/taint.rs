@@ -23,6 +23,7 @@ use crate::home::Home;
 use crate::integrity::sha256_hex;
 use crate::realpath::FsPathResolver;
 
+pub mod provenance;
 pub mod run;
 
 /// The rule id the core gives a taint ask.
@@ -54,14 +55,17 @@ pub struct SessionTaint {
 ///
 /// The read is on a read-only handle; the new cache row, when there is one, is
 /// returned for the caller to write on the handle it records the call with.
+///
+/// Files the session read that a tainted session wrote ([`provenance`]) taint
+/// it too. They are looked up each call, not cached: the cache holds only what
+/// the events fold to.
 pub fn of_session(
-    home: &Home,
+    store: &Store,
     host: Host,
     session: &str,
     policy: &CompiledPolicy<'_>,
     cwd: &str,
 ) -> Result<(SessionTaint, Option<CacheWrite>)> {
-    let store = home.open_audit()?;
     let digest = digest(host, policy, cwd)?;
     let (mut out, after) = store
         .session_cache(session, host.id())
@@ -86,6 +90,15 @@ pub fn of_session(
         }),
         None => None,
     };
+    if openmoat_core::TaintSettings::provenance_on(policy.policy().taint.as_ref())
+        && let Some(exposure) = store
+            .exposure(session, host.id())
+            .context("reading this session's file provenance from the audit log")?
+    {
+        out.taint.untrusted.get_or_insert(exposure.source);
+        out.untrusted_last_ms = out.untrusted_last_ms.max(Some(exposure.last_ts_ms));
+        out.untrusted_last_row = out.untrusted_last_row.max(Some(exposure.last_event.0));
+    }
     Ok((out, write))
 }
 
@@ -269,7 +282,7 @@ fn after_read(granted_ms: i64, seen_row: Option<i64>, read_ms: i64, read_row: Op
 /// Whether a call decided `verdict` may have run: it was allowed, or it asked
 /// a host that can ask (Codex turns an ask into a deny). A person may have
 /// declined an ask; that is not recorded, so it counts as run.
-fn ran(host: Host, verdict: Verdict) -> bool {
+pub(crate) fn ran(host: Host, verdict: Verdict) -> bool {
     host.answer(&HookEvent::PreToolUse, &Decision::new(verdict))
         .verdict
         != Verdict::Deny

@@ -102,6 +102,40 @@ fn read_roots_must_be_plain_paths_below_a_root() {
 }
 
 #[test]
+fn package_release_age_defaults_to_seven_days_and_zero_turns_it_off() {
+    let age = |yaml: &str| Policy::parse(yaml).unwrap().package_min_release_age_days();
+    assert_eq!(age("version: 1\n"), 7);
+    assert_eq!(age("version: 1\nsandbox: { proxy_port: 18081 }\n"), 7);
+    assert_eq!(
+        age("version: 1\nsandbox: { package_min_release_age_days: 0 }\n"),
+        0
+    );
+    assert_eq!(
+        age("version: 1\nsandbox: { package_min_release_age_days: 14 }\n"),
+        14
+    );
+    assert_eq!(
+        Policy::parse(crate::DEFAULT_POLICY)
+            .unwrap()
+            .package_min_release_age_days(),
+        7
+    );
+    assert!(Policy::parse("version: 1\nsandbox: { package_min_release_age_days: -1 }\n").is_err());
+}
+
+#[test]
+fn signed_repository_policies_are_trusted_only_when_asked_for() {
+    assert!(
+        !Policy::parse("version: 1\n")
+            .unwrap()
+            .require_signed_repo_policy
+    );
+    let on = Policy::parse("version: 1\nrequire_signed_repo_policy: true\n").unwrap();
+    assert!(on.require_signed_repo_policy);
+    assert!(Policy::parse("version: 1\nrequire_signed_repo_policy: 1\n").is_err());
+}
+
+#[test]
 fn rejects_unknown_keys() {
     assert!(Policy::parse("version: 1\nbogus: 1\n").is_err());
 }

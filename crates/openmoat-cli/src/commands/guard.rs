@@ -121,9 +121,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
     // refused in the format its hook expects.
     let mut host = installed_for;
     let mut event = HookEvent::default();
-    let mut known = KnownSecrets::default();
-    let mut cache = None;
-    let mut drifted = Vec::new();
+    let mut out = Evaluated::default();
     hangs::enter(Phase::Stdin);
     let (request, mut decision) = match read_stdin() {
         Ok(payload) => {
@@ -131,8 +129,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             event = host.event_of(&payload);
-            evaluate(host, &payload, &mut known, &mut cache, &mut drifted)
-                .unwrap_or_else(|error| (None, kernel_error(&error)))
+            evaluate(host, &payload, &mut out).unwrap_or_else(|error| (None, kernel_error(&error)))
         }
         Err(error) => (None, kernel_error(&error)),
     };
@@ -146,10 +143,11 @@ fn decide_and_respond(installed_for: Host) -> Code {
     let recorded = Recorded {
         request: request.as_ref(),
         decision: &decision,
-        drifted: &drifted,
+        drifted: &out.drifted,
         started,
-        known,
-        cache,
+        known: out.known,
+        cache: out.cache,
+        provenance: out.provenance,
     };
     if let Err(error) = record(host, recorded) {
         decision = kernel_error(&error.context("audit log unavailable"));
@@ -210,17 +208,27 @@ fn relay_once(reply: &guard_relay::Reply) -> Code {
     }
 }
 
-/// Decide one hook payload. `known` gets the brokered secret values to mask in
-/// the audit row as soon as the policy is loaded, so it holds them even when a
-/// later step fails. `cache` gets the session's fold to store, written with
-/// the record so the call opens one writable handle. `drifted` gets the
-/// settings drift the lock let the call be decided through ([`integrity::check`]).
+/// What deciding a call leaves for [`record`], besides the decision.
+#[derive(Default)]
+struct Evaluated {
+    /// The brokered secret values to mask in the audit row, set as soon as
+    /// the policy is loaded, so it holds them even when a later step fails.
+    known: KnownSecrets,
+    /// The session's fold to store, written with the record so the call
+    /// opens one writable handle.
+    cache: Option<taint::CacheWrite>,
+    /// The settings drift the lock let the call be decided through
+    /// ([`integrity::check`]).
+    drifted: Vec<Drift>,
+    /// The file provenance rows the call adds when it runs (ADR-029).
+    provenance: taint::provenance::Seen,
+}
+
+/// Decide one hook payload, filling `out` as it goes.
 fn evaluate(
     host: Host,
     payload: &str,
-    known: &mut KnownSecrets,
-    cache: &mut Option<taint::CacheWrite>,
-    drifted: &mut Vec<Drift>,
+    out: &mut Evaluated,
 ) -> Result<(Option<HookRequest>, Decision)> {
     hangs::enter(Phase::Lock);
     let request = host
@@ -246,7 +254,7 @@ fn evaluate(
     if let Some(decision) = checked.deny {
         return Ok((Some(request), decision));
     }
-    *drifted = checked.relaxed;
+    out.drifted = checked.relaxed;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
     if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {
@@ -267,7 +275,7 @@ fn evaluate(
     hangs::enter(Phase::Context);
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
     let policy = crate::repo::effective_policy(&home, &ctx)?;
-    *known = secrets::known(&policy.secrets, &ctx.home)?;
+    out.known = secrets::known(&policy.secrets, &ctx.home)?;
     let snapshot = Snapshot::load(&home.environment_path())?;
     hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
@@ -294,9 +302,18 @@ fn evaluate(
     // A grant made after the session read untrusted content answers that
     // content's ask for this exact call (taint.rs).
     hangs::enter(Phase::Taint);
+    let store = home.open_audit()?;
     let (session, write) =
-        taint::of_session(&home, host, &request.session_id, &compiled, &ctx.cwd)?;
-    *cache = write;
+        taint::of_session(&store, host, &request.session_id, &compiled, &ctx.cwd)?;
+    out.cache = write;
+    let seen = taint::provenance::Call {
+        session: &request.session_id,
+        action,
+        content: request.content.as_deref(),
+        untrusted: session.taint.untrusted.as_deref(),
+    };
+    out.provenance = taint::provenance::observe(&store, &compiled, &seen)?;
+    drop(store);
     let tainted = compiled.with_taint(decision.clone(), action, &FsPathResolver, &session.taint);
     let call = taint::Call {
         home: &home,
@@ -316,7 +333,7 @@ fn evaluate(
     )?;
     // Last: a push is checked for what it would publish (push.rs); only tightens.
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
-    let decision = push::check(&compiled.pushes(action), known, tainted, decision);
+    let decision = push::check(&compiled.pushes(action), &out.known, tainted, decision);
     Ok((Some(request), decision))
 }
 
@@ -330,6 +347,7 @@ struct Recorded<'a> {
     started: Instant,
     known: KnownSecrets,
     cache: Option<taint::CacheWrite>,
+    provenance: taint::provenance::Seen,
 }
 
 /// Record the decision, after the session cache on the same handle. The cache
@@ -344,6 +362,7 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         started,
         known,
         cache,
+        provenance,
     } = recorded;
     hangs::enter(Phase::Record);
     let home = Home::locate()?;
@@ -375,6 +394,13 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         latency_us,
     };
     let id = store.record(&event)?;
+    // A call that may have run wrote and read what it named (ADR-029); like
+    // the row, provenance that cannot be written fails the call.
+    if let Some(r) = request
+        && taint::ran(host, decision.verdict)
+    {
+        provenance.write(&store, id, host.id(), &r.session_id)?;
+    }
     // Under `moat run`, the run's proxy applies this session's taint too
     // (ADR-027); a link that cannot be written fails the call like the row.
     let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();

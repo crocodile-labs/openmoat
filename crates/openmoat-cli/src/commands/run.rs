@@ -18,6 +18,7 @@
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+mod release_age;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
 
@@ -94,6 +95,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         platform::confine(&policy, &ctx, grants, &program)?
     };
     agent.command().args(rest);
+    agent
+        .command()
+        .envs(package_release_age(&policy, ctx.project.as_deref()));
     // The proxy reads a brokered secret from this process's environment; the
     // agent gets only the placeholder, never the variable that holds the value.
     for name in env_secrets(&policy) {
@@ -169,6 +173,26 @@ fn guard_service(home: &Home, run_session: &str) -> Result<(Service, Zeroizing<S
         .context("locating the moat binary")?;
     let service = Service::new(home.clone(), run_session, token.as_bytes(), moat);
     Ok((service, token))
+}
+
+/// npm and uv skip versions published within the policy's release age
+/// (ADR-030), unless the person set their own cut-off.
+fn package_release_age(policy: &Policy, project: Option<&str>) -> Vec<(&'static str, String)> {
+    let in_project = |file: &str| project.map(|p| Path::new(p).join(file));
+    release_age::env(
+        policy.package_min_release_age_days(),
+        crate::time::now_ms(),
+        &release_age::Found {
+            inherited: &|name| std::env::var_os(name).is_some(),
+            project_has: &|file| in_project(file).is_some_and(|p| p.exists()),
+            project_file: &|file| {
+                let path = in_project(file)?;
+                // a configuration file, not a lockfile: a large one is not read
+                let small = std::fs::metadata(&path).is_ok_and(|m| m.len() < 1 << 20);
+                small.then(|| std::fs::read_to_string(&path).ok()).flatten()
+            },
+        },
+    )
 }
 
 /// The environment variables the policy's brokered secrets are read from.

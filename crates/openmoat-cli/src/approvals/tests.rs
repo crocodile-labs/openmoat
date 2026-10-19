@@ -233,3 +233,23 @@ fn grants_and_overlay_round_trip() {
             .contains("approved-")
     );
 }
+
+#[test]
+fn an_approved_near_miss_install_also_allows_its_near_miss_atom() {
+    let mut o = Overlay::default();
+    assert_eq!(
+        o.allow_command("cd app && npm i lodahs").unwrap().shell,
+        [
+            "cd app && npm i lodahs",
+            "@package-near-miss npm lodahs lodash"
+        ]
+    );
+    assert_eq!(
+        o.allow_command("npm i left-pad").unwrap().shell,
+        ["npm i left-pad"]
+    );
+    // the rule written still counts as covering the command
+    assert!(o.covers(&Action::Shell {
+        command: "cd app && npm i lodahs".into()
+    }));
+}

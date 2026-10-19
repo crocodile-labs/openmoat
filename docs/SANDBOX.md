@@ -273,6 +273,10 @@ available, the Standard tier keeps its commands out of the home altogether.
 - git uses a bare repository only when named: `moat run` (and `--isolate`) appends
   `safe.bareRepository=explicit` to the agent's `GIT_CONFIG_COUNT` entries, keeping
   the ones it inherits, and refuses to start when `GIT_CONFIG_COUNT` is not a number.
+- npm and uv install no package version published in the last 7 days:
+  `moat run` sets `npm_config_before` and `UV_EXCLUDE_NEWER` unless you set a cut-off
+  yourself (`sandbox.package_min_release_age_days`, `0` turns it off;
+  [POLICY.md](POLICY.md) §9.1, ADR-030).
 - Network goes only to the proxy on a loopback port (`HTTP_PROXY`, `HTTPS_PROXY`),
   which allows the hosts the policy allows. A tool that ignores those variables has
   no network. The proxy serves this run alone: the variables carry the run's

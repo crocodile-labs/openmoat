@@ -4,6 +4,7 @@
 //! by `openmoat-core`. Exit codes are a stable contract used by host hooks:
 //! see [`exit::Code`].
 
+mod anchor;
 mod approvals;
 mod cli;
 mod commands;
@@ -16,6 +17,7 @@ mod home;
 mod install;
 mod integrity;
 mod mcp;
+mod packs;
 mod project;
 mod protection;
 mod push;
@@ -24,6 +26,7 @@ mod render;
 mod repo;
 mod sandbox;
 mod secrets;
+mod signing;
 mod taint;
 mod terminal;
 mod time;

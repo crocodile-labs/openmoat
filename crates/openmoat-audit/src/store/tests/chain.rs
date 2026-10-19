@@ -116,6 +116,19 @@ fn an_untouched_chain_verifies_and_links() {
 }
 
 #[test]
+fn the_head_and_each_hash_are_what_an_anchor_records() {
+    let store = chain_of(3);
+    let report = store.verify_chain().unwrap();
+    let head = store.head().unwrap().unwrap();
+    assert_eq!(Some(head.hash.clone()), report.head);
+    assert_eq!(head.id, EventId(3));
+    assert_eq!(store.hash_of(EventId(3)).unwrap(), Some(head.hash));
+    assert_ne!(store.hash_of(EventId(2)).unwrap(), None);
+    assert_eq!(store.hash_of(EventId(9)).unwrap(), None);
+    assert_eq!(Store::open_in_memory().unwrap().head().unwrap(), None);
+}
+
+#[test]
 fn an_edited_field_is_detected_at_its_event() {
     for edit in [
         "UPDATE events SET verdict = 'deny' WHERE id = 2",

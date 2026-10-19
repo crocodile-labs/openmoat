@@ -260,7 +260,13 @@ impl AtomicAction {
     #[must_use]
     pub fn describe(&self) -> String {
         match self {
-            Self::Shell { argv } => format!("shell \"{}\"", argv.join(" ")),
+            // the near-miss atom names the package the person probably meant
+            Self::Shell { argv } => match argv.as_slice() {
+                [tag, ecosystem, name, popular] if tag == crate::shell::installs::NEAR_MISS => {
+                    format!("{ecosystem} package \"{name}\" is not \"{popular}\"")
+                }
+                _ => format!("shell \"{}\"", argv.join(" ")),
+            },
             Self::Pipeline { argv } => format!("pipeline \"{}\"", argv.join(" ")),
             Self::FsRead { path } => format!("read {path}"),
             Self::FsWrite { path } => format!("write {path}"),

@@ -1,5 +1,6 @@
 mod compound;
 mod database;
+mod installs;
 mod path_options;
 mod quotes;
 mod redirects;

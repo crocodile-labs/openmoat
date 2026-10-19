@@ -63,6 +63,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             AuditCommand::Export(args) => audit::export(&args),
             AuditCommand::Verify(args) => audit::verify(&args),
             AuditCommand::Report(args) => team::run(&args),
+            AuditCommand::Anchor(args) => audit::anchor(&args),
         },
         Command::Run(args) => run::run(&args),
         Command::Isolated(args) => run::inside(&args),
@@ -71,6 +72,9 @@ pub fn run(cli: Cli) -> Result<Code> {
             PolicyCommand::Check(args) => policy::check(&args),
             PolicyCommand::Compile(args) => policy::compile(&args),
             PolicyCommand::Upgrade(args) => policy::upgrade(&args),
+            PolicyCommand::Install(args) => policy::install(&args),
+            PolicyCommand::TrustKey(args) => policy::trust_key(&args),
+            PolicyCommand::Remove(args) => policy::remove(&args),
         },
         Command::Bench(args) => bench::run(&args),
         Command::Sandbox { command } => match command {

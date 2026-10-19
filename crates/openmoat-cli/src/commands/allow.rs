@@ -248,9 +248,23 @@ fn will_allow(rule: &RuleGroup) -> String {
             .collect();
         format!("{} (no other path)", files.join(" and "))
     } else {
+        // an install's near-miss atoms (`Overlay::allow_command`) are named apart
+        let (near_misses, commands): (Vec<&str>, Vec<&str>) = rule
+            .shell
+            .iter()
+            .map(String::as_str)
+            .partition(|p| p.starts_with("@package-near-miss "));
+        let notes: String = near_misses
+            .iter()
+            .filter_map(|atom| {
+                let mut words = atom.split(' ').skip(2);
+                let (name, popular) = (words.next()?, words.next()?);
+                Some(format!(", even though \"{name}\" is not \"{popular}\""))
+            })
+            .collect();
         format!(
-            "{} (and the same command with extra arguments)",
-            rule.shell.join(", ")
+            "{} (and the same command with extra arguments){notes}",
+            commands.join(", ")
         )
     };
     format!("will allow: {what}; deny rules still win")

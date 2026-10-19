@@ -112,6 +112,17 @@
       (regex "^(.*/)?\\.env\\.example$")
       (regex "^(.*/)?\\.env\\.sample$")
       (regex "^(.*/)?\\.env\\.template$")))))
+; deny kernel-self (fs.read)
+(deny file-read-data file-read-xattr
+  (regex "^/Users/me/\\.moat/audit\\.db[^/]*$")
+  (literal "/Users/me/.moat/policy.lock")
+  (literal "/Users/me/.moat/hosts.json")
+  (literal "/Users/me/.moat/approvals.json")
+  (literal "/Users/me/.moat/trust.json")
+  (literal "/Users/me/.moat/allowed_signers")
+  (subpath "/Users/me/.moat/mcp")
+  (regex "^(.*/)?\\.moat/audit\\.db[^/]*$")
+  (regex "^(.*/)?\\.moat/policy\\.lock$"))
 ; deny secrets-paths (fs.write)
 (deny file-write*
   (require-all

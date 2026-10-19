@@ -268,6 +268,7 @@ fn classify_as_written(
     let program = basename(&argv[0]);
     sink.refuse_dot_dirs(program);
     super::push::note(&argv, program, ctx, sink);
+    super::installs::note(&argv, program, sink)?;
 
     if program == "git" {
         git::push_shell(&argv, ctx, sink)?;

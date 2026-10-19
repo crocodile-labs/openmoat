@@ -432,6 +432,32 @@ print("io_uring=" + str(ctypes.get_errno()))
         }
     }
 
+    /// npm and uv skip package versions published in the last 7 days (ADR-030),
+    /// and a cut-off the person set themselves is kept.
+    #[test]
+    fn package_managers_get_the_release_age_cut_off() {
+        let (sb, project) = installed_with_secret();
+        let script =
+            "echo \"npm=${npm_config_before-unset}\"; echo \"uv=${UV_EXCLUDE_NEWER-unset}\"";
+        let out = run_sh(&sb, &project, script);
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        for var in ["npm=", "uv="] {
+            let value = stdout(&out)
+                .lines()
+                .find_map(|l| l.strip_prefix(var))
+                .map(str::to_owned);
+            assert!(
+                value.is_some_and(|v| v.len() == 20 && v.ends_with("T00:00:00Z")),
+                "{var}: {shown}"
+            );
+        }
+        let own = run_sh_with(&sb, &project, script, &[("UV_EXCLUDE_NEWER", "2026-01-01")]);
+        assert!(stdout(&own).contains("uv=2026-01-01\n"), "{}", text(&own));
+    }
+
     #[test]
     fn a_failing_agent_exits_1() {
         let (sb, project) = installed_with_secret();

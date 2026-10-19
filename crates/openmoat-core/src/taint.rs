@@ -1,6 +1,7 @@
 //! The policy's `taint:` section (ADR-020, docs/POLICY.md §4.1): what session
-//! taint protects beyond the built-in list. The engine applies it in
-//! `engine/taint.rs`.
+//! taint protects beyond the built-in list, and whether file provenance
+//! (ADR-029) is on. The engine applies the list in `engine/taint.rs`; the CLI
+//! keeps provenance in the audit log.
 
 use serde::{Deserialize, Serialize};
 
@@ -125,6 +126,20 @@ pub struct TaintSettings {
     /// exclusions, for the same reason.
     #[serde(default)]
     pub protected_writes: Vec<String>,
+    /// File provenance (ADR-029): a file a session wrote after reading
+    /// untrusted content taints the sessions that later read or run it.
+    /// Absent means on; `false` turns it off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<bool>,
+}
+
+impl TaintSettings {
+    /// Whether file provenance is on under `settings` (the policy's `taint:`
+    /// section, if any). On unless the section says `provenance: false`.
+    #[must_use]
+    pub fn provenance_on(settings: Option<&Self>) -> bool {
+        settings.and_then(|s| s.provenance).unwrap_or(true)
+    }
 }
 
 /// The built-in protected paths followed by the ones `settings` adds.
@@ -179,6 +194,18 @@ mod tests {
             );
         }
         assert!(Policy::parse("version: 1\ntaint: { bogus: [] }\n").is_err());
+    }
+
+    #[test]
+    fn provenance_is_on_unless_the_policy_turns_it_off() {
+        use super::TaintSettings;
+        let on =
+            |yaml: &str| TaintSettings::provenance_on(Policy::parse(yaml).unwrap().taint.as_ref());
+        assert!(on("version: 1\n"));
+        assert!(on("version: 1\ntaint: {}\n"));
+        assert!(on("version: 1\ntaint: { provenance: true }\n"));
+        assert!(!on("version: 1\ntaint: { provenance: false }\n"));
+        assert!(Policy::parse("version: 1\ntaint: { provenance: maybe }\n").is_err());
     }
 
     /// A path a `fs.write` pattern of the default policy names: `~` as a home,

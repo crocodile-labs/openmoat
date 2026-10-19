@@ -27,6 +27,7 @@ mod kind;
 #[doc(hidden)]
 pub mod lexer;
 pub mod lint;
+mod packages;
 mod patch;
 mod paths;
 mod pattern;
@@ -55,6 +56,7 @@ pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};
 pub use secret::{Secret, Source as SecretSource};
+pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
 pub use taint::TaintSettings;
 pub use verdict::{Decision, UnknownVerdict, Verdict};

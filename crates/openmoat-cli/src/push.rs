@@ -30,8 +30,9 @@ pub const RUNS_LATER_RULE: &str = "push-runs-later";
 pub const UNCHECKED_RULE: &str = "push-unchecked";
 
 /// The time all git commands of one call may take together, well inside the
-/// guard's own budget (`install::GUARD_BUDGET_S`).
-const BUDGET: Duration = Duration::from_secs(2);
+/// guard's own budget (`install::GUARD_BUDGET_S`). Starting git can take
+/// seconds on Windows and under load, and a push that runs out asks.
+const BUDGET: Duration = Duration::from_secs(10);
 
 /// Debug builds take the budget from this variable, in milliseconds, so the
 /// end-to-end tests can reach the timeout. Release builds do not read it.

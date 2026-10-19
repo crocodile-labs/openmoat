@@ -25,7 +25,33 @@ pub struct Found {
     pub root: String,
     /// SHA-256 of the bytes that were parsed.
     pub digest: String,
+    /// The text that was parsed, which a signature must cover.
+    pub text: String,
     pub policy: RepoPolicy,
+}
+
+/// The detached signature beside a repository policy (ADR-031).
+fn signature_path(found: &Found) -> std::path::PathBuf {
+    found.path.with_file_name("policy.yaml.sig")
+}
+
+/// The principal whose trusted key signed this repository policy, when the
+/// user policy asks for signed repository policies (`require_signed_repo_policy`)
+/// and there is a signature; `None` otherwise. A signature that does not verify
+/// is `None` too, and with the setting on the file is then not trusted.
+pub fn signed_by(home: &Home, user: &Policy, found: &Found) -> Result<Option<String>> {
+    let signature = signature_path(found);
+    if !user.require_signed_repo_policy || fs::symlink_metadata(&signature).is_err() {
+        return Ok(None);
+    }
+    let (Some(program), Some(signers)) = (
+        crate::signing::locate(home),
+        crate::signing::trusted_signers(home),
+    ) else {
+        return Ok(None);
+    };
+    crate::signing::verify(&program, &signers, found.text.as_bytes(), &signature)
+        .with_context(|| format!("checking the signature {}", signature.display()))
 }
 
 /// The project root as `trust.json` records it: symlinks resolved, so every
@@ -62,6 +88,7 @@ pub fn find(home: &Home, root: &Path) -> Result<Option<Found>> {
     Ok(Some(Found {
         root: root_key(root)?,
         digest: sha256_hex(text.as_bytes()),
+        text,
         path,
         policy,
     }))
@@ -77,6 +104,17 @@ pub fn trust(home: &Home) -> Result<Trust> {
     Trust::load(&path)
 }
 
+/// Whether the repository policy's allow rules apply. With
+/// `require_signed_repo_policy` only a signature from a trusted key counts, so
+/// a file `moat trust` accepted but no trusted key signed only tightens; without
+/// it only `moat trust` counts.
+pub fn is_trusted(home: &Home, user: &Policy, found: &Found) -> Result<bool> {
+    if user.require_signed_repo_policy {
+        return Ok(signed_by(home, user, found)?.is_some());
+    }
+    Ok(trust(home)?.trusts(&found.root, &found.digest))
+}
+
 /// The user policy with the recorded `moat` binary's paths in `kernel-self`
 /// and the project's repository policy merged in, as `guard` decides with it.
 pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
@@ -88,7 +126,7 @@ pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
     let Some(found) = find(home, Path::new(root))? else {
         return Ok(user);
     };
-    let trusted = trust(home)?.trusts(&found.root, &found.digest);
+    let trusted = is_trusted(home, &user, &found)?;
     found
         .policy
         .merge(&user, trusted)
@@ -111,13 +149,25 @@ pub fn summary(home: &Home) -> Result<Option<String>> {
         p.ask.len(),
         p.allow.len()
     );
-    let form = match trust(home)?.repos.get(&found.root) {
-        Some(digest) if *digest == found.digest => format!("trusted ({rules})"),
-        Some(_) => {
+    let (signer, signed_only) = match home.load_policy() {
+        Ok(user) => (
+            signed_by(home, &user, &found)?,
+            user.require_signed_repo_policy,
+        ),
+        Err(_) => (None, false),
+    };
+    let form = match (trust(home)?.repos.get(&found.root), signer) {
+        (_, Some(signer)) => format!("trusted: signed by {signer} ({rules})"),
+        _ if signed_only && p.allow.is_empty() => format!("tightening only ({rules})"),
+        _ if signed_only => {
+            format!("not signed by a trusted key: tightening only, allow rules ignored ({rules})")
+        }
+        (Some(digest), _) if *digest == found.digest => format!("trusted ({rules})"),
+        (Some(_), None) => {
             format!("changed since `moat trust`: tightening only, allow rules ignored ({rules})")
         }
-        None if p.allow.is_empty() => format!("tightening only ({rules})"),
-        None => format!("not trusted: tightening only, allow rules ignored ({rules})"),
+        (None, None) if p.allow.is_empty() => format!("tightening only ({rules})"),
+        (None, None) => format!("not trusted: tightening only, allow rules ignored ({rules})"),
     };
     Ok(Some(format!(
         "{}  sha256:{}  {form}",

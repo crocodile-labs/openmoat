@@ -481,3 +481,19 @@ fn files_run_later_are_no_deny_glob() {
         out.report.allowances
     );
 }
+
+/// On Linux a deny of a missing file below a denied directory stops every
+/// command (bubblewrap cannot make its mount point there), so only the
+/// directory is listed: OpenMoat's state below the denied `~/.moat`.
+#[test]
+fn denies_below_a_denied_directory_are_left_to_it() {
+    let out = generated(DEFAULT_POLICY);
+    assert_eq!(mode(&out, &[], "/Users/me/.moat"), Some("deny"));
+    for file in ["approvals.json", "policy.lock", "mcp", "audit.db*"] {
+        assert_eq!(
+            mode(&out, &[], &format!("/Users/me/.moat/{file}")),
+            None,
+            "{file}"
+        );
+    }
+}

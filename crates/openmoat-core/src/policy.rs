@@ -290,10 +290,18 @@ pub struct Policy {
     /// What session taint protects beyond the built-in list. Absent in older policies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub taint: Option<TaintSettings>,
+    /// Trust a repository policy only when its detached signature
+    /// (`policy.yaml.sig`) verifies against a key the person trusted (ADR-031):
+    /// a signed one needs no `moat trust`, and an unsigned one is not trusted even
+    /// after `moat trust`. Off by default: then only `moat trust` lets a
+    /// repository policy allow.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub require_signed_repo_policy: bool,
     /// Ask rules merged in from a repository policy ([`crate::RepoPolicy`],
-    /// ADR-022). Tried after `deny` and before `allow`, so a repository can make
-    /// an action the user allows ask. Never read from or written to a file, and
-    /// not lowered to OS layers, which are generated from the user policy alone.
+    /// ADR-022) or a policy pack (ADR-031). Tried after `deny` and before
+    /// `allow`, so a repository can make an action the user allows ask. Never
+    /// read from or written to a file, and not lowered to OS layers, which are
+    /// generated from the user policy alone.
     #[serde(skip)]
     pub repo_ask: Vec<RuleGroup>,
 }
@@ -317,6 +325,27 @@ pub struct SandboxSettings {
     /// on the encrypted name, which may be another site than the allowed host.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub proxy_allow_ech: bool,
+    /// Days a package version must have been published before the package
+    /// managers `moat run` starts install it (ADR-030); `0` turns this off,
+    /// absent is 7 days ([`Policy::package_min_release_age_days`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_min_release_age_days: Option<u16>,
+}
+
+/// The release age `moat run` asks of new package versions when the policy
+/// does not say (ADR-030).
+pub const DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS: u16 = 7;
+
+impl Policy {
+    /// The days a package version must have been published before `moat run`
+    /// lets npm and uv install it; `0` is off.
+    #[must_use]
+    pub fn package_min_release_age_days(&self) -> u16 {
+        self.sandbox
+            .as_ref()
+            .and_then(|s| s.package_min_release_age_days)
+            .unwrap_or(DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS)
+    }
 }
 
 fn default_verdict() -> Defaults {

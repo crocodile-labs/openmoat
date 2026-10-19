@@ -41,11 +41,15 @@ sandbox:                            # optional: what the host sandboxes may read
   read_roots: ["/usr", "~/.cargo"]
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `moat proxy` (§9)
   proxy_allow_ech: false            # optional: let `moat proxy` forward encrypted server names (ECH) (§9)
+  package_min_release_age_days: 7   # optional: `moat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 
 taint:                              # optional: more paths session taint protects (§4.1)
   protected_writes: ["**/deploy/**"]
+  provenance: true                  # optional, default true: taint follows written files (§4.1.1)
+
+require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
 ```
 
 `approval:` (`channel`, `remember`, `timeout_s`) and `scope:` (`project_roots`) are reserved:
@@ -197,6 +201,7 @@ Tokenised with the same lexer as commands, so `a|b` and `a | b` are equal.
 - A `sed` script is data too (`shell/sed/`): its words are not files (`sed -n '/^fn/,/^}/p' f` reads only `f`). The script is read with the commands and addresses GNU and BSD sed share (`p`, `d`, `s///`, `y`, `a`/`i`/`c`, `b`/`t`/`:`, `q`, `l`, `=`, `n`, `N`, `g`, `h`, `x`, `{}`, …). `r FILE`/`R FILE` are `fs.read`s and `w FILE`/`W FILE`/the `s///w FILE` flag `fs.write`s of `FILE` taken literally (sed does not expand `~`). A script that runs a command (`e`, the `s///e` flag), uses any other command, or cannot be read completely becomes a `sed @<script>` shell action, as do `-f FILE` (whose `FILE` is also an `fs.read`) and unknown options. `-i`/`--in-place` makes every file operand an `fs.write`, and its backup too (`-i.bak` writes `f.bak`; a suffix with `/` or `*`, which GNU sed reads as another directory, is reported). A bare `-i` is read both ways: GNU sed takes no suffix, BSD sed takes the next word. `-i ''` is the BSD empty suffix (the next operand is checked as a script and as a file), `-i -e …` gives BSD the suffix `-e`, and any other word after a bare `-i` (`sed -i 's/a/b/' f g`, a script to GNU and a suffix to BSD) is reported, except as the last two words with no script before them: in `sed -i 's/a/b/' f` BSD sed takes `f` as its script, has no file left to edit and stops before reading input, so when `f` holds no `w` (the only command that acts while the script is compiled) the command is GNU's reading alone and writes `f`.
 - An `awk` program is data as well (`shell/awk.rs`); its words are not files (`awk '/error/ {print}' log` reads only `log`). awk stops reading options at the program, so only `-F` and `-v` before it are options, and every later word is a file or an assignment. A program containing `system`, a `|` that is not part of `||`, `getline`, `ENVIRON`, `ARGV` or `@` (gawk's `@include`, `@load`, indirect calls), or a `>` after its first `print` (output redirection), becomes an `awk @<program>` shell action, as do `-f FILE` and any other option. These words are looked for in the raw text, strings and regexes included, so quoting cannot hide them, and a string that happens to contain one asks.
 - Only a `$` the shell expands is an `env.read`: an unquoted or double-quoted `$NAME`/`${NAME}` (`"$AWS_SECRET_ACCESS_KEY"` is a read), one in an unquoted here-document body, or one in a `<<<` word outside single quotes. The lexer records which part of each word came from single quotes, so `$p` in `sed -n '$p'` and `$NF` in `awk '{print $NF}'` read nothing, and in `'$p'"$TOKEN"` only `TOKEN` is read. Code handed to another shell is classified again as that shell sees it: `sh -c 'echo $SECRET'` and `eval 'echo $SECRET'` read `SECRET`. `$'…'` (ANSI-C quoting) is decoded the way bash decodes it (`\x2f` and `\057` are `/`, `\'` a quote), so `cat $'\x2f'Users/me/.ssh/id_rsa` is a read of that key and `$'moat'` is `moat`; a `$` in the decoded text is still scanned as if unquoted. `$"…"` (locale quoting) is read as `"…"`. A quoted here-document delimiter (`<<'EOF'`) keeps the body literal. `$1`-style field references are not variables and stay allowed. Where GNU and BSD sed would split a script differently (a delimiter inside a bracket expression, text after a label), or take a different word for the script (BSD stops at the first operand, so in `sed p -e x f` it runs `p` and reads `-e` and `x`), every reading is checked and the word stays a file too.
+- A package install is read for the names it fetches from a registry (`shell/installs.rs`, ADR-030): `npm install|i|add`, `pnpm add`, `yarn add`, `yarn global add`, `bun add` (npm); `pip install` (`pip3`, `pip3.12`, `python -m pip`), `uv pip install`, `uv add`, `uv tool install`, `poetry add`, `pipx install` (PyPI); `cargo add` and `cargo install` (crates.io); `gem install` (RubyGems); `go get` and `go install` (Go modules). Versions, extras, markers and options are taken off each name (`requests==2.32`, `uvicorn[standard]`, `@types/node@20`, `serde@1`, `cobra@v1.8.0`). Paths, URLs, archives, git sources (`--git`, `--path`, `github:user/repo`) and requirement files name no registry package, and an install from the lockfile (`npm install`, `pip install -r requirements.txt`) names none. An install gives no atom of its own unless a name is a near miss, so it is decided by its command as before (a rule names a package through the command: `deny: shell: ["npm install event-stream"]`). A name that is not on the bundled list of popular names for its registry but is one edit away from a listed name of five characters or more (a letter added, dropped, changed or two swapped), differs from it only in `-`, `_` and `.` or in doubled letters, or adds or drops a squatter's prefix or suffix (`node-`, `-js`, `.js`, `python-`, `py`, `-py`, `rust-`, `-rs`, `ruby-`, …) gives the atom `@package-near-miss <ecosystem> <name> <popular name>`, with the ecosystem `npm`, `pypi`, `crates`, `rubygems` or `go`, which `package-near-miss` asks for (§6). Names are compared as each registry compares them: PyPI ignores case and treats `-`, `_` and `.` alike, crates.io ignores case and `-`/`_`, and a Go module's `/v2` suffix does not count.
 
 ### 3.2 Path, host and name globs
 - `*` matches within one path segment; `**` matches across segments: `~/.ssh/**`, `**/.env.*`.
@@ -309,6 +314,37 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   decides its calls outside the sandbox (ADR-028).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
 
+#### 4.1.1 File provenance
+
+Session taint also follows what a tainted session writes into a file (ADR-029). It
+adds no ask of its own: it taints a later session, and that session's calls then
+tighten as in §4.1.
+
+- **Recorded.** When a session that read untrusted content (§4.1) makes a call that may
+  have run and that writes a file by a literal path (`Write`, `Edit`, `MultiEdit`,
+  `NotebookEdit`, `apply_patch`, an MCP tool's file argument, or a shell write such as
+  `> file`, `tee`, `cp`), the audit log records the path, the session and what it had
+  read. For `Write`, which sends the whole file, it also records the SHA-256 of the
+  content (CRLF line ends hashed as LF); for every other write the hash is unknown.
+- **Followed.** When any later session reads or runs that path (an `fs.read`, which
+  covers `Read`, `cat`, `source`/`.`, `bash file`, `python file` and the other script
+  forms the classifier knows, and a program named by a path such as `./run.sh`), and the
+  file is a regular file that still holds the recorded content (or the hash is unknown),
+  that session is tainted as if it had read untrusted content. The reason names the file
+  and the session that wrote it: `read /p/run.sh, which session a wrote after it read
+  untrusted content (fetch crates.io)`. What the same call writes (`bash run.sh >
+  out.txt`) is recorded as tainted too.
+- **Cleared.** A `Write` by a session that read no untrusted content replaces the whole
+  file and makes it clean. A partial change by such a session (`Edit`, a shell write)
+  may leave what the tainted session wrote, so the file stays tainted whatever its hash
+  becomes. A change no session made (an editor, `git checkout`) gives a hashed file
+  another content, and it no longer taints. A `session-taint` ask that results is
+  answered with `moat allow --last` as in §4.1.
+- `taint: { provenance: false }` turns it off: nothing is recorded or followed.
+- Not tracked: content copied, renamed or produced indirectly (a build that writes
+  output, a script that writes another file), and files under a directory a search
+  tool reads (`Grep`, `Glob`).
+
 ### 4.2 The push check
 
 A push publishes commits: CI runs them with the repository's secrets, and anyone who can
@@ -347,7 +383,7 @@ pushed yet. `gh pr merge` publishes nothing local and is not checked.
   names (§6), at any depth and in any letter case. In a clean session such a push
   stays as the policy decided it.
 - **`push-unchecked` (ask).** What the push publishes could not be checked: git took
-  longer than 2 s for all of a call's pushes together, the diffs exceed 8 MiB (the
+  longer than 10 s for all of a call's pushes together, the diffs exceed 8 MiB (the
   commit messages or the list of changed files 1 MiB), git failed, a refspec names no
   commit, or the push may run in a directory or repository that is not known (`cd
   "$X"`, `git --git-dir=…`, a git option that keeps the command as written, or
@@ -394,7 +430,7 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `session-taint` | ask | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | ask | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
-| `push-unchecked` | ask | what a push would publish could not be checked within 2 s or 8 MiB, or where it runs is not known (§4.2) |
+| `push-unchecked` | ask | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
 | `approved-session` | allow | an `ask` for a shell command that a person granted with `moat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `moat allow --always` |
 | `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
@@ -462,7 +498,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | deny | `env-poison` | setting `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `GIT_*`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `MOAT_*` |
 | deny | `pipe-to-shell` | `curl`/`wget` output, or any decoded/decompressed stream (`base64 -d/-D/--decode`, `openssl … -d`, `xxd -r`, `gunzip`, `zcat`, `gzip -d`, …), piped into a shell or interpreter that reads its program from stdin (`sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `python*`, `node`, `perl`, `ruby`, `php`, `deno`, `bun`, `pwsh`); `eval` |
 | deny | `destructive` | any write to a raw disk (`/dev/disk*`, `/dev/sd*`, `/dev/nvme*`, …), and any write to the home directory or the root itself (`fs.write` of exactly `~` and `/`, however the path is spelt: `~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`), so removing, moving or replacing them with any program and flags; this also denies a command that changes that directory itself (`touch ~`, `chmod 700 ~`) or copies into it entries whose names the command line does not show (`rsync -a dist/ ~/`, `cp * ~/`), while a copy or move of named files into it writes those entries (`cp f ~/` writes `~/f`, which the default policy defers, §3.1), as do writes below them (`mkdir ~/x`, `rm -rf ~/tmp/build`) are unaffected; `rm` of an unexpanded `/*`, `~/*`, `$HOME/*`, `${HOME}/*` or of `//`, and `rm -rf --no-preserve-root`, `git push --force*`/`-f*` (also after the remote, bundled as `-uf`, and a `+refspec` such as `+main` or `+HEAD:main`), remote branch deletion (`git push origin :main`, `--delete`, `-d`), the prefixes of `--force` and `--delete` git accepts as abbreviations (`--for*`, `--de*`; `--mirror` and `--prune` are not denied and defer like any other push), `git reset --hard`, `git clean -fdx`, `git branch -D`, `git stash drop/clear`, `sudo`, `mkfs`, `dd if=`, `shutdown`, `reboot` |
-| deny | `kernel-self` | writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/secret/trust/uninstall` and `moat sandbox sync` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
+| deny | `kernel-self` | reads of OpenMoat's state beside the policy: `~/.moat/audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`, `allowed_signers` and `mcp/` (and `audit.db*` and `policy.lock` in any `.moat/`), while `~/.moat/policy.yaml` stays readable; writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/secret/trust/uninstall`, `moat sandbox sync` and `moat audit anchor` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
 | deny | `shell-rc` | writes to `~/.zshrc`, `~/.bashrc`, `~/.profile` and friends |
 | deny | `cloud-metadata` | network to instance metadata and link-local services (`169.254.*`, `fe80:*`, `fd00:ec2::254`, `100.100.100.200`, `metadata.google.internal`, `metadata.goog`), for shell network and for a host fetch tool alike |
 | deny | `token-egress` | a token of a well-known prefixed format sent to a host that is not its service's, allowed hosts included: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`; own hosts `github.com`, `githubusercontent.com`, `ghcr.io`), OpenAI and Anthropic (`sk-`, `sk-proj-`, `sk-ant-`, `sk-svcacct-`, `sk-admin-`; `openai.com`, `anthropic.com`), AWS access key ids (`AKIA…`; `amazonaws.com`, `aws.amazon.com`), Slack (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`; `slack.com`), Google API keys (`AIza…`; `googleapis.com`, `google.com`), npm (`npm_`; `npmjs.org`, `npmjs.com`) and GitLab (`glpat-`; `gitlab.com`), each with its subdomains. Checked in a fetch or network tool's URL, an MCP URL argument, a web search query, and the arguments of a command that connects to a host (the `curl`, `wget`, `nc`, `ssh` family, `git clone/fetch/pull/push/ls-remote`) and of every command piped into one; the destination is every host those arguments name, `--connect-to`/`--resolve` targets and `Host:` headers included, and a destination that cannot be read counts as another host. The atom is `@token-egress <service> <host>`; the token is never in it. Only prefixed formats, the same list audit redaction masks: a commit SHA, a UUID or a base64 blob is never a token. A self-hosted GitLab or GitHub Enterprise server is not the service's host: to send tokens there, narrow the group (`shell: ["@token-egress github *", …]` without that service) |
@@ -483,6 +519,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | ask | `secret-names` | a path through a variable whose value is not known (the `@unknown-path` atom, §3.1) whose file name is a key's, a token file's or a `.env` (`cat $X/id_rsa`, `cat "$d"/.env`); other such paths defer |
 | ask | `other-home` | any path in another user's home (`~alice/.ssh/id_rsa`, the `@other-home` atom), which OpenMoat cannot place and which may hold that user's secrets |
 | ask | `opaque-code` | `<program> @<argument>` atoms of `awk`, `sed`, `sort`, `uniq`, `cut` (a program or option the classifier cannot prove harmless, §3.1), `printf -v`, setting `CDPATH`, and `<shell> @stdin`: text piped into a shell that the command line does not show (`printf '\x63at .env' \| sh`) |
+| ask | `package-near-miss` | installing a package whose name is not on the bundled list of popular names for its registry but is one typo or a common trick away from one that is (the `@package-near-miss` atom, §3.1): `pip install reqeusts`, `npm i lodahs`, `npm i react_dom`, `pip install python-requests`, `cargo add tokio-rs`. The reason names the popular package. A popular name, or one far from every popular name, is not asked about: unknown packages are normal, so those installs defer like any other |
 | ask | `docker-secrets` | `docker build` with the options `dev-shell` leaves out (`--secret`, `--ssh`, `--build-context`, `--network`, `--output`, …) |
 | defer | `local-net` | network to `localhost`, `127.0.0.1`, `::1`, fetches included: without it the `net` default would deny local services |
 | defaults | `default`, `default.net`, `default.fetch`, `default.web.search`, `default.tool.unknown` | everything else defers to the agent's own permission prompt (installs, pushes and publishing included); outbound network to unlisted hosts is denied; a `WebFetch` of an unlisted URL defers (ADR-017); a `WebSearch` is allowed and recorded, and asks once the session read secret material; a tool the adapter cannot classify defers |
@@ -626,7 +663,10 @@ The command is stored as a literal pattern: glob characters and `$` are escaped 
 stored as `cat [*]` and approves only a literal `*`), and ids are numbered one past the
 highest existing `approved-N`, so deleting a rule never causes a duplicate id. Shell rules
 are prefixes, so a permanently approved `npm install left-pad` also allows extra arguments
-after it; edit the overlay if you want it tighter. Both files are pinned
+after it; edit the overlay if you want it tighter. A permanently approved install of a
+near-miss name (`npm i lodahs`, §3.1) also gets its `@package-near-miss npm lodahs lodash`
+atom in the rule, so `package-near-miss` does not ask for that install again; another
+near miss added to the same command still asks. Both files are pinned
 by the lock; `moat allow` must be run from a terminal and is denied to agents.
 `moat allow` verifies the lock before writing anything: if a pinned file (policy,
 overlay, approvals, hook file) drifted, it lists each one and exits 64 without changing
@@ -753,6 +793,31 @@ root under Codex (`codex.nested-git`: a Codex glob can only deny, which would al
 block reading every `.git`); the hook still asks for file-tool writes to any `.git`. Run
 `moat sandbox show` for the exact list your policy produces.
 
+### 9.1 Package release age (`moat run`)
+
+A malicious package version is usually found and taken down within days of its
+release. `moat run` therefore tells the package managers the agent starts not to
+install a version published in the last `sandbox.package_min_release_age_days`
+days (ADR-030). The default is 7, also when the key is absent; `0` turns it off.
+
+It sets two variables in the agent's environment, each a timestamp at the start of
+the UTC day that many days back (`2026-10-11T00:00:00Z`); no configuration file is
+written or changed:
+
+| Variable | Tool | What the tool does |
+|---|---|---|
+| `npm_config_before` | npm (its `before` setting) | resolves each package to the newest version published before that time; a package with no such version fails to install |
+| `UV_EXCLUDE_NEWER` | uv (`--exclude-newer`) | leaves out distributions uploaded after that time |
+
+A cut-off the person set is kept: either variable already in `moat run`'s
+environment (`NPM_CONFIG_BEFORE` too), a `before=` line in the project's `.npmrc`,
+or `exclude-newer` in the project's `pyproject.toml` or `uv.toml`. A project with a
+`uv.lock` gets no `UV_EXCLUDE_NEWER`: uv records the setting in its lockfile, so a
+cut-off that moves every day would make uv resolve the lockfile again. pip, pnpm,
+Yarn and Bun are not covered, and the host sandboxes of the Standard tier set nothing.
+To install a version released this week inside `moat run`, start `moat run` with
+your own cut-off in the variable, or set the key to `0`.
+
 ## 10. Repository policy
 
 A project can commit rules for everyone who works in it: `<project>/.moat/policy.yaml`,
@@ -809,8 +874,63 @@ allow`, `moat trust` must be run from a terminal, refuses while the lock shows d
 (exit 64), and is denied to agents by `kernel-self`. A `trust.json` the lock does not
 pin is ignored.
 
+Where your policy says `require_signed_repo_policy: true`, a signature decides instead
+of `moat trust` (ADR-031). A repository policy's allow rules apply only when its
+detached signature `<project>/.moat/policy.yaml.sig` verifies, with `ssh-keygen -Y verify`
+in the namespace `openmoat-policy`, against a key you trusted with `moat policy trust-key`
+(§11). A file with no signature, a signature from another key, or a change to the file
+after signing is not trusted, even where you ran `moat trust`: its allow rules are
+ignored and its deny and ask rules apply, as for any untrusted repository policy.
+`moat trust` still records the file, and says that the setting overrides it. Without the
+setting, which is the default, a signature changes nothing and `moat trust` alone
+decides. The signature is checked on each call in the project, outside the agent's
+sandbox.
+
 `moat status` and `moat doctor`, run inside the project, name the repository policy and
-its digest, and say which form applies: `trusted`, `not trusted: tightening only`,
-`changed since moat trust: tightening only`, or `tightening only` for a file without
+its digest, and say which form applies: `trusted`, `trusted: signed by <name>`, `not trusted: tightening only`,
+`changed since moat trust: tightening only`, `not signed by a trusted key: tightening only`
+(with `require_signed_repo_policy: true`), or `tightening only` for a file without
 allow rules. A file that does not parse is reported as a problem (exit 64), because
 every call in the project is denied.
+
+## 11. Signed policy packs
+
+A policy pack is a team's rules that you install for every project (ADR-031). It has a
+repository policy's shape (only `version`, `deny`, `ask` and `allow`, §10) and a
+detached OpenSSH signature. OpenMoat has no signature code of its own: it runs the
+system `ssh-keygen` (OpenSSH 8.1 or later), found through the environment snapshot
+`moat init` records (§8.1), in the namespace `openmoat-policy`.
+
+```bash
+# whoever maintains the pack signs it
+ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-policy team.yaml   # writes team.yaml.sig
+
+# each person trusts the maintainer's public key once, then installs the pack
+moat policy trust-key alice.pub --name alice@example.com
+moat policy install team.yaml               # the signature defaults to team.yaml.sig
+moat policy install team.yaml --sig other.sig --name team
+moat policy remove team
+```
+
+- `moat policy trust-key` checks the key with `ssh-keygen -l`, prints its fingerprint,
+  and adds it to `~/.moat/allowed_signers` for the namespace `openmoat-policy` only, so
+  a key's signature over anything else (a git commit) is never a policy signature.
+- `moat policy install` verifies the signature over the exact bytes it then installs.
+  A signature that does not verify, or one from a key you did not trust, is refused
+  (exit 64) and nothing is written. The pack and its signature are copied to
+  `~/.moat/policy.d/packs/<name>.yaml` and `.yaml.sig`, and recorded with their SHA-256
+  and signer in `~/.moat/packs.json`. Installing a pack again under the same name
+  replaces it.
+- The pack's rules merge like a trusted repository policy's, under the prefix
+  `pack:<name>:` (`pack:team:no-deploy`): its deny rules join yours, its ask rules are
+  tried before your allow rules, and its allow rules are added after yours, so your
+  deny rules still win. Deny and allow rules also reach the host sandboxes at the next
+  `moat sandbox sync`; ask rules are hook only.
+- The allowed signers, `packs.json` and each installed pack are pinned by the lock
+  (§8). A pack changed after install is drift, and every call is denied with
+  `kernel-integrity`. Only these three commands add those pins; another re-pin keeps
+  them and never adds them, so a file planted there is not trusted. An unpinned
+  `allowed_signers` or `packs.json` is ignored.
+- All three commands must be run from a terminal, refuse while the lock shows drift, and
+  are denied to agents by `kernel-self` (`moat policy *`). Without `ssh-keygen` they
+  refuse with a message saying so; nothing else changes.

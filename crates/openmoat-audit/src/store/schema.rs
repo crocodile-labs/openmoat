@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 3;
+pub(super) const SCHEMA_VERSION: i64 = 4;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -68,6 +68,30 @@ CREATE INDEX events_session ON events(session_id, id);
 CREATE INDEX events_ts ON events(ts_ms);
 ";
 
+/// Version 4: file provenance (ADR-029, `provenance.rs`). Rows are only
+/// appended: the triggers refuse an update or a delete, so a later row, never
+/// an edit, is what changes a file's provenance. `IF NOT EXISTS`: a database
+/// whose version was set back by hand still migrates.
+const V4: &str = "
+CREATE TABLE IF NOT EXISTS provenance (
+    id          INTEGER PRIMARY KEY,
+    event_id    INTEGER NOT NULL,
+    ts_ms       INTEGER NOT NULL,
+    host        TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    kind        TEXT    NOT NULL CHECK (kind IN ('tainted-write','clean-write','tainted-read')),
+    path        TEXT    NOT NULL,
+    sha256      TEXT,
+    source      TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS provenance_path ON provenance(path, id);
+CREATE INDEX IF NOT EXISTS provenance_session ON provenance(session_id, host, id);
+CREATE TRIGGER IF NOT EXISTS provenance_no_update BEFORE UPDATE ON provenance
+    BEGIN SELECT RAISE(ABORT, 'provenance rows are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS provenance_no_delete BEFORE DELETE ON provenance
+    BEGIN SELECT RAISE(ABORT, 'provenance rows are append-only'); END;
+";
+
 /// The `user_version` of the open database.
 pub(super) fn version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
@@ -102,6 +126,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 3 {
         tx.execute_batch(V3)?;
+    }
+    if found < 4 {
+        tx.execute_batch(V4)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

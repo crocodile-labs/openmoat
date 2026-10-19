@@ -150,12 +150,14 @@ fn a_secret_read_inside_the_run_taints_its_egress() {
 fn the_sandbox_still_cannot_touch_the_home_or_take_the_port() {
     let (sb, project) = installed_with_secret();
     let lock = std::fs::read(sb.home.join(".moat/policy.lock")).unwrap();
-    // Writes only: `kernel-self` denies writing OpenMoat's home wherever it is.
-    // Nothing denies reading it; a real `~/.moat` is unreadable because no
-    // read root covers the home, but this test's home is in the temp
-    // directory, which commands may read.
+    // `kernel-self` denies writing OpenMoat's home wherever it is, and reading
+    // the audit log and the lock: this test's home is in the temp directory,
+    // a read root, so only that read deny keeps them from the agent.
     let script = r#"echo forged >> "$HOME/.moat/audit.db" 2>/dev/null; echo "audit=$?"
          echo forged > "$HOME/.moat/policy.lock" 2>/dev/null; echo "lock=$?"
+         cat "$HOME/.moat/audit.db" > /dev/null 2>&1; echo "read_audit=$?"
+         cat "$HOME/.moat/policy.lock" > /dev/null 2>&1; echo "read_lock=$?"
+         cat "$HOME/.moat/policy.yaml" > /dev/null 2>&1; echo "read_policy=$?"
          python3 -c '
 import os, socket
 host, port = os.environ["MOAT_GUARD_SOCKET"].rsplit(":", 1)
@@ -174,6 +176,14 @@ except OSError:
     // Held by `moat run` and outside what the sandbox lets anything bind.
     for refused in ["bind=open", "audit=0", "lock=0"] {
         assert!(!stdout(&out).contains(refused), "{refused}: {shown}");
+    }
+    // Seatbelt denies a path inside a granted tree; Landlock only grants, so on
+    // Linux a deny inside a read root is a listed allowance the hook decides.
+    if cfg!(target_os = "macos") {
+        for refused in ["read_audit=0", "read_lock=0"] {
+            assert!(!stdout(&out).contains(refused), "{refused}: {shown}");
+        }
+        assert!(stdout(&out).contains("read_policy=0"), "{shown}");
     }
     assert_eq!(
         std::fs::read(sb.home.join(".moat/policy.lock")).unwrap(),

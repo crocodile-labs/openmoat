@@ -450,6 +450,28 @@ fn claude_code_modes_that_prompt_keep_the_ask() {
     assert_eq!(req.event, HookEvent::PreToolUse);
 }
 
+/// File provenance (ADR-029) hashes what `Write` writes; a partial edit has
+/// no whole content to hash.
+#[test]
+fn only_a_whole_file_write_carries_its_content() {
+    let parse = |tool: &str, input: serde_json::Value| {
+        let payload = serde_json::json!({
+            "session_id": "s", "cwd": "/p", "tool_name": tool, "tool_input": input
+        });
+        Host::ClaudeCode
+            .parse_request(&payload.to_string())
+            .unwrap()
+            .content
+    };
+    let write = serde_json::json!({"file_path": "/p/run.sh", "content": "echo hi\n"});
+    assert_eq!(parse("Write", write).as_deref(), Some("echo hi\n"));
+    let empty = serde_json::json!({"file_path": "/p/run.sh", "content": ""});
+    assert_eq!(parse("Write", empty).as_deref(), Some(""));
+    let edit = serde_json::json!({"file_path": "/p/run.sh", "old_string": "a", "new_string": "b"});
+    assert_eq!(parse("Edit", edit), None);
+    assert_eq!(parse("Bash", serde_json::json!({"command": "ls"})), None);
+}
+
 #[test]
 fn host_ids_round_trip() {
     for host in Host::ALL {

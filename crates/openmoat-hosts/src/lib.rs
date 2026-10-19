@@ -349,6 +349,11 @@ pub struct HookRequest {
     pub tool: String,
     /// `None` when the tool is outside the kernel's scope (e.g. a todo list).
     pub action: Option<Action>,
+    /// The whole new content of the one file the call writes, when the tool
+    /// sends it (Claude Code `Write`): file provenance (ADR-029) records its
+    /// hash. `None` for a tool that changes part of a file (`Edit`) or names
+    /// no content.
+    pub content: Option<String>,
     /// Which hook fired.
     pub event: HookEvent,
 }
