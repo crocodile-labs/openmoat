@@ -10,6 +10,8 @@ use serde_json::Value;
 
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+pub(crate) mod bench;
+
 pub(crate) const EVENT: &str = "PreToolUse";
 
 #[derive(Deserialize)]

@@ -11,9 +11,11 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod bench;
 mod pre_tool;
 
 use pre_tool::pre_tool_action;
@@ -31,6 +33,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: Some("Cursor does not prompt for this hook"),
         defer_is_ask_on_no_ask: true,
     },
+    on_hook_failure: "runs the call when the hook is missing, crashes or times out, unless \
+         the hook entry sets `failClosed: true`; then it blocks the call",
 };
 
 /// Cursor's hooks, each named in the payload.
@@ -57,6 +61,18 @@ impl HostAdapter for Adapter {
 
     fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
         render(decision)
+    }
+
+    fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {
+        bench::payload(call, at)
+    }
+
+    fn read_reply(&self, call: &Call, exit: &Exit<'_>) -> Answer {
+        bench::read_reply(call, exit)
+    }
+
+    fn seen(&self, call: &Call, verdict: Verdict) -> Answer {
+        bench::seen(call, verdict)
     }
 }
 

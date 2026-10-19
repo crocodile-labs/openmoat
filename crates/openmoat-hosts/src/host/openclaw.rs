@@ -20,9 +20,11 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod bench;
 mod tools;
 
 /// OpenClaw puts an `ask` to the person itself (`requireApproval`).
@@ -35,6 +37,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
     },
+    on_hook_failure: "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
+         `before_tool_call` fails closed), and the plugin blocks when `moat` is missing, \
+         crashes or does not answer; runs the call unchecked when the Gateway does not \
+         load the plugin",
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";
@@ -63,6 +69,18 @@ impl HostAdapter for Adapter {
 
     fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
         render(decision)
+    }
+
+    fn bench_payload(&self, call: &BenchCall, at: &Place<'_>) -> Option<String> {
+        Some(bench::payload(call, at))
+    }
+
+    fn read_reply(&self, _call: &BenchCall, exit: &Exit<'_>) -> Answer {
+        bench::read_reply(exit)
+    }
+
+    fn seen(&self, _call: &BenchCall, verdict: Verdict) -> Answer {
+        bench::seen(verdict)
     }
 }
 

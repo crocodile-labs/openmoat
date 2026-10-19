@@ -4,6 +4,7 @@
 
 use openmoat_core::{Decision, Verdict};
 
+use crate::bench::{Answer, Call, Exit, Place};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
@@ -30,6 +31,18 @@ pub(crate) trait HostAdapter: Sync {
 
     /// The response document the host expects on stdout.
     fn render(&self, event: &HookEvent, decision: &Decision) -> String;
+
+    /// The hook payload the host sends for `call` at `at`, or `None` when the
+    /// host has no tool for it.
+    fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String>;
+
+    /// What the host does with the hook's reply to `call`.
+    fn read_reply(&self, call: &Call, exit: &Exit<'_>) -> Answer;
+
+    /// What the host must end up doing when OpenMoat decides `verdict` on `call`.
+    fn seen(&self, _call: &Call, verdict: Verdict) -> Answer {
+        verdict.into()
+    }
 }
 
 /// The error for a payload whose hook this format does not handle.
@@ -54,6 +67,9 @@ pub struct HostSpec {
     pub speaks: Option<Host>,
     /// What the host does with an `ask` on each kind of tool hook.
     pub asks: Asks,
+    /// What the host does when its hook is missing, crashes or times out, as
+    /// `docs/THREAT_MODEL.md` §5 ("When the hook fails") says; change them together.
+    pub on_hook_failure: &'static str,
 }
 
 /// What a host does with an `ask` (and a `defer`, ADR-025) on a tool hook.

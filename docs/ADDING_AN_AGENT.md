@@ -42,7 +42,7 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response), with unit tests; `mod` in `host.rs` |
+| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `moat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
 | `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `adapter` |
 | `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
 | `crates/openmoat-cli/src/install.rs` | a `HookSpec` list, `dir_variable`, the file name and `HookFormat` in `HostConfig::at` |
