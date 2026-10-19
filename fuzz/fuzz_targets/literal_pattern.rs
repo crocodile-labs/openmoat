@@ -42,6 +42,7 @@ fuzz_target!(|data: &[u8]| {
         repo_ask: Vec::new(),
         taint: None,
         require_signed_repo_policy: false,
+        mcp: None,
     };
     if let Err(e) = policy.lint() {
         panic!("pattern {pattern:?} for {command:?} does not lint: {e}");

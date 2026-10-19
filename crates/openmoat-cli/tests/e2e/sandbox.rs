@@ -103,10 +103,12 @@ fn doctor_says_whether_claude_code_masks_each_secret() {
          header: X-Api-Key\n    source: { env: MOAT_E2E_OTHER }\n",
     );
     std::fs::write(&policy, yaml).unwrap();
-    for args in [&["doctor", "--accept"][..], &["sandbox", "sync"]] {
-        let out = sb.moat_as_person(args);
-        assert_eq!(out.status.code(), Some(OK), "{args:?}: {}", text(&out));
-    }
+    // `--accept` re-pins the edited policy, then still reports the sandbox that
+    // differs from it (exit 64) until `sandbox sync` writes the new settings.
+    let accept = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&accept).contains("re-pinned"), "{}", text(&accept));
+    let sync = sb.moat_as_person(&["sandbox", "sync"]);
+    assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
 
     let doctor = sb.moat(&["doctor"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
