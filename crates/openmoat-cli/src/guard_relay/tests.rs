@@ -10,7 +10,7 @@ use std::time::Instant;
 use openmoat_audit::Store;
 use openmoat_hosts::Host;
 
-use super::client::exchange;
+use super::client::{connect_retrying, exchange};
 use super::service::RULE_TOKEN;
 use super::wire::{NONCE_LEN, REPLY_MAGIC, REQUEST_MAGIC, Request};
 use super::*;
@@ -154,6 +154,49 @@ fn no_answer_in_time_is_an_error() {
     let mut sent = Vec::new();
     theirs.read_to_end(&mut sent).unwrap();
     assert!(sent.is_empty(), "nothing was sent");
+}
+
+/// A connect the sandbox refuses for a moment opens on a later try (#588);
+/// one it keeps refusing, or any other failure, stays the error.
+#[test]
+fn only_a_brief_sandbox_refusal_is_connected_again() {
+    use std::io::{Error, ErrorKind};
+    let deadline = || Instant::now() + Duration::from_secs(5);
+    let mut tries = 0;
+    let opened = connect_retrying(
+        |_| {
+            tries += 1;
+            if tries < 3 {
+                Err(Error::from(ErrorKind::PermissionDenied))
+            } else {
+                Ok(tries)
+            }
+        },
+        deadline(),
+    );
+    assert_eq!(opened.unwrap(), 3);
+    let mut tries = 0;
+    let refused = connect_retrying(
+        |_| -> std::io::Result<()> {
+            tries += 1;
+            Err(Error::from(ErrorKind::PermissionDenied))
+        },
+        deadline(),
+    );
+    assert_eq!(refused.unwrap_err().kind(), ErrorKind::PermissionDenied);
+    assert_eq!(tries, 10, "a lasting refusal is given up on");
+    let mut tries = 0;
+    let closed = connect_retrying(
+        |_| -> std::io::Result<()> {
+            tries += 1;
+            Err(Error::from(ErrorKind::ConnectionRefused))
+        },
+        deadline(),
+    );
+    assert_eq!(closed.unwrap_err().kind(), ErrorKind::ConnectionRefused);
+    assert_eq!(tries, 1, "nothing listening is not tried again");
+    let past = connect_retrying(|_| Ok(()), Instant::now());
+    assert_eq!(past.unwrap_err().kind(), ErrorKind::TimedOut);
 }
 
 /// What [`configured`] makes of an environment holding `pairs`.
