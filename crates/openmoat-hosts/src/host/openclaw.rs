@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
-use crate::contract::{Asks, HostAdapter, HostSpec, wrong_event};
+use crate::contract::{Asks, HostAdapter, HostSpec, InstallSpec, wrong_event};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
@@ -41,6 +41,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          `before_tool_call` fails closed), and the plugin blocks when `moat` is missing, \
          crashes or does not answer; runs the call unchecked when the Gateway does not \
          load the plugin",
+    gaps: "no OS sandbox from OpenMoat; a parameter rewrite by another plugin and \
+         OpenClaw's process input are not checked; calls run unchecked if the Gateway does \
+         not load the plugin; a failed or slow hook blocks the call",
+    // The state directory, which holds `openclaw.json` unless
+    // `OPENCLAW_CONFIG_PATH` puts it elsewhere
+    // (<https://docs.openclaw.ai/help/environment>).
+    install: Some(InstallSpec {
+        dir_variable: "OPENCLAW_STATE_DIR",
+        dir_name: ".openclaw",
+        config_file: "openclaw.json",
+    }),
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";

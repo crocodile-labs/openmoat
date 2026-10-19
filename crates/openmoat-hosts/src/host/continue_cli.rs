@@ -24,6 +24,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2, or times out (default 600 s)",
+    gaps: "the released Continue CLI does not run hooks, so OpenMoat cannot check its tool \
+         calls; run it under `moat run`",
+    install: None,
 };
 
 /// Set by `cn` for every command hook it runs, next to `CLAUDE_PROJECT_DIR`
