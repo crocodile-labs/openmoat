@@ -177,7 +177,7 @@ fn settings_that_no_longer_parse_deny_every_call() {
 fn a_config_change_of_only_relaxed_settings_loads() {
     let sb = sandbox();
     edit_settings(&sb, |s| {
-        s["permissions"]["ask"] = json!(["Bash(git push:*)"])
+        s["permissions"]["ask"] = json!(["Bash(git push:*)"]);
     });
     let payload = json!({
         "session_id": "cfg", "cwd": sb.home.to_string_lossy(),
