@@ -43,8 +43,12 @@ sanitizers = "sanitizers"
 center = "center"
 # A deliberate typosquat in a MoatBench scenario (`pip install reqeusts`).
 reqeusts = "reqeusts"
-# Deliberate typos of package names in the near-miss tests (ADR-030).
+# Deliberate typos of package names in the near-miss tests and docs (ADR-030).
 requets = "requets"
+reqests = "reqests"
+expresss = "expresss"
+expres = "expres"
+jist = "jist"
 # npm's own aliases of `install` (`npm isntall`), which the classifier reads.
 instal = "instal"
 isnt = "isnt"
