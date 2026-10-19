@@ -133,25 +133,28 @@ mod tests {
         resolve(|name| vars.get(name).cloned(), Path::new("/os/home")).unwrap()
     }
 
+    /// A path a variable names, made absolute as `expand` does: on Windows
+    /// `/srv` gets the current drive.
+    fn abs(path: &str) -> PathBuf {
+        crate::context::absolute(Path::new(path)).unwrap()
+    }
+
     #[test]
     fn defaults_follow_openclaw_home_and_explicit_paths_win() {
         assert_eq!(located(&[]), Location::default_for(Path::new("/os/home")));
         let home = located(&[("OPENCLAW_HOME", "~/svc")]);
-        assert_eq!(home.state_dir, PathBuf::from("/os/home/svc/.openclaw"));
-        assert_eq!(
-            home.config,
-            PathBuf::from("/os/home/svc/.openclaw/openclaw.json")
-        );
+        assert_eq!(home.state_dir, abs("/os/home/svc/.openclaw"));
+        assert_eq!(home.config, abs("/os/home/svc/.openclaw/openclaw.json"));
         assert!(home.config_is_default());
         let state = located(&[
             ("OPENCLAW_HOME", "/srv/oc"),
             ("OPENCLAW_STATE_DIR", "~/state"),
         ]);
-        assert_eq!(state.state_dir, PathBuf::from("/srv/oc/state"));
-        assert_eq!(state.config, PathBuf::from("/srv/oc/state/openclaw.json"));
+        assert_eq!(state.state_dir, abs("/srv/oc/state"));
+        assert_eq!(state.config, abs("/srv/oc/state/openclaw.json"));
         let config = located(&[("OPENCLAW_CONFIG_PATH", " /etc/oc/main.json5 ")]);
         assert_eq!(config.state_dir, PathBuf::from("/os/home/.openclaw"));
-        assert_eq!(config.config, PathBuf::from("/etc/oc/main.json5"));
+        assert_eq!(config.config, abs("/etc/oc/main.json5"));
         assert!(!config.config_is_default());
     }
 
