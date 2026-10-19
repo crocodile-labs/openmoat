@@ -63,8 +63,11 @@ exits. There is no daemon.
 3. **ConfigChange.** A Claude Code `ConfigChange` takes its own path: every pinned
    file is compared with `policy.lock`, and while any drifted the change is blocked for
    the session, whichever file it names (§6).
-4. **Lock.** `integrity::violation` recomputes every digest in `policy.lock`. Any drift
-   denies the call with `kernel-integrity` before the policy is read. Otherwise a tool
+4. **Lock.** `integrity::check` recomputes every digest in `policy.lock`. Any drift
+   denies the call with `kernel-integrity` before the policy is read, except drift of
+   only the Claude Code settings keys `integrity/relaxed.rs` allowlists (§6): then the
+   call is decided as usual and the first call of the session records the drift with
+   rule `settings-drift`. Otherwise a tool
    the adapter does not govern (no action) is recorded with rule `ungoverned` and
    deferred: the host decides it as if no hook had answered (Cursor, whose hooks have
    no such answer, gets an allow). An `McpTool` call is then checked against the MCP
@@ -381,11 +384,26 @@ away. Codex has no such key: a failed hook "continues the tool call"
   lock also records a digest per top-level key, so drift (in `guard` reasons, `doctor`,
   and `doctor --accept` before it re-pins) names the keys that were changed, added or
   removed: `settings.json was modified: changed hooks; added theme`. A lock written
-  before that, or a file that no longer parses, gives the plain `was modified`. Only a person re-pins: `moat init`, or
+  before that, or a file that no longer parses, gives the plain `was modified`. For a
+  Claude Code `settings.json` the lock also records a digest per key of `permissions`.
+  With them, `guard` (and `moat policy check`) keep deciding while the only drift is in
+  an allowlist of Claude Code keys (`integrity/relaxed.rs`): display and reply toggles
+  (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …) and Claude Code's own
+  permission lists and modes (`permissions.allow`, `ask`, `deny`, `defaultMode`,
+  `additionalDirectories`, `blockReadsOutsideWorkingDirectories`). They change only
+  Claude Code's own prompts; the hook still decides every call. A `deny` list that
+  lost a rule OpenMoat wrote (recorded as `claude_rules` in `hosts.json`), any other or
+  unknown key (`hooks`, `env`, `apiKeyHelper`, `model`, plugin, MCP and `sandbox` keys),
+  a file that no longer parses or is a symlink, a lock without the `permissions` digests,
+  or drift in any other pinned file still denies every call. Allowlisted drift stays
+  drift: `status` and `doctor` report it until a person re-pins, the commands that
+  re-pin still refuse while it is there, and `moat proxy` and `moat run` still refuse to
+  start. Only a person re-pins: `moat init`, or
   `moat doctor --accept`, `moat allow`, `moat edit`, `moat secret`, `moat trust` and `moat sandbox sync` from an
   interactive terminal.
 - **ConfigChange veto.** Claude Code reports settings changes; while any pinned file
-  no longer matches the lock, every change is blocked for the session. Codex and Cursor have no such
+  no longer matches the lock, every change is blocked for the session, unless all of
+  that drift is allowlisted settings drift, which loads. Codex and Cursor have no such
   event, so there the next tool call is denied instead. A `/settings-review` accept
   writes the new contents to `<file>.proposed-<8 hex>`, fires `ConfigChange` for that
   copy and renames it over the file only if no hook blocks; when `<file>` is pinned,
@@ -810,6 +828,7 @@ one sandbox generated from the policy. The code is in `crates/openmoat-cli/src/c
 policy.yaml ─► ir::lower (this project) ─► Enforcement + Grants ─┬─► seatbelt::generate ─► sandbox-exec -p <profile> <agent>
                                                                  └─► landlock::generate + seccomp ─► restricted thread ─► <agent>
 moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄── HTTP(S)_PROXY (with credential) ── agent and its commands
+         └► hook decisions (same port, MOAT-GUARD/1) ─► moat guard (outside) ◄── MOAT_GUARD_SOCKET + MOAT_GUARD_TOKEN ── moat guard (agent's hook, inside)
 ```
 
 - **Start-up.** `moat run` refuses a missing installation and a drifted policy lock
@@ -839,11 +858,24 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   session of every proxy row and is printed in the banner. `MOAT_RUN_SESSION` names it
   for the agent, so `moat guard`, started by the agent, records one link row per agent
   session in the run's session (host `moat-run`, `taint/run.rs`). The proxy folds the
-  linked sessions' taint from those rows. As the profiles stand, a hook inside the
-  sandbox can neither read nor write the OpenMoat state directory (ADR-027,
-  Consequences), so those links are written only where the hook's audit writes reach
-  the log. The port is ephemeral and the proxy private to the session, unlike
-  the Standard tier's opt-in long-running `moat proxy` on `sandbox.proxy_port` (§13).
+  linked sessions' taint from those rows. The port is ephemeral and the proxy private
+  to the session, unlike the Standard tier's opt-in long-running `moat proxy` on
+  `sandbox.proxy_port` (§13).
+- **Hook decisions** (ADR-028, `crates/openmoat-cli/src/guard_relay/`). The agent's
+  hooks run `moat guard` inside the sandbox, which can neither read nor write the
+  OpenMoat state directory. `moat run` sets `MOAT_GUARD_SOCKET` (the proxy's address)
+  and `MOAT_GUARD_TOKEN` (256 bits from `/dev/urandom`, made per run). A guard with
+  both sends its raw payload, `--host`, working directory, a random nonce and the token
+  over the proxy's port, behind the prefix `MOAT-GUARD/1\n`, which the proxy hands to
+  the service (`openmoat_proxy::LocalService`) instead of reading HTTP. The service
+  compares the token in constant time. A wrong one is recorded in the run's session
+  (rule `run-guard-token`) and gets no answer. The right one starts `moat guard` outside
+  the sandbox with the payload and `MOAT_RUN_SESSION`; that guard checks the lock,
+  decides, and writes the audit and link rows as anywhere else. The inside guard prints
+  the reply (standard output, standard error, exit 0 or 2) only when it repeats the
+  nonce; a missing variable, a non-loopback address, a failed connection, the guard's
+  10 s budget, a payload over 1 MiB or a malformed reply each deny (`kernel-error`).
+  The sandbox profiles are unchanged: no Unix socket and no second port.
 - **Seatbelt (macOS).** `(deny default)`, then:
   - process basics (exec, fork, signals and process info in the same sandbox, ttys,
     POSIX shm, the two directory-service lookups `opendirectoryd.libinfo` and
@@ -909,4 +941,6 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   the session's grants are added. The executing tests in `tests/e2e/run.rs` run
   `/bin/sh` payloads under the real sandbox on macOS and Linux; on Linux they show Unix
   and UDP sockets and `io_uring` failing with `EPERM` while TCP to the proxy works, and
-  `run/linux.rs` applies the filter to a test thread.
+  `run/linux.rs` applies the filter to a test thread. `tests/e2e/run_guard.rs` runs a
+  hook inside `moat run` and checks its decision, audit row, link row and the egress
+  taint that follows, and that a wrong token or a forged reply denies.

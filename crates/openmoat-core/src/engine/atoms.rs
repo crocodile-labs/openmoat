@@ -12,7 +12,10 @@ use crate::{host, paths};
 
 /// Classify an [`Action`] into atomic actions for the given context, and list
 /// the reads and writes among them whose path is a glob the shell expands.
-fn classify_action(action: &Action, ctx: &EvalContext) -> (ParseOutcome, Vec<AtomicAction>) {
+fn classify_action(
+    action: &Action,
+    ctx: &EvalContext,
+) -> (ParseOutcome, Vec<(AtomicAction, bool)>) {
     let outcome = match action {
         Action::Shell { command } => {
             return classify_globs(
@@ -118,7 +121,7 @@ pub(super) fn checked_atoms(
     let (outcome, globs) = classify_action(action, ctx);
     let (mut atoms, unparsed) = outcome.into_parts();
     let mut expansion = Expansion::new(paths);
-    for glob in &globs {
+    for (glob, dot_dirs) in &globs {
         if let Some(pattern) = glob.subject() {
             // a glob that kept its `..` is listed where the OS would look
             let pattern = if paths::has_dotdot(pattern) {
@@ -126,7 +129,7 @@ pub(super) fn checked_atoms(
             } else {
                 pattern.to_owned()
             };
-            let named = expansion.paths(&pattern);
+            let named = expansion.paths(&pattern, *dot_dirs);
             atoms.extend(named.into_iter().filter_map(|path| glob.with_path(path)));
         }
     }

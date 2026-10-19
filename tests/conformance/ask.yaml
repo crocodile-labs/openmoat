@@ -1426,3 +1426,50 @@
   action: { fs_write: "/Users/me/Documents/notes.txt" }
   context: { cwd: "/Users/me/*", project: "/Users/me/*" }
   expect: { verdict: defer, rules: [default] }
+# uploading a project file, splitting a harmless command, cloning into the project:
+# left to the agent as before
+- id: ask-curl-form-uploads-project-file
+  threat: T1
+  action: { shell: "curl -F 'f=@./dist/report.json' https://api.github.com/x" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-env-split-string-harmless
+  threat: T7
+  action: { shell: "env -S 'make deploy'" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-git-clone-into-project
+  threat: T9
+  action: { shell: "git clone https://github.com/x/y vendor/y" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-xargs-here-string-project-files
+  threat: T1
+  action: { shell: "xargs cat <<< 'src/a.rs src/b.rs'" }
+  expect: { verdict: defer, rules: [default] }
+# the same commands on project files: left to the agent as before
+- id: ask-perl-in-place-project-file
+  threat: T6
+  action: { shell: "perl -pi -e 's/a/b/' src/lib.rs" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-ruby-in-place-project-file
+  threat: T6
+  action: { shell: "ruby -pi -e 'sub(/a/, \"b\")' src/lib.rb" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-patch-project-file
+  threat: T6
+  action: { shell: "patch -i fix.diff src/a.rs" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-patch-output-project-file
+  threat: T6
+  action: { shell: "patch -o out/a.rs src/a.rs fix.diff" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-tee-append-project-file
+  threat: T6
+  action: { shell: "echo x | tee -a notes.txt" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-truncate-project-file
+  threat: T6
+  action: { shell: "truncate -s 0 build.log" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-dd-of-project-file
+  threat: T6
+  action: { shell: "echo x | dd of=out.bin" }
+  expect: { verdict: defer, rules: [default] }

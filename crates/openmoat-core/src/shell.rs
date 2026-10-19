@@ -18,6 +18,10 @@
 //! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
 //! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e` (`embedded.rs`) | nested classification |
 //! | `file:` URLs (`curl file:///etc/passwd`) | `FsRead` |
+//! | files `curl -F`/`-T`/`-d @` and `wget --post-file` send (`upload.rs`) | `FsRead` |
+//! | `perl -i`/`ruby -i` operands, `patch` targets and `-o` (`in_place.rs`) | `FsWrite` |
+//! | `xargs` input on the command line, `env -S 'cmd'` (`commands/wrappers.rs`) | nested classification |
+//! | local git remotes, `git clone` destinations, `--upload-pack` (`git.rs`, `embedded.rs`) | `FsRead`, `FsWrite`, nested classification |
 //! | `make --eval`, `-e`, `SHELL=`, `X!=cmd`, `$(shell …)` (`make.rs`) | `make <arg>` `Shell` atom + nested classification |
 //! | text tool options (`text.rs`): `sort -o FILE`, `uniq in out`; an unknown option | `FsWrite`; `<program> @<option>` `Shell` atom |
 //! | `sed` scripts (`sed/`): `r FILE`, `w FILE`; `e`, anything not understood | `FsRead`, `FsWrite`; `sed @<script>` `Shell` atom |
@@ -53,6 +57,7 @@ mod decoders;
 mod embedded;
 mod error;
 pub(crate) mod git;
+mod in_place;
 mod invocation;
 mod make;
 mod operands;
@@ -65,6 +70,7 @@ pub(crate) mod tables;
 mod tests;
 mod text;
 pub(crate) mod tokens;
+mod upload;
 
 pub(crate) use error::ClassifyError;
 
@@ -188,9 +194,13 @@ pub fn classify(command: &str, ctx: &ShellContext<'_>) -> ParseOutcome {
 
 /// Classify a shell command string into atomic actions, and list the reads
 /// and writes among them whose path is a glob the shell expands
-/// (`crate::expand`).
+/// (`crate::expand`), each with whether a last component starting with `.`
+/// may name `.` and `..` ([`Sink::refuse_dot_dirs`]).
 #[must_use]
-pub fn classify_globs(command: &str, ctx: &ShellContext<'_>) -> (ParseOutcome, Vec<AtomicAction>) {
+pub fn classify_globs(
+    command: &str,
+    ctx: &ShellContext<'_>,
+) -> (ParseOutcome, Vec<(AtomicAction, bool)>) {
     let mut sink = Sink::default();
     let mut stopped = commands::classify_into(command, ctx, &mut sink, 0).err();
     // `cat${IFS}~/.ssh/id_rsa`: the shell splits words where `$IFS` expands. The
@@ -243,7 +253,10 @@ pub(crate) struct Sink {
     glob_words: Vec<String>,
     /// Read and write atoms whose path is one of those globs: the engine
     /// evaluates every file it matches as well as the literal path.
-    globs: Vec<AtomicAction>,
+    globs: Vec<(AtomicAction, bool)>,
+    /// The command being classified refuses `.` and `..` as operands (`rm`,
+    /// `rmdir`), so a glob of its own does not name them.
+    no_dot_dirs: bool,
     /// Words of the command line with a `$` the shell expands (not one from
     /// single quotes): a path taken from one is not known as written.
     dollar_words: Vec<String>,
@@ -264,6 +277,13 @@ impl Sink {
     /// Classify the next simple command at `depth`.
     pub(crate) fn enter(&mut self, depth: u8) {
         self.depth = depth;
+        self.no_dot_dirs = false;
+    }
+
+    /// The command being classified is `program`: `rm` and `rmdir` refuse to
+    /// remove `.` and `..` (POSIX), so `rm -rf .*` does not reach the parent.
+    pub(crate) fn refuse_dot_dirs(&mut self, program: &str) {
+        self.no_dot_dirs = matches!(program, "rm" | "rmdir");
     }
 
     /// `name`, set by a command of its own, is a shell variable from here on, if
@@ -462,8 +482,9 @@ impl Sink {
         let traversals = ctx.traversals(word);
         for path in self.paths(ctx, word).into_iter().chain(traversals) {
             let atom = atom(path);
-            if glob && !self.globs.contains(&atom) {
-                self.globs.push(atom.clone());
+            let entry = (atom.clone(), !self.no_dot_dirs);
+            if glob && !self.globs.contains(&entry) {
+                self.globs.push(entry);
             }
             self.push(atom)?;
         }

@@ -280,6 +280,8 @@ pub(super) struct Exit {
     broker: Broker,
     recorder: AuditLog,
     run: Option<RunSession>,
+    /// `moat run`'s decisions for its sandboxed hooks, on the same port (ADR-028).
+    local: Option<crate::guard_relay::Service>,
 }
 
 /// Session mode (ADR-027): the one session `moat run` serves, and the
@@ -332,7 +334,14 @@ impl Exit {
                 session,
             },
             run,
+            local: None,
         })
+    }
+
+    /// Serve `service` on the proxy's port too.
+    pub(super) fn with_guard(mut self, service: crate::guard_relay::Service) -> Self {
+        self.local = Some(service);
+        self
     }
 
     /// The audit session the proxy records under.
@@ -363,6 +372,10 @@ impl Exit {
                 .as_ref()
                 .is_some_and(|s| s.proxy_allow_ech),
             sessions,
+            local: self
+                .local
+                .as_ref()
+                .map(|s| s as &dyn openmoat_proxy::LocalService),
         };
         let Some(run) = self.run else {
             return proxy(None).serve(listener).context("accepting connections");

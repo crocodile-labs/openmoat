@@ -26,6 +26,7 @@ use crate::audit::{Connection, Recorder};
 use crate::body::{self, BodyEnd, Framing};
 use crate::broker::{Broker, Watch};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
+use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
 use crate::session::{RULE_SESSION, Sessions};
 use crate::slots::{PENDING, Share, Shares};
@@ -59,6 +60,9 @@ pub struct Proxy<'a> {
     /// share. `None` serves any local client, as the standalone `moat proxy`
     /// does for the host sandboxes, which cannot send a credential.
     pub sessions: Option<&'a Sessions<'a>>,
+    /// A service of this process that shares the port (ADR-028): `moat run`
+    /// answers its sandboxed hooks here. `None` in `moat proxy`.
+    pub local: Option<&'a dyn LocalService>,
 }
 
 impl std::fmt::Debug for Proxy<'_> {
@@ -69,6 +73,7 @@ impl std::fmt::Debug for Proxy<'_> {
             .field("loopback_ok", &self.loopback_ok)
             .field("allow_ech", &self.allow_ech)
             .field("sessions", &self.sessions)
+            .field("local", &self.local.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -144,6 +149,14 @@ impl Proxy<'_> {
         // The head may hold the session's credential: zeroed once dropped.
         let mut buf = Zeroizing::new(Vec::new());
         let deadline = started + self.limits.handshake_timeout;
+        // Still counted as waiting to authenticate: the service checks its own token.
+        if let Some(local) = self.local
+            && !local.prefix().is_empty()
+            && local::starts_with(client, local.prefix(), deadline)
+        {
+            local.serve(client);
+            return;
+        }
         let request = match read_head(client, &mut buf, self.limits.max_head_bytes, deadline) {
             Ok(request) => request,
             Err(why) => {

@@ -305,8 +305,8 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   cannot ask, so it refuses (`session-taint`), the package registries included. A grant
   does not answer it; a new `moat run` starts clean. Untrusted content changes nothing at
   the proxy. The standalone `moat proxy` has no sessions, so taint does not apply there.
-  As the run's profiles stand, a hook inside `moat run` cannot write these links
-  (ADR-027, Consequences).
+  A hook inside `moat run` writes these links through the `moat run` process, which
+  decides its calls outside the sandbox (ADR-028).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
 
 ### 4.2 The push check
@@ -384,12 +384,13 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `unparseable` | ask | the shell command or URL, or part of it, could not be classified safely (§4 step 5) |
 | `executables` | deny | the command's program resolves to a path other than its pin (§8.1) |
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
+| `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
 | `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `moat mcp accept` |
 | `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `moat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's description or input schema is not the one a person accepted (§8) |
 | `kernel-error` | deny | `moat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
-| `config-change` | allow | a Claude Code `ConfigChange` for a settings file that is not pinned, or still matches the lock; a change that names no file is allowed only while every pinned file matches the lock; recorded |
+| `config-change` | allow | a Claude Code `ConfigChange` for a settings file that is not pinned, or still matches the lock apart from settings drift (§8); a change that names no file is allowed only while every pinned file matches the lock apart from settings drift; recorded |
 | `session-taint` | ask | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | ask | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
@@ -540,6 +541,23 @@ pinned file changed or disappeared, every call is denied with rule `kernel-integ
 until a person re-pins with `moat doctor --accept` (refused outside an interactive terminal) or
 by re-running `moat init`. Edit the policy, then run `moat doctor --accept`. Which hook files are pinned is decided only by `moat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR`, else the recorded or default ones). `moat doctor --accept`, `moat allow` and `moat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `moat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `moat doctor` and `moat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
 
+One exception keeps a changed Claude Code toggle from stopping every agent. When the
+only drift is in Claude Code's `settings.json`, limited to its own display and reply
+settings (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …) or its own
+permission lists and modes (`permissions.allow`, `ask`, `deny`, `defaultMode`,
+`additionalDirectories`, `blockReadsOutsideWorkingDirectories`), `moat guard` keeps
+deciding every call by the policy. These settings change only when Claude Code asks
+you; a hook deny stands whatever they say. The drift is recorded once per session
+(rule `settings-drift`), and `moat doctor` and `moat status` keep reporting it until
+you run `moat doctor --accept`. Removing a `permissions.deny` rule OpenMoat wrote, any
+change under `hooks`, `env`, `apiKeyHelper`, the model, plugins, MCP servers or
+`sandbox`, any key not on the list, and a file that no longer parses still deny every
+call. Turning `blockReadsOutsideWorkingDirectories` off widens what sandboxed commands
+may read; `moat status` then shows Claude Code as `hook only`. The full list and why
+each key is safe are in `crates/openmoat-cli/src/integrity/relaxed.rs`. A lock written
+before this release has no per-key record of `permissions`, so there a change to it
+still denies until the next re-pin.
+
 The lock also pins each MCP server definition the agents read (ADR-026): Claude Code's
 `~/.claude.json` (`mcpServers` and each project's local `mcpServers`) and a project's
 `.mcp.json`, Codex's `config.toml` and a project's `.codex/config.toml`, and Cursor's
@@ -576,8 +594,9 @@ when `~/.moat/environment.json` exists and resolves symlinks in checked paths. W
 installation, installation pins are not consulted and a program pinned under `executables:`
 is reported as "not found on the kernel search path" unless the command names it by
 absolute path. Checked against the installed policy (no `--policy`), it also verifies
-`policy.lock` first and, when a pinned file changed, reports the `kernel-integrity` deny
-(exit 2) that `guard` answers instead of the policy's verdict.
+`policy.lock` first and, when a pinned file changed beyond the Claude Code settings
+above, reports the `kernel-integrity` deny (exit 2) that `guard` answers instead of the
+policy's verdict.
 
 ### 8.2 Approvals
 

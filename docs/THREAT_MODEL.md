@@ -59,7 +59,7 @@ sandboxes and `moat run` add today, or the planned answer from the
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) ask (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `moat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and asks under an `ask` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands; a line not read in full or past a classifier limit asks, so padding cannot turn a deny into a defer | The sandbox bounds what any spelling can reach |
 | T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `moat mcp accept` (ADR-026) | Opt-in: `moat mcp proxy` pins each tool's description and input schema, hides a changed or new tool until `moat mcp accept`, and with `--sandbox` starts the server under `moat run` |
-| T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `moat allow\\|doctor\\|init\\|policy\\|secret\\|trust\\|uninstall` and `moat sandbox sync`; the lock denies everything after drift; Claude Code `ConfigChange` blocks a drifted settings file; a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `moat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); *planned:* signed policy (1.0) |
+| T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `moat allow\\|doctor\\|init\\|policy\\|secret\\|trust\\|uninstall` and `moat sandbox sync`; the lock denies everything after drift, except drift of only Claude Code's own display toggles and permission lists, which is recorded and reported while the hook keeps deciding every call (§5); Claude Code `ConfigChange` blocks a drifted settings file; a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `moat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); *planned:* signed policy (1.0) |
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/moat` and to the recorded binary, its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `moat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
 | T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts; `cloud-metadata` denies metadata and link-local services; `local-net` defers localhost to the agent's own prompt; `moat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host defers to the agent's own prompt (ADR-017, ADR-025); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `moat run`, and host sandboxes with `sandbox.proxy_port`, go through `moat proxy` |
@@ -257,9 +257,8 @@ something OpenMoat claims to stop.
 - **Session taint is minimal.** It follows host tool calls only. `moat run`'s proxy
   applies it to the run's connections (ADR-027): after a hook-visible call of a linked
   agent session read secret material, a request to any host but that secret's own is
-  refused. As the run's profiles stand, a hook inside `moat run` cannot reach the
-  OpenMoat state directory, so it writes no links and the proxy has no history to apply
-  (ADR-027, Consequences). Connections through the standalone `moat proxy` (the host
+  refused. A hook inside `moat run` gets its decision from the `moat run` process
+  (ADR-028), which writes the links. Connections through the standalone `moat proxy` (the host
   sandboxes' `sandbox.proxy_port`) carry no session, and taint does not apply to them.
   It does not count these as untrusted content: shell network to
   allowed hosts (`gh pr view`, `git pull`), an allowed command that reads secrets at run
@@ -275,6 +274,32 @@ something OpenMoat claims to stop.
   the same user outside the sandbox that can read the agent's environment (`ps eww` on
   some systems, `/proc/<pid>/environ` on Linux) can use the session too. The standalone
   `moat proxy` asks for no credential, so any local process may use it.
+- **The hook relay of `moat run` is attack surface (ADR-028).** Hooks inside the run's
+  sandbox cannot open `~/.moat`, so they send each payload to the `moat run` process
+  over the proxy's loopback port with the run's `MOAT_GUARD_TOKEN`, and that process
+  decides with its own access. What it trusts and why:
+  - *The token, for who may ask.* It is 256 bits, made per run and never written to
+    disk, compared in constant time. A wrong one is recorded (`run-guard-token`) and
+    gets no decision. As with the proxy credential, every process in the sandbox holds
+    it and a same-user process that can read the agent's environment could take it.
+    That is enough because what the token buys is small: a real decision on a payload
+    the asker chose, recorded as such. Any process outside `moat run` gets the same by
+    running `moat guard` itself. It cannot choose the verdict of a row, change the
+    lock or the policy, read a secret source, or make taint looser: link rows only add
+    sessions to the run, and taint only tightens.
+  - *Nothing in the payload beyond what `moat guard` already trusts.* The payload,
+    host, Continue flag and working directory are the hook's input, parsed and decided
+    as outside `moat run`; each field has a size limit checked before it is read.
+  - *The endpoint, for the hook.* The sandboxed guard trusts the reply only from the
+    address in its environment, which its host set, and only when the reply repeats
+    the request's random nonce and carries exit 0 or 2. `moat run` holds the port for
+    the whole run and the sandbox lets nothing bind one, so a command in it cannot
+    take the port over. A command can point a guard it starts itself at a server of its
+    own, which then answers that guard. That gains nothing: the command could skip the
+    guard altogether, a forged answer leaves no audit row, and the hooks the host
+    starts keep the host's environment.
+  - Everything that goes wrong denies in the sandboxed guard, and the sandbox stays
+    closed to `~/.moat` (tested in `tests/e2e/run_guard.rs`).
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**
   `openmoat-proxy` holds the value of each `secrets:` entry. It refuses and records
   (`proxy-secret`) any request to another host whose head, or plain-HTTP body, carries
@@ -411,11 +436,14 @@ something OpenMoat claims to stop.
   'print(os.environ)'`, ADR-010), and options that run programs (ADR-012) are matched
   by lists. Spellings outside the lists defer to the agent's own prompt or, if a broad allow covers them, are
   allowed.
+- **Interpreter code is scanned, not parsed.** A file that inline `python -c`, `node -e`
+  or similar code opens for writing is not checked as a write.
 - **TOCTOU and hard links.** A link swapped between the check and the command
   running, and hard links, are not seen (ADR-009).
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand
   is checked as every file it matches when the hook runs (POLICY.md §4), with
-  `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`). A
+  `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`;
+  a pattern starting with `.` also names `.` and `..`, as bash before 5.2 does). A
   file created between the check and the command that a pattern's last component
   matches is not seen. Shell options that change matching (`shopt -s dotglob
   nocaseglob extglob`, `zsh` `EXTENDED_GLOB` and `GLOB_DOTS`), `zsh` qualifiers and
@@ -434,6 +462,25 @@ something OpenMoat claims to stop.
   commands in the same process tree as the person's own terminals there, so it is not told
   apart. The `kernel-self` rules and the lock are what stop an agent from
   re-pinning or granting itself anything.
+- **Some Claude Code settings may drift without stopping the guard.** Claude Code's
+  `settings.json` is pinned, but a change limited to an allowlist of its keys
+  (`crates/openmoat-cli/src/integrity/relaxed.rs`) does not deny every call: display
+  and reply toggles, and Claude Code's own `permissions.allow`, `ask`, `deny`,
+  `defaultMode`, `additionalDirectories` and `blockReadsOutsideWorkingDirectories`.
+  The hook still decides every call by the policy, and Claude Code obeys a hook deny in
+  every permission mode, so these change only when Claude Code asks the person about a
+  call the hook left to it. Two of them widen more than prompts: with
+  `blockReadsOutsideWorkingDirectories` off, sandboxed commands may read the home
+  directory outside the working directories, and `additionalDirectories` adds
+  directories sandboxed commands may write. No guard decision depends on the sandbox,
+  `moat status` shows the agent as `hook only` while its sandbox differs from the
+  policy, and `moat doctor` reports the drift until a person runs `moat doctor --accept`.
+  A change under `hooks`, a key that runs a program or redirects the agent (`env`,
+  `apiKeyHelper`, `awsAuthRefresh`, `awsCredentialExport`, `otelHeadersHelper`,
+  `statusLine`, `fileSuggestion`, the model, plugins, MCP servers, `sandbox`), a
+  removed `permissions.deny` rule OpenMoat wrote, an unknown key, a symlink or a file
+  that no longer parses still denies every call. The kernel-self rules deny the agent
+  writes to the settings file in any case.
 - **Repository rules are hook-only, and a repository can block itself.** A
   repository policy is merged into the hook decision only. Host sandboxes and
   `moat proxy` are generated per user from the user policy, so a repository deny is

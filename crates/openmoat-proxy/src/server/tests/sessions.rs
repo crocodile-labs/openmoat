@@ -61,6 +61,7 @@ fn exchange(lookup: &Fixed, credential: Option<&str>, held: usize) -> (String, V
         loopback_ok: &[upstream.local_addr().unwrap()],
         allow_ech: false,
         sessions: Some(&sessions),
+        local: None,
     };
     let served = Served {
         addresses: &addresses,

@@ -35,6 +35,8 @@ pub(super) fn classify(
     if program == "gofmt" {
         gofmt(argv, ctx, sink)?;
     }
+    super::upload::classify(argv, program, ctx, sink)?;
+    super::in_place::classify(argv, program, ctx, sink)?;
     let mut i = 1;
     while let Some(arg) = argv.get(i) {
         i += 1;
