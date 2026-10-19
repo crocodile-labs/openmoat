@@ -107,7 +107,7 @@ exits. There is no daemon.
    or deleted event is found by the hash chain (`moat doctor`), not on every call.
 10. **Push.** `CompiledPolicy::pushes` lists the shell command's pushes (`git push`,
     `gh pr create`; core `shell/push.rs`) with the directories each may run in. Unless the
-    call is already denied, `push.rs` runs git read-only there, within 2 s for the whole
+    call is already denied, `push.rs` runs git read-only there, within 10 s for the whole
     call, and tightens the decision: `push-secret` deny, `push-runs-later` or
     `push-unchecked` ask (POLICY.md §4.2). With no finding the decision is unchanged.
 11. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot

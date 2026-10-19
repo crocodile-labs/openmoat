@@ -21,6 +21,7 @@ view at the end of the file.
 - Signed policy packs: `moat policy trust-key <key.pub> --name <who>` trusts an SSH key to sign policy, `moat policy install <pack.yaml> [--sig …]` verifies the pack with the system `ssh-keygen -Y verify` (namespace `openmoat-policy`) and merges its rules as `pack:<name>:<id>`, and `moat policy remove` takes it out. With `require_signed_repo_policy: true` in the policy, a repository policy's allow rules apply only when it is signed by a trusted key (`.moat/policy.yaml.sig`): a signed one needs no `moat trust`, and an unsigned one, or one signed by another key, is not trusted even after `moat trust`. Without it nothing changes ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
 
 ### Changed
+- The push check gives git 10 s instead of 2 s before a push asks as unchecked (`push-unchecked`): starting git can take seconds on Windows and on a loaded machine ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
 - The audit database moves to schema version 4 to record file provenance. Older `moat` builds cannot open a version-4 audit database ([#577](https://github.com/crocodile-labs/openmoat/pull/577)).
 
 ## [0.5.7] - 2026-10-18

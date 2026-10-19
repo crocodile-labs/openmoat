@@ -383,7 +383,7 @@ pushed yet. `gh pr merge` publishes nothing local and is not checked.
   names (§6), at any depth and in any letter case. In a clean session such a push
   stays as the policy decided it.
 - **`push-unchecked` (ask).** What the push publishes could not be checked: git took
-  longer than 2 s for all of a call's pushes together, the diffs exceed 8 MiB (the
+  longer than 10 s for all of a call's pushes together, the diffs exceed 8 MiB (the
   commit messages or the list of changed files 1 MiB), git failed, a refspec names no
   commit, or the push may run in a directory or repository that is not known (`cd
   "$X"`, `git --git-dir=…`, a git option that keeps the command as written, or
@@ -430,7 +430,7 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `session-taint` | ask | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | ask | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
-| `push-unchecked` | ask | what a push would publish could not be checked within 2 s or 8 MiB, or where it runs is not known (§4.2) |
+| `push-unchecked` | ask | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
 | `approved-session` | allow | an `ask` for a shell command that a person granted with `moat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `moat allow --always` |
 | `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
