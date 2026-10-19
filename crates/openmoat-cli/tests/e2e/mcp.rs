@@ -41,6 +41,43 @@ fn edit_claude_json(sb: &Sandbox, from: &str, to: &str) {
     std::fs::write(&path, now.replacen(from, to, 1)).unwrap();
 }
 
+/// Claude Code reads `.claude.json` from inside `CLAUDE_CONFIG_DIR` whenever the
+/// variable is set, even to the default `~/.claude`; its servers are pinned and
+/// a change to one is denied, whether or not `moat` sees the variable.
+#[test]
+fn servers_inside_the_claude_config_dir_are_pinned() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let config = sb.home.join(".claude");
+    let inside = config.join(".claude.json");
+    std::fs::write(&inside, SERVERS).unwrap();
+    let out = output(
+        sb.command()
+            .args(["init", "--yes"])
+            .env("CLAUDE_CONFIG_DIR", &config),
+        None,
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains("2 definitions pinned"),
+        "{}",
+        text(&out)
+    );
+    let home = sb.home.clone();
+    assert_eq!(
+        mcp_call(&sb, &home, "mcp__gh__get_issue").status.code(),
+        Some(OK)
+    );
+    let now = std::fs::read_to_string(&inside).unwrap();
+    std::fs::write(
+        &inside,
+        now.replacen(r#""command": "npx""#, r#""command": "sh""#, 1),
+    )
+    .unwrap();
+    let out = mcp_call(&sb, &home, "mcp__gh__get_issue");
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    assert!(text(&out).contains("mcp-server-changed"), "{}", text(&out));
+}
+
 #[test]
 fn a_changed_server_is_denied_alone_until_a_person_accepts_it() {
     let sb = installed_with(SERVERS);

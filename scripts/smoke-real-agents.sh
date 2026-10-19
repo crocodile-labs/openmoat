@@ -166,6 +166,10 @@ run_claude() {
     refuse_real
     (cd "$proj" && PATH="$proj/bin:$PATH" "$claude" -p "$3" --session-id "$1" \
         --permission-mode default --allowedTools "$2") 2>&1 | tee "$smoke/said.txt" || true
+    # A rejected key or token is not the agent declining: say so, not LOOK.
+    if grep -q "Failed to authenticate" "$smoke/said.txt"; then
+        fail "Claude Code could not sign in: check ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN"
+    fi
 }
 exactly() {
     printf 'Use the %s tool exactly once to %s. Do not run anything else and do not retry. Then reply with what the tool returned, word for word.' "$1" "$2"
@@ -205,7 +209,9 @@ if [ -n "$claude" ]; then
 fi
 
 refuse_real
-"$moat" init --yes
+# From the throwaway home: `init` refuses a binary inside the project of the
+# current directory, and this repository holds the one just built.
+(cd "$HOME" && "$moat" init --yes)
 if [ -n "$claude" ]; then
     echo "smoke: Claude Code $("$claude" --version 2>/dev/null || echo unknown)"
 fi
@@ -348,7 +354,8 @@ codex_run() {
         # Sign in with a ChatGPT plan instead of an API key. The login lands in
         # the throwaway CODEX_HOME, never in your own ~/.codex.
         echo "  sign in to Codex with your ChatGPT account (saved only in $CODEX_HOME)"
-        "$codex" login --device-auth || "$codex" login
+        # The browser sign-in: device-code sign-in is off for many accounts.
+        "$codex" login
     fi
     (cd "$proj" && "$moat" run --write "$CODEX_HOME" -- "$codex" exec --skip-git-repo-check \
         --sandbox danger-full-access "$(exactly shell "run: cat ~/.ssh/id_rsa")") 2>&1 |
