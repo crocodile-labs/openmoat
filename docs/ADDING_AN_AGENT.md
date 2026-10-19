@@ -210,7 +210,7 @@ runs the hook. Test at least:
   2 (invariant 4). If the agent runs the call when the hook crashes, times out or
   cannot start, and it has a setting to block instead, `init` must set it (Cursor's
   `failClosed`). Add the agent's column to the "When the hook fails" table in
-  THREAT_MODEL §5, with sources, and to `protection.rs` `gaps`; add its payload shape
+  THREAT_MODEL §5, with sources, and to its spec's `on_hook_failure` and `gaps`; add its payload shape
   to `e2e/host_failures.rs`. Its hook timeout must stay above `GUARD_BUDGET_S`.
 - Say whether the agent can ask, and what the person does when it cannot.
 
