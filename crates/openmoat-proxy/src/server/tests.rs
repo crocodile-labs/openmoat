@@ -96,6 +96,10 @@ impl LocalService for Echo {
     }
 
     fn serve(&self, mut client: &TcpStream) {
+        // Read what was sent first, as the guard relay reads its whole request.
+        // A socket closed with unread bytes is reset, and on Windows the reset
+        // throws away what the other end had not read yet: "served".
+        let _ = client.read_to_end(&mut Vec::new());
         let _ = client.write_all(b"served");
     }
 }
