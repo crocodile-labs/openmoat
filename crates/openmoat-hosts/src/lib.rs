@@ -10,13 +10,12 @@
 
 mod contract;
 mod host;
-mod openclaw;
 mod registry;
 mod wire;
 
 use host::claude_code::config_change;
-use host::cursor;
-use wire::{mcp, pre_tool_use};
+use host::{cursor, openclaw};
+use wire::pre_tool_use;
 
 pub use config_change::proposal_target;
 pub use contract::{Asks, HostSpec};

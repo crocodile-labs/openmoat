@@ -139,7 +139,9 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
         name if UNGOVERNED.contains(&name) => return Ok(None),
         // OpenClaw names an MCP tool `<server>__<tool>`; built-in and plugin
         // tool ids have no `__`.
-        name if name.contains("__") => crate::mcp::action(&format!("mcp__{name}"), call.params)?,
+        name if name.contains("__") => {
+            crate::wire::mcp::action(&format!("mcp__{name}"), call.params)?
+        }
         _ => unknown(call),
     };
     Ok(Some(action))

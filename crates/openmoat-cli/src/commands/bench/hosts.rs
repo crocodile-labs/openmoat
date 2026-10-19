@@ -239,7 +239,7 @@ impl Place<'_> {
     }
 }
 
-/// What OpenMoat's OpenClaw plugin sends (`openmoat-hosts` `openclaw.rs`). The
+/// What OpenMoat's OpenClaw plugin sends (`openmoat-hosts` `host/openclaw.rs`). The
 /// platform is always a POSIX one: on Windows OpenClaw's `exec` runs PowerShell,
 /// which OpenMoat leaves to OpenClaw, so the bench scores the shell it reads.
 fn openclaw(call: &Call, at: &Place<'_>) -> Value {

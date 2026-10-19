@@ -20,9 +20,22 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::contract::{Asks, HostSpec};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod tools;
+
+/// OpenClaw puts an `ask` to the person itself (`requireApproval`).
+pub(crate) static SPEC: HostSpec = HostSpec {
+    id: "openclaw",
+    display_name: "OpenClaw",
+    speaks: None,
+    asks: Asks {
+        on_pre_tool_use: None,
+        on_no_ask: None,
+        defer_is_ask_on_no_ask: false,
+    },
+};
 
 pub(crate) const EVENT: &str = "before_tool_call";
 
