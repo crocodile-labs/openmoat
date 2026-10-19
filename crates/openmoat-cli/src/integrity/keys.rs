@@ -16,15 +16,7 @@ pub(super) fn key_digests(path: &Path) -> Option<BTreeMap<String, String>> {
     match path.extension()?.to_str()? {
         "json" => {
             let value: serde_json::Value = serde_json::from_str(&text).ok()?;
-            let object = value.as_object()?;
-            let digest = |v| serde_json::to_vec(v).ok().map(|b| sha256_hex(&b));
-            // The key the digest leaves out is not named as a change either.
-            let settings = is_claude_settings(path);
-            object
-                .iter()
-                .filter(|(k, _)| !(settings && *k == COSMETIC_KEY))
-                .map(|(k, v)| Some((k.clone(), digest(v)?)))
-                .collect()
+            object_digests(value.as_object()?, is_claude_settings(path))
         }
         "toml" => {
             let doc: toml_edit::DocumentMut = text.parse().ok()?;
@@ -39,6 +31,35 @@ pub(super) fn key_digests(path: &Path) -> Option<BTreeMap<String, String>> {
         }
         _ => None,
     }
+}
+
+/// Key → SHA-256 of its value's compact serialisation. In a Claude Code
+/// settings file (`settings`) the key its digest leaves out is not named as a
+/// change either.
+pub(super) fn object_digests(
+    object: &serde_json::Map<String, serde_json::Value>,
+    settings: bool,
+) -> Option<BTreeMap<String, String>> {
+    let digest = |v| serde_json::to_vec(v).ok().map(|b| sha256_hex(&b));
+    object
+        .iter()
+        .filter(|(k, _)| !(settings && *k == COSMETIC_KEY))
+        .map(|(k, v)| Some((k.clone(), digest(v)?)))
+        .collect()
+}
+
+/// The keys whose digests differ between `pinned` and `now`: changed, added
+/// or removed.
+pub(super) fn differing<'a>(
+    pinned: &'a BTreeMap<String, String>,
+    now: &'a BTreeMap<String, String>,
+) -> impl Iterator<Item = &'a String> {
+    let changed_or_removed = pinned
+        .iter()
+        .filter(|(k, v)| now.get(*k) != Some(*v))
+        .map(|(k, _)| k);
+    let added = now.keys().filter(|k| !pinned.contains_key(*k));
+    changed_or_removed.chain(added)
 }
 
 /// `changed hooks; added theme`: the top-level keys that differ between the

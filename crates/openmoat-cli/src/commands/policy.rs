@@ -45,7 +45,7 @@ pub fn check(args: &CheckArgs) -> Result<Code> {
     // The installed policy decides nothing while the lock is broken: report the
     // `kernel-integrity` deny `guard` would answer instead of the policy's verdict.
     if args.policy.is_none()
-        && let Some(decision) = integrity::violation(&Home::locate()?)?
+        && let Some(decision) = integrity::check(&Home::locate()?)?.deny
     {
         return report(&decision, args.format);
     }

@@ -22,13 +22,15 @@ use crate::guard_relay::{self, MAX_PAYLOAD_BYTES};
 use crate::hangs::{self, Phase};
 use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
-use crate::integrity::{self, INTEGRITY_RULE, Lock};
+use crate::integrity::{self, Drift};
 use crate::realpath::FsPathResolver;
 use crate::{push, render, secrets, taint, time};
 
+mod config_change;
+mod drift;
+
 const UNGOVERNED_RULE: &str = "ungoverned";
 const KERNEL_ERROR_RULE: &str = "kernel-error";
-const CONFIG_CHANGE_RULE: &str = "config-change";
 const SESSION_GRANT_RULE: &str = "approved-session";
 
 pub fn run(args: &GuardArgs) -> Code {
@@ -121,6 +123,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
     let mut event = HookEvent::default();
     let mut known = KnownSecrets::default();
     let mut cache = None;
+    let mut drifted = Vec::new();
     hangs::enter(Phase::Stdin);
     let (request, mut decision) = match read_stdin() {
         Ok(payload) => {
@@ -128,7 +131,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             event = host.event_of(&payload);
-            evaluate(host, &payload, &mut known, &mut cache)
+            evaluate(host, &payload, &mut known, &mut cache, &mut drifted)
                 .unwrap_or_else(|error| (None, kernel_error(&error)))
         }
         Err(error) => (None, kernel_error(&error)),
@@ -143,6 +146,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
     let recorded = Recorded {
         request: request.as_ref(),
         decision: &decision,
+        drifted: &drifted,
         started,
         known,
         cache,
@@ -209,12 +213,14 @@ fn relay_once(reply: &guard_relay::Reply) -> Code {
 /// Decide one hook payload. `known` gets the brokered secret values to mask in
 /// the audit row as soon as the policy is loaded, so it holds them even when a
 /// later step fails. `cache` gets the session's fold to store, written with
-/// the record so the call opens one writable handle.
+/// the record so the call opens one writable handle. `drifted` gets the
+/// settings drift the lock let the call be decided through ([`integrity::check`]).
 fn evaluate(
     host: Host,
     payload: &str,
     known: &mut KnownSecrets,
     cache: &mut Option<taint::CacheWrite>,
+    drifted: &mut Vec<Drift>,
 ) -> Result<(Option<HookRequest>, Decision)> {
     hangs::enter(Phase::Lock);
     let request = host
@@ -228,15 +234,19 @@ fn evaluate(
     {
         let change = change_type.as_deref().unwrap_or("changed");
         let decision =
-            config_change_decision(&Home::locate()?, request.action.as_ref(), source, change)?;
+            config_change::decision(&Home::locate()?, request.action.as_ref(), source, change)?;
         return Ok((Some(request), decision));
     }
     // Lock before decide, ungoverned tools included: an `allow` while pinned
-    // files drifted would tell whoever tampered that nothing noticed.
+    // files drifted would tell whoever tampered that nothing noticed. Drift of
+    // only Claude Code toggles and permission lists changes no decision, so the
+    // call is decided as usual and the drift recorded (`integrity/relaxed.rs`).
     let home = Home::locate()?;
-    if let Some(decision) = integrity::violation(&home)? {
+    let checked = integrity::check(&home)?;
+    if let Some(decision) = checked.deny {
         return Ok((Some(request), decision));
     }
+    *drifted = checked.relaxed;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
     if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {
@@ -314,6 +324,9 @@ fn evaluate(
 struct Recorded<'a> {
     request: Option<&'a HookRequest>,
     decision: &'a Decision,
+    /// Settings drift the call was decided through; the first call of a
+    /// session records it with its row, and the host's answer stays as decided.
+    drifted: &'a [Drift],
     started: Instant,
     known: KnownSecrets,
     cache: Option<taint::CacheWrite>,
@@ -327,6 +340,7 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     let Recorded {
         request,
         decision,
+        drifted,
         started,
         known,
         cache,
@@ -344,6 +358,11 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         hangs::enter(Phase::Record);
     }
     let store = store.with_secrets(known);
+    let noted = match request {
+        Some(r) => drift::noted(&store, &r.session_id, decision, drifted)?,
+        None => None,
+    };
+    let decision = noted.as_ref().unwrap_or(decision);
     let latency_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
     let event = NewEvent {
         host: host.id(),
@@ -389,86 +408,6 @@ fn read_stdin() -> Result<String> {
         bail!("empty hook payload on stdin");
     }
     Ok(payload)
-}
-
-/// A settings file changed on disk. While any pinned file drifted, no change
-/// is loaded: the session keeps the old settings and the drift is reported.
-/// Otherwise a pinned file loads (it matches the lock), a settings-review copy
-/// of one loads only if it leaves the pinned file as is, and an unpinned file
-/// is audited and allowed.
-fn config_change_decision(
-    home: &Home,
-    action: Option<&openmoat_core::Action>,
-    source: &str,
-    change: &str,
-) -> Result<Decision> {
-    let lock_path = home.lock_path();
-    if !lock_path.is_file() {
-        bail!("no policy lock at {}; run `moat init`", lock_path.display());
-    }
-    let lock = Lock::load(&lock_path)?;
-    // Checked whatever file the change names: settings load together, so an
-    // unpinned file's change would also load a tampered pinned one (every tool
-    // call is denied then anyway).
-    let drift = lock.verify();
-    if !drift.is_empty() {
-        return Ok(drift_blocks_change(&drift));
-    }
-    let mut decision = Decision::new(Verdict::Allow);
-    decision.rules.push(CONFIG_CHANGE_RULE.to_owned());
-    let path = match action {
-        Some(openmoat_core::Action::FsWrite { path }) => std::path::Path::new(path),
-        Some(_) => bail!("config change for something other than a file"),
-        // Claude Code may report a change without naming the file. Every pin
-        // matches, and refusing the change would block the user's own edits
-        // while protecting nothing the lock does not already cover.
-        None => {
-            decision.reasons.push(format!(
-                "{source} {change} (no file named); every file pinned by OpenMoat matches the policy lock"
-            ));
-            return Ok(decision);
-        }
-    };
-    // A settings-review copy holds exactly what its target will become, so the
-    // target's pin decides: block unless the copy leaves the pinned file as is.
-    // Only a person re-pins, and the hook cannot tell an owner's accept in
-    // `/settings-review` from an agent's, so any edit of a pinned file is refused.
-    if let Some(target) = path.to_str().and_then(openmoat_hosts::proposal_target)
-        && lock.pins(std::path::Path::new(&target))
-    {
-        if let Some(drift) = lock.verify_proposal(path, std::path::Path::new(&target)) {
-            let mut deny = Decision::new(Verdict::Deny);
-            deny.rules.push(INTEGRITY_RULE.to_owned());
-            deny.reasons.push(format!(
-                "{drift}; OpenMoat pinned {target}, so the proposal is not applied. Edit the file yourself and run `moat doctor --accept` to change it"
-            ));
-            return Ok(deny);
-        }
-        decision
-            .reasons
-            .push(format!("{} leaves {target} as pinned", path.display()));
-        return Ok(decision);
-    }
-    let pinned = if lock.pins(path) {
-        "matches the policy lock"
-    } else {
-        "not pinned by OpenMoat"
-    };
-    decision
-        .reasons
-        .push(format!("{} {change}; {pinned}", path.display()));
-    Ok(decision)
-}
-
-fn drift_blocks_change(drift: &[crate::integrity::Drift]) -> Decision {
-    let mut decision = Decision::new(Verdict::Deny);
-    decision.rules.push(INTEGRITY_RULE.to_owned());
-    for d in drift {
-        decision.reasons.push(format!(
-            "{d} outside OpenMoat; the change is not loaded into this session. Run `moat doctor` to inspect, `moat doctor --accept` to accept it"
-        ));
-    }
-    decision
 }
 
 /// A tool OpenMoat does not govern is recorded, and the host decides it as if no
