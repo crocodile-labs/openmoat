@@ -333,3 +333,32 @@ fn open_existing_refuses_a_missing_database() {
     Store::open(&path).unwrap();
     assert!(Store::open_existing(&path).is_ok());
 }
+
+#[test]
+fn session_has_rule_matches_the_rule_exactly_and_only_in_that_session() {
+    let store = Store::open_in_memory().unwrap();
+    let a = Action::Shell {
+        command: "ls".into(),
+    };
+    let record = |session: &str, rule: &str| {
+        let d = decision(Verdict::Allow, rule, "ok");
+        let event = NewEvent {
+            session_id: session,
+            ..sample(&d, &a)
+        };
+        store.record(&event).unwrap();
+    };
+    record("s1", "dev-shell");
+    record("other", "settings-drift");
+    // LIKE ignores ASCII case and reads `_` as any character: the prefilter
+    // keeps these rows, the exact check drops them.
+    record("s1", "SETTINGS-DRIFT");
+    record("s1", "axb");
+    assert!(!store.session_has_rule("s1", "settings-drift").unwrap());
+    assert!(!store.session_has_rule("s1", "a_b").unwrap());
+    assert!(!store.session_has_rule("s1", "settings").unwrap());
+    assert!(store.session_has_rule("other", "settings-drift").unwrap());
+    record("s1", "settings-drift");
+    assert!(store.session_has_rule("s1", "settings-drift").unwrap());
+    assert!(store.session_has_rule("s1", "axb").unwrap());
+}

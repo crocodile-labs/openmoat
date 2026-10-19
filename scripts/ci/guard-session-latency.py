@@ -16,6 +16,11 @@ session should cost what a short one does. Like guard-latency.py, it warns
 when p95 at 5,000 earlier calls is over the 15 ms budget and fails above
 three times it: a regression back to folding the whole session fails here.
 
+Each size times BATCHES batches of `runs` calls and reports the median of the
+batches' p95. With 50 runs a batch's p95 is its third-slowest call, so three
+slow process starts on a busy runner would fail one batch; they rarely land
+in two of three, while a real regression slows every batch.
+
 A last row times reads after another session that read untrusted content
 wrote 500 files (file provenance, ADR-029): each read is one indexed lookup
 per path, so it is held to the same budget.
@@ -35,11 +40,17 @@ BUDGET_MS = 15.0
 FAIL_MS = 3 * BUDGET_MS
 SESSION = "long-session"
 PROVENANCE_FILES = 500
+BATCHES = 3
 
 
 def percentile(samples, p):
     ordered = sorted(samples)
     return ordered[min(len(ordered) - 1, round(p / 100 * (len(ordered) - 1)))]
+
+
+def batched_p95(batches):
+    """The median of each batch's p95."""
+    return statistics.median(percentile(batch, 95) for batch in batches)
 
 
 def payload(project, command, session=SESSION, tool="Bash", tool_input=None):
@@ -80,24 +91,37 @@ def main():
             sys.exit(f"`{command}`: exit {out.returncode}\n{out.stderr.decode()}")
         return (time.perf_counter() - started) * 1000
 
+    def timed(command_of):
+        """BATCHES batches of `runs` calls: end to end and `latency_us`, in ms."""
+        wall, own = [], []
+        for batch in range(BATCHES):
+            wall.append([call(command_of(batch * runs + i)) for i in range(runs)])
+            with sqlite3.connect(os.path.join(home, ".moat", "audit.db")) as db:
+                own.append([r[0] / 1000 for r in db.execute(
+                    "SELECT latency_us FROM events ORDER BY id DESC LIMIT ?", (runs,))])
+        return wall, own
+
+    def report(label, title, wall, own):
+        flat_wall = [ms for batch in wall for ms in batch]
+        flat_own = [ms for batch in own for ms in batch]
+        p95, own_p95 = batched_p95(wall), batched_p95(own)
+        rows.append(f"| {label} | {statistics.median(flat_wall):.1f} / {p95:.1f} | "
+                    f"{statistics.median(flat_own):.1f} / {own_p95:.1f} |")
+        # a comma ends a workflow command property, so the title has none
+        print(f"::notice title=guard latency {title}::"
+              f"end to end median {statistics.median(flat_wall):.1f} ms, p95 {p95:.1f} ms; "
+              f"latency_us median {statistics.median(flat_own):.1f} ms, p95 {own_p95:.1f} ms")
+        return p95
+
     rows, earlier, worst = [], 0, 0.0
     for size in SIZES:
         while earlier < size:
             call(f"cat src/file{earlier}.rs")
             earlier += 1
-        wall = [call("git status") for _ in range(runs)]
-        with sqlite3.connect(os.path.join(home, ".moat", "audit.db")) as db:
-            own = [r[0] / 1000 for r in db.execute(
-                "SELECT latency_us FROM events ORDER BY id DESC LIMIT ?", (runs,))]
-        p95 = percentile(wall, 95)
+        wall, own = timed(lambda _: "git status")
+        p95 = report(f"{size:,}", f"after {size} earlier calls", wall, own)
         if size == SIZES[-1]:
             worst = p95
-        rows.append(f"| {size:,} | {statistics.median(wall):.1f} / {p95:.1f} | "
-                    f"{statistics.median(own):.1f} / {percentile(own, 95):.1f} |")
-        # a comma ends a workflow command property, so the title has none
-        print(f"::notice title=guard latency after {size} earlier calls::"
-              f"end to end median {statistics.median(wall):.1f} ms, p95 {p95:.1f} ms; "
-              f"latency_us median {statistics.median(own):.1f} ms")
 
     # File provenance (ADR-029): another session reads untrusted content and
     # writes PROVENANCE_FILES files; every later read is looked up by path.
@@ -105,16 +129,13 @@ def main():
     call("fetch", session="tainted-writer", tool="WebFetch", tool_input=fetch)
     for i in range(PROVENANCE_FILES):
         call(f"echo x > src/gen{i}.rs", session="tainted-writer")
-    wall = [call(f"cat src/gen{i % PROVENANCE_FILES}.rs") for i in range(runs)]
-    p95 = percentile(wall, 95)
-    worst = max(worst, p95)
-    rows.append(f"| {SIZES[-1]:,} and {PROVENANCE_FILES} tainted files | "
-                f"{statistics.median(wall):.1f} / {p95:.1f} | n/a |")
-    print(f"::notice title=guard latency with {PROVENANCE_FILES} tainted files::"
-          f"end to end median {statistics.median(wall):.1f} ms, p95 {p95:.1f} ms")
+    wall, own = timed(lambda i: f"cat src/gen{i % PROVENANCE_FILES}.rs")
+    worst = max(worst, report(f"{SIZES[-1]:,} and {PROVENANCE_FILES} tainted files",
+                              f"with {PROVENANCE_FILES} tainted files", wall, own))
 
     table = "\n".join([
-        f"`moat guard` late in one session, {runs} runs per size, ms (median / p95)",
+        f"`moat guard` late in one session, {BATCHES} batches of {runs} runs per size, "
+        "ms (median of all runs / median of the batches' p95)",
         "",
         "| earlier calls | end to end | latency_us |",
         "|---|---|---|",
