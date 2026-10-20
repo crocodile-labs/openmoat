@@ -112,7 +112,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let policy = policies(&mut report, &home);
     if let Some(update) = crate::upgrade::available(&home) {
         report.warn(&format!(
-            "policy update    {update}: `moat policy upgrade` shows them and asks"
+            "policy update    {update}: `openmoat policy upgrade` shows them and asks"
         ));
     }
     let lock = load_lock(&mut report, &home);
@@ -146,12 +146,15 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
     let macos = warnings::old_macos(crate::os_version::macos().as_deref());
     let network = super::run::port_only_network();
+    let alias = warnings::alias_hooks(&home, &binary);
     for warning in [tiocsti, hangs, state, macos, network]
         .into_iter()
         .flatten()
+        .chain(alias)
     {
         report.warn(&warning);
     }
+    report.note(warnings::RENAMED);
     // Loaded when a session starts here, where no `ConfigChange` fires.
     for warning in crate::project_settings::warnings_here() {
         let name = warning.host.display_name();
@@ -227,7 +230,7 @@ fn load_lock(report: &mut Report, home: &Home) -> Option<Lock> {
             report.line(
                 Area::Lock,
                 false,
-                "lock             missing; run `moat init`".to_owned(),
+                "lock             missing; run `openmoat init`".to_owned(),
             );
             None
         }
@@ -255,12 +258,14 @@ fn verify_lock(report: &mut Report, lock: &Lock, binary: &Path) -> Vec<integrity
     for d in &drift {
         report.line(Area::Lock, false, format!("lock             {d}"));
     }
-    if lock.binary != binary.to_string_lossy() {
+    if let Some(warning) = warnings::alias_lock(&lock.binary, binary) {
+        report.warn(&warning);
+    } else if lock.binary != binary.to_string_lossy() {
         report.line(
             Area::Binary,
             false,
             format!(
-                "binary           lock expects {}, running {}; run `moat init`",
+                "binary           lock expects {}, running {}; run `openmoat init`",
                 lock.binary,
                 binary.display()
             ),
@@ -284,7 +289,7 @@ fn environment(report: &mut Report, home: &Home) {
         Err(e) => report.line(
             Area::Environment,
             false,
-            format!("environment      {e:#}; run `moat init`"),
+            format!("environment      {e:#}; run `openmoat init`"),
         ),
     }
 }
@@ -298,7 +303,7 @@ fn hook_pins(report: &mut Report, lock: &Lock, home: &Home, hook_files: &[PathBu
             Area::Hook,
             false,
             format!(
-                "hook file        {} is not pinned by the lock; run `moat init` to pin it",
+                "hook file        {} is not pinned by the lock; run `openmoat init` to pin it",
                 path.display()
             ),
         );
@@ -320,15 +325,15 @@ fn accept(
     policy_lints: bool,
     intact: bool,
 ) -> Result<()> {
-    crate::terminal::refuse_agent("moat doctor --accept")?;
+    crate::terminal::refuse_agent("openmoat doctor --accept")?;
     if !crate::terminal::interactive() {
         bail!(
-            "`moat doctor --accept` must be run by a person in a terminal, not from a hook or script"
+            "`openmoat doctor --accept` must be run by a person in a terminal, not from a hook or script"
         );
     }
     if !policy_lints {
         bail!(
-            "refusing to pin a policy that does not lint; fix it, then run `moat doctor --accept` again"
+            "refusing to pin a policy that does not lint; fix it, then run `openmoat doctor --accept` again"
         );
     }
     if intact {
@@ -361,7 +366,7 @@ fn finish(mut report: Report) -> Result<Code> {
     }
     writeln!(
         report.out,
-        "{} problem(s). `moat init` re-installs and re-pins; `moat doctor --accept` accepts edits you made yourself.",
+        "{} problem(s). `openmoat init` re-installs and re-pins; `openmoat doctor --accept` accepts edits you made yourself.",
         report.problems.len()
     )?;
     report.out.finish()?;
@@ -392,8 +397,8 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                 Area::Hook,
                 false,
                 format!(
-                    "{name:<16} {var} is {}, but `moat init` set it up in {}, which moat uses; \
-                     run `moat init` with {var} set to set up that directory instead",
+                    "{name:<16} {var} is {}, but `openmoat init` set it up in {}, which OpenMoat uses; \
+                     run `openmoat init` with {var} set to set up that directory instead",
                     env.display(),
                     dir.display()
                 ),
@@ -402,7 +407,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
         let state = config.state(binary);
         if recorded.skipped(host) && config.host_present() && matches!(state, HookState::Missing) {
             report.note(&format!(
-                "{name:<16} not set up; `moat init --hosts {}` adds it",
+                "{name:<16} not set up; `openmoat init --hosts {}` adds it",
                 host.id()
             ));
             continue;
@@ -422,7 +427,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                     report.warn(&format!(
                         "{name:<16} runs a tool call when its hook fails to start, crashes or \
                          times out: no `claude` 2.1.295 or later on PATH, so the hook has no \
-                         `onFailure: \"block\"`; update Claude Code, then run `moat init`"
+                         `onFailure: \"block\"`; update Claude Code, then run `openmoat init`"
                     ));
                 }
             }
@@ -433,7 +438,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                 report.line(
                     Area::Hook,
                     false,
-                    format!("{name:<16} hook missing; run `moat init`"),
+                    format!("{name:<16} hook missing; run `openmoat init`"),
                 );
             }
             HookState::Stale { command } => {
@@ -483,7 +488,7 @@ fn audit_line(report: &mut Report, chain: &ChainReport) {
     );
     if let Some(head) = &chain.head {
         report.note(&format!(
-            "audit log        head {head}; record it elsewhere (`moat audit anchor`), then `moat audit verify --against` it later"
+            "audit log        head {head}; record it elsewhere (`openmoat audit anchor`), then `openmoat audit verify --against` it later"
         ));
     }
     if chain.unchained > 0 {

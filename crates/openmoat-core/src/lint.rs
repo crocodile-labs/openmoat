@@ -46,7 +46,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
             out.push(Warning {
                 rule: key.to_owned(),
                 message: format!(
-                    "`{key}` is reserved and has no effect yet; approvals are made with `moat allow` \
+                    "`{key}` is reserved and has no effect yet; approvals are made with `openmoat allow` \
                      and the project root is the git root of the call's working directory"
                 ),
             });
@@ -69,7 +69,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
     if policy.sandbox.as_ref().is_some_and(|s| s.proxy_allow_ech) {
         out.push(Warning {
             rule: "sandbox.proxy_allow_ech".to_owned(),
-            message: "`moat proxy` forwards encrypted server names (ECH): an allowed host's \
+            message: "`openmoat proxy` forwards encrypted server names (ECH): an allowed host's \
                       provider may serve another site it hosts through it"
                 .to_owned(),
         });
@@ -77,7 +77,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
     if policy.trust_mcp_first_sight() {
         out.push(Warning {
             rule: "mcp.trust_first_sight".to_owned(),
-            message: "`moat mcp proxy` pins a new server's tools as it first lists them: a \
+            message: "`openmoat mcp proxy` pins a new server's tools as it first lists them: a \
                       server that is malicious from the start gets its tool descriptions \
                       pinned without a person reading them"
                 .to_owned(),
@@ -98,7 +98,7 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
         };
         if !listed(&policy.allow, &[Kind::Net, Kind::Fetch], &secret.host) {
             warn(format!(
-                "no net or fetch allow rule names {}, so `moat proxy` refuses it and the \
+                "no net or fetch allow rule names {}, so `openmoat proxy` refuses it and the \
                  secret is never injected",
                 secret.host
             ));
@@ -108,7 +108,7 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
         }
         if secret.plain_http && secret.is_loopback() {
             warn(format!(
-                "`plain_http: true` names {}, a loopback host; `moat proxy` never connects to \
+                "`plain_http: true` names {}, a loopback host; `openmoat proxy` never connects to \
                  a loopback address, so the secret is never injected",
                 secret.host
             ));

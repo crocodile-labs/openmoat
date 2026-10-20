@@ -11,8 +11,8 @@
 # Steps (default: all): egress push near-miss mcp on-failure provenance codex-hook
 # codex-run. The Claude Code steps need ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
 # (from `claude setup-token`); a Claude Code step without either is skipped.
-# codex-hook checks Codex's own hook without `moat run` (it works on any macOS);
-# codex-run checks it inside `moat run` (macOS 13 or later, or Linux). The Codex
+# codex-hook checks Codex's own hook without `openmoat run` (it works on any macOS);
+# codex-run checks it inside `openmoat run` (macOS 13 or later, or Linux). The Codex
 # steps use OPENAI_API_KEY when set, and otherwise ask you to sign in once with a
 # ChatGPT plan, saved only in the temporary CODEX_HOME. MOAT_BIN, CLAUDE_BIN and
 # CODEX_BIN choose the binaries (default: PATH).
@@ -27,7 +27,7 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
 real_home=${HOME:?HOME is not set}
-moat=${MOAT_BIN:-$(command -v moat || true)}
+moat=${MOAT_BIN:-$(command -v openmoat || true)}
 claude=${CLAUDE_BIN:-$(command -v claude || true)}
 codex=${CODEX_BIN:-$(command -v codex || true)}
 
@@ -36,7 +36,7 @@ die() {
     exit 64
 }
 
-[ -n "$moat" ] || die "no moat on PATH (set MOAT_BIN)"
+[ -n "$moat" ] || die "no openmoat on PATH (set MOAT_BIN)"
 command -v python3 >/dev/null || die "python3 is needed for the fake MCP server and the checks"
 command -v git >/dev/null || die "git is needed for the push step"
 

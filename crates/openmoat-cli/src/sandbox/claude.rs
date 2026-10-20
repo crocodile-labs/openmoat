@@ -486,7 +486,7 @@ fn through_moat_proxy(net: &Access, port: u16, report: &mut Report) -> Value {
         "claude-code.proxy",
         format!(
             "sandboxed commands have no network while nothing listens on 127.0.0.1:{port} \
-             (`moat proxy`), and none over SOCKS5 (`ALL_PROXY`, ssh): `moat proxy` speaks HTTP only"
+             (`openmoat proxy`), and none over SOCKS5 (`ALL_PROXY`, ssh): `openmoat proxy` speaks HTTP only"
         ),
     );
     value

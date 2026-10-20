@@ -16,8 +16,8 @@ pub enum Confined {}
 
 pub fn confine(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Result<Confined> {
     bail!(
-        "`moat run` needs an operating-system sandbox OpenMoat can generate (Seatbelt on macOS, \
-         Landlock on Linux); there is none on {}. Use the Standard tier: `moat init` \
+        "`openmoat run` needs an operating-system sandbox OpenMoat can generate (Seatbelt on macOS, \
+         Landlock on Linux); there is none on {}. Use the Standard tier: `openmoat init` \
          configures the agent's own sandbox",
         std::env::consts::OS
     )
@@ -25,13 +25,13 @@ pub fn confine(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Re
 
 pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Result<Confined> {
     bail!(
-        "`moat run --isolate` runs on Linux only (bubblewrap); there is no Isolated tier on {}",
+        "`openmoat run --isolate` runs on Linux only (bubblewrap); there is no Isolated tier on {}",
         std::env::consts::OS
     )
 }
 
 pub fn inside(_: &IsolatedArgs) -> Result<Code> {
-    bail!("only `moat run --isolate` on Linux starts this")
+    bail!("only `openmoat run --isolate` on Linux starts this")
 }
 
 /// None: `moat run` refuses here.

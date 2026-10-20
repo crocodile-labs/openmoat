@@ -47,7 +47,9 @@ where
         .arg("--user")
         .args(args)
         .output()
-        .with_context(|| "running systemctl --user; install systemd or run `moat proxy` yourself")
+        .with_context(
+            || "running systemctl --user; install systemd or run `openmoat proxy` yourself",
+        )
 }
 
 impl Manager for SystemdManager {

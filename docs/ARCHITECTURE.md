@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you change the code: where it lives, and how a tool call becomes a decision, a hook response and an audit record.
 
-**On this page:** [1. Crates](#1-crates) · [2. One tool call, end to end](#2-one-tool-call-end-to-end) · [3. Classification](#3-classification) · [4. Decision](#4-decision) · [5. Hook responses and exit codes](#5-hook-responses-and-exit-codes) · [6. Self-protection](#6-self-protection) · [7. Audit log](#7-audit-log) · [8. Files on disk](#8-files-on-disk) · [9. Invariants](#9-invariants) · [10. Repository layout](#10-repository-layout) · [11. Testing layers](#11-testing-layers) · [12. Egress proxy](#12-egress-proxy) · [13. Standard tier: host sandboxes](#13-standard-tier-host-sandboxes) · [14. Lightweight tier: moat run](#14-lightweight-tier-moat-run)
+**On this page:** [1. Crates](#1-crates) · [2. One tool call, end to end](#2-one-tool-call-end-to-end) · [3. Classification](#3-classification) · [4. Decision](#4-decision) · [5. Hook responses and exit codes](#5-hook-responses-and-exit-codes) · [6. Self-protection](#6-self-protection) · [7. Audit log](#7-audit-log) · [8. Files on disk](#8-files-on-disk) · [9. Invariants](#9-invariants) · [10. Repository layout](#10-repository-layout) · [11. Testing layers](#11-testing-layers) · [12. Egress proxy](#12-egress-proxy) · [13. Standard tier: host sandboxes](#13-standard-tier-host-sandboxes) · [14. Lightweight tier: openmoat run](#14-lightweight-tier-openmoat-run)
 
 How OpenMoat turns one agent tool call into a decision, a hook response and an audit
 record. This describes the code on `main`. The working rules for changing it are in
@@ -25,10 +25,10 @@ openmoat ──► openmoat-hosts ──► openmoat-core
 | Crate | Role | Rules |
 |---|---|---|
 | `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists and near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), the Codex `apply_patch` file list (`patch.rs`), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
-| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `moat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
+| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
-| `openmoat-proxy` | The egress proxy behind `moat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
-| `openmoat` (`crates/openmoat-cli`) | The `moat` binary: commands, hook installation, the policy lock and its MCP server pins, `moat mcp proxy` (`mcp/relay.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
+| `openmoat-proxy` | The egress proxy behind `openmoat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
+| `openmoat` (`crates/openmoat-cli`) | The `openmoat` binary, and `moat` (`src/bin/moat.rs`), the old name kept for a few releases, which starts the `openmoat` beside it: commands, hook installation, the policy lock and its MCP server pins, `openmoat mcp proxy` (`mcp/relay.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
 
 No crate depends on `openmoat`.
 
@@ -51,7 +51,7 @@ host payload (stdin)
                                                               └─► hook response (stdout) + exit code
 ```
 
-`moat guard --host <id>` (`commands/guard.rs`) runs this once per tool call and
+`openmoat guard --host <id>` (`commands/guard.rs`) runs this once per tool call and
 exits. There is no daemon.
 
 1. **Read.** At most 1 MiB of UTF-8 from stdin. An empty or unreadable payload is a
@@ -92,7 +92,7 @@ exits. There is no daemon.
 7. **Decide.** `CompiledPolicy::compile(policy, ctx).decide_with(action, snapshot,
    FsPathResolver)` classifies and evaluates (§3, §4).
 8. **Grant.** An `ask` or `defer` for a call whose exact text was granted for this host
-   session with `moat allow` becomes `allow` with rule `approved-session`. A grant
+   session with `openmoat allow` becomes `allow` with rule `approved-session`. A grant
    never touches a `deny` and expires 24 h after it was given; expired grants are
    ignored and pruned.
 9. **Taint.** `taint::of_session` (`taint.rs`) reads this host session's earlier events
@@ -104,7 +104,7 @@ exits. There is no daemon.
    the session last read untrusted content answers that content's ask; a later read
    asks again. A taint from a
    secret the session read is never answered this way. A log or session event that cannot be read is a `kernel-error` deny. An edited
-   or deleted event is found by the hash chain (`moat doctor`), not on every call.
+   or deleted event is found by the hash chain (`openmoat doctor`), not on every call.
 10. **Push.** `CompiledPolicy::pushes` lists the shell command's pushes (`git push`,
     `gh pr create`; core `shell/push.rs`) with the directories each may run in. Unless the
     call is already denied, `push.rs` runs git read-only there, within 10 s for the whole
@@ -118,16 +118,16 @@ exits. There is no daemon.
 
 A panic inside steps 1–11 is caught and answered with a deny and exit 2, because
 Claude Code treats exit 101 as a non-blocking error. A `guard` with no answer after
-30 s (`GUARD_BUDGET_S`, below every hook timeout `moat init` sets) writes a deny,
+30 s (`GUARD_BUDGET_S`, below every hook timeout `openmoat init` sets) writes a deny,
 unrecorded, and exits 2, since a host that times the hook out runs the call
 (THREAT_MODEL §5, "When the hook fails"). Only one response is ever written. The
 limit is wall-clock time, which includes waiting for a CPU and for the audit
 database's lock, so it is set well above the 10–20 ms a call takes: on a machine
 loaded by parallel builds a call can take seconds without being stuck. The deny
 appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
-phase being the step the guard was in (`stdin`, `relay` for a hook inside `moat run`
+phase being the step the guard was in (`stdin`, `relay` for a hook inside `openmoat run`
 waiting for the run to decide, `lock`, `context`, `compile`, `taint`, `cache`,
-`record`, `answer`); `moat doctor` reports the hangs of the last
+`record`, `answer`); `openmoat doctor` reports the hangs of the last
 week and the phase most of them were in.
 
 ## 3. Classification
@@ -216,14 +216,14 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`) | — | none: `ungoverned` |
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,
-written by `moat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
+written by `openmoat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
 listed in `plugins.load.paths`, pinned in the lock) handles `before_tool_call` for every tool,
-runs `moat guard --host openclaw` with the event, the context's session ids, the agent's
+runs `openmoat guard --host openclaw` with the event, the context's session ids, the agent's
 workspace (`cwd`), the configuration path, the state directory and the platform on stdin
 (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` resolved as OpenClaw
 does, `install/openclaw/location.rs`), and maps the answer:
 `deny` (exit 2) to `block`, `ask` to `requireApproval`, `allow` or nothing to no decision.
-Anything else (no `moat`, a crash, another exit code, an unreadable answer, no answer in 45 s)
+Anything else (no `openmoat`, a crash, another exit code, an unreadable answer, no answer in 45 s)
 blocks the call (ADR-033). `openclaw.json` is JSON5; OpenMoat reads it with its own
 JSON5 reader (`crates/openmoat-cli/src/json5.rs`) and writes it back as plain JSON, and
 refuses to write a file with comments. The lock pins it without `mcp.servers`, whose
@@ -232,8 +232,8 @@ servers are pinned one by one with the other hosts' (ADR-026).
 Claude Code calls only reach OpenMoat for tools in the installed matcher
 (`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen. `Skill`
 and `EnterWorktree` are in it so they are recorded, and left to Claude Code's own
-permission flow when unmapped. A hook entry written by an older `moat` with a shorter
-list is reported as out of date by `moat doctor` and `moat status`, with "run `moat
+permission flow when unmapped. A hook entry written by an older `openmoat` with a shorter
+list is reported as out of date by `openmoat doctor` and `openmoat status`, with "run `moat
 init`", which rewrites it in place; until then the entry keeps working for the tools it
 names.
 Cursor's hook matcher is empty, so every tool reaches `preToolUse`. Cursor's hook
@@ -271,12 +271,12 @@ for each and the CLI implements it:
 
 | Trait | ADR | Implementation | What it adds |
 |---|---|---|---|
-| `ProgramResolver` | ADR-008 | `environment.rs` (`Snapshot`) | The first word of each command is resolved through the search path recorded at `moat init` (`environment.json`), not the hook's inherited `PATH`. A pinned program (policy `executables:` or the snapshot) that now resolves elsewhere is a deny with rule `executables` |
+| `ProgramResolver` | ADR-008 | `environment.rs` (`Snapshot`) | The first word of each command is resolved through the search path recorded at `openmoat init` (`environment.json`), not the hook's inherited `PATH`. A pinned program (policy `executables:` or the snapshot) that now resolves elsewhere is a deny with rule `executables` |
 | `PathResolver` | ADR-009 | `realpath.rs` (`FsPathResolver`) | Every `fs.read`/`fs.write` path is also checked at its symlink-resolved location; both are evaluated and the strictest wins. New files resolve through their deepest existing ancestor. `read_dir` lists the directories an unquoted glob operand searches, so every path it names is checked too (`expand.rs`, POLICY.md §4) |
 
 Patterns naming `${project}` or `~` are compiled for both the written and the resolved
 spelling of the root, so a project under macOS `/tmp` → `/private/tmp` matches either
-way. `moat policy check` uses the same resolvers (the snapshot only when an
+way. `openmoat policy check` uses the same resolvers (the snapshot only when an
 installation exists) and, against the installed policy, the same lock check.
 
 ### Policy compiler
@@ -318,7 +318,7 @@ policy and for policies with braces, classes, `?` and `!` exceptions, on paths d
 their patterns, against `Checker::check_os`. Where a backend is wider, its report must
 name the path as an allowance; where it is narrower, it must report a loss.
 
-`moat policy compile` prints the IR.
+`openmoat policy compile` prints the IR.
 
 ## 5. Hook responses and exit codes
 
@@ -338,7 +338,7 @@ records and answers it as `ask` (below). `guard` prints no trace line for a `def
 `ask` is the host's own prompt; OpenMoat has no prompt of its own. Codex cannot ask:
 its `PreToolUse` rejects `permissionDecision: "ask"` as unsupported and then runs the
 call. So for Codex an `ask` is sent as a `deny` (exit 2) whose reason says to approve
-it with `moat` or `moat allow --last`. Cursor's `preToolUse` and `beforeReadFile` get the
+it with `openmoat` or `openmoat allow --last`. Cursor's `preToolUse` and `beforeReadFile` get the
 same treatment. The audit log keeps the `ask`, which is what `--last` finds
 (`Host::answer`); it approves a shell command or the exact files of a file action.
 
@@ -352,7 +352,7 @@ run the call. `guard --host claude-code` treats a call as host `continue` when
 does) or when the payload's `transcript_path` is empty (`cn` keeps no transcript file;
 Claude Code always sends a path). Either sign is enough, because a Claude Code call
 mistaken for `cn` only turns an ask into a deny. For `continue` an `ask` is sent as a
-`deny` with the same `moat allow --last` instruction as for Codex, and the audit log
+`deny` with the same `openmoat allow --last` instruction as for Codex, and the audit log
 records host `continue` with the `ask`. Everything else is decided as for Claude Code
 (`Host::sender`, `tests/fixtures/hosts/continue/`, built from `cn`'s hook source).
 `continue` is not in `Host::ALL`: it has no hook file of its own to install.
@@ -362,14 +362,14 @@ Cursor prompts on `ask` for `beforeShellExecution` and `beforeMCPExecution` only
 for permission with it). For `preToolUse` the same page says `ask` is "accepted by the
 schema but not enforced", so the call runs, and `beforeReadFile` takes only allow or
 deny. The Cursor adapter marks those two events `HookEvent::PreToolUseNoAsk`, and an
-`ask` there is sent as a `deny` (exit 2) whose reason says to approve it with `moat` or
-`moat allow --last`, which approve the exact file. The audit log keeps the `ask`.
+`ask` there is sent as a `deny` (exit 2) whose reason says to approve it with `openmoat` or
+`openmoat allow --last`, which approve the exact file. The audit log keeps the `ask`.
 
 Claude Code sends its session's `permission_mode` with `PreToolUse`. Two modes put no
 question to a person: `bypassPermissions` skips Claude Code's prompts and `dontAsk`
 denies whatever would prompt. For these the adapter marks the call
 `HookEvent::PreToolUseNoAsk`, and an `ask` is sent as a `deny` with the same
-`moat allow --last` instruction; the audit log keeps the `ask`. A `defer` stays a
+`openmoat allow --last` instruction; the audit log keeps the `ask`. A `defer` stays a
 `defer` (Claude Code decides it as its mode says). Every other mode, `auto` included,
 receives the `ask`.
 
@@ -379,19 +379,19 @@ openai/codex `ff9ab4a` and codex-cli 0.160.1). Codex runs it only from
 policy and sandbox have decided to prompt. The hook can answer allow, deny or nothing;
 nothing shows Codex's prompt. No hook can send a call into that path, so a `PreToolUse`
 `ask` that let the call through would run unprompted whenever Codex itself does not
-prompt. `moat init` therefore does not install `PermissionRequest`. `guard` refuses that
+prompt. `openmoat init` therefore does not install `PermissionRequest`. `guard` refuses that
 event as a wrong event (deny, exit 2, reason on stderr), which Codex reads as a deny
 (`tests/fixtures/hosts/codex/permission-request-shell.json`, built from Codex's
 `permission-request.command.input.schema.json`). Exit codes follow
-ADR-004 and ADR-015: 0 allow, defer or ask, 2 deny, 3 unresolved ask from `moat policy
-check`, 64 usage or configuration error. `moat run` exits 1 when the agent it started
+ADR-004 and ADR-015: 0 allow, defer or ask, 2 deny, 3 unresolved ask from `openmoat policy
+check`, 64 usage or configuration error. `openmoat run` exits 1 when the agent it started
 exits non-zero; never 2 or 3. `guard` never exits 64: an argument it cannot
 parse is a deny with exit 2, because Claude Code and Codex proceed on any other
 non-zero exit. Cursor is fail-open unless a hook sets `failClosed: true`, so
-`moat init` sets it on every Cursor hook. Claude Code 2.1.295 and later block a call
+`openmoat init` sets it on every Cursor hook. Claude Code 2.1.295 and later block a call
 whose hook fails to start, crashes, exits other than 0 or 2, or times out when the hook
 sets `"onFailure": "block"` (<https://code.claude.com/docs/en/hooks>, "Block the action
-when a hook fails"). `moat init` writes it on its `PreToolUse` entry when `claude --version`
+when a hook fails"). `openmoat init` writes it on its `PreToolUse` entry when `claude --version`
 (the `claude` on `PATH`, 5 s at most, asked once per command) reports 2.1.295 or later
 (`install/claude_version.rs`); `status` and `doctor` then report an entry without it as
 out of date. With an older Claude Code, or none on `PATH`, the key is left out and
@@ -414,7 +414,7 @@ away. Codex has no such key: a failed hook "continues the tool call"
   removed: `settings.json was modified: changed hooks; added theme`. A lock written
   before that, or a file that no longer parses, gives the plain `was modified`. For a
   Claude Code `settings.json` the lock also records a digest per key of `permissions`.
-  With them, `guard` (and `moat policy check`) keep deciding while the only drift is in
+  With them, `guard` (and `openmoat policy check`) keep deciding while the only drift is in
   an allowlist of Claude Code keys (`integrity/relaxed.rs`): display and reply toggles
   (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …), the model the person
   switches to (`model` as a string, `switchModelsOnFlag` as a scalar) and Claude Code's own
@@ -426,9 +426,9 @@ away. Codex has no such key: a failed hook "continues the tool call"
   a file that no longer parses or is a symlink, a lock without the `permissions` digests,
   or drift in any other pinned file still denies every call. Allowlisted drift stays
   drift: `status` and `doctor` report it until a person re-pins, the commands that
-  re-pin still refuse while it is there, and `moat proxy` and `moat run` still refuse to
-  start. Only a person re-pins: `moat init`, or
-  `moat doctor --accept`, `moat allow`, `moat edit`, `moat secret`, `moat trust` and `moat sandbox sync` from an
+  re-pin still refuse while it is there, and `openmoat proxy` and `openmoat run` still refuse to
+  start. Only a person re-pins: `openmoat init`, or
+  `openmoat doctor --accept`, `openmoat allow`, `openmoat edit`, `openmoat secret`, `openmoat trust` and `openmoat sandbox sync` from an
   interactive terminal.
 - **ConfigChange veto.** Claude Code reports settings changes; while any pinned file
   no longer matches the lock, every change is blocked for the session, unless all of
@@ -442,24 +442,25 @@ away. Codex has no such key: a failed hook "continues the tool call"
   from the repository. A change of one (source `project_settings` or `local_settings`)
   is read and blocked with `project-settings` when it sets a key that turns hooks off,
   runs a program or redirects the agent, or cannot be parsed (`project_settings.rs`);
-  `moat doctor` and `moat status` warn about such a file in the current project, which
+  `openmoat doctor` and `openmoat status` warn about such a file in the current project, which
   Claude Code loads at session start without a `ConfigChange`.
 - **`kernel-self` rules.** The default policy denies agent writes to the state and
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
-  `CURSOR_CONFIG_DIR` moved them, and where `moat init` recorded them in `hosts.json`), hook
-  files and any `bin/moat`, and denies `moat
-  allow|doctor|edit|init|policy|secret|trust|uninstall`, `moat sandbox sync` and `moat audit
-  anchor` from an agent, including under pseudo-terminal
+  `CURSOR_CONFIG_DIR` moved them, and where `openmoat init` recorded them in `hosts.json`), hook
+  files and any `bin/openmoat` or `bin/moat` (`moat` is the command's name up to 0.7.0,
+  installed beside `openmoat` for a few releases; it runs the `openmoat` next to it), and
+  denies `openmoat allow|doctor|edit|init|policy|secret|trust|uninstall`, `openmoat sandbox
+  sync` and `openmoat audit anchor` from an agent, by either name, including under pseudo-terminal
   wrappers (ADR-011, ADR-014). It also denies agent reads of the state beside the
   policy (`audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`,
-  `allowed_signers`, `mcp/`), and every host sandbox and `moat run` profile carries the
+  `allowed_signers`, `mcp/`), and every host sandbox and `openmoat run` profile carries the
   same read denies; `policy.yaml` stays readable. Nothing that decides needs those reads
-  from inside a sandbox: host hooks run outside the host's sandbox, a `moat guard`
-  inside `moat run` relays the payload to the `moat run` process outside before it
+  from inside a sandbox: host hooks run outside the host's sandbox, an `openmoat guard`
+  inside `openmoat run` relays the payload to the `openmoat run` process outside before it
   touches OpenMoat's home (ADR-028), and the commands that read them (`show`, `status`,
   `doctor`, `audit`) are a person's, run outside any sandbox.
-- **Signed policy** (ADR-031, `signing.rs`, `packs.rs`). `moat policy trust-key` adds an
-  OpenSSH key to `allowed_signers` for the namespace `openmoat-policy`; `moat policy
+- **Signed policy** (ADR-031, `signing.rs`, `packs.rs`). `openmoat policy trust-key` adds an
+  OpenSSH key to `allowed_signers` for the namespace `openmoat-policy`; `openmoat policy
   install` checks a pack's detached signature with the system `ssh-keygen -Y verify`
   (resolved through `environment.json`) before copying it to `policy.d/packs/` and
   recording it in `packs.json`. `Home::load_policy` merges every pack `packs.json` lists
@@ -469,19 +470,19 @@ away. Codex has no such key: a failed hook "continues the tool call"
   With `require_signed_repo_policy: true`, `repo.rs` trusts a repository policy only
   when its `policy.yaml.sig` verifies against `allowed_signers`; a `trust.json` record
   alone no longer counts (`repo::is_trusted`).
-- **Terminal check.** `moat allow`, `moat edit`, `moat secret`, `moat trust`, `moat uninstall`, `moat doctor --accept`,
-  `moat sandbox sync`, `moat policy upgrade`, `moat policy install`/`trust-key`/`remove`,
-  `moat audit anchor`, `moat mcp accept`/`wrap`/`unwrap` and
-  `moat proxy install`/`uninstall` refuse to
+- **Terminal check.** `openmoat allow`, `openmoat edit`, `openmoat secret`, `openmoat trust`, `openmoat uninstall`, `openmoat doctor --accept`,
+  `openmoat sandbox sync`, `openmoat policy upgrade`, `openmoat policy install`/`trust-key`/`remove`,
+  `openmoat audit anchor`, `openmoat mcp accept`/`wrap`/`unwrap` and
+  `openmoat proxy install`/`uninstall` refuse to
   run without a terminal (`terminal.rs`). They also refuse when an agent host (`claude`,
-  `codex`, `cursor-agent`) or `moat` itself (`moat run`) is among their parent processes,
+  `codex`, `cursor-agent`) or `openmoat` itself (`openmoat run`) is among their parent processes,
   or when those cannot be read (`terminal/ancestry.rs`: `/proc` on Linux, `/bin/ps` on
   macOS; not checked on Windows yet), and the home screen offers no approval there.
   Their answers are read from the controlling terminal (`/dev/tty`), not stdin. The
   debug-only `MOAT_ASSUME_TTY` override exists for tests; release builds do not contain it.
 - **Stable hook path** (ADR-016). Hooks run the package manager's stable link to
-  `moat`, not a versioned file an upgrade deletes; `doctor` and `status` name a hook
-  whose binary is missing or is a different `moat`.
+  `openmoat`, not a versioned file an upgrade deletes; `doctor` and `status` name a hook
+  whose binary is missing or is a different `openmoat`.
 
 ## 7. Audit log
 
@@ -500,7 +501,7 @@ stored as sent. Redaction is two passes (`crates/openmoat-audit/src/redact.rs`):
    records host names lowercased), whatever their format. All values are matched by
    one automaton, so the cost is linear in the text. Values shorter than 8 bytes
    (`MIN_SECRET_LEN`) are not matched this way: they occur in ordinary text too. The
-   proxy masks every value it holds. `moat guard` masks, in every call the policy
+   proxy masks every value it holds. `openmoat guard` masks, in every call the policy
    decides, the values it can read, those with a `file` or `env` source; it does not
    start the keychain tool per call, and it skips a source it cannot read. Rows of an
    ungoverned tool, a settings change or a call refused for lock drift are written
@@ -511,7 +512,7 @@ stored as sent. Redaction is two passes (`crates/openmoat-audit/src/redact.rs`):
 The policy has no other declaration of secret environment variables: `env-secrets` is
 a list of names the agent may not read (it includes `AWS_REGION`-style names), not of
 values to mask. `show`, `replay` and `report` read the log; nothing leaves the machine
-unless a person runs `moat audit export`.
+unless a person runs `openmoat audit export`.
 
 **Hash chain** (schema 2, `crates/openmoat-audit/src/store/chain.rs`). Each event also
 stores `prev_hash`, the `hash` of the event before it, and `hash`, the lowercase hex
@@ -531,7 +532,7 @@ needs a new domain tag.
 hash, insert the next event with `id + 1` linked to it, commit. Concurrent `guard`
 processes serialise on SQLite's write lock (busy timeout 2 s), so the chain never
 forks; a write that fails or times out is a `kernel-error` deny as before. The
-transaction adds about 0.1 ms to a guard call. `moat doctor` re-hashes the whole log
+transaction adds about 0.1 ms to a guard call. `openmoat doctor` re-hashes the whole log
 oldest first (about 0.15 s per 100 000 events) and reports the first event that was
 edited (contents do not match its hash), unlinked (an event before it was deleted or
 inserted, or events were reordered) or unhashed, and exits 64.
@@ -580,7 +581,7 @@ no provenance rows in the log skips the lookups. The upgrade from schema 3 creat
 table; a read-only handle on an older database reads it as empty. A schema-4 database
 is refused by builds before it (`SchemaTooNew`), as every schema bump is.
 
-**Export** (`moat audit export`, `crates/openmoat-audit/src/store/export.rs`). JSON Lines,
+**Export** (`openmoat audit export`, `crates/openmoat-audit/src/store/export.rs`). JSON Lines,
 oldest first, one object per chained event with the filters `--since`, `--host` and
 `--session`. Every line has `"format": "moat-audit-export-v1"` and the fields `id`
 (hex), `ts_ms`, `host`, `session_id`, `call_id`, `cwd`, `tool`, `action`, `verdict`,
@@ -591,17 +592,17 @@ line invalid. Cells are already redacted in the store and are not touched again,
 an export holds no more than the database. Events from before the chain have no hash
 and are left out. A new line format gets a new `format` value.
 
-**Verify** (`moat audit verify`, `store/export_verify.rs`). It works without the
+**Verify** (`openmoat audit verify`, `store/export_verify.rs`). It works without the
 database. Every line must hash to its `hash`, ids must rise, and a line whose id
 follows the previous line's id must carry that line's hash as `prev_hash`. A jump in
 ids is a gap, which is counted and not failed: a filtered export has gaps, and so
 does deleting events. The first failing line is named and the command exits 64. The
-head is the last line's `hash`. `moat doctor` prints the database head. With
+head is the last line's `hash`. `openmoat doctor` prints the database head. With
 `--anchor <hash>`, verify also fails unless a verified line carries that hash.
 Without one, the result says the export is not anchored (`"anchor": "not_anchored"`
 in JSON), and `--require-anchor` turns that into exit 64.
 
-**Anchors** (`moat audit anchor`, `crates/openmoat-cli/src/anchor.rs`, ADR-031). A
+**Anchors** (`openmoat audit anchor`, `crates/openmoat-cli/src/anchor.rs`, ADR-031). A
 person-only command records the database head (`Store::head`: newest event id, its
 time and hash) after `verify_chain` finds no break, as one JSON line `{"format":
 "moat-audit-anchor-v1", "event", "hash", "event_ms", "anchored_ms"}`. With `--file` the
@@ -610,20 +611,20 @@ line is appended to a file the person keeps. With `--git <repo>` it is appended 
 built with plumbing only (`hash-object`, `mktree`, `commit-tree`, then `update-ref`
 against the old tip), with a `Signed-off-by` trailer from git's committer identity; the
 working tree, index, `HEAD` and branches are not touched, and nothing is pushed.
-`~/.moat/anchor.json` remembers the last anchor for `moat doctor`. `moat audit verify
+`~/.moat/anchor.json` remembers the last anchor for `openmoat doctor`. `openmoat audit verify
 --against <repo|file>` reads every anchor back and checks each, oldest first, against
 the database: the event must still exist (`Store::hash_of`) with the anchored hash, and
 the chain must not break at or before it. The first anchor that fails is named
 (`missing`: deleted, `rewritten`: another hash, `chain_broken`) and the command exits
 64. No code here opens a network connection.
 
-**Team report** (`moat audit report <file>…`, `crates/openmoat-cli/src/commands/team.rs`).
+**Team report** (`openmoat audit report <file>…`, `crates/openmoat-cli/src/commands/team.rs`).
 It verifies every file first and refuses (exit 64) if one fails. Events with the
 same `hash` are counted once, so overlapping exports do not double-count. The report
-starts with the `moat report` summary (`Summary::of`), then shows each file's head,
+starts with the `openmoat report` summary (`Summary::of`), then shows each file's head,
 verdicts per host, asks and denies per rule, and the most frequent asked and denied
 actions. False-positive candidates are actions that asked and were also allowed by
-an `approved-…` rule (`moat allow`), which suggests the asking rule is too broad.
+an `approved-…` rule (`openmoat allow`), which suggests the asking rule is too broad.
 `--format json` gives the same data.
 
 The upgrade from schema 1 adds the two columns and records the last existing id as
@@ -636,20 +637,20 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 
 ```
 ~/.moat/                       ($MOAT_HOME overrides; directory 0700, files 0600 on macOS and Linux; on Windows inherited permissions)
-  policy.yaml                  user policy (moat init writes the default once)
-  policy.yaml.bak              the policy before the last `moat edit` applied a change
+  policy.yaml                  user policy (openmoat init writes the default once)
+  policy.yaml.bak              the policy before the last `openmoat edit` applied a change
   policy.base.yaml             the shipped default the policy started from or was last upgraded to
-  policy.yaml.before-upgrade   the policy before the last `moat policy upgrade` (and the base's copy)
-  policy.d/approved.yaml       permanent rules from `moat allow --always/--site/--dir`
-  approvals.json               session grants from `moat allow` (24 h each)
-  trust.json                   repository policies trusted with `moat trust`: root → SHA-256
-  allowed_signers              keys trusted with `moat policy trust-key` (OpenSSH format)
+  policy.yaml.before-upgrade   the policy before the last `openmoat policy upgrade` (and the base's copy)
+  policy.d/approved.yaml       permanent rules from `openmoat allow --always/--site/--dir`
+  approvals.json               session grants from `openmoat allow` (24 h each)
+  trust.json                   repository policies trusted with `openmoat trust`: root → SHA-256
+  allowed_signers              keys trusted with `openmoat policy trust-key` (OpenSSH format)
   packs.json                   installed policy packs: name → SHA-256, signer, time
   policy.d/packs/<name>.yaml   each installed pack, and its `.yaml.sig`
   environment.json             search path and program locations recorded at init
   policy.lock                  digests of the files above and of installed hook files
   audit.db                     audit log
-  anchor.json                  when and where `moat audit anchor` last recorded the head
+  anchor.json                  when and where `openmoat audit anchor` last recorded the head
 ~/.claude/settings.json        Claude Code hooks and sandbox block ($CLAUDE_CONFIG_DIR overrides)
 ~/.codex/hooks.json            Codex hooks ($CODEX_HOME overrides)
 ~/.codex/config.toml           Codex [permissions.moat] profile, default_permissions
@@ -662,7 +663,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 <project>/.moat/policy.yaml.sig  its optional detached signature (ADR-031)
 ```
 
-Host sandboxes and `moat proxy` are generated from the user policy only. Repository
+Host sandboxes and `openmoat proxy` are generated from the user policy only. Repository
 rules apply in the hook.
 
 ## 9. Invariants
@@ -670,7 +671,7 @@ rules apply in the hook.
 The full list, with the tests that hold each one, is AGENTS.md §3. In short: deny is
 absolute; strictest wins; unparseable is never `allow` (`ask`, or `defer` under an allow or defer catch-all); every error path in `guard` is a deny
 with exit 2; exit codes 2 and 3 mean nothing else; nothing persisted skips
-redaction; the core stays pure; `moat init` never overwrites a policy or duplicates a
+redaction; the core stays pure; `openmoat init` never overwrites a policy or duplicates a
 hook; the lock is checked before any decision.
 
 ## 10. Repository layout
@@ -680,8 +681,8 @@ crates/openmoat-core/          decision core; policies/default-v1.yaml is the sh
 crates/openmoat-hosts/         host adapters
 crates/openmoat-audit/         audit store
 crates/openmoat-proxy/         egress proxy; tests/proxy/ runs it on loopback
-crates/openmoat-cli/           the moat binary; tests/e2e/ runs it in isolated homes;
-                               moatbench/ holds the MoatBench scenarios `moat bench` bundles
+crates/openmoat-cli/           the openmoat binary; tests/e2e/ runs it in isolated homes;
+                               moatbench/ holds the MoatBench scenarios `openmoat bench` bundles
 tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool call each,
                                with the verdict the default policy must give
 tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, cursor, openclaw)
@@ -693,7 +694,7 @@ docs/                          this document, INSTALL, USAGE, SANDBOX, POLICY,
                                THREAT_MODEL, ROADMAP, COVERAGE and EVIDENCE
                                (generated), adr/
 scripts/ci/quality-gate.sh     the one gate CI and the pre-push hook run
-scripts/ci/guard-latency.py    times `moat guard` per process in CI (the `latency` job)
+scripts/ci/guard-latency.py    times `openmoat guard` per process in CI (the `latency` job)
 scripts/ci/guard-session-latency.py
                                times it late in a long session (the same job)
 scripts/ci/sync-labels.sh      the repository's label set
@@ -709,7 +710,7 @@ scripts/ci/sync-labels.sh      the repository's label set
 | Policy compiler | `crates/openmoat-core/tests/ir_consistency.rs` (IR against the engine on the conformance fixtures), `ir_never_widens.rs` (generated policies) | every PR, all OS |
 | Golden host payloads | `tests/fixtures/hosts/` | every PR |
 | End to end | `crates/openmoat-cli/tests/e2e/` (real binary, isolated `HOME`/`MOAT_HOME`) | every PR, all OS |
-| Differential (ADR-019) | `crates/openmoat-cli/tests/e2e/differential/` runs `tests/differential/scenarios.yaml` (attacks, benign work, CVE replays) against every enforcement point: the hook decision, and each host sandbox whose binary is present. A layer that disagrees with a scenario's recorded verdict fails the suite; a missing host binary skips that layer visibly. `scripts/ci/differential.sh` points it at the host binaries for the full run. Its `scripts` list runs hostile project scripts as `npm test` under `moat run`, Claude Code's sandbox and `codex sandbox -P moat` and asserts the OS outcome; `docs/EVIDENCE.md` is generated from it (`OPENMOAT_TEST_UPDATE_EVIDENCE=1`) | every PR: hook layer and `moat run` (macOS, Linux) in the gate, where the host layers skip visibly; in the `standard tier` job, every scenario under the host sandboxes plus `sandbox_exec` on macOS and Linux, with Claude Code and Codex pinned by `scripts/ci/host-binaries.sh`, where a missing host binary fails the test (`MOAT_REQUIRE_HOST_BINARIES`) |
+| Differential (ADR-019) | `crates/openmoat-cli/tests/e2e/differential/` runs `tests/differential/scenarios.yaml` (attacks, benign work, CVE replays) against every enforcement point: the hook decision, and each host sandbox whose binary is present. A layer that disagrees with a scenario's recorded verdict fails the suite; a missing host binary skips that layer visibly. `scripts/ci/differential.sh` points it at the host binaries for the full run. Its `scripts` list runs hostile project scripts as `npm test` under `openmoat run`, Claude Code's sandbox and `codex sandbox -P moat` and asserts the OS outcome; `docs/EVIDENCE.md` is generated from it (`OPENMOAT_TEST_UPDATE_EVIDENCE=1`) | every PR: hook layer and `openmoat run` (macOS, Linux) in the gate, where the host layers skip visibly; in the `standard tier` job, every scenario under the host sandboxes plus `sandbox_exec` on macOS and Linux, with Claude Code and Codex pinned by `scripts/ci/host-binaries.sh`, where a missing host binary fails the test (`MOAT_REQUIRE_HOST_BINARIES`) |
 | Proxy | `crates/openmoat-proxy/tests/proxy/`: a real listener and a local upstream on loopback, names mapped by a test resolver, no external network | every PR, all OS |
 | `wasm32` purity build | CI job | every PR |
 | Fuzz | `fuzz/`, one minute per target on PRs, ten minutes weekly | CI |
@@ -721,10 +722,10 @@ CI runs `scripts/ci/quality-gate.sh` on macOS (arm64, x64), Linux and Windows, p
 
 ## 12. Egress proxy
 
-`moat proxy [--listen 127.0.0.1:<port>]` is the default-deny network exit from ADR-020.
+`openmoat proxy [--listen 127.0.0.1:<port>]` is the default-deny network exit from ADR-020.
 Without `--listen` it binds `127.0.0.1` and the policy's `sandbox.proxy_port` when that
 is set, the port the host sandboxes then send their commands' traffic to (§13; run it as
-a user service), and `127.0.0.1:18080` otherwise. `moat run` serves the same proxy, brokered secrets included, from a thread
+a user service), and `127.0.0.1:18080` otherwise. `openmoat run` serves the same proxy, brokered secrets included, from a thread
 on an ephemeral loopback port and makes it the agent's only way out (§14). It is our own code on
 `std::net` and `httparse` rather than `codex-network-proxy` or `sandbox-runtime` (#171):
 the first is not on crates.io and would add over a hundred crates, the second would put
@@ -734,8 +735,8 @@ host outside TLS termination.
 - **Start-up.** It refuses a non-loopback listen address, a missing installation and a
   drifted policy lock (exit 64). It compiles the policy once, so restart it after a policy
   change. It writes to the audit log under one session id per run (`proxy-<ms>`).
-- **Two modes** (ADR-027). The standalone `moat proxy` serves any local client, since the
-  host sandboxes cannot send a credential, and says so on stderr at start-up. `moat run`
+- **Two modes** (ADR-027). The standalone `openmoat proxy` serves any local client, since the
+  host sandboxes cannot send a credential, and says so on stderr at start-up. `openmoat run`
   serves its proxy in session mode: every request must carry the run's credential,
   `Proxy-Authorization: Basic base64(<session>:<token>)` (the agent's proxy URL holds it as
   userinfo), and is recorded under that session (`openmoat-proxy/src/session.rs`).
@@ -822,7 +823,7 @@ host outside TLS termination.
   - 10 s to connect upstream.
   - One thread per direction of each connection.
 - **Not yet:** TLS termination for per-host method and path rules and for injecting
-  secrets into HTTPS (opt-in, ADR-020), session taint for the standalone `moat proxy`
+  secrets into HTTPS (opt-in, ADR-020), session taint for the standalone `openmoat proxy`
   (its clients carry no session), and a policy reload without restart.
 
 ## 13. Standard tier: host sandboxes
@@ -860,22 +861,22 @@ policy.yaml ─► ir::lower (project = placeholder) ─► Enforcement ─┬�
     states `allow_local_binding = false` (its default), and `doctor` names it when on.
     Claude Code `httpProxyPort`/`socksProxyPort` set by hand are reported, because
     they replace the allowlist.
-  - *Opt-in (`sandbox.proxy_port` set): through `moat proxy` (§12).* This adds
+  - *Opt-in (`sandbox.proxy_port` set): through `openmoat proxy` (§12).* This adds
     OpenMoat's audit rows, brokered secrets and private-address checks. The cost is
     that the proxy must be running: a stopped proxy leaves commands without network,
-    never with direct network. It stays opt-in until `moat init` can install the proxy
-    as a user service (#272). `moat doctor` and `moat status` warn when nothing listens
+    never with direct network. It stays opt-in until `openmoat init` can install the proxy
+    as a user service (#272). `openmoat doctor` and `openmoat status` warn when nothing listens
     on the port. They check by trying to bind it, so the proxy records nothing.
   - *Claude Code, opt-in:* `httpProxyPort` and `socksProxyPort` both name the port, so
     Claude Code runs no proxy of its own and sandboxed commands have no other route out
     (verified on 2.1.292; the sandboxing docs, "Custom proxy configuration").
     - Its `allowedDomains`, `deniedDomains` and local-address check then no longer
-      apply to that traffic. `moat proxy` decides by the same policy.
+      apply to that traffic. `openmoat proxy` decides by the same policy.
     - The lists are still written. They apply again if the ports are removed, which
       `doctor` reports. `strictAllowlist` in user settings keeps a repository's
       settings from changing the ports or adding domains.
     - Loss: SOCKS5-only programs (`ALL_PROXY`, ssh through it) have no network, since
-      `moat proxy` speaks HTTP.
+      `openmoat proxy` speaks HTTP.
   - *Codex has no setting for an external proxy.*
     - `codex sandbox` always starts its own proxy on an ephemeral loopback port and
       enforces `network.domains` there. The profile allows commands no other connection
@@ -887,13 +888,13 @@ policy.yaml ─► ir::lower (project = placeholder) ─► Enforcement ─┬�
       turned off.
     - Starting Codex with both variables set to `http://127.0.0.1:<port>` is the
       user's step (allowance `codex.upstream`). It routes Codex's own API requests
-      through `moat proxy` too.
+      through `openmoat proxy` too.
 - **Losses and allowances.** A backend narrows what it cannot express and reports it
   as a loss. It may widen only where the host cannot run otherwise (the read roots,
   Codex `:minimal` and `:tmpdir`, Claude Code's working directories and unblocked
   system paths, directory nodes left out of `denyWrite`, `.git` outside its
   code-execution paths so `git commit` works), and each of those is
-  listed. `moat sandbox show` and `sandbox sync` print both; `doctor` counts them
+  listed. `openmoat sandbox show` and `sandbox sync` print both; `doctor` counts them
   and prints them with `--verbose`.
 - **Traps the generators handle** (found in the spike, re-verified on Claude Code
   2.1.290 and codex-cli 0.160.1): a relative pattern in Claude Code user settings
@@ -902,7 +903,7 @@ policy.yaml ─► ir::lower (project = placeholder) ─► Enforcement ─┬�
   out and `.claude/worktrees/*` stays writable; Claude Code's `allowRead` of a `**/`
   exception re-opens it everywhere, so exceptions are dropped; Codex accepts globs
   only for `deny` and not under `:tmpdir`, and keeps `.git` read-only.
-- **Writing and pinning.** `moat init` and `moat sandbox sync` merge the generated
+- **Writing and pinning.** `openmoat init` and `openmoat sandbox sync` merge the generated
   keys into the files, keeping every other key (JSON values; TOML through `toml_edit`,
   comments included), and back each file up first. `policy.lock` pins Claude Code's
   `settings.json` whole except the cosmetic `theme` key (§6) and Codex's `config.toml` by the canonical text of the part
@@ -912,10 +913,10 @@ policy.yaml ─► ir::lower (project = placeholder) ─► Enforcement ─┬�
   `kernel-integrity`. `doctor` also fails on a weakened or out-of-date setting,
   including a Claude Code proxy port that does not match `sandbox.proxy_port` (missing
   when it is set, present when it is not).
-- **Asking and undoing.** Before writing anything, `moat init` lists the agents whose
+- **Asking and undoing.** Before writing anything, `openmoat init` lists the agents whose
   configuration directory exists and asks per agent at a terminal; `--hosts` and
   `--yes` skip the questions, and without a terminal no agent's files change.
-  `moat uninstall` (`commands/uninstall.rs`, a person at a terminal; `kernel-self`
+  `openmoat uninstall` (`commands/uninstall.rs`, a person at a terminal; `kernel-self`
   denies it to agents) is the inverse: it removes exactly the hook entries
   (`hook_file::remove`) and sandbox keys (`claude::remove`, `codex::remove`,
   `cursor::remove`) init
@@ -925,7 +926,7 @@ policy.yaml ─► ir::lower (project = placeholder) ─► Enforcement ─┬�
   backups. The lock then drops those files (`integrity::unpin`) without re-pinning
   anything else.
 
-## 14. Lightweight tier: `moat run`
+## 14. Lightweight tier: `openmoat run`
 
 ADR-018's tier for machines without a container or VM runtime puts the whole agent in
 one sandbox generated from the policy. The code is in `crates/openmoat-cli/src/commands/run.rs`
@@ -935,11 +936,11 @@ one sandbox generated from the policy. The code is in `crates/openmoat-cli/src/c
 ```
 policy.yaml ─► ir::lower (this project) ─► Enforcement + Grants ─┬─► seatbelt::generate ─► sandbox-exec -p <profile> <agent>
                                                                  └─► landlock::generate + seccomp ─► restricted thread ─► <agent>
-moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄── HTTP(S)_PROXY (with credential) ── agent and its commands
-         └► hook decisions (same port, MOAT-GUARD/1) ─► moat guard (outside) ◄── MOAT_GUARD_SOCKET + MOAT_GUARD_TOKEN ── moat guard (agent's hook, inside)
+openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄── HTTP(S)_PROXY (with credential) ── agent and its commands
+         └► hook decisions (same port, MOAT-GUARD/1) ─► openmoat guard (outside) ◄── MOAT_GUARD_SOCKET + MOAT_GUARD_TOKEN ── openmoat guard (agent's hook, inside)
 ```
 
-- **Start-up.** `moat run` refuses a missing installation and a drifted policy lock
+- **Start-up.** `openmoat run` refuses a missing installation and a drifted policy lock
   (§6), and a session without a project: the home directory, an ancestor of it or a
   filesystem root. It resolves the agent's executable through `PATH` and its symlinks,
   binds a loopback port, and generates the sandbox. It then prints what the user must
@@ -947,7 +948,7 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   off, because sandboxes do not nest (Seatbelt refuses a second profile); and every
   loss and allowance. Then it starts the agent. SIGINT is caught (`signal-hook`) so
   that Ctrl-C reaches the agent without taking down the proxy under it. The agent
-  exiting non-zero makes `moat run` exit 1.
+  exiting non-zero makes `openmoat run` exit 1.
 - **One lowering per session.** Unlike §13, the IR is lowered for the real project and
   home in both their spellings. `Grants` adds what the session needs: the proxy port, the
   temp directory, the agent's executable (a process cannot start from a file it cannot
@@ -959,25 +960,25 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` (both cases) point at it, and `NO_PROXY`
   is removed. A program that ignores them has no network; that is the one loss for the
   default policy.
-- **Session credential** (ADR-027). `moat run` makes one credential per run: session
+- **Session credential** (ADR-027). `openmoat run` makes one credential per run: session
   `run-<ms>-<8 hex>` and a 256-bit token from `/dev/urandom`. The proxy variables hold
   `http://<session>:<token>@127.0.0.1:<port>`, and the proxy serves that session alone
   (§12), so a program that drops the URL's userinfo gets `407`. The session is the audit
   session of every proxy row and is printed in the banner. `MOAT_RUN_SESSION` names it
-  for the agent, so `moat guard`, started by the agent, records one link row per agent
+  for the agent, so `openmoat guard`, started by the agent, records one link row per agent
   session in the run's session (host `moat-run`, `taint/run.rs`). The proxy folds the
   linked sessions' taint from those rows. The port is ephemeral and the proxy private
-  to the session, unlike the Standard tier's opt-in long-running `moat proxy` on
+  to the session, unlike the Standard tier's opt-in long-running `openmoat proxy` on
   `sandbox.proxy_port` (§13).
 - **Hook decisions** (ADR-028, `crates/openmoat-cli/src/guard_relay/`). The agent's
-  hooks run `moat guard` inside the sandbox, which can neither read nor write the
-  OpenMoat state directory. `moat run` sets `MOAT_GUARD_SOCKET` (the proxy's address)
+  hooks run `openmoat guard` inside the sandbox, which can neither read nor write the
+  OpenMoat state directory. `openmoat run` sets `MOAT_GUARD_SOCKET` (the proxy's address)
   and `MOAT_GUARD_TOKEN` (256 bits from `/dev/urandom`, made per run). A guard with
   both sends its raw payload, `--host`, working directory, a random nonce and the token
   over the proxy's port, behind the prefix `MOAT-GUARD/1\n`, which the proxy hands to
   the service (`openmoat_proxy::LocalService`) instead of reading HTTP. The service
   compares the token in constant time. A wrong one is recorded in the run's session
-  (rule `run-guard-token`) and gets no answer. The right one starts `moat guard` outside
+  (rule `run-guard-token`) and gets no answer. The right one starts `openmoat guard` outside
   the sandbox with the payload and `MOAT_RUN_SESSION`; that guard checks the lock,
   decides, and writes the audit and link rows as anywhere else. The inside guard prints
   the reply (standard output, standard error, exit 0 or 2) only when it repeats the
@@ -1036,12 +1037,12 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   system's `bwrap` and, where it can create the namespaces, starts the agent under
   `/bin/sh -c "trap '' INT; exec …" bwrap --unshare-user --unshare-net
   --die-with-parent --dev-bind / /` (the shell keeps Ctrl-C from ending bubblewrap's
-  monitor), running `moat isolated` as under `--isolate`: the proxy's port is relayed
+  monitor), running `openmoat isolated` as under `--isolate`: the proxy's port is relayed
   into a namespace with only loopback, and the same Landlock rules and seccomp filter
   apply inside; the Landlock rules are also built outside first, so a kernel without
   ABI 4 is refused before anything starts. `landlock.tcp-port` is dropped from the
   report there. Where `bwrap` is missing or the probe fails, the agent starts as before
-  and `moat run` prints that the network is restricted by port only; `moat doctor`
+  and `openmoat run` prints that the network is restricted by port only; `openmoat doctor`
   warns.
 - **`--isolate` (Isolated tier, Linux).** `run/linux/isolate.rs` starts the agent under
   `bwrap --unshare-all --unshare-user --die-with-parent` with the mounts
@@ -1051,16 +1052,16 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   denied read is covered by a mode-`000` placeholder, a denied write bound read-only, a
   directory whose node alone is denied bound onto itself so it cannot be renamed. The
   literal paths deny rules name elsewhere are masked the same way, under every spelling
-  of the project. Inside, `moat isolated` (hidden) binds the proxy's port on the
+  of the project. Inside, `openmoat isolated` (hidden) binds the proxy's port on the
   namespace's loopback, relays each connection to a Unix socket bound in from a private
-  `0700` directory (`moat run` relays it on to the proxy), then applies the Landlock
+  `0700` directory (`openmoat run` relays it on to the proxy), then applies the Landlock
   rules and seccomp filter to the thread that starts the agent. Missing or unusable
   `bwrap` (a probe runs first) refuses with exit 64; macOS refuses (#175).
 - **Windows** refuses with exit 64; the Standard tier is the answer there.
-- `moat sandbox show` prints both lightweight outputs for the current directory, before
+- `openmoat sandbox show` prints both lightweight outputs for the current directory, before
   the session's grants are added. The executing tests in `tests/e2e/run.rs` run
   `/bin/sh` payloads under the real sandbox on macOS and Linux; on Linux they show Unix
   and UDP sockets and `io_uring` failing with `EPERM` while TCP to the proxy works, and
   `run/linux.rs` applies the filter to a test thread. `tests/e2e/run_guard.rs` runs a
-  hook inside `moat run` and checks its decision, audit row, link row and the egress
+  hook inside `openmoat run` and checks its decision, audit row, link row and the egress
   taint that follows, and that a wrong token or a forged reply denies.

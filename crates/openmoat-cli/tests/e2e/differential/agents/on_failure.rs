@@ -37,7 +37,7 @@ fn real_claude_hook_failure_blocks_from_2_1_295() {
     ours["command"] = json!(missing.to_string_lossy());
     std::fs::write(&path, settings.to_string()).unwrap();
     let id = session(8);
-    let probe = json!({"command": "printf 'moat-%s\\n' ran", "description": "moat probe"});
+    let probe = json!({"command": "printf 'moat-%s\\n' ran", "description": "openmoat probe"});
     let said = home.claude(&agent, &id, &json!([call("Bash", probe)]), "Bash");
     let ran = text(&said).contains("moat-ran");
     if knows {

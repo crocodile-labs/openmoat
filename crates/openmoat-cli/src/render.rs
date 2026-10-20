@@ -167,7 +167,10 @@ pub fn demo(rows: &[DemoRow], source: &str) -> Result<()> {
             &truncate(&format!("    {}: {}", row.shows, row.reason), 100),
         )?;
     }
-    writeln!(out, "\nTry any command: moat policy check \"<command>\"")?;
+    writeln!(
+        out,
+        "\nTry any command: openmoat policy check \"<command>\""
+    )?;
     Ok(())
 }
 

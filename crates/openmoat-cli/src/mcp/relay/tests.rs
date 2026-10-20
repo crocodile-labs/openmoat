@@ -95,7 +95,9 @@ fn a_new_server_has_every_tool_held_and_its_calls_refused() {
     let (relay, saved) = relay(None, &log);
     // Before any listing, too: the host may call a tool it remembers.
     let early = relay.host_line(&call(1, "search"));
-    assert!(matches!(early.as_slice(), [Routed::Host(r)] if r.contains("moat mcp accept docs")));
+    assert!(
+        matches!(early.as_slice(), [Routed::Host(r)] if r.contains("openmoat mcp accept docs"))
+    );
 
     relay.host_line(&list_request(2));
     let out = relay.server_line(&list_response(
@@ -191,7 +193,7 @@ fn a_changed_description_is_hidden_and_its_calls_refused() {
     assert_eq!(reply["id"], 3);
     assert_eq!(reply["error"]["code"], -32602);
     let message = reply["error"]["message"].as_str().unwrap();
-    assert!(message.contains("moat mcp accept docs"), "{message}");
+    assert!(message.contains("openmoat mcp accept docs"), "{message}");
 
     assert_eq!(
         relay.host_line(&call(4, "read")),

@@ -30,7 +30,11 @@ fn init_without_a_terminal_changes_no_agent() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
     let out = sb.moat(&["init"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(stdout(&out).contains("moat init --yes"), "{}", text(&out));
+    assert!(
+        stdout(&out).contains("openmoat init --yes"),
+        "{}",
+        text(&out)
+    );
     assert!(sb.home.join(".moat/policy.yaml").is_file());
     assert!(!sb.home.join(".claude/settings.json").exists());
     assert!(!sb.home.join(".codex/hooks.json").exists());
@@ -45,7 +49,10 @@ fn init_asks_per_agent_and_changes_only_the_accepted_ones() {
     let shown = stdout(&out);
     assert!(shown.contains("Protect Claude Code ("), "{shown}");
     assert!(shown.contains("Protect Codex ("), "{shown}");
-    assert!(shown.contains("Undo anytime: moat uninstall"), "{shown}");
+    assert!(
+        shown.contains("Undo anytime: openmoat uninstall"),
+        "{shown}"
+    );
     assert!(sb.home.join(".claude/settings.json").is_file());
     assert!(!sb.home.join(".codex/hooks.json").exists());
     assert!(!sb.home.join(".codex/config.toml").exists());
@@ -65,14 +72,21 @@ fn init_shows_each_agents_changes_before_asking() {
     let out = init_answering(&sb, "\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = stdout(&out);
-    let claude = shown.find("settings.json (after moat init)").expect(&shown);
-    let codex = shown.find("hooks.json (after moat init)").expect(&shown);
+    let claude = shown
+        .find("settings.json (after openmoat init)")
+        .expect(&shown);
+    let codex = shown
+        .find("hooks.json (after openmoat init)")
+        .expect(&shown);
     assert!(
         claude < shown.find("Protect Claude Code (").unwrap(),
         "{shown}"
     );
     assert!(codex < shown.find("Protect Codex (").unwrap(), "{shown}");
-    assert!(shown.contains("config.toml (after moat init)"), "{shown}");
+    assert!(
+        shown.contains("config.toml (after openmoat init)"),
+        "{shown}"
+    );
     assert!(
         shown
             .lines()

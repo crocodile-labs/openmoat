@@ -10,8 +10,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: moat version
-      placeholder: output of `moat --version`
+      label: openmoat version
+      placeholder: output of `openmoat --version`
     validations:
       required: true
   - type: dropdown
@@ -32,8 +32,8 @@ body:
   - type: textarea
     id: check
     attributes:
-      label: "`moat policy check` output"
-      description: Run `moat policy check "<command>"` (add `--kind fs-read|fs-write|net|fetch|mcp` for other tools) and paste the verdict, rules and reasons.
+      label: "`openmoat policy check` output"
+      description: Run `openmoat policy check "<command>"` (add `--kind fs-read|fs-write|net|fetch|mcp` for other tools) and paste the verdict, rules and reasons.
       render: text
     validations:
       required: true

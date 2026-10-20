@@ -31,7 +31,7 @@ fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
     assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains("session-taint"), "{reason}");
     assert!(
-        reason.contains("moat allow --last"),
+        reason.contains("openmoat allow --last"),
         "the ask says how: {reason}"
     );
 

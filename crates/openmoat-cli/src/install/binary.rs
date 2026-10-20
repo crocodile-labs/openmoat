@@ -13,9 +13,9 @@ use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context as _, Result};
 
-/// The path hooks and the lock record for the running `moat`.
+/// The path hooks and the lock record for the running `openmoat`.
 pub fn hook_binary() -> Result<PathBuf> {
-    let exe = std::env::current_exe().context("locating the moat binary")?;
+    let exe = std::env::current_exe().context("locating the openmoat binary")?;
     let invoked = std::env::args_os()
         .next()
         .and_then(|arg0| invoked_path(&arg0));
@@ -31,16 +31,53 @@ pub fn stale_hint(command: &str) -> String {
         .ok()
         .and_then(|p| fs::canonicalize(p).ok());
     match fs::canonicalize(command) {
-        Err(_) => format!("hook runs {command}, which does not exist; run `moat init`"),
+        Err(_) => format!("hook runs {command}, which does not exist; run `openmoat init`"),
         Ok(target) if Some(&target) != running.as_ref() => format!(
-            "hook runs {command}, a different moat than this one; run `moat init` with the moat hooks should use"
+            "hook runs {command}, a different OpenMoat binary than this one; run `openmoat init` \
+             with the openmoat hooks should use"
         ),
-        // This moat, so what differs is the entry itself: an older moat wrote
-        // it with fewer tools, another timeout, or without one of its events.
+        // This binary, so what differs is the entry itself: an older release
+        // wrote it with fewer tools, another timeout, or without one of its events.
         Ok(_) => format!(
-            "hook entry for {command} is out of date (written by an older moat); run `moat init`"
+            "hook entry for {command} is out of date (written by an older OpenMoat); run `openmoat init`"
         ),
     }
+}
+
+/// The command's name before the rename, still installed beside `openmoat`
+/// for a few releases (the `moat` binary starts the `openmoat` next to it).
+const ALIAS: &str = "moat";
+/// The command's name.
+const NAME: &str = "openmoat";
+
+/// `binary`'s file name with `name` in place of its stem, keeping `.exe`;
+/// `None` unless the stem is `from`.
+fn renamed(binary: &Path, from: &str, name: &str) -> Option<PathBuf> {
+    if binary.file_stem()? != from {
+        return None;
+    }
+    let mut file = name.to_owned();
+    if let Some(ext) = binary.extension() {
+        file.push('.');
+        file.push_str(ext.to_str()?);
+    }
+    Some(binary.with_file_name(file))
+}
+
+/// The `moat` alias of `binary` (`<dir>/moat` for `<dir>/openmoat`) when it
+/// is installed with it: both resolve into the same directory, as one install
+/// puts them. Hooks written before the rename run it.
+pub fn alias_of(binary: &Path) -> Option<PathBuf> {
+    let alias = renamed(binary, NAME, ALIAS)?;
+    let dir = |p: &Path| fs::canonicalize(p).ok()?.parent().map(Path::to_path_buf);
+    (dir(&alias)? == dir(binary)?).then_some(alias)
+}
+
+/// The other name of `binary` in its directory, whether or not it exists:
+/// `<dir>/moat` for `<dir>/openmoat` and the reverse. Either one runs the
+/// hooks, so both are protected.
+pub fn other_name(binary: &Path) -> Option<PathBuf> {
+    renamed(binary, NAME, ALIAS).or_else(|| renamed(binary, ALIAS, NAME))
 }
 
 /// First of: the package manager's stable link, the path this process was
@@ -188,5 +225,45 @@ mod tests {
         assert_eq!(link("/c/Users/u/scoop/apps/moat/current/moat.exe"), None);
         assert_eq!(link("/opt/homebrew/Cellar/moat/0.1.0"), None);
         assert_eq!(link("/home/u/.cargo/bin/moat"), None);
+    }
+
+    #[test]
+    fn each_name_has_the_other_beside_it() {
+        let other = |p: &str| other_name(Path::new(p));
+        assert_eq!(other("/u/bin/openmoat"), Some(PathBuf::from("/u/bin/moat")));
+        assert_eq!(other("/u/bin/moat"), Some(PathBuf::from("/u/bin/openmoat")));
+        assert_eq!(
+            other("/c/scoop/apps/openmoat/current/openmoat.exe"),
+            Some(PathBuf::from("/c/scoop/apps/openmoat/current/moat.exe"))
+        );
+        assert_eq!(other("/opt/t/moatd"), None);
+        assert_eq!(other("/u/bin/openmoat-dev"), None);
+    }
+
+    #[test]
+    fn the_alias_counts_only_when_installed_with_the_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let binary = bin.join("openmoat");
+        fs::write(&binary, b"").unwrap();
+        assert_eq!(alias_of(&binary), None, "no alias installed");
+        fs::write(bin.join("moat"), b"").unwrap();
+        assert_eq!(alias_of(&binary), Some(bin.join("moat")));
+        #[cfg(unix)]
+        {
+            // `bin/moat` reaching another package's file is not ours.
+            let elsewhere = dir.path().join("other/moat");
+            fs::create_dir_all(elsewhere.parent().unwrap()).unwrap();
+            fs::write(&elsewhere, b"").unwrap();
+            fs::remove_file(bin.join("moat")).unwrap();
+            std::os::unix::fs::symlink(&elsewhere, bin.join("moat")).unwrap();
+            assert_eq!(alias_of(&binary), None);
+        }
+        assert_eq!(
+            alias_of(&bin.join("moat")),
+            None,
+            "only openmoat has an alias"
+        );
     }
 }

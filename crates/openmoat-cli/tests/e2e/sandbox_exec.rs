@@ -146,7 +146,7 @@ fn codex_from_the_standalone_installer_starts_commands() {
         );
     };
 
-    starts("after `moat init`");
+    starts("after `openmoat init`");
     for file in &state {
         assert_eq!(
             cat(&installed, &sb, &project, &file.to_string_lossy()),
@@ -157,5 +157,5 @@ fn codex_from_the_standalone_installer_starts_commands() {
     }
     // Codex updates itself: a new release directory, `current` moved to it.
     install("0.161.0");
-    starts("after an update, without `moat sandbox sync`");
+    starts("after an update, without `openmoat sandbox sync`");
 }

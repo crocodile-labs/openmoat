@@ -81,7 +81,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
         read,
         "landlock.program",
         program,
-        "the program `moat run` starts",
+        "the program `openmoat run` starts",
     );
     g.allows(&ir.fs.read, read, &checker);
     for allowance in &ir.allowances {
@@ -99,7 +99,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
         tmp,
         "commands may read and write the temp directory",
     );
-    let message = "`moat run --write`: commands may read and write these";
+    let message = "`openmoat run --write`: commands may read and write these";
     g.grant(write, "landlock.write", grants.writes.clone(), message);
     g.unenforced(&ir.fs.read, read);
     g.unenforced(&ir.fs.write, write);

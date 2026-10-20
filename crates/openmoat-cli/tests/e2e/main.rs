@@ -6,6 +6,7 @@
 
 mod common;
 
+mod alias;
 mod allow;
 mod allow_files;
 mod anchor;

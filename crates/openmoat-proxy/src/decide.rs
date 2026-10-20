@@ -139,7 +139,7 @@ pub fn tainted(
     decision.verdict = Verdict::Deny;
     decision.reasons.push(
         "the proxy cannot ask, so a session that read secret material reaches only that \
-         secret's own host until it ends; `moat allow` does not answer a secret's taint, \
+         secret's own host until it ends; `openmoat allow` does not answer a secret's taint, \
          so start a new session"
             .to_owned(),
     );

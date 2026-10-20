@@ -249,9 +249,9 @@ fn status_and_doctor_report_a_missing_lock_and_audit_log() {
     assert_eq!(out.status.code(), Some(64), "{}", text(&out));
     let status = stdout(&out);
     for line in [
-        "lock             ✗ missing (run `moat init`)",
+        "lock             ✗ missing (run `openmoat init`)",
         "approvals        no active session grants",
-        "audit log        ✗ missing (run `moat init`)",
+        "audit log        ✗ missing (run `openmoat init`)",
     ] {
         assert!(status.lines().any(|l| l == line), "{line:?} in {status}");
     }
@@ -261,7 +261,7 @@ fn status_and_doctor_report_a_missing_lock_and_audit_log() {
     assert!(
         doctor
             .lines()
-            .any(|l| l == "✗ lock             missing; run `moat init`"),
+            .any(|l| l == "✗ lock             missing; run `openmoat init`"),
         "{doctor}"
     );
     assert!(

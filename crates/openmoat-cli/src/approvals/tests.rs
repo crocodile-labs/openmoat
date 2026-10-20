@@ -218,7 +218,7 @@ fn grants_and_overlay_round_trip() {
             .reason
             .as_deref()
             .unwrap()
-            .contains("moat allow --always")
+            .contains("openmoat allow --always")
     );
 
     fs::write(

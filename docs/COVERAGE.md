@@ -15,8 +15,8 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 31 | 20 | 7 |
 | T7 | Obfuscation and nested execution | 130 | 102 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 12 | 0 | 6 |
-| T9 | Hook / policy tampering by the agent | 168 | 46 | 7 |
-| T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
+| T9 | Hook / policy tampering by the agent | 185 | 46 | 7 |
+| T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
 | T12 | Network to unknown hosts | 76 | 17 | 1 |
 
@@ -937,6 +937,23 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-export-moat-home` (attacks): Deny [env-poison]
 - `T9-assume-tty-prefix-on-allow` (attacks): Deny [env-poison, kernel-self]
 - `T9-patch-edits-codex-hooks` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-allow` (attacks): Deny [kernel-self]
+- `T9-openmoat-allow-by-absolute-path` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-init` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-doctor-accept` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-policy` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-secret` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-mcp-accept` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-sandbox-sync` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-audit-anchor` (attacks): Deny [kernel-self]
+- `T9-agent-runs-openmoat-edit-trust-uninstall` (attacks): Deny [kernel-self]
+- `T9-script-openmoat-allow` (attacks): Deny [kernel-self]
+- `T9-script-absolute-openmoat-doctor-accept` (attacks): Deny [kernel-self]
+- `T9-script-c-openmoat-allow` (attacks): Deny [kernel-self]
+- `T9-expect-spawn-openmoat-allow` (attacks): Deny [kernel-self]
+- `T9-unbuffer-openmoat-allow` (attacks): Deny [kernel-self]
+- `T9-tmux-bare-openmoat` (attacks): Deny [kernel-self]
+- `T9-python-pty-bare-openmoat` (attacks): Deny [kernel-self]
 - `T9-zsh-interactive-moat-doctor-accept` (attacks): Deny [kernel-self]
 - `T9-absolute-script-moat-doctor-accept` (attacks): Deny [kernel-self]
 - `T9-absolute-script-linux-command-form` (attacks): Deny [kernel-self]
@@ -1064,7 +1081,15 @@ the verdict and rule ids the default policy must produce for it.
 - `T10-file-tool-writes-scoop-current-binary` (attacks): Deny [kernel-self]
 - `T10-copy-over-scoop-versioned-binary` (attacks): Deny [kernel-self]
 - `T10-replace-scoop-current-junction` (attacks): Deny [kernel-self]
+- `T10-copy-over-openmoat-binary` (attacks): Deny [kernel-self]
+- `T10-link-over-openmoat-binary` (attacks): Deny [kernel-self]
+- `T10-file-tool-writes-windows-openmoat` (attacks): Deny [kernel-self]
+- `T10-file-tool-writes-scoop-openmoat` (attacks): Deny [kernel-self]
+- `T10-copy-over-scoop-openmoat-alias` (attacks): Deny [kernel-self]
+- `T10-replace-scoop-openmoat-junction` (attacks): Deny [kernel-self]
 - `benign-write-monorepo-app-named-moat` (benign): Allow [project-fs]
+- `benign-write-monorepo-app-named-openmoat` (benign): Allow [project-fs]
+- `benign-write-source-file-named-openmoat` (benign): Allow [project-fs]
 
 ## T11: Time-of-check / time-of-use, symlinks
 

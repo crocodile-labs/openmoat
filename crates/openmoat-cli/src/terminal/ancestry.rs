@@ -29,9 +29,16 @@ pub(super) struct Process {
     pub argv: Vec<String>,
 }
 
-/// Executable names of the agent hosts, and `moat` itself: `moat run` is the
-/// parent of the agent it starts.
-const AGENTS: &[&str] = &["claude", "codex", "cursor-agent", "openclaw", "moat"];
+/// Executable names of the agent hosts, and `openmoat` itself under either
+/// name: `openmoat run` is the parent of the agent it starts.
+const AGENTS: &[&str] = &[
+    "claude",
+    "codex",
+    "cursor-agent",
+    "openclaw",
+    "openmoat",
+    "moat",
+];
 
 /// Directories the agents install their code under, for an agent that runs
 /// as `node <dir>/…/cli.js` or from a versioned file (`claude/versions/2.1.0`).

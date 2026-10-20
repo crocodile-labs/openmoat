@@ -16,7 +16,7 @@ use crate::run::run_sh_with;
 #[test]
 fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
     let Some(codex) = std::env::var_os("MOAT_CODEX_BIN").filter(|v| !v.is_empty()) else {
-        skip_without_host_binary("codex inside moat run (set MOAT_CODEX_BIN)");
+        skip_without_host_binary("codex inside openmoat run (set MOAT_CODEX_BIN)");
         return;
     };
     // Landlock cannot deny inside a granted tree and `/tmp` is a read root, so
@@ -28,7 +28,7 @@ fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
     };
     let sb = Sandbox::bare_in(&parent, &[".codex"]);
     let out = sb.moat(&["init", "--yes"]);
-    assert_eq!(out.status.code(), Some(OK), "moat init: {}", text(&out));
+    assert_eq!(out.status.code(), Some(OK), "openmoat init: {}", text(&out));
     assert!(
         sb.home.join(".codex/hooks.json").exists(),
         "init installed no Codex hook: {}",
@@ -40,7 +40,7 @@ fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
     // Both binaries in the project: the sandbox reads the project, not the
     // CI download directory or the build tree.
     std::fs::copy(&codex, project.join("codex-bin")).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_moat"), project.join("moat-bin")).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_openmoat"), project.join("moat-bin")).unwrap();
 
     let key = sb.home.join(".ssh/id_rsa");
     let payload = json!({

@@ -44,16 +44,34 @@ pub fn sandbox_paths(binary: &Path) -> Vec<String> {
             paths.push(real);
         }
     }
+    // `moat` beside `openmoat`, or the reverse: a hook written before the
+    // rename runs `moat`, which starts the `openmoat` next to it. Only when it
+    // is there: Claude Code's Linux sandbox would mount a placeholder file at a
+    // missing one for every command (the hook still denies writing it).
+    if let Some(other) =
+        super::other_name(&recorded).filter(|other| fs::symlink_metadata(other).is_ok())
+    {
+        paths.extend(other.file_name().and_then(|name| {
+            let real = fs::canonicalize(other.parent()?).ok()?;
+            Some(real.join(name))
+        }));
+        paths.push(other);
+    }
     literal(&paths)
 }
 
-/// [`sandbox_paths`], and the file `binary` resolves to and that file's
-/// directory: what a call is decided against.
+/// [`sandbox_paths`], `binary`'s other name even when nothing is there yet
+/// (so none can be planted), and the files both resolve to and their
+/// directories: what a call is decided against.
 pub fn protected_paths(binary: &Path) -> Vec<String> {
     let mut paths: Vec<PathBuf> = sandbox_paths(binary).iter().map(PathBuf::from).collect();
-    if let Ok(target) = fs::canonicalize(binary) {
-        paths.extend(target.parent().map(Path::to_path_buf));
-        paths.push(target);
+    let other = super::other_name(&absolute(binary).unwrap_or_else(|_| binary.to_path_buf()));
+    paths.extend(other.clone());
+    for path in std::iter::once(binary).chain(other.as_deref()) {
+        if let Ok(target) = fs::canonicalize(path) {
+            paths.extend(target.parent().map(Path::to_path_buf));
+            paths.push(target);
+        }
     }
     literal(&paths)
 }
@@ -85,7 +103,7 @@ pub fn protect(policy: &mut Policy, paths: &[String]) {
     } else {
         policy.deny.push(RuleGroup {
             id: KERNEL_SELF.to_owned(),
-            reason: Some("the moat binary every installed hook runs".to_owned()),
+            reason: Some("the openmoat binary every installed hook runs".to_owned()),
             ..RuleGroup::default()
         });
         policy.deny.len() - 1
@@ -108,7 +126,7 @@ pub fn refuse_writable(binary: &Path, writable: &[String]) -> Result<()> {
         if has_glob_syntax(&path_string(path)) {
             bail!(
                 "refusing to set up hooks for {}: the path has glob characters (`*?[]{{}}`), \
-                 so no sandbox can protect it by name; install moat where the path has none",
+                 so no sandbox can protect it by name; install openmoat where the path has none",
                 path.display()
             );
         }
@@ -133,8 +151,9 @@ pub fn refuse_writable(binary: &Path, writable: &[String]) -> Result<()> {
         if std::iter::once(binary).chain(target.as_deref()).any(under) {
             bail!(
                 "refusing to set up hooks for {}: it is {why} ({}), where an agent could \
-                 replace the binary every hook runs; install moat outside it (for example with \
-                 `cargo install`, Homebrew or the release installer) and run that moat's `init`",
+                 replace the binary every hook runs; install openmoat outside it (for example \
+                 with `cargo install`, Homebrew or the release installer) and run that openmoat's \
+                 `init`",
                 binary.display(),
                 place.display()
             );
@@ -189,6 +208,30 @@ mod tests {
         assert!(protected_paths(&real.join("a[1]/moat")).is_empty());
         let refused = refuse_writable(&real.join("a*/moat"), &[]).unwrap_err();
         assert!(refused.to_string().contains("glob characters"), "{refused}");
+    }
+
+    #[test]
+    fn the_other_name_is_protected_and_sandboxed_only_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let tools = fs::canonicalize(dir.path()).unwrap().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let (openmoat, moat) = (tools.join("openmoat"), tools.join("moat"));
+        fs::write(&openmoat, b"").unwrap();
+        let alias = path_string(&moat);
+        assert!(
+            !sandbox_paths(&openmoat).contains(&alias),
+            "nothing to mount"
+        );
+        assert!(
+            protected_paths(&openmoat).contains(&alias),
+            "none can be planted"
+        );
+        fs::write(&moat, b"").unwrap();
+        assert!(sandbox_paths(&openmoat).contains(&alias));
+        // A lock from before the rename records `moat`; `openmoat` beside it
+        // is what that hook ends up running.
+        assert!(protected_paths(&moat).contains(&path_string(&openmoat)));
+        assert!(sandbox_paths(&moat).contains(&path_string(&openmoat)));
     }
 
     #[test]

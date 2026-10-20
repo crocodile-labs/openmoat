@@ -246,11 +246,11 @@ mod tests {
         };
         let mut files = rule(&policy.ask, "runs-later");
         // the binary is not a file that runs later as configuration does
-        files.extend(
-            rule(&policy.deny, "kernel-self")
-                .into_iter()
-                .filter(|p| !p.contains("/bin/moat") && !p.contains("apps/moat")),
-        );
+        files.extend(rule(&policy.deny, "kernel-self").into_iter().filter(|p| {
+            !["/bin/moat", "apps/moat", "/bin/openmoat", "apps/openmoat"]
+                .iter()
+                .any(|binary| p.contains(binary))
+        }));
         assert!(files.len() > 30, "{files:?}");
         for pattern in &files {
             let path = sample(pattern);

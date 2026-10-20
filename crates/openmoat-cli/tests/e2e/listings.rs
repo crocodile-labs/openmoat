@@ -47,7 +47,7 @@ fn allowed_lists_rules_grants_and_trust_without_a_terminal() {
 
     let shown = text(&sb.moat(&["allowed"]));
     assert!(
-        shown.contains("docs.rs") && shown.contains("moat allow --remove"),
+        shown.contains("docs.rs") && shown.contains("openmoat allow --remove"),
         "{shown}"
     );
     assert!(shown.contains("npm install left-pad"), "{shown}");

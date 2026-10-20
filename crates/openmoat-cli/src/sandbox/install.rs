@@ -46,7 +46,7 @@ pub fn claude_settings(home: &Home) -> Result<serde_json::Value> {
 /// of a host whose sandbox is [`unavailable`]: Claude Code's deny rules are
 /// written there, and the sandbox settings of an older version removed.
 pub const OLD_SANDBOX_REMOVED: &str = "deny rules written for Claude Code's file tools, without \
-     sandbox settings (an older moat's are removed), so Claude Code can start";
+     sandbox settings (an older OpenMoat's are removed), so Claude Code can start";
 
 fn unavailable_on(host: Host, windows: bool) -> Option<&'static str> {
     let sandbox = host.spec().sandbox.as_ref()?;
@@ -202,7 +202,7 @@ pub fn problems(
     if !path.parent().is_some_and(Path::is_dir) {
         return Ok(None);
     }
-    let out_of_date = "differs from the policy; run `moat sandbox sync`".to_owned();
+    let out_of_date = "differs from the policy; run `openmoat sandbox sync`".to_owned();
     let mut problems = match format(host) {
         Some(SandboxFormat::CodexProfile) => {
             let doc = read_toml(&path)?;
@@ -211,7 +211,7 @@ pub fn problems(
                 found.push(out_of_date);
             }
             if lock.is_some_and(|l| !l.pins_codex_profile(&path)) {
-                found.push("not pinned by the lock; run `moat sandbox sync`".to_owned());
+                found.push("not pinned by the lock; run `openmoat sandbox sync`".to_owned());
             }
             found
         }
@@ -222,7 +222,7 @@ pub fn problems(
                 found.push(out_of_date);
             }
             if lock.is_some_and(|l| path.is_file() && !l.pins(&path)) {
-                found.push("not pinned by the lock; run `moat sandbox sync`".to_owned());
+                found.push("not pinned by the lock; run `openmoat sandbox sync`".to_owned());
             }
             found
         }

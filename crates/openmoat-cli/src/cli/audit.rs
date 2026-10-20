@@ -26,7 +26,7 @@ pub enum AuditCommand {
 
 #[derive(Debug, Args)]
 pub struct TeamReportArgs {
-    /// Files `moat audit export` wrote; events present in several are counted once.
+    /// Files `openmoat audit export` wrote; events present in several are counted once.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
 
@@ -37,11 +37,11 @@ pub struct TeamReportArgs {
 
 #[derive(Debug, Args)]
 pub struct VerifyArgs {
-    /// The file `moat audit export` wrote.
+    /// The file `openmoat audit export` wrote.
     #[arg(required_unless_present = "against")]
     pub file: Option<PathBuf>,
 
-    /// A head hash recorded earlier (`moat audit verify` or `moat doctor` printed it);
+    /// A head hash recorded earlier (`openmoat audit verify` or `openmoat doctor` printed it);
     /// fail unless a verified event carries it.
     #[arg(long, conflicts_with = "against")]
     pub anchor: Option<String>,
@@ -51,7 +51,7 @@ pub struct VerifyArgs {
     #[arg(long, conflicts_with = "against")]
     pub require_anchor: bool,
 
-    /// Check this machine's audit log against every anchor `moat audit anchor`
+    /// Check this machine's audit log against every anchor `openmoat audit anchor`
     /// recorded in this git repository or file: each must still be in the log
     /// with the same hash, or the newest events were deleted or rewritten.
     #[arg(long, value_name = "GIT_REPO_OR_FILE", conflicts_with = "file")]

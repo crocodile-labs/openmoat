@@ -106,7 +106,7 @@ impl Home {
                 .args(["init", "--yes"]),
             None,
         );
-        assert_eq!(out.status.code(), Some(OK), "moat init: {}", text(&out));
+        assert_eq!(out.status.code(), Some(OK), "openmoat init: {}", text(&out));
         let project = crate::push::repo(&sb);
         Self { sb, project }
     }

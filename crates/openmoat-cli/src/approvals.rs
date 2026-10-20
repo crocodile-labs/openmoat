@@ -277,8 +277,8 @@ impl Overlay {
 
     pub fn save(&self, path: &Path) -> Result<()> {
         let text = format!(
-            "# Permanent allow rules added with `moat allow`. Remove one with\n\
-             # `moat allow --remove <id>`, or edit freely, then run `moat doctor --accept`.\n{}",
+            "# Permanent allow rules added with `openmoat allow`. Remove one with\n\
+             # `openmoat allow --remove <id>`, or edit freely, then run `openmoat doctor --accept`.\n{}",
             openmoat_core::yaml::to_string(self)?
         );
         write_private(path, text.as_bytes())
@@ -299,7 +299,7 @@ impl Overlay {
                 .with_context(|| format!("cannot approve `{line}`"))?;
             patterns.push(pattern);
         }
-        Ok(self.push("moat allow --always", |g| g.shell = patterns))
+        Ok(self.push("openmoat allow --always", |g| g.shell = patterns))
     }
 
     /// Append an `fs.read` and `fs.write` allow for exactly these paths. A path
@@ -311,10 +311,10 @@ impl Overlay {
             .find(|p| p.contains(['*', '?', '[', ']', '{', '}', '\\']))
         {
             bail!(
-                "{bad} contains glob characters; write it in the policy with `moat edit` instead"
+                "{bad} contains glob characters; write it in the policy with `openmoat edit` instead"
             );
         }
-        Ok(self.push("moat allow --always", |g| {
+        Ok(self.push("openmoat allow --always", |g| {
             g.fs_read = reads.to_vec();
             g.fs_write = writes.to_vec();
         }))
@@ -349,10 +349,10 @@ impl Overlay {
         if !plain {
             bail!(
                 "`{host}` is not a host name such as docs.rs; wildcards, URLs and ports \
-                 are not accepted here (write those in the policy with `moat edit`)"
+                 are not accepted here (write those in the policy with `openmoat edit`)"
             );
         }
-        Ok(self.push("moat allow --site", |g| g.net = vec![host]))
+        Ok(self.push("openmoat allow --site", |g| g.net = vec![host]))
     }
 
     /// Append an `fs.read` and `fs.write` allow for each spelling of a directory
@@ -378,7 +378,7 @@ impl Overlay {
                     )
             })
             .collect();
-        self.push("moat allow --dir", |g| {
+        self.push("openmoat allow --dir", |g| {
             g.fs_read.clone_from(&patterns);
             g.fs_write = patterns.into_iter().chain(git).collect();
         })

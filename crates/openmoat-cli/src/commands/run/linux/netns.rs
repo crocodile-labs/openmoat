@@ -97,8 +97,8 @@ pub fn port_only_notice(port: u16, why: &str) -> String {
     format!(
         "moat run: the network is restricted by port only: {why}, so a command in the sandbox \
          can reach any host on port {port} and go around the proxy's checks and audit. With \
-         bubblewrap (`apt install bubblewrap`) `moat run` gives the agent a network of its own \
-         whose only exit is the proxy; `moat run --isolate` needs it too and also hides the \
+         bubblewrap (`apt install bubblewrap`) `openmoat run` gives the agent a network of its own \
+         whose only exit is the proxy; `openmoat run --isolate` needs it too and also hides the \
          rest of the machine"
     )
 }
@@ -108,9 +108,9 @@ pub fn doctor_warning() -> Option<String> {
     match network() {
         Network::Namespace(_) => None,
         Network::PortOnly(why) => Some(format!(
-            "moat run         network restricted by port only: {why}; commands could reach any \
+            "openmoat run     network restricted by port only: {why}; commands could reach any \
              host on the proxy's port. Install bubblewrap for a network namespace (also needed \
-             by `moat run --isolate`)"
+             by `openmoat run --isolate`)"
         )),
     }
 }
@@ -200,7 +200,7 @@ mod tests {
             "restricted by port only",
             "any host on port 41000",
             "apt install bubblewrap",
-            "moat run --isolate",
+            "openmoat run --isolate",
         ] {
             assert!(notice.contains(expected), "{expected}: {notice}");
         }

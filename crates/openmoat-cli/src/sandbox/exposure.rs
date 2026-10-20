@@ -138,7 +138,7 @@ pub fn refusal(
     let (state_dir, exposure) = find(state, rules, tmpdir.filter(|_| isolated))?;
     let isolate_hides = !isolated && find(state, rules, tmpdir).is_none();
     let fix = if isolate_hides {
-        ", or use `moat run --isolate`, which hides it under an empty temp directory"
+        ", or use `openmoat run --isolate`, which hides it under an empty temp directory"
     } else {
         ""
     };
@@ -147,11 +147,11 @@ pub fn refusal(
     Some(match exposure {
         Exposure::Inside(root) => format!(
             "OpenMoat's state directory {state_dir} is inside {root}, which the sandbox grants; \
-             {cause}, so `moat run` refuses to start. Move MOAT_HOME out of {root}{fix}"
+             {cause}, so `openmoat run` refuses to start. Move MOAT_HOME out of {root}{fix}"
         ),
         Exposure::Holds(path) => format!(
             "{path}, which the sandbox grants, is inside OpenMoat's state directory {state_dir}; \
-             {cause}, so `moat run` refuses to start. Grant a path outside it, or move MOAT_HOME \
+             {cause}, so `openmoat run` refuses to start. Grant a path outside it, or move MOAT_HOME \
              elsewhere"
         ),
     })

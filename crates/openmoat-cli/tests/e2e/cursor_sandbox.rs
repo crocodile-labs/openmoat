@@ -139,7 +139,10 @@ fn a_weakened_sandbox_json_denies_every_call_and_drops_to_hook_only() {
 
     let uninstall = sb.moat_as_person(&["uninstall"]);
     assert_eq!(uninstall.status.code(), Some(OK), "{}", text(&uninstall));
-    assert!(!dir.join("sandbox.json").exists(), "moat init created it");
+    assert!(
+        !dir.join("sandbox.json").exists(),
+        "openmoat init created it"
+    );
 }
 
 /// Cursor documents its sandbox for macOS and Linux only, so on native

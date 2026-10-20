@@ -25,7 +25,7 @@ pub struct Spec<'a> {
 /// because systemd would otherwise read it as a line continuation or token.
 pub fn render(spec: &Spec<'_>) -> String {
     let mut out = String::new();
-    out.push_str("# OpenMoat egress proxy, installed by `moat proxy install`.\n");
+    out.push_str("# OpenMoat egress proxy, installed by `openmoat proxy install`.\n");
     out.push_str("# Managed by moat; do not edit by hand.\n");
     out.push_str("\n[Unit]\n");
     out.push_str("Description=OpenMoat default-deny egress proxy\n");

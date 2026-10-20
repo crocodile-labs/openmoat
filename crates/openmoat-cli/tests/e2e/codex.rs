@@ -32,7 +32,7 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     assert_eq!(d["permissionDecision"], "deny", "{d}");
     let reason = d["permissionDecisionReason"].as_str().unwrap();
     assert!(reason.contains("[git-internals]"), "{reason}");
-    assert!(reason.contains("moat allow --last"), "{reason}");
+    assert!(reason.contains("openmoat allow --last"), "{reason}");
 
     let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));

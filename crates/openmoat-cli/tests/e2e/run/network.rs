@@ -19,7 +19,7 @@ fn namespaced(out: &Output) -> bool {
     let port_only = stderr(out).contains("restricted by port only");
     assert!(
         !(port_only && std::env::var_os("CI").is_some()),
-        "CI must run `moat run` in a network namespace: {}",
+        "CI must run `openmoat run` in a network namespace: {}",
         text(out)
     );
     if port_only {

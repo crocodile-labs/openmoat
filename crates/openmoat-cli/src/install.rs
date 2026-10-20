@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::{Host, InstallSpec};
 
-pub use binary::{hook_binary, stale_hint};
+pub use binary::{alias_of, hook_binary, other_name, stale_hint};
 pub use dirs::Recorded;
 pub use hook_file::{HookState, Outcome, read_or_empty};
 pub use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, HookSpec};
@@ -215,6 +215,13 @@ impl HostConfig {
     /// its sandbox settings; the files of any other host are never touched.
     pub fn set_up(&self, binary: &std::path::Path) -> bool {
         self.state(binary) == HookState::Installed
+    }
+
+    /// Whether the installed hook runs the `moat` alias of `binary` rather
+    /// than `binary` itself: written before the rename, it still works, and
+    /// `openmoat init` rewrites it.
+    pub fn runs_alias(&self, binary: &Path) -> bool {
+        hook_file::runs_alias(self, binary)
     }
 
     /// Remove OpenMoat's hook entries from the parsed hook file `root`.

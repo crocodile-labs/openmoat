@@ -93,7 +93,28 @@ fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Ou
     Ok(outcome)
 }
 
+/// The hook's state for `binary`. A hook that runs `binary`'s `moat` alias
+/// counts as installed: hooks written before the rename keep working through
+/// it, and `init` rewrites them to `binary` ([`upsert`] compares exactly).
 pub fn state(config: &HostConfig, binary: &Path) -> HookState {
+    let exact = state_for(config, binary);
+    if exact == HookState::Installed {
+        return exact;
+    }
+    match super::alias_of(binary) {
+        Some(alias) if state_for(config, &alias) == HookState::Installed => HookState::Installed,
+        _ => exact,
+    }
+}
+
+/// Whether the installed hook runs `binary`'s `moat` alias, not `binary`.
+pub fn runs_alias(config: &HostConfig, binary: &Path) -> bool {
+    state_for(config, binary) != HookState::Installed
+        && super::alias_of(binary)
+            .is_some_and(|alias| state_for(config, &alias) == HookState::Installed)
+}
+
+fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     let path = &config.settings_path;
     if !path.exists() {
         return HookState::Missing;

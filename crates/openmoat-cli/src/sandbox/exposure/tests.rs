@@ -202,7 +202,7 @@ fn the_refusal_names_the_root_and_offers_isolate_only_where_it_hides() {
         message.contains(&format!("Move MOAT_HOME out of {tmp}")),
         "{message}"
     );
-    assert!(message.contains("`moat run --isolate`"), "{message}");
+    assert!(message.contains("`openmoat run --isolate`"), "{message}");
     assert_eq!(refusal(&in_tmp, &rules, Some(&tmp), true), None);
     assert_eq!(
         refusal(Path::new("/nowhere/granted"), &rules, Some(&tmp), false),

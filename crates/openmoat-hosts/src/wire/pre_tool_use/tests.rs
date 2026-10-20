@@ -301,7 +301,7 @@ fn codex_receives_an_ask_as_a_deny_that_says_how_to_approve() {
     let codex = Host::Codex.answer(&HookEvent::PreToolUse, &ask);
     assert_eq!(codex.verdict, Verdict::Deny);
     assert_eq!(codex.rules, ask.rules);
-    assert!(crate::reason_line(&codex).contains("moat allow --last"));
+    assert!(crate::reason_line(&codex).contains("openmoat allow --last"));
     assert_eq!(Host::ClaudeCode.answer(&HookEvent::PreToolUse, &ask), ask);
     assert_eq!(Host::Cursor.answer(&HookEvent::PreToolUse, &ask), ask);
     let allow = Decision::new(Verdict::Allow);
@@ -419,7 +419,7 @@ fn claude_code_modes_that_cannot_prompt_turn_an_ask_into_a_deny() {
             answer
                 .reasons
                 .iter()
-                .any(|r| r.contains("moat allow --last"))
+                .any(|r| r.contains("openmoat allow --last"))
         );
         let rendered = Host::ClaudeCode.render_response(&req.event, &answer);
         assert!(

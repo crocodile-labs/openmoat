@@ -64,7 +64,11 @@ fn a_missing_entry_or_tls_terminate_is_not_masked() {
 
     let found = names(&states(&json!({}), &policy.secrets, &out.report, false));
     assert_eq!(found[0].1, Mask::NotWritten, "never synced");
-    assert!(Mask::NotWritten.describe().contains("moat sandbox sync"));
+    assert!(
+        Mask::NotWritten
+            .describe()
+            .contains("openmoat sandbox sync")
+    );
 }
 
 #[test]

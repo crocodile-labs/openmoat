@@ -35,7 +35,7 @@ pub fn require(home: &Home) -> Result<PathBuf> {
     locate(home).with_context(|| {
         format!(
             "signed policy needs OpenSSH's `{PROGRAM}`, and none was found on the search path \
-             `moat init` recorded; install OpenSSH, then run `moat init` again"
+             `openmoat init` recorded; install OpenSSH, then run `openmoat init` again"
         )
     })
 }

@@ -33,8 +33,8 @@ fn codex_apply_patch_ask_is_approved_with_allow_last() {
     let out = sb.guard("codex", &patch(&sb, "../notes/plan.md"));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     let reason = hook_output(&out)["permissionDecisionReason"].to_string();
-    assert!(reason.contains("run `moat`"), "{reason}");
-    assert!(reason.contains("moat allow --last"), "{reason}");
+    assert!(reason.contains("run `openmoat`"), "{reason}");
+    assert!(reason.contains("openmoat allow --last"), "{reason}");
 
     let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
@@ -77,10 +77,10 @@ fn claude_code_read_ask_is_approved_for_good() {
         "{shown}"
     );
     assert!(
-        shown.contains("undo: moat allow --remove approved-1"),
+        shown.contains("undo: openmoat allow --remove approved-1"),
         "{shown}"
     );
-    assert!(shown.contains("moat allow --dir"), "{shown}");
+    assert!(shown.contains("openmoat allow --dir"), "{shown}");
     let rules = std::fs::read_to_string(sb.home.join(".moat/policy.d/approved.yaml")).unwrap();
     assert!(rules.contains("plan.md") && !rules.contains('*'), "{rules}");
 

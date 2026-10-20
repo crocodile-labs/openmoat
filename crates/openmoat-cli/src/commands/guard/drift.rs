@@ -38,7 +38,7 @@ fn with_drift_note(decision: &Decision, drifted: &[Drift]) -> Decision {
     let drift: Vec<String> = drifted.iter().map(ToString::to_string).collect();
     noted.reasons.push(format!(
         "{}; only settings that change no OpenMoat decision differ, so calls are decided as \
-         usual; run `moat doctor` to inspect, `moat doctor --accept` to re-pin",
+         usual; run `openmoat doctor` to inspect, `openmoat doctor --accept` to re-pin",
         drift.join("; ")
     ));
     noted

@@ -13,7 +13,7 @@ use crate::common::{OK, Sandbox, USAGE, output, text, verdict_and_reason};
 /// A copy of the built binary at `path`.
 fn install_copy(path: &Path) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::copy(env!("CARGO_BIN_EXE_moat"), path).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_openmoat"), path).unwrap();
 }
 
 /// A Claude Code `Write` payload for `path`.

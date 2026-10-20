@@ -1,13 +1,14 @@
 //! `moat doctor` rows that warn without counting as a problem.
 
 use std::fs;
+use std::path::Path;
 
 use openmoat_core::Policy;
 use openmoat_hosts::Host;
 
 use crate::hangs;
 use crate::home::Home;
-use crate::install::GUARD_BUDGET_S;
+use crate::install::{GUARD_BUDGET_S, HostConfig};
 use crate::sandbox::{self, Grants, exposure};
 use crate::time;
 
@@ -56,7 +57,40 @@ pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Optio
     let rules = sandbox::landlock_rules(policy, &ctx, Grants::default()).ok()?;
     let tmpdir = sandbox::session_tmpdir();
     let why = exposure::refusal(home.root(), &rules.rules, tmpdir.as_deref(), false)?;
-    Some(format!("moat run         {why}"))
+    Some(format!("openmoat run     {why}"))
+}
+
+/// The row that says the `moat` name goes away.
+pub(super) const RENAMED: &str = "command          `moat` is the old name of `openmoat`; it still \
+                                  works for now and will be removed in a later release";
+
+/// A warning when the lock records `binary`'s `moat` alias: a lock written
+/// before the rename. It still works; `openmoat init` moves it to `binary`.
+pub(super) fn alias_lock(recorded: &str, binary: &Path) -> Option<String> {
+    let alias = crate::install::alias_of(binary)?;
+    (alias.to_string_lossy() == recorded).then(|| {
+        format!(
+            "binary           the lock records {recorded}, the old `moat` name of {}; it still \
+             works, and `openmoat init` moves the hooks and the lock to openmoat",
+            binary.display()
+        )
+    })
+}
+
+/// A warning for each agent whose hook still runs `binary`'s `moat` alias.
+pub(super) fn alias_hooks(home: &Home, binary: &Path) -> Vec<String> {
+    Host::ALL
+        .into_iter()
+        .filter_map(|host| HostConfig::for_host(home, host).ok())
+        .filter(|config| config.runs_alias(binary))
+        .map(|config| {
+            format!(
+                "{:<16} hook runs the old `moat` name; it still works, and `openmoat init` \
+                 switches it to openmoat",
+                config.host.display_name()
+            )
+        })
+        .collect()
 }
 
 /// On a Mac with `version` (see [`crate::os_version::macos`]), a warning when
@@ -64,7 +98,7 @@ pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Optio
 pub(super) fn old_macos(version: Option<&str>) -> Option<String> {
     let reason = crate::os_version::run_floor(version)?;
     Some(format!(
-        "moat run         {reason}; the agent hooks still apply the policy"
+        "openmoat run     {reason}; the agent hooks still apply the policy"
     ))
 }
 
@@ -112,7 +146,7 @@ mod tests {
         fs::create_dir_all(home.root()).unwrap();
         let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
         let row = state_in_grant(&home, &policy, true).unwrap();
-        assert!(row.starts_with("moat run         "), "{row}");
+        assert!(row.starts_with("openmoat run     "), "{row}");
         assert!(row.contains("Move MOAT_HOME out of /"), "{row}");
         assert_eq!(state_in_grant(&home, &policy, false), None);
     }
@@ -120,7 +154,7 @@ mod tests {
     #[test]
     fn an_old_macos_is_a_moat_run_warning() {
         let row = old_macos(Some("12.7.6")).unwrap();
-        assert!(row.starts_with("moat run         needs macOS 13"), "{row}");
+        assert!(row.starts_with("openmoat run     needs macOS 13"), "{row}");
         assert!(row.contains("hooks still apply the policy"), "{row}");
         assert_eq!(old_macos(Some("13.0")), None);
         assert_eq!(old_macos(None), None, "not macOS, or unreadable");

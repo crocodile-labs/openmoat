@@ -38,7 +38,7 @@ pub fn interactive() -> bool {
 /// Whether a person, not an agent, is at the terminal: what the home screen
 /// needs before it offers to approve or accept anything.
 pub fn person() -> bool {
-    interactive() && refuse_agent("moat").is_ok()
+    interactive() && refuse_agent("openmoat").is_ok()
 }
 
 /// Refuse `command` when an agent host (Claude Code, Codex, the Cursor CLI)

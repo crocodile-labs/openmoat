@@ -254,7 +254,7 @@ fn native_windows_init_removes_an_old_claude_code_sandbox() {
     let init = sb.moat(&["init", "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert!(
-        stdout(&init).contains("an older moat's are removed"),
+        stdout(&init).contains("an older OpenMoat's are removed"),
         "{}",
         text(&init)
     );
@@ -306,8 +306,8 @@ fn sync_leaves_agents_init_left_out_untouched() {
     assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
     let shown = stdout(&sync);
     for line in [
-        "· Codex            not set up (`moat init --hosts codex` adds it)",
-        "· Cursor           not set up (`moat init --hosts cursor` adds it)",
+        "· Codex            not set up (`openmoat init --hosts codex` adds it)",
+        "· Cursor           not set up (`openmoat init --hosts cursor` adds it)",
         "Claude Code",
     ] {
         assert!(shown.contains(line), "{line}: {shown}");
@@ -374,7 +374,7 @@ fn sync_after_a_full_uninstall_writes_no_agent() {
     assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
     let shown = stdout(&sync);
     assert_eq!(
-        shown.matches("not set up (`moat init --hosts").count(),
+        shown.matches("not set up (`openmoat init --hosts").count(),
         3,
         "{shown}"
     );

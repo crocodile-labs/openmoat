@@ -180,7 +180,7 @@ pub fn weaknesses(root: &Value, expect_block_reads: bool, proxy_port: Option<u16
         let set = at(&format!("/sandbox/network/{key}")).filter(|v| !v.is_null());
         match proxy_port {
             Some(port) if set != Some(&json!(port)) => out.push(format!(
-                "sandbox.network.{key} is not {port}: that traffic does not go through `moat proxy`"
+                "sandbox.network.{key} is not {port}: that traffic does not go through `openmoat proxy`"
             )),
             None if set.is_some() => out.push(format!(
                 "sandbox.network.{key} is set: another proxy decides that traffic, not the allowlist"

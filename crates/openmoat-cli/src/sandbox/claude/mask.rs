@@ -41,7 +41,8 @@ impl Mask {
                 .to_owned(),
             Self::Skipped(why) => format!("Claude Code skips it: {why}"),
             Self::NotWritten => {
-                "not masked: the settings lack its mask entry; run `moat sandbox sync`".to_owned()
+                "not masked: the settings lack its mask entry; run `openmoat sandbox sync`"
+                    .to_owned()
             }
         }
     }

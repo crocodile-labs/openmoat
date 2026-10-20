@@ -185,6 +185,50 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
     );
 }
 
+#[test]
+fn a_hook_running_the_moat_alias_stays_installed_until_init_rewrites_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let (binary, alias) = (bin.join("openmoat"), bin.join("moat"));
+    fs::write(&binary, b"").unwrap();
+    fs::write(&alias, b"").unwrap();
+    let cfg = config(&dir.path().join("claude"));
+    fs::create_dir_all(cfg.dir()).unwrap();
+    // A hook written before the rename names `moat`.
+    install(&cfg, &alias, false).unwrap();
+    let before = fs::read_to_string(&cfg.settings_path).unwrap();
+    assert_eq!(state(&cfg, &binary), HookState::Installed);
+    assert!(runs_alias(&cfg, &binary));
+    let rendered = render(&cfg, &binary, &before).unwrap().unwrap();
+    // Compared as JSON: a Windows path's backslashes are escaped in the text.
+    let parsed: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(
+        parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str(),
+        Some(&*binary.to_string_lossy()),
+        "{rendered}"
+    );
+    assert_eq!(install(&cfg, &binary, false).unwrap(), Outcome::Updated);
+    let command = &root(&cfg)["hooks"]["PreToolUse"][0]["hooks"][0]["command"];
+    assert_eq!(command.as_str(), Some(&*binary.to_string_lossy()));
+    assert!(!runs_alias(&cfg, &binary));
+    assert_eq!(state(&cfg, &binary), HookState::Installed);
+    let backup = crate::install::backup_path(&cfg.settings_path, HOOK_BACKUP);
+    assert_eq!(
+        fs::read_to_string(backup).unwrap(),
+        before,
+        "backed up first"
+    );
+    // Another binary that happens to be called `moat` is not the alias.
+    let other = dir.path().join("elsewhere/openmoat");
+    assert_eq!(
+        state(&cfg, &other),
+        HookState::Stale {
+            command: binary.to_string_lossy().into_owned()
+        }
+    );
+}
+
 fn root(cfg: &HostConfig) -> Value {
     serde_json::from_str(&fs::read_to_string(&cfg.settings_path).unwrap()).unwrap()
 }

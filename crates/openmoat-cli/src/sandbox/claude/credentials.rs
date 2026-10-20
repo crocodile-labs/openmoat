@@ -64,7 +64,7 @@ fn entries(secrets: &[BrokeredSecret], allowed: &[String], report: &mut Report) 
                 &format!("secrets.{}", secret.id),
                 format!(
                     "`{}` is not in `net` allow, so Claude Code's broker cannot inject it; the \
-                     secret still works through `moat proxy`",
+                     secret still works through `openmoat proxy`",
                     secret.host
                 ),
             );
@@ -92,7 +92,7 @@ fn entries(secrets: &[BrokeredSecret], allowed: &[String], report: &mut Report) 
                     Kind::Net,
                     &format!("secrets.{}", secret.id),
                     "Claude Code's broker reads env and file sources only, not the keychain; the \
-                     secret still works through `moat proxy`"
+                     secret still works through `openmoat proxy`"
                         .into(),
                 );
                 continue;
@@ -118,7 +118,7 @@ fn drop_plain_http(entries: &mut Vec<Entry>, report: &mut Report) {
                 &format!("secrets.{}", e.id),
                 "mixing `plain_http: true` with `plain_http: false` secrets would widen the \
                  others through Claude Code's block-scoped `allowPlaintextInject`; this secret \
-                 is routed through `moat proxy` instead"
+                 is routed through `openmoat proxy` instead"
                     .into(),
             );
             false

@@ -83,7 +83,7 @@ fn guard_denies_secret_exfiltration_and_records_it() {
             .unwrap()
             .contains("secrets-paths")
     );
-    assert!(stderr(&out).contains("moat show "));
+    assert!(stderr(&out).contains("openmoat show "));
 
     let shown = sb.moat(&["show", "--recent", "1"]);
     assert_eq!(shown.status.code(), Some(0), "{}", stderr(&shown));
@@ -234,7 +234,7 @@ fn guard_fails_closed() {
         decision(&out)["permissionDecisionReason"]
             .as_str()
             .unwrap()
-            .contains("moat init")
+            .contains("openmoat init")
     );
 
     sb.moat(&["init", "--yes"]);
@@ -452,7 +452,7 @@ fn status_reports_missing_installation() {
     let sb = Sandbox::bare(&[".claude"]);
     let out = sb.moat(&["status"]);
     assert_eq!(out.status.code(), Some(64));
-    assert!(stdout(&out).contains("run `moat init`"));
+    assert!(stdout(&out).contains("run `openmoat init`"));
     assert!(!stdout(&out).contains("os error"), "{}", stdout(&out));
 }
 

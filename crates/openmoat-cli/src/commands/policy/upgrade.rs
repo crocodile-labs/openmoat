@@ -22,7 +22,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let home = Home::locate()?;
     if !home.policy_path().is_file() {
         bail!(
-            "no policy at {}; run `moat init`",
+            "no policy at {}; run `openmoat init`",
             home.policy_path().display()
         );
     }
@@ -40,7 +40,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
         out.finish()?;
         return Ok(Code::Ok);
     }
-    person("moat policy upgrade")?;
+    person("openmoat policy upgrade")?;
     // Applying re-pins every pinned file, so upgrading over drift would accept it unseen.
     integrity::refuse_drift(&home, "upgrade the policy")?;
     lint(&home, &plan.merge.text)?;
@@ -69,7 +69,7 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
             writeln!(
                 out,
                 "This policy was not made from OpenMoat's default, so no change is offered; \
-                 compare it with `moat policy lint` and the default in docs/POLICY.md."
+                 compare it with `openmoat policy lint` and the default in docs/POLICY.md."
             )?;
             return Ok(());
         }
@@ -91,7 +91,7 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
         write!(out, "{diff}")?;
         writeln!(
             out,
-            "`moat policy upgrade` applies them after asking; `--undo` takes them back."
+            "`openmoat policy upgrade` applies them after asking; `--undo` takes them back."
         )?;
     }
     for change in plan.merge.conflicts() {
@@ -105,7 +105,10 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
         }
     }
     if plan.merge.conflicts().next().is_some() {
-        writeln!(out, "Make those by hand with `moat edit` if you want them.")?;
+        writeln!(
+            out,
+            "Make those by hand with `openmoat edit` if you want them."
+        )?;
     } else if count == 0 {
         writeln!(
             out,
@@ -126,7 +129,7 @@ fn person(command: &str) -> Result<()> {
     if !crate::terminal::interactive() {
         bail!(
             "`{command}` must be run by a person in a terminal, not from a hook or script; \
-             `moat policy upgrade --dry-run` shows the changes anywhere"
+             `openmoat policy upgrade --dry-run` shows the changes anywhere"
         );
     }
     Ok(())
@@ -170,12 +173,12 @@ fn apply(home: &Home, plan: &Plan, out: &mut Deferred) -> Result<()> {
     writeln!(out, "✔ lock re-pinned ({} files)", lock.entries.len())?;
     writeln!(
         out,
-        "  the previous policy is in {}; undo: moat policy upgrade --undo",
+        "  the previous policy is in {}; undo: openmoat policy upgrade --undo",
         policy_backup.display()
     )?;
     writeln!(
         out,
-        "  run `moat sandbox sync` so the agents' sandboxes follow the upgraded policy"
+        "  run `openmoat sandbox sync` so the agents' sandboxes follow the upgraded policy"
     )?;
     Ok(())
 }
@@ -188,7 +191,7 @@ fn undo(home: &Home, yes: bool) -> Result<Code> {
             policy_backup.display()
         );
     }
-    person("moat policy upgrade --undo")?;
+    person("openmoat policy upgrade --undo")?;
     integrity::refuse_drift(home, "undo the policy upgrade")?;
     let current = read_policy(&home.policy_path())?;
     let previous = read_policy(&policy_backup)?;

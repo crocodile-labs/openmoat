@@ -21,7 +21,7 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
     };
     if !found.pinned {
         report.warn(
-            "mcp servers      not pinned yet: `moat mcp accept` shows them and pins them, so a \
+            "mcp servers      not pinned yet: `openmoat mcp accept` shows them and pins them, so a \
              changed definition is held back",
         );
     } else if found.changes.is_empty() && found.unreadable.is_empty() {
@@ -36,7 +36,7 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
     }
     if found.pinned {
         for change in &found.changes {
-            let accept = format!("`moat mcp accept {}` shows it and asks", change.name);
+            let accept = format!("`openmoat mcp accept {}` shows it and asks", change.name);
             let what = match &change.kind {
                 Kind::Added => "is new",
                 Kind::Changed(_) => "changed; its tool calls are refused",
@@ -71,7 +71,7 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                     false,
                     format!(
                         "mcp tools        `{}` lists {} tool(s) that changed or are new, hidden until \
-                         `moat mcp accept {}`",
+                         `openmoat mcp accept {}`",
                         pins.server,
                         pins.held.len(),
                         pins.server

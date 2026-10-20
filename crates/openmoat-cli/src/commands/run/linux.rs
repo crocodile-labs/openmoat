@@ -162,7 +162,7 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
             ))?
             .add_rules(ports)
     };
-    let ruleset = build().context("`moat run` needs Landlock ABI 4 (Linux 6.7 or later)")?;
+    let ruleset = build().context("`openmoat run` needs Landlock ABI 4 (Linux 6.7 or later)")?;
     let filter = seccomp_filter().context("generating the seccomp filter")?;
     Ok(Confined {
         command,

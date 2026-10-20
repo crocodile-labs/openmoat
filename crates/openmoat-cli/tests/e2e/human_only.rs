@@ -17,7 +17,7 @@ fn a_human_only_command_started_by_an_agent_is_refused() {
     };
     let agent = sb.home.join("claude");
     std::fs::copy(shell, &agent).unwrap();
-    let moat = env!("CARGO_BIN_EXE_moat");
+    let moat = env!("CARGO_BIN_EXE_openmoat");
     for args in [
         &["allow", "--last"][..],
         &["doctor", "--accept"],

@@ -107,7 +107,7 @@ fn allow_always_writes_the_overlay_and_keeps_the_lock_intact() {
         "{shown}"
     );
     assert!(
-        shown.contains("undo: moat allow --remove approved-1"),
+        shown.contains("undo: openmoat allow --remove approved-1"),
         "{shown}"
     );
 
@@ -219,7 +219,7 @@ fn assert_allow_refuses_after_tampering(pinned: &str, args: &[&str]) {
         "{message}"
     );
     assert!(
-        message.contains("`moat doctor`") && message.contains("`moat doctor --accept`"),
+        message.contains("`openmoat doctor`") && message.contains("`openmoat doctor --accept`"),
         "{message}"
     );
     let file = path.file_name().unwrap().to_string_lossy().into_owned();
@@ -295,7 +295,7 @@ fn allow_site_adds_a_net_rule_and_remove_takes_it_back() {
     assert!(
         message.contains("added to")
             && message.contains("- docs.rs")
-            && message.contains("undo: moat allow --remove approved-1")
+            && message.contains("undo: openmoat allow --remove approved-1")
             && message.contains("lock re-pinned")
             && message.contains("Updating the agents' sandbox settings"),
         "{message}"

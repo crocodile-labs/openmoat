@@ -100,7 +100,7 @@ fn read_export(file: &Path) -> Result<(Source, Vec<ExportedEvent>)> {
     let check = openmoat_audit::verify_export(&text, None);
     if let Some(broken) = check.broken {
         bail!(
-            "{name}: line {} does not verify ({}); run `moat audit verify` on it",
+            "{name}: line {} does not verify ({}); run `openmoat audit verify` on it",
             broken.line,
             broken.kind.describe()
         );
@@ -245,7 +245,7 @@ fn text(report: &TeamReport) -> Result<()> {
     if !report.false_positive_candidates.is_empty() {
         writeln!(
             out,
-            "false-positive candidates (asked, and approved with `moat allow`):"
+            "false-positive candidates (asked, and approved with `openmoat allow`):"
         )?;
         for c in &report.false_positive_candidates {
             let rules: Vec<&str> = c.rules.iter().map(String::as_str).collect();

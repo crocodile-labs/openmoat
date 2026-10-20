@@ -320,14 +320,14 @@ impl Masks<'_> {
             self.entries += 1;
             if self.entries > MAX_ENTRIES {
                 bail!(
-                    "the project has more than {MAX_ENTRIES} files and directories; `moat run \
+                    "the project has more than {MAX_ENTRIES} files and directories; `openmoat run \
                      --isolate` looks at each to hide what the policy denies"
                 );
             }
             let is_dir = entry.file_type()?.is_dir();
             let Ok(name) = entry.file_name().into_string() else {
                 bail!(
-                    "{dir} holds a name that is not UTF-8, which `moat run --isolate` cannot mount over"
+                    "{dir} holds a name that is not UTF-8, which `openmoat run --isolate` cannot mount over"
                 );
             };
             let path = format!("{dir}/{name}");

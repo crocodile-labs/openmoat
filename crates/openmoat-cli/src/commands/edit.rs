@@ -19,14 +19,14 @@ use crate::render::Deferred;
 const FALLBACK_EDITOR: &str = if cfg!(windows) { "notepad" } else { "vi" };
 
 pub fn run() -> Result<Code> {
-    crate::terminal::refuse_agent("moat edit")?;
+    crate::terminal::refuse_agent("openmoat edit")?;
     if !crate::terminal::interactive() {
-        bail!("`moat edit` must be run by a person in a terminal, not from a hook or script");
+        bail!("`openmoat edit` must be run by a person in a terminal, not from a hook or script");
     }
     let home = Home::locate()?;
     let path = home.policy_path();
     if !path.is_file() {
-        bail!("no policy at {}; run `moat init`", path.display());
+        bail!("no policy at {}; run `openmoat init`", path.display());
     }
     // Applying re-pins every pinned file, so editing over drift would accept it unseen.
     integrity::refuse_drift(&home, "edit the policy")?;
@@ -95,7 +95,7 @@ pub(super) fn apply(home: &Home, before: &str, after: &str, out: &mut Deferred) 
     writeln!(out, "✔ lock re-pinned ({} files)", lock.entries.len())?;
     writeln!(
         out,
-        "  undo: the previous policy is in {}; copy it back and run `moat doctor --accept`",
+        "  undo: the previous policy is in {}; copy it back and run `openmoat doctor --accept`",
         backup.display()
     )?;
     Ok(())

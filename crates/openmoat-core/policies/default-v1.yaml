@@ -239,65 +239,74 @@ deny:
       # write of it), so an agent cannot approve its own commands there
       - "~/.openclaw/state/**"
       - "**/.moat/**"
-      # the binary every installed hook runs
+      # the binary every installed hook runs, by its name and by `moat`, the name it
+      # had up to 0.7.0, which still runs it
       - "**/bin/moat"
       - "**/bin/moat.exe"
-      # Scoop: apps/moat/current (the junction hooks run through) and each
-      # apps/moat/<version> it may point at (ADR-016)
+      - "**/bin/openmoat"
+      - "**/bin/openmoat.exe"
+      # Scoop: apps/<package>/current (the junction hooks run through) and each
+      # apps/<package>/<version> it may point at (ADR-016)
       - "**/apps/moat/current"
       - "**/apps/moat/*/moat.exe"
+      - "**/apps/openmoat/current"
+      - "**/apps/openmoat/*/moat.exe"
+      - "**/apps/openmoat/*/openmoat.exe"
+    # each command by either name: `openmoat`, or `moat`, its name up to 0.7.0
     shell:
-      - "moat policy *"
-      - "moat init*"
-      - "moat doctor*"
-      - "moat allow*"
-      - "moat trust*"
-      - "moat edit*"
-      - "*/moat policy *"
-      - "*/moat init*"
-      - "*/moat doctor*"
-      - "*/moat allow*"
-      - "*/moat trust*"
-      - "*/moat edit*"
-      - "moat uninstall*"
-      - "*/moat uninstall*"
-      - "moat sandbox sync*"
-      - "*/moat sandbox sync*"
+      - "{moat,openmoat} policy *"
+      - "{moat,openmoat} init*"
+      - "{moat,openmoat} doctor*"
+      - "{moat,openmoat} allow*"
+      - "{moat,openmoat} trust*"
+      - "{moat,openmoat} edit*"
+      - "*/{moat,openmoat} policy *"
+      - "*/{moat,openmoat} init*"
+      - "*/{moat,openmoat} doctor*"
+      - "*/{moat,openmoat} allow*"
+      - "*/{moat,openmoat} trust*"
+      - "*/{moat,openmoat} edit*"
+      - "{moat,openmoat} uninstall*"
+      - "*/{moat,openmoat} uninstall*"
+      - "{moat,openmoat} sandbox sync*"
+      - "*/{moat,openmoat} sandbox sync*"
       # a brokered secret's host is where its value goes
-      - "moat secret*"
-      - "*/moat secret*"
+      - "{moat,openmoat} secret*"
+      - "*/{moat,openmoat} secret*"
       # an audit anchor is the person's record of the log, kept outside it (ADR-031)
-      - "moat audit anchor*"
-      - "*/moat audit anchor*"
+      - "{moat,openmoat} audit anchor*"
+      - "*/{moat,openmoat} audit anchor*"
       # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
-      - "moat mcp {accept,wrap,unwrap}*"
-      - "*/moat mcp {accept,wrap,unwrap}*"
+      - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
       # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept` require
-      - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * moat sandbox sync*"
-      - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */moat sandbox sync*"
-      - "script * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "script * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      # (`*moat` inside a quoted command line covers `openmoat` too)
+      - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
+      - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */{moat,openmoat} sandbox sync*"
+      - "script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       - "expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "unbuffer * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "unbuffer * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "*/script * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "*/script * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "unbuffer * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "unbuffer * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "*/script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "*/script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
       - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "{tmux,*/tmux,screen,*/screen} * moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * */moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      # a bare `moat` (the home screen asks to accept drift or approve an ask) under the
-      # same wrappers; patterns are prefixes, so these deny any `moat` command run in them
-      - "{script,*/script,unbuffer,*/unbuffer,tmux,*/tmux,screen,*/screen} * {moat,*/moat}"
-      - "{script,*/script,tmux,*/tmux,screen,*/screen} * '{moat,*/moat}'*"
-      - "{expect,*/expect} * '*spawn {moat,*/moat}{;,\n,'}*"
-      - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat}\"{],)}*'"
-      - "{osascript,*/osascript} * '*\"{moat,*/moat}\"*'"
+      # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve an
+      # ask) under the same wrappers; patterns are prefixes, so these deny any command
+      # of either name run in them
+      - "{script,*/script,unbuffer,*/unbuffer,tmux,*/tmux,screen,*/screen} * {moat,*/moat,openmoat,*/openmoat}"
+      - "{script,*/script,tmux,*/tmux,screen,*/screen} * '{moat,*/moat,openmoat,*/openmoat}'*"
+      - "{expect,*/expect} * '*spawn {moat,*/moat,openmoat,*/openmoat}{;,\n,'}*"
+      - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat,openmoat,*/openmoat}\"{],)}*'"
+      - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
   - id: shell-rc
     reason: edits persist into every future shell session
     fs.write: ["~/.zshrc", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zprofile", "~/.zshenv"]

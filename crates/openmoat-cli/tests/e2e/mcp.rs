@@ -92,7 +92,7 @@ fn a_changed_server_is_denied_alone_until_a_person_accepts_it() {
     assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
     let said = text(&out);
     assert!(said.contains("mcp-server-changed"), "{said}");
-    assert!(said.contains("moat mcp accept gh"), "{said}");
+    assert!(said.contains("openmoat mcp accept gh"), "{said}");
     let other = mcp_call(&sb, &home, "mcp__db__query");
     assert_eq!(other.status.code(), Some(OK), "{}", text(&other));
     let bash = sb.guard_bash("s1", &home, "ls");
@@ -191,7 +191,7 @@ fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
     let out = sb.moat_as_person(&["mcp", "wrap", "gh"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
-        text(&out).contains("tools of `gh` wait for `moat mcp accept"),
+        text(&out).contains("tools of `gh` wait for `openmoat mcp accept"),
         "{}",
         text(&out)
     );
@@ -289,7 +289,7 @@ fn the_proxy_hides_a_tool_whose_description_changed_until_accepted() {
     // could check it before the server's reply shows the change.
     let refused = proxy_session(&sb, poisoned, &call);
     assert!(
-        refused.contains("-32602") && refused.contains("moat mcp accept docs"),
+        refused.contains("-32602") && refused.contains("openmoat mcp accept docs"),
         "{refused}"
     );
 
@@ -331,7 +331,7 @@ fn the_proxy_holds_a_new_servers_tools_until_accepted() {
     );
     let refused = proxy_session(&sb, evil, &call);
     assert!(
-        refused.contains("-32602") && refused.contains("moat mcp accept docs"),
+        refused.contains("-32602") && refused.contains("openmoat mcp accept docs"),
         "{refused}"
     );
 

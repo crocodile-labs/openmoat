@@ -25,7 +25,7 @@ use crate::protection::{self, Level};
 
 mod os;
 
-const NOTICE: &str = "Written by `moat doctor --bundle` on this machine; nothing was sent. \
+const NOTICE: &str = "Written by `openmoat doctor --bundle` on this machine; nothing was sent. \
      Recent decisions keep only time, host, tool name, verdict and rule ids: no commands, \
      paths, arguments, URLs or file contents. The home directory reads `~`. Read the file \
      before you attach it to an issue.";
@@ -120,7 +120,7 @@ pub(super) fn write(
     events: usize,
 ) -> Result<Code> {
     // Run by a person: an agent could otherwise have OpenMoat create a file for it.
-    crate::terminal::refuse_agent("moat doctor --bundle")?;
+    crate::terminal::refuse_agent("openmoat doctor --bundle")?;
     let facts = Facts {
         policy: policy_facts(home),
         agents: agents(home, binary)?,

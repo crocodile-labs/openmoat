@@ -69,7 +69,8 @@ fn stdio(entry: &Value) -> Option<(String, Vec<String>)> {
 /// The original command and arguments of a wrapped definition.
 fn original(command: &str, args: &[String]) -> Option<(String, Vec<String>)> {
     let program = Path::new(command).file_stem()?.to_str()?;
-    if program != "moat" || args.get(..2)? != ["mcp", "proxy"] {
+    // `moat` is the name a wrap made before the rename wrote.
+    if !matches!(program, "openmoat" | "moat") || args.get(..2)? != ["mcp", "proxy"] {
         return None;
     }
     let split = args.iter().position(|a| a == "--")?;
@@ -231,6 +232,17 @@ mod tests {
         );
         assert_eq!(unwrapped(&wrapped).unwrap(), entry);
         assert!(super::wrapped(&wrapped, Path::new("/x/moat"), "gh", false).is_none());
+        // Wrapped by `openmoat`, or by `moat` before the rename: both unwrap.
+        let renamed =
+            super::wrapped(&entry, Path::new("/usr/local/bin/openmoat"), "gh", false).unwrap();
+        assert_eq!(unwrapped(&renamed).unwrap(), entry);
+        assert!(super::wrapped(&renamed, Path::new("/x/openmoat"), "gh", false).is_none());
+        let windows = json!({"command": "C:/scoop/apps/openmoat/current/openmoat.exe",
+            "args": ["mcp", "proxy", "--server", "gh", "--", "npx"]});
+        assert_eq!(
+            unwrapped(&windows).unwrap(),
+            json!({"command": "npx", "args": []})
+        );
     }
 
     #[test]

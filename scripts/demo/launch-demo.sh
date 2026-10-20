@@ -5,21 +5,21 @@
 # Everything runs in a throwaway HOME that is deleted on exit. The agent-config
 # variables are unset for every moat call, so your own ~/.moat, ~/.claude, ~/.codex
 # and ~/.cursor are never read or written. Nothing is sent over the network; the
-# tool calls are fed to `moat guard` exactly as Claude Code and Codex send them.
+# tool calls are fed to `openmoat guard` exactly as Claude Code and Codex send them.
 #
-# Usage: scripts/demo/launch-demo.sh [path/to/moat]
+# Usage: scripts/demo/launch-demo.sh [path/to/openmoat]
 #   DEMO_PACE=0 runs without pauses (default 1.5 seconds between steps).
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 bin=${1:-}
 if [ -z "$bin" ]; then
-    for candidate in "$repo/target/release/moat" "$repo/target/debug/moat"; do
+    for candidate in "$repo/target/release/openmoat" "$repo/target/debug/openmoat"; do
         if [ -x "$candidate" ]; then bin=$candidate; break; fi
     done
 fi
 if [ -z "$bin" ] || [ ! -x "$bin" ]; then
-    echo "no moat binary: run 'cargo build -p openmoat' or pass its path" >&2
+    echo "no openmoat binary: run 'cargo build -p openmoat' or pass its path" >&2
     exit 64
 fi
 bin=$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")   # as the hooks name it

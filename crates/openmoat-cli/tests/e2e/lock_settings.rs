@@ -78,7 +78,7 @@ fn the_read_block_toggle_alone_leaves_calls_decided_and_is_reported() {
     assert_eq!(doctor.status.code(), Some(USAGE), "{}", text(&doctor));
     assert!(text(&doctor).contains(expected), "{}", text(&doctor));
     assert!(
-        text(&doctor).contains("moat doctor --accept"),
+        text(&doctor).contains("openmoat doctor --accept"),
         "{}",
         text(&doctor)
     );

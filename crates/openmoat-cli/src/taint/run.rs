@@ -52,7 +52,7 @@ pub fn link(store: &Store, run: &str, host: Host, session: &str) -> Result<()> {
         Verdict::Allow,
         LINK_RULE,
         format!(
-            "{} session {session} runs under this `moat run`; its taint applies to the proxy",
+            "{} session {session} runs under this `openmoat run`; its taint applies to the proxy",
             host.id()
         ),
     );

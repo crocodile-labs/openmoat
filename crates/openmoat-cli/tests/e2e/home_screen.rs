@@ -57,7 +57,7 @@ fn drift_declined_changes_nothing() {
     edit_policy(&sb);
     let before = lock(&sb);
     let shown = home_as_person(&sb, "n\n");
-    assert!(shown.contains("moat doctor"), "{shown}");
+    assert!(shown.contains("openmoat doctor"), "{shown}");
     assert!(!shown.contains("re-pinned"), "{shown}");
     assert_eq!(lock(&sb), before);
 }
@@ -97,7 +97,7 @@ fn ask_allowed_always_shows_what_the_rule_matches() {
         "{shown}"
     );
     assert!(
-        shown.contains("undo: moat allow --remove approved-1"),
+        shown.contains("undo: openmoat allow --remove approved-1"),
         "{shown}"
     );
     assert_eq!(verdict(&sb, "s2"), "allow");
@@ -117,7 +117,7 @@ fn ask_allowed_always_shows_what_the_rule_matches() {
         "{shown}"
     );
     assert!(
-        shown.contains("undo: moat allow --remove approved-2"),
+        shown.contains("undo: openmoat allow --remove approved-2"),
         "{shown}"
     );
 }
@@ -128,7 +128,7 @@ fn without_a_terminal_nothing_changes() {
     assert_eq!(verdict(&sb, "s1"), "ask");
     let out = output(&mut sb.command(), Some("o\n"));
     let shown = text(&out);
-    assert!(shown.contains("moat allow --last"), "{shown}");
+    assert!(shown.contains("openmoat allow --last"), "{shown}");
     assert!(!shown.contains("may run"), "{shown}");
     assert_eq!(verdict(&sb, "s1"), "ask");
 
@@ -137,7 +137,7 @@ fn without_a_terminal_nothing_changes() {
     let out = output(&mut sb.command(), Some("y\n"));
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(
-        text(&out).contains("moat doctor --accept"),
+        text(&out).contains("openmoat doctor --accept"),
         "{}",
         text(&out)
     );

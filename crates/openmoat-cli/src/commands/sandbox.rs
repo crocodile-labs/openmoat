@@ -109,7 +109,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     for (title, text, report) in lightweight {
         writeln!(
             out,
-            "{title}  `moat run` in this directory (Lightweight tier)"
+            "{title}  `openmoat run` in this directory (Lightweight tier)"
         )?;
         writeln!(out, "{}", text.trim_end())?;
         write_report(&mut out, report)?;
@@ -123,10 +123,10 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
 /// host's files are left as they are. A re-pin accepts what it pins, so like
 /// `moat allow` it refuses over a drifted lock (#163) and without a person.
 pub fn sync() -> Result<Code> {
-    crate::terminal::refuse_agent("moat sandbox sync")?;
+    crate::terminal::refuse_agent("openmoat sandbox sync")?;
     if !crate::terminal::interactive() {
         bail!(
-            "`moat sandbox sync` must be run by a person in a terminal, not from a hook or script"
+            "`openmoat sandbox sync` must be run by a person in a terminal, not from a hook or script"
         );
     }
     let home = Home::locate()?;
@@ -145,10 +145,13 @@ pub fn sync() -> Result<Code> {
         if !config.set_up(&binary) {
             let why = match config.state(&binary) {
                 HookState::Missing => "not set up",
-                _ => "hook out of date or unreadable; `moat init` repairs it",
+                _ => "hook out of date or unreadable; `openmoat init` repairs it",
             };
             let (name, id) = (host.display_name(), host.id());
-            writeln!(out, "· {name:<16} {why} (`moat init --hosts {id}` adds it)")?;
+            writeln!(
+                out,
+                "· {name:<16} {why} (`openmoat init --hosts {id}` adds it)"
+            )?;
             continue;
         }
         let changed = install::write(&home, host, &plan, false)?;
@@ -191,7 +194,7 @@ pub fn sync() -> Result<Code> {
         Ok(None) => {}
         Err(e) => writeln!(
             out,
-            "! service          restart failed: {e:#}; `moat proxy install` restarts it by hand"
+            "! service          restart failed: {e:#}; `openmoat proxy install` restarts it by hand"
         )?,
     }
     out.finish()?;

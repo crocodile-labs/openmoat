@@ -56,7 +56,7 @@ impl Endpoint {
             |limit| TcpStream::connect_timeout(&self.addr, limit),
             deadline,
         )
-        .with_context(|| format!("connecting to `moat run` at {}", self.addr))?;
+        .with_context(|| format!("connecting to `openmoat run` at {}", self.addr))?;
         let cwd = std::env::current_dir()
             .ok()
             .and_then(|d| d.to_str().map(str::to_owned))
@@ -120,7 +120,7 @@ pub fn exchange(mut stream: impl Stream, request: &Request, deadline: Instant) -
     stream.set_timeouts(left()?)?;
     request
         .write_to(&mut stream)
-        .context("sending the hook call to `moat run`")?;
+        .context("sending the hook call to `openmoat run`")?;
     stream.set_timeouts(left()?)?;
-    Reply::read_from(&mut stream, &request.nonce).context("reading `moat run`'s answer")
+    Reply::read_from(&mut stream, &request.nonce).context("reading `openmoat run`'s answer")
 }

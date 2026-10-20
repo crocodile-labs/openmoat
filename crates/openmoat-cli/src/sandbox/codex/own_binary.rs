@@ -107,7 +107,7 @@ pub fn read_own_binary(
             RULE,
             "`codex` was not on PATH: Codex on Linux runs its own executable inside the \
              sandbox, so it starts commands only when installed under a read root; run \
-             `moat sandbox sync` after installing it"
+             `openmoat sandbox sync` after installing it"
                 .into(),
         );
         return;
@@ -162,7 +162,7 @@ pub fn read_own_binary(
     });
     let message = format!(
         "Codex on Linux runs its own executable again inside the sandbox, so commands may read \
-         it; run `moat sandbox sync` after moving or updating Codex{opened}"
+         it; run `openmoat sandbox sync` after moving or updating Codex{opened}"
     );
     generated
         .report

@@ -18,7 +18,7 @@ use crate::taint::call;
 /// The `moat` binary, copied into the project: the sandbox reads the project.
 fn moat_in(project: &Path) -> PathBuf {
     let copy = project.join("moat-bin");
-    std::fs::copy(env!("CARGO_BIN_EXE_moat"), &copy).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_openmoat"), &copy).unwrap();
     copy
 }
 
@@ -222,7 +222,12 @@ fn a_state_directory_inside_the_project_is_refused() {
             .args(["init", "--yes"]),
         None,
     );
-    assert_eq!(init.status.code(), Some(OK), "moat init: {}", text(&init));
+    assert_eq!(
+        init.status.code(),
+        Some(OK),
+        "openmoat init: {}",
+        text(&init)
+    );
     let out = run_sh_with(&sb, &project, "echo ran", &[("MOAT_HOME", moved.as_str())]);
     let shown = text(&out);
     assert_eq!(out.status.code(), Some(USAGE), "{shown}");

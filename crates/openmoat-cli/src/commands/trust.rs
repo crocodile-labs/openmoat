@@ -18,9 +18,9 @@ use crate::trust::Trust;
 use crate::{context, project, repo};
 
 pub fn run(args: &TrustArgs) -> Result<Code> {
-    crate::terminal::refuse_agent("moat trust")?;
+    crate::terminal::refuse_agent("openmoat trust")?;
     if !crate::terminal::interactive() {
-        bail!("`moat trust` must be run by a person in a terminal, not from a hook or script");
+        bail!("`openmoat trust` must be run by a person in a terminal, not from a hook or script");
     }
     let home = Home::locate()?;
     integrity::refuse_drift(&home, "change trust")?;

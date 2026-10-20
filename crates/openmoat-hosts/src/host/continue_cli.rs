@@ -25,7 +25,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2, or times out (default 600 s)",
     gaps: "the released Continue CLI does not run hooks, so OpenMoat cannot check its tool \
-         calls; run it under `moat run`",
+         calls; run it under `openmoat run`",
     install: None,
     // `cn` reads its own configuration and fires no hook.
     mcp: None,
@@ -119,7 +119,7 @@ mod tests {
         assert_eq!(cn.verdict, Verdict::Deny);
         assert_eq!(cn.rules, ask.rules);
         assert!(crate::reason_line(&cn).contains("Continue CLI"));
-        assert!(crate::reason_line(&cn).contains("moat allow --last"));
+        assert!(crate::reason_line(&cn).contains("openmoat allow --last"));
         let allow = Decision::new(Verdict::Allow);
         assert_eq!(Host::Continue.answer(&HookEvent::PreToolUse, &allow), allow);
     }

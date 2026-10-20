@@ -37,6 +37,11 @@ fn agent_hosts_are_known_by_program_or_script() {
             "openclaw",
         ),
         ("/usr/local/bin/moat run -- claude", "moat"),
+        ("/usr/local/bin/openmoat run -- claude", "openmoat"),
+        (
+            "C:\\scoop\\apps\\openmoat\\current\\openmoat.exe run",
+            "openmoat",
+        ),
     ] {
         assert_eq!(agent_name(&argv(line)).as_deref(), Some(agent), "{line}");
     }

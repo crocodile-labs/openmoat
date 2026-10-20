@@ -11,10 +11,10 @@ reference, and they describe the code on `main`.
 
 | Goal | Start here |
 |---|---|
-| Install on macOS, Linux or Windows, run `moat init`, see what each agent's hook covers, use other config directories | [INSTALL.md](INSTALL.md) |
+| Install on macOS, Linux or Windows, run `openmoat init`, see what each agent's hook covers, use other config directories | [INSTALL.md](INSTALL.md) |
 | Handle a deny or an ask, review what the agent did, change the policy, share rules with a team; every command and exit code | [USAGE.md](USAGE.md) |
 | Write or read a policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy | [POLICY.md](POLICY.md) |
-| Make the OS enforce the policy: the agents' own sandboxes (Standard tier), `moat run` (Lightweight), `moat run --isolate` (Isolated) | [SANDBOX.md](SANDBOX.md) |
+| Make the OS enforce the policy: the agents' own sandboxes (Standard tier), `openmoat run` (Lightweight), `openmoat run --isolate` (Isolated) | [SANDBOX.md](SANDBOX.md) |
 | Run the launch demo in a throwaway home | [DEMO.md](DEMO.md) |
 
 ## Understand the protection

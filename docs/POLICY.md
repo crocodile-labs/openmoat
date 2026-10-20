@@ -9,12 +9,12 @@
 
 A policy is a YAML document that tells OpenMoat what an agent may do. The installed
 user policy lives at `~/.moat/policy.yaml` (or `$MOAT_HOME/policy.yaml`).
-`moat init` writes the default; `moat policy lint` validates; `moat policy check`
+`openmoat init` writes the default; `openmoat policy lint` validates; `openmoat policy check`
 explains a decision. A project can add rules of its own in `<project>/.moat/policy.yaml`
 (§10).
 
 A decision is not itself enforced by the operating system: `allow` means the host runs
-the tool call with your permissions. Where a host sandbox (§9) or `moat run` applies,
+the tool call with your permissions. Where a host sandbox (§9) or `openmoat run` applies,
 the operating system also bounds what the call can reach ([SANDBOX.md](SANDBOX.md)).
 
 ## 1. Shape
@@ -39,9 +39,9 @@ executables:                        # pin program names to absolute paths (enfor
 
 sandbox:                            # optional: what the host sandboxes may read beyond the rules (§9)
   read_roots: ["/usr", "~/.cargo"]
-  proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `moat proxy` (§9)
-  proxy_allow_ech: false            # optional: let `moat proxy` forward encrypted server names (ECH) (§9)
-  package_min_release_age_days: 7   # optional: `moat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
+  proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `openmoat proxy` (§9)
+  proxy_allow_ech: false            # optional: let `openmoat proxy` forward encrypted server names (ECH) (§9)
+  package_min_release_age_days: 7   # optional: `openmoat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
 
@@ -51,13 +51,13 @@ taint:                              # optional: more paths session taint protect
 
 require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
 
-mcp:                                # optional: how `moat mcp proxy` treats a new server (§8)
+mcp:                                # optional: how `openmoat mcp proxy` treats a new server (§8)
   trust_first_sight: false          # optional, default false: pin its first tool listing unseen
 ```
 
 `approval:` (`channel`, `remember`, `timeout_s`) and `scope:` (`project_roots`) are reserved:
-they are accepted so older policy files stay valid, have no effect yet, and `moat policy lint`
-says so. Approvals are made with `moat allow` (§8.2); the project root is the git root of the
+they are accepted so older policy files stay valid, have no effect yet, and `openmoat policy lint`
+says so. Approvals are made with `openmoat allow` (§8.2); the project root is the git root of the
 call's working directory (§3.2).
 
 `defer` (ADR-025) means OpenMoat neither objects nor approves: the agent's own permission
@@ -94,7 +94,7 @@ kind. One tool call usually produces several atomic actions (see §4).
 A `deny` group may also say `hook_only: true` (additive to schema v1, ADR-034). The
 hook applies it like any other deny rule: a shell command, file tool or MCP argument
 that names one of its `fs.read` or `fs.write` paths is denied. The host sandboxes and
-`moat run` leave those paths out and treat them as the other rules say, so a program a
+`openmoat run` leave those paths out and treat them as the other rules say, so a program a
 sandboxed command runs can still open them. The default policy uses it for
 `build-credentials` (§6): `mvn` and `gradle` must read their settings inside the
 sandbox. `policy lint` rejects `hook_only` on an `allow`, `ask` or `defer` group, with
@@ -109,7 +109,7 @@ a group without `fs.read` or `fs.write`; `policy compile` lists such groups unde
 | `net` | the host name only (no scheme, port or path), lowercase; also matches `fetch` actions | glob, case-insensitive |
 | `fetch` | the host of a URL a host's own fetch tool reads (Claude Code `WebFetch`), as for `net` | glob, case-insensitive |
 | `web.search` | a query a host's own search tool sends to the host's search provider (Claude Code and Cursor `WebSearch`); the agent chooses the words, not the host | none: no rule group lists it, so `defaults.web.search` (else `"*"`) decides it, and session taint (§4.1) tightens it |
-| `tool.unknown` | a host tool the adapter cannot classify: an unknown Cursor `preToolUse` tool that names no path key OpenMoat reads | none: `defaults.tool.unknown` (else `"*"`) decides it, and session taint (§4.1) tightens it; `moat allow` cannot approve it |
+| `tool.unknown` | a host tool the adapter cannot classify: an unknown Cursor `preToolUse` tool that names no path key OpenMoat reads | none: `defaults.tool.unknown` (else `"*"`) decides it, and session taint (§4.1) tightens it; `openmoat allow` cannot approve it |
 | `env.read`, `env.set` | the variable name | glob |
 | `mcp` | the full MCP tool name `mcp__<server>__<tool>` | glob |
 
@@ -124,20 +124,20 @@ secrets:
     plain_http: false               # optional; true also injects into plain-HTTP (clear-text) requests
 ```
 
-`moat secret add gh` adds exactly this entry, shows the diff and asks, then re-pins and
-runs `moat sandbox sync`. When no deny rule covers the source yet (an `env` name the
+`openmoat secret add gh` adds exactly this entry, shows the diff and asks, then re-pins and
+runs `openmoat sandbox sync`. When no deny rule covers the source yet (an `env` name the
 policy does not deny, a `file` outside the secret paths), it also adds one, first in
 `deny:` and in the same diff: `secret-<id>` with an `env.read` or `fs.read` of the
-source, so the agent cannot read the value it brokers. For another secret: `moat secret add <id> --host <host>
+source, so the agent cannot read the value it brokers. For another secret: `openmoat secret add <id> --host <host>
 [--header <name>] (--env NAME | --file PATH)`; the header defaults to `Authorization`.
 
 A brokered secret is kept by OpenMoat, not by the agent (ADR-020). The agent holds the
-placeholder `moat-secret:<id>:placeholder` instead of the value. `moat proxy` reads the
+placeholder `moat-secret:<id>:placeholder` instead of the value. `openmoat proxy` reads the
 value from `source` and is the only OpenMoat component that uses it (Claude Code's
 sandbox can broker it too, below).
 
 - **`source`.** `file` is absolute or under `~/`; the value is its contents without the
-  trailing newline. `env` is a variable of the `moat proxy` process. `keychain` is an item
+  trailing newline. `env` is a variable of the `openmoat proxy` process. `keychain` is an item
   in the operating system's keychain.
 - **`header`** must be an HTTP header name. Headers that frame the request or the
   connection (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Proxy-*`, …)
@@ -147,7 +147,7 @@ sandbox can broker it too, below).
   that says `plain_http: true`.
 - **Never wider.** A secret opens nothing: its host still needs a `net` or `fetch` allow
   rule, or the proxy refuses it.
-- **Lint.** `moat policy lint` warns in four cases:
+- **Lint.** `openmoat policy lint` warns in four cases:
   - no allow rule names the host;
   - no deny rule covers a `file` source (`fs.read`) or an `env` source (`env.read`), so
     the agent could read the value itself;
@@ -171,32 +171,32 @@ What the proxy does with them:
   built (#172).
 - **Leak blocking.** The proxy refuses a request to any other host that carries the
   placeholder or the value, in its head or plain-HTTP body (`proxy-secret`, §5.1).
-  `moat guard` already denies the call that would send it (`placeholder-egress`, §6): a
+  `openmoat guard` already denies the call that would send it (`placeholder-egress`, §6): a
   placeholder (`moat-secret:<id>:placeholder`, any letter case) in a fetch or network
   tool's URL, an MCP URL argument, a web search, or the arguments of a command that
   connects to a host, when the destination is not `host`. A placeholder whose id the
   policy does not broker belongs to no host, so it is denied wherever it goes.
 - **Audit masking.** A value of 8 bytes or more is replaced by `[redacted]` wherever it
-  occurs in an audit row the proxy records, and in the row of a call `moat guard`
+  occurs in an audit row the proxy records, and in the row of a call `openmoat guard`
   decides when its source is a `file` or `env` the guard can read (ARCHITECTURE.md §7).
 
-`moat proxy` reads every source at start-up and refuses to start (exit 64) if one cannot
+`openmoat proxy` reads every source at start-up and refuses to start (exit 64) if one cannot
 be read or holds a control character. It prints each secret's id, host, header and
 placeholder, which is what to give the agent (for example
 `GITHUB_TOKEN=moat-secret:gh:placeholder`), and never the value. A keychain source uses
 `/usr/bin/security` on macOS and `/usr/bin/secret-tool` (libsecret) on Linux. Keychain
 sources are not supported on Windows yet.
 
-Claude Code's sandbox can also broker them itself, inside HTTPS. `moat sandbox sync`
+Claude Code's sandbox can also broker them itself, inside HTTPS. `openmoat sandbox sync`
 writes each secret with an `env` or `file` source whose host a `net` allow rule names
 as a Claude Code `mask` entry for that one host, and turns on Claude Code's
 `network.tlsTerminate`, which masking needs. Sandboxed commands then see Claude Code's
 own placeholder in that variable or file, and Claude Code's proxy sends the value to the
-host. The value is read by Claude Code from the same source, not by `moat proxy`. A
+host. The value is read by Claude Code from the same source, not by `openmoat proxy`. A
 secret Claude Code cannot mask (a `keychain` source, a host outside `net` allow, or a
-`plain_http: true` secret beside HTTPS-only ones) is left to `moat proxy` as above; on
-macOS a `file` source is denied rather than masked. `moat sandbox show` and
-`moat doctor` list what Claude Code does with each secret ([SANDBOX.md](SANDBOX.md#host-sandboxes-standard-tier)).
+`plain_http: true` secret beside HTTPS-only ones) is left to `openmoat proxy` as above; on
+macOS a `file` source is denied rather than masked. `openmoat sandbox show` and
+`openmoat doctor` list what Claude Code does with each secret ([SANDBOX.md](SANDBOX.md#host-sandboxes-standard-tier)).
 
 ## 3. Pattern syntax
 
@@ -233,9 +233,9 @@ Tokenised with the same lexer as commands, so `a|b` and `a | b` are equal.
 ### 3.2 Path, host and name globs
 - `*` matches within one path segment; `**` matches across segments: `~/.ssh/**`, `**/.env.*`.
 - Hosts are matched lowercase without userinfo, port, trailing dot or IPv6 brackets (`http://u@[::1]:8080/` is `::1`). A word with a scheme is always a URL, so `http://localhost`, `http://intranet` and numeric forms such as `http://2130706433/` are network actions; a word without a scheme counts only as a dotted name under a known top-level domain or an IPv4 address.
-- `~` and `${project}` are expanded in patterns before matching; `${project}` is the git root above the call's working directory (or the directory itself when there is no repository). When the project root or the home directory is reached through a symlink (macOS `/tmp` → `/private/tmp`, `~/code` → `/Volumes/dev/code`, a Windows 8.3 short name), each pattern naming it is expanded for both spellings, exclusions included: `${project}/**` matches `/tmp/x/a` and `/private/tmp/x/a`, and `!${project}/.git/**` excludes both. When `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moves `~/.moat`, `~/.claude`, `~/.codex` or `~/.cursor`, a pattern naming that directory or a path below it also matches the same path under the moved one (as written and with its symlinks resolved): with `CLAUDE_CONFIG_DIR=/srv/claude`, `~/.claude/settings.json` also matches `/srv/claude/settings.json`. The CLI reads the variables and the directories `moat init` recorded (`~/.moat/hosts.json`), and both are covered when they differ; the hook, `moat policy check`, `moat run` and the Standard-tier settings all see the moved directories. `$HOME` and `${HOME}` are expanded in the *action's* path (so `cat $HOME/.ssh/id_rsa` is seen as `~/.ssh/id_rsa`) but not in patterns: write `~` in rules.
-- A leading `~name` in an action's path is a home directory, as the shell expands it: `~me/x` is `~/x` when `me` is the last component of your home directory. Any **other** `~<otheruser>` cannot be placed from the pure core: homes do not always sit next to each other (root's `/root` on Linux, homes under `/srv`, networked homes, Windows service accounts), so a guessed `/<parent-of-home>/<name>` could judge one path while the OS reads another. `~<otheruser>` is therefore unresolvable: a command naming it gets rule `unparseable` (§4 step 5), as `~-` already does, and `moat guard` never claims a cross-user path is allowed from a layout guess (#400). `~+` is the working directory. `~-` (the shell's previous directory) cannot be known, so a command naming it gets rule `unparseable`.
-- The project root is never the home directory, one of its ancestors or a filesystem root (`/`, `C:/`, a UNC share), compared as written and with symlinks resolved. A git root that is one of these (a dotfiles repository in `~`) is skipped in favour of the working directory itself; when that is one too (a session started in `~` or `/`), the call has **no project**: every pattern naming `${project}` matches nothing (and a negated one excludes nothing), so project-scoped allows do not apply and those actions fall through to `ask`, `defer` and the defaults. Deny rules are unaffected. A project root whose path holds a glob character (`*`, `?`, `[`, `]`, `{`, `}`) is treated the same way: spliced into `${project}/**` it would match far more than the project. `moat policy check --project ~` is refused with exit 64.
+- `~` and `${project}` are expanded in patterns before matching; `${project}` is the git root above the call's working directory (or the directory itself when there is no repository). When the project root or the home directory is reached through a symlink (macOS `/tmp` → `/private/tmp`, `~/code` → `/Volumes/dev/code`, a Windows 8.3 short name), each pattern naming it is expanded for both spellings, exclusions included: `${project}/**` matches `/tmp/x/a` and `/private/tmp/x/a`, and `!${project}/.git/**` excludes both. When `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moves `~/.moat`, `~/.claude`, `~/.codex` or `~/.cursor`, a pattern naming that directory or a path below it also matches the same path under the moved one (as written and with its symlinks resolved): with `CLAUDE_CONFIG_DIR=/srv/claude`, `~/.claude/settings.json` also matches `/srv/claude/settings.json`. The CLI reads the variables and the directories `openmoat init` recorded (`~/.moat/hosts.json`), and both are covered when they differ; the hook, `openmoat policy check`, `openmoat run` and the Standard-tier settings all see the moved directories. `$HOME` and `${HOME}` are expanded in the *action's* path (so `cat $HOME/.ssh/id_rsa` is seen as `~/.ssh/id_rsa`) but not in patterns: write `~` in rules.
+- A leading `~name` in an action's path is a home directory, as the shell expands it: `~me/x` is `~/x` when `me` is the last component of your home directory. Any **other** `~<otheruser>` cannot be placed from the pure core: homes do not always sit next to each other (root's `/root` on Linux, homes under `/srv`, networked homes, Windows service accounts), so a guessed `/<parent-of-home>/<name>` could judge one path while the OS reads another. `~<otheruser>` is therefore unresolvable: a command naming it gets rule `unparseable` (§4 step 5), as `~-` already does, and `openmoat guard` never claims a cross-user path is allowed from a layout guess (#400). `~+` is the working directory. `~-` (the shell's previous directory) cannot be known, so a command naming it gets rule `unparseable`.
+- The project root is never the home directory, one of its ancestors or a filesystem root (`/`, `C:/`, a UNC share), compared as written and with symlinks resolved. A git root that is one of these (a dotfiles repository in `~`) is skipped in favour of the working directory itself; when that is one too (a session started in `~` or `/`), the call has **no project**: every pattern naming `${project}` matches nothing (and a negated one excludes nothing), so project-scoped allows do not apply and those actions fall through to `ask`, `defer` and the defaults. Deny rules are unaffected. A project root whose path holds a glob character (`*`, `?`, `[`, `]`, `{`, `}`) is treated the same way: spliced into `${project}/**` it would match far more than the project. `openmoat policy check --project ~` is refused with exit 64.
 - A pattern ending in `/**` also matches the directory itself: `~/.ssh/**` matches `~/.ssh`, so a recursive read (`grep -r . ~/.ssh`, `tar czf k.tgz ~/.ssh`) or a removal (`rm -rf ~/.gnupg`) of the directory meets the rule that guards its contents, and `!${project}/.git/**` also excludes `.git` itself.
 - A recursive read of an *ancestor* of a guarded directory (`grep -r . ~`, `rg -uu . ~/.config`, `find ~`, `tar czf h.tgz ~`, `cp -r ~ …`, `zip -r`, `rsync -a`) is checked on the directory it names, which no deny rule matches. In the default policy no allow rule covers the home directory or `~/.config` either, and `home-sweep` asks for reading them, so the person sees the whole command; a user rule that allows reading `~` or `~/**` would allow them too, contents of `~/.ssh` included. Inside a project the project root is allowed by `project-fs`, so `grep -r TODO .` stays allowed even when the project holds a `.env`: denying every recursive search of a project would make the default unusable, and a named `.env` is still denied.
 - A leading `!` excludes matches within the same list of the same group, in `deny`, `allow` and `ask` alike: a candidate matches when at least one positive pattern matches and no negated pattern does. Example: `fs.write: ["${project}/**", "!${project}/.git/**"]`.
@@ -263,15 +263,15 @@ Consequences worth remembering:
   - no variable set earlier on the line that makes the program read another configuration file or use a proxy (`CURL_HOME`, `XDG_CONFIG_HOME`, `HOME`, `WGETRC`, `SYSTEM_WGETRC`, `*_proxy`);
   - the host is a domain name: dotted, a letters-only last label, no all-digit label. An IP address in any spelling (`203.0.113.7`, `2852039166`, `0x7f000001`, `[::1]`) and a single-label name (`intranet`) keep the command `net`.
 
-  Each such host is matched by `net` and `fetch` rules alike, so `cloud-metadata` and `token-egress` still deny, `local-net` still defers localhost, `registries` still allows, and a `fetch` allow (or deny) now covers these commands too. Piping the output into a shell is still `pipe-to-shell`. Like a `WebFetch`, the fetch counts as untrusted content for session taint, and after a secret read it asks. What the hook cannot see: a name that resolves to an internal address, and a `~/.curlrc` or `~/.wgetrc` written earlier (one may turn on following redirects); under `moat run` and the host sandboxes the proxy still refuses link-local and metadata addresses after DNS.
+  Each such host is matched by `net` and `fetch` rules alike, so `cloud-metadata` and `token-egress` still deny, `local-net` still defers localhost, `registries` still allows, and a `fetch` allow (or deny) now covers these commands too. Piping the output into a shell is still `pipe-to-shell`. Like a `WebFetch`, the fetch counts as untrusted content for session taint, and after a secret read it asks. What the hook cannot see: a name that resolves to an internal address, and a `~/.curlrc` or `~/.wgetrc` written earlier (one may turn on following redirects); under `openmoat run` and the host sandboxes the proxy still refuses link-local and metadata addresses after DNS.
 - A host is network evidence (`net`) when it comes from a URL with a scheme or from an argument of a program that names hosts (`curl`, `wget`, `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `netcat`, `telnet`, `ftp`, `ping`, `dig`, `nslookup`, `host`, `openssl`, `socat` (its `TCP:host:port` addresses), `mosh`, `lftp`, `aria2c`, `nmap`, `psql`, `mysql`, `redis-cli`, `mongo`, `mongosh`, `http`/`https`, `xh`, `curlie`, `wget2`, `whois`, `traceroute`, `mtr`, `git clone/fetch/pull/push/ls-remote`, also after git's global options such as `-C dir`); for these programs a quoted word is a host too (`curl 'host'`). In inline interpreter code a host in a quoted string is network evidence too (`urlopen('evil.com')`). Any other unquoted word that only looks like a host (`check_runs.0.id`, `config.dev`, `subprocess.run` in a here-document) is still matched by `net` rules, so a host you deny or allow is denied or allowed; when no rule matches it, the catch-all decides it (it is deferred in the default policy), not `defaults.net` (ADR-025).
 - An allow rule on `shell` does not allow the paths or hosts the command touches; those are evaluated separately. `cat ~/.ssh/id_rsa` is denied by the path rule even though `cat *` is allowed.
 - Arguments that name files become `fs.read`/`fs.write` actions even when they are relative: any word containing `/` (`s/id_rsa`, `src/main.rs`, the value of `--in=keys/k`), and every operand of programs that read or write their operands (`cat`, `head`, `tail`, `less`, `grep`, `rg`, `wc`, `diff`, `base64`, `tar`, `ls`, `find`, `cp`, `mv`, `rm`, `tee`, … ; `shell/tables.rs`), so `cat k` is a read of `<cwd>/k`. Options before `--`, URLs, remote specs (`host:dir`) and the arguments of `echo`/`printf` are not files. Inside the project these reads cost nothing (`project-fs` allows them); an option value such as the `5` in `head -n 5 f` becomes a harmless read of `<cwd>/5`.
 - A reserved word that starts a command inside a compound one (`do`, `then`, `else`, `elif`, `if`, `while`, `until`, `!`, `{`) is not the program: `for f in a; do cat x; done` is the command `cat x`, and `done`, `fi`, `}` and `esac` alone run nothing. `for NAME in WORDS` is an `env.set` of `NAME`, and the words are read like any others. A variable set by a command of its own earlier on the line (`n=3; git log -$n`, a `for` variable, `export X=v`; also `readonly`, `local`, `declare` and `typeset` without options, which may set an array, a number or a reference) is a shell variable. When every value it can hold is text the line shows (no `$`, `$( … )`, glob or quoted `~`), it is substituted where it is used and the command is classified once per value, so `d=~/.ssh; cat $d/id_rsa` and `X=~/.ssh; cat $X/id_rsa` are reads of `~/.ssh/id_rsa`. Reading a lowercase one is then no `env.read`; an uppercase name, by convention an environment variable, keeps its `env.read`, and so does any variable whose value is not known. A prefix assignment (`D=x cmd $D`) does not count: the shell expands `$D` before it. A path that still contains a variable the shell expands (other than `$HOME` and `$PWD`, unless the line gave them a value it does not show, as `read HOME` or `HOME=$(cat f)` do; `${project}` is the policy's syntax, so in a command it is the shell's variable `project`, read as empty), or the output of a command (`cat $(cat list)`, `` cat `cmd` ``), is not known: the call gets rule `unparseable` (§4 step 5) and the literal path is still checked, so a deny on it wins. `$PWD` is the working directory. A child shell (`sh -c`) does not see the variables, so `x=1; sh -c 'echo $x'` reads `x`, and an uppercase name's read stays: `NPM_TOKEN=x; echo $NPM_TOKEN` is still a read of `NPM_TOKEN`. A path through a variable whose value is not known is also the atom `@unknown-path <word>`, which `secret-names` asks for when its file name is a key's, a token file's or a `.env`. Where `$IFS` or `${IFS}` stands in a word, the line is classified a second time with it read as a space and both results count, so `cat${IFS}~/.ssh/id_rsa` is a read of the key. A substituted variable used unquoted is split into words, as the shell does: where its value holds a space, tab or newline, and once more at the characters of each value the line gave `IFS` (an `IFS` set to a value the line does not show, as `read IFS` does, makes the call `unparseable`); every split counts. So `x='.env other'; cat $x` reads `.env` and `other`, `s=' '; cat${s}~/.ssh/id_rsa` is a read of the key (a `~` a split leaves at the start of a word is read as the home directory, stricter than the shell), an unquoted empty value is no word (`x=; $x env` is `env`), and a `*`, `?` or `[` in an unquoted value is a glob (`x='.e*'; cat $x`). A quoted use (`"$x"`) stays one word. A value that starts with a quoted `~` is not substituted (its path is not known). A `file:` URL in any argument (`curl file:///etc/passwd`, `--url=FILE:///…`, `%`-escapes decoded) is an `fs.read` of its path. Arguments that are a command line the program runs are classified as one: `watch 'cmd'`, `git rebase --exec`/`-x` (by any prefix git accepts), `git submodule foreach`, `git bisect run`, `git difftool --extcmd`/`-x`, `git filter-branch --*-filter`, `ssh`/`scp`/`sftp -o ProxyCommand=`/`LocalCommand`/`KnownHostsCommand`, `rsync -e`/`--rsh`, `su`/`runuser -c`/`--command`/`--session-command`, and `tar --to-command`, `-I`/`--use-compress-program`, `--checkpoint-action=exec=`, `-F`/`--info-script`/`--new-volume-script` and `--rsh-command`/`--rmt-command` (by any prefix GNU tar accepts, the value attached, after `=` or the next word). `pkexec` and `runuser -u USER` are wrappers like `sudo`.
 - Inline code given to an interpreter on the command line is scanned for paths, hosts and variable names (not parsed): `python`/`python3 -c` (also versioned, `python3.12 -c`, `python2.7 -c`), `node -e`/`--eval`/`-p`/`--print`, `deno eval`, `bun -e`, `perl -e`/`-E`, `ruby -e`, `php -r`, `osascript -e`, `pwsh`/`powershell -c`/`-Command`, `lua`/`luajit -e` and `Rscript -e` (`shell/tables.rs`). So `python3.12 -c "open('/Users/you/.ssh/id_rsa')"` is a read of the key. A variable the code reads by a quoted or spelled-out name (`os.environ['X']`, `os.environ.get('X')`, `os.getenv('X')`, `process.env.X`, `Deno.env.get('X')`, `ENV['X']`, `ENV.fetch('X')`, `$ENV{X}`, `$_ENV['X']`, `getenv('X')`, `$env:X`) is an `env.read` of it. Code that reads the whole environment is the atom `@env-dump <expression>`, which `env-dump` denies: the environment as the only argument of a call (`print(os.environ)`, `dict(os.environ)`, `console.log(process.env)`, `JSON.stringify(process.env)`), unless that call is handed on as a child's environment (`env=dict(os.environ)`); a method that returns every variable (`.items()`, `.values()`, `ENV.to_h`, `Deno.env.toObject()`, …); `%ENV`; `getenv()` without a name; a name chosen at run time (`os.environ[k]`, `$ENV{$_}`); a printing statement (`p ENV`); or the environment as the whole code (`node -p process.env`). Passing the environment on (`env={**os.environ}`) or setting a variable (`os.environ['A'] = '1'`) is neither.
 - Relative paths follow `cd` and `pushd` earlier in the same command line: `cd ~/.ssh && cat id_rsa` is a read of `~/.ssh/id_rsa`. Which commands run after a `cd` succeeds is not modelled (`cd x || cat y`, a failed `cd` before `;`), so a relative path is checked in every directory the line may be in (the session's directory and each `cd` target), strictest wins. A subshell `( … )` restores the directory when it closes; `$( … )` and `sh -c` start from the directory where they appear. `cd` alone is `~`. A target that cannot be known (`cd "$DIR"`, `cd -`, `cd s*`, `pushd +1`, `popd`, and `eval`/`source`, which may `cd` themselves) makes every later relative path unresolvable, so the command gets rule `unparseable` (step 5); absolute paths are still checked normally. More than 16 possible directories is `unparseable` too. `cd` itself adds no new action (a path-looking target is an `fs.read` like any argument). `CDPATH` is not consulted: the shell searches it for a target that does not start with `/`, `./` or `../`, but the classifier cannot see the environment the host started the shell with, so such a target is taken relative to the current directory. Setting `CDPATH` on the line itself (`CDPATH=~ cd .ssh`, `export CDPATH=…`) is an `env.set` that `opaque-code` asks for, and the shell start-up files that could preset it are denied by `shell-rc`.
-- `moat guard` checks a path where it really points as well as where it was written: after `ln -s ~/.ssh ./s`, `cat ./s/id_rsa`, `cat s/id_rsa`, `head s/id_rsa` and `grep -r . s/` are denied by `secrets-paths`. A link inside the project that points elsewhere inside the project stays allowed; one that points outside it is checked at its target (`ln -s /etc e; cat e/hosts` is decided as a read of `/etc/hosts`, which the default policy defers), also when the project itself sits under a linked directory (§3.2). `moat policy check` resolves symlinks the same way. Hard links and a link swapped after the check are not seen (ADR-009).
-- A path operand or redirection target with an unquoted `*`, `?` or `[` is a glob the shell expands before the command runs, so it is checked as written **and** as every path it names in the real directories: `cat .en?`, `cat .e*`, `cat .[e]nv`, `base64 < .en?` and `cat ~/.ss?/id_rsa` are denied by `secrets-paths` like `cat .env`. The expansion follows `bash`: `*`, `?` and classes (`[ab]`, `[!a]`, `[^a]`; a set with a POSIX class, equivalence class or collating symbol such as `[[:alpha:]]` is taken as any one character, so it names at least what the shell opens) do not match a leading `.` unless the pattern starts with one (`cat *` does not read `.env`, `cat .e*` does), `**` is taken as any number of directories (as with `globstar` or in `zsh`), and a pattern that matches nothing is only its literal word. A component without glob characters after a globbed directory is named whether or not the file exists yet (`~/.ss?/id_rsa` names `~/.ssh/id_rsa` once `~/.ssh` matches), and every match is resolved through symlinks. A quoted or escaped pattern (`cat '.en?'`, `cat .en\?`) is one literal name; an operand with the same text as an unquoted glob elsewhere in the command line is expanded too. Directories are listed only for such operands. When the globs of one call name more than 256 paths, list more than 1024 directories or descend more than 8 levels of `**`, the call gets rule `unparseable` (step 5), and a deny among the paths that were named still wins. `moat policy check` expands globs the same way; without a filesystem (`decide()` with no resolver, the conformance suite without `files`) only the literal is checked.
+- `openmoat guard` checks a path where it really points as well as where it was written: after `ln -s ~/.ssh ./s`, `cat ./s/id_rsa`, `cat s/id_rsa`, `head s/id_rsa` and `grep -r . s/` are denied by `secrets-paths`. A link inside the project that points elsewhere inside the project stays allowed; one that points outside it is checked at its target (`ln -s /etc e; cat e/hosts` is decided as a read of `/etc/hosts`, which the default policy defers), also when the project itself sits under a linked directory (§3.2). `openmoat policy check` resolves symlinks the same way. Hard links and a link swapped after the check are not seen (ADR-009).
+- A path operand or redirection target with an unquoted `*`, `?` or `[` is a glob the shell expands before the command runs, so it is checked as written **and** as every path it names in the real directories: `cat .en?`, `cat .e*`, `cat .[e]nv`, `base64 < .en?` and `cat ~/.ss?/id_rsa` are denied by `secrets-paths` like `cat .env`. The expansion follows `bash`: `*`, `?` and classes (`[ab]`, `[!a]`, `[^a]`; a set with a POSIX class, equivalence class or collating symbol such as `[[:alpha:]]` is taken as any one character, so it names at least what the shell opens) do not match a leading `.` unless the pattern starts with one (`cat *` does not read `.env`, `cat .e*` does), `**` is taken as any number of directories (as with `globstar` or in `zsh`), and a pattern that matches nothing is only its literal word. A component without glob characters after a globbed directory is named whether or not the file exists yet (`~/.ss?/id_rsa` names `~/.ssh/id_rsa` once `~/.ssh` matches), and every match is resolved through symlinks. A quoted or escaped pattern (`cat '.en?'`, `cat .en\?`) is one literal name; an operand with the same text as an unquoted glob elsewhere in the command line is expanded too. Directories are listed only for such operands. When the globs of one call name more than 256 paths, list more than 1024 directories or descend more than 8 levels of `**`, the call gets rule `unparseable` (step 5), and a deny among the paths that were named still wins. `openmoat policy check` expands globs the same way; without a filesystem (`decide()` with no resolver, the conformance suite without `files`) only the literal is checked.
 - Unquoted braces make several words before any other expansion, without the filesystem, as in `bash`: `cat .{env,x}` is checked as `cat .env .x`, so `cat .{env,x}`, `cat .e{n,m}v`, `cat ~/.ssh/{id_rsa,x}` and `{cat,.env}` are denied by `secrets-paths`. Comma lists, nested braces, integer and letter sequences with an optional step and zero padding (`{1..3}`, `{a..e..2}`, `{01..10}`) and several groups in one word (`{a,b}{1,2}`) are expanded in any position, the command name included, and each word made goes through the rules above (`cat .{e,x}n?` is globbed). As in `bash`, `{}`, `{x}`, `{a,b` and invalid sequences stay literal, `${…}` is a variable, quoted or escaped braces (`cat '.{env,x}'`, `\{a,b}`) are one literal name, empty results are dropped and a here-string is not expanded. A word whose braces would make more than 256 words gets rule `unparseable` (step 5); a deny elsewhere in the call still wins.
 - The explanation names the rules that produced the final verdict; weaker matches are shown as context (`also:` lines, `context` in JSON).
 
@@ -316,7 +316,7 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   test-runner configs written in JavaScript (`jest.config.js`) included: they are code the
   run executes like any other file, and the command that runs them is named in a
   protected file.
-- A protected-path ask from untrusted content can be answered once per file: `moat allow
+- A protected-path ask from untrusted content can be answered once per file: `openmoat allow
   --last` after the ask grants that exact file, and the grant stands while it is newer
   than the session's latest untrusted read (the ask says how). Newer is by audit row, not
   by the clock: the grant records the newest row it saw, so a clock that steps back cannot
@@ -329,23 +329,23 @@ other atomic action, so an `allow` becomes `ask` and a `deny` stays `deny`.
   answered.
 - `taint: { protected_writes: [<glob>, …] }` adds path globs (§3.2, `~` and `${project}`
   included) to that list. It only extends: a policy cannot remove a built-in path, and
-  `moat policy lint` rejects a `!` exclusion as well as a glob that does not compile.
+  `openmoat policy lint` rejects a `!` exclusion as well as a glob that does not compile.
   Without the key, the built-in list applies alone.
 - Shell network to an allowed host (`git fetch`, `gh pr view`) is not counted as untrusted
   content, except a `curl` or `wget` that sends nothing, which is a `fetch` (§4), and a command OpenMoat cannot classify taints nothing it can name.
-- `moat guard` reads the history from the audit log: the earlier events of the same host
+- `openmoat guard` reads the history from the audit log: the earlier events of the same host
   session that may have run. Those are allowed calls, and asks on a host that can ask. A
   declined ask is not recorded, so it counts as run. Codex turns an ask into a deny, so
   an ask under Codex never taints. The agent cannot reset its session's taint, and a log
   that cannot be read denies the call (`kernel-error`).
-- `moat run`'s proxy applies the same taint to every request of the run (ADR-027). The
+- `openmoat run`'s proxy applies the same taint to every request of the run (ADR-027). The
   run's hooks link each agent session to the run's audit session (`MOAT_RUN_SESSION`),
   and the proxy folds the linked sessions as the guard does. After a secret read, a
   CONNECT or plain-HTTP request to any host but the secret's own would ask; the proxy
   cannot ask, so it refuses (`session-taint`), the package registries included. A grant
-  does not answer it; a new `moat run` starts clean. Untrusted content changes nothing at
-  the proxy. The standalone `moat proxy` has no sessions, so taint does not apply there.
-  A hook inside `moat run` writes these links through the `moat run` process, which
+  does not answer it; a new `openmoat run` starts clean. Untrusted content changes nothing at
+  the proxy. The standalone `openmoat proxy` has no sessions, so taint does not apply there.
+  A hook inside `openmoat run` writes these links through the `openmoat run` process, which
   decides its calls outside the sandbox (ADR-028).
 - Conformance fixtures express a chain with `session:`, the earlier calls that ran.
 
@@ -374,7 +374,7 @@ tighten as in §4.1.
   may leave what the tainted session wrote, so the file stays tainted whatever its hash
   becomes. A change no session made (an editor, `git checkout`) gives a hashed file
   another content, and it no longer taints. A `session-taint` ask that results is
-  answered with `moat allow --last` as in §4.1.
+  answered with `openmoat allow --last` as in §4.1.
 - `taint: { provenance: false }` turns it off: nothing is recorded or followed.
 - Not tracked: content copied, renamed or produced indirectly (a build that writes
   output, a script that writes another file), and files under a directory a search
@@ -384,7 +384,7 @@ tighten as in §4.1.
 
 A push publishes commits: CI runs them with the repository's secrets, and anyone who can
 read the remote can read them. After the steps above, and only when the call is not
-already denied, `moat guard` looks at what a push would publish. A push is `git push`,
+already denied, `openmoat guard` looks at what a push would publish. A push is `git push`,
 in any spelling the classifier reads (after git's global options, `-C`, `cd`, `sh -c`,
 `sudo`, `$( … )`), and `gh pr create`, which pushes the current branch when it is not
 pushed yet. `gh pr merge` publishes nothing local and is not checked.
@@ -426,7 +426,7 @@ pushed yet. `gh pr merge` publishes nothing local and is not checked.
   `GIT_ALTERNATE_OBJECT_DIRECTORIES` or `GIT_CEILING_DIRECTORIES` set on the line).
 - **Otherwise** the decision stands unchanged: the check adds nothing to a push it has
   no finding for. Codex and the Continue CLI cannot ask, so the two asks reach them as
-  a deny; a `moat allow` grant does not answer them.
+  a deny; an `openmoat allow` grant does not answer them.
 - **Limits.** The check reads what git shows at the time of the call: a commit made by
   a later part of the same command line (`git commit -am x && git push`), a variable
   that moves git to another repository exported by an earlier tool call, and a push
@@ -447,7 +447,7 @@ The reason line has the shape `moat: <verdict> [rule, rule] — reason; reason`.
 
 ### 5.1 Rule ids that are not in your policy
 
-These appear in responses and in `moat show` alongside the ids from `policy.yaml`:
+These appear in responses and in `openmoat show` alongside the ids from `policy.yaml`:
 
 | Rule id | Verdict | When |
 |---|---|---|
@@ -456,9 +456,9 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `executables` | deny | the command's program resolves to a path other than its pin (§8.1) |
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
 | `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
-| `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `moat mcp accept` |
-| `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `moat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's description or input schema is not the one a person accepted (§8) |
-| `kernel-error` | deny | `moat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
+| `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept` |
+| `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's description or input schema is not the one a person accepted (§8) |
+| `kernel-error` | deny | `openmoat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
 | `config-change` | allow | a Claude Code `ConfigChange` for a settings file that is not pinned, or still matches the lock apart from settings drift (§8); a change that names no file is allowed only while every pinned file matches the lock apart from settings drift; recorded |
@@ -467,13 +467,13 @@ These appear in responses and in `moat show` alongside the ids from `policy.yaml
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |
 | `push-runs-later` | ask | the session read untrusted content or a secret, and the push changes a file `runs-later` names (§4.2) |
 | `push-unchecked` | ask | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
-| `approved-session` | allow | an `ask` for a shell command that a person granted with `moat allow` for this host session (§8.2) |
-| `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `moat allow --always` |
-| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `moat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
+| `approved-session` | allow | an `ask` for a shell command that a person granted with `openmoat allow` for this host session (§8.2) |
+| `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` |
+| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `openmoat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
 
-### 5.2 `moat proxy`
+### 5.2 `openmoat proxy`
 
-`moat proxy` decides each connection's host with the same policy and matcher as a fetch
+`openmoat proxy` decides each connection's host with the same policy and matcher as a fetch
 tool's URL. Each host is one `fetch` atom, so `fetch` and `net` lists both apply, deny rules
 first. Differences from the hook:
 
@@ -506,9 +506,9 @@ first. Differences from the hook:
 ### 5.3 What an operating-system layer can enforce
 
 The policy compiler (ADR-019) derives from `policy.yaml` what an OS layer (a host's
-sandbox, Seatbelt, Landlock, the egress proxy) enforces. `moat policy compile [--format
+sandbox, Seatbelt, Landlock, the egress proxy) enforces. `openmoat policy compile [--format
 json]` prints it. The host sandboxes of Claude Code, Codex and Cursor (§9) and the
-Seatbelt and Landlock rules of `moat run` are generated from it.
+Seatbelt and Landlock rules of `openmoat run` are generated from it.
 
 - **OS-enforceable:** `fs.read`, `fs.write`, `net` and `fetch` rules and their defaults.
   Patterns are expanded for the session (`~`, `${project}`, both spellings of a linked
@@ -522,7 +522,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 - **Never wider, except listed allowances.** Whatever a backend cannot represent
   exactly, it narrows and reports. An OS layer is wider than the hook only by an
   allowance (ADR-021): `sandbox.read_roots` (§9), which `policy compile` prints under
-  `allowances`, and what a host needs to run, which `moat sandbox show` lists. Network
+  `allowances`, and what a host needs to run, which `openmoat sandbox show` lists. Network
   to the cloud-metadata hosts (`moat.cloud-metadata`) is denied whatever the policy says.
 
 ## 6. The default policy, in one table
@@ -530,13 +530,13 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | List | Rule id | What it covers |
 |---|---|---|
 | deny | `secrets-paths` | read **and** write of `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.config/gh`, `~/.netrc`, `~/.authinfo{,.gpg}`, `~/.docker/config.json`, `~/.config/containers/auth.json` (Podman, Buildah), `~/.config/doctl/config.yaml`, `~/.config/gcloud`, `~/.azure`, `~/.git-credentials`, `~/.npmrc`, `~/.pypirc`, `~/.cargo/credentials{,.toml}`, `~/.gem/credentials`, `~/.pgpass`, `~/.my.cnf`, `~/.mylogin.cnf`, `~/.vault-token`, `~/.terraform.d/credentials.tfrc.json`, `~/.config/op`, `~/.password-store`, `~/.local/share/keyrings`, `~/.zsh_history`, `~/.bash_history`, `.env`, `.env.*` (except `.env.example`, `.env.sample`, `.env.template`), `.envrc`, keychains; commands that print a stored token or password: `gh auth token`, `gh auth status --show-token`/`-t`, `gcloud auth print-access-token`/`print-identity-token`, `az account get-access-token`, `aws configure export-credentials`, `aws configure get *secret*`, `kubectl config view --raw`, `git credential fill`, `git credential-<helper> get`, `security find-generic-password`/`find-internet-password` with `-w` or `-g`, `security dump-keychain`, `vault kv get`, `vault read`, `vault print token`, `op read`, `op item get --reveal`, `heroku auth:token`, and `pass` with any argument (`pass NAME`, `pass show`, `pass grep`, …) except `ls`, `list`, `find`, `search`, `init`, `insert`, `add`, `rm`, `remove`, `delete`, `mv`, `rename`, `cp`, `copy`, `git`, `help`, `version`, which print no password (`pass` alone lists names) |
-| deny | `build-credentials` | read **and** write of `~/.m2/settings.xml`, `~/.m2/settings-security.xml` and `~/.gradle/gradle.properties` (repository passwords, signing keys, tokens) by the agent: a shell command naming them, the file tools, MCP arguments. `hook_only` (§2): the host sandboxes and `moat run` do not deny them, so `mvn` and `gradle` keep reading their settings there, and `mvn package` or `./gradlew build` keep their verdict. The caches (`~/.m2/repository`, `~/.gradle/caches`) are not covered |
+| deny | `build-credentials` | read **and** write of `~/.m2/settings.xml`, `~/.m2/settings-security.xml` and `~/.gradle/gradle.properties` (repository passwords, signing keys, tokens) by the agent: a shell command naming them, the file tools, MCP arguments. `hook_only` (§2): the host sandboxes and `openmoat run` do not deny them, so `mvn` and `gradle` keep reading their settings there, and `mvn package` or `./gradlew build` keep their verdict. The caches (`~/.m2/repository`, `~/.gradle/caches`) are not covered |
 | deny | `env-secrets` | reading `*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AWS_*`, `GITHUB_TOKEN`, `NPM_TOKEN`, `*_PASS`, `*_PASSWD`, `*_PWD`, `PGPASSWORD`, `*_CREDENTIALS`, `*_DSN`, `DATABASE_URL`, `*_DATABASE_URL`, `REDIS_URL`, `MONGODB_URI`, `MONGO_URL` |
 | deny | `env-dump` | `env`, `printenv`, `set`, `export`, `declare`, `typeset` with no arguments (or only `-0`, `-p`, `-x`), also by absolute path: they print every variable, secrets included. `printenv NAME` is an `env.read` of `NAME`. A read of `/proc/<pid>/environ` (also `/proc/self/…` and `/proc/<pid>/task/<tid>/…`) is the atom `@proc-environ <path>`, which this rule denies; it is not a path rule, so no OS sandbox is asked to deny a glob under `/proc`. Inline interpreter code that reads the whole environment is the atom `@env-dump <expression>` (§3.1), which this rule denies |
 | deny | `env-poison` | setting `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `GIT_*`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `MOAT_*` |
 | deny | `pipe-to-shell` | `curl`/`wget` output, or any decoded/decompressed stream (`base64 -d/-D/--decode`, `openssl … -d`, `xxd -r`, `gunzip`, `zcat`, `gzip -d`, …), piped into a shell or interpreter that reads its program from stdin (`sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `python*`, `node`, `perl`, `ruby`, `php`, `deno`, `bun`, `pwsh`); `eval` |
 | deny | `destructive` | any write to a raw disk (`/dev/disk*`, `/dev/sd*`, `/dev/nvme*`, …), and any write to the home directory or the root itself (`fs.write` of exactly `~` and `/`, however the path is spelt: `~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`), so removing, moving or replacing them with any program and flags; this also denies a command that changes that directory itself (`touch ~`, `chmod 700 ~`) or copies into it entries whose names the command line does not show (`rsync -a dist/ ~/`, `cp * ~/`), while a copy or move of named files into it writes those entries (`cp f ~/` writes `~/f`, which the default policy defers, §3.1), as do writes below them (`mkdir ~/x`, `rm -rf ~/tmp/build`) are unaffected; `rm` of an unexpanded `/*`, `~/*`, `$HOME/*`, `${HOME}/*` or of `//`, and `rm -rf --no-preserve-root`, `git push --force*`/`-f*` (also after the remote, bundled as `-uf`, and a `+refspec` such as `+main` or `+HEAD:main`), remote branch deletion (`git push origin :main`, `--delete`, `-d`), the prefixes of `--force` and `--delete` git accepts as abbreviations (`--for*`, `--de*`; `--mirror` and `--prune` are not denied and defer like any other push), `git reset --hard`, `git clean -fdx`, `git branch -D`, `git stash drop/clear`, `sudo`, `mkfs`, `dd if=`, `shutdown`, `reboot` |
-| deny | `kernel-self` | reads of OpenMoat's state beside the policy: `~/.moat/audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`, `allowed_signers` and `mcp/` (and `audit.db*` and `policy.lock` in any `.moat/`), while `~/.moat/policy.yaml` stays readable; writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; OpenClaw's state directory `~/.openclaw` itself, its configuration `~/.openclaw/openclaw.json`, the plugin `moat init` writes (`~/.openclaw/openmoat` and `~/.openclaw/openmoat/**`) and its state database `~/.openclaw/state/**`; any `bin/moat` or `bin/moat.exe` (the binary every hook runs), and Scoop's `apps/moat/current` junction and `apps/moat/<version>/moat.exe` (ADR-016); `moat policy/init/doctor/allow/edit/secret/trust/uninstall`, `moat sandbox sync` and `moat audit anchor` from an agent, also by absolute path (`*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `moat` command, a bare `moat` included, since its home screen asks questions at a terminal |
+| deny | `kernel-self` | reads of OpenMoat's state beside the policy: `~/.moat/audit.db*`, `policy.lock`, `hosts.json`, `approvals.json`, `trust.json`, `allowed_signers` and `mcp/` (and `audit.db*` and `policy.lock` in any `.moat/`), while `~/.moat/policy.yaml` stays readable; writes to `~/.moat`, `~/.codex`, anything under a `.moat/` directory, host hook/settings files, and to the directories `~/.moat`, `~/.claude`, `~/.codex`, `~/.cursor` (and `.moat`, `.claude`, `.codex`, `.cursor` anywhere) themselves, and the same paths in the directories `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR` name (§3.2), so they cannot be renamed, deleted or replaced by a link; OpenClaw's state directory `~/.openclaw` itself, its configuration `~/.openclaw/openclaw.json`, the plugin `openmoat init` writes (`~/.openclaw/openmoat` and `~/.openclaw/openmoat/**`) and its state database `~/.openclaw/state/**`; any `bin/openmoat`, `bin/moat` or their `.exe` (the binary every hook runs, under its name and `moat`, its name up to 0.7.0), and Scoop's `apps/openmoat/current` and `apps/moat/current` junctions and the binaries in each `apps/<package>/<version>` (ADR-016); `openmoat policy/init/doctor/allow/edit/secret/trust/uninstall`, `openmoat sandbox sync`, `openmoat audit anchor` and `openmoat mcp accept/wrap/unwrap` from an agent, by either name, also by absolute path (`*/openmoat …`, `*/moat …`) and under the pseudo-terminal wrappers `script`, `expect`, `unbuffer` (ADR-011), also by absolute path, Python `pty.spawn(…)`, `tmux`/`screen` and `osascript` (ADR-014); under those wrappers any `openmoat` command, a bare `openmoat` included, since its home screen asks questions at a terminal |
 | deny | `shell-rc` | writes to `~/.zshrc`, `~/.bashrc`, `~/.profile` and friends |
 | deny | `cloud-metadata` | network to instance metadata and link-local services (`169.254.*`, `fe80:*`, `fd00:ec2::254`, `100.100.100.200`, `metadata.google.internal`, `metadata.goog`), for shell network and for a host fetch tool alike |
 | deny | `token-egress` | a token of a well-known prefixed format sent to a host that is not its service's, allowed hosts included: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`; own hosts `github.com`, `githubusercontent.com`, `ghcr.io`), OpenAI and Anthropic (`sk-`, `sk-proj-`, `sk-ant-`, `sk-svcacct-`, `sk-admin-`; `openai.com`, `anthropic.com`), AWS access key ids (`AKIA…`; `amazonaws.com`, `aws.amazon.com`), Slack (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`; `slack.com`), Google API keys (`AIza…`; `googleapis.com`, `google.com`), npm (`npm_`; `npmjs.org`, `npmjs.com`) and GitLab (`glpat-`; `gitlab.com`), each with its subdomains. Checked in a fetch or network tool's URL, an MCP URL argument, a web search query, and the arguments of a command that connects to a host (the `curl`, `wget`, `nc`, `ssh` family, `git clone/fetch/pull/push/ls-remote`) and of every command piped into one; the destination is every host those arguments name, `--connect-to`/`--resolve` targets and `Host:` headers included, and a destination that cannot be read counts as another host. The atom is `@token-egress <service> <host>`; the token is never in it. Only prefixed formats, the same list audit redaction masks: a commit SHA, a UUID or a base64 blob is never a token. A self-hosted GitLab or GitHub Enterprise server is not the service's host: to send tokens there, narrow the group (`shell: ["@token-egress github *", …]` without that service) |
@@ -551,7 +551,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | allow | `registries` | `api.github.com`, `github.com`, npm, crates.io, Go proxy, PyPI (shell clients and `WebFetch` alike) |
 | allow | `safe-mcp` | read-only GitHub and filesystem MCP tools |
 | ask | `git-internals` | writes to a `.git` at any depth (hooks, config, refs, a `gitdir:` file) and `git config`, `git remote`, `git -c`, `git --config-env`, `git --git-dir`, `git --work-tree`, `git --exec-path` in the forms `dev-shell` does not allow: git runs what they name later, outside any sandbox |
-| ask | `runs-later` | writes, at any depth, to what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) and to what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.lefthook.yml`, `.vscode/tasks.json`), including what an agent host starts in its next session (a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and in the home `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`), and OpenClaw's plugin directories (`~/.openclaw/extensions/`, a project's `.openclaw/extensions/`). OpenClaw's state database (`~/.openclaw/state/`, which holds its exec approvals and the `cron` jobs its Gateway runs; an OpenClaw `cron` add or update is decided as a write of it) is `kernel-self`, so writes to it are denied. `project-fs` and `moat allow --dir` leave the project ones out, so the write asks; reading them stays allowed. Hook only: the OS sandboxes list them as writable, since a deny there would make them unreadable or fail installs that write them (`husky`) |
+| ask | `runs-later` | writes, at any depth, to what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) and to what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.lefthook.yml`, `.vscode/tasks.json`), including what an agent host starts in its next session (a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and in the home `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`), and OpenClaw's plugin directories (`~/.openclaw/extensions/`, a project's `.openclaw/extensions/`). OpenClaw's state database (`~/.openclaw/state/`, which holds its exec approvals and the `cron` jobs its Gateway runs; an OpenClaw `cron` add or update is decided as a write of it) is `kernel-self`, so writes to it are denied. `project-fs` and `openmoat allow --dir` leave the project ones out, so the write asks; reading them stays allowed. Hook only: the OS sandboxes list them as writable, since a deny there would make them unreadable or fail installs that write them (`husky`) |
 | ask | `persistence` | writes to `~/Library/LaunchAgents`, `~/.gitconfig`, `~/.config/git`, `~/.config/autostart`, `~/.config/systemd/user`; `crontab` |
 | ask | `home-sweep` | reading the home folder or `~/.config` themselves, which is what a recursive read of them reads (`grep -r . ~`, `tar czf h.tgz ~`, `find ~ -name '*.pem'`) |
 | ask | `secret-names` | a path through a variable whose value is not known (the `@unknown-path` atom, §3.1) whose file name is a key's, a token file's or a `.env` (`cat $X/id_rsa`, `cat "$d"/.env`); other such paths defer |
@@ -592,9 +592,9 @@ ask:
 
 Check what a policy would do before installing it:
 ```bash
-moat policy lint ./policy.yaml
-moat policy check "npm install left-pad" --policy ./policy.yaml --project ~/code/app
-moat policy check "~/.aws/credentials" --kind fs-read --policy ./policy.yaml
+openmoat policy lint ./policy.yaml
+openmoat policy check "npm install left-pad" --policy ./policy.yaml --project ~/code/app
+openmoat policy check "~/.aws/credentials" --kind fs-read --policy ./policy.yaml
 ```
 
 `policy lint` fails (exit 64) on errors: wrong version, unknown keys, missing or duplicate
@@ -610,24 +610,24 @@ warning does not prove a rule is reachable.
 
 ## 8. The policy lock
 
-`moat init` records SHA-256 digests of the policy file and of every host hook file it
-installed in `~/.moat/policy.lock`. `moat guard` recomputes them on every call; if any
+`openmoat init` records SHA-256 digests of the policy file and of every host hook file it
+installed in `~/.moat/policy.lock`. `openmoat guard` recomputes them on every call; if any
 pinned file changed or disappeared, every call is denied with rule `kernel-integrity`
-until a person re-pins with `moat doctor --accept` (refused outside an interactive terminal) or
-by re-running `moat init` (over an existing lock it refuses when an agent is among its parent
+until a person re-pins with `openmoat doctor --accept` (refused outside an interactive terminal) or
+by re-running `openmoat init` (over an existing lock it refuses when an agent is among its parent
 processes, and over drift when it has no terminal; a first install has no lock and is not
-checked). Edit the policy, then run `moat doctor --accept`. Which hook files are pinned is decided only by `moat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR`, else the recorded or default ones). `moat doctor --accept`, `moat allow` and `moat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `moat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `moat doctor` and `moat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
+checked). Edit the policy, then run `openmoat doctor --accept`. Which hook files are pinned is decided only by `openmoat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR`, else the recorded or default ones). `openmoat doctor --accept`, `openmoat allow` and `openmoat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `openmoat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `openmoat doctor` and `openmoat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
 
 <a id="what-the-lock-is-not"></a>**What the lock is not.** The lock is a list of
 SHA-256 digests in a file, with no key and no signature. It catches a change the agent
 makes through its tools, and the agents' OS sandboxes stop the commands inside them
 from changing `~/.moat` and the hook files at all (§9, [SANDBOX.md](SANDBOX.md)). It
 does not stop a program that runs as the same user outside any sandbox: such a program
-can change the policy and write new digests into the lock, and `moat guard` then finds
+can change the policy and write new digests into the lock, and `openmoat guard` then finds
 nothing wrong. In hook-only mode (OpenClaw, Claude Code and Cursor on native Windows,
 or a sandbox that is off) every program an allowed command starts is such a program.
-There the OS sandboxes (the agents' own sandboxes in the Standard tier, `moat run` and
-`moat run --isolate`) are the protection; `moat status` shows which agents have one. A root user or a replaced `moat` binary is out of scope as well
+There the OS sandboxes (the agents' own sandboxes in the Standard tier, `openmoat run` and
+`openmoat run --isolate`) are the protection; `openmoat status` shows which agents have one. A root user or a replaced `openmoat` binary is out of scope as well
 (ADR-006, [THREAT_MODEL.md](THREAT_MODEL.md#5-known-limitations)).
 
 One exception keeps a changed Claude Code toggle from stopping every agent. When the
@@ -635,15 +635,15 @@ only drift is in Claude Code's `settings.json`, limited to its own display and r
 settings (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …), the model you
 switch to (`model` and `switchModelsOnFlag`, which Claude Code writes itself) or its own
 permission lists and modes (`permissions.allow`, `ask`, `deny`, `defaultMode`,
-`additionalDirectories`, `blockReadsOutsideWorkingDirectories`), `moat guard` keeps
+`additionalDirectories`, `blockReadsOutsideWorkingDirectories`), `openmoat guard` keeps
 deciding every call by the policy. These settings change only when Claude Code asks
 you; a hook deny stands whatever they say. The drift is recorded once per session
-(rule `settings-drift`), and `moat doctor` and `moat status` keep reporting it until
-you run `moat doctor --accept`. Removing a `permissions.deny` rule OpenMoat wrote, any
+(rule `settings-drift`), and `openmoat doctor` and `openmoat status` keep reporting it until
+you run `openmoat doctor --accept`. Removing a `permissions.deny` rule OpenMoat wrote, any
 change under `hooks`, `env`, `apiKeyHelper`, `statusLine`, plugins, MCP servers or
 `sandbox`, any key not on the list, and a file that no longer parses still deny every
 call. Turning `blockReadsOutsideWorkingDirectories` off widens what sandboxed commands
-may read; `moat status` then shows Claude Code as `hook only`. The full list and why
+may read; `openmoat status` then shows Claude Code as `hook only`. The full list and why
 each key is safe are in `crates/openmoat-cli/src/integrity/relaxed.rs`. A lock written
 before this release has no per-key record of `permissions`, so there a change to it
 still denies until the next re-pin.
@@ -655,16 +655,16 @@ The lock also pins each MCP server definition the agents read (ADR-026): Claude 
 SHA-256 of its canonical JSON, not by its file, so the rest of `~/.claude.json` may change
 freely. A definition that differs from its pin, or one added since, does not deny every
 call. It denies that server's tool calls (`mcp__<server>__…`) with rule
-`mcp-server-changed` until a person runs `moat mcp accept` or `moat doctor --accept`.
+`mcp-server-changed` until a person runs `openmoat mcp accept` or `openmoat doctor --accept`.
 Both show what changed (never the value of an `env` variable or header) and ask. A file
-that cannot be parsed holds back every MCP call of its agent. `moat init` pins what it
+that cannot be parsed holds back every MCP call of its agent. `openmoat init` pins what it
 finds. The other re-pinning commands keep the MCP pins as they are.
 
-`moat mcp proxy` (opt-in per server with `moat mcp wrap`) pins each tool's name,
+`openmoat mcp proxy` (opt-in per server with `openmoat mcp wrap`) pins each tool's name,
 description and input schema in `~/.moat/mcp/`. A tool with no pin, or one that changed,
 is left out of `tools/list`, and a `tools/call` for it is answered with an error naming
-`moat mcp accept <server>` (rule `mcp-tool-held` in the audit log, host `mcp-proxy`).
-The first time the proxy sees a server, that is every tool it lists (ADR-032): `moat mcp
+`openmoat mcp accept <server>` (rule `mcp-tool-held` in the audit log, host `mcp-proxy`).
+The first time the proxy sees a server, that is every tool it lists (ADR-032): `openmoat mcp
 accept <server>` shows each one's name, description and input schema, asks, and pins
 them. A server the proxy already pinned keeps its pins.
 
@@ -675,23 +675,23 @@ mcp:
 
 `trust_first_sight: true` has the proxy pin a new server's first listing as it is, as
 releases before ADR-032 did. A server that is malicious from its first start then gets
-its tool descriptions pinned as good, so `moat policy lint` warns while it is on. The
+its tool descriptions pinned as good, so `openmoat policy lint` warns while it is on. The
 proxy honours it only while the policy lock is intact.
 
 ### 8.1 Executable pinning and the environment snapshot
 
-`moat init` also records the search path and the absolute location of common programs
+`openmoat init` also records the search path and the absolute location of common programs
 (`git`, `npm`, `node`, `python3`, `cargo`, `curl`, `ssh`, `sudo`, …) in
 `~/.moat/environment.json`, pinned by the lock. For every shell command, the first word is
 resolved through that snapshot, never through the environment the hook inherited. If the
 program is pinned, either by `executables:` in the policy or by the snapshot, and it now
 resolves somewhere else (a `git` planted in `node_modules/.bin`, an absolute path to a copy
 in `/tmp`), the command is denied with rule `executables`. Unpinned programs are not checked.
-After installing a tool in a new location, re-run `moat init` or `moat doctor --accept`.
+After installing a tool in a new location, re-run `openmoat init` or `openmoat doctor --accept`.
 
 On Windows the snapshot also records `PATHEXT`; a bare program name resolves as written, then with each recorded extension in order (default `.com`, `.exe`, `.bat`, `.cmd`).
 
-`moat policy check` decides the way `guard` does: it resolves programs through the snapshot
+`openmoat policy check` decides the way `guard` does: it resolves programs through the snapshot
 when `~/.moat/environment.json` exists and resolves symlinks in checked paths. Without an
 installation, installation pins are not consulted and a program pinned under `executables:`
 is reported as "not found on the kernel search path" unless the command names it by
@@ -705,9 +705,9 @@ policy's verdict.
 When a host prompts you because the verdict was `ask`, you can make the answer stick:
 
 ```bash
-moat allow --last                  # grant the most recent ask to that host session (exact command or files)
-moat allow --last --always         # or add a permanent allow rule
-moat allow "npm install left-pad" --host claude-code --session 7c1e
+openmoat allow --last                  # grant the most recent ask to that host session (exact command or files)
+openmoat allow --last --always         # or add a permanent allow rule
+openmoat allow "npm install left-pad" --host claude-code --session 7c1e
 ```
 
 Session grants live in `~/.moat/approvals.json` and match the exact command text, or
@@ -717,9 +717,9 @@ and `.` and `..` collapsed. A grant applies to any `ask` for that command or tho
 files, including an `unparseable` one; it never overrides a `deny`. A file ask approved
 with `--always` becomes an `fs.read` or `fs.write` rule for exactly its paths, as
 asked and with symlinks resolved; a path with glob characters is refused. Hosts do not report when a session ends,
-so a grant expires 24 hours after `moat allow` wrote it (granting the same command again
+so a grant expires 24 hours after `openmoat allow` wrote it (granting the same command again
 restarts it); `guard` ignores expired grants, every write of `approvals.json` drops them,
-and `moat status` shows how many are active and the age of the oldest. A grant written
+and `openmoat status` shows how many are active and the age of the oldest. A grant written
 without a creation time (files from before grants expired) counts as expired.
 Permanent rules (`--always`) never expire; they are appended to
 `~/.moat/policy.d/approved.yaml` with ids `approved-1`, `approved-2`, … and a provenance
@@ -732,38 +732,38 @@ after it; edit the overlay if you want it tighter. A permanently approved instal
 near-miss name (`npm i lodahs`, §3.1) also gets its `@package-near-miss npm lodahs lodash`
 atom in the rule, so `package-near-miss` does not ask for that install again; another
 near miss added to the same command still asks. Both files are pinned
-by the lock; `moat allow` must be run from a terminal and is denied to agents.
-`moat allow` verifies the lock before writing anything: if a pinned file (policy,
+by the lock; `openmoat allow` must be run from a terminal and is denied to agents.
+`openmoat allow` verifies the lock before writing anything: if a pinned file (policy,
 overlay, approvals, hook file) drifted, it lists each one and exits 64 without changing
-the overlay, the grants or the lock. Review the changes with `moat doctor` and accept them
-with `moat doctor --accept`, then approve again; approving a command never accepts drift.
+the overlay, the grants or the lock. Review the changes with `openmoat doctor` and accept them
+with `openmoat doctor --accept`, then approve again; approving a command never accepts drift.
 
 ```bash
-moat allow --site docs.rs          # net: [docs.rs], network access to that host, fetches included
-moat allow --dir ~/work/shared     # fs.read and fs.write of the directory and everything below it
-moat allow --remove approved-3     # take a permanent rule out again
+openmoat allow --site docs.rs          # net: [docs.rs], network access to that host, fetches included
+openmoat allow --dir ~/work/shared     # fs.read and fs.write of the directory and everything below it
+openmoat allow --remove approved-3     # take a permanent rule out again
 ```
 
 `--site` and `--dir` append a rule to the same overlay, check that the merged policy still
 lints, re-pin, and print the rule as written plus the `--remove` command that undoes it.
 `--site` takes a plain host name or address only (no wildcard, scheme or port; write those
-with `moat edit`). `--dir` must name an existing directory; it is stored as written and,
+with `openmoat edit`). `--dir` must name an existing directory; it is stored as written and,
 when that differs, with its symlinks resolved, since the hook checks a path both ways. The
 home directory, its ancestors and filesystem roots are refused, as are names with glob
 characters. Deny rules still win, so `.env` files and keys inside an allowed directory stay
 denied and `kernel-self` paths stay protected. `--remove` takes any `approved-N` id,
 including one `--always` wrote.
 
-`moat edit` opens `~/.moat/policy.yaml` in `$VISUAL`, `$EDITOR` or `vi` (`notepad` on
+`openmoat edit` opens `~/.moat/policy.yaml` in `$VISUAL`, `$EDITOR` or `vi` (`notepad` on
 Windows) on a copy inside `~/.moat`. When the editor exits, an unchanged copy changes
 nothing; a copy that does not lint (with the overlay merged, as `guard` loads it) is
-reported and never written, and you can reopen it. Otherwise `moat edit` prints the lint
+reported and never written, and you can reopen it. Otherwise `openmoat edit` prints the lint
 warnings and a unified diff and asks `Apply? [y/N]`; only `y` writes the policy, keeps the
-previous one in `~/.moat/policy.yaml.bak` and re-pins. Like `moat allow` it needs a
+previous one in `~/.moat/policy.yaml.bak` and re-pins. Like `openmoat allow` it needs a
 terminal, refuses over a drifted lock, and is denied to agents by `kernel-self`.
 
-`moat init` never replaces an existing policy, so a release whose default gained a rule
-reaches an installed policy through `moat policy upgrade`. It merges the changes between
+`openmoat init` never replaces an existing policy, so a release whose default gained a rule
+reaches an installed policy through `openmoat policy upgrade`. It merges the changes between
 the default the policy was made from (`~/.moat/policy.base.yaml`, written with the policy)
 and this release's default into the policy, line by line as `diff3` does: a change is
 applied only where the policy still has the old default's lines, so a rule you changed or
@@ -778,7 +778,7 @@ that file back byte for byte; `--dry-run` only shows the changes and needs no te
 
 ## 9. Host sandboxes (`sandbox:`)
 
-`moat init` and `moat sandbox sync` compile the policy into each host's own sandbox
+`openmoat init` and `openmoat sandbox sync` compile the policy into each host's own sandbox
 (Standard tier, ADR-018, ADR-019). The rules above apply there as an OS layer can apply
 them: a deny rule denies; an allow rule allows; everything else, `ask` included, is
 denied. Shell, `env.*`, `mcp` and `executables` rules have no OS form and stay with the
@@ -795,52 +795,52 @@ read although no allow rule covers them:
 - Only OS layers use the list. The hook keeps deciding these reads by the rules, so
   `cat ~/.cargo/registry/…` still defers under the default policy; deny rules win inside a root in every layer
   (`~/.cargo/credentials.toml` stays denied).
-- This is the one way an OS layer is wider than the hook (ADR-019), and `moat sandbox
+- This is the one way an OS layer is wider than the hook (ADR-019), and `openmoat sandbox
   show` prints it as an allowance. The default policy lists system directories
   (`/usr`, `/bin`, `/etc`, `/opt`, `/System`, `/Library`, `/nix`, …), temp directories
   and toolchain homes (`~/.cargo`, `~/.rustup`, `~/.npm`, `~/.nvm`, `~/.pyenv`,
   `~/.local/bin`, `~/go`, `~/.gitconfig`). A policy without a `sandbox:` section gets
   that list, and `sandbox show` says so.
 
-**Network through `moat proxy` is opt-in.** By default each host's own proxy enforces
+**Network through `openmoat proxy` is opt-in.** By default each host's own proxy enforces
 the `net` rules' domain names: Claude Code's `allowedDomains` with `strictAllowlist`,
 and Codex's `network.domains`. Neither host's sandbox allows a direct connection.
 
 Set the additive `sandbox.proxy_port` key (1–65535) to send sandboxed commands'
-traffic through `moat proxy` (§5.2) on `127.0.0.1:<port>` instead. `moat proxy`
+traffic through `openmoat proxy` (§5.2) on `127.0.0.1:<port>` instead. `openmoat proxy`
 without `--listen` then uses that port, and the policy lock pins it with the rest of
 the file.
 
-`moat proxy` refuses a TLS tunnel whose `ClientHello` carries an encrypted server name
+`openmoat proxy` refuses a TLS tunnel whose `ClientHello` carries an encrypted server name
 (ECH, extension `0xfe0d`, or the older ESNI, `0xffce`), rule `proxy-sni`: the server acts
 on the encrypted inner name, so a site the policy does not allow could be reached
 behind an allowed host on the same provider. Browsers send an ECH extension even
 without an ECH key ("GREASE"), so a browser driven through the proxy is refused too.
 `sandbox.proxy_allow_ech: true` forwards such tunnels (the cleartext name must still
-match the CONNECT host), and `moat policy lint` warns about it. Without ECH an allowed
+match the CONNECT host), and `openmoat policy lint` warns about it. Without ECH an allowed
 host can still front for another site through the HTTP `Host` header inside the
 tunnel, which the proxy does not see.
 
 | | What you gain | What it costs |
 |---|---|---|
-| `moat proxy` | Every connection is decided by the full policy (address patterns too, not only domain names) and recorded in the audit log. Brokered secrets (§2.1) are injected. Loopback, link-local, metadata and unnamed private addresses are refused after DNS. | `moat proxy` must be running. While it is stopped, Claude Code's sandboxed commands have no network (`npm install`, `cargo build` and `git fetch` fail), and `moat doctor` and `moat status` warn. Programs that speak only SOCKS5 have none at all. |
+| `openmoat proxy` | Every connection is decided by the full policy (address patterns too, not only domain names) and recorded in the audit log. Brokered secrets (§2.1) are injected. Loopback, link-local, metadata and unnamed private addresses are refused after DNS. | `openmoat proxy` must be running. While it is stopped, Claude Code's sandboxed commands have no network (`npm install`, `cargo build` and `git fetch` fail), and `openmoat doctor` and `openmoat status` warn. Programs that speak only SOCKS5 have none at all. |
 
 Keep the proxy running as a user service, for example a launchd agent or a systemd
-user unit running `moat proxy`. `moat init` cannot install one yet (#272); routing
-through `moat proxy` stays opt-in until it can.
+user unit running `openmoat proxy`. `openmoat init` cannot install one yet (#272); routing
+through `openmoat proxy` stays opt-in until it can.
 
 Codex's own proxy still decides Codex's commands. It hands what it allows on to `moat
 proxy` only when Codex starts with `HTTP_PROXY` and `HTTPS_PROXY` set to
 `http://127.0.0.1:<port>`, and its API hosts then need an allow rule (THREAT_MODEL.md §5).
 
-What each host enforces for sandboxed commands after `moat init` with the default
+What each host enforces for sandboxed commands after `openmoat init` with the default
 policy:
 
 | | Claude Code (`Bash`, `PowerShell`, `Monitor`) | Codex (every command) |
 |---|---|---|
 | Read | project, read roots, paths outside the user directories; never `secrets-paths` | project, read roots, Codex's minimal system paths; never `secrets-paths` |
 | Write | working directories, temp; never `secrets-paths`, `kernel-self`, `shell-rc`, `.moat`, or what in `.git` makes git run code (`hooks`, `config`, `config.worktree`, `info/attributes`, a worktree's `commondir`, the same in submodules) | project, temp; the same denies; `.git` read-only |
-| Network | `registries` domains only (`strictAllowlist`); `cloud-metadata` denied; no direct connection. With `sandbox.proxy_port`: through `moat proxy` only | the same, through Codex's network proxy; with `sandbox.proxy_port`, on to `moat proxy` when Codex runs with `HTTP(S)_PROXY` |
+| Network | `registries` domains only (`strictAllowlist`); `cloud-metadata` denied; no direct connection. With `sandbox.proxy_port`: through `openmoat proxy` only | the same, through Codex's network proxy; with `sandbox.proxy_port`, on to `openmoat proxy` when Codex runs with `HTTP(S)_PROXY` |
 | Escape hatches | `allowUnsandboxedCommands: false`, `failIfUnavailable: true`, no `excludedCommands` | `default_permissions = "moat"`; Codex asks before running outside the sandbox |
 
 Losses (stricter than the policy): the `.env.example`, `.env.sample` and `.env.template`
@@ -848,8 +848,8 @@ exceptions cannot be re-allowed inside the `**/.env.*` deny; `.git` is read-only
 Codex's sandboxed commands; every `.moat` is denied under Claude Code, whose user
 settings cannot name the project; Claude Code's file tools refuse reads outside the
 working directories; with `sandbox.proxy_port`, Claude Code's sandboxed commands
-have no network without `moat proxy` and none over SOCKS5. Allowances (wider): with
-`sandbox.proxy_port`, Codex's traffic skips `moat proxy` unless Codex runs with
+have no network without `openmoat proxy` and none over SOCKS5. Allowances (wider): with
+`sandbox.proxy_port`, Codex's traffic skips `openmoat proxy` unless Codex runs with
 `HTTP(S)_PROXY`; the read roots, Codex `:minimal` and
 `:tmpdir`, Claude Code's working directories, system paths, the directory-node
 rules of `kernel-self` (`**/.claude` itself; the files below stay denied) and, so
@@ -857,12 +857,12 @@ that `git commit` works, writes to every `.git` under Claude Code except the pat
 above (`claude-code.git-internals`), and a `.git` file or directory below the project
 root under Codex (`codex.nested-git`: a Codex glob can only deny, which would also
 block reading every `.git`); the hook still asks for file-tool writes to any `.git`. Run
-`moat sandbox show` for the exact list your policy produces.
+`openmoat sandbox show` for the exact list your policy produces.
 
-### 9.1 Package release age (`moat run`)
+### 9.1 Package release age (`openmoat run`)
 
 A malicious package version is usually found and taken down within days of its
-release. `moat run` therefore tells the package managers the agent starts not to
+release. `openmoat run` therefore tells the package managers the agent starts not to
 install a version published in the last `sandbox.package_min_release_age_days`
 days (ADR-030). The default is 7, also when the key is absent; `0` turns it off.
 
@@ -875,13 +875,13 @@ written or changed:
 | `npm_config_before` | npm (its `before` setting) | resolves each package to the newest version published before that time; a package with no such version fails to install |
 | `UV_EXCLUDE_NEWER` | uv (`--exclude-newer`) | leaves out distributions uploaded after that time |
 
-A cut-off the person set is kept: either variable already in `moat run`'s
+A cut-off the person set is kept: either variable already in `openmoat run`'s
 environment (`NPM_CONFIG_BEFORE` too), a `before=` line in the project's `.npmrc`,
 or `exclude-newer` in the project's `pyproject.toml` or `uv.toml`. A project with a
 `uv.lock` gets no `UV_EXCLUDE_NEWER`: uv records the setting in its lockfile, so a
 cut-off that moves every day would make uv resolve the lockfile again. pip, pnpm,
 Yarn and Bun are not covered, and the host sandboxes of the Standard tier set nothing.
-To install a version released this week inside `moat run`, start `moat run` with
+To install a version released this week inside `openmoat run`, start `openmoat run` with
 your own cut-off in the variable, or set the key to `0`.
 
 ## 10. Repository policy
@@ -889,7 +889,7 @@ your own cut-off in the variable, or set the key to `0`.
 A project can commit rules for everyone who works in it: `<project>/.moat/policy.yaml`,
 where the project is the git root that `${project}` names (§3.2). A repository is input
 you did not write, so by itself its policy can only make yours stricter. Its allow rules
-apply only after you trust that exact file with `moat trust` (ADR-022).
+apply only after you trust that exact file with `openmoat trust` (ADR-022).
 
 ```yaml
 version: 1
@@ -911,50 +911,50 @@ ask:
   your allow rules, so your deny rules (`secrets-paths`, `kernel-self`, …) still win.
   They can widen your `ask` rules and defaults.
 - Every repository rule id is shown with the prefix `repo:` (`repo:no-prod-deploy`) in
-  responses, the audit log and `moat show`. This way a repository rule cannot pose as
+  responses, the audit log and `openmoat show`. This way a repository rule cannot pose as
   one of yours.
 - A file that cannot be read or parsed, that sets a key it may not set, or that is not
   a regular file denies every tool call in the project with `kernel-error` and the
   reason. Fix the file to go on. OpenMoat never ignores it, because ignoring it would
   silently drop the team's deny rules.
-- `moat policy check` without `--policy` decides with it, as `guard` does. With
+- `openmoat policy check` without `--policy` decides with it, as `guard` does. With
   `--policy`, only that file is used.
 - Agents cannot change it: `kernel-self` denies writes to `**/.moat/**`.
-- Hook only. Host sandboxes (§9) and `moat proxy` are generated from your policy,
+- Hook only. Host sandboxes (§9) and `openmoat proxy` are generated from your policy,
   per user and not per repository. A repository deny is not enforced there, and a
   trusted repository allow does not widen them.
 
 ```bash
-moat trust                   # trust the repository policy of the current directory's project
-moat trust ~/code/app        # or of another project
-moat trust --revoke          # its allow rules stop applying; deny and ask stay
+openmoat trust                   # trust the repository policy of the current directory's project
+openmoat trust ~/code/app        # or of another project
+openmoat trust --revoke          # its allow rules stop applying; deny and ask stay
 ```
 
-`moat trust` prints each allow rule it lets in. It records the SHA-256 of the file's
+`openmoat trust` prints each allow rule it lets in. It records the SHA-256 of the file's
 bytes against the project root (symlinks resolved) in `~/.moat/trust.json`, never in
 the repository, and re-pins the lock. The record holds for that exact file in that
 exact checkout. After any change to the file (a pull, a branch switch, an edit), or for
 a copy in another directory, the policy applies in its tightening-only form until you
-run `moat trust` again. A file that does not parse cannot be trusted. Like `moat
-allow`, `moat trust` must be run from a terminal, refuses while the lock shows drift
+run `openmoat trust` again. A file that does not parse cannot be trusted. Like `moat
+allow`, `openmoat trust` must be run from a terminal, refuses while the lock shows drift
 (exit 64), and is denied to agents by `kernel-self`. A `trust.json` the lock does not
 pin is ignored.
 
 Where your policy says `require_signed_repo_policy: true`, a signature decides instead
-of `moat trust` (ADR-031). A repository policy's allow rules apply only when its
+of `openmoat trust` (ADR-031). A repository policy's allow rules apply only when its
 detached signature `<project>/.moat/policy.yaml.sig` verifies, with `ssh-keygen -Y verify`
-in the namespace `openmoat-policy`, against a key you trusted with `moat policy trust-key`
+in the namespace `openmoat-policy`, against a key you trusted with `openmoat policy trust-key`
 (§11). A file with no signature, a signature from another key, or a change to the file
-after signing is not trusted, even where you ran `moat trust`: its allow rules are
+after signing is not trusted, even where you ran `openmoat trust`: its allow rules are
 ignored and its deny and ask rules apply, as for any untrusted repository policy.
-`moat trust` still records the file, and says that the setting overrides it. Without the
-setting, which is the default, a signature changes nothing and `moat trust` alone
+`openmoat trust` still records the file, and says that the setting overrides it. Without the
+setting, which is the default, a signature changes nothing and `openmoat trust` alone
 decides. The signature is checked on each call in the project, outside the agent's
 sandbox.
 
-`moat status` and `moat doctor`, run inside the project, name the repository policy and
+`openmoat status` and `openmoat doctor`, run inside the project, name the repository policy and
 its digest, and say which form applies: `trusted`, `trusted: signed by <name>`, `not trusted: tightening only`,
-`changed since moat trust: tightening only`, `not signed by a trusted key: tightening only`
+`changed since openmoat trust: tightening only`, `not signed by a trusted key: tightening only`
 (with `require_signed_repo_policy: true`), or `tightening only` for a file without
 allow rules. A file that does not parse is reported as a problem (exit 64), because
 every call in the project is denied.
@@ -965,23 +965,23 @@ A policy pack is a team's rules that you install for every project (ADR-031). It
 repository policy's shape (only `version`, `deny`, `ask` and `allow`, §10) and a
 detached OpenSSH signature. OpenMoat has no signature code of its own: it runs the
 system `ssh-keygen` (OpenSSH 8.1 or later), found through the environment snapshot
-`moat init` records (§8.1), in the namespace `openmoat-policy`.
+`openmoat init` records (§8.1), in the namespace `openmoat-policy`.
 
 ```bash
 # whoever maintains the pack signs it
 ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-policy team.yaml   # writes team.yaml.sig
 
 # each person trusts the maintainer's public key once, then installs the pack
-moat policy trust-key alice.pub --name alice@example.com
-moat policy install team.yaml               # the signature defaults to team.yaml.sig
-moat policy install team.yaml --sig other.sig --name team
-moat policy remove team
+openmoat policy trust-key alice.pub --name alice@example.com
+openmoat policy install team.yaml               # the signature defaults to team.yaml.sig
+openmoat policy install team.yaml --sig other.sig --name team
+openmoat policy remove team
 ```
 
-- `moat policy trust-key` checks the key with `ssh-keygen -l`, prints its fingerprint,
+- `openmoat policy trust-key` checks the key with `ssh-keygen -l`, prints its fingerprint,
   and adds it to `~/.moat/allowed_signers` for the namespace `openmoat-policy` only, so
   a key's signature over anything else (a git commit) is never a policy signature.
-- `moat policy install` verifies the signature over the exact bytes it then installs.
+- `openmoat policy install` verifies the signature over the exact bytes it then installs.
   A signature that does not verify, or one from a key you did not trust, is refused
   (exit 64) and nothing is written. The pack and its signature are copied to
   `~/.moat/policy.d/packs/<name>.yaml` and `.yaml.sig`, and recorded with their SHA-256
@@ -991,12 +991,12 @@ moat policy remove team
   `pack:<name>:` (`pack:team:no-deploy`): its deny rules join yours, its ask rules are
   tried before your allow rules, and its allow rules are added after yours, so your
   deny rules still win. Deny and allow rules also reach the host sandboxes at the next
-  `moat sandbox sync`; ask rules are hook only.
+  `openmoat sandbox sync`; ask rules are hook only.
 - The allowed signers, `packs.json` and each installed pack are pinned by the lock
   (§8). A pack changed after install is drift, and every call is denied with
   `kernel-integrity`. Only these three commands add those pins; another re-pin keeps
   them and never adds them, so a file planted there is not trusted. An unpinned
   `allowed_signers` or `packs.json` is ignored.
 - All three commands must be run from a terminal, refuse while the lock shows drift, and
-  are denied to agents by `kernel-self` (`moat policy *`). Without `ssh-keygen` they
+  are denied to agents by `kernel-self` (`openmoat policy *`). Without `ssh-keygen` they
   refuse with a message saying so; nothing else changes.

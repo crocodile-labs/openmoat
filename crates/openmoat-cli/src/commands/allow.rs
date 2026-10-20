@@ -111,14 +111,12 @@ pub(super) fn run_for(host: &str, session: &str, action: &Action, always: bool) 
 /// The state directory, once a person at a terminal is confirmed and the lock
 /// shows no drift.
 fn checked_home() -> Result<Home> {
-    crate::terminal::refuse_agent("moat allow")?;
+    crate::terminal::refuse_agent("openmoat allow")?;
     if !crate::terminal::interactive() {
-        bail!("`moat allow` must be run by a person in a terminal, not from a hook or script");
+        bail!("`openmoat allow` must be run by a person in a terminal, not from a hook or script");
     }
     let home = Home::locate()?;
-    if !home.exists() {
-        bail!("{} does not exist; run `moat init`", home.root().display());
-    }
+    home.require_exists()?;
     // The re-pin below covers every pinned file, so approving one command over a
     // drifted lock would also accept a tampered policy or hook unseen. Without a
     // lock there is nothing to accept yet and the re-pin creates one.
@@ -170,10 +168,10 @@ fn approve(
             }
             writeln!(
                 out,
-                "  `moat allow --dir <dir>` allows a whole directory, `moat edit` any pattern"
+                "  `openmoat allow --dir <dir>` allows a whole directory, `openmoat edit` any pattern"
             )?;
         }
-        writeln!(out, "  undo: moat allow --remove {}", rule.id)?;
+        writeln!(out, "  undo: openmoat allow --remove {}", rule.id)?;
         warn_if_shadowed(home, &rule.id, &mut out)?;
     } else {
         let session = session.context(
@@ -184,7 +182,7 @@ fn approve(
             bail!(
                 "this call came with no session id, so a session grant would hold in every \
                  session that sends none; approve it in the agent, or give --always for a \
-                 permanent rule you can remove with `moat allow --remove`"
+                 permanent rule you can remove with `openmoat allow --remove`"
             );
         }
         let path = home.grants_path();
@@ -336,7 +334,7 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
                 "  deny rules still win: secrets and kernel files in it stay denied"
             )?;
         }
-        writeln!(out, "  undo: moat allow --remove {}", rule.id)?;
+        writeln!(out, "  undo: openmoat allow --remove {}", rule.id)?;
         warn_if_shadowed(home, &rule.id, out)?;
     }
     Ok(())
@@ -366,7 +364,7 @@ fn dir_spellings(dir: &Path) -> Result<Vec<String>> {
         !spellings
             .iter()
             .any(|s| s.contains(['*', '?', '[', ']', '{', '}', '\\'])),
-        "{} contains glob characters; write it in the policy with `moat edit` instead",
+        "{} contains glob characters; write it in the policy with `openmoat edit` instead",
         written.display()
     );
     Ok(spellings)
@@ -399,8 +397,8 @@ pub(super) fn asked(event: &Event) -> Result<Action> {
         .and_then(|a| approvals::approvable(a, cwd.as_deref(), &home))
         .with_context(|| {
             format!(
-                "ask {} names no file `moat allow` can approve (none, or a relative path \
-                 without a working directory); allow it with `moat edit` instead",
+                "ask {} names no file `openmoat allow` can approve (none, or a relative path \
+                 without a working directory); allow it with `openmoat edit` instead",
                 event.id
             )
         })

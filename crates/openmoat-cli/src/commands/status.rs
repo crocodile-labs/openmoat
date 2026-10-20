@@ -46,7 +46,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     if let Some(update) = &update {
         writeln!(
             out,
-            "policy update    · {update}: `moat policy upgrade` shows them and asks"
+            "policy update    · {update}: `openmoat policy upgrade` shows them and asks"
         )?;
     }
     healthy &= lock(&mut out, &home, &binary)?;
@@ -118,7 +118,7 @@ fn mcp_line(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool
         Ok(lines) if lines.is_empty() => {
             writeln!(
                 out,
-                "mcp servers      ✔ nothing waits for `moat mcp accept`"
+                "mcp servers      ✔ nothing waits for `openmoat mcp accept`"
             )?;
             Ok(true)
         }
@@ -126,7 +126,7 @@ fn mcp_line(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool
             for line in lines {
                 writeln!(
                     out,
-                    "mcp servers      ✗ {line}; `moat mcp accept` shows it and asks"
+                    "mcp servers      ✗ {line}; `openmoat mcp accept` shows it and asks"
                 )?;
             }
             Ok(false)
@@ -180,7 +180,7 @@ fn lock(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
     let lock = match Lock::load(&lock_path) {
         Ok(lock) => lock,
         Err(_) if !lock_path.exists() => {
-            writeln!(out, "lock             ✗ missing (run `moat init`)")?;
+            writeln!(out, "lock             ✗ missing (run `openmoat init`)")?;
             return Ok(false);
         }
         Err(error) => {
@@ -199,7 +199,7 @@ fn lock(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
     } else {
         healthy = false;
         for d in drift {
-            writeln!(out, "lock             ✗ {d} (run `moat doctor`)")?;
+            writeln!(out, "lock             ✗ {d} (run `openmoat doctor`)")?;
         }
     }
     let installed = integrity::installed_hook_files(home, binary)?;
@@ -208,7 +208,7 @@ fn lock(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
         healthy = false;
         writeln!(
             out,
-            "lock             ✗ {} is not pinned (run `moat init` to pin it)",
+            "lock             ✗ {} is not pinned (run `openmoat init` to pin it)",
             path.display()
         )?;
     }
@@ -260,12 +260,15 @@ fn hooks(
         let line = match config.state(binary) {
             HookState::Installed => "✔ installed".to_owned(),
             HookState::Missing if recorded.skipped(host) && config.host_present() => {
-                format!("· not set up (`moat init --hosts {}` adds it)", host.id())
+                format!(
+                    "· not set up (`openmoat init --hosts {}` adds it)",
+                    host.id()
+                )
             }
             HookState::Missing if !config.host_present() => "· host not found".to_owned(),
             HookState::Missing => {
                 healthy = false;
-                "✗ hook missing (run `moat init`)".to_owned()
+                "✗ hook missing (run `openmoat init`)".to_owned()
             }
             HookState::Stale { command } => {
                 healthy = false;
@@ -316,7 +319,7 @@ fn protection_lines(out: &mut impl io::Write, home: &Home, binary: &Path) -> Res
 fn audit(out: &mut impl io::Write, home: &Home) -> Result<bool> {
     let audit_path = home.audit_path();
     if !audit_path.is_file() {
-        writeln!(out, "audit log        ✗ missing (run `moat init`)")?;
+        writeln!(out, "audit log        ✗ missing (run `openmoat init`)")?;
         return Ok(false);
     }
     let store = Store::open_read_only(&audit_path)?;
@@ -355,7 +358,7 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
                 let report = host_sandbox::report(host, plan);
                 writeln!(
                     out,
-                    "{name:<16} ✔ sandbox matches the policy ({} stricter, {} wider: `moat sandbox show`)",
+                    "{name:<16} ✔ sandbox matches the policy ({} stricter, {} wider: `openmoat sandbox show`)",
                     report.losses.len(),
                     report.allowances.len()
                 )?;
@@ -377,7 +380,7 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
         let (ok, text) = super::proxy::listening_line(port);
         writeln!(
             out,
-            "moat proxy       {} {text}",
+            "openmoat proxy   {} {text}",
             if ok { "✔" } else { "!" }
         )?;
     }
@@ -385,7 +388,7 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
     if let Some((ok, text)) = super::proxy::service_line(&home) {
         writeln!(
             out,
-            "moat proxy       {} {text}",
+            "openmoat proxy   {} {text}",
             if ok { "✔" } else { "!" }
         )?;
         healthy &= ok;
