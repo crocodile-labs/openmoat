@@ -18,10 +18,27 @@ const REPLACEMENT: &str = "[redacted]";
 
 /// Credential patterns that run before [`TOKEN_SHAPES`], and what replaces each match.
 const NAMED: &[(&str, &str)] = &[
-    // Named credentials in key=value or key: value form; keep the key.
+    // Named credentials in key=value or key: value form; keep the key. The
+    // credential word may be one `_`- or `-`-separated part of a longer name
+    // (`AWS_SECRET_ACCESS_KEY`, `GH_TOKEN`, `access_token`), but not the start
+    // of a longer word (`tokenizer`, `secretary`, `max_tokens`).
     (
-        r"(?i)\b((?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|authorization|private[_-]?key)\s*[=:]\s*)(['\x22]?)((?:bearer|basic)\s+)?[^\s'\x22&;]+(['\x22]?)",
+        r"(?i)\b((?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|authorization|private[_-]?key)(?:[_-][a-z0-9]+)*\s*[=:]\s*)(['\x22]?)((?:bearer|basic)\s+)?[^\s'\x22&;]+(['\x22]?)",
         "${1}${2}${3}[redacted]${4}",
+    ),
+    // The same names as a flag with its value as the next argument
+    // (`--token abc`, `--db-password abc`). The name must end in the
+    // credential word, so `--password-stdin` and `--with-token < file` keep
+    // what follows, and a value cannot start with `-` (the next flag).
+    (
+        r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)(['\x22]?)[^\s'\x22&;|<>-][^\s'\x22&;|<>]*(['\x22]?)",
+        "${1}${2}[redacted]${3}",
+    ),
+    // `user:password` given to `-u` or `--user` (curl and others); a value
+    // without `:` (`git push -u origin`) has no password to mask.
+    (
+        r"((?:^|\s)(?:-u|--user)(?:\s+|=)['\x22]?[^\s:'\x22]+:)[^\s'\x22]+",
+        "${1}[redacted]",
     ),
     (
         r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}",
@@ -302,6 +319,67 @@ mod tests {
             redact("password=hunter2 user=bob"),
             "password=[redacted] user=bob"
         );
+    }
+
+    #[test]
+    fn credential_words_inside_longer_names() {
+        for (text, want) in [
+            (
+                "AWS_SECRET_ACCESS_KEY=wJalrFAKEfakeKEY aws s3 ls",
+                "AWS_SECRET_ACCESS_KEY=[redacted] aws s3 ls",
+            ),
+            (
+                "GH_TOKEN=abc123 gh pr list",
+                "GH_TOKEN=[redacted] gh pr list",
+            ),
+            ("export NPM_TOKEN='abc123'", "export NPM_TOKEN='[redacted]'"),
+            (
+                "DATABASE_PASSWORD=hunter2 ./run",
+                "DATABASE_PASSWORD=[redacted] ./run",
+            ),
+            ("MY_TOKEN: abc123", "MY_TOKEN: [redacted]"),
+            (
+                "curl 'https://x.test/?access_token=abc123&n=1'",
+                "curl 'https://x.test/?access_token=[redacted]&n=1'",
+            ),
+            ("tool --token=abc123", "tool --token=[redacted]"),
+            ("tool --token abc123 -v", "tool --token [redacted] -v"),
+            (
+                "psql --db-password \"abc123\"",
+                "psql --db-password \"[redacted]\"",
+            ),
+            (
+                "curl -u alice:s3cret https://x.test",
+                "curl -u alice:[redacted] https://x.test",
+            ),
+            (
+                "curl --user=alice:s3cret x.test",
+                "curl --user=alice:[redacted] x.test",
+            ),
+            (
+                "curl --user 'alice:s3cret' x.test",
+                "curl --user 'alice:[redacted]' x.test",
+            ),
+        ] {
+            assert_eq!(redact(text), want, "{text}");
+            assert_eq!(redact(want), want, "{want}");
+        }
+    }
+
+    #[test]
+    fn words_that_only_start_with_a_credential_word_are_kept() {
+        for text in [
+            "tokenizer=bpe max_tokens=100",
+            "the secretary: Jane",
+            "passwords are hashed",
+            "gh auth login --with-token < token.txt",
+            "docker login --password-stdin registry.example",
+            "tool --token --verbose",
+            "git push -u origin main",
+            "sort -u names.txt",
+        ] {
+            assert_eq!(redact(text), text);
+        }
     }
 
     #[test]

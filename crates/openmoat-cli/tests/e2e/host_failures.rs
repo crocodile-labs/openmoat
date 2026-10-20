@@ -323,7 +323,8 @@ fn moat_init_adds_a_new_tool_to_an_installed_matcher() {
         "{status}"
     );
 
-    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(0));
+    // The hook file drifted from the lock, so the repair is a person's.
+    assert_eq!(sb.moat_as_person(&["init", "--yes"]).status.code(), Some(0));
     let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     let matcher = settings["hooks"]["PreToolUse"][0]["matcher"]
         .as_str()

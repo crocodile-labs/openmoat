@@ -479,7 +479,9 @@ away. Codex has no such key: a failed hook "continues the tool call"
 
 ## 7. Audit log
 
-`~/.moat/audit.db` is SQLite in WAL mode, created with mode 0600, with one `events`
+`~/.moat/audit.db` is SQLite in WAL mode, created with mode 0600 on macOS and Linux
+(on Windows it keeps the permissions it inherits from its directory, by default inside the
+user's profile; OpenMoat sets none of its own there), with one `events`
 table (time, host, session, call id, working directory, tool, action, verdict, rules,
 reasons, latency). Every governed and ungoverned call is recorded. `Store::record`
 redacts every text the agent can influence (each string of the action, the reasons,
@@ -627,7 +629,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 ## 8. Files on disk
 
 ```
-~/.moat/                       ($MOAT_HOME overrides; directory 0700, files 0600)
+~/.moat/                       ($MOAT_HOME overrides; directory 0700, files 0600 on macOS and Linux; on Windows inherited permissions)
   policy.yaml                  user policy (moat init writes the default once)
   policy.yaml.bak              the policy before the last `moat edit` applied a change
   policy.base.yaml             the shipped default the policy started from or was last upgraded to

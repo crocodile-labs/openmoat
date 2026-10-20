@@ -3,7 +3,7 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use openmoat_audit::Store;
 use openmoat_core::{DEFAULT_POLICY, Policy};
 use openmoat_hosts::Host;
@@ -18,6 +18,8 @@ use crate::render::Deferred;
 use crate::sandbox::{self, Plan};
 
 mod preview;
+#[cfg(test)]
+mod tests;
 
 pub fn run(args: &InitArgs) -> Result<Code> {
     let dry_run = args.dry_run;
@@ -26,6 +28,9 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let binary = crate::install::hook_binary()?;
     refuse_writable_binary(&home, &binary)?;
     let mut out = Deferred::default();
+    if !dry_run {
+        refuse_repin(&home, &mut out)?;
+    }
     // Asked before anything is written, so declining everything changes nothing
     // but OpenMoat's own state directory.
     let hosts = choose_hosts(&home, args, &binary, &mut out)?;
@@ -100,6 +105,64 @@ fn mcp_servers(
     )?;
     if proxy {
         super::mcp::wrap_servers(home, binary, hosts, &[], false, false, out)?;
+    }
+    Ok(())
+}
+
+/// Which checks guard `init`'s re-pin of an existing lock.
+#[derive(Debug, PartialEq, Eq)]
+struct RepinChecks {
+    /// Refuse when an agent is among the parent processes.
+    agent: bool,
+    /// Refuse when pinned files drifted.
+    drift: bool,
+}
+
+/// The checks for an `init` that writes. A first install has no lock, so
+/// nothing to re-pin, and stays open to scripts and the agent setting it up.
+/// Over an existing lock an agent is always refused; without a terminal (a
+/// script, CI, or a process detached from the agent that started it) drift
+/// is refused too, while a person at a terminal re-pins over it as
+/// documented, shown what drifted.
+fn repin_checks(lock_exists: bool, interactive: bool) -> RepinChecks {
+    RepinChecks {
+        agent: lock_exists,
+        drift: lock_exists && !interactive,
+    }
+}
+
+/// Refuse, before anything is written, a re-pin [`repin_checks`] does not
+/// allow. An unreadable lock is not refused: `init` is how a person recovers
+/// from one.
+fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<()> {
+    let lock_path = home.lock_path();
+    let lock_exists = lock_path.exists();
+    let checks = repin_checks(lock_exists, crate::terminal::interactive());
+    let drift: Vec<String> = if lock_exists {
+        integrity::Lock::load(&lock_path)
+            .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    if checks.drift && !drift.is_empty() {
+        bail!(
+            "refusing to re-pin while the policy lock shows drift ({}) and no person is at \
+             a terminal:\n  {}\nrun `moat doctor` to see what changed, then `moat doctor \
+             --accept` in a terminal of your own if the changes are yours",
+            integrity::INTEGRITY_RULE,
+            drift.join("\n  ")
+        );
+    }
+    if checks.agent {
+        crate::terminal::refuse_agent("moat init")?;
+    }
+    if !drift.is_empty() {
+        writeln!(
+            out,
+            "! lock drift       re-pinning over: {}",
+            drift.join("; ")
+        )?;
     }
     Ok(())
 }
