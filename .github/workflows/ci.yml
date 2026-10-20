@@ -271,7 +271,7 @@ jobs:
       - name: run every target
         working-directory: fuzz
         run: |
-          for target in decide_shell policy_parse host_payload literal_pattern proxy_parse; do
+          for target in decide_shell policy_parse host_payload literal_pattern proxy_parse openclaw_json5; do
             cargo fuzz run -O "$target" "corpus/$target" -- -max_total_time="$SECONDS_PER_TARGET"
           done
       - name: keep crashing inputs

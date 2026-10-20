@@ -55,4 +55,19 @@ write("proxy_parse", bytes.fromhex(
     "16030100430100003f0303010101010101010104ff01010101010101010101010101010101010101"
     "01014000000213010100001400000010000e3b0001010100000200000000012e00006d"
 ))
+# openclaw_json5: OpenClaw-style openclaw.json files using each JSON5 feature.
+for doc in [
+    b'{"plugins": {"entries": {"openmoat": {"enabled": true}}}}',
+    b"// OpenClaw config\n{\n  plugins: {\n    load: { paths: ['~/.openclaw/plugins/openmoat'], },\n"
+    b"    entries: { openmoat: { enabled: true, }, },\n  },\n}\n",
+    b"/* block */ { gateway: { port: 0x4e20, timeout: .5, retries: +3, ratio: 5., }, }",
+    b"{ 'single': 'it\\'s', \"esc\": \"\\u00e9\\ud83d\\ude00\\x41\\\n line\", $id: null, _k: [1e3, -0x10] }",
+    b"{ a: Infinity }",
+    b"{ a: 1, a: 2 }",
+    b"[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+]:
+    write("openclaw_json5", doc)
+for path in glob.glob(os.path.join(ROOT, "tests", "fixtures", "hosts", "openclaw", "*.json")):
+    with open(path, "rb") as f:
+        write("openclaw_json5", f.read())
 print(f"seeded {len(commands)} commands")

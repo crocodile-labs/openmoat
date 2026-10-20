@@ -78,7 +78,10 @@ fn copy(
                 let _ = to.shutdown(Shutdown::Write);
                 return;
             }
-            // Dropped bytes do not count as activity.
+            // Dropped bytes do not count as activity. Intended: once the
+            // request ends, only the upstream's answer keeps the connection
+            // open, so an upstream silent for `idle` is closed even while the
+            // client keeps sending; a client cannot hold it open by trickling.
             Ok(_) if dropping => {}
             Ok(n) => {
                 let forward = inspect

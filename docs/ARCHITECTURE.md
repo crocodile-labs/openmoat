@@ -679,8 +679,8 @@ tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool cal
 tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, cursor, openclaw)
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
-                               host_payload, literal_pattern, proxy_parse
-                               (separate workspace)
+                               host_payload, literal_pattern, proxy_parse,
+                               openclaw_json5 (separate workspace)
 docs/                          this document, INSTALL, USAGE, SANDBOX, POLICY,
                                THREAT_MODEL, ROADMAP, COVERAGE and EVIDENCE
                                (generated), adr/

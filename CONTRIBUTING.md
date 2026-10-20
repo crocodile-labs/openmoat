@@ -218,7 +218,9 @@ prints. The temporary directory is kept so you can inspect it.
 `decide_shell` (any command line through the lexer, classifier and engine),
 `policy_parse` (any policy file), `host_payload` (any hook payload, every host),
 `literal_pattern` (`moat allow --always` must produce a rule that lints and matches its
-command) and `proxy_parse` (any request head or TLS `ClientHello` `moat proxy` reads). It is a separate workspace built with nightly:
+command), `proxy_parse` (any request head or TLS `ClientHello` `moat proxy` reads) and
+`openclaw_json5` (any `openclaw.json`: the CLI's JSON5 reader, compiled from
+`crates/openmoat-cli/src/json5.rs`). It is a separate workspace built with nightly:
 
 ```bash
 cargo install cargo-fuzz --version 0.13.1 --locked

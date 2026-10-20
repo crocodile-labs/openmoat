@@ -1151,3 +1151,153 @@
 - id: benign-read-containers-storage-conf
   action: { shell: "cat ~/.config/containers/storage.conf" }
   expect: { verdict: defer, rules: [default] }
+
+# Everyday work next to the shapes of T3, T5, T6, T8 and T11, so a rule that
+# tightens too far fails here rather than in a user's session.
+# T3: variables that are not secret, and naming a variable without reading it.
+- id: benign-t3-echo-home
+  threat: T3
+  action: { shell: "echo $HOME" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t3-echo-path
+  threat: T3
+  action: { shell: "echo \"$PATH\"" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t3-printenv-one-plain-variable
+  threat: T3
+  action: { shell: "printenv NODE_ENV" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-env-runs-command-with-plain-variable
+  threat: T3
+  action: { shell: "env RUST_LOG=debug cargo test" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-plain-variable-prefix
+  threat: T3
+  action: { shell: "RUST_BACKTRACE=1 cargo test" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-grep-secret-name-in-source
+  threat: T3
+  action: { shell: "grep -rn OPENAI_API_KEY ./src" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-t3-echo-user-and-shell
+  threat: T3
+  action: { shell: "echo \"$USER on $SHELL\"" }
+  expect: { verdict: allow, rules: [dev-shell] }
+# T5: installs from the lock file, popular packages and running project scripts.
+- id: benign-t5-npm-ci
+  threat: T5
+  action: { shell: "npm ci" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-pnpm-install-frozen
+  threat: T5
+  action: { shell: "pnpm install --frozen-lockfile" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-npm-install-popular
+  threat: T5
+  action: { shell: "npm install react react-dom" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-pip-install-requirements
+  threat: T5
+  action: { shell: "pip install -r requirements.txt" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-cargo-add-popular
+  threat: T5
+  action: { shell: "cargo add serde --features derive" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-uv-sync
+  threat: T5
+  action: { shell: "uv sync" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-curl-download-to-file
+  threat: T5
+  action: { shell: "curl -fsSL -o ./tmp/install.sh https://github.com/x/y/raw/main/install.sh" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-npm-run-build
+  threat: T5
+  action: { shell: "npm run build" }
+  expect: { verdict: allow, rules: [dev-shell] }
+# T6: project-local variables, virtual environments and git config reads.
+- id: benign-t6-node-env-prefix
+  threat: T6
+  action: { shell: "NODE_ENV=production npm run build" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t6-export-plain-variable
+  threat: T6
+  action: { shell: "export RUST_LOG=info && cargo run" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t6-git-config-get
+  threat: T6
+  action: { shell: "git config --get user.email" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t6-git-config-list
+  threat: T6
+  action: { shell: "git config --list --show-origin" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t6-venv-python-run
+  threat: T6
+  action: { shell: ".venv/bin/python -m pytest -q" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t6-which-node
+  threat: T6
+  action: { shell: "which node" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t6-write-project-envrc-example
+  threat: T6
+  action: { fs_write: "/p/.envrc.example" }
+  expect: { verdict: allow, rules: [project-fs] }
+# T8: MCP tools reading and writing the project and fetching allowed hosts.
+- id: benign-t8-mcp-github-list-issues
+  threat: T8
+  action: { mcp_tool: "mcp__github__list_issues" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t8-mcp-filesystem-list-project
+  threat: T8
+  action: { mcp_tool: { name: mcp__filesystem__list_directory, reads: ["/p/src"] } }
+  expect: { verdict: allow, rules: [safe-mcp, project-fs] }
+- id: benign-t8-mcp-filesystem-write-project
+  threat: T8
+  action: { mcp_tool: { name: mcp__filesystem__write_file, writes: ["/p/docs/notes.md"] } }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t8-mcp-github-search-code
+  threat: T8
+  action: { mcp_tool: { name: mcp__github__search_code, hosts: ["https://api.github.com/search/code"] } }
+  expect: { verdict: allow, rules: [safe-mcp] }
+- id: benign-t8-mcp-filesystem-read-relative
+  threat: T8
+  action: { mcp_tool: { name: mcp__filesystem__read_file, reads: ["src/lib.rs"] } }
+  expect: { verdict: allow, rules: [safe-mcp, project-fs] }
+- id: benign-t8-mcp-context7-docs
+  threat: T8
+  action: { mcp_tool: "mcp__context7__get_library_docs" }
+  expect: { verdict: defer, rules: [default] }
+# T11: symlinks that stay in the project or point at ordinary files.
+- id: benign-t11-read-through-link-in-project
+  threat: T11
+  action: { shell: "cat ./current/README.md" }
+  links: { /p/current: /p/releases/v2 }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-t11-write-through-link-in-project
+  threat: T11
+  action: { fs_write: "/p/latest/CHANGELOG.md" }
+  links: { /p/latest: /p/packages/core }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-t11-read-file-link-in-project
+  threat: T11
+  action: { fs_read: "/p/AGENTS.md" }
+  links: { /p/AGENTS.md: /p/docs/agents.md }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-t11-mcp-read-through-link-in-project
+  threat: T11
+  action: { mcp_tool: { name: mcp__filesystem__read_file, reads: [/p/cfg/app.yml] } }
+  links: { /p/cfg: /p/config/dev }
+  expect: { verdict: allow, rules: [safe-mcp, project-fs] }
+- id: benign-t11-ls-link-in-project
+  threat: T11
+  action: { shell: "ls -la ./node_modules/.bin" }
+  links: { /p/node_modules/.bin: /p/node_modules/.pnpm/bin }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-t11-link-to-temp-directory
+  threat: T11
+  action: { fs_write: "/p/scratch/out.txt" }
+  links: { /p/scratch: /tmp/build-scratch }
+  expect: { verdict: defer, rules: [default] }
