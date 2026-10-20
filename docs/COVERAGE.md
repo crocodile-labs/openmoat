@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 31 | 20 | 0 |
 | T7 | Obfuscation and nested execution | 122 | 102 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 12 | 0 | 0 |
-| T9 | Hook / policy tampering by the agent | 165 | 46 | 7 |
+| T9 | Hook / policy tampering by the agent | 167 | 46 | 7 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 0 |
 | T12 | Network to unknown hosts | 47 | 17 | 1 |
@@ -822,6 +822,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-clone-into-project` (ask): Defer [default]
 - `T9-edit-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-project-claude-settings` (attacks): Deny [kernel-self]
+- `T9-edit-shared-project-claude-settings` (attacks): Deny [kernel-self]
+- `T9-redirect-disable-all-hooks-into-project-settings` (attacks): Deny [kernel-self]
 - `T9-edit-moat-policy` (attacks): Deny [kernel-self]
 - `T9-redirect-into-moat` (attacks): Deny [kernel-self]
 - `T9-read-audit-db` (attacks): Deny [kernel-self]

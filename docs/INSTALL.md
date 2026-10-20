@@ -208,6 +208,28 @@ the stable path still resolves to the new binary. After a reinstall at a
 different path (a Cargo change of `--root`, say), run `moat proxy install`
 again so the service file names the new path.
 
+## Teams: managed settings
+
+`moat init` writes OpenMoat's Claude Code hooks to the user `settings.json`. A
+repository's `.claude/settings.json` can turn every user-level hook off with
+`"disableAllHooks": true`, and Claude Code loads it when a session starts, before any
+hook runs. OpenMoat blocks such a change mid-session and `moat doctor` and `moat status`
+warn about it, but cannot stop it at start (THREAT_MODEL §5). Only Claude Code's
+[managed settings](https://code.claude.com/docs/en/managed-settings), which an
+administrator deploys and the user cannot edit, make the hooks immune: a `disableAllHooks`
+outside them cannot turn off a hook set in them. For teams:
+
+1. Copy the `PreToolUse` and `ConfigChange` entries `moat init` wrote to
+   `~/.claude/settings.json` (they run `moat` by its stable path, ADR-016) into the
+   managed settings file, and keep them in the user file too, which `moat doctor`
+   checks.
+2. Add `"allowManagedHooksOnly": true` there to also block user, project, local and
+   plugin hooks (except plugins the managed settings force on) and to take `statusLine`
+   and file suggestion commands only from managed settings.
+
+OpenMoat does not write or pin managed settings; whoever deploys them keeps them in step
+with `moat init` after an upgrade that changes the hook entries.
+
 ## Undo with `moat uninstall`
 
 ```bash

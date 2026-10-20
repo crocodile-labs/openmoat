@@ -254,8 +254,7 @@ fn evaluate(
     } = &request.event
     {
         let change = change_type.as_deref().unwrap_or("changed");
-        let decision =
-            config_change::decision(&Home::locate()?, request.action.as_ref(), source, change)?;
+        let decision = config_change::decision(&Home::locate()?, &request, source, change)?;
         return Ok((Some(request), decision));
     }
     // Lock before decide, ungoverned tools included: an `allow` while pinned

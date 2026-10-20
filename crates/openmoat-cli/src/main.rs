@@ -21,6 +21,7 @@ mod mcp;
 mod os_version;
 mod packs;
 mod project;
+mod project_settings;
 mod protection;
 mod push;
 mod realpath;
