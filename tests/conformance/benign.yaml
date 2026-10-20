@@ -197,6 +197,13 @@
 - id: benign-git-fetch-origin
   action: { shell: "git fetch origin" }
   expect: { verdict: allow, rules: [dev-shell] }
+# A directory named like a domain (a website's repository) is a path, not a host.
+- id: benign-git-fetch-in-a-directory-named-like-a-domain
+  action: { shell: "git -C site.dev fetch -q origin" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-git-work-tree-named-like-a-domain
+  action: { shell: "git --work-tree=docs.example.com pull --rebase" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
 - id: benign-git-pull-rebase
   action: { shell: "git pull --rebase" }
   expect: { verdict: allow, rules: [dev-shell] }

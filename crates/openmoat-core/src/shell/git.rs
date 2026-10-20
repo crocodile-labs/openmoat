@@ -86,6 +86,9 @@ pub(crate) struct GitCommand<'a> {
     pub directories: Vec<&'a str>,
     /// Values of `-C` alone, in order: git changes into each before it runs.
     pub chdirs: Vec<&'a str>,
+    /// The argv indices of the words holding those directories: local paths,
+    /// read by [`push_shell`], never hosts (`git -C site.dev fetch`).
+    pub directory_words: Vec<usize>,
     /// True when an option can run a program, names the git directory or is not
     /// understood: the command line as written must be judged too.
     pub keep_original: bool,
@@ -95,6 +98,7 @@ pub(crate) struct GitCommand<'a> {
 pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
     let mut directories = Vec::new();
     let mut chdirs = Vec::new();
+    let mut directory_words = Vec::new();
     let mut keep_original = false;
     let mut i = 1;
     while let Some(arg) = argv.get(i).filter(|a| a.starts_with('-')) {
@@ -120,6 +124,7 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
         i += usize::from(inline.is_none());
         if DIRECTORIES.contains(&name) {
             directories.push(value);
+            directory_words.push(i - 1);
             if name == "-C" {
                 chdirs.push(value);
             }
@@ -138,8 +143,21 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
         subcommand: argv[..1].iter().chain(&argv[i..]).cloned().collect(),
         directories,
         chdirs,
+        directory_words,
         keep_original,
     }
+}
+
+/// The argv indices of words that are no file or host for the argument scan:
+/// the name `git config` looks up ([`config_name`]) and, for `git`, the
+/// directories its global options name, which [`push_shell`] reads
+/// ([`GitCommand::directory_words`]).
+pub(super) fn data_words(argv: &[String], program: &str) -> Vec<usize> {
+    let mut words: Vec<usize> = config_name(argv).into_iter().collect();
+    if program == "git" {
+        words.extend(parse(argv).directory_words);
+    }
+    words
 }
 
 /// True when the subcommand, past git's global options (`git -C dir push`), names a

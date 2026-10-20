@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 127 | 51 | 3 |
+| T1 | Secret exfiltration via shell | 128 | 51 | 3 |
 | T2 | Secret exfiltration via file tools | 26 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 79 | 3 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
@@ -18,7 +18,7 @@ the verdict and rule ids the default policy must produce for it.
 | T9 | Hook / policy tampering by the agent | 185 | 46 | 7 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
-| T12 | Network to unknown hosts | 76 | 17 | 1 |
+| T12 | Network to unknown hosts | 78 | 17 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -154,6 +154,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-docker-build-dockerfile-from-ssh` (attacks): Deny [secrets-paths]
 - `T1-uv-run-env-file` (attacks): Deny [secrets-paths]
 - `T1-ssh-attached-identity-file` (attacks): Deny [secrets-paths]
+- `T1-git-directory-named-like-a-domain-under-ssh` (attacks): Deny [secrets-paths]
 - `T1-other-user-home-relative-asks` (attacks): Ask [other-home]
 - `T1-key-read-inside-for-loop` (attacks): Deny [secrets-paths]
 - `T1-env-read-after-if` (attacks): Deny [secrets-paths]
@@ -1180,6 +1181,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-curl-quoted-bare-host-is-still-net` (attacks): Deny [default.net]
 - `T12-ssh-quoted-host-is-still-net` (attacks): Deny [default.net]
 - `T12-git-option-before-push-host-is-still-net` (attacks): Deny [default.net]
+- `T12-git-push-to-a-host-from-a-directory-named-like-one` (attacks): Deny [default.net]
+- `T12-git-fetch-url-from-a-directory-named-like-a-domain` (attacks): Deny [default.net]
 - `T12-openssl-s-client-unlisted-host` (attacks): Deny [default.net]
 - `T12-socat-address-unlisted-host` (attacks): Deny [default.net]
 - `T12-psql-host-option-unlisted-host` (attacks): Deny [default.net]
