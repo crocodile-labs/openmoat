@@ -315,7 +315,7 @@ fn classify_as_written(
     text_operands
         .data
         .extend(database::classify(&argv, program, stdin, ctx, sink)?);
-    text_operands.data.extend(git::config_name(&argv));
+    text_operands.data.extend(git::data_words(&argv, program));
     text_operands
         .data
         .extend(options::fd_pattern(&argv, program).or(options::grep_pattern(&argv, program)));
