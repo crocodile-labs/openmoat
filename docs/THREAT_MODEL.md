@@ -544,7 +544,10 @@ something OpenMoat claims to stop.
   by lists. Spellings outside the lists defer to the agent's own prompt or, if a broad allow covers them, are
   allowed.
 - **Interpreter code is scanned, not parsed.** A file that inline `python -c`, `node -e`
-  or similar code opens for writing is not checked as a write.
+  or similar code opens for writing is not checked as a write. Environment reads are
+  recognised by their usual spellings (`os.environ`, `os.getenv`, `process.env`, `ENV`,
+  `$ENV{…}`, `%ENV`, `getenv`, `$env:`); the environment reached through an alias
+  (`e = os.environ`, then `print(e)`) or another spelling is not seen.
 - **TOCTOU and hard links.** A link swapped between the check and the command
   running, and hard links, are not seen (ADR-009).
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand

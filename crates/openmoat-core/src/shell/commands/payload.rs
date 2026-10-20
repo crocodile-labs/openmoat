@@ -2,6 +2,8 @@
 //! interpreter's stdin) is not shell, so it is scanned for the paths, hosts and
 //! variables it names rather than parsed.
 
+mod environ;
+
 use crate::action::AtomicAction;
 use crate::host;
 use crate::paths;
@@ -46,6 +48,16 @@ pub(super) fn scan_payload(
         for name in env_refs(raw) {
             sink.push(AtomicAction::EnvRead { name })?;
         }
+    }
+    let (names, whole) = environ::reads(payload);
+    for name in names {
+        sink.push(AtomicAction::EnvRead { name })?;
+    }
+    // every variable, secrets included: `@env-dump <expression>`, which `env-dump` denies
+    if let Some(expression) = whole {
+        sink.push(AtomicAction::Shell {
+            argv: vec!["@env-dump".to_owned(), expression.to_owned()],
+        })?;
     }
     Ok(())
 }

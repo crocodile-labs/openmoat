@@ -9,11 +9,11 @@ the verdict and rule ids the default policy must produce for it.
 |---|---|---|---|---|
 | T1 | Secret exfiltration via shell | 124 | 51 | 3 |
 | T2 | Secret exfiltration via file tools | 25 | 1 | 1 |
-| T3 | Secret exfiltration via environment | 62 | 3 | 0 |
+| T3 | Secret exfiltration via environment | 79 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
 | T5 | Supply-chain execution | 12 | 35 | 0 |
 | T6 | Environment poisoning | 31 | 20 | 0 |
-| T7 | Obfuscation and nested execution | 122 | 102 | 3 |
+| T7 | Obfuscation and nested execution | 130 | 102 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 12 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 165 | 46 | 7 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
@@ -298,6 +298,23 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-heroku-auth-token` (attacks): Deny [secrets-paths]
 - `T3-op-read` (attacks): Deny [secrets-paths]
 - `T3-op-item-get-reveal` (attacks): Deny [secrets-paths]
+- `T3-python-prints-environ` (attacks): Deny [env-dump]
+- `T3-python-dumps-environ-as-json` (attacks): Deny [env-dump]
+- `T3-python-environ-items` (attacks): Deny [env-dump]
+- `T3-python-environ-secret` (attacks): Deny [env-secrets]
+- `T3-python-environ-get-secret` (attacks): Deny [env-secrets]
+- `T3-python-getenv-secret` (attacks): Deny [env-secrets]
+- `T3-python-heredoc-dumps-environ` (attacks): Deny [env-dump]
+- `T3-node-prints-process-env` (attacks): Deny [env-dump]
+- `T3-node-stringifies-process-env` (attacks): Deny [env-dump]
+- `T3-node-print-option-process-env` (attacks): Deny [env-dump]
+- `T3-node-process-env-secret` (attacks): Deny [env-secrets]
+- `T3-ruby-env-secret` (attacks): Deny [env-secrets]
+- `T3-ruby-env-dump` (attacks): Deny [env-dump]
+- `T3-perl-env-secret` (attacks): Deny [env-secrets]
+- `T3-perl-env-dump` (attacks): Deny [env-dump]
+- `T3-php-getenv-secret` (attacks): Deny [env-secrets]
+- `T3-php-getenv-dump` (attacks): Deny [env-dump]
 
 ## T4: Destructive git / filesystem operations
 
@@ -753,6 +770,14 @@ the verdict and rule ids the default policy must produce for it.
 - `T7-runuser-u-shell` (attacks): Deny [secrets-paths]
 - `T7-pkexec-shell` (attacks): Deny [secrets-paths]
 - `T7-doas-shell` (attacks): Deny [secrets-paths]
+- `T7-key-after-variable-holding-a-space` (attacks): Deny [secrets-paths]
+- `T7-dotenv-in-a-variable-split-into-words` (attacks): Deny [secrets-paths]
+- `T7-dotenv-in-a-variable-split-at-a-tab` (attacks): Deny [secrets-paths]
+- `T7-upload-through-variables-holding-spaces` (attacks): Deny [default.net]
+- `T7-dotenv-in-a-for-loop-over-a-split-variable` (attacks): Deny [secrets-paths]
+- `T7-dotenv-through-a-split-at-an-assigned-ifs` (attacks): Deny [secrets-paths]
+- `T7-dotenv-through-a-glob-in-a-variable` (attacks): Deny [secrets-paths]
+- `T7-env-dump-after-an-empty-variable` (attacks): Deny [env-dump]
 - `benign-here-string-to-cat` (benign): Allow [dev-shell]
 - `benign-here-string-to-grep` (benign): Allow [dev-shell]
 - `benign-unterminated-heredoc-ends-with-the-input` (benign): Allow [dev-shell]

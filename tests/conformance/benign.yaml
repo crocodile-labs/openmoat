@@ -1151,3 +1151,39 @@
 - id: benign-read-containers-storage-conf
   action: { shell: "cat ~/.config/containers/storage.conf" }
   expect: { verdict: defer, rules: [default] }
+# a variable holding several words: split where unquoted, one word in quotes
+- id: benign-quoted-variable-holding-a-space
+  action: { shell: "x='a b'; echo \"$x\"" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-variable-split-into-project-files
+  action: { shell: "x='README.md src/main.rs'; cat $x" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-for-loop-over-a-split-variable
+  action: { shell: "files='src/a.rs src/b.rs'; for f in $files; do cat $f; done" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-quoted-variable-holding-a-glob
+  action: { shell: "x='*.rs'; echo \"$x\"" }
+  expect: { verdict: allow, rules: [dev-shell] }
+# inline code that names no secret variable and does not print the environment
+# defers as before: the interpreter itself is the agent's prompt to decide
+- id: benign-python-print
+  action: { shell: "python3 -c \"print(1)\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-getcwd
+  action: { shell: "python3 -c \"import os;print(os.getcwd())\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-environ-home
+  action: { shell: "python3 -c \"import os;print(os.environ['HOME'])\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-environ-to-a-child
+  action: { shell: "python3 -c \"import os,subprocess;subprocess.run(['ls'],env={**os.environ,'A':'1'})\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-node-argv
+  action: { shell: "node -e \"console.log(process.argv)\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-node-env-node-env
+  action: { shell: "node -e 'console.log(process.env.NODE_ENV)'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ruby-env-fetch-rails-env
+  action: { shell: "ruby -e \"puts ENV.fetch('RAILS_ENV')\"" }
+  expect: { verdict: defer, rules: [default] }
