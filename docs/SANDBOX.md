@@ -270,6 +270,18 @@ available, the Standard tier keeps its commands out of the home altogether.
   macOS 15 runners (`macos-15-intel`) did not show it.
 - **Linux 6.7 or later:** Landlock rules, plus a seccomp filter that allows only TCP
   sockets (no UDP, Unix sockets or `ptrace`). Windows refuses.
+- **The network on Linux.** Landlock restricts TCP connections by port only, and a
+  seccomp filter cannot read the address `connect()` is given (it gets a pointer), so
+  those two alone would let a command reach any host on the proxy's port and go around
+  the proxy. Where bubblewrap can run (`bwrap` in `/usr/bin`, `/bin` or
+  `/usr/local/bin`, and unprivileged user namespaces, as for `--isolate` below),
+  `moat run` starts the agent in a network namespace of its own with nothing but
+  loopback, where OpenMoat serves the proxy's port and relays each connection over a
+  Unix socket to the proxy outside. Nothing else changes: the agent sees the machine's
+  files as before, and the same Landlock rules and seccomp filter apply. Where
+  bubblewrap is missing or cannot create the namespaces, `moat run` starts with
+  Landlock and seccomp alone and says on every start that the network is restricted
+  by port only, and `moat doctor` warns.
 - **What Linux does not protect.** Landlock can only grant access to whole directory
   trees, so inside the project the policy's deny rules do not hold for the agent's
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
@@ -315,8 +327,8 @@ available, the Standard tier keeps its commands out of the home altogether.
 - Before the agent starts, `moat run` prints how many places the sandbox is stricter
   or wider than the policy; `moat run --verbose` lists each one (`moat sandbox show`
   prints the same for the current directory). Linux is wider than macOS (the paths inside
-  the project above, and the proxy's port is reachable on any host; `--isolate` closes
-  both, below); see [THREAT_MODEL.md](THREAT_MODEL.md).
+  the project above, and, without bubblewrap, the proxy's port on any host; `--isolate`
+  closes both, below); see [THREAT_MODEL.md](THREAT_MODEL.md).
 
 It is weaker per command than the Standard tier: the agent and its scripts share one
 sandbox, so whatever the agent needs, `npm test` gets too. On macOS and Linux alike,
@@ -335,7 +347,8 @@ records it outside the sandbox (ADR-028). The sandbox gets no new rule for this:
 - Linux: Landlock does not restrict connecting to a Unix socket by path at the ABI
   `moat run` uses (ABI 6 scopes only abstract sockets), which is why the seccomp
   filter refuses Unix sockets altogether. The relay uses the proxy's TCP port, so that
-  filter and the Landlock port rule stay as they are, under `--isolate` too.
+  filter and the Landlock port rule stay as they are, in the network namespace and
+  under `--isolate` too.
 
 If the token is wrong, the connection fails or no answer comes within the hook's
 10 s, the hook denies the call.

@@ -9,7 +9,8 @@
 //!   is listed as an allowance; the hook still decides those accesses;
 //! - a glob cannot be granted, so it stays denied (a loss);
 //! - TCP connections are restricted by port only (ABI 4): the proxy's port is
-//!   reachable on any host;
+//!   reachable on any host, unless `moat run` also gives the agent a network
+//!   namespace (`commands/run/linux/netns.rs`), which drops this allowance;
 //! - Landlock does not restrict UDP or connecting to Unix sockets: `moat run`'s
 //!   seccomp filter (`super::seccomp`) closes them, so they are not listed.
 

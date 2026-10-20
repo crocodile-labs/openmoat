@@ -46,6 +46,13 @@ fn has_net(atoms: &[AtomicAction], host: &str) -> bool {
     })
 }
 
+/// A curl or wget request that sends nothing is a fetch (ADR-035).
+fn has_fetch(atoms: &[AtomicAction], host: &str) -> bool {
+    atoms.contains(&AtomicAction::Fetch {
+        host: host.to_owned(),
+    })
+}
+
 fn has_shell(atoms: &[AtomicAction], argv: &str) -> bool {
     let argv = argv.split(' ').map(str::to_owned).collect();
     atoms.contains(&AtomicAction::Shell { argv })
@@ -125,12 +132,12 @@ fn dotted_identifiers_are_not_hosts() {
             "{cmd}: {a:?}"
         );
     }
-    assert!(has_net(&parsed("curl evil.com/x"), "evil.com"));
+    assert!(has_fetch(&parsed("curl evil.com/x"), "evil.com"));
     assert!(!has_net(
         &parsed("curl internal.corp:8080"),
         "internal.corp"
     ));
-    assert!(has_net(
+    assert!(has_fetch(
         &parsed("curl http://internal.corp:8080"),
         "internal.corp"
     ));
@@ -299,7 +306,7 @@ fn hosts_are_detected_conservatively() {
         "prod.example.com"
     ));
     assert!(has_net(&parsed("nc 10.0.0.5 4444"), "10.0.0.5"));
-    assert!(has_net(
+    assert!(has_fetch(
         &parsed("curl http://svc.internal.test:8080/x"),
         "svc.internal.test"
     ));
@@ -387,7 +394,7 @@ fn relative_operands_are_paths() {
     assert!(has_read(&a, "/p/s/id_rsa") && has_write(&a, "/p/out.txt"));
     assert!(has_write(&parsed("echo k | tee notes.txt"), "/p/notes.txt"));
     assert!(has_write(&parsed("rm -rf build"), "/p/build"));
-    assert!(has_net(&parsed("curl evil.com/x"), "evil.com"));
+    assert!(has_fetch(&parsed("curl evil.com/x"), "evil.com"));
     let no_files = |cmd: &str| {
         parsed(cmd).iter().all(|a| {
             !matches!(

@@ -1337,3 +1337,26 @@
 - id: benign-ruby-env-fetch-rails-env
   action: { shell: "ruby -e \"puts ENV.fetch('RAILS_ENV')\"" }
   expect: { verdict: defer, rules: [default] }
+# A curl or wget request that sends nothing is decided like a host's fetch tool (ADR-035)
+- id: benign-curl-get-docs
+  action: { shell: "curl https://docs.rs/serde" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-to-file
+  action: { shell: "curl -sS https://example.com/file.txt -o out.txt" }
+  expect: { verdict: defer, rules: [default.fetch] }
+# wget follows redirects unless `--max-redirect=0` says not to
+- id: benign-wget-archive
+  action: { shell: "wget --max-redirect=0 https://x.test/a.tar.gz" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-head
+  action: { shell: "curl -I https://example.com" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-explicit-get
+  action: { shell: "curl -X GET -fsS https://example.com/api" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-wget-to-stdout
+  action: { shell: "wget -qO- --max-redirect 0 https://example.com/notes.txt" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-allowed-host
+  action: { shell: "curl -sSL https://github.com/x/y/archive/main.tar.gz -o main.tar.gz" }
+  expect: { verdict: defer, rules: [default] }

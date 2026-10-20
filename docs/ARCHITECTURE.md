@@ -1031,6 +1031,18 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   so only the proxy resolves names, as on macOS: a tool that ignores `HTTP(S)_PROXY`
   cannot resolve them. Programs that list network interfaces (`getifaddrs`, netlink)
   get an error.
+- **Network namespace (Linux, without `--isolate`).** Landlock restricts TCP by port
+  only and seccomp cannot read `connect()`'s address, so `run/linux/netns.rs` probes the
+  system's `bwrap` and, where it can create the namespaces, starts the agent under
+  `/bin/sh -c "trap '' INT; exec …" bwrap --unshare-user --unshare-net
+  --die-with-parent --dev-bind / /` (the shell keeps Ctrl-C from ending bubblewrap's
+  monitor), running `moat isolated` as under `--isolate`: the proxy's port is relayed
+  into a namespace with only loopback, and the same Landlock rules and seccomp filter
+  apply inside; the Landlock rules are also built outside first, so a kernel without
+  ABI 4 is refused before anything starts. `landlock.tcp-port` is dropped from the
+  report there. Where `bwrap` is missing or the probe fails, the agent starts as before
+  and `moat run` prints that the network is restricted by port only; `moat doctor`
+  warns.
 - **`--isolate` (Isolated tier, Linux).** `run/linux/isolate.rs` starts the agent under
   `bwrap --unshare-all --unshare-user --die-with-parent` with the mounts
   `sandbox/bwrap.rs` generates from the same Landlock rules: each read path read-only,

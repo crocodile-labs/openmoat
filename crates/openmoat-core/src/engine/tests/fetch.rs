@@ -35,13 +35,16 @@ fn fetch_is_a_narrower_kind_of_net() {
             Verdict::Ask,
             "default.fetch",
         ),
+        // a curl that sends nothing is a fetch (ADR-035); one that can send data is `net`
+        // the fetch allow covers the host; the command itself takes this policy's default
+        (shell("curl https://docs.rs/serde"), Verdict::Ask, "default"),
         (
-            shell("curl https://docs.rs/serde"),
+            shell("curl -d x=1 https://docs.rs/serde"),
             Verdict::Deny,
             "default.net",
         ),
         (
-            shell("curl https://unknown.example/"),
+            shell("curl -T f https://unknown.example/"),
             Verdict::Deny,
             "default.net",
         ),
@@ -64,8 +67,13 @@ fn fetch_deny_list_never_catches_other_network_access() {
         "deny stays absolute for fetches"
     );
     assert_eq!(
-        verdict_and_rules(&p, &shell("curl https://a.example/")).0,
+        verdict_and_rules(&p, &shell("curl -d x=1 https://a.example/")).0,
         Verdict::Allow
+    );
+    // a curl that sends nothing is a fetch (ADR-035), so the fetch deny catches it
+    assert_eq!(
+        verdict_and_rules(&p, &shell("curl https://a.example/")).0,
+        Verdict::Deny
     );
 }
 

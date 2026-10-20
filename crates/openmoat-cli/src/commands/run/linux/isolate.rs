@@ -36,7 +36,7 @@ use crate::sandbox::{Grants, Report, bwrap, bwrap_mounts};
 const BWRAP_DIRS: [&str; 3] = ["/usr/bin", "/bin", "/usr/local/bin"];
 
 /// The system's bubblewrap, symlinks resolved.
-fn system_bwrap() -> Option<PathBuf> {
+pub(super) fn system_bwrap() -> Option<PathBuf> {
     let dirs: Vec<PathBuf> = BWRAP_DIRS.iter().map(PathBuf::from).collect();
     crate::environment::find_in(&dirs, &[], "bwrap").and_then(|p| std::fs::canonicalize(p).ok())
 }
@@ -75,17 +75,7 @@ pub fn isolate(
     // The mounts hide the state directory only under the empty temp directory.
     refuse_exposed(state, &generated.rules, true)?;
     let session = Session::create(&generated.placeholders)?;
-    let listener = UnixListener::bind(&session.socket)
-        .with_context(|| format!("listening on {}", session.socket.display()))?;
-    std::thread::spawn(move || {
-        for unix in listener.incoming().flatten() {
-            std::thread::spawn(move || {
-                if let Ok(tcp) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)) {
-                    splice(&tcp, &unix);
-                }
-            });
-        }
-    });
+    relay_to_proxy(&session.socket, port)?;
     let moat = std::env::current_exe().and_then(std::fs::canonicalize)?;
     let (moat, dir) = (path_string(&moat), path_string(&session.dir));
     let mut command = Command::new(&bwrap);
@@ -111,7 +101,25 @@ pub fn isolate(
         report: generated.report,
         restrict: None,
         _session: Some(session),
+        warning: None,
     })
+}
+
+/// Outside the sandbox: relay each connection to `socket` on to the proxy's
+/// `port` on loopback.
+pub(super) fn relay_to_proxy(socket: &Path, port: u16) -> Result<()> {
+    let listener =
+        UnixListener::bind(socket).with_context(|| format!("listening on {}", socket.display()))?;
+    std::thread::spawn(move || {
+        for unix in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                if let Ok(tcp) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)) {
+                    splice(&tcp, &unix);
+                }
+            });
+        }
+    });
+    Ok(())
 }
 
 /// Refuse, with bubblewrap's reason, where it cannot create the namespaces:
@@ -197,12 +205,12 @@ fn splice(tcp: &TcpStream, unix: &UnixStream) {
 /// placeholders created in the project. All are removed when it drops.
 pub struct Session {
     dir: PathBuf,
-    socket: PathBuf,
+    pub(super) socket: PathBuf,
     placeholders: Vec<PathBuf>,
 }
 
 impl Session {
-    fn create(placeholders: &[String]) -> Result<Self> {
+    pub(super) fn create(placeholders: &[String]) -> Result<Self> {
         let dir = std::env::temp_dir().join(format!("moat-run-{}", std::process::id()));
         DirBuilder::new()
             .mode(0o700)

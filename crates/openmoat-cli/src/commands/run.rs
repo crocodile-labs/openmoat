@@ -13,8 +13,10 @@
 // -> Confined` (Lightweight) and `isolate(…)` (Isolated), refused on Linux where
 // a grant would show the state directory `state`, whose `command()` takes
 // the agent's arguments and environment, `report()` lists the losses and
-// allowances, and `status()` runs the agent in its sandbox; `inside(args)` is
-// what `isolate` starts in its sandbox.
+// allowances, `warning()` says where the network is restricted by port only,
+// and `status()` runs the agent in its sandbox; `inside(args)` is what
+// bubblewrap starts in its sandbox; `port_only_network()` is `moat doctor`'s
+// warning for the same.
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -116,7 +118,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // this process decides their calls on the proxy's port (ADR-028).
     let (guard, guard_token) = guard_service(&home, &run_session)?;
     let exit = Exit::open(&home, policy, ctx, Some(credential))?.with_guard(guard);
-    notice(&program, port, exit.session(), agent.report(), args)?;
+    notice(&program, port, exit.session(), &agent, args)?;
     std::thread::spawn(move || {
         if let Err(error) = exit.serve(&listener) {
             eprintln!("moat run: the proxy stopped, so the agent has no network: {error:#}");
@@ -152,7 +154,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     })
 }
 
-/// Inside `moat run --isolate`'s sandbox: serve the proxy on loopback, apply
+/// Inside bubblewrap (`moat run --isolate`, and `moat run`'s network
+/// namespace on Linux): serve the proxy on loopback, apply
 /// the Landlock rules and seccomp filter, and start the agent.
 pub fn inside(args: &IsolatedArgs) -> Result<Code> {
     platform::inside(args)
@@ -230,20 +233,42 @@ fn resolved(path: &Path) -> String {
     path_string(resolved.as_deref().unwrap_or(path))
 }
 
+/// Why `moat run` here would restrict the agent's network by port only, if it
+/// would (Linux without a usable bubblewrap), for `moat doctor`.
+pub fn port_only_network() -> Option<String> {
+    platform::port_only_network()
+}
+
 /// What the user must know before the agent starts, on standard error.
-fn notice(program: &Path, port: u16, session: &str, report: &Report, args: &RunArgs) -> Result<()> {
+fn notice(
+    program: &Path,
+    port: u16,
+    session: &str,
+    agent: &platform::Confined,
+    args: &RunArgs,
+) -> Result<()> {
+    let report: &Report = agent.report();
     let mut err = std::io::stderr().lock();
     let sees = if args.isolate {
         "; it sees only the project, the read roots and --write paths"
     } else {
         ""
     };
+    // The tests find the port after "proxy on 127.0.0.1:" in either line.
+    let network = if agent.warning().is_some() {
+        format!("network only to port {port} on any host, OpenMoat's proxy")
+    } else {
+        "network only through OpenMoat's proxy".to_owned()
+    };
     writeln!(
         err,
-        "moat run: {} in a sandbox made from the policy{sees}, network only through \
-         OpenMoat's proxy on 127.0.0.1:{port} (audit session {session})",
+        "moat run: {} in a sandbox made from the policy{sees}, {network} on 127.0.0.1:{port} \
+         (audit session {session})",
         program.display()
     )?;
+    if let Some(warning) = agent.warning() {
+        writeln!(err, "{warning}")?;
+    }
     if args.verbose {
         writeln!(
             err,
