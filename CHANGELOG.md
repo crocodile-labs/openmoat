@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Fixed
+- `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#601](https://github.com/crocodile-labs/openmoat/pull/601)).
+
 ## [0.7.0] - 2026-10-19
 
 The host adapters behind one contract, `moat doctor --bundle` for bug reports, and a round of checks: `tar` and `su` options that run a program, bash network redirections, more credential files, variables and secret-printing commands, MCP pins under `CLAUDE_CONFIG_DIR`, model switches that no longer freeze a session, and long sessions that no longer time out `moat guard`.

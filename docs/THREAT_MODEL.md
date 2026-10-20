@@ -194,13 +194,13 @@ something OpenMoat claims to stop.
   - Network is the proxy alone: a tool that ignores `HTTP(S)_PROXY` has none, and
     any allowlisted host stays a relay.
   - On macOS it uses `sandbox-exec`, which Apple has deprecated (Codex, Claude Code
-    and Chromium still use it). It needs macOS 14 or later: the generated profile
+    and Chromium still use it). It needs macOS 13 or later: the generated profile
     names `(ioctl-command TIOCSTI)`, an identifier `sandbox-exec` only recognises
-    from macOS 13 onwards. On macOS 12 and earlier `sandbox-exec` refuses to parse
-    the profile and `moat run` exits without starting the agent (fail closed). CI
-    covers `macos-14` and `macos-15-intel`; GitHub Actions no longer offers a
-    `macos-13` runner, so macOS 13 is not exercised and is unsupported in practice
-    (#389).
+    from macOS 13 onwards. On macOS 12 and earlier `moat run` refuses without
+    starting the agent (fail closed); where it cannot read the macOS version it
+    tries, and `sandbox-exec` refuses the profile itself. CI covers `macos-14` and
+    `macos-15-intel`; GitHub Actions no longer offers a `macos-13` runner, so
+    macOS 13 is not exercised (#389).
   - The profile leaves every file's existence, size and times visible.
   - On Linux, Landlock only grants. Secrets inside a granted tree stay readable and
     writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`

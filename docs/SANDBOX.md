@@ -253,8 +253,10 @@ agent runs shares that grant. The hook asks before the agent's own tools write o
 (`runs-later`); a script it runs is not asked. Where the agent's own sandbox is
 available, the Standard tier keeps its commands out of the home altogether.
 
-- **macOS:** a Seatbelt profile, started with `/usr/bin/sandbox-exec`. On some
-  macOS 14 machines, Seatbelt itself sometimes refuses the connection to the proxy
+- **macOS 13 or later:** a Seatbelt profile, started with `/usr/bin/sandbox-exec`.
+  On macOS 12 and earlier `sandbox-exec` cannot read the profile's `TIOCSTI` deny,
+  so `moat run` refuses there and `moat doctor` warns ([INSTALL.md](INSTALL.md)).
+  On some macOS 14 machines, Seatbelt itself sometimes refuses the connection to the proxy
   that the profile allows. This happens for a few milliseconds about every 15 seconds,
   so a network request now and then fails at once with `Operation not permitted`.
   Nothing gets out, and a retry succeeds. A one-rule `sandbox-exec` profile and a

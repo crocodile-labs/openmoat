@@ -144,7 +144,8 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let state = policy
         .as_ref()
         .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
-    for warning in [tiocsti, hangs, state].into_iter().flatten() {
+    let macos = warnings::old_macos(crate::os_version::macos().as_deref());
+    for warning in [tiocsti, hangs, state, macos].into_iter().flatten() {
         report.warn(&warning);
     }
     for agent in protection::report(&home, &binary)? {

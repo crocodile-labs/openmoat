@@ -18,6 +18,7 @@ mod install;
 mod integrity;
 mod json5;
 mod mcp;
+mod os_version;
 mod packs;
 mod project;
 mod protection;
