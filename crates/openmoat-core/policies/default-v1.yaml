@@ -136,6 +136,9 @@ deny:
       - "typeset -x $"
       # `@proc-environ <path>` atoms: a read of `/proc/<pid>/environ`
       - "@proc-environ *"
+      # `@env-dump <expression>` atoms: inline interpreter code that reads the
+      # whole environment (`print(os.environ)`, `console.log(process.env)`)
+      - "@env-dump *"
   - id: env-poison
     reason: changes how later commands resolve or load code
     env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*"]
