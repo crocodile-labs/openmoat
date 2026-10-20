@@ -123,6 +123,54 @@ pub fn decision_text(decision: &Decision) -> Result<()> {
     Ok(())
 }
 
+/// One example call of `moat demo` and what the policy decides for it.
+#[derive(Debug, Serialize)]
+pub struct DemoRow {
+    /// What the example shows (`reading a private key`).
+    pub shows: &'static str,
+    /// The shell command an agent would send.
+    pub command: &'static str,
+    pub verdict: Verdict,
+    /// The rule ids that decided it, comma-separated.
+    pub rules: String,
+    /// The first reason.
+    pub reason: String,
+}
+
+/// Width of the command column of `moat demo`.
+const DEMO_COMMAND_WIDTH: usize = 48;
+
+/// The `moat demo` table: a row per example, its reason indented below it.
+pub fn demo(rows: &[DemoRow], source: &str) -> Result<()> {
+    let mut out = io::stdout().lock();
+    line(
+        &mut out,
+        &format!("What OpenMoat decides for these agent calls, with {source}."),
+    )?;
+    writeln!(
+        out,
+        "Nothing is run, changed or written.\n\n{:<DEMO_COMMAND_WIDTH$} {:<9} rule",
+        "command", "verdict"
+    )?;
+    for row in rows {
+        line(
+            &mut out,
+            &format!(
+                "{:<DEMO_COMMAND_WIDTH$} {:<9} {}",
+                truncate(row.command, DEMO_COMMAND_WIDTH),
+                verdict_mark(row.verdict),
+                row.rules
+            ),
+        )?;
+        line(
+            &mut out,
+            &truncate(&format!("    {}: {}", row.shows, row.reason), 100),
+        )?;
+    }
+    writeln!(out, "\nTry any command: moat policy check \"<command>\"")?;
+    Ok(())
+}
+
 pub fn event_table(events: &[Event]) -> Result<()> {
     let mut out = io::stdout().lock();
     if events.is_empty() {

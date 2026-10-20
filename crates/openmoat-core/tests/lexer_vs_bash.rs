@@ -179,8 +179,11 @@ fn lexed(line: &str, skip_programs: &BTreeSet<String>) -> Option<Lexed> {
                 }
                 match redirect.take() {
                     // Here-string data is stdin, and a duplicated descriptor
-                    // is a number: neither names a file.
-                    Some(Operator::HereString | Operator::DuplicateDescriptor) => {}
+                    // is a number or `-`: neither names a file. `>& word`
+                    // with any other word redirects both outputs to that file.
+                    Some(Operator::HereString) => {}
+                    Some(Operator::DuplicateDescriptor)
+                        if word.text == "-" || word.text.chars().all(|c| c.is_ascii_digit()) => {}
                     Some(_) if !scratch_path(&word.text) => return None,
                     Some(_) => files.push(word.text),
                     None => current.push(word.text),

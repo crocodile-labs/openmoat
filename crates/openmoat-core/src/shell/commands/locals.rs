@@ -20,7 +20,8 @@ pub(super) fn classify_with_values(
     sink: &mut Sink,
     depth: u8,
 ) -> Result<bool, ClassifyError> {
-    let (variants, used) = match expand(cmd, &sink.known_locals(depth)) {
+    let separators = separator_sets(sink, depth);
+    let (variants, used) = match expand(cmd, &sink.known_locals(depth), &separators) {
         Ok(Some(expanded)) => expanded,
         Ok(None) => return Ok(false),
         Err(e) => {
@@ -37,6 +38,10 @@ pub(super) fn classify_with_values(
     for variant in &variants {
         for w in variant.words.iter().chain(&variant.stdin) {
             sink.note_dollar_word(w);
+            // `x='.e*'; cat $x`: the shell expands a glob an unquoted value holds
+            if w.glob && !sink.glob_words.contains(&w.text) {
+                sink.glob_words.push(w.text.clone());
+            }
         }
         for text in variant.reads.iter().chain(&variant.writes) {
             sink.note_dollar_word(&Word {
@@ -129,17 +134,39 @@ fn literal_value(value: &str, start: usize, word: &Word, home: &str) -> Option<S
     (!value.starts_with('~')).then(|| value.to_owned())
 }
 
+/// The characters the shell splits an unquoted expansion at: space, tab and
+/// newline, and each value the line gave `IFS`, all of which are classified
+/// so that a split never loosens the verdict. An `IFS` whose value is not
+/// known (`read IFS`) leaves the split unknown too (skipped).
+fn separator_sets(sink: &mut Sink, depth: u8) -> Vec<String> {
+    let default = " \t\n".to_owned();
+    let ifs = sink
+        .locals
+        .iter()
+        .find(|(n, d, _)| n == "IFS" && *d == depth)
+        .map(|(_, _, v)| v.clone());
+    match ifs {
+        None => vec![default],
+        Some(Some(values)) => std::iter::once(default).chain(values).collect(),
+        Some(None) => {
+            sink.skip(ClassifyError::UnknownValue("$IFS".to_owned()));
+            vec![default]
+        }
+    }
+}
+
 /// The variants of a command, and the names substituted in them.
 type Expanded = (Vec<SimpleCommand>, Vec<String>);
 
 /// The variants of `cmd` with every use of a known variable substituted, one
-/// per combination of values, and the names substituted; `None` when it uses
-/// none. A use the shell would
+/// per combination of values and set of `separators`, and the names
+/// substituted; `None` when it uses none. A use the shell would
 /// transform (`${d:-x}`, `${d#*/}`) cannot be substituted: an error, which
 /// leaves the command to be classified as written.
 pub(super) fn expand(
     cmd: &SimpleCommand,
     known: &[(String, Vec<String>)],
+    separators: &[String],
 ) -> Result<Option<Expanded>, ClassifyError> {
     let mut used: Vec<&(String, Vec<String>)> = Vec::new();
     let words = cmd.words.iter().chain(&cmd.stdin);
@@ -161,33 +188,100 @@ pub(super) fn expand(
         return Ok(None);
     }
     let count = used.iter().map(|u| u.1.len().max(1)).product::<usize>();
-    if count > MAX_DIRS {
+    if count * separators.len() > MAX_DIRS {
         return Err(ClassifyError::TooManyValues);
     }
-    let mut variants = Vec::with_capacity(count);
+    let mut variants = Vec::with_capacity(count * separators.len());
     for n in 0..count {
         let mut rest = n;
         let mut out = cmd.clone();
+        // per word, the text unquoted references put there: the shell splits it
+        let mut fields = vec![Vec::new(); out.words.len()];
         for (name, values) in &used {
             let value = values
                 .get(rest % values.len().max(1))
                 .map_or("", String::as_str);
             rest /= values.len().max(1);
-            for w in out.words.iter_mut().chain(out.stdin.iter_mut()) {
-                substitute(w, name, value);
+            for (w, f) in out.words.iter_mut().zip(fields.iter_mut()) {
+                substitute(w, name, value, f);
+            }
+            // a here-string and a redirection target are not split
+            for w in &mut out.stdin {
+                substitute(w, name, value, &mut Vec::new());
             }
             for text in out.reads.iter_mut().chain(out.writes.iter_mut()) {
                 let mut w = Word {
                     text: std::mem::take(text),
                     ..Word::default()
                 };
-                substitute(&mut w, name, value);
+                substitute(&mut w, name, value, &mut Vec::new());
                 *text = w.text;
             }
         }
-        variants.push(out);
+        for set in separators {
+            let mut split = out.clone();
+            split.words = out
+                .words
+                .iter()
+                .zip(&fields)
+                .flat_map(|(w, f)| split_fields(w, f, set))
+                .collect();
+            variants.push(split);
+        }
     }
     Ok(Some((variants, used.iter().map(|u| u.0.clone()).collect())))
+}
+
+/// The words the shell makes of `word` after expansion (field splitting):
+/// it is cut at each of `separators` inside `fields`, the text unquoted
+/// references put there, and empty pieces are dropped (`x=; $x env` runs
+/// `env`). An unquoted value's `*`, `?` or `[` makes its piece a glob.
+fn split_fields(word: &Word, fields: &[Range<usize>], separators: &str) -> Vec<Word> {
+    if fields.is_empty() {
+        return vec![word.clone()];
+    }
+    let in_field = |at: usize| fields.iter().any(|f| f.contains(&at));
+    let mut cuts = vec![0];
+    for (at, c) in word.text.char_indices() {
+        if separators.contains(c) && in_field(at) {
+            cuts.extend([at, at + c.len_utf8()]);
+        }
+    }
+    cuts.push(word.text.len());
+    let mut out: Vec<Word> = Vec::new();
+    for piece in cuts.chunks(2).filter_map(|c| match c {
+        [a, b] if a < b => Some(*a..*b),
+        _ => None,
+    }) {
+        let within = |spans: &[Range<usize>]| -> Vec<Range<usize>> {
+            spans
+                .iter()
+                .filter(|s| s.start < piece.end && s.end > piece.start)
+                .map(|s| s.start.max(piece.start) - piece.start..s.end.min(piece.end) - piece.start)
+                .collect()
+        };
+        let glob = word.glob
+            || word.text[piece.clone()]
+                .char_indices()
+                .any(|(i, c)| matches!(c, '*' | '?' | '[') && in_field(piece.start + i));
+        out.push(Word {
+            text: word.text[piece.clone()].to_owned(),
+            quoted: word.quoted,
+            glob,
+            literal: within(&word.literal),
+            unquoted: within(&word.unquoted),
+            substitutions: if out.is_empty() {
+                word.substitutions.clone()
+            } else {
+                Vec::new()
+            },
+        });
+    }
+    // `""$x` with an empty `x` is still an (empty) word
+    if out.is_empty() && word.quoted {
+        out.push(word.clone());
+    }
+    out
 }
 
 /// Whether `text` expands `$name` or `${name}` outside `literal` spans; an
@@ -236,8 +330,9 @@ fn references(text: &str, name: &str, literal: &[Range<usize>]) -> Vec<(usize, R
 }
 
 /// Replace every expanded `$name` and `${name}` in `word` with `value`, moving
-/// the quoting spans that follow.
-fn substitute(word: &mut Word, name: &str, value: &str) {
+/// the quoting spans that follow, and add to `fields` where an unquoted one
+/// put its value (not in double quotes: `"$x"` stays one word).
+fn substitute(word: &mut Word, name: &str, value: &str, fields: &mut Vec<Range<usize>>) {
     let refs = references(&word.text, name, &word.literal);
     for (pos, form) in refs.into_iter().rev() {
         let len = match form {
@@ -245,6 +340,7 @@ fn substitute(word: &mut Word, name: &str, value: &str) {
             Ref::Braced => 3 + name.len(),
             Ref::Transformed => continue,
         };
+        let unquoted = word.unquoted.iter().any(|span| span.contains(&pos));
         word.text.replace_range(pos..pos + len, value);
         // a position after the reference moves by the change in length; one inside
         // it stays within the value
@@ -265,5 +361,9 @@ fn substitute(word: &mut Word, name: &str, value: &str) {
         };
         word.literal.iter_mut().for_each(shift);
         word.unquoted.iter_mut().for_each(shift);
+        fields.iter_mut().for_each(shift);
+        if unquoted {
+            fields.push(pos..pos + value.len());
+        }
     }
 }

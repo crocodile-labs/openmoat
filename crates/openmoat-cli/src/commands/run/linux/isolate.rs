@@ -36,13 +36,27 @@ use crate::sandbox::{Grants, Report, bwrap, bwrap_mounts};
 const BWRAP_DIRS: [&str; 3] = ["/usr/bin", "/bin", "/usr/local/bin"];
 
 /// The system's bubblewrap, symlinks resolved.
-fn system_bwrap() -> Option<PathBuf> {
+pub(super) fn system_bwrap() -> Option<PathBuf> {
     let dirs: Vec<PathBuf> = BWRAP_DIRS.iter().map(PathBuf::from).collect();
     crate::environment::find_in(&dirs, &[], "bwrap").and_then(|p| std::fs::canonicalize(p).ok())
 }
 
 /// Namespaces bubblewrap creates; a user namespace is required, not tried.
 const UNSHARE: [&str; 3] = ["--unshare-all", "--unshare-user", "--die-with-parent"];
+
+/// Keeps the agent from creating user namespaces of its own inside the
+/// sandbox. bubblewrap 0.8 and later know it; an older one refuses to start
+/// with it, so it is passed only when [`usable`] found it accepted.
+const DISABLE_USERNS: &str = "--disable-userns";
+
+/// [`UNSHARE`], with [`DISABLE_USERNS`] when this bubblewrap knows it.
+fn unshare(disable_userns: bool) -> Vec<&'static str> {
+    let mut args = UNSHARE.to_vec();
+    if disable_userns {
+        args.push(DISABLE_USERNS);
+    }
+    args
+}
 
 pub fn isolate(
     policy: &Policy,
@@ -55,28 +69,18 @@ pub fn isolate(
         "`moat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
          `apt install bubblewrap`); refusing rather than starting the agent in a weaker tier",
     )?;
-    usable(&bwrap)?;
+    let disable_userns = usable(&bwrap)?;
     let port = grants.proxy_port.context("no proxy port")?;
     let generated = bwrap_mounts(policy, ctx, grants)?;
     // The mounts hide the state directory only under the empty temp directory.
     refuse_exposed(state, &generated.rules, true)?;
     let session = Session::create(&generated.placeholders)?;
-    let listener = UnixListener::bind(&session.socket)
-        .with_context(|| format!("listening on {}", session.socket.display()))?;
-    std::thread::spawn(move || {
-        for unix in listener.incoming().flatten() {
-            std::thread::spawn(move || {
-                if let Ok(tcp) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)) {
-                    splice(&tcp, &unix);
-                }
-            });
-        }
-    });
+    relay_to_proxy(&session.socket, port)?;
     let moat = std::env::current_exe().and_then(std::fs::canonicalize)?;
     let (moat, dir) = (path_string(&moat), path_string(&session.dir));
     let mut command = Command::new(&bwrap);
     command
-        .args(UNSHARE)
+        .args(unshare(disable_userns))
         .args(["--dev", "/dev", "--proc", "/proc"])
         .args(bwrap::args(
             &generated.mounts,
@@ -97,19 +101,45 @@ pub fn isolate(
         report: generated.report,
         restrict: None,
         _session: Some(session),
+        warning: None,
     })
+}
+
+/// Outside the sandbox: relay each connection to `socket` on to the proxy's
+/// `port` on loopback.
+pub(super) fn relay_to_proxy(socket: &Path, port: u16) -> Result<()> {
+    let listener =
+        UnixListener::bind(socket).with_context(|| format!("listening on {}", socket.display()))?;
+    std::thread::spawn(move || {
+        for unix in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                if let Ok(tcp) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)) {
+                    splice(&tcp, &unix);
+                }
+            });
+        }
+    });
+    Ok(())
 }
 
 /// Refuse, with bubblewrap's reason, where it cannot create the namespaces:
 /// a kernel or distribution that restricts unprivileged user namespaces.
-fn usable(bwrap: &Path) -> Result<()> {
-    let out = Command::new(bwrap)
-        .args(UNSHARE)
-        .args(["--ro-bind", "/", "/", "--"])
-        .arg(bwrap)
-        .arg("--version")
-        .output()
-        .with_context(|| format!("starting {}", bwrap.display()))?;
+/// Otherwise whether it accepts [`DISABLE_USERNS`]: tried first, and only
+/// when that fails is the sandbox tried without it.
+fn usable(bwrap: &Path) -> Result<bool> {
+    let probe = |disable_userns: bool| {
+        Command::new(bwrap)
+            .args(unshare(disable_userns))
+            .args(["--ro-bind", "/", "/", "--"])
+            .arg(bwrap)
+            .arg("--version")
+            .output()
+            .with_context(|| format!("starting {}", bwrap.display()))
+    };
+    if probe(true)?.status.success() {
+        return Ok(true);
+    }
+    let out = probe(false)?;
     if !out.status.success() {
         bail!(
             "bubblewrap cannot create its namespaces here, so `moat run --isolate` refuses: {}\
@@ -118,7 +148,7 @@ fn usable(bwrap: &Path) -> Result<()> {
             String::from_utf8_lossy(&out.stderr)
         );
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Inside the sandbox: relay the proxy's port to the socket, then start the
@@ -175,12 +205,12 @@ fn splice(tcp: &TcpStream, unix: &UnixStream) {
 /// placeholders created in the project. All are removed when it drops.
 pub struct Session {
     dir: PathBuf,
-    socket: PathBuf,
+    pub(super) socket: PathBuf,
     placeholders: Vec<PathBuf>,
 }
 
 impl Session {
-    fn create(placeholders: &[String]) -> Result<Self> {
+    pub(super) fn create(placeholders: &[String]) -> Result<Self> {
         let dir = std::env::temp_dir().join(format!("moat-run-{}", std::process::id()));
         DirBuilder::new()
             .mode(0o700)
@@ -215,5 +245,20 @@ impl Drop for Session {
         let _ = std::fs::remove_file(self.dir.join("file"));
         let _ = std::fs::remove_dir(self.dir.join("dir"));
         let _ = std::fs::remove_dir(&self.dir);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DISABLE_USERNS, UNSHARE, unshare};
+
+    #[test]
+    fn user_namespaces_are_disabled_only_where_bubblewrap_knows_how() {
+        let with = unshare(true);
+        assert_eq!(with[..UNSHARE.len()], UNSHARE);
+        assert_eq!(with.last(), Some(&DISABLE_USERNS));
+        // `--disable-userns` needs the user namespace bubblewrap creates.
+        assert!(with.contains(&"--unshare-user"));
+        assert_eq!(unshare(false), UNSHARE.to_vec());
     }
 }

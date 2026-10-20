@@ -237,7 +237,10 @@ impl Store {
 
     /// Read-only handle; fails if the database does not exist.
     pub fn open_read_only(path: &Path) -> Result<Self, StoreError> {
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        // `NO_MUTEX` as in the other opens: a `Store` owns its `Connection`, which
+        // is not `Sync`, so one thread uses it at a time.
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let conn = Connection::open_with_flags(path, flags)?;
         conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))?;
         let found = schema::version(&conn)?;
         // A newer build's rows may hold what this one cannot read (a new verdict):

@@ -376,3 +376,30 @@ fn init_names_a_config_dir_variable_whose_directory_is_missing() {
         stdout(&out)
     );
 }
+
+#[test]
+fn demo_decides_the_examples_and_writes_nothing() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let out = sb.moat(&["demo"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    let text = stdout(&out);
+    println!("{text}");
+    assert!(text.contains("the default policy"), "{text}");
+    let key_read = text
+        .lines()
+        .find(|l| l.starts_with("cat ~/.ssh/id_rsa"))
+        .unwrap_or_default();
+    assert!(
+        key_read.contains("deny") && key_read.contains("secrets-paths"),
+        "{text}"
+    );
+    assert!(
+        !sb.home.join(".moat").exists(),
+        "the demo wrote OpenMoat state"
+    );
+    assert_eq!(
+        std::fs::read_dir(sb.home.join(".claude")).unwrap().count(),
+        0,
+        "the demo touched the agent's settings"
+    );
+}

@@ -153,6 +153,9 @@ config directories: [docs/INSTALL.md](docs/INSTALL.md).
       also  : shell "cat ~/.ssh/id_rsa"
    ```
 
+   `moat demo` shows the verdicts for a short list of example calls the same way;
+   nothing runs.
+
 3. **Start your agent** in a new session and work as usual. `moat status` shows, for
    each agent, whether it has the hook and an OS sandbox, the hook only, or nothing.
 

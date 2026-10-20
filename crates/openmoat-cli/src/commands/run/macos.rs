@@ -76,6 +76,11 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
     bail!("only `moat run --isolate` on Linux starts this")
 }
 
+/// None: Seatbelt names the proxy's address, not only its port.
+pub fn port_only_network() -> Option<String> {
+    None
+}
+
 impl Confined {
     pub fn command(&mut self) -> &mut Command {
         &mut self.command
@@ -83,6 +88,15 @@ impl Confined {
 
     pub fn report(&self) -> &Report {
         &self.report
+    }
+
+    /// None: the profile allows only `localhost:<port>`.
+    #[expect(
+        clippy::unused_self,
+        reason = "the method every platform's `Confined` has; Linux's reads itself"
+    )]
+    pub fn warning(&self) -> Option<&str> {
+        None
     }
 
     pub fn status(mut self) -> Result<ExitStatus> {

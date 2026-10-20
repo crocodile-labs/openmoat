@@ -8,6 +8,11 @@ description = "Fuzz targets for OpenMoat's untrusted-input surfaces"
 [package.metadata]
 cargo-fuzz = true
 
+# `anyhow` is used by crates/openmoat-cli/src/json5.rs, which openclaw_json5
+# compiles through `#[path]`; cargo-machete does not follow that.
+[package.metadata.cargo-machete]
+ignored = ["anyhow"]
+
 # Not part of the main workspace: built with nightly by `cargo fuzz`.
 [workspace]
 members = ["."]
@@ -27,6 +32,10 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
 [dependencies]
+# What crates/openmoat-cli/src/json5.rs, compiled into openclaw_json5, uses.
+anyhow = "1"
+# As the main workspace: json5.rs's numbers survive being written back.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 libfuzzer-sys = "0.4"
 openmoat-core = { path = "../crates/openmoat-core" }
 openmoat-hosts = { path = "../crates/openmoat-hosts" }
@@ -63,6 +72,13 @@ bench = false
 [[bin]]
 name = "proxy_parse"
 path = "fuzz_targets/proxy_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "openclaw_json5"
+path = "fuzz_targets/openclaw_json5.rs"
 test = false
 doc = false
 bench = false

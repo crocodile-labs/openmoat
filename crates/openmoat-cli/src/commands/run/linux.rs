@@ -2,9 +2,12 @@
 //! (`crate::sandbox::landlock`) and a seccomp filter (`crate::sandbox::seccomp`),
 //! applied to a thread of its own that starts the agent. Both restrict the
 //! calling thread and what it starts, so OpenMoat's proxy thread stays
-//! unrestricted and keeps its audit log and its network. With `--isolate`
-//! (`linux/isolate.rs`) the agent starts in bubblewrap, and `moat` inside it
-//! applies the same rules and filter.
+//! unrestricted and keeps its audit log and its network. Landlock limits TCP by
+//! port only, so where bubblewrap can make one the agent also gets a network
+//! namespace of its own (`linux/netns.rs`), and `moat` inside it applies the
+//! rules and filter; elsewhere `moat run` says the network is restricted by port
+//! only. With `--isolate` (`linux/isolate.rs`) the agent starts in bubblewrap's
+//! own view of the machine, and `moat` inside it applies the same rules and filter.
 
 use std::path::Path;
 use std::process::{Command, ExitStatus};
@@ -26,6 +29,8 @@ use crate::sandbox::{Grants, Report, exposure, landlock_rules, session_tmpdir};
 
 /// `moat run --isolate`: bubblewrap around the same rules.
 mod isolate;
+/// `moat run`: the agent's own network namespace, where bubblewrap runs.
+mod netns;
 
 /// The first ABI that restricts TCP connections (Linux 6.7). An older kernel
 /// is refused rather than run with the network open.
@@ -73,10 +78,13 @@ pub struct Confined {
     command: Command,
     report: Report,
     /// The Landlock rules and seccomp filter of the thread that starts the
-    /// agent; `None` under `--isolate`, where `inside` applies them.
+    /// agent; `None` under bubblewrap, where `inside` applies them.
     restrict: Option<(RulesetCreated, BpfProgram)>,
-    /// What `--isolate` created for the session, removed when it ends.
+    /// What bubblewrap's session created, removed when it ends.
     _session: Option<isolate::Session>,
+    /// Where the sandbox is weaker than `moat run` promises: printed before
+    /// the agent starts.
+    warning: Option<String>,
 }
 
 pub fn confine(
@@ -86,9 +94,35 @@ pub fn confine(
     program: &Path,
     state: &Path,
 ) -> Result<Confined> {
+    let port = grants.proxy_port;
     let generated = landlock_rules(policy, ctx, grants)?;
     refuse_exposed(state, &generated.rules, false)?;
-    restricted(&generated.rules, generated.report, Command::new(program))
+    // Built here also where `inside` applies them: a kernel without Landlock
+    // ABI 4 is refused before anything starts.
+    let mut agent = restricted(&generated.rules, generated.report, Command::new(program))?;
+    let Some(port) = port else {
+        // No port: Landlock allows no TCP connection at all.
+        return Ok(agent);
+    };
+    match netns::network() {
+        netns::Network::Namespace(bwrap) => netns::namespaced(
+            &bwrap,
+            &generated.rules,
+            agent.report,
+            program,
+            &ctx.cwd,
+            port,
+        ),
+        netns::Network::PortOnly(why) => {
+            agent.warning = Some(netns::port_only_notice(port, &why));
+            Ok(agent)
+        }
+    }
+}
+
+/// Why `moat run` here would restrict the network by port only, for `moat doctor`.
+pub fn port_only_network() -> Option<String> {
+    netns::doctor_warning()
 }
 
 pub use isolate::{inside, isolate};
@@ -135,6 +169,7 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
         report,
         restrict: Some((ruleset, filter)),
         _session: None,
+        warning: None,
     })
 }
 
@@ -188,6 +223,10 @@ impl Confined {
 
     pub fn report(&self) -> &Report {
         &self.report
+    }
+
+    pub fn warning(&self) -> Option<&str> {
+        self.warning.as_deref()
     }
 
     pub fn status(self) -> Result<ExitStatus> {

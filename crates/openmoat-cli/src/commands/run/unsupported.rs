@@ -34,12 +34,21 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
     bail!("only `moat run --isolate` on Linux starts this")
 }
 
+/// None: `moat run` refuses here.
+pub fn port_only_network() -> Option<String> {
+    None
+}
+
 impl Confined {
     pub fn command(&mut self) -> &mut Command {
         match *self {}
     }
 
     pub fn report(&self) -> &Report {
+        match *self {}
+    }
+
+    pub fn warning(&self) -> Option<&str> {
         match *self {}
     }
 

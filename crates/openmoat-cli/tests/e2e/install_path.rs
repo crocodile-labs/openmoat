@@ -114,7 +114,13 @@ fn doctor_and_status_name_a_missing_or_different_hook_binary() {
         text(&out)
     );
 
-    let out = output(sb.command_at(&moat).args(["init", "--yes"]), None);
+    // The edited hook file drifted from the lock: a person repairs it.
+    let out = output(
+        sb.command_at(&moat)
+            .args(["init", "--yes"])
+            .env("MOAT_ASSUME_TTY", "1"),
+        None,
+    );
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let out = output(sb.command_at(&moat).args(["doctor"]), None);
     assert_eq!(

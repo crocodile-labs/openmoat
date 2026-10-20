@@ -76,8 +76,18 @@ fn edited_policy_makes_guard_fail_closed_until_repinned() {
         text(&check)
     );
 
+    // Without a terminal, `init` refuses to re-pin over the drift.
+    let refused = sb.moat(&["init", "--yes"]);
+    assert_eq!(refused.status.code(), Some(USAGE), "{}", text(&refused));
+    assert!(
+        text(&refused).contains("moat doctor --accept"),
+        "{}",
+        text(&refused)
+    );
+    assert_eq!(guard_read_src(&sb)["permissionDecision"], "deny");
+
     assert_eq!(
-        sb.moat(&["init", "--yes"]).status.code(),
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
         Some(OK),
         "init re-pins"
     );

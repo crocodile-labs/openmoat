@@ -1,5 +1,6 @@
 //! From tokens to simple commands to atomic actions.
 
+mod fetch;
 mod locals;
 mod payload;
 mod piped;
@@ -422,6 +423,8 @@ fn classify_arguments(
     // git's global options come before the subcommand (`git -C dir push host:x`).
     let names_hosts =
         HOST_PROGRAMS.contains(&program) || (program == "git" && git::names_hosts(argv));
+    // a curl or wget request that sends nothing is a fetch (ADR-035)
+    let fetch_only = fetch::sends_nothing(argv, program, words, sink);
 
     for (i, (tok, word)) in argv.iter().zip(words).enumerate() {
         for name in word_env_refs(word) {
@@ -468,7 +471,9 @@ fn classify_arguments(
             // or an argument of a program that names hosts (`curl 'evil.com'`).
             // Without a scheme and outside such a program, the word only looks like
             // one (`check_runs.0.id`, ADR-025).
-            sink.push(if tok.contains("://") || names_hosts {
+            sink.push(if fetch_only && fetch::fetchable_host(&host) {
+                AtomicAction::Fetch { host }
+            } else if tok.contains("://") || names_hosts {
                 AtomicAction::Net { host }
             } else {
                 AtomicAction::NetWord { host }

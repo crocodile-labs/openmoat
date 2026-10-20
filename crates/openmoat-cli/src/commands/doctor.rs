@@ -145,8 +145,17 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .as_ref()
         .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
     let macos = warnings::old_macos(crate::os_version::macos().as_deref());
-    for warning in [tiocsti, hangs, state, macos].into_iter().flatten() {
+    let network = super::run::port_only_network();
+    for warning in [tiocsti, hangs, state, macos, network]
+        .into_iter()
+        .flatten()
+    {
         report.warn(&warning);
+    }
+    // Loaded when a session starts here, where no `ConfigChange` fires.
+    for warning in crate::project_settings::warnings_here() {
+        let name = Host::ClaudeCode.display_name();
+        report.warn(&format!("{name:<16} project settings {warning}"));
     }
     for agent in protection::report(&home, &binary)? {
         if let Some(summary) = agent.summary() {

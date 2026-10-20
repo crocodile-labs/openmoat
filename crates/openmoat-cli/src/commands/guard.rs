@@ -55,7 +55,9 @@ pub fn run(args: &GuardArgs) -> Code {
 /// default event's format; exit 2 denies whatever the event. The deny goes to
 /// the side file of [`hangs`], not the audit log: what is stuck may be the log.
 /// The line names the phase the guard was in and how long it had run, so a
-/// slow machine can be told from a stuck step.
+/// slow machine can be told from a stuck step. Exiting while the main thread is
+/// inside the audit store's `BEGIN IMMEDIATE` is deliberate (fail closed): the
+/// OS drops the write lock, and the next open of the log drops the unfinished row.
 fn deny_when_over_budget(host: Host, started: Instant) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(GUARD_BUDGET_S));
@@ -247,6 +249,7 @@ fn evaluate(
     let request = host
         .parse_request(payload)
         .context("parsing hook payload")?;
+    let home = Home::locate()?;
 
     if let HookEvent::ConfigChange {
         source,
@@ -254,15 +257,13 @@ fn evaluate(
     } = &request.event
     {
         let change = change_type.as_deref().unwrap_or("changed");
-        let decision =
-            config_change::decision(&Home::locate()?, request.action.as_ref(), source, change)?;
+        let decision = config_change::decision(&home, &request, source, change)?;
         return Ok((Some(request), decision));
     }
     // Lock before decide, ungoverned tools included: an `allow` while pinned
     // files drifted would tell whoever tampered that nothing noticed. Drift of
     // only Claude Code toggles and permission lists changes no decision, so the
     // call is decided as usual and the drift recorded (`integrity/relaxed.rs`).
-    let home = Home::locate()?;
     let checked = integrity::check(&home)?;
     if let Some(decision) = checked.deny {
         return Ok((Some(request), decision));

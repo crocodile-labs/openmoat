@@ -437,7 +437,13 @@ away. Codex has no such key: a failed hook "continues the tool call"
   writes the new contents to `<file>.proposed-<8 hex>`, fires `ConfigChange` for that
   copy and renames it over the file only if no hook blocks; when `<file>` is pinned,
   the copy is blocked unless the file still matches the lock and the copy's bytes equal
-  the pinned ones, so a reviewed edit of a pinned file cannot pass the hook.
+  the pinned ones, so a reviewed edit of a pinned file cannot pass the hook. A project's
+  `.claude/settings.json` and `.claude/settings.local.json` are not pinned: they come
+  from the repository. A change of one (source `project_settings` or `local_settings`)
+  is read and blocked with `project-settings` when it sets a key that turns hooks off,
+  runs a program or redirects the agent, or cannot be parsed (`project_settings.rs`);
+  `moat doctor` and `moat status` warn about such a file in the current project, which
+  Claude Code loads at session start without a `ConfigChange`.
 - **`kernel-self` rules.** The default policy denies agent writes to the state and
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
   `CURSOR_CONFIG_DIR` moved them, and where `moat init` recorded them in `hosts.json`), hook
@@ -479,7 +485,9 @@ away. Codex has no such key: a failed hook "continues the tool call"
 
 ## 7. Audit log
 
-`~/.moat/audit.db` is SQLite in WAL mode, created with mode 0600, with one `events`
+`~/.moat/audit.db` is SQLite in WAL mode, created with mode 0600 on macOS and Linux
+(on Windows it keeps the permissions it inherits from its directory, by default inside the
+user's profile; OpenMoat sets none of its own there), with one `events`
 table (time, host, session, call id, working directory, tool, action, verdict, rules,
 reasons, latency). Every governed and ungoverned call is recorded. `Store::record`
 redacts every text the agent can influence (each string of the action, the reasons,
@@ -627,7 +635,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
 ## 8. Files on disk
 
 ```
-~/.moat/                       ($MOAT_HOME overrides; directory 0700, files 0600)
+~/.moat/                       ($MOAT_HOME overrides; directory 0700, files 0600 on macOS and Linux; on Windows inherited permissions)
   policy.yaml                  user policy (moat init writes the default once)
   policy.yaml.bak              the policy before the last `moat edit` applied a change
   policy.base.yaml             the shipped default the policy started from or was last upgraded to
@@ -679,8 +687,8 @@ tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool cal
 tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, cursor, openclaw)
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
-                               host_payload, literal_pattern, proxy_parse
-                               (separate workspace)
+                               host_payload, literal_pattern, proxy_parse,
+                               openclaw_json5 (separate workspace)
 docs/                          this document, INSTALL, USAGE, SANDBOX, POLICY,
                                THREAT_MODEL, ROADMAP, COVERAGE and EVIDENCE
                                (generated), adr/
@@ -1023,6 +1031,18 @@ moat run ─► moat proxy (thread, 127.0.0.1:<ephemeral>, session mode) ◄─�
   so only the proxy resolves names, as on macOS: a tool that ignores `HTTP(S)_PROXY`
   cannot resolve them. Programs that list network interfaces (`getifaddrs`, netlink)
   get an error.
+- **Network namespace (Linux, without `--isolate`).** Landlock restricts TCP by port
+  only and seccomp cannot read `connect()`'s address, so `run/linux/netns.rs` probes the
+  system's `bwrap` and, where it can create the namespaces, starts the agent under
+  `/bin/sh -c "trap '' INT; exec …" bwrap --unshare-user --unshare-net
+  --die-with-parent --dev-bind / /` (the shell keeps Ctrl-C from ending bubblewrap's
+  monitor), running `moat isolated` as under `--isolate`: the proxy's port is relayed
+  into a namespace with only loopback, and the same Landlock rules and seccomp filter
+  apply inside; the Landlock rules are also built outside first, so a kernel without
+  ABI 4 is refused before anything starts. `landlock.tcp-port` is dropped from the
+  report there. Where `bwrap` is missing or the probe fails, the agent starts as before
+  and `moat run` prints that the network is restricted by port only; `moat doctor`
+  warns.
 - **`--isolate` (Isolated tier, Linux).** `run/linux/isolate.rs` starts the agent under
   `bwrap --unshare-all --unshare-user --die-with-parent` with the mounts
   `sandbox/bwrap.rs` generates from the same Landlock rules: each read path read-only,

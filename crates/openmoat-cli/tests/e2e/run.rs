@@ -7,6 +7,10 @@ use std::process::Output;
 
 use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 
+/// Linux: the network reaches only the proxy on loopback.
+#[cfg(target_os = "linux")]
+mod network;
+
 /// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
 /// outside the home so that writing the home is not a temp-directory write.
 fn run_sh(sb: &Sandbox, project: &Path, script: &str) -> Output {

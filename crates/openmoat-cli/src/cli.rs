@@ -91,7 +91,7 @@ pub enum Command {
     /// one on Linux). Turn the agent's own sandbox off. On Linux without `--isolate`,
     /// files inside the project (`.env`, `.git`, `.moat`) are not protected.
     Run(RunArgs),
-    /// What `moat run --isolate` starts inside its sandbox (not for people).
+    /// What `moat run` starts inside bubblewrap on Linux (not for people).
     #[command(hide = true)]
     Isolated(IsolatedArgs),
     /// Inspect and test policy files.
@@ -103,6 +103,9 @@ pub enum Command {
     /// host's hook payloads in a throwaway home, and print the scorecard. The scenarios'
     /// commands never run; only the hook does.
     Bench(BenchArgs),
+    /// Show what the policy (the default one when none is installed) decides for a fixed
+    /// list of example agent calls. Nothing runs; no hook or file is touched.
+    Demo(DemoArgs),
     /// The agents' own sandboxes, which OpenMoat configures from the policy.
     Sandbox {
         #[command(subcommand)]
@@ -127,6 +130,13 @@ pub enum SandboxCommand {
 
 #[derive(Debug, Args)]
 pub struct SandboxShowArgs {
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct DemoArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
