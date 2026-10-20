@@ -1151,7 +1151,6 @@
 - id: benign-read-containers-storage-conf
   action: { shell: "cat ~/.config/containers/storage.conf" }
   expect: { verdict: defer, rules: [default] }
-<<<<<<< HEAD
 
 # Everyday work next to the shapes of T3, T5, T6, T8 and T11, so a rule that
 # tightens too far fails here rather than in a user's session.
@@ -1301,7 +1300,7 @@
   threat: T11
   action: { fs_write: "/p/scratch/out.txt" }
   links: { /p/scratch: /tmp/build-scratch }
-=======
+  expect: { verdict: defer, rules: [default] }
 # a variable holding several words: split where unquoted, one word in quotes
 - id: benign-quoted-variable-holding-a-space
   action: { shell: "x='a b'; echo \"$x\"" }
@@ -1337,5 +1336,4 @@
   expect: { verdict: defer, rules: [default] }
 - id: benign-ruby-env-fetch-rails-env
   action: { shell: "ruby -e \"puts ENV.fetch('RAILS_ENV')\"" }
->>>>>>> 6178ec4 (sec(core): unquoted variables split into words as bash splits them; interpreter one-liners that read the environment are checked)
   expect: { verdict: defer, rules: [default] }

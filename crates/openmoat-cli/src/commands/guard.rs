@@ -257,11 +257,7 @@ fn evaluate(
     } = &request.event
     {
         let change = change_type.as_deref().unwrap_or("changed");
-<<<<<<< HEAD
-        let decision = config_change::decision(&home, request.action.as_ref(), source, change)?;
-=======
-        let decision = config_change::decision(&Home::locate()?, &request, source, change)?;
->>>>>>> 9c8b986 (sec(cli): a project's Claude Code settings cannot turn OpenMoat's hooks off mid-session; doctor warns about ones that already do)
+        let decision = config_change::decision(&home, &request, source, change)?;
         return Ok((Some(request), decision));
     }
     // Lock before decide, ungoverned tools included: an `allow` while pinned
