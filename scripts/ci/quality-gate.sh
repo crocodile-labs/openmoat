@@ -19,7 +19,21 @@ run cargo clippy --locked --workspace --all-targets --all-features -- -D warning
 run cargo clippy --locked --workspace --lib --bins --all-features -- -D warnings \
     -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::unreachable
 run cargo doc --locked --workspace --no-deps --document-private-items
-run cargo test --locked --workspace --all-features
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    # On a failure, the failing tests and their first panic lines become
+    # annotations, shown on the run without reading its log. Actions keeps the
+    # first ten errors of a step.
+    echo "▶ cargo test --locked --workspace --all-features"
+    log="${RUNNER_TEMP:-/tmp}/cargo-test.log"
+    if ! cargo test --locked --workspace --all-features 2>&1 | tee "$log"; then
+        # Each panic with the line after it, which holds the message.
+        { grep -E "^test .* FAILED$" "$log"; grep -A1 "panicked at" "$log" | grep -v '^--$'; } |
+            head -10 | sed -e 's/%/%25/g' -e 's/^/::error title=cargo test::/'
+        exit 1
+    fi
+else
+    run cargo test --locked --workspace --all-features
+fi
 run cargo run -q --locked -p openmoat -- policy lint crates/openmoat-core/policies/default-v1.yaml
 if rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown; then
     run cargo build -q --locked -p openmoat-core --target wasm32-unknown-unknown
