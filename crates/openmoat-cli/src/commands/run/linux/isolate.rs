@@ -44,6 +44,20 @@ fn system_bwrap() -> Option<PathBuf> {
 /// Namespaces bubblewrap creates; a user namespace is required, not tried.
 const UNSHARE: [&str; 3] = ["--unshare-all", "--unshare-user", "--die-with-parent"];
 
+/// Keeps the agent from creating user namespaces of its own inside the
+/// sandbox. bubblewrap 0.8 and later know it; an older one refuses to start
+/// with it, so it is passed only when [`usable`] found it accepted.
+const DISABLE_USERNS: &str = "--disable-userns";
+
+/// [`UNSHARE`], with [`DISABLE_USERNS`] when this bubblewrap knows it.
+fn unshare(disable_userns: bool) -> Vec<&'static str> {
+    let mut args = UNSHARE.to_vec();
+    if disable_userns {
+        args.push(DISABLE_USERNS);
+    }
+    args
+}
+
 pub fn isolate(
     policy: &Policy,
     ctx: &EvalContext,
@@ -55,7 +69,7 @@ pub fn isolate(
         "`moat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
          `apt install bubblewrap`); refusing rather than starting the agent in a weaker tier",
     )?;
-    usable(&bwrap)?;
+    let disable_userns = usable(&bwrap)?;
     let port = grants.proxy_port.context("no proxy port")?;
     let generated = bwrap_mounts(policy, ctx, grants)?;
     // The mounts hide the state directory only under the empty temp directory.
@@ -76,7 +90,7 @@ pub fn isolate(
     let (moat, dir) = (path_string(&moat), path_string(&session.dir));
     let mut command = Command::new(&bwrap);
     command
-        .args(UNSHARE)
+        .args(unshare(disable_userns))
         .args(["--dev", "/dev", "--proc", "/proc"])
         .args(bwrap::args(
             &generated.mounts,
@@ -102,14 +116,22 @@ pub fn isolate(
 
 /// Refuse, with bubblewrap's reason, where it cannot create the namespaces:
 /// a kernel or distribution that restricts unprivileged user namespaces.
-fn usable(bwrap: &Path) -> Result<()> {
-    let out = Command::new(bwrap)
-        .args(UNSHARE)
-        .args(["--ro-bind", "/", "/", "--"])
-        .arg(bwrap)
-        .arg("--version")
-        .output()
-        .with_context(|| format!("starting {}", bwrap.display()))?;
+/// Otherwise whether it accepts [`DISABLE_USERNS`]: tried first, and only
+/// when that fails is the sandbox tried without it.
+fn usable(bwrap: &Path) -> Result<bool> {
+    let probe = |disable_userns: bool| {
+        Command::new(bwrap)
+            .args(unshare(disable_userns))
+            .args(["--ro-bind", "/", "/", "--"])
+            .arg(bwrap)
+            .arg("--version")
+            .output()
+            .with_context(|| format!("starting {}", bwrap.display()))
+    };
+    if probe(true)?.status.success() {
+        return Ok(true);
+    }
+    let out = probe(false)?;
     if !out.status.success() {
         bail!(
             "bubblewrap cannot create its namespaces here, so `moat run --isolate` refuses: {}\
@@ -118,7 +140,7 @@ fn usable(bwrap: &Path) -> Result<()> {
             String::from_utf8_lossy(&out.stderr)
         );
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Inside the sandbox: relay the proxy's port to the socket, then start the
@@ -215,5 +237,20 @@ impl Drop for Session {
         let _ = std::fs::remove_file(self.dir.join("file"));
         let _ = std::fs::remove_dir(self.dir.join("dir"));
         let _ = std::fs::remove_dir(&self.dir);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DISABLE_USERNS, UNSHARE, unshare};
+
+    #[test]
+    fn user_namespaces_are_disabled_only_where_bubblewrap_knows_how() {
+        let with = unshare(true);
+        assert_eq!(with[..UNSHARE.len()], UNSHARE);
+        assert_eq!(with.last(), Some(&DISABLE_USERNS));
+        // `--disable-userns` needs the user namespace bubblewrap creates.
+        assert!(with.contains(&"--unshare-user"));
+        assert_eq!(unshare(false), UNSHARE.to_vec());
     }
 }

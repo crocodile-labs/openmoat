@@ -372,6 +372,9 @@ moat run --isolate --write ~/.claude --write ~/.claude.json -- claude
 - Inside, the Lightweight tier's Landlock rules and seccomp filter apply too, so
   Linux 6.7 or later is needed. The agent's own sandbox must be off, as under
   `moat run`.
+- **No user namespaces of its own.** Where bubblewrap accepts `--disable-userns`
+  (0.8 and later), OpenMoat passes it, so the agent cannot create further user
+  namespaces inside; an older bubblewrap runs without it.
 
 It needs `bwrap` in `/usr/bin`, `/bin` or `/usr/local/bin` (`apt install bubblewrap`, `dnf install bubblewrap`; never taken from `PATH`, since it starts outside the sandbox) and
 unprivileged user namespaces; on Ubuntu 24.04 AppArmor restricts them unless

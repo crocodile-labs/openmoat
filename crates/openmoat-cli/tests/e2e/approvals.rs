@@ -48,7 +48,7 @@ fn session_grants_expire_and_are_pruned_on_write() {
 
     write_grant(&sb, command, Some(now_ms() - DAY_MS - 60_000));
     assert_eq!(
-        sb.moat(&["init", "--yes"]).status.code(),
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
         Some(OK),
         "init re-pins"
     );
@@ -61,7 +61,10 @@ fn session_grants_expire_and_are_pruned_on_write() {
     assert!(status.contains("no active session grants"), "{status}");
 
     write_grant(&sb, command, None);
-    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    assert_eq!(
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
+        Some(OK)
+    );
     let d = decide(&sb, "s1", command);
     assert_eq!(
         d["permissionDecision"], "ask",
@@ -69,7 +72,10 @@ fn session_grants_expire_and_are_pruned_on_write() {
     );
 
     write_grant(&sb, command, Some(now_ms() - DAY_MS + 3_600_000));
-    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    assert_eq!(
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
+        Some(OK)
+    );
     assert_eq!(decide(&sb, "s1", command)["permissionDecision"], "allow");
     let status = text(&sb.moat(&["status"]));
     assert!(
@@ -79,7 +85,10 @@ fn session_grants_expire_and_are_pruned_on_write() {
 
     // Writing approvals.json drops the expired grants it holds.
     write_grant(&sb, command, Some(now_ms() - 2 * DAY_MS));
-    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    assert_eq!(
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
+        Some(OK)
+    );
     let out = crate::common::output(
         person.args([
             "allow",
@@ -141,7 +150,7 @@ fn session_grant_turns_ask_into_allow_for_that_session_only() {
     );
 
     assert_eq!(
-        sb.moat(&["init", "--yes"]).status.code(),
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
         Some(OK),
         "init re-pins"
     );
@@ -176,7 +185,10 @@ fn permanent_overlay_rules_merge_into_the_policy() {
         "policy.d/approved.yaml",
         "version: 1\nallow:\n  - id: approved-1\n    reason: test\n    shell: ['pip install requests']\n",
     );
-    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    assert_eq!(
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
+        Some(OK)
+    );
     let d = decide(&sb, "any", "pip install requests");
     assert_eq!(d["permissionDecision"], "allow", "{d}");
     assert!(
@@ -191,7 +203,10 @@ fn permanent_overlay_rules_merge_into_the_policy() {
         "policy.d/approved.yaml",
         "version: 1\nallow:\n  - id: evil\n    shell: ['*']\n",
     );
-    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    assert_eq!(
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
+        Some(OK)
+    );
     let d = decide(&sb, "any", "terraform apply");
     assert_eq!(
         d["permissionDecision"], "deny",
