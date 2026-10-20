@@ -36,6 +36,11 @@ fn person(sb: &Sandbox, program: &Path, args: &[&str]) -> Output {
     )
 }
 
+/// The output on one line, so a CI annotation of the panic shows all of it.
+fn one_line(out: &Output) -> String {
+    text(out).replace(['\r', '\n'], " | ")
+}
+
 fn hook_command(sb: &Sandbox) -> String {
     let settings = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
     let settings: Value = serde_json::from_str(&settings).unwrap();
@@ -64,10 +69,8 @@ fn moat_runs_the_same_command_as_openmoat() {
         run(&sb, &moat, &["no-such"], None).status.code(),
         Some(USAGE)
     );
-    assert_eq!(
-        person(&sb, &openmoat, &["init", "--yes"]).status.code(),
-        Some(OK)
-    );
+    let init = person(&sb, &openmoat, &["init", "--yes"]);
+    assert_eq!(init.status.code(), Some(OK), "{}", one_line(&init));
     let payload = fixture("claude-code/read.json");
     let args = ["guard", "--host", "claude-code"];
     let direct = run(&sb, &openmoat, &args, Some(&payload));
@@ -120,10 +123,8 @@ fn init_moves_hooks_written_as_moat_to_openmoat() {
     let (openmoat, moat) = (bin.join(exe("openmoat")), bin.join(exe("moat")));
     // Before the rename the whole program was `bin/moat`, and its hooks name it.
     fs::copy(env!("CARGO_BIN_EXE_openmoat"), &moat).unwrap();
-    assert_eq!(
-        person(&sb, &moat, &["init", "--yes"]).status.code(),
-        Some(OK)
-    );
+    let init = person(&sb, &moat, &["init", "--yes"]);
+    assert_eq!(init.status.code(), Some(OK), "{}", one_line(&init));
     assert_eq!(Path::new(&hook_command(&sb)), moat);
     let before = fs::read_to_string(sb.home.join(".claude/settings.json")).unwrap();
 
