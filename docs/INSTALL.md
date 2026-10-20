@@ -29,6 +29,21 @@ cargo install openmoat --locked
 
 Then run `moat init` ([below](#set-up-with-moat-init)).
 
+> [!NOTE]
+> **Windows.** On Windows, OpenMoat applies the policy through the agents' hooks. It
+> sets up no OS sandbox for Claude Code or Cursor (Codex's own sandbox settings are
+> written as on other systems), `moat run` refuses to start, `moat proxy` cannot be
+> installed as a service, and OpenMoat sets no file permissions on its own files: it
+> relies on the access rules of the user profile. For OS confinement, run the agent
+> and `moat` inside WSL2 ([details below](#set-up-with-moat-init)).
+
+> [!NOTE]
+> **Another `moat`.** An unrelated project, `majorcontext/moat`, also installs a
+> command named `moat`. The two cannot be installed side by side: whichever comes
+> first on your `PATH` runs. OpenMoat's Homebrew formula is
+> `crocodile-labs/tap/moat` and its crate is `openmoat`. OpenMoat's `moat --version`
+> prints `(OpenMoat)` after the version number.
+
 > [!IMPORTANT]
 > **macOS version.** `moat run` needs macOS 13 or later. Its Seatbelt profile names
 > `(ioctl-command TIOCSTI)` (CVE-2017-5226 class), an identifier `sandbox-exec`
@@ -46,8 +61,13 @@ git clone https://github.com/crocodile-labs/openmoat && cd openmoat
 cargo install --locked --path crates/openmoat-cli    # installs the `moat` binary
 ```
 
-Each release carries `sha256.sum` and GitHub build attestations:
-`gh attestation verify <archive> --repo crocodile-labs/openmoat`.
+Each release carries `sha256.sum`, and every release file (archives, installers,
+`sha256.sum`) has a GitHub build attestation. To check a file before you use it:
+
+```bash
+gh release download --repo crocodile-labs/openmoat --pattern openmoat-installer.sh
+gh attestation verify openmoat-installer.sh --repo crocodile-labs/openmoat
+```
 
 ## Upgrading
 

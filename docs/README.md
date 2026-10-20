@@ -33,7 +33,7 @@ reference, and they describe the code on `main`.
 | Find where code lives and how a tool call becomes a decision, a hook response and an audit record | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Add support for another AI coding agent: adapter, installer, fixtures, tests, docs | [ADDING_AN_AGENT.md](ADDING_AN_AGENT.md) |
 | Read the decisions that constrain the code | [adr/](adr/README.md) |
-| See what exists and what comes next; the live order is issue #144 | [ROADMAP.md](ROADMAP.md) |
+| See what exists and what comes next; the live order is issue [#562](https://github.com/crocodile-labs/openmoat/issues/562) | [ROADMAP.md](ROADMAP.md) |
 
 Contributor files live at the repository root: [AGENTS.md](../AGENTS.md) (working
 contract), [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md),

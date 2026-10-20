@@ -608,6 +608,18 @@ pinned file changed or disappeared, every call is denied with rule `kernel-integ
 until a person re-pins with `moat doctor --accept` (refused outside an interactive terminal) or
 by re-running `moat init`. Edit the policy, then run `moat doctor --accept`. Which hook files are pinned is decided only by `moat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR`, else the recorded or default ones). `moat doctor --accept`, `moat allow` and `moat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `moat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `moat doctor` and `moat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
 
+<a id="what-the-lock-is-not"></a>**What the lock is not.** The lock is a list of
+SHA-256 digests in a file, with no key and no signature. It catches a change the agent
+makes through its tools, and the agents' OS sandboxes stop the commands inside them
+from changing `~/.moat` and the hook files at all (§9, [SANDBOX.md](SANDBOX.md)). It
+does not stop a program that runs as the same user outside any sandbox: such a program
+can change the policy and write new digests into the lock, and `moat guard` then finds
+nothing wrong. In hook-only mode (OpenClaw, Claude Code and Cursor on native Windows,
+or a sandbox that is off) every program an allowed command starts is such a program.
+There the OS sandboxes (the agents' own sandboxes in the Standard tier, `moat run` and
+`moat run --isolate`) are the protection; `moat status` shows which agents have one. A root user or a replaced `moat` binary is out of scope as well
+(ADR-006, [THREAT_MODEL.md](THREAT_MODEL.md#5-known-limitations)).
+
 One exception keeps a changed Claude Code toggle from stopping every agent. When the
 only drift is in Claude Code's `settings.json`, limited to its own display and reply
 settings (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …), the model you
