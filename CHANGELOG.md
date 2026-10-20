@@ -12,7 +12,7 @@ view at the end of the file.
 - `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#601](https://github.com/crocodile-labs/openmoat/pull/601)).
 
 ### Changed
-- `openmoat-hosts` (library API, breaking): `InstallSpec` also lists the hook entries `moat init` writes (`hooks`, each a `#[non_exhaustive]` `HookSpec` with event, matcher, timeout and `onFailure`) and the hook file's layout (`hook_format`, a `HookFormat`), and `GUARD_BUDGET_S` moves here; a test checks every host's timeouts outlast it. The configuration directory table in INSTALL.md and the known gaps list in THREAT_MODEL.md are generated from the specs and checked by a test. Every hook entry `moat init` writes is unchanged ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- `openmoat-hosts` (library API, breaking): `InstallSpec` also lists the hook entries `moat init` writes (`hooks`, each a `#[non_exhaustive]` `HookSpec` with event, matcher, timeout and `onFailure`) and the hook file's layout (`hook_format`, a `HookFormat`), and `GUARD_BUDGET_S` moves here; a test checks every host's timeouts outlast it. The configuration directory table in INSTALL.md and the known gaps list in THREAT_MODEL.md are generated from the specs and checked by a test. Every hook entry `moat init` writes is unchanged ([#602](https://github.com/crocodile-labs/openmoat/pull/602)).
 
 ## [0.7.0] - 2026-10-19
 
