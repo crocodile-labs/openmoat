@@ -9,7 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Fixed
-- `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#601](https://github.com/crocodile-labs/openmoat/pull/601)).
 
 ## [0.7.0] - 2026-10-19
 
