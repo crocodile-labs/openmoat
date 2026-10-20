@@ -17,10 +17,10 @@ use crate::time;
 /// Person-only: an agent that could anchor whenever it liked could also choose
 /// what the person's record says the log was.
 pub fn run(args: &AnchorArgs) -> Result<Code> {
-    crate::terminal::refuse_agent("moat audit anchor")?;
+    crate::terminal::refuse_agent("openmoat audit anchor")?;
     if !crate::terminal::interactive() {
         bail!(
-            "`moat audit anchor` must be run by a person in a terminal, not from a hook or script"
+            "`openmoat audit anchor` must be run by a person in a terminal, not from a hook or script"
         );
     }
     let home = Home::locate()?;
@@ -81,7 +81,7 @@ pub fn run(args: &AnchorArgs) -> Result<Code> {
     }
     writeln!(
         out,
-        "  check the log later with `moat audit verify --against {}`",
+        "  check the log later with `openmoat audit verify --against {}`",
         match &place {
             Place::Git(path) | Place::File(path) => path.display(),
         }
@@ -93,7 +93,7 @@ pub fn run(args: &AnchorArgs) -> Result<Code> {
 /// git as the environment snapshot resolves it.
 fn git(home: &Home) -> Result<PathBuf> {
     crate::environment::program(home, "git").context(
-        "git was not found on the search path `moat init` recorded; install git or use --file",
+        "git was not found on the search path `openmoat init` recorded; install git or use --file",
     )
 }
 

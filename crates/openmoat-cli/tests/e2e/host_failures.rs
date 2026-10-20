@@ -265,7 +265,7 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
             .trim_matches('"')
             .to_owned()
     };
-    let binary = escaped(env!("CARGO_BIN_EXE_moat"));
+    let binary = escaped(env!("CARGO_BIN_EXE_openmoat"));
     let gone = escaped(&sb.home.join("gone/moat").to_string_lossy());
     for file in [
         ".claude/settings.json",

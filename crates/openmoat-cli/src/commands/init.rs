@@ -82,7 +82,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         if !hosts.is_empty() {
             backups(&home, &hosts, &mut out)?;
         }
-        writeln!(out, "done. run `moat status` any time to verify.")?;
+        writeln!(out, "done. run `openmoat status` any time to verify.")?;
     }
     out.finish()?;
     Ok(Code::Ok)
@@ -101,7 +101,7 @@ fn mcp_servers(
     let pinned = crate::mcp::pin_current(home, binary, cwd.as_deref())?;
     writeln!(
         out,
-        "✔ mcp servers      {pinned} definitions pinned; a changed or new one waits for `moat mcp accept`"
+        "✔ mcp servers      {pinned} definitions pinned; a changed or new one waits for `openmoat mcp accept`"
     )?;
     if proxy {
         super::mcp::wrap_servers(home, binary, hosts, &[], false, false, out)?;
@@ -148,14 +148,14 @@ fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<()> {
     if checks.drift && !drift.is_empty() {
         bail!(
             "refusing to re-pin while the policy lock shows drift ({}) and no person is at \
-             a terminal:\n  {}\nrun `moat doctor` to see what changed, then `moat doctor \
+             a terminal:\n  {}\nrun `openmoat doctor` to see what changed, then `openmoat doctor \
              --accept` in a terminal of your own if the changes are yours",
             integrity::INTEGRITY_RULE,
             drift.join("\n  ")
         );
     }
     if checks.agent {
-        crate::terminal::refuse_agent("moat init")?;
+        crate::terminal::refuse_agent("openmoat init")?;
     }
     if !drift.is_empty() {
         writeln!(
@@ -210,7 +210,7 @@ fn state(home: &Home, dry_run: bool, out: &mut Deferred) -> Result<()> {
         if let Some(update) = crate::upgrade::available(home) {
             writeln!(
                 out,
-                "! policy update    {update}: `moat policy upgrade` shows them and asks"
+                "! policy update    {update}: `openmoat policy upgrade` shows them and asks"
             )?;
         }
     }
@@ -263,7 +263,7 @@ fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
     } else {
         writeln!(out, "✔ backups          {}", backups.join(", "))?;
     }
-    writeln!(out, "Undo anytime: moat uninstall")?;
+    writeln!(out, "Undo anytime: openmoat uninstall")?;
     Ok(())
 }
 
@@ -293,7 +293,7 @@ fn choose_hosts(
             writeln!(
                 out,
                 "{name}: {} is {}, which does not exist yet; start {name} once to create \
-                 it, then run moat init again",
+                 it, then run openmoat init again",
                 dir_variable(config.host)?.0,
                 config.dir().display()
             )?;
@@ -313,8 +313,8 @@ fn choose_hosts(
     if !crate::terminal::interactive() {
         writeln!(
             out,
-            "· agents           found {}; none changed without a terminal: run `moat init` \
-             in a terminal to choose, or `moat init --yes` to set up all of them",
+            "· agents           found {}; none changed without a terminal: run `openmoat init` \
+             in a terminal to choose, or `openmoat init --yes` to set up all of them",
             names.join(", ")
         )?;
         return Ok(Vec::new());
@@ -336,7 +336,7 @@ fn choose_hosts(
     writeln!(
         out,
         "OpenMoat adds its hook and sandbox settings to each agent you accept, backing \
-         up every file first; `moat uninstall` undoes it. Each agent's changes are shown \
+         up every file first; `openmoat uninstall` undoes it. Each agent's changes are shown \
          before you are asked."
     )?;
     // The sandbox settings the policy `init` keeps or installs gives each agent.
@@ -452,7 +452,7 @@ fn sandboxes(
         let report = sandbox::install::report(host, &plan);
         writeln!(
             out,
-            "{prefix} {:<16} {} (sandbox {verb}; {} stricter, {} wider than the policy: `moat sandbox show`)",
+            "{prefix} {:<16} {} (sandbox {verb}; {} stricter, {} wider than the policy: `openmoat sandbox show`)",
             host.display_name(),
             sandbox::install::settings_path(home, host)?.display(),
             report.losses.len(),

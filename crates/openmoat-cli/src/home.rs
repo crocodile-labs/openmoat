@@ -122,6 +122,17 @@ impl Home {
         self.root.is_dir()
     }
 
+    /// An error pointing at `openmoat init` when the directory is missing.
+    pub fn require_exists(&self) -> Result<()> {
+        if !self.exists() {
+            bail!(
+                "{} does not exist; run `openmoat init`",
+                self.root.display()
+            );
+        }
+        Ok(())
+    }
+
     /// Create the directory with owner-only permissions, tightening an
     /// existing one.
     pub fn ensure(&self) -> Result<()> {
@@ -146,7 +157,7 @@ impl Home {
     pub fn load_policy(&self) -> Result<Policy> {
         let path = self.policy_path();
         if !path.is_file() {
-            bail!("no policy at {}; run `moat init`", path.display());
+            bail!("no policy at {}; run `openmoat init`", path.display());
         }
         self.load_policy_at(&path)
     }
@@ -192,7 +203,7 @@ impl Home {
                  blocks it, so run this from your own terminal",
                 path.display()
             ),
-            _ => bail!("no audit log at {}; run `moat init`", path.display()),
+            _ => bail!("no audit log at {}; run `openmoat init`", path.display()),
         }
         openmoat_audit::Store::open_read_only(&path)
             .with_context(|| format!("opening {}", path.display()))
@@ -363,7 +374,7 @@ mod tests {
             root: dir.path().join("state"),
         };
         let missing = home.open_audit().err().unwrap().to_string();
-        assert!(missing.contains("run `moat init`"), "{missing}");
+        assert!(missing.contains("run `openmoat init`"), "{missing}");
 
         fs::create_dir(home.root()).unwrap();
         fs::write(home.audit_path(), b"").unwrap();
@@ -375,7 +386,7 @@ mod tests {
             // Root reads through mode 000, so only an ordinary user reaches this.
             let message = message.unwrap();
             assert!(message.contains("permission denied"), "{message}");
-            assert!(!message.contains("moat init"), "{message}");
+            assert!(!message.contains("openmoat init"), "{message}");
         }
     }
 }

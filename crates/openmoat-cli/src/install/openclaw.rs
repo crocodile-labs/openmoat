@@ -153,7 +153,7 @@ pub fn upsert(root: &mut Value, config: &HostConfig) -> Result<Outcome> {
     if plugins.get("enabled") == Some(&Value::Bool(false)) {
         bail!(
             "{} turns every plugin off (`plugins.enabled: false`), so OpenMoat's plugin \
-             cannot load; turn plugins on, then run `moat init` again",
+             cannot load; turn plugins on, then run `openmoat init` again",
             file.display()
         );
     }

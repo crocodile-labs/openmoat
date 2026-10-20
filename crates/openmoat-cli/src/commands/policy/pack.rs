@@ -44,7 +44,7 @@ fn repin(home: &Home) -> Result<usize> {
 }
 
 pub fn trust_key(args: &TrustKeyArgs) -> Result<Code> {
-    let home = person("moat policy trust-key", "trust a signing key")?;
+    let home = person("openmoat policy trust-key", "trust a signing key")?;
     let program = signing::require(&home)?;
     let key =
         fs::read_to_string(&args.key).with_context(|| format!("reading {}", args.key.display()))?;
@@ -89,7 +89,7 @@ fn default_sig(pack: &Path) -> PathBuf {
 }
 
 pub fn install(args: &InstallArgs) -> Result<Code> {
-    let home = person("moat policy install", "install a policy pack")?;
+    let home = person("openmoat policy install", "install a policy pack")?;
     let program = signing::require(&home)?;
     let name = match &args.name {
         Some(name) => name.clone(),
@@ -101,7 +101,7 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     };
     packs::check_name(&name)?;
     let signers = signing::trusted_signers(&home).context(
-        "no key is trusted to sign policy yet; add your team's with `moat policy trust-key`",
+        "no key is trusted to sign policy yet; add your team's with `openmoat policy trust-key`",
     )?;
     let text = fs::read_to_string(&args.pack)
         .with_context(|| format!("reading {}", args.pack.display()))?;
@@ -116,7 +116,7 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     let _ = fs::remove_file(&staged);
     let Some(signer) = signer? else {
         bail!(
-            "refusing {}: its signature {} does not verify against any key `moat policy \
+            "refusing {}: its signature {} does not verify against any key `openmoat policy \
              trust-key` trusted (namespace {})",
             args.pack.display(),
             sig.display(),
@@ -181,7 +181,7 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
 }
 
 pub fn remove(args: &RemoveArgs) -> Result<Code> {
-    let home = person("moat policy remove", "remove a policy pack")?;
+    let home = person("openmoat policy remove", "remove a policy pack")?;
     packs::check_name(&args.name)?;
     let mut installed = Packs::load(&home.packs_path())?;
     if installed.packs.remove(&args.name).is_none() {

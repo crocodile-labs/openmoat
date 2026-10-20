@@ -18,22 +18,22 @@ pub use policy::{
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "moat",
+    name = "openmoat",
     version = concat!(env!("CARGO_PKG_VERSION"), " (OpenMoat)"),
     about = "OpenMoat: decides what AI coding agents may do, and records every decision",
     long_about = "OpenMoat decides what AI coding agents may do on this machine and records\n\
                   every decision.\n\
                   The hook decides each call; the operating system also bounds commands inside the\n\
-                  agents' sandboxes `moat init` configures and under `moat run`. Outside them an\n\
-                  allowed command runs with your permissions (`moat status` shows each agent's level).\n\
+                  agents' sandboxes `openmoat init` configures and under `openmoat run`. Outside them an\n\
+                  allowed command runs with your permissions (`openmoat status` shows each agent's level).\n\
                   Exit codes: 0 allow/ok, 1 the agent `run` started failed, 2 deny, 3 ask (unresolved),\n\
                   64 usage or configuration error\n\
                   (`guard` exits 2 instead, so a broken hook blocks rather than fails open).\n\n\
-                  Run `moat` alone to see what is protected and answer anything that needs you:\n\
+                  Run `openmoat` alone to see what is protected and answer anything that needs you:\n\
                   a changed policy to accept, or a command an agent asked to run."
 )]
 pub struct Cli {
-    /// `None` is the home screen (`moat` alone).
+    /// `None` is the home screen (`openmoat` alone).
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -44,7 +44,7 @@ pub enum Command {
     /// finds. At a terminal it shows each change and asks before making it.
     Init(InitArgs),
     /// Remove OpenMoat's hooks and sandbox settings from the agents, restoring the
-    /// backups `moat init` took. Refused unless run from an interactive terminal.
+    /// backups `openmoat init` took. Refused unless run from an interactive terminal.
     Uninstall(UninstallArgs),
     /// Decide one hook request from stdin (invoked by host hooks, not by people).
     Guard(GuardArgs),
@@ -57,7 +57,7 @@ pub enum Command {
     /// Approve a shell command for one session, or permanently; or permanently allow
     /// a site (`--site`) or a directory (`--dir`). Refused unless run from an interactive terminal.
     Allow(AllowArgs),
-    /// List what you allowed: permanent rules from `moat allow`, active session
+    /// List what you allowed: permanent rules from `openmoat allow`, active session
     /// grants, and trusted repositories, each with how to take it back.
     Allowed(AllowedArgs),
     /// Edit ~/.moat/policy.yaml in $VISUAL or $EDITOR; lint it, show the diff and ask
@@ -78,7 +78,7 @@ pub enum Command {
     Report(ReportArgs),
     /// Run the default-deny egress proxy, or install/uninstall it as a user service
     /// so it stays up without a person running it (macOS launchd, Linux systemd user unit).
-    /// `moat proxy` alone runs the proxy; `install`, `uninstall` and `status` manage the service.
+    /// `openmoat proxy` alone runs the proxy; `install`, `uninstall` and `status` manage the service.
     Proxy(ProxyArgs),
     /// Export the audit log for review elsewhere, verify an export, and anchor the
     /// log's head outside it.
@@ -91,7 +91,7 @@ pub enum Command {
     /// one on Linux). Turn the agent's own sandbox off. On Linux without `--isolate`,
     /// files inside the project (`.env`, `.git`, `.moat`) are not protected.
     Run(RunArgs),
-    /// What `moat run` starts inside bubblewrap on Linux (not for people).
+    /// What `openmoat run` starts inside bubblewrap on Linux (not for people).
     #[command(hide = true)]
     Isolated(IsolatedArgs),
     /// Inspect and test policy files.
@@ -165,7 +165,7 @@ pub struct InitArgs {
     pub dry_run: bool,
 
     /// Also run every stdio MCP server in the agents' user configuration through
-    /// `moat mcp proxy` (`moat mcp wrap`), which pins its tool descriptions.
+    /// `openmoat mcp proxy` (`openmoat mcp wrap`), which pins its tool descriptions.
     #[arg(long)]
     pub mcp_proxy: bool,
 }
@@ -219,7 +219,7 @@ pub struct ReportArgs {
 #[derive(Debug, Subcommand)]
 pub enum SecretCommand {
     /// Broker a secret: the agent holds a placeholder, and OpenMoat puts the value in
-    /// one header of requests to one host. `moat secret add gh` is the GitHub API token
+    /// one header of requests to one host. `openmoat secret add gh` is the GitHub API token
     /// (`GITHUB_TOKEN`, `api.github.com`).
     Add(SecretAddArgs),
     /// List the brokered secrets: id, host, header and where the value is read from.
@@ -251,7 +251,7 @@ pub struct SecretAddArgs {
     /// The request header the value goes in.
     #[arg(long)]
     pub header: Option<String>,
-    /// Read the value from this environment variable of `moat proxy` and the agent.
+    /// Read the value from this environment variable of `openmoat proxy` and the agent.
     #[arg(long, value_name = "NAME")]
     pub env: Option<String>,
     /// Read the value from this file (absolute or under `~/`).
@@ -349,7 +349,7 @@ pub struct ProxyArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum ProxyCommand {
-    /// Install `moat proxy` as a user service that starts at login and restarts on failure
+    /// Install `openmoat proxy` as a user service that starts at login and restarts on failure
     /// (macOS launchd user agent, Linux systemd user unit; refused on Windows for now, #272).
     /// Refused unless run from an interactive terminal.
     Install,

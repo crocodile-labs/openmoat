@@ -42,7 +42,10 @@ fn requiring_signatures_ignores_a_trust_record_without_one() {
         .unwrap();
 
     let default = Policy::parse("version: 1\n").unwrap();
-    assert!(is_trusted(&home, &default, &found).unwrap(), "moat trust");
+    assert!(
+        is_trusted(&home, &default, &found).unwrap(),
+        "openmoat trust"
+    );
     let signed_only = Policy::parse("version: 1\nrequire_signed_repo_policy: true\n").unwrap();
     assert!(
         !is_trusted(&home, &signed_only, &found).unwrap(),

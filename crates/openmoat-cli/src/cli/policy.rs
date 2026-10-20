@@ -19,7 +19,7 @@ pub enum PolicyCommand {
     /// interactive terminal, except with --dry-run.
     Upgrade(UpgradeArgs),
     /// Install a team's signed policy pack: verify its OpenSSH signature against the
-    /// keys `moat policy trust-key` trusted, then merge its rules into the policy and
+    /// keys `openmoat policy trust-key` trusted, then merge its rules into the policy and
     /// pin the pack. Refused unless run from an interactive terminal, and over a
     /// drifted lock.
     Install(InstallArgs),

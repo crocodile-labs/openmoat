@@ -82,7 +82,7 @@ pub(super) fn sandboxes(
     if let Some(port) = plan.proxy_port.filter(|_| present) {
         // A warning, not a problem: a stopped proxy fails closed.
         let (ok, text) = crate::commands::proxy::listening_line(port);
-        let line = format!("moat proxy       {text}");
+        let line = format!("openmoat proxy   {text}");
         if ok {
             report.line(Area::Service, true, line);
         } else {

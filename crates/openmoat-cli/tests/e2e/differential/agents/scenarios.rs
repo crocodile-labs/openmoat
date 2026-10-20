@@ -251,7 +251,7 @@ fn the_scenario_calls_get_these_verdicts_from_the_hook() {
 fn bash(command: &str) -> Value {
     call(
         "Bash",
-        json!({"command": command, "description": "moat probe"}),
+        json!({"command": command, "description": "openmoat probe"}),
     )
 }
 

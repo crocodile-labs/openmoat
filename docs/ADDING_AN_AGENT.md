@@ -15,8 +15,8 @@ this guide; this file explains each step.
 ## What an adapter is
 
 An agent that supports hooks runs a command before each tool call, passes the call as
-JSON on stdin and reads an answer from stdout. `moat init` installs
-`moat guard --host <id>` as that command. For each call, `guard`:
+JSON on stdin and reads an answer from stdout. `openmoat init` installs
+`openmoat guard --host <id>` as that command. For each call, `guard`:
 
 1. reads the payload and asks the adapter to turn it into a `HookRequest` (host,
    session id, call id, working directory, tool name, and an `Action` or none);
@@ -27,7 +27,7 @@ Adapters live in `crates/openmoat-hosts`. They translate; they never decide. The
 flow is in [ARCHITECTURE.md](ARCHITECTURE.md) §2–3.
 
 If the agent has no hook that runs before a tool call, it cannot get an adapter. Point
-its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
+its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 ## Before you write code
 
@@ -42,7 +42,7 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `moat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_format`, the `HookFormat` of the file); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user and the project file; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `moat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
+| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_format`, the `HookFormat` of the file); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user and the project file; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
 | `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `adapter` |
 | `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
 | `crates/openmoat-cli/src/install.rs` | nothing for an agent whose configuration is one directory moved by one variable: `HostConfig` takes the directory, variable, file, entries and layout from the spec's `install` |
@@ -55,7 +55,7 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 | `CHANGELOG.md` | an `### Added` line under Unreleased |
 
 The compiler points at every other `match` on `Host` that needs a new arm. Lock pinning,
-`moat status`, `moat doctor` and `moat uninstall` loop over `Host::ALL`, so they pick up
+`openmoat status`, `openmoat doctor` and `openmoat uninstall` loop over `Host::ALL`, so they pick up
 the new agent without further code.
 
 ## Map the payload to an `Action`
@@ -94,7 +94,7 @@ Rules the existing adapters follow:
   or network.**
 - **Return `HostError::WrongEvent` for an event the adapter does not handle.**
 - Keep the agent's session id (`session_or_unknown`) and call id. Grants, session
-  taint and `moat allow --last` depend on them.
+  taint and `openmoat allow --last` depend on them.
 
 ## Answer allow, defer, ask or deny
 
@@ -114,7 +114,7 @@ Some agents cannot ask. Codex rejects `ask` and runs the call; the Continue CLI 
 it; Cursor accepts `ask` on `preToolUse` but runs the call, and `beforeReadFile` takes
 only allow or deny. For these, the spec's `Asks` says why the agent cannot ask, and
 `Host::answer` (`contract::answer`) turns an `ask` into a `deny` with that reason and the line saying how to
-approve it. The audit log keeps the `ask`, which is what `moat` and `moat allow --last`
+approve it. The audit log keeps the `ask`, which is what `openmoat` and `openmoat allow --last`
 look for. If the agent cannot ask, fill in `Asks::on_pre_tool_use`. If it can ask only
 on some events, return `HookEvent::PreToolUseNoAsk` for the others and fill in
 `Asks::on_no_ask`, as `host/cursor.rs` does.
@@ -124,7 +124,7 @@ checked in the fixtures `README.md`.
 
 ## Install, uninstall and the lock
 
-`moat init` calls `HostConfig::install`, which adds one entry per `HookSpec` (event,
+`openmoat init` calls `HostConfig::install`, which adds one entry per `HookSpec` (event,
 matcher, timeout) of the spec's `install.hooks` to the agent's hook file, in the
 layout `install.hook_format` names. It must stay idempotent (invariant 8):
 
@@ -139,14 +139,14 @@ layout `install.hook_format` names. It must stay idempotent (invariant 8):
   entry the host can block on gets `block_on_failure`; `tests/contract.rs` checks both
   for every host.
 
-`moat uninstall` calls `HostConfig::remove`, which deletes only our entries and any
+`openmoat uninstall` calls `HostConfig::remove`, which deletes only our entries and any
 event list or `hooks` object that leaves empty. Test that installing and then removing
 gives back the original file (`hook_file.rs` tests).
 
-`moat init` pins every installed hook file in `~/.moat/policy.lock`
+`openmoat init` pins every installed hook file in `~/.moat/policy.lock`
 (`integrity::installed_hook_files` loops over `Host::ALL`). If the file changes, the
-next tool call is denied with `kernel-integrity` until a person runs `moat init` or
-`moat doctor --accept`. Only Claude Code has a `ConfigChange` event that catches the
+next tool call is denied with `kernel-integrity` until a person runs `openmoat init` or
+`openmoat doctor --accept`. Only Claude Code has a `ConfigChange` event that catches the
 edit as it happens; for other agents, say in the threat model that a tampered hook file
 is caught on the next tool call.
 
@@ -161,7 +161,7 @@ Most agents let a variable move their config directory (`CLAUDE_CONFIG_DIR`,
 `CODEX_HOME`, `CURSOR_CONFIG_DIR`). Put the agent's variable and default directory in
 its spec's `install` (`InstallSpec`): `dir_variable` and `moved_dirs`
 (`crates/openmoat-cli/src/context.rs`) read them from there for every host in
-`Host::ALL`. `moat init` installs where that variable points and
+`Host::ALL`. `openmoat init` installs where that variable points and
 records the directory in `~/.moat/hosts.json`, and later commands use the record. An
 agent counts as present when its directory exists; `init` names an agent whose variable
 points at a missing directory instead of skipping it silently.
@@ -192,19 +192,19 @@ adapter does not handle.
 ## End-to-end tests
 
 `crates/openmoat-cli/tests/e2e/cursor.rs` is the model. `Sandbox::installed(&[".<agent>"])`
-runs the real `moat init --yes` with an isolated `HOME`, and `sb.guard("<id>", payload)`
+runs the real `openmoat init --yes` with an isolated `HOME`, and `sb.guard("<id>", payload)`
 runs the hook. Test at least:
 
 - `init` writes one entry per event, with the fail-closed flag if there is one, and a
   second `init` changes nothing;
 - a secret read or exfiltration fixture is denied with exit 2 in the agent's format;
 - a safe call is allowed;
-- an `ask` arrives as the agent needs it (a deny with `moat allow --last` if it cannot
+- an `ask` arrives as the agent needs it (a deny with `openmoat allow --last` if it cannot
   ask);
 - a deferred call is left to the agent (no output and exit 0, or the agent's own
   prompt) and is not denied;
 - malformed arguments are denied;
-- `moat uninstall` removes the entries (see `e2e/uninstall.rs`).
+- `openmoat uninstall` removes the entries (see `e2e/uninstall.rs`).
 
 ## Be honest about coverage
 

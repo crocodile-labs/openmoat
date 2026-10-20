@@ -52,8 +52,8 @@ pub(crate) fn wrong_event(event: Option<&str>) -> HostError {
 
 /// How a person approves a call a host could not ask about. Every host that
 /// receives an `ask` as a `deny` ends its reason with this.
-const HOW_TO_APPROVE: &str = "run `moat` to approve it, or `moat allow --last` (this session) \
-     or `moat allow --last --always`, then retry";
+const HOW_TO_APPROVE: &str = "run `openmoat` to approve it, or `openmoat allow --last` (this session) \
+     or `openmoat allow --last --always`, then retry";
 
 /// The facts about one host. Code covers only what a fact cannot say.
 #[derive(Debug)]

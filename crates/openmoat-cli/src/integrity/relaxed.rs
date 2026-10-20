@@ -122,7 +122,10 @@ pub struct Verified {
 pub fn check(home: &Home) -> Result<Verified> {
     let lock_path = home.lock_path();
     if !lock_path.is_file() {
-        bail!("no policy lock at {}; run `moat init`", lock_path.display());
+        bail!(
+            "no policy lock at {}; run `openmoat init`",
+            lock_path.display()
+        );
     }
     let lock = Lock::load(&lock_path)?;
     let (drift, policy) = lock.verify_keeping(Some(&home.policy_path()));

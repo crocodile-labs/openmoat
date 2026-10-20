@@ -6,7 +6,7 @@ in `AGENTS.md`, the working contract for people and coding agents.
 ## Where to start
 
 - **A safe command is denied or asked about** (a *false positive*): open an issue with
-  the false-positive form and paste the `moat policy check` output.
+  the false-positive form and paste the `openmoat policy check` output.
 - **A dangerous action is allowed**, or anything else security-relevant: report it
   privately through a security advisory ([SECURITY.md](SECURITY.md)), never in a
   public issue or pull request.
@@ -81,7 +81,7 @@ is pushed to `main` directly.
 | `type: *` | from the Conventional Commits title | what kind of change |
 | `area: *` | from changed paths | `core`, `hosts`, `audit`, `proxy`, `cli`, `policy`, `ci`, `docs`, `deps` |
 | `size: *` | additions + deletions | `XS` ≤ 10 · `S` ≤ 50 · `M` ≤ 200 · `L` ≤ 500 · `XL` fails without `size: override` |
-| `risk: *` | from changed paths | `high`: engine, lexer/classifier, policy, guard, exit codes, proxy and broker, OS sandbox generation, `moat run`, integrity, secrets, workflows, SECURITY · `medium`: adapters, install, audit · `low`: the rest |
+| `risk: *` | from changed paths | `high`: engine, lexer/classifier, policy, guard, exit codes, proxy and broker, OS sandbox generation, `openmoat run`, integrity, secrets, workflows, SECURITY · `medium`: adapters, install, audit · `low`: the rest |
 | `needs: fixture` | core or policy changed without `tests/conformance/` | add a fixture |
 
 Checks that must pass before merge (enforced by the `main` ruleset; names as shown on the
@@ -176,24 +176,24 @@ locally.
 
 ## Testing with real agents
 
-Most end-to-end tests hand `moat guard` a hook payload the test wrote. CI's
+Most end-to-end tests hand `openmoat guard` a hook payload the test wrote. CI's
 `standard tier` job also runs the pinned Claude Code and Codex binaries
 (`scripts/ci/host-binaries.sh`, then `scripts/ci/differential.sh`), with no account and
 no traffic leaving the machine:
 
 - `differential::claude` and `differential::codex` run the attack scenarios under each
   agent's own sandbox, without OpenMoat's hook.
-- `differential::agents` runs Claude Code with OpenMoat's hook installed by `moat init`.
+- `differential::agents` runs Claude Code with OpenMoat's hook installed by `openmoat init`.
   A local fake Anthropic API (`tests/differential/fake_api.py --calls`) asks for a fixed
   sequence of tool calls, and a stdio MCP server (`tests/differential/fake_mcp.py`)
   answers MCP calls. The scenarios are token egress, a push of a committed token, the
   package near-miss ask, a changed MCP server, file provenance across two sessions and
   `onFailure: block`, which is asserted only from Claude Code 2.1.295 (with an older pin
-  the test reports what happened). The same calls also run through `moat guard` alone,
+  the test reports what happened). The same calls also run through `openmoat guard` alone,
   on every machine.
-- Codex is driven only through `codex sandbox`, and inside `moat run` the only network
+- Codex is driven only through `codex sandbox`, and inside `openmoat run` the only network
   is the run's proxy, which refuses loopback, so no fake model API is reachable there.
-  For hooks inside `moat run`, CI checks that the real `codex` starts inside the run and
+  For hooks inside `openmoat run`, CI checks that the real `codex` starts inside the run and
   that a Codex hook call made in the run is decided and recorded outside it.
 
 To try the same checks with your own agents and model keys, run:
@@ -203,8 +203,8 @@ ANTHROPIC_API_KEY=… OPENAI_API_KEY=… scripts/smoke-real-agents.sh   # or nam
 ```
 
 It creates a throwaway `HOME`, `MOAT_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` under a
-new temporary directory, runs `moat init` there, and walks through each check in
-headless mode (`claude -p`, `codex exec` on its own and inside `moat run`). Before each step it says what
+new temporary directory, runs `openmoat init` there, and walks through each check in
+headless mode (`claude -p`, `codex exec` on its own and inside `openmoat run`). Before each step it says what
 to expect, and after it prints PASS, FAIL or LOOK (the model did not make the call).
 Before any agent starts it checks that none of those variables resolves to your real
 home, `~/.claude`, `~/.codex`, `~/.cursor`, `~/.moat` or `~/.ssh`, or to a config
@@ -217,8 +217,8 @@ prints. The temporary directory is kept so you can inspect it.
 `fuzz/` holds `cargo fuzz` targets for every surface that takes untrusted input:
 `decide_shell` (any command line through the lexer, classifier and engine),
 `policy_parse` (any policy file), `host_payload` (any hook payload, every host),
-`literal_pattern` (`moat allow --always` must produce a rule that lints and matches its
-command), `proxy_parse` (any request head or TLS `ClientHello` `moat proxy` reads) and
+`literal_pattern` (`openmoat allow --always` must produce a rule that lints and matches its
+command), `proxy_parse` (any request head or TLS `ClientHello` `openmoat proxy` reads) and
 `openclaw_json5` (any `openclaw.json`: the CLI's JSON5 reader, compiled from
 `crates/openmoat-cli/src/json5.rs`). It is a separate workspace built with nightly:
 
@@ -236,7 +236,7 @@ crash becomes a unit test or fixture next to the fix.
 `.github/workflows/release.yml` is driven by [dist](https://axodotdev.github.io/cargo-dist/)
 (config in `dist-workspace.toml`). A `v*` tag builds the seven targets, writes the shell and
 PowerShell installers, the Homebrew formula and `sha256.sum`, attests every file, creates
-the GitHub release, pushes `Formula/moat.rb` to `crocodile-labs/homebrew-tap` and, after a maintainer
+the GitHub release, pushes `Formula/openmoat.rb` to `crocodile-labs/homebrew-tap` and, after a maintainer
 approves the `release` environment, publishes the crates to crates.io. Pull requests that
 touch the manifests or the workflow run `dist plan` only. Running the workflow by hand
 (Actions → release → Run workflow) is a dry run: it builds every target and publishes nothing.

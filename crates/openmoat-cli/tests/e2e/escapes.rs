@@ -31,11 +31,11 @@ fn logged_escapes_are_shown_as_question_marks() {
     let deny = format!("cat ~/.ssh/id_rsa{ESCAPES}");
     for command in [&ask, &deny] {
         let guard = sb.guard("claude-code", &bash_payload("s1", &sb.project(), command));
-        assert_clean("moat guard", &guard);
+        assert_clean("openmoat guard", &guard);
     }
 
     let show = sb.moat(&["show"]);
-    assert_clean("moat show", &show);
+    assert_clean("openmoat show", &show);
     let shown = String::from_utf8_lossy(&show.stdout);
     assert!(
         shown.contains("left-pad?]52;c;ZmFrZQ==??]0;title?"),
@@ -49,11 +49,11 @@ fn logged_escapes_are_shown_as_question_marks() {
         &["policy", "check", &ask],
         &["policy", "check", &deny],
     ] {
-        assert_clean(&format!("moat {}", args[0]), &sb.moat(args));
+        assert_clean(&format!("openmoat {}", args[0]), &sb.moat(args));
     }
     assert_clean("moat", &output(&mut sb.command(), Some("")));
     assert_clean(
-        "moat allow --last",
+        "openmoat allow --last",
         &sb.moat_approving(&["allow", "--last"]),
     );
 }

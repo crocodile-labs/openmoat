@@ -110,8 +110,8 @@ pub fn violation(
         return Ok(None);
     }
     let accept = names.first().map_or_else(
-        || "fix the file, then run `moat mcp accept` in a terminal".to_owned(),
-        |name| format!("a person must review it: run `moat mcp accept {name}` in a terminal"),
+        || "fix the file, then run `openmoat mcp accept` in a terminal".to_owned(),
+        |name| format!("a person must review it: run `openmoat mcp accept {name}` in a terminal"),
     );
     reasons.push(accept);
     let mut decision = Decision::new(Verdict::Deny);

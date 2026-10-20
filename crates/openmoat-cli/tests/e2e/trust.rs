@@ -162,7 +162,7 @@ fn status_and_doctor_say_which_form_applies() {
     }
     write_policy(&project, &format!("{DEPLOY}# edited\n"));
     for (_, out) in reports(&sb, &project) {
-        assert!(out.contains("changed since `moat trust`"), "{out}");
+        assert!(out.contains("changed since `openmoat trust`"), "{out}");
     }
     write_policy(&project, "version: 1\ndeny: [\n");
     for (code, out) in reports(&sb, &project) {

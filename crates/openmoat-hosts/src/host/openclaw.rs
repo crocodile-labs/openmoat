@@ -55,7 +55,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_ask_on_no_ask: false,
     },
     on_hook_failure: "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
-         `before_tool_call` fails closed), and the plugin blocks when `moat` is missing, \
+         `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, \
          crashes or does not answer; runs the call unchecked when the Gateway does not \
          load the plugin",
     gaps: "no OS sandbox from OpenMoat; a parameter rewrite by another plugin and \

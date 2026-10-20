@@ -5,7 +5,7 @@
     "fs.write `claude-code.working-directories`: sandboxed commands may write the session's working directories and temp directory; OpenMoat's project is the git root and never the home directory, so a session started above a project writes more than the hook allows"
   ],
   "losses": [
-    "net `secrets.local`: mixing `plain_http: true` with `plain_http: false` secrets would widen the others through Claude Code's block-scoped `allowPlaintextInject`; this secret is routed through `moat proxy` instead",
+    "net `secrets.local`: mixing `plain_http: true` with `plain_http: false` secrets would widen the others through Claude Code's block-scoped `allowPlaintextInject`; this secret is routed through `openmoat proxy` instead",
     "fs.read `default`: Claude Code's file tools refuse reads outside the working directories (permissions.blockReadsOutsideWorkingDirectories) where the hook would ask; `/add-dir` adds a directory"
   ],
   "permissions": {

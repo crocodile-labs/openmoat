@@ -14,7 +14,7 @@ use crate::common::{OK, Sandbox, USAGE, fixture, hook_output, output, text};
 fn brew_install(prefix: &Path, version: &str) {
     let bin = prefix.join(format!("Cellar/moat/{version}/bin"));
     fs::create_dir_all(&bin).unwrap();
-    fs::copy(env!("CARGO_BIN_EXE_moat"), bin.join("moat")).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_openmoat"), bin.join("moat")).unwrap();
     let link = prefix.join("bin/moat");
     fs::create_dir_all(prefix.join("bin")).unwrap();
     let _ = fs::remove_file(&link);
@@ -93,7 +93,7 @@ fn doctor_and_status_name_a_missing_or_different_hook_binary() {
         let out = output(sb.command_at(&moat).args(args), None);
         assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
         assert!(
-            text(&out).contains("a different moat than this one"),
+            text(&out).contains("a different OpenMoat binary than this one"),
             "{}",
             text(&out)
         );
@@ -104,12 +104,12 @@ fn doctor_and_status_name_a_missing_or_different_hook_binary() {
     let gone = prefix.join("Cellar/moat/0.0.9/bin/moat");
     let edited = fs::read_to_string(&settings)
         .unwrap()
-        .replace(env!("CARGO_BIN_EXE_moat"), &gone.to_string_lossy());
+        .replace(env!("CARGO_BIN_EXE_openmoat"), &gone.to_string_lossy());
     fs::write(&settings, edited).unwrap();
     let out = output(sb.command_at(&moat).args(["doctor"]), None);
     assert_eq!(out.status.code(), Some(USAGE));
     assert!(
-        text(&out).contains("which does not exist; run `moat init`"),
+        text(&out).contains("which does not exist; run `openmoat init`"),
         "{}",
         text(&out)
     );

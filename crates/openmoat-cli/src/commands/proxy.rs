@@ -72,7 +72,7 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
     writeln!(
         std::io::stderr(),
         "moat proxy: note: no session credentials here, so any local process may use this \
-         proxy and session taint does not apply to it; `moat run` serves one that requires them"
+         proxy and session taint does not apply to it; `openmoat run` serves one that requires them"
     )?;
     if let Some(port) = hosts_port.filter(|p| *p != addr.port()) {
         writeln!(
@@ -99,10 +99,10 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
 
 /// `moat proxy install`: write and start the per-user service.
 pub fn install() -> Result<Code> {
-    crate::terminal::refuse_agent("moat proxy install")?;
+    crate::terminal::refuse_agent("openmoat proxy install")?;
     if !crate::terminal::interactive() {
         bail!(
-            "`moat proxy install` must be run by a person in a terminal, not from a hook \
+            "`openmoat proxy install` must be run by a person in a terminal, not from a hook \
              or script: starting a user service touches the host OS"
         );
     }
@@ -123,7 +123,7 @@ pub fn install() -> Result<Code> {
     )?;
     writeln!(
         out,
-        "  `moat proxy status` reports its state; `moat proxy uninstall` removes it.",
+        "  `openmoat proxy status` reports its state; `openmoat proxy uninstall` removes it.",
     )?;
     out.finish()?;
     Ok(Code::Ok)
@@ -131,10 +131,10 @@ pub fn install() -> Result<Code> {
 
 /// `moat proxy uninstall`: stop and remove the per-user service.
 pub fn uninstall() -> Result<Code> {
-    crate::terminal::refuse_agent("moat proxy uninstall")?;
+    crate::terminal::refuse_agent("openmoat proxy uninstall")?;
     if !crate::terminal::interactive() {
         bail!(
-            "`moat proxy uninstall` must be run by a person in a terminal, not from a hook or script"
+            "`openmoat proxy uninstall` must be run by a person in a terminal, not from a hook or script"
         );
     }
     let home = Home::locate()?;
@@ -222,7 +222,7 @@ pub fn service_line(home: &Home) -> Option<(bool, String)> {
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn status(_args: &ProxyStatusArgs) -> Result<Code> {
     bail!(
-        "no user service on {} yet (#272); run `moat proxy` in a terminal to keep the proxy up",
+        "no user service on {} yet (#272); run `openmoat proxy` in a terminal to keep the proxy up",
         std::env::consts::OS
     )
 }
@@ -253,7 +253,7 @@ pub(super) fn listening_line(port: u16) -> (bool, String) {
     } else {
         let text = format!(
             "WARNING: nothing listens on 127.0.0.1:{port}, so sandboxed commands have no \
-             network; start `moat proxy` (keep it running as a user service)"
+             network; start `openmoat proxy` (keep it running as a user service)"
         );
         (false, text)
     }
@@ -263,9 +263,7 @@ pub(super) fn listening_line(port: u16) -> (bool, String) {
 /// drift, so a tampered policy is never compiled into a sandbox or a proxy.
 pub(super) fn installed() -> Result<Home> {
     let home = Home::locate()?;
-    if !home.exists() {
-        bail!("{} does not exist; run `moat init`", home.root().display());
-    }
+    home.require_exists()?;
     if let Some(drift) = integrity::violation(&home)? {
         bail!("policy lock drift: {}", drift.reasons.join("; "));
     }

@@ -47,7 +47,7 @@ pub(crate) fn installed_with_secret() -> (Sandbox, PathBuf) {
     };
     let sb = Sandbox::bare_in(&parent, &[]);
     let out = sb.moat(&["init", "--yes"]);
-    assert_eq!(out.status.code(), Some(OK), "moat init: {}", text(&out));
+    assert_eq!(out.status.code(), Some(OK), "openmoat init: {}", text(&out));
     std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
     std::fs::write(sb.home.join(".ssh/id_rsa"), "FAKE-SSH-KEY").unwrap();
     let project = sb.project();
@@ -128,7 +128,7 @@ fn isolate_never_runs_a_bwrap_from_path() {
 fn refuses_where_no_sandbox_can_be_generated() {
     let (sb, project) = installed_with_secret();
     // An agent that exists everywhere: this binary, which would print its version.
-    let agent = env!("CARGO_BIN_EXE_moat");
+    let agent = env!("CARGO_BIN_EXE_openmoat");
     let out = output(
         sb.command()
             .current_dir(&project)

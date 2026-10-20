@@ -288,7 +288,7 @@ fn ask_is_a_deny_where_cursor_does_not_prompt() {
             answer
                 .reasons
                 .iter()
-                .any(|r| r.contains("moat allow --last")),
+                .any(|r| r.contains("openmoat allow --last")),
             verdict == Verdict::Deny,
             "{name}"
         );

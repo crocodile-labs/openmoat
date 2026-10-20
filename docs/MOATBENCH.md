@@ -5,24 +5,24 @@
 > [!NOTE]
 > **Read this when** you want to run the attack and everyday scenarios per agent, read the scorecard, or score another hook.
 
-**On this page:** [Reproduce it: moat bench](#reproduce-it-moat-bench) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario)
+**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario)
 
-End-to-end scenarios of what a steered agent tries, run through the real `moat`
+End-to-end scenarios of what a steered agent tries, run through the real `openmoat`
 binary with each host's own payload shape. The conformance suite
 (`tests/conformance/`) checks one action against the engine; MoatBench checks the
 whole path: host payload, adapter, policy lock, engine, audit log and the answer the
 host receives.
 
-## Reproduce it: `moat bench`
+## Reproduce it: `openmoat bench`
 
 ```bash
-moat bench                       # the scenarios against this moat
-moat bench --hook '<command>' --host claude-code    # against any hook command
+openmoat bench                       # the scenarios against this openmoat
+openmoat bench --hook '<command>' --host claude-code    # against any hook command
 ```
 
-`moat bench` creates a throwaway home under the system temporary directory, runs
-`moat init --yes` there, and for each scenario and each host that has a tool for
-every step (Claude Code, Codex, Cursor, OpenClaw) sends the steps to `moat guard --host <host>`
+`openmoat bench` creates a throwaway home under the system temporary directory, runs
+`openmoat init --yes` there, and for each scenario and each host that has a tool for
+every step (Claude Code, Codex, Cursor, OpenClaw) sends the steps to `openmoat guard --host <host>`
 as that host's hook payload. The scenarios' commands are never executed: only the
 hook runs. It reads the kernel verdict of each step back from the throwaway audit
 log and checks:
@@ -62,7 +62,7 @@ its working directory, and an environment of only `PATH`, `HOME` and `USERPROFIL
 variable (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `MOAT_HOME`) and no secret of yours.
 A hook that does not exit within 10 s is killed. `--verbose` prints that environment
 and every payload with the reply on stderr; `--format json` prints the report for
-scripts. `moat bench` exits 0 whenever it ran, whatever the scores; 64 on a usage
+scripts. `openmoat bench` exits 0 whenever it ran, whatever the scores; 64 on a usage
 error (`--hook` without `--host`).
 
 ```text
@@ -88,10 +88,10 @@ allow`, followed by:
 
 ```text
 hook failure (host behaviour from docs/THREAT_MODEL.md §5, not tested here):
-  claude-code: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`moat init` sets `onFailure: "block"`)
+  claude-code: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`openmoat init` sets `onFailure: "block"`)
 ```
 
-The end-to-end test `cargo test -p openmoat --test e2e moatbench` runs `moat bench`
+The end-to-end test `cargo test -p openmoat --test e2e moatbench` runs `openmoat bench`
 and fails on any mismatch or false positive of OpenMoat, so CI runs it on every
 platform through `scripts/ci/quality-gate.sh`.
 
@@ -153,7 +153,7 @@ of a CI workflow, `runs-later`).
 
 The scorecard counts every step on every host that ran it, in total and per
 workflow. `asks` counts the prompts a host shows; Codex, and Cursor for file tools,
-cannot prompt, so an expected ask arrives there as a deny that names `moat allow
+cannot prompt, so an expected ask arrives there as a deny that names `openmoat allow
 --last`, which is why there can be fewer asks than expected:
 
 ```text

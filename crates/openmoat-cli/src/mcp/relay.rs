@@ -176,7 +176,7 @@ impl Relay {
             return Some(format!(
                 "OpenMoat holds tool `{tool}` of MCP server `{server}`: its description or \
                  input schema is not the one a person accepted, or it is new. Run \
-                 `moat mcp accept {server}` in a terminal to review it"
+                 `openmoat mcp accept {server}` in a terminal to review it"
             ));
         }
         None

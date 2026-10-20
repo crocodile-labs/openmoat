@@ -28,7 +28,7 @@ fn an_ask_under_bypass_permissions_is_a_deny_a_person_can_approve() {
     let d = hook_output(&out);
     assert_eq!(d["permissionDecision"], "deny", "{d}");
     let reason = d["permissionDecisionReason"].as_str().unwrap();
-    assert!(reason.contains("moat allow --last"), "{reason}");
+    assert!(reason.contains("openmoat allow --last"), "{reason}");
 
     let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));

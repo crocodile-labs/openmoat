@@ -87,7 +87,11 @@ fn text(allowed: &Allowed<'_>, now: i64) -> Result<Code> {
     }
     for rule in allowed.rules {
         writeln!(out, "  {:<14} {}", rule.id, patterns(rule))?;
-        writeln!(out, "  {:<14} remove: moat allow --remove {}", "", rule.id)?;
+        writeln!(
+            out,
+            "  {:<14} remove: openmoat allow --remove {}",
+            "", rule.id
+        )?;
     }
     writeln!(
         out,
@@ -107,13 +111,13 @@ fn text(allowed: &Allowed<'_>, now: i64) -> Result<Code> {
             time::duration(grant.expires_at_ms.saturating_sub(now))
         )?;
     }
-    writeln!(out, "Trusted repositories (moat trust)")?;
+    writeln!(out, "Trusted repositories (openmoat trust)")?;
     if allowed.trusted_repos.is_empty() {
         writeln!(out, "  none")?;
     }
     for repo in &allowed.trusted_repos {
         writeln!(out, "  {}  sha256:{}", repo.root, repo.sha256)?;
-        writeln!(out, "  revoke: moat trust --revoke {}", repo.root)?;
+        writeln!(out, "  revoke: openmoat trust --revoke {}", repo.root)?;
     }
     out.finish()?;
     Ok(Code::Ok)

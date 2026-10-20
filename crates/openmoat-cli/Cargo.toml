@@ -9,10 +9,18 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+# `cargo run -p openmoat` runs `openmoat`, not the `moat` alias.
+default-run = "openmoat"
 
 [[bin]]
-name = "moat"
+name = "openmoat"
 path = "src/main.rs"
+
+# The command's name up to 0.7.0, kept for a few releases: it starts the
+# `openmoat` installed beside it with the same arguments.
+[[bin]]
+name = "moat"
+path = "src/bin/moat.rs"
 
 [dependencies]
 openmoat-core.workspace = true

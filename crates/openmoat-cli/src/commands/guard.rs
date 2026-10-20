@@ -191,7 +191,7 @@ fn relayed(installed_for: Host, endpoint: Result<guard_relay::Endpoint>, started
             relay_once(&reply)
         }
         Err(error) => {
-            let error = error.context("`moat run` did not decide this call");
+            let error = error.context("`openmoat run` did not decide this call");
             respond(host, &event, &kernel_error(&error))
         }
     }
@@ -309,7 +309,7 @@ fn evaluate(
         decision.rules.push(SESSION_GRANT_RULE.to_owned());
         decision
             .reasons
-            .push("approved for this session with `moat allow`".to_owned());
+            .push("approved for this session with `openmoat allow`".to_owned());
     }
     // After the grant: taint only tightens, and a grant made before the
     // session read a secret did not approve sending that secret anywhere.
@@ -401,9 +401,7 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     } = recorded;
     hangs::enter(Phase::Record);
     let home = Home::locate()?;
-    if !home.exists() {
-        bail!("{} does not exist; run `moat init`", home.root().display());
-    }
+    home.require_exists()?;
     let store = Store::open_existing(&home.audit_path())?;
     if let Some(cache) = cache {
         hangs::enter(Phase::Cache);
@@ -444,7 +442,7 @@ fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     }
     // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
     if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
-        eprintln!("moat: trace {id}  (moat show {id})");
+        eprintln!("moat: trace {id}  (openmoat show {id})");
     }
     Ok(())
 }

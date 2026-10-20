@@ -93,7 +93,7 @@ fn project_flag_matches_paths_written_the_same_way() {
     assert!(stdout(&out).contains("project-fs"), "{}", stdout(&out));
 }
 
-/// Policies written by earlier `moat init` runs carry an `approval:` block;
+/// Policies written by earlier `openmoat init` runs carry an `approval:` block;
 /// they must stay valid, with a warning that the block does nothing yet.
 #[test]
 fn reserved_blocks_from_older_policies_still_lint() {
@@ -365,7 +365,7 @@ fn init_names_a_config_dir_variable_whose_directory_is_missing() {
     assert_eq!(out.status.code(), Some(OK), "{}", stdout(&out));
     let expected = format!(
         "Claude Code: CLAUDE_CONFIG_DIR is {}, which does not exist yet; start Claude Code \
-         once to create it, then run moat init again",
+         once to create it, then run openmoat init again",
         missing.display()
     );
     assert!(stdout(&out).contains(&expected), "{}", stdout(&out));

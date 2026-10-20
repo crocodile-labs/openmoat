@@ -41,7 +41,7 @@ pub(super) fn show(
             3,
             Some((
                 &format!("{name} (now)"),
-                &format!("{name} (after moat init)"),
+                &format!("{name} (after openmoat init)"),
             )),
         );
         write!(out, "{diff}")?;

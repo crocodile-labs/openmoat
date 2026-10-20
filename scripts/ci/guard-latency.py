@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Time `moat guard` the way a host runs it: one process per tool call.
+"""Time `openmoat guard` the way a host runs it: one process per tool call.
 
 Usage: guard-latency.py <path to a release moat binary> [runs]
 
@@ -65,7 +65,7 @@ def main():
     env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "USERPROFILE": home}
     if "SYSTEMROOT" in os.environ:
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    # Started in the throwaway HOME, not this checkout: `moat init` refuses a
+    # Started in the throwaway HOME, not this checkout: `openmoat init` refuses a
     # binary inside the project of the current directory.
     subprocess.run([moat, "init"], env=env, cwd=home, check=True, capture_output=True)
 
@@ -103,7 +103,7 @@ def main():
             f"{s['median']:.1f} / {s['p95']:.1f} / {s['p99']:.1f}" for s in (e2e, own)) + " |")
 
     table = "\n".join([
-        f"`moat guard`, {BATCHES} batches of {runs} runs per case, ms "
+        f"`openmoat guard`, {BATCHES} batches of {runs} runs per case, ms "
         "(median / median of the batches' p95 / p99)",
         "",
         "| case | end to end | latency_us |",

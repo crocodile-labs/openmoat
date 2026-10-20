@@ -174,7 +174,9 @@ pub fn summary(home: &Home) -> Result<Option<String>> {
         }
         (Some(digest), _) if *digest == found.digest => format!("trusted ({rules})"),
         (Some(_), None) => {
-            format!("changed since `moat trust`: tightening only, allow rules ignored ({rules})")
+            format!(
+                "changed since `openmoat trust`: tightening only, allow rules ignored ({rules})"
+            )
         }
         (None, None) if p.allow.is_empty() => format!("tightening only ({rules})"),
         (None, None) => format!("not trusted: tightening only, allow rules ignored ({rules})"),

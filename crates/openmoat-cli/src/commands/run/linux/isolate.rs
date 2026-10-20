@@ -66,7 +66,7 @@ pub fn isolate(
     state: &Path,
 ) -> Result<Confined> {
     let bwrap = system_bwrap().context(
-        "`moat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
+        "`openmoat run --isolate` needs bubblewrap (`bwrap` in /usr/bin, /bin or /usr/local/bin; \
          `apt install bubblewrap`); refusing rather than starting the agent in a weaker tier",
     )?;
     let disable_userns = usable(&bwrap)?;
@@ -142,7 +142,7 @@ fn usable(bwrap: &Path) -> Result<bool> {
     let out = probe(false)?;
     if !out.status.success() {
         bail!(
-            "bubblewrap cannot create its namespaces here, so `moat run --isolate` refuses: {}\
+            "bubblewrap cannot create its namespaces here, so `openmoat run --isolate` refuses: {}\
              (unprivileged user namespaces must be allowed; on Ubuntu 24.04 AppArmor restricts \
              them: kernel.apparmor_restrict_unprivileged_userns)",
             String::from_utf8_lossy(&out.stderr)

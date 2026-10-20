@@ -49,7 +49,7 @@ pub fn list(args: &SecretListArgs) -> Result<Code> {
     }
     let mut out = Deferred::default();
     if listed.is_empty() {
-        writeln!(out, "no brokered secrets; `moat secret add` adds one")?;
+        writeln!(out, "no brokered secrets; `openmoat secret add` adds one")?;
     }
     for item in &listed {
         let s = item.secret;
@@ -78,15 +78,17 @@ pub fn list(args: &SecretListArgs) -> Result<Code> {
 }
 
 pub fn add(args: &SecretAddArgs) -> Result<Code> {
-    crate::terminal::refuse_agent("moat secret add")?;
+    crate::terminal::refuse_agent("openmoat secret add")?;
     if !crate::terminal::interactive() {
-        bail!("`moat secret add` must be run by a person in a terminal, not from a hook or script");
+        bail!(
+            "`openmoat secret add` must be run by a person in a terminal, not from a hook or script"
+        );
     }
     let secret = secret(args)?;
     let home = Home::locate()?;
     let path = home.policy_path();
     if !path.is_file() {
-        bail!("no policy at {}; run `moat init`", path.display());
+        bail!("no policy at {}; run `openmoat init`", path.display());
     }
     integrity::refuse_drift(&home, "add a secret")?;
     if home
@@ -96,7 +98,7 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         .any(|s| s.id == secret.id)
     {
         bail!(
-            "the policy already brokers a secret `{}`; `moat edit` changes it",
+            "the policy already brokers a secret `{}`; `openmoat edit` changes it",
             secret.id
         );
     }
@@ -261,7 +263,9 @@ fn with_entry(policy: &str, secret: &Secret) -> Result<String> {
             .filter(|l| l.trim_start().starts_with('-'))
             .map_or("  ", |l| &l[..l.len() - l.trim_start().len()]),
         "[]" => "  ",
-        _ => bail!("the policy's `secrets:` is not a block list; add the secret with `moat edit`"),
+        _ => bail!(
+            "the policy's `secrets:` is not a block list; add the secret with `openmoat edit`"
+        ),
     };
     let mut out = String::new();
     for line in &lines[..at] {

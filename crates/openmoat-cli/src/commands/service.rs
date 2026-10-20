@@ -96,18 +96,18 @@ impl State {
     pub fn describe(&self, path: &std::path::Path) -> String {
         match self {
             Self::NotInstalled => {
-                "not installed; `moat proxy install` keeps the proxy running".to_owned()
+                "not installed; `openmoat proxy install` keeps the proxy running".to_owned()
             }
             Self::Stopped => format!("installed but stopped ({})", path.display()),
             Self::Running => format!("installed and running ({})", path.display()),
             Self::DriftBlocked => format!(
                 "installed; the proxy exited because of policy-lock drift. Fix the drift \
-                 (`moat doctor`), then `moat proxy install` restarts it ({})",
+                 (`openmoat doctor`), then `openmoat proxy install` restarts it ({})",
                 path.display()
             ),
             Self::Crashlooping => format!(
                 "installed; restart budget exhausted. Check the service log, then \
-                 `moat proxy install` to retry ({})",
+                 `openmoat proxy install` to retry ({})",
                 path.display()
             ),
             Self::Unknown { details } => format!("installed; state unknown: {details}"),

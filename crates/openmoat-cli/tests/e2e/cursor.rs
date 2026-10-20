@@ -300,8 +300,8 @@ fn pre_tool_use_ask_is_denied_and_allow_last_approves_the_file() {
     assert_eq!(code, Some(DENY), "{doc}");
     assert_eq!(doc["permission"], "deny");
     let message = doc["agent_message"].to_string();
-    assert!(message.contains("run `moat`"), "{doc}");
-    assert!(message.contains("moat allow --last"), "{doc}");
+    assert!(message.contains("run `openmoat`"), "{doc}");
+    assert!(message.contains("openmoat allow --last"), "{doc}");
     let log = text(&sb.moat(&["audit", "export"]));
     assert!(log.contains("\"verdict\":\"ask\""), "{log}");
 

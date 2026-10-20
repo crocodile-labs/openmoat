@@ -31,7 +31,7 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     ),
     ("a misspelled package", "pip install reqeusts"),
     ("a plain download", "curl -sS https://example.com/notes.txt"),
-    ("switching OpenMoat off", "moat uninstall"),
+    ("switching OpenMoat off", "openmoat uninstall"),
 ];
 
 pub fn run(args: &DemoArgs) -> Result<Code> {

@@ -108,7 +108,7 @@ fn a_0_3_0_policy_gains_the_new_defaults_and_undo_restores_it() {
     let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
-        text(&out).contains("moat policy upgrade --undo"),
+        text(&out).contains("openmoat policy upgrade --undo"),
         "{}",
         text(&out)
     );
@@ -202,7 +202,7 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
         shown.contains("Policy update available: ") && shown.contains(update),
         "{shown}"
     );
-    assert!(shown.contains("`moat policy upgrade`") && !shown.contains("Nothing needs you"));
+    assert!(shown.contains("`openmoat policy upgrade`") && !shown.contains("Nothing needs you"));
     assert_eq!(policy(&sb), V0_3_0);
 
     let out = output(sb.command().env("MOAT_ASSUME_TTY", "1"), Some("y\ny\n"));

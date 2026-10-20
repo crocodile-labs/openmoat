@@ -62,7 +62,7 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
     let (relay_in, host_in) = (Arc::clone(&relay), Arc::clone(&host));
     std::thread::spawn(move || {
         if let Err(e) = relay::pump_host(&relay_in, io::stdin().lock(), to_server, &*host_in) {
-            eprintln!("moat mcp proxy: {e:#}");
+            eprintln!("openmoat mcp proxy: {e:#}");
         }
     });
     let pumped = relay::pump_server(&relay, BufReader::new(from_server), &*host);

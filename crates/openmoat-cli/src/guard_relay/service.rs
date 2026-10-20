@@ -125,7 +125,7 @@ impl Service {
             Verdict::Deny,
             RULE_TOKEN,
             format!(
-                "a hook call for {host} came with a wrong token for this `moat run`, so it was \
+                "a hook call for {host} came with a wrong token for this `openmoat run`, so it was \
                  not decided"
             ),
         );

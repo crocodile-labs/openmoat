@@ -73,7 +73,7 @@ pub fn env_disagrees(set_up: &Location) -> Result<Option<String>> {
         .map(|env| {
             format!(
                 "OPENCLAW_HOME, OPENCLAW_STATE_DIR or OPENCLAW_CONFIG_PATH name {} (state {}), \
-                 but `moat init` set up {} (state {}), which moat uses; run `moat init` with \
+                 but `openmoat init` set up {} (state {}), which OpenMoat uses; run `openmoat init` with \
                  them set to set up that one instead",
                 env.config.display(),
                 env.state_dir.display(),

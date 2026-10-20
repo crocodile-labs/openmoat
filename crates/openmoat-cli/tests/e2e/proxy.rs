@@ -28,7 +28,7 @@ fn refuses_to_start_before_init() {
     let sb = Sandbox::bare(&[]);
     let out = sb.moat(&["proxy", "--listen", "127.0.0.1:0"]);
     assert_eq!(out.status.code(), Some(USAGE));
-    assert!(stderr(&out).contains("moat init"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("openmoat init"), "{}", stderr(&out));
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn doctor_and_status_warn_while_the_hosts_proxy_is_not_listening() {
     for args in [["doctor"], ["status"]] {
         let out = sb.moat(&args);
         assert!(
-            !text(&out).contains("moat proxy "),
+            !text(&out).contains("openmoat proxy "),
             "{args:?}: {}",
             text(&out)
         );
@@ -276,7 +276,7 @@ fn status_refuses_on_windows_with_a_clear_hint() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(64), "{stderr}");
     assert!(
-        stderr.contains("run `moat proxy` in a terminal"),
+        stderr.contains("run `openmoat proxy` in a terminal"),
         "{stderr}"
     );
 }

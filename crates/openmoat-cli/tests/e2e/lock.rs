@@ -80,7 +80,7 @@ fn edited_policy_makes_guard_fail_closed_until_repinned() {
     let refused = sb.moat(&["init", "--yes"]);
     assert_eq!(refused.status.code(), Some(USAGE), "{}", text(&refused));
     assert!(
-        text(&refused).contains("moat doctor --accept"),
+        text(&refused).contains("openmoat doctor --accept"),
         "{}",
         text(&refused)
     );
@@ -241,7 +241,7 @@ fn missing_lock_denies_and_points_to_init() {
         d["permissionDecisionReason"]
             .as_str()
             .unwrap()
-            .contains("moat init")
+            .contains("openmoat init")
     );
 }
 
@@ -359,7 +359,7 @@ fn repin_from_another_config_dir_keeps_the_pinned_hook_file() {
     );
     assert_eq!(out.status.code(), Some(USAGE), "{report}");
     assert!(
-        report.contains("CLAUDE_CONFIG_DIR is") && report.contains("which moat uses"),
+        report.contains("CLAUDE_CONFIG_DIR is") && report.contains("which OpenMoat uses"),
         "{report}"
     );
     assert!(

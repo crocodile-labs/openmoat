@@ -85,7 +85,7 @@ impl Phase {
     pub fn doing(self) -> &'static str {
         match self {
             Self::Stdin => "reading the tool call",
-            Self::Relay => "waiting for `moat run` to decide",
+            Self::Relay => "waiting for `openmoat run` to decide",
             Self::Lock => "checking the policy lock",
             Self::Context => "loading the policy",
             Self::Compile => "deciding",

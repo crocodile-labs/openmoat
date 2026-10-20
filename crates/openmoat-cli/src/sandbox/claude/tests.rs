@@ -376,7 +376,7 @@ fn mixed_plain_http_does_not_widen() {
     assert!(
         dropped.is_some_and(
             |l| l.message.contains("block-scoped `allowPlaintextInject`")
-                && l.message.contains("`moat proxy`")
+                && l.message.contains("`openmoat proxy`")
         ),
         "{:?}",
         out.report.losses

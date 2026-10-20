@@ -315,7 +315,8 @@ pub fn answered(
     if exact.as_ref().is_some_and(|g| fresh(&g)) {
         let mut decision = untainted;
         decision.reasons.push(
-            "approved with `moat allow` after the session last read untrusted content".to_owned(),
+            "approved with `openmoat allow` after the session last read untrusted content"
+                .to_owned(),
         );
         return Ok(decision);
     }
@@ -325,7 +326,7 @@ pub fn answered(
     {
         let mut decision = untainted;
         decision.reasons.push(
-            "the session's protected writes were approved with `moat allow` after it last read \
+            "the session's protected writes were approved with `openmoat allow` after it last read \
              untrusted content"
                 .to_owned(),
         );
@@ -335,7 +336,7 @@ pub fn answered(
     // Hosts that cannot ask are told how already (`Host::answer`).
     if call.host == Host::ClaudeCode {
         decision.reasons.push(
-            "to stop asking for this in this session, run `moat allow --last` in a terminal"
+            "to stop asking for this in this session, run `openmoat allow --last` in a terminal"
                 .to_owned(),
         );
     }

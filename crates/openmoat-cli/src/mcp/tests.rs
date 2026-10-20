@@ -62,7 +62,7 @@ fn a_changed_server_is_denied_alone_until_accepted() {
     assert_eq!(deny.rules, [SERVER_RULE]);
     let reasons = deny.reasons.join("\n");
     assert!(reasons.contains(r#"command: "npx" → "sh""#), "{reasons}");
-    assert!(reasons.contains("moat mcp accept gh"), "{reasons}");
+    assert!(reasons.contains("openmoat mcp accept gh"), "{reasons}");
     assert!(
         denied(&home, "mcp__db__query").is_none(),
         "other servers run"

@@ -161,7 +161,7 @@ pub fn merge_installed(home: &Home, policy: &mut Policy) -> Result<()> {
             .with_context(|| format!("reading policy pack {}", file.display()))?;
         if sha256_hex(text.as_bytes()) != record.sha256 {
             bail!(
-                "policy pack {} changed since `moat policy install`; reinstall it",
+                "policy pack {} changed since `openmoat policy install`; reinstall it",
                 file.display()
             );
         }

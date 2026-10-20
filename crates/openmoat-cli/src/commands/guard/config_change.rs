@@ -46,7 +46,10 @@ pub(super) fn decision(
 ) -> Result<Decision> {
     let lock_path = home.lock_path();
     if !lock_path.is_file() {
-        bail!("no policy lock at {}; run `moat init`", lock_path.display());
+        bail!(
+            "no policy lock at {}; run `openmoat init`",
+            lock_path.display()
+        );
     }
     let lock = Lock::load(&lock_path)?;
     // Checked whatever file the change names: settings load together, so an
@@ -100,7 +103,7 @@ pub(super) fn decision(
             let mut deny = Decision::new(Verdict::Deny);
             deny.rules.push(INTEGRITY_RULE.to_owned());
             deny.reasons.push(format!(
-                "{drift}; OpenMoat pinned {target}, so the proposal is not applied. Edit the file yourself and run `moat doctor --accept` to change it"
+                "{drift}; OpenMoat pinned {target}, so the proposal is not applied. Edit the file yourself and run `openmoat doctor --accept` to change it"
             ));
             return Ok(deny);
         }
@@ -118,7 +121,7 @@ pub(super) fn decision(
         return Ok(blocked);
     }
     let pinned = if lock.verify_one(path).is_some() {
-        "differs from the policy lock only in settings that change no decision; `moat doctor --accept` re-pins"
+        "differs from the policy lock only in settings that change no decision; `openmoat doctor --accept` re-pins"
     } else if lock.pins(path) {
         "matches the policy lock"
     } else {
@@ -169,7 +172,7 @@ fn drift_blocks_change(drift: &[Drift]) -> Decision {
     decision.rules.push(INTEGRITY_RULE.to_owned());
     for d in drift {
         decision.reasons.push(format!(
-            "{d} outside OpenMoat; the change is not loaded into this session. Run `moat doctor` to inspect, `moat doctor --accept` to accept it"
+            "{d} outside OpenMoat; the change is not loaded into this session. Run `openmoat doctor` to inspect, `openmoat doctor --accept` to accept it"
         ));
     }
     decision

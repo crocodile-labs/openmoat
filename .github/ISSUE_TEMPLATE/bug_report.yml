@@ -10,8 +10,8 @@ body:
     attributes:
       label: Diagnostic bundle
       description: >-
-        Run `moat doctor --bundle moat-bundle.json` in a terminal of your own. It writes one
-        local file with the moat version, the operating system, each agent's hook state and
+        Run `openmoat doctor --bundle openmoat-bundle.json` in a terminal of your own. It writes one
+        local file with the openmoat version, the operating system, each agent's hook state and
         protection level, the policy version and lint findings, the doctor checks, and the
         last 20 decisions (time, host, tool name, verdict and rule ids only; no commands,
         paths or arguments). Nothing is sent. Read the file, then drag it here.
@@ -20,8 +20,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: moat version
-      placeholder: output of `moat --version`
+      label: openmoat version
+      placeholder: output of `openmoat --version`
     validations:
       required: true
   - type: dropdown
@@ -42,7 +42,7 @@ body:
     id: action
     attributes:
       label: The action and the decision you got
-      description: The command or path, the rule ids reported, and the output of `moat show <id>` if there is one.
+      description: The command or path, the rule ids reported, and the output of `openmoat show <id>` if there is one.
       render: text
     validations:
       required: true

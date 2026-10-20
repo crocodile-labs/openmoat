@@ -28,8 +28,8 @@ struct Unsupported;
 impl Manager for Unsupported {
     fn install(&self, _binary: &Path, _moat_home: &Path) -> Result<PathBuf> {
         bail!(
-            "`moat proxy install` is not supported on {} yet (#272 defers Standard-tier \
-             proxy routing on Windows); run `moat proxy` in a terminal to keep the proxy up",
+            "`openmoat proxy install` is not supported on {} yet (#272 defers Standard-tier \
+             proxy routing on Windows); run `openmoat proxy` in a terminal to keep the proxy up",
             std::env::consts::OS
         )
     }

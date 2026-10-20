@@ -135,7 +135,7 @@ fn sandbox(
 ) -> Result<(), String> {
     if host_sandbox::format(host).is_none() {
         return Err(format!(
-            "no OS sandbox from OpenMoat; `moat run` covers the {} CLI (docs/SANDBOX.md)",
+            "no OS sandbox from OpenMoat; `openmoat run` covers the {} CLI (docs/SANDBOX.md)",
             host.display_name()
         ));
     }

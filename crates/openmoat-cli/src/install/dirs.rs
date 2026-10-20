@@ -50,7 +50,7 @@ impl Recorded {
         let text =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let recorded: Self = serde_json::from_str(&text)
-            .with_context(|| format!("parsing {}; run `moat init`", path.display()))?;
+            .with_context(|| format!("parsing {}; run `openmoat init`", path.display()))?;
         if recorded.version != VERSION {
             bail!(
                 "{} has version {}; this build supports {VERSION}",

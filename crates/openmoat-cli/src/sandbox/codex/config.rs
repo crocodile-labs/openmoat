@@ -236,7 +236,7 @@ pub fn weaknesses(doc: &DocumentMut, via_moat_proxy: bool) -> Vec<String> {
     let set = |key: &str| network.and_then(|n| n.get(key)).and_then(Item::as_bool);
     if via_moat_proxy && set("allow_upstream_proxy") == Some(false) {
         out.push(
-            "allow_upstream_proxy is false: Codex's proxy never hands traffic to `moat proxy`"
+            "allow_upstream_proxy is false: Codex's proxy never hands traffic to `openmoat proxy`"
                 .to_owned(),
         );
     }

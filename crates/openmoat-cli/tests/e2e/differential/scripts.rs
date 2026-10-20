@@ -115,9 +115,12 @@ pub struct Script {
 
 /// The executing layers: id (as `gap.layer` names it) and the column heading.
 const LAYERS: [(&str, &str); 7] = [
-    ("seatbelt", "`moat run`, macOS (Seatbelt)"),
-    ("landlock", "`moat run`, Linux (Landlock + seccomp)"),
-    ("isolate-linux", "`moat run --isolate`, Linux (bubblewrap)"),
+    ("seatbelt", "`openmoat run`, macOS (Seatbelt)"),
+    ("landlock", "`openmoat run`, Linux (Landlock + seccomp)"),
+    (
+        "isolate-linux",
+        "`openmoat run --isolate`, Linux (bubblewrap)",
+    ),
     ("claude-macos", "Claude Code sandbox, macOS"),
     ("claude-linux", "Claude Code sandbox, Linux"),
     ("codex-macos", "Codex `moat` profile, macOS"),
@@ -183,8 +186,8 @@ fn evidence_table_is_current() {
          The hook allows project scripts (`npm test`, `make test`) and cannot see what they\n\
          do ([THREAT_MODEL.md](THREAT_MODEL.md) §5). Each row is such a script: the payload is\n\
          the project's test script, started as `npm test` in a throwaway home with fake secrets,\n\
-         under `moat run` (Lightweight tier), under `moat run --isolate` (Isolated tier, Linux)\n\
-         and under each agent's own sandbox as `moat init`\n\
+         under `openmoat run` (Lightweight tier), under `openmoat run --isolate` (Isolated tier, Linux)\n\
+         and under each agent's own sandbox as `openmoat init`\n\
          configures it (Standard tier, [SANDBOX.md](SANDBOX.md)): Claude Code 2.1.290 runs\n\
          `claude -p --bare` against a local fake Anthropic API that asks for that one Bash call,\n\
          with only the generated settings (no hook, so the sandbox alone is measured), and\n\
@@ -230,7 +233,7 @@ fn evidence_table_is_current() {
          sandbox\nmounted the path read-only). ENOENT: the path does not exist\ninside the sandbox (bubblewrap mounted an empty directory over it, or did not mount it). EEXIST: the sandbox \
          mounted a\nfile where the payload creates a directory. refused: the \
          connection\nwas refused inside the sandbox's own network namespace. proxy 403: the \
-         layer's proxy refused\nthe request (OpenMoat's under `moat run`, the agent's own, which \
+         layer's proxy refused\nthe request (OpenMoat's under `openmoat run`, the agent's own, which \
          allows only the policy's\nhosts, under the Standard tier). contained: the payload \
          completed inside the sandbox, but\nwhat it wrote or sent stayed there (an empty \
          in-memory directory, its own network namespace)\nand nothing reached the host. sandbox \
@@ -243,14 +246,14 @@ fn evidence_table_is_current() {
     doc.push_str(&gaps);
     doc.push_str(
         "\n## Layers\n\n| Layer | Status |\n|---|---|\n\
-         | `moat run`, macOS (Seatbelt) | verified by the `macos-14` and `macos-15-intel` CI jobs |\n\
-         | `moat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
-         | `moat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |\n\
-         | `moat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
+         | `openmoat run`, macOS (Seatbelt) | verified by the `macos-14` and `macos-15-intel` CI jobs |\n\
+         | `openmoat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
+         | `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |\n\
+         | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
          | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-14)` CI job |\n\
          | Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |\n\
-         | `moat run`, Windows | not run: `moat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |\n\
-         | Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `moat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |\n\
+         | `openmoat run`, Windows | not run: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |\n\
+         | Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `openmoat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |\n\
          | Codex profile, Windows | not verified: the scripts and the project's `npm` shim are POSIX shell |\n\
          \nThe Standard tier columns cover the commands the agent runs and the processes they \
          start.\nNot verified here: what the agent's own process does outside its sandbox (Claude \
@@ -463,7 +466,7 @@ pub mod executing {
             let out = retried(|| {
                 output(
                     fx.sb
-                        .configure(start(env!("CARGO_BIN_EXE_moat"), terminal))
+                        .configure(start(env!("CARGO_BIN_EXE_openmoat"), terminal))
                         .current_dir(project)
                         .env("PATH", format!("{}/bin:/usr/bin:/bin", project.display()))
                         .env("TMPDIR", &tmp)
@@ -485,7 +488,7 @@ pub mod executing {
 #[test]
 fn hostile_scripts_are_not_run_without_an_os_layer() {
     eprintln!(
-        "skipped: hostile scripts — `moat run` refuses on {}, where OpenMoat generates no OS \
+        "skipped: hostile scripts — `openmoat run` refuses on {}, where OpenMoat generates no OS \
          sandbox (#135; run.rs checks that it refuses), Claude Code's sandbox does not run, and \
          the scripts are POSIX shell",
         std::env::consts::OS

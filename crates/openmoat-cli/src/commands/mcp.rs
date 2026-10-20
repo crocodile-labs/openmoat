@@ -26,14 +26,14 @@ mod proxy;
 pub use proxy::run as proxy;
 
 fn person_only(command: &str) -> Result<Home> {
-    crate::terminal::refuse_agent(&format!("moat mcp {command}"))?;
+    crate::terminal::refuse_agent(&format!("openmoat mcp {command}"))?;
     if !crate::terminal::interactive() {
         bail!(
-            "`moat mcp {command}` must be run by a person in a terminal, not from a hook or script"
+            "`openmoat mcp {command}` must be run by a person in a terminal, not from a hook or script"
         );
     }
     let home = Home::locate()?;
-    integrity::refuse_drift(&home, &format!("run `moat mcp {command}`"))?;
+    integrity::refuse_drift(&home, &format!("run `openmoat mcp {command}`"))?;
     Ok(home)
 }
 
@@ -204,7 +204,7 @@ fn first_sight_note(
     let names: Vec<String> = new.iter().map(|n| format!("`{n}`")).collect();
     writeln!(
         out,
-        "· the tools of {} wait for `moat mcp accept <server>` after the server's first start",
+        "· the tools of {} wait for `openmoat mcp accept <server>` after the server's first start",
         names.join(", ")
     )?;
     Ok(())
@@ -258,7 +258,7 @@ fn skipped(out: &mut Deferred, name: &str) -> Result<()> {
     writeln!(
         out,
         "! skipped `{name}`: its definition changed since it was accepted; \
-         run `moat mcp accept {name}` first"
+         run `openmoat mcp accept {name}` first"
     )?;
     Ok(())
 }

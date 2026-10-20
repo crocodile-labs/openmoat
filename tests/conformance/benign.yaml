@@ -50,6 +50,14 @@
   threat: T10
   action: { fs_write: "/p/apps/moat/src/main.rs" }
   expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-monorepo-app-named-openmoat
+  threat: T10
+  action: { fs_write: "/p/apps/openmoat/src/main.rs" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-source-file-named-openmoat
+  threat: T10
+  action: { fs_write: "/p/src/bin/openmoat.rs" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-read-relative
   action: { fs_read: "src/lib.rs" }
   expect: { verdict: allow, rules: [project-fs] }

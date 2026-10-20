@@ -103,7 +103,9 @@ pub fn repin_with(
                 profiles.extend(old.codex_profiles.into_keys().map(PathBuf::from));
             }
             (Err(e), HookPins::Keep) => {
-                return Err(e.context("cannot tell which hook files are pinned; run `moat init`"));
+                return Err(
+                    e.context("cannot tell which hook files are pinned; run `openmoat init`")
+                );
             }
             // `init` is how a person recovers from an unreadable lock.
             (Err(_), HookPins::Adopt) => {}
@@ -199,7 +201,10 @@ impl HookPinGap {
 pub fn violation(home: &Home) -> Result<Option<Decision>> {
     let lock_path = home.lock_path();
     if !lock_path.is_file() {
-        bail!("no policy lock at {}; run `moat init`", lock_path.display());
+        bail!(
+            "no policy lock at {}; run `openmoat init`",
+            lock_path.display()
+        );
     }
     Ok(deny_for(&Lock::load(&lock_path)?.verify()))
 }
@@ -215,7 +220,8 @@ fn deny_for(drift: &[Drift]) -> Option<Decision> {
         decision.reasons.push(d.to_string());
     }
     decision.reasons.push(
-        "run `moat doctor` to inspect; `moat doctor --accept` or `moat init` to re-pin".to_owned(),
+        "run `openmoat doctor` to inspect; `openmoat doctor --accept` or `openmoat init` to re-pin"
+            .to_owned(),
     );
     Some(decision)
 }

@@ -7,8 +7,8 @@ differential suite; do not edit. Regenerate with
 The hook allows project scripts (`npm test`, `make test`) and cannot see what they
 do ([THREAT_MODEL.md](THREAT_MODEL.md) §5). Each row is such a script: the payload is
 the project's test script, started as `npm test` in a throwaway home with fake secrets,
-under `moat run` (Lightweight tier), under `moat run --isolate` (Isolated tier, Linux)
-and under each agent's own sandbox as `moat init`
+under `openmoat run` (Lightweight tier), under `openmoat run --isolate` (Isolated tier, Linux)
+and under each agent's own sandbox as `openmoat init`
 configures it (Standard tier, [SANDBOX.md](SANDBOX.md)): Claude Code 2.1.290 runs
 `claude -p --bare` against a local fake Anthropic API that asks for that one Bash call,
 with only the generated settings (no hook, so the sandbox alone is measured), and
@@ -18,7 +18,7 @@ pull request, together with its side effects (no secret printed, no file written
 nothing reached the listener), and fails when it changes. Network targets are loopback
 listeners the test owns.
 
-| Case | Threat | Payload | `moat run`, macOS (Seatbelt) | `moat run`, Linux (Landlock + seccomp) | `moat run --isolate`, Linux (bubblewrap) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
+| Case | Threat | Payload | `openmoat run`, macOS (Seatbelt) | `openmoat run`, Linux (Landlock + seccomp) | `openmoat run --isolate`, Linux (bubblewrap) | Claude Code sandbox, macOS | Claude Code sandbox, Linux | Codex `moat` profile, macOS | Codex `moat` profile, Linux |
 |---|---|---|---|---|---|---|---|---|---|
 | `script-benign-work` | control | `cat package.json > /dev/null && echo ok > out.txt && ln -sf src s && cat s/main.rs && /bin/bash -c true && curl --version > /dev/null` | ran | ran | ran | ran | ran | ran | ran |
 | `script-reads-ssh-key` | T1 | `cat "$HOME/.ssh/id_rsa"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
@@ -42,7 +42,7 @@ mounted the path read-only). ENOENT: the path does not exist
 inside the sandbox (bubblewrap mounted an empty directory over it, or did not mount it). EEXIST: the sandbox mounted a
 file where the payload creates a directory. refused: the connection
 was refused inside the sandbox's own network namespace. proxy 403: the layer's proxy refused
-the request (OpenMoat's under `moat run`, the agent's own, which allows only the policy's
+the request (OpenMoat's under `openmoat run`, the agent's own, which allows only the policy's
 hosts, under the Standard tier). contained: the payload completed inside the sandbox, but
 what it wrote or sent stayed there (an empty in-memory directory, its own network namespace)
 and nothing reached the host. sandbox error: the sandbox failed to start the command, so
@@ -51,24 +51,24 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 
 ## Known gaps
 
-- `script-reads-project-env` under `moat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays readable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-writes-project-env` under `moat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-envrc` under `moat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-writes-project-policy` under `moat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-git-hook` under `moat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still asks for the agent's own writes there
+- `script-reads-project-env` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays readable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-writes-project-env` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-plants-envrc` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-writes-project-policy` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
+- `script-plants-git-hook` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still asks for the agent's own writes there
 
 ## Layers
 
 | Layer | Status |
 |---|---|
-| `moat run`, macOS (Seatbelt) | verified by the `macos-14` and `macos-15-intel` CI jobs |
-| `moat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |
-| `moat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
-| `moat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
+| `openmoat run`, macOS (Seatbelt) | verified by the `macos-14` and `macos-15-intel` CI jobs |
+| `openmoat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |
+| `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
+| `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
 | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-14)` CI job |
 | Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |
-| `moat run`, Windows | not run: `moat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |
-| Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `moat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |
+| `openmoat run`, Windows | not run: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |
+| Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `openmoat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |
 | Codex profile, Windows | not verified: the scripts and the project's `npm` shim are POSIX shell |
 
 The Standard tier columns cover the commands the agent runs and the processes they start.

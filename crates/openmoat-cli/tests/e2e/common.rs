@@ -77,7 +77,7 @@ impl Sandbox {
     pub fn installed_in(parent: &Path, host_dirs: &[&str]) -> Self {
         let sb = Self::bare_in(parent, host_dirs);
         let out = sb.moat(&["init", "--yes"]);
-        assert_eq!(out.status.code(), Some(0), "moat init: {}", text(&out));
+        assert_eq!(out.status.code(), Some(0), "openmoat init: {}", text(&out));
         sb
     }
 
@@ -90,7 +90,7 @@ impl Sandbox {
 
     /// The command with the isolated environment; callers add arguments.
     pub fn command(&self) -> Command {
-        self.command_at(Path::new(env!("CARGO_BIN_EXE_moat")))
+        self.command_at(Path::new(env!("CARGO_BIN_EXE_openmoat")))
     }
 
     /// [`Sandbox::command`] running the binary at `program` (a copy or a link).

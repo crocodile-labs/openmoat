@@ -126,8 +126,8 @@ jobs:
         run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo build --locked --release -p openmoat
-      - run: python3 scripts/ci/guard-latency.py target/release/moat 100
-      - run: python3 scripts/ci/guard-session-latency.py target/release/moat 50
+      - run: python3 scripts/ci/guard-latency.py target/release/openmoat 100
+      - run: python3 scripts/ci/guard-session-latency.py target/release/openmoat 50
 
   # Not a required check yet: compares the shell lexer's words with the argv
   # bash builds (crates/openmoat-core/tests/lexer_vs_bash.rs). A divergence is

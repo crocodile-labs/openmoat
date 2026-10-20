@@ -32,7 +32,7 @@ fn repo_root() -> PathBuf {
 /// the file `moat init` writes its hook into, and the entries it writes.
 fn install_table() -> Vec<String> {
     let mut lines = vec![
-        "| Agent | Directory | Moved by | Hook file | Entries `moat init` writes |".to_owned(),
+        "| Agent | Directory | Moved by | Hook file | Entries `openmoat init` writes |".to_owned(),
         "|---|---|---|---|---|".to_owned(),
     ];
     for host in Host::ALL {

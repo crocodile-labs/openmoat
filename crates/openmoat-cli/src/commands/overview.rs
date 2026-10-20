@@ -25,7 +25,7 @@ pub fn run() -> Result<Code> {
     let home = Home::locate()?;
     let lock_path = home.lock_path();
     if !lock_path.is_file() {
-        println!("OpenMoat is not set up here; run `moat init`.");
+        println!("OpenMoat is not set up here; run `openmoat init`.");
         return Ok(Code::Usage);
     }
     let person = crate::terminal::person();
@@ -40,7 +40,7 @@ pub fn run() -> Result<Code> {
             println!("✗ lock  {d}");
         }
         if !person {
-            println!("A person must accept these at a terminal: `moat doctor --accept`.");
+            println!("A person must accept these at a terminal: `openmoat doctor --accept`.");
             return Ok(Code::Usage);
         }
         if !matches!(
@@ -48,7 +48,7 @@ pub fn run() -> Result<Code> {
             "y" | "yes"
         ) {
             println!("Nothing changed; every call is denied until a person accepts.");
-            println!("Run `moat doctor` to look at the changes.");
+            println!("Run `openmoat doctor` to look at the changes.");
             return Ok(Code::Usage);
         }
         let code = super::doctor::run(&DoctorArgs {
@@ -74,7 +74,7 @@ pub fn run() -> Result<Code> {
         if update.is_none() {
             println!("Nothing needs you.");
         }
-        println!("`moat show` lists recent decisions; `moat --help` lists every command.");
+        println!("`openmoat show` lists recent decisions; `openmoat --help` lists every command.");
         return Ok(Code::Ok);
     };
     let asked = format!(
@@ -86,8 +86,8 @@ pub fn run() -> Result<Code> {
     );
     println!("{}", render::clean(&asked));
     if !person {
-        println!("A person can allow it at a terminal: `moat allow --last` for this session,");
-        println!("`moat allow --last --always` for good.");
+        println!("A person can allow it at a terminal: `openmoat allow --last` for this session,");
+        println!("`openmoat allow --last --always` for good.");
         return Ok(Code::Ok);
     }
     let always = match answer("Allow? [o]nce for this session / [a]lways / [n]o ")?.as_str() {
@@ -108,7 +108,7 @@ pub fn run() -> Result<Code> {
 fn offer_upgrade(update: &str, person: bool) -> Result<Option<Code>> {
     println!("Policy update available: {update}.");
     if !person {
-        println!("A person can review and apply it at a terminal: `moat policy upgrade`.");
+        println!("A person can review and apply it at a terminal: `openmoat policy upgrade`.");
         return Ok(None);
     }
     if !matches!(answer("See the changes? [y/N] ")?.as_str(), "y" | "yes") {
@@ -131,7 +131,7 @@ fn health(home: &Home, today: &[Event]) -> Result<String> {
         .map(|agent| format!("{} ({})", agent.name, agent.level.label()))
         .collect();
     let agents = if protected.is_empty() {
-        "No agent is protected (run `moat init`)".to_owned()
+        "No agent is protected (run `openmoat init`)".to_owned()
     } else {
         format!("Protecting {}", protected.join(", "))
     };

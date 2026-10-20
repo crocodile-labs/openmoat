@@ -217,7 +217,7 @@ jobs:
           COMMIT: ${{ github.sha }}
         run: |
           {
-            echo "> **Alpha**: the hook's decisions are not enforced by the operating system (ADR-013). Only commands inside the host sandboxes \`moat init\` configures, or under \`moat run\`, are confined by the OS. Elsewhere an allowed call runs with your permissions, so a classifier mistake is a security bug."
+            echo "> **Alpha**: the hook's decisions are not enforced by the operating system (ADR-013). Only commands inside the host sandboxes \`openmoat init\` configures, or under \`openmoat run\`, are confined by the OS. Elsewhere an allowed call runs with your permissions, so a classifier mistake is a security bug."
             echo
             printf '%s\n' "$BODY"
           } > "$RUNNER_TEMP/notes.md"
@@ -226,7 +226,7 @@ jobs:
           gh release create "$TAG" --verify-tag --target "$COMMIT" "${flags[@]}" \
             --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md" artifacts/*
 
-  # Pushes Formula/moat.rb to the tap with a fine-grained token scoped to that repository.
+  # Pushes Formula/openmoat.rb to the tap with a fine-grained token scoped to that repository.
   publish-homebrew-formula:
     needs: [plan, host]
     runs-on: ubuntu-24.04
@@ -249,11 +249,11 @@ jobs:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           mkdir -p Formula
-          cp "$RUNNER_TEMP/global/moat.rb" Formula/moat.rb
+          cp "$RUNNER_TEMP/global/openmoat.rb" Formula/openmoat.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/moat.rb
-          git diff --cached --quiet || git commit -m "moat $VERSION"
+          git add Formula/openmoat.rb
+          git diff --cached --quiet || git commit -m "openmoat $VERSION"
           git push "https://x-access-token:${TAP_TOKEN}@github.com/crocodile-labs/homebrew-tap.git" HEAD
 
   # crates.io trusted publishing (OIDC): no long-lived token. Waits for an owner to

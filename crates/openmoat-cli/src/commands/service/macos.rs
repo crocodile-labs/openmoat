@@ -52,7 +52,7 @@ fn log_dir() -> Result<PathBuf> {
 fn target() -> Result<String> {
     let uid = current_uid()?;
     if uid == 0 {
-        bail!("`moat proxy install` is for a logged-in user, not root");
+        bail!("`openmoat proxy install` is for a logged-in user, not root");
     }
     Ok(format!("gui/{uid}/{}", plist::LABEL))
 }
@@ -69,7 +69,7 @@ where
     S: AsRef<OsStr>,
 {
     Command::new("launchctl").args(args).output().with_context(
-        || "running launchctl; install launchd command-line tools or run `moat proxy` yourself",
+        || "running launchctl; install launchd command-line tools or run `openmoat proxy` yourself",
     )
 }
 

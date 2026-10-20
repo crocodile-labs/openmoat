@@ -127,10 +127,10 @@ fn install(scratch: &Scratch) -> Result<Target> {
     let out = scratch
         .command(&exe, &["init".into(), "--yes".into()])
         .output()
-        .context("running moat init in the throwaway home")?;
+        .context("running openmoat init in the throwaway home")?;
     ensure!(
         out.status.success(),
-        "moat init in the throwaway home failed: {}",
+        "openmoat init in the throwaway home failed: {}",
         String::from_utf8_lossy(&out.stderr).trim()
     );
     let path = Home::under(&scratch.home).audit_path();

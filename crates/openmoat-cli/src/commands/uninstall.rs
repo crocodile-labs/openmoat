@@ -26,9 +26,11 @@ use crate::sandbox::install as host_sandbox;
 use crate::sandbox::{claude, codex, cursor};
 
 pub fn run(args: &UninstallArgs) -> Result<Code> {
-    crate::terminal::refuse_agent("moat uninstall")?;
+    crate::terminal::refuse_agent("openmoat uninstall")?;
     if !crate::terminal::interactive() {
-        bail!("`moat uninstall` must be run by a person in a terminal, not from a hook or script");
+        bail!(
+            "`openmoat uninstall` must be run by a person in a terminal, not from a hook or script"
+        );
     }
     let home = Home::locate()?;
     let hosts = match &args.hosts {
@@ -44,7 +46,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
     if let Err(e) = super::mcp::unwrap_servers(&home, &hosts, &[], &mut out) {
         writeln!(
             out,
-            "! mcp servers      {e:#}; `moat mcp unwrap` restores the wrapped ones"
+            "! mcp servers      {e:#}; `openmoat mcp unwrap` restores the wrapped ones"
         )?;
     }
     let mut undone = Vec::new();
@@ -123,7 +125,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         Ok(None) => {}
         Err(e) => writeln!(
             out,
-            "! proxy service    {e:#}; `moat proxy uninstall` removes it by hand"
+            "! proxy service    {e:#}; `openmoat proxy uninstall` removes it by hand"
         )?,
     }
     if args.purge {
@@ -132,7 +134,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
     } else if home.exists() {
         writeln!(
             out,
-            "· state directory  {} kept (policy, audit log); `moat uninstall --purge` deletes it",
+            "· state directory  {} kept (policy, audit log); `openmoat uninstall --purge` deletes it",
             home.root().display()
         )?;
     }
@@ -151,7 +153,7 @@ impl std::fmt::Display for Undone {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Restored(backup) => write!(f, "restored from {}", backup.display()),
-            Self::Deleted => write!(f, "deleted (moat init created it)"),
+            Self::Deleted => write!(f, "deleted (openmoat init created it)"),
             Self::Stripped(kept) if kept.is_empty() => {
                 write!(f, "OpenMoat's entries removed, your changes kept")
             }

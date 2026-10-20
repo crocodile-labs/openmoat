@@ -325,7 +325,7 @@ fn report_host_gaps(ir: &Enforcement, proxy_port: Option<u16>, report: &mut Repo
             Vec::new(),
             &format!(
                 "sandbox.json has no proxy setting, so Cursor's own allowlist decides and its \
-                 traffic does not reach `moat proxy` on 127.0.0.1:{port}: no address checks, \
+                 traffic does not reach `openmoat proxy` on 127.0.0.1:{port}: no address checks, \
                  audit log or brokered secrets for it"
             ),
         );

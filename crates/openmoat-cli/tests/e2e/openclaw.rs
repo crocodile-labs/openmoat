@@ -61,7 +61,7 @@ fn init_writes_the_plugin_and_its_entries_once() {
         json!({"enabled": true, "hooks": {"timeouts": {"before_tool_call": 60000}}})
     );
     let source = fs::read_to_string(&plugin).unwrap();
-    let binary = serde_json::to_string(env!("CARGO_BIN_EXE_moat")).unwrap();
+    let binary = serde_json::to_string(env!("CARGO_BIN_EXE_openmoat")).unwrap();
     assert!(
         source.contains(&format!("const MOAT = {binary};")),
         "{source}"
@@ -188,7 +188,7 @@ fn a_changed_openclaw_mcp_server_holds_back_only_its_own_tools() {
     assert_eq!(code, Some(DENY), "{reply}");
     let reason = reply["reason"].to_string();
     assert!(reason.contains("mcp-server-changed"), "{reply}");
-    assert!(reason.contains("moat mcp accept docs"), "{reply}");
+    assert!(reason.contains("openmoat mcp accept docs"), "{reply}");
     // Only that server: not drift of the whole file.
     let (code, reply) = guard(&sb, &payload(&sb, "db__query", &json!({})));
     assert_eq!(code, Some(OK), "{reply}");

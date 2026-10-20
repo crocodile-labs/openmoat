@@ -4,9 +4,9 @@ OpenMoat is a security control. Reports about it are handled as such.
 
 **The operating system enforces only part of the policy** (ADR-013, ADR-018).
 OpenMoat decides whether each agent tool call its hook reports may run, and records it.
-The operating system confines only the commands inside the host sandboxes `moat init`
+The operating system confines only the commands inside the host sandboxes `openmoat init`
 configures (Claude Code `Bash`, `PowerShell` and `Monitor`; every Codex command; the
-terminal commands Cursor runs in its sandbox) and agents started with `moat run`.
+terminal commands Cursor runs in its sandbox) and agents started with `openmoat run`.
 Everywhere else an allowed call runs with your permissions and the policy decision is
 the only check, so a classifier mistake that lets a dangerous action through is a
 vulnerability, not a usability bug.
@@ -31,9 +31,9 @@ How a fix ships:
   with a GitHub Security Advisory for a confirmed issue in a released version
   ([What happens next](#what-happens-next)).
 - A fix in the default policy reaches an existing `policy.yaml` only through
-  `moat policy upgrade`, because an upgrade keeps your policy as it is. The CHANGELOG
-  line says "Existing policies get it with `moat policy upgrade`" when that applies.
-- After upgrading, run `moat doctor` and `moat policy upgrade`
+  `openmoat policy upgrade`, because an upgrade keeps your policy as it is. The CHANGELOG
+  line says "Existing policies get it with `openmoat policy upgrade`" when that applies.
+- After upgrading, run `openmoat doctor` and `openmoat policy upgrade`
   ([docs/INSTALL.md](docs/INSTALL.md#upgrading) says what each one may ask for).
 
 ## Reporting
@@ -44,10 +44,10 @@ Only the maintainers see it.
 
 Do not open public issues or pull requests for bypasses. A useful report contains:
 
-- the `moat --version` or commit, the host and the operating system
-  (`moat doctor --bundle moat-bundle.json` writes these, and the agents' hook state, to
+- the `openmoat --version` or commit, the host and the operating system
+  (`openmoat doctor --bundle moat-bundle.json` writes these, and the agents' hook state, to
   one local file you can attach after reading it);
-- the exact tool call: the hook payload, or the command line for `moat policy check`;
+- the exact tool call: the hook payload, or the command line for `openmoat policy check`;
 - the policy in use (default, or the file) and the verdict and rule ids you got;
 - what actually executes and why that crosses a boundary the policy promises.
 
@@ -80,9 +80,9 @@ yours.
 |---|---|
 | Policy bypass | a command the default policy should deny is allowed, or evaluated as a different action than the one that executes |
 | Parser confusion | quoting, operators, substitutions or encodings that make the classifier see something other than what the shell runs |
-| Fail-open | any error path in `moat guard` that results in `allow` |
-| Sandbox generation | a generated host sandbox setting, Seatbelt profile or Landlock rule that allows more than the policy and than `moat sandbox show` reports |
-| Self-protection gap | an agent tool call that can modify `~/.moat`, host hook configuration or the `moat` binary without a `deny` |
+| Fail-open | any error path in `openmoat guard` that results in `allow` |
+| Sandbox generation | a generated host sandbox setting, Seatbelt profile or Landlock rule that allows more than the policy and than `openmoat sandbox show` reports |
+| Self-protection gap | an agent tool call that can modify `~/.moat`, host hook configuration or the `openmoat` binary without a `deny` |
 | Audit integrity | decisions missing from the log, or secrets persisted un-redacted |
 | Supply chain | malicious or vulnerable dependencies; release artefacts whose checksum or attestation does not verify |
 
@@ -93,12 +93,12 @@ These are known limits, documented in `docs/THREAT_MODEL.md` §4–5 and
 
 | Not yet covered | Status |
 |---|---|
-| OS enforcement where no sandbox applies (Claude Code's and Cursor's file tools, `WebFetch` and MCP calls; commands Cursor runs outside its sandbox; native Windows): a report that an allowed call could do harm because nothing below the decision stops it (a misjudged call is a policy bypass, in scope) | `moat run`; Windows enforcement (#135), Isolated tier (#174, #175) |
-| Sandbox gaps listed as gaps in `docs/EVIDENCE.md` or as losses by `moat sandbox show` (for example, on Linux `moat run` cannot deny `.env` inside the project) | tracked in the issue each one names |
-| HTTPS secret injection, and per-host method and path rules, in `moat proxy` | #247 |
+| OS enforcement where no sandbox applies (Claude Code's and Cursor's file tools, `WebFetch` and MCP calls; commands Cursor runs outside its sandbox; native Windows): a report that an allowed call could do harm because nothing below the decision stops it (a misjudged call is a policy bypass, in scope) | `openmoat run`; Windows enforcement (#135), Isolated tier (#174, #175) |
+| Sandbox gaps listed as gaps in `docs/EVIDENCE.md` or as losses by `openmoat sandbox show` (for example, on Linux `openmoat run` cannot deny `.env` inside the project) | tracked in the issue each one names |
+| HTTPS secret injection, and per-host method and path rules, in `openmoat proxy` | #247 |
 | Data sent to a host the policy allows (`api.github.com`, registries) by an allowed or approved command, including project scripts such as `npm test` | known limit; session taint asks for network after a secret read |
 | PowerShell / cmd tokenisation | Claude Code `PowerShell` is always `unparseable`, which the default policy defers to the agent's own prompt (ADR-025); other PowerShell lines are lexed as POSIX and fall through to the catch-all default |
-| Hosts that proceed when the hook binary is missing or killed | host limitation; `moat status` reports a missing hook |
+| Hosts that proceed when the hook binary is missing or killed | host limitation; `openmoat status` reports a missing hook |
 | Tools no hook reports (Codex web search and other hosted tools) | host limitation: the hook never sees them |
 | An attacker with root or the user's own shell, a compromised release pipeline, prompt-injection detection in text | not a target (THREAT_MODEL §4) |
 | Agents running in a vendor's cloud rather than on the host | not a target |
@@ -123,6 +123,6 @@ before installing it by hand.
 
 Deterministic decisions (no model in the loop); a policy lock verified on every call
 (edits to the policy or hook files deny everything until a person re-pins); fail-closed
-on every error path in `moat guard`; exit code 2 reserved for `deny`; protected paths
+on every error path in `openmoat guard`; exit code 2 reserved for `deny`; protected paths
 for the kernel's own configuration; redaction before audit storage; owner-only permissions on state files; a pure core
 with no I/O and no `unsafe`; dependency and licence auditing in CI.

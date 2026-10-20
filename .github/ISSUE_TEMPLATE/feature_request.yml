@@ -20,7 +20,7 @@ body:
     id: area
     attributes:
       label: Area
-      options: [policy semantics, shell classification, host integration, audit and replay, enforcement (sandboxes, moat run, moat proxy), CLI and UX, documentation]
+      options: [policy semantics, shell classification, host integration, audit and replay, enforcement (sandboxes, openmoat run, openmoat proxy), CLI and UX, documentation]
     validations:
       required: true
   - type: textarea

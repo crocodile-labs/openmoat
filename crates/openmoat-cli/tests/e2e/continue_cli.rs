@@ -29,7 +29,7 @@ fn assert_blocked_ask(out: &Output) {
     let reason = d["permissionDecisionReason"].as_str().unwrap();
     assert!(reason.contains("[git-internals]"), "{reason}");
     assert!(reason.contains("Continue CLI"), "{reason}");
-    assert!(reason.contains("moat allow --last"), "{reason}");
+    assert!(reason.contains("openmoat allow --last"), "{reason}");
 }
 
 /// `cn` runs the call when its hook answers `ask`. An `ask` must reach it as a
@@ -91,7 +91,7 @@ fn doctor_and_status_warn_when_the_continue_cli_is_present() {
     std::fs::create_dir_all(sb.home.join(".continue")).unwrap();
     for (out, earlier) in checks(&sb, &bin, &[]).iter().zip(&before) {
         assert!(text(out).contains(warning), "{}", text(out));
-        assert!(text(out).contains("moat run"), "{}", text(out));
+        assert!(text(out).contains("openmoat run"), "{}", text(out));
         assert_eq!(out.status.code(), earlier.status.code(), "{}", text(out));
     }
 

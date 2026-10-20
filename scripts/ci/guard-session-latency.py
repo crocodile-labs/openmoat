@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Time `moat guard` late in a long agent session (#559).
+"""Time `openmoat guard` late in a long agent session (#559).
 
 Usage: guard-session-latency.py <path to a release moat binary> [runs]
 
@@ -8,7 +8,7 @@ session's taint (POLICY.md §4.1), so the work grows with the session. This
 script grows one session to 100, 1,000 and 5,000 earlier calls, each a
 distinct file read (the case the per-call cache in #542 cannot shorten), and
 at each size times `runs` further calls end to end and as recorded in the
-audit log's `latency_us`. The earlier calls go through `moat guard` like any
+audit log's `latency_us`. The earlier calls go through `openmoat guard` like any
 other, so the log is the real, hash-chained one.
 
 The session cache (#570) folds only the calls since the last one, so a long
@@ -78,7 +78,7 @@ def main():
     env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "USERPROFILE": home}
     if "SYSTEMROOT" in os.environ:
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    # Started in the throwaway HOME, not this checkout: `moat init` refuses a
+    # Started in the throwaway HOME, not this checkout: `openmoat init` refuses a
     # binary inside the project of the current directory.
     subprocess.run([moat, "init"], env=env, cwd=home, check=True, capture_output=True)
     guard = [moat, "guard", "--host", "claude-code"]
@@ -134,7 +134,7 @@ def main():
                               f"with {PROVENANCE_FILES} tainted files", wall, own))
 
     table = "\n".join([
-        f"`moat guard` late in one session, {BATCHES} batches of {runs} runs per size, "
+        f"`openmoat guard` late in one session, {BATCHES} batches of {runs} runs per size, "
         "ms (median of all runs / median of the batches' p95)",
         "",
         "| earlier calls | end to end | latency_us |",

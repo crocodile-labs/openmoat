@@ -73,7 +73,7 @@ pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Re
 }
 
 pub fn inside(_: &IsolatedArgs) -> Result<Code> {
-    bail!("only `moat run --isolate` on Linux starts this")
+    bail!("only `openmoat run --isolate` on Linux starts this")
 }
 
 /// None: Seatbelt names the proxy's address, not only its port.
@@ -107,8 +107,8 @@ impl Confined {
 /// What `moat run` says on a macOS too old for its profile (exit 64).
 fn refusal(reason: &str) -> String {
     format!(
-        "`moat run` {reason}. The agent was not started. The agent hooks still apply the \
-         policy to each tool call: start the agent without `moat run`"
+        "`openmoat run` {reason}. The agent was not started. The agent hooks still apply the \
+         policy to each tool call: start the agent without `openmoat run`"
     )
 }
 
@@ -125,13 +125,13 @@ fn stub_message(path: &[PathBuf], program: &str) -> String {
     let found = find_in(path, &[], program);
     if found.is_some() {
         format!(
-            "`moat run --isolate` on macOS: not yet implemented, see ADR-023 (#175). `{program}` \
+            "`openmoat run --isolate` on macOS: not yet implemented, see ADR-023 (#175). `{program}` \
              is installed; the virtualization work ships in follow-up PRs. For now the Isolated \
-             tier is Linux-only; `moat run` without --isolate is the Lightweight tier"
+             tier is Linux-only; `openmoat run` without --isolate is the Lightweight tier"
         )
     } else {
         format!(
-            "`moat run --isolate` on macOS needs Apple's `containerization` toolchain (ADR-023, \
+            "`openmoat run --isolate` on macOS needs Apple's `containerization` toolchain (ADR-023, \
              #175): `{program}` is not on PATH. Install it with `brew install --cask container` \
              or from https://github.com/apple/container/releases, then re-run. Refusing rather \
              than starting the agent in a weaker tier"
@@ -170,7 +170,7 @@ mod tests {
         let reason = os_version::run_floor(Some("12.7")).unwrap();
         let message = refusal(&reason);
         assert!(
-            message.starts_with("`moat run` needs macOS 13 or later"),
+            message.starts_with("`openmoat run` needs macOS 13 or later"),
             "{message}"
         );
         assert!(
