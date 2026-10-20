@@ -15,15 +15,24 @@
   <a href="https://www.reddit.com/r/openmoat/"><img src="https://img.shields.io/badge/reddit-r%2Fopenmoat-FF4500?style=flat-square&logo=reddit&logoColor=white" alt="r/openmoat"></a>
 </p>
 
-OpenMoat checks every command, file access, web request and MCP call your coding agent
-makes, and blocks the dangerous ones before they run. It works with **Claude Code**,
-**Codex**, **Cursor** and **OpenClaw**. Everything it has no rule for it leaves to your agent's own
-prompt, so your work goes on as before.
+OpenMoat gives a fixed verdict on what each command of your coding agent actually does,
+before it runs. It parses the shell, so it decides on the files a command opens, the
+programs it runs and the hosts it connects to, not on how the command is spelt. Written
+rules give the same verdict every time, and `moat policy check` shows any verdict in
+advance. OpenMoat also writes the same policy into each agent's own OS sandbox, and
+keeps one policy and one tamper-evident log across **Claude Code**, **Codex**,
+**Cursor** and **OpenClaw** (OpenClaw gets the hook only, no sandbox).
 
-**Local, and open to inspection.** One Rust binary, about 10 ms per check on macOS and Linux. No AI model
-decides: written rules give the same answer every time, and you can see any verdict in
-advance. Nothing leaves your machine unless you export it. Every rule, test and known
-limit is in this repository.
+Anything the policy has no rule for goes to your agent's own prompt, as before. It is one
+Rust binary, about 10 ms per check on macOS and Linux. No AI model decides, and nothing
+leaves your machine unless you export it. Every rule, test and known limit is in this
+repository.
+
+| | Decides by | Sees through quoting, variables, encodings | One policy across agents | Audit log |
+|---|---|---|---|---|
+| The agent's built-in controls | its own permission rules, and your answer to its prompt | no: the prompt shows the command as written | no: each agent has its own settings | each agent's own, if any |
+| Hook tools with pattern lists | matching the command text against patterns | no: another spelling of the same command is other text | depends on the tool | depends on the tool |
+| OpenMoat | rules in one policy file, checked against what the command opens, runs and connects to | yes: variables, `$'…'` quoting, base64 and other decoders, globs and `$(…)` are resolved first | yes: Claude Code, Codex, Cursor and OpenClaw | one local, hash-chained log you can export and verify |
 
 [Website](https://openmoat.dev) · [Docs](https://openmoat.dev/docs/) · [Quick start](https://openmoat.dev/docs/quickstart/) · [How it decides](https://openmoat.dev/docs/how-it-decides/) · [Limits](https://openmoat.dev/docs/limits/) · [Blog](https://openmoat.dev/blog/) · [Changelog](CHANGELOG.md)
 
@@ -31,41 +40,56 @@ limit is in this repository.
 
 ## Features
 
-- **Agent hooks** for Claude Code, Codex, Cursor and OpenClaw: every command, file read and write, web request and MCP call is checked
-  before it runs.
-- **A real shell parser.** Variables, `$'…'` quoting, base64 and other decoders,
-  globs, braces, symlinks, here-documents and `$(…)` are checked as what they open,
-  and commands handed to `ssh`, `git` or `watch` as commands of their own.
-- **OS sandboxes** configured from the same policy, so code inside an allowed
-  `npm test` cannot reach your secrets or files outside the project; `moat run` puts
-  a whole agent in one. What each one stops is tested in CI
-  ([EVIDENCE.md](docs/EVIDENCE.md)).
-- **Network allowlist.** Agents reach only the hosts the policy lists; cloud
-  metadata services are refused.
-- **Secrets broker.** With `moat secret add`, the agent holds a placeholder and the
-  real token goes to one host only.
+**Checks on every tool call**
+
+- **Agent hooks** for Claude Code, Codex, Cursor and OpenClaw check every command, file
+  read and write, web request and MCP call before it runs.
+- **A shell parser.** Variables, quoting, decoders, globs, braces, symlinks,
+  here-documents and `$(…)` are checked as what they open, and commands handed to
+  `ssh`, `git` or `watch` as commands of their own.
 - **Session taint.** After a session reads a secret, its network and MCP calls ask.
-  After it fetches web content or gets an MCP result, writes to CI, git hooks, build
-  files and agent instructions ask.
-- **Self-protection.** The agent cannot edit the rules, approve its own blocked call
-  or uninstall OpenMoat; a policy or settings change behind its back blocks every
-  call until you review.
-- **A record of every decision** in a local, hash-chained log you can export and
-  verify (tamper-evident, not tamper-proof), read with `moat`, `moat show`,
-  `moat replay` and `moat report`.
-- **Team rules.** A committed `.moat/policy.yaml` applies its deny and ask rules to
-  everyone, and its allow rules after `moat trust`.
-- **Policy tools.** `moat policy check` shows any verdict in advance, `moat edit`
-  shows the diff before it applies, and `moat policy upgrade` keeps your changes.
+  After it reads web content or an MCP result, writes to CI, git hooks, build files and
+  agent instructions ask.
 - **Fails closed.** If its own check errors or hangs, the call is blocked. The
   exceptions: if the `moat` binary is missing, Codex and Claude Code before 2.1.295
   run calls unchecked, and OpenClaw runs calls unchecked when its Gateway does not
   load OpenMoat's plugin ([Limits](#limits)).
+
+**Limits set by the operating system**
+
+- **OS sandboxes** configured from the same policy, so code inside an allowed
+  `npm test` cannot reach your secrets or files outside the project; `moat run` puts
+  a whole agent in one. What each one stops is tested in CI
+  ([EVIDENCE.md](docs/EVIDENCE.md)).
+- **Network allowlist and secrets broker.** Agents reach only the hosts the policy
+  lists, and cloud metadata services are refused. With `moat secret add`, the agent
+  holds a placeholder and the real token goes to one host only.
+
+**Self-protection and the record**
+
+- **Self-protection.** The agent cannot edit the rules, approve its own blocked call or
+  uninstall OpenMoat through its tools. A changed policy or hook file blocks every call
+  until you review it. This catches changes the agent makes through its tools, and the
+  OS sandboxes stop sandboxed commands from making them. A program that runs as you
+  outside any sandbox can change the policy and recompute the lock. Against that, the
+  OS sandboxes are the protection, and an agent with the hook only does not have it
+  ([What the lock is not](docs/POLICY.md#what-the-lock-is-not)).
+- **A record of every decision** in a local, hash-chained log you can export and
+  verify (tamper-evident, not tamper-proof), read with `moat`, `moat show`,
+  `moat replay` and `moat report`.
+
+**Policy and teams**
+
+- **Policy tools.** `moat policy check` shows any verdict in advance, `moat edit`
+  shows the diff before it applies, and `moat policy upgrade` keeps your changes.
+- **Team rules.** A committed `.moat/policy.yaml` applies its deny and ask rules to
+  everyone, and its allow rules after `moat trust`.
 - **MoatBench.** `moat bench` scores OpenMoat, or any agent hook, against the
   bundled attack and workflow scenarios ([MOATBENCH.md](docs/MOATBENCH.md)).
-- **Single binary** for macOS, Linux and Windows, written in Rust, about 10 ms per
-  check on macOS and Linux (CI's latency job fails a change whose p95 goes over
-  45 ms); no AI model decides and nothing leaves your machine unless you export it.
+
+One binary for macOS, Linux and Windows. CI's latency job fails a change whose p95 goes
+over 45 ms. On Windows, Claude Code and Cursor get the hook only, with no OS sandbox
+([Install](#install)).
 
 ## Install
 
@@ -73,6 +97,18 @@ limit is in this repository.
 # Homebrew (macOS, Linux)
 brew install crocodile-labs/tap/moat
 ```
+
+Every file of a release (archives, installers, `sha256.sum`) has a GitHub build
+attestation. To check that the installer came from this repository's release workflow
+before you run it, use the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh release download --repo crocodile-labs/openmoat --pattern openmoat-installer.sh
+gh attestation verify openmoat-installer.sh --repo crocodile-labs/openmoat
+sh openmoat-installer.sh                  # installs moat into ~/.cargo/bin
+```
+
+Or run the installer straight from the latest release:
 
 ```bash
 # macOS and Linux installer: installs moat into ~/.cargo/bin
@@ -84,30 +120,41 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/crocodile-labs/openmoat
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/crocodile-labs/openmoat/releases/latest/download/openmoat-installer.ps1 | iex"
 ```
 
+**On Windows**, OpenMoat applies the policy through the agents' hooks. It sets up no OS
+sandbox for Claude Code or Cursor (Codex's own sandbox settings are written as on other
+systems), `moat run` is not available, and OpenMoat sets no file permissions on its own
+files: it relies on the access rules of your user profile. For OS confinement, run the agent and `moat` inside WSL2.
+
 From crates.io: `cargo install openmoat --locked`. Platforms, upgrades and other
 config directories: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Quick start
 
-```bash
-moat init
-```
+1. **Set up your agents.**
 
-`moat init` lists the agents it finds and asks `Protect Claude Code (~/.claude)? [Y/n]`
-for each one. It backs up every file before it changes it, and `moat uninstall` puts
-them back. Then start your agent in a new session and work as usual.
+   ```bash
+   moat init
+   ```
 
-```bash
-moat status                               # each agent: hook + OS sandbox, hook only, or not protected
-moat policy check "cat ~/.ssh/id_rsa"     # the verdict for any command, without running it
-```
+   `moat init` lists the agents it finds and asks `Protect Claude Code (~/.claude)? [Y/n]`
+   for each one. It backs up every file before it changes it, and `moat uninstall` puts
+   them back.
 
-```
-⛔ deny
-   rules : secrets-paths
-   reason: secret material: read /Users/you/.ssh/id_rsa
-   also  : shell "cat ~/.ssh/id_rsa"
-```
+2. **See a verdict.** Ask OpenMoat what it would do with a command, without running it:
+
+   ```bash
+   moat policy check "cat ~/.ssh/id_rsa"
+   ```
+
+   ```
+   ⛔ deny
+      rules : secrets-paths
+      reason: secret material: read /Users/you/.ssh/id_rsa
+      also  : shell "cat ~/.ssh/id_rsa"
+   ```
+
+3. **Start your agent** in a new session and work as usual. `moat status` shows, for
+   each agent, whether it has the hook and an OS sandbox, the hook only, or nothing.
 
 When OpenMoat blocks a call, the agent gets the rule and the reason, and usually tells
 you: `moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa`.
@@ -154,9 +201,9 @@ to OpenMoat itself.
 
 | Agent | Status |
 |---|---|
-| Claude Code | hooks and its OS sandbox |
+| Claude Code | hooks and its OS sandbox (macOS, Linux, WSL2; hooks only on native Windows) |
 | Codex | hooks and its OS sandbox; an `ask` becomes a deny you approve with `moat allow --last`; a deferred call follows Codex's own approval policy |
-| Cursor | hooks and its OS sandbox (macOS, Linux); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
+| Cursor | hooks and its OS sandbox (macOS, Linux; hooks only on Windows); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
 | OpenClaw | hook only, through OpenMoat's `before_tool_call` plugin; an `ask` is OpenClaw's own approval request; not yet tested against a running Gateway |
 | Continue CLI (`cn`) | partial: the released `cn` does not run hooks yet; use `moat run` |
 
@@ -257,8 +304,8 @@ Found a way past OpenMoat? Report it privately, as described in [SECURITY.md](SE
 
 ## Status
 
-**Stable.** The latest release is `0.7.0`; the policy format and commands may still
-change before 1.0. What is planned: [docs/ROADMAP.md](docs/ROADMAP.md).
+**Usable daily.** The latest release is `0.7.0`. The policy format and commands can
+still change before 1.0. What is planned: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 
