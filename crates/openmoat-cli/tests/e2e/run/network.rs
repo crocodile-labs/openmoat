@@ -31,7 +31,7 @@ fn namespaced(out: &Output) -> bool {
 /// A connection to the proxy's port number on another address (TEST-NET-1,
 /// RFC 5737) has no route, and the proxy itself still answers on loopback.
 #[test]
-fn the_proxys_port_on_another_host_is_unreachable() {
+fn the_proxy_port_on_another_host_is_unreachable() {
     let (sb, project) = installed_with_secret();
     let script = r#"port="${HTTPS_PROXY##*:}"
          python3 -c '

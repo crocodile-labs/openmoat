@@ -124,7 +124,7 @@ fn ordinary_project_settings_load() {
 #[test]
 fn a_project_file_that_cannot_be_read_blocks_and_a_deleted_one_loads() {
     let w = world();
-    for bad in ["{\"disableAllHooks\": tru", "[]", ""] {
+    for bad in ["{\"disableAllHooks\": ", "[]", ""] {
         let path = project_file(&w, "settings.json", bad);
         let d = decide(&w, "project_settings", Some(&path));
         assert_blocked(&d, bad);

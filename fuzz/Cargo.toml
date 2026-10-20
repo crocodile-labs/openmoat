@@ -8,6 +8,11 @@ description = "Fuzz targets for OpenMoat's untrusted-input surfaces"
 [package.metadata]
 cargo-fuzz = true
 
+# `anyhow` is used by crates/openmoat-cli/src/json5.rs, which openclaw_json5
+# compiles through `#[path]`; cargo-machete does not follow that.
+[package.metadata.cargo-machete]
+ignored = ["anyhow"]
+
 # Not part of the main workspace: built with nightly by `cargo fuzz`.
 [workspace]
 members = ["."]
