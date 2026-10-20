@@ -32,7 +32,10 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
             "policy_update": update,
             "lock_drift": drift,
             "mcp_changes": mcp_changes(&home, &binary).unwrap_or_default(),
-            "project_settings": crate::project_settings::warnings_here(),
+            "project_settings": crate::project_settings::warnings_here()
+                .into_iter()
+                .map(|warning| warning.text)
+                .collect::<Vec<_>>(),
         }))?;
         return Ok(Code::Ok);
     }
@@ -54,8 +57,8 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     // A warning that leaves `healthy` alone: OpenMoat is installed as it should
     // be, and only the person can judge a project's own settings.
     for warning in crate::project_settings::warnings_here() {
-        let name = Host::ClaudeCode.display_name();
-        writeln!(out, "{name:<16} ! project settings {warning}")?;
+        let name = warning.host.display_name();
+        writeln!(out, "{name:<16} ! project settings {}", warning.text)?;
     }
     if let Ok(policy) = home.load_policy() {
         healthy &= sandboxes(&mut out, &home, &Plan::new(&home, &policy)?, &binary)?;

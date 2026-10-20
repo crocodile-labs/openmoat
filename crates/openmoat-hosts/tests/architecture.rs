@@ -13,16 +13,13 @@ use std::path::{Path, PathBuf};
 /// `registry.rs` maps them to their modules; the rest is to move.
 const ALLOWED: &[(&str, usize)] = &[
     ("openmoat-cli/src/commands/allow.rs", 1),
-    // +1: the project-settings warning is Claude Code's; its file list belongs in
-    // the host spec next.
-    ("openmoat-cli/src/commands/doctor.rs", 3),
+    ("openmoat-cli/src/commands/doctor.rs", 2),
     ("openmoat-cli/src/commands/doctor/sandboxes.rs", 1),
     ("openmoat-cli/src/commands/doctor/warnings.rs", 1),
     ("openmoat-cli/src/commands/guard.rs", 1),
     ("openmoat-cli/src/commands/init.rs", 3),
     ("openmoat-cli/src/commands/sandbox.rs", 1),
-    // +1: as doctor.rs, the project-settings warning.
-    ("openmoat-cli/src/commands/status.rs", 2),
+    ("openmoat-cli/src/commands/status.rs", 1),
     ("openmoat-cli/src/context.rs", 3),
     ("openmoat-cli/src/hangs.rs", 1),
     ("openmoat-cli/src/install.rs", 1),

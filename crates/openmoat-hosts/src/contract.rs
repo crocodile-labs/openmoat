@@ -86,6 +86,32 @@ pub struct HostSpec {
     /// The OS sandbox OpenMoat configures inside the host (the Standard tier);
     /// `None` for a host it configures none for.
     pub sandbox: Option<SandboxSpec>,
+    /// The settings files the host reads from a project and merges over the
+    /// user settings OpenMoat pins; `None` for a host OpenMoat checks none of.
+    pub project_settings: Option<ProjectSettingsSpec>,
+}
+
+/// Where a host reads a project's own settings. They come from the repository,
+/// so OpenMoat does not pin them: `moat doctor` and `moat status` warn about
+/// what one sets, and a host's settings-change hook may veto loading one.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct ProjectSettingsSpec {
+    /// The directory holding them, in the working directory and in the
+    /// project root.
+    pub dir: &'static str,
+    /// The file shared with the project.
+    pub shared: &'static str,
+    /// The person's own file, kept out of version control.
+    pub local: &'static str,
+}
+
+impl ProjectSettingsSpec {
+    /// Both files, the shared one first.
+    #[must_use]
+    pub const fn files(&self) -> [&'static str; 2] {
+        [self.shared, self.local]
+    }
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.

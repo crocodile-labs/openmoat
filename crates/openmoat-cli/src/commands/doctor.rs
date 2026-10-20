@@ -154,8 +154,8 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     }
     // Loaded when a session starts here, where no `ConfigChange` fires.
     for warning in crate::project_settings::warnings_here() {
-        let name = Host::ClaudeCode.display_name();
-        report.warn(&format!("{name:<16} project settings {warning}"));
+        let name = warning.host.display_name();
+        report.warn(&format!("{name:<16} project settings {}", warning.text));
     }
     for agent in protection::report(&home, &binary)? {
         if let Some(summary) = agent.summary() {

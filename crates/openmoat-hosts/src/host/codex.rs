@@ -56,6 +56,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         file: "config.toml",
         unavailable_on_windows: None,
     }),
+    project_settings: None,
 };
 
 /// Codex sends only `PreToolUse`.

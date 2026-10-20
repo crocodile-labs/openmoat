@@ -79,6 +79,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         project_file: None,
     }),
     sandbox: None,
+    project_settings: None,
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";

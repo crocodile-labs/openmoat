@@ -264,16 +264,16 @@ fn evaluate(
     // files drifted would tell whoever tampered that nothing noticed. Drift of
     // only Claude Code toggles and permission lists changes no decision, so the
     // call is decided as usual and the drift recorded (`integrity/relaxed.rs`).
-    let checked = integrity::check(&home)?;
-    if let Some(decision) = checked.deny {
+    let verified = integrity::check(&home)?;
+    if let Some(decision) = verified.checked.deny {
         return Ok((Some(request), decision));
     }
-    out.drifted = checked.relaxed;
+    out.drifted = verified.checked.relaxed;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
     if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {
         let cwd = request.cwd.as_deref().map(std::path::Path::new);
-        if let Some(decision) = crate::mcp::violation(&home, host, cwd, name)? {
+        if let Some(decision) = crate::mcp::violation(&home, &verified.lock, host, cwd, name)? {
             return Ok((Some(request), decision));
         }
     }
@@ -288,7 +288,7 @@ fn evaluate(
         .context("resolving working directory")?;
     hangs::enter(Phase::Context);
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
-    let policy = crate::repo::effective_policy(&home, &ctx)?;
+    let policy = crate::repo::effective_policy_with(&home, verified.policy, &ctx)?;
     out.known = secrets::known(&policy.secrets, &ctx.home)?;
     let snapshot = Snapshot::load(&home.environment_path())?;
     hangs::enter(Phase::Compile);

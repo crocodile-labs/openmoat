@@ -16,7 +16,7 @@ mod wire;
 
 pub use contract::{
     Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    SandboxFormat, SandboxSpec,
+    ProjectSettingsSpec, SandboxFormat, SandboxSpec,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;

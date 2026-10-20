@@ -1,5 +1,6 @@
 //! Claude Code settings a repository carries: `.claude/settings.json` (shared
-//! with the project) and `.claude/settings.local.json` (the person's own).
+//! with the project) and `.claude/settings.local.json` (the person's own), as
+//! the host's spec names them (`HostSpec::project_settings`).
 //!
 //! OpenMoat pins only the user settings file, which holds its hooks. Claude
 //! Code merges the project and local files over it, and a key set there wins:
@@ -15,13 +16,11 @@ use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
+use openmoat_hosts::{Host, ProjectSettingsSpec};
 use serde_json::{Map, Value};
 
 /// The rule a blocked project settings change and its audit row carry.
 pub const RULE: &str = "project-settings";
-
-/// The settings files Claude Code reads from a project's `.claude` directory.
-pub const FILES: [&str; 2] = ["settings.json", "settings.local.json"];
 
 /// A settings file larger than this is refused unread rather than parsed.
 const MAX_BYTES: u64 = 1024 * 1024;
@@ -150,13 +149,18 @@ pub fn check(path: &Path) -> Option<String> {
     }
 }
 
-/// The project settings files Claude Code may load for a session in `cwd`:
-/// those of `cwd` and of its project root (`project.rs`), named `name` (one
-/// of [`FILES`]), existing or not. A directory that cannot be a project root
-/// (the home directory, which holds the user settings, or an ancestor of it)
-/// has none.
+/// The project settings files a host may load for a session in `cwd`: those
+/// of `cwd` and of its project root (`project.rs`) in the directory `spec`
+/// names, named `name` (one of [`ProjectSettingsSpec::files`]), existing or
+/// not. A directory that cannot be a project root (the home directory, which
+/// holds the user settings, or an ancestor of it) has none.
 #[must_use]
-pub fn candidates(cwd: &Path, user_home: &Path, name: &str) -> Vec<PathBuf> {
+pub fn candidates(
+    cwd: &Path,
+    user_home: &Path,
+    spec: &ProjectSettingsSpec,
+    name: &str,
+) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = vec![cwd.to_path_buf()];
     if let Some(root) = crate::project::root_of(cwd, user_home)
         && !dirs.contains(&root)
@@ -165,19 +169,19 @@ pub fn candidates(cwd: &Path, user_home: &Path, name: &str) -> Vec<PathBuf> {
     }
     dirs.into_iter()
         .filter(|dir| crate::project::trusted(dir, user_home))
-        .map(|dir| dir.join(".claude").join(name))
+        .map(|dir| dir.join(spec.dir).join(name))
         .collect()
 }
 
-/// One warning per project settings file for `cwd` that sets something
-/// [`findings`] names or cannot be read, for `moat doctor` and `moat status`.
-/// Claude Code loads these when a session starts, where no `ConfigChange`
-/// fires, so OpenMoat can only point at them.
+/// One warning per project settings file `spec` names for `cwd` that sets
+/// something [`findings`] names or cannot be read, for `moat doctor` and
+/// `moat status`. The host loads these when a session starts, where no
+/// `ConfigChange` fires, so OpenMoat can only point at them.
 #[must_use]
-pub fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
-    FILES
+pub fn warnings(cwd: &Path, user_home: &Path, spec: &ProjectSettingsSpec) -> Vec<String> {
+    spec.files()
         .iter()
-        .flat_map(|name| candidates(cwd, user_home, name))
+        .flat_map(|name| candidates(cwd, user_home, spec, name))
         .filter_map(|path| {
             check(&path).map(|found| {
                 format!(
@@ -190,14 +194,29 @@ pub fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
         .collect()
 }
 
-/// [`warnings`] for the current directory, for `moat doctor` and `moat
-/// status`; empty when the directory or the home directory cannot be found.
+/// One [`warnings`] line and the host whose project settings it is about.
+pub struct Warning {
+    pub host: Host,
+    pub text: String,
+}
+
+/// [`warnings`] for the current directory, for every host with project
+/// settings in its spec, for `moat doctor` and `moat status`; empty when the
+/// directory or the home directory cannot be found.
 #[must_use]
-pub fn warnings_here() -> Vec<String> {
+pub fn warnings_here() -> Vec<Warning> {
     let (Ok(cwd), Ok(user_home)) = (std::env::current_dir(), crate::home::user_home()) else {
         return Vec::new();
     };
-    warnings(&cwd, &user_home)
+    Host::ALL
+        .into_iter()
+        .filter_map(|host| Some((host, host.spec().project_settings.as_ref()?)))
+        .flat_map(|(host, spec)| {
+            warnings(&cwd, &user_home, spec)
+                .into_iter()
+                .map(move |text| Warning { host, text })
+        })
+        .collect()
 }
 
 #[cfg(test)]

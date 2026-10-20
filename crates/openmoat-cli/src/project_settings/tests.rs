@@ -2,6 +2,11 @@ use serde_json::json;
 
 use super::*;
 
+fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
+    let spec = Host::ClaudeCode.spec().project_settings.as_ref().unwrap();
+    super::warnings(cwd, user_home, spec)
+}
+
 fn found(value: &Value) -> Vec<String> {
     findings(value.as_object().unwrap())
 }

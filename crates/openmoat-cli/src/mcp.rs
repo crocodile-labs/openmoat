@@ -75,18 +75,18 @@ pub fn review(home: &Home, lock: &Lock, hosts: &[Host], cwd: Option<&Path>) -> R
 /// `Some(deny)` when `tool`, an MCP tool call `host` sent from `cwd`, belongs
 /// to a server whose definition is not the pinned one. A configuration file
 /// that cannot be read hides which server it defines, so it holds back every
-/// MCP call of that host.
+/// MCP call of that host. `lock` is the one the guard already read and checked.
 pub fn violation(
     home: &Home,
+    lock: &Lock,
     host: Host,
     cwd: Option<&Path>,
     tool: &str,
 ) -> Result<Option<Decision>> {
-    let lock = Lock::load(&home.lock_path())?;
     if lock.mcp_servers.is_none() {
         return Ok(None);
     }
-    let found = review(home, &lock, &[host], cwd)?;
+    let found = review(home, lock, &[host], cwd)?;
     let mut reasons: Vec<String> = found
         .unreadable
         .iter()

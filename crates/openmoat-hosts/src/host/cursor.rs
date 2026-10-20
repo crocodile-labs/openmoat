@@ -71,6 +71,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy",
         ),
     }),
+    project_settings: None,
 };
 
 /// Cursor's hooks, each named in the payload.

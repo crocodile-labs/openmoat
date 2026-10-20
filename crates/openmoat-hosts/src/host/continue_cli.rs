@@ -30,6 +30,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // `cn` reads its own configuration and fires no hook.
     mcp: None,
     sandbox: None,
+    project_settings: None,
 };
 
 /// Set by `cn` for every command hook it runs, next to `CLAUDE_PROJECT_DIR`
