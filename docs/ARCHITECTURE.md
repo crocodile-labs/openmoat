@@ -437,7 +437,13 @@ away. Codex has no such key: a failed hook "continues the tool call"
   writes the new contents to `<file>.proposed-<8 hex>`, fires `ConfigChange` for that
   copy and renames it over the file only if no hook blocks; when `<file>` is pinned,
   the copy is blocked unless the file still matches the lock and the copy's bytes equal
-  the pinned ones, so a reviewed edit of a pinned file cannot pass the hook.
+  the pinned ones, so a reviewed edit of a pinned file cannot pass the hook. A project's
+  `.claude/settings.json` and `.claude/settings.local.json` are not pinned: they come
+  from the repository. A change of one (source `project_settings` or `local_settings`)
+  is read and blocked with `project-settings` when it sets a key that turns hooks off,
+  runs a program or redirects the agent, or cannot be parsed (`project_settings.rs`);
+  `moat doctor` and `moat status` warn about such a file in the current project, which
+  Claude Code loads at session start without a `ConfigChange`.
 - **`kernel-self` rules.** The default policy denies agent writes to the state and
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
   `CURSOR_CONFIG_DIR` moved them, and where `moat init` recorded them in `hosts.json`), hook

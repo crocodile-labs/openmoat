@@ -449,6 +449,14 @@
   threat: T9
   action: { fs_write: "/p/.claude/settings.local.json" }
   expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-shared-project-claude-settings
+  threat: T9
+  action: { fs_write: "/p/.claude/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-redirect-disable-all-hooks-into-project-settings
+  threat: T9
+  action: { shell: "echo '{\"disableAllHooks\":true}' > .claude/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-edit-moat-policy
   threat: T9
   action: { fs_write: "~/.moat/policy.yaml" }

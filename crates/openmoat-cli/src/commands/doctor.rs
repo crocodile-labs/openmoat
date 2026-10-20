@@ -148,6 +148,11 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     for warning in [tiocsti, hangs, state, macos].into_iter().flatten() {
         report.warn(&warning);
     }
+    // Loaded when a session starts here, where no `ConfigChange` fires.
+    for warning in crate::project_settings::warnings_here() {
+        let name = Host::ClaudeCode.display_name();
+        report.warn(&format!("{name:<16} project settings {warning}"));
+    }
     for agent in protection::report(&home, &binary)? {
         if let Some(summary) = agent.summary() {
             report.note(&format!("{:<16} protection: {summary}", agent.name));
