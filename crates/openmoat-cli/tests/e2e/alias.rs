@@ -23,15 +23,23 @@ fn home_with_bin() -> (Sandbox, PathBuf) {
     (sb, bin)
 }
 
+/// `program` with the sandbox's environment and this machine's temp directory:
+/// without `TEMP`, Windows names the home as the temp directory, and `init`
+/// refuses a binary inside one.
+fn command(sb: &Sandbox, program: &Path) -> std::process::Command {
+    let temp = std::env::temp_dir();
+    let mut cmd = sb.command_at(program);
+    cmd.env("TEMP", &temp).env("TMP", &temp);
+    cmd
+}
+
 fn run(sb: &Sandbox, program: &Path, args: &[&str], stdin: Option<&str>) -> Output {
-    output(sb.command_at(program).args(args), stdin)
+    output(command(sb, program).args(args), stdin)
 }
 
 fn person(sb: &Sandbox, program: &Path, args: &[&str]) -> Output {
     output(
-        sb.command_at(program)
-            .args(args)
-            .env("MOAT_ASSUME_TTY", "1"),
+        command(sb, program).args(args).env("MOAT_ASSUME_TTY", "1"),
         None,
     )
 }
