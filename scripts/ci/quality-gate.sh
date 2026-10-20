@@ -20,12 +20,12 @@ run cargo clippy --locked --workspace --lib --bins --all-features -- -D warnings
     -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::unreachable
 run cargo doc --locked --workspace --no-deps --document-private-items
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
-    # On a failure, the failing tests and their first panic lines become
+    # Every test target runs; on a failure, the failing tests and their first panic lines become
     # annotations, shown on the run without reading its log. Actions keeps the
     # first ten errors of a step.
-    echo "▶ cargo test --locked --workspace --all-features"
+    echo "▶ cargo test --locked --workspace --all-features --no-fail-fast"
     log="${RUNNER_TEMP:-/tmp}/cargo-test.log"
-    if ! cargo test --locked --workspace --all-features 2>&1 | tee "$log"; then
+    if ! cargo test --locked --workspace --all-features --no-fail-fast 2>&1 | tee "$log"; then
         # Each panic with the line after it, which holds the message.
         { grep -E "^test .* FAILED$" "$log"; grep -A1 "panicked at" "$log" | grep -v '^--$'; } |
             head -10 | sed -e 's/%/%25/g' -e 's/^/::error title=cargo test::/'
