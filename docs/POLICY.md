@@ -91,6 +91,17 @@ work as usual.
 A group matches when **any** of its patterns matches an atomic action of the same
 kind. One tool call usually produces several atomic actions (see §4).
 
+A `deny` group may also say `hook_only: true` (additive to schema v1, ADR-034). The
+hook applies it like any other deny rule: a shell command, file tool or MCP argument
+that names one of its `fs.read` or `fs.write` paths is denied. The host sandboxes and
+`moat run` leave those paths out and treat them as the other rules say, so a program a
+sandboxed command runs can still open them. The default policy uses it for
+`build-credentials` (§6): `mvn` and `gradle` must read their settings inside the
+sandbox. `policy lint` rejects `hook_only` on an `allow`, `ask` or `defer` group, with
+`net` or `fetch` patterns (sandboxed commands would reach hosts the hook denies), and on
+a group without `fs.read` or `fs.write`; `policy compile` lists such groups under
+`decide-only`.
+
 | Kind | Matched against | Pattern language |
 |---|---|---|
 | `shell` | the normalised argument vector of a command, and of every pipeline suffix | token sequence (§3.1) |
@@ -511,6 +522,7 @@ Seatbelt and Landlock rules of `moat run` are generated from it.
 | List | Rule id | What it covers |
 |---|---|---|
 | deny | `secrets-paths` | read **and** write of `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.config/gh`, `~/.netrc`, `~/.authinfo{,.gpg}`, `~/.docker/config.json`, `~/.config/containers/auth.json` (Podman, Buildah), `~/.config/doctl/config.yaml`, `~/.config/gcloud`, `~/.azure`, `~/.git-credentials`, `~/.npmrc`, `~/.pypirc`, `~/.cargo/credentials{,.toml}`, `~/.gem/credentials`, `~/.pgpass`, `~/.my.cnf`, `~/.mylogin.cnf`, `~/.vault-token`, `~/.terraform.d/credentials.tfrc.json`, `~/.config/op`, `~/.password-store`, `~/.local/share/keyrings`, `~/.zsh_history`, `~/.bash_history`, `.env`, `.env.*` (except `.env.example`, `.env.sample`, `.env.template`), `.envrc`, keychains; commands that print a stored token or password: `gh auth token`, `gh auth status --show-token`/`-t`, `gcloud auth print-access-token`/`print-identity-token`, `az account get-access-token`, `aws configure export-credentials`, `aws configure get *secret*`, `kubectl config view --raw`, `git credential fill`, `git credential-<helper> get`, `security find-generic-password`/`find-internet-password` with `-w` or `-g`, `security dump-keychain`, `vault kv get`, `vault read`, `vault print token`, `op read`, `op item get --reveal`, `heroku auth:token`, and `pass` with any argument (`pass NAME`, `pass show`, `pass grep`, …) except `ls`, `list`, `find`, `search`, `init`, `insert`, `add`, `rm`, `remove`, `delete`, `mv`, `rename`, `cp`, `copy`, `git`, `help`, `version`, which print no password (`pass` alone lists names) |
+| deny | `build-credentials` | read **and** write of `~/.m2/settings.xml`, `~/.m2/settings-security.xml` and `~/.gradle/gradle.properties` (repository passwords, signing keys, tokens) by the agent: a shell command naming them, the file tools, MCP arguments. `hook_only` (§2): the host sandboxes and `moat run` do not deny them, so `mvn` and `gradle` keep reading their settings there, and `mvn package` or `./gradlew build` keep their verdict. The caches (`~/.m2/repository`, `~/.gradle/caches`) are not covered |
 | deny | `env-secrets` | reading `*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AWS_*`, `GITHUB_TOKEN`, `NPM_TOKEN`, `*_PASS`, `*_PASSWD`, `*_PWD`, `PGPASSWORD`, `*_CREDENTIALS`, `*_DSN`, `DATABASE_URL`, `*_DATABASE_URL`, `REDIS_URL`, `MONGODB_URI`, `MONGO_URL` |
 | deny | `env-dump` | `env`, `printenv`, `set`, `export`, `declare`, `typeset` with no arguments (or only `-0`, `-p`, `-x`), also by absolute path: they print every variable, secrets included. `printenv NAME` is an `env.read` of `NAME`. A read of `/proc/<pid>/environ` (also `/proc/self/…` and `/proc/<pid>/task/<tid>/…`) is the atom `@proc-environ <path>`, which this rule denies; it is not a path rule, so no OS sandbox is asked to deny a glob under `/proc` |
 | deny | `env-poison` | setting `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `GIT_*`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `MOAT_*` |
@@ -748,7 +760,8 @@ that file back byte for byte; `--dry-run` only shows the changes and needs no te
 (Standard tier, ADR-018, ADR-019). The rules above apply there as an OS layer can apply
 them: a deny rule denies; an allow rule allows; everything else, `ask` included, is
 denied. Shell, `env.*`, `mcp` and `executables` rules have no OS form and stay with the
-hook.
+hook, as do the paths of a `hook_only` deny group (§2, ADR-034): OS layers treat those
+paths as if the group were absent.
 
 A deny-by-default read would also deny the toolchains and system files every command
 reads, so the additive `sandbox.read_roots` key lists the paths sandboxed commands may

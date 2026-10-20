@@ -37,8 +37,17 @@ fn connections_over_the_limit_get_503() {
     };
     let h = start(None, limits);
     let _held = h.connect(); // sends nothing, so it holds its slot
-    thread::sleep(Duration::from_millis(200));
-    let reply = h.exchange("GET http://allowed.test/ HTTP/1.1\r\n\r\n");
+    // The proxy takes the slot when it accepts the held connection, which a
+    // slow runner may not have done yet: ask again until it has, well inside
+    // the handshake timeout that would free the slot.
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let reply = loop {
+        let reply = h.exchange("GET http://allowed.test/ HTTP/1.1\r\n\r\n");
+        if reply.starts_with("HTTP/1.1 503") || std::time::Instant::now() > deadline {
+            break reply;
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
     assert!(reply.starts_with("HTTP/1.1 503"), "{reply}");
 }
 

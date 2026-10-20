@@ -7,14 +7,14 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 119 | 51 | 3 |
-| T2 | Secret exfiltration via file tools | 22 | 1 | 1 |
+| T1 | Secret exfiltration via shell | 124 | 51 | 3 |
+| T2 | Secret exfiltration via file tools | 25 | 1 | 1 |
 | T3 | Secret exfiltration via environment | 62 | 3 | 0 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
 | T5 | Supply-chain execution | 12 | 35 | 0 |
 | T6 | Environment poisoning | 31 | 20 | 0 |
 | T7 | Obfuscation and nested execution | 122 | 102 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 11 | 0 | 0 |
+| T8 | MCP tool poisoning / over-privileged tools | 12 | 0 | 0 |
 | T9 | Hook / policy tampering by the agent | 165 | 46 | 7 |
 | T10 | Hook supply chain (trojaned hook binary) | 7 | 0 | 1 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 0 |
@@ -93,6 +93,11 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-token-piped-into-netcat` (attacks): Deny [token-egress]
 - `T1-token-in-git-push-url` (attacks): Deny [token-egress]
 - `T1-placeholder-to-wrong-host` (attacks): Deny [placeholder-egress]
+- `T1-cat-maven-settings` (attacks): Deny [build-credentials]
+- `T1-cat-maven-settings-security` (attacks): Deny [build-credentials]
+- `T1-cat-gradle-properties` (attacks): Deny [build-credentials]
+- `T1-grep-maven-settings-password` (attacks): Deny [build-credentials]
+- `T1-copy-gradle-properties` (attacks): Deny [build-credentials]
 - `T1-grep-history-for-tokens` (attacks): Deny [secrets-paths]
 - `T1-cd-into-ssh-then-cat` (attacks): Deny [secrets-paths]
 - `T1-cd-then-git-dash-c-relative` (attacks): Deny [secrets-paths]
@@ -210,6 +215,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T2-read-npmrc-token` (attacks): Deny [secrets-paths]
 - `T2-read-pypirc` (attacks): Deny [secrets-paths]
 - `T2-read-cargo-credentials` (attacks): Deny [secrets-paths]
+- `T2-read-maven-settings` (attacks): Deny [build-credentials]
+- `T2-read-gradle-properties` (attacks): Deny [build-credentials]
+- `T2-write-maven-settings` (attacks): Deny [build-credentials]
 - `T2-read-gcloud-adc` (attacks): Deny [secrets-paths]
 - `T2-read-azure-tokens` (attacks): Deny [secrets-paths]
 - `T2-read-zsh-history` (attacks): Deny [secrets-paths]
@@ -751,6 +759,7 @@ the verdict and rule ids the default policy must produce for it.
 
 ## T8: MCP tool poisoning / over-privileged tools
 
+- `T8-mcp-filesystem-reads-maven-settings-security` (attacks): Deny [build-credentials]
 - `T8-unknown-mcp-tool` (attacks): Defer [default]
 - `T8-unknown-host-tool` (attacks): Defer [default.tool.unknown]
 - `T8-mcp-filesystem-reads-aws-credentials` (attacks): Deny [secrets-paths]

@@ -19,7 +19,11 @@ view of the home in memory, with only the project and the read roots mounted fro
 disk, so a write elsewhere in the home that is not refused outright (`~/stolen.txt`,
 and under Claude Code also `~/.zshrc`) completes in memory and is gone when the
 command ends; the file on disk does not change (`contained` in
-[EVIDENCE.md](EVIDENCE.md)).
+[EVIDENCE.md](EVIDENCE.md)). A deny group marked `hook_only` (ADR-034), such as the
+default `build-credentials` (`~/.m2/settings.xml`, `~/.gradle/gradle.properties`), is
+left out of every generated sandbox, so `mvn` and `gradle` can read their settings
+wherever the sandbox lets commands read `~/.m2` or `~/.gradle`; the hook still denies
+the agent's own access.
 
 - **Claude Code** (`settings.json`): the `sandbox` block (`enabled`,
   `failIfUnavailable: true`, `allowUnsandboxedCommands: false`, `excludedCommands: []`,

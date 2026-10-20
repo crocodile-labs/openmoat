@@ -82,7 +82,11 @@ fn default_policy_lowers_paths_and_hosts() {
     );
     assert!(ir.secrets.is_empty() && ir.limits.is_empty());
     let kinds: Vec<&str> = ir.decide_only.iter().map(|d| d.kind.as_str()).collect();
-    assert_eq!(kinds, ["shell", "env.read", "env.set", "mcp"]);
+    // `fs.read` and `fs.write`: the `hook_only` group `build-credentials`
+    assert_eq!(
+        kinds,
+        ["shell", "env.read", "env.set", "mcp", "fs.read", "fs.write"]
+    );
 }
 
 #[test]
@@ -218,6 +222,55 @@ fn decide_only_lists_rules_and_executables() {
         argv: vec!["sudo".into()],
     };
     assert_eq!(ir.checker().unwrap().check(&shell), None);
+}
+
+#[test]
+fn hook_only_deny_groups_are_left_to_the_hook() {
+    let ir = lowered(
+        "version: 1\ndefaults: allow\ndeny:\n  - id: s\n    fs.read: ['/s/**']\n\
+         \x20 - id: b\n    hook_only: true\n    fs.read: ['/h/.m2/settings.xml']\n\
+         \x20   fs.write: ['/h/.m2/settings.xml']\n",
+    );
+    assert_eq!(ids(&ir.fs.read.deny), ["s"]);
+    assert!(ir.fs.write.deny.is_empty());
+    let check = ir.checker().unwrap();
+    assert_eq!(
+        check.check_os(&read("/h/.m2/settings.xml")),
+        Some(Effect::Allow)
+    );
+    assert_eq!(check.check_os(&read("/s/key")), Some(Effect::Deny));
+    let kinds: Vec<(&str, &[String])> = ir
+        .decide_only
+        .iter()
+        .map(|d| (d.kind.as_str(), d.rules.as_slice()))
+        .collect();
+    let b = ["b".to_owned()];
+    assert_eq!(kinds, [("fs.read", &b[..]), ("fs.write", &b[..])]);
+    // The hook still denies them.
+    let policy =
+        Policy::parse("version: 1\ndeny:\n  - id: b\n    hook_only: true\n    fs.read: ['/h/x']\n")
+            .unwrap();
+    let engine = crate::CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    let decision = engine.evaluate_atomic(&read("/h/x")).unwrap();
+    assert_eq!(decision.verdict, crate::Verdict::Deny);
+}
+
+#[test]
+fn the_default_policy_leaves_build_credentials_out_of_os_layers() {
+    let ir = lowered(crate::DEFAULT_POLICY);
+    let json = serde_json::to_string(&ir.fs).unwrap();
+    for file in [
+        ".m2/settings.xml",
+        ".m2/settings-security.xml",
+        "gradle.properties",
+    ] {
+        assert!(!json.contains(file), "{file} reaches OS layers: {json}");
+    }
+    assert!(
+        ir.decide_only
+            .iter()
+            .any(|d| d.kind == "fs.read" && d.rules == ["build-credentials"])
+    );
 }
 
 #[test]

@@ -41,6 +41,7 @@ each ADR records the outcome it needs.
 | [031](ADR-031-audit-anchors-and-signed-policy.md) | `moat audit anchor` records the log's head in a git ref or file the person names, and `moat audit verify --against` checks the log against it, with nothing sent anywhere; policy packs and, where the policy asks, repository policies are trusted by OpenSSH signatures (`ssh-keygen -Y`, namespace `openmoat-policy`) from keys `moat policy trust-key` pinned; `kernel-self` also denies reading the state beside the policy | accepted; implements the signed packs of #136 |
 | [032](ADR-032-mcp-proxy-holds-first-sight.md) | `moat mcp proxy` holds every tool of a server it has no pins for until a person runs `moat mcp accept`; existing pins stay; `mcp: { trust_first_sight: true }` restores pinning on first sight, and `moat policy lint` warns about it | accepted; supersedes the first-sight part of ADR-026 |
 | [033](ADR-033-openclaw-plugin-hook.md) | OpenClaw is supported through a dependency-free plugin whose `before_tool_call` handler runs `moat guard --host openclaw` and blocks on any failure; `moat init` installs and pins it and its `openclaw.json` entries; an ask is OpenClaw's own approval request | accepted |
+| [034](ADR-034-hook-only-deny-groups.md) | A `deny` group with `hook_only: true` is applied by the hook and left out of every OS layer, listed under `decide-only`; the default `build-credentials` denies the agent Maven and Gradle settings while `mvn` and `gradle` still read them in the sandboxes | accepted; refines ADR-019 and ADR-021 |
 
 ## Names in older ADRs
 

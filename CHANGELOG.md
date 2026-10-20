@@ -8,11 +8,15 @@ view at the end of the file.
 
 ## [Unreleased]
 
-### Fixed
-- `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#601](https://github.com/crocodile-labs/openmoat/pull/601)).
+### Security
+- `build-credentials` denies the agent reading or writing `~/.m2/settings.xml`, `~/.m2/settings-security.xml` and `~/.gradle/gradle.properties`, through shell commands, file tools and MCP arguments. A deny group can now say `hook_only: true`: the host sandboxes and `moat run` leave its paths out, so `mvn` and `gradle` run inside them still read their settings, and `mvn package` or `./gradlew build` keep their verdict. Existing policies get it with `moat policy upgrade` ([#603](https://github.com/crocodile-labs/openmoat/pull/603)).
 
 ### Changed
+- `openmoat-core` (library API, breaking): `RuleGroup` has a `hook_only` field (ADR-034) ([#603](https://github.com/crocodile-labs/openmoat/pull/603)).
 - `openmoat-hosts` (library API, breaking): `InstallSpec` also lists the hook entries `moat init` writes (`hooks`, each a `#[non_exhaustive]` `HookSpec` with event, matcher, timeout and `onFailure`) and the hook file's layout (`hook_format`, a `HookFormat`), and `GUARD_BUDGET_S` moves here; a test checks every host's timeouts outlast it. The configuration directory table in INSTALL.md and the known gaps list in THREAT_MODEL.md are generated from the specs and checked by a test. Every hook entry `moat init` writes is unchanged ([#602](https://github.com/crocodile-labs/openmoat/pull/602)).
+
+### Fixed
+- `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#601](https://github.com/crocodile-labs/openmoat/pull/601)).
 
 ## [0.7.0] - 2026-10-19
 

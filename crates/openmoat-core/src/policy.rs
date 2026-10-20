@@ -69,6 +69,8 @@ use crate::secret::{self, Secret};
 use crate::taint::{self, TaintSettings};
 use crate::verdict::Verdict;
 
+mod hook_only;
+
 pub const SUPPORTED_VERSION: u32 = 1;
 
 /// Why a policy file cannot be used. Any of these keeps `guard` from deciding.
@@ -156,6 +158,12 @@ pub struct RuleGroup {
     /// MCP tool-name globs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mcp: Vec<String>,
+    /// Applied by the hook only (ADR-034): OS layers leave this group's
+    /// `fs.read` and `fs.write` paths to the other rules, so a build tool a
+    /// sandboxed command runs can still read them. `deny` groups only, never
+    /// with `net` or `fetch`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hook_only: bool,
 }
 
 impl RuleGroup {
@@ -420,6 +428,7 @@ impl Policy {
                 }
             }
         }
+        hook_only::check(self)?;
         for (name, paths) in &self.executables {
             if paths.is_empty() {
                 return Err(PolicyError::Rule {
