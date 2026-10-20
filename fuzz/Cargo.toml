@@ -34,7 +34,8 @@ missing_panics_doc = "allow"
 [dependencies]
 # What crates/openmoat-cli/src/json5.rs, compiled into openclaw_json5, uses.
 anyhow = "1"
-serde_json = "1"
+# As the main workspace: json5.rs's numbers survive being written back.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 libfuzzer-sys = "0.4"
 openmoat-core = { path = "../crates/openmoat-core" }
 openmoat-hosts = { path = "../crates/openmoat-hosts" }
