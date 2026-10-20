@@ -42,15 +42,15 @@ its users at `moat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives; `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user and the project file; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `moat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
+| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `moat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_format`, the `HookFormat` of the file); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user and the project file; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `moat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
 | `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `adapter` |
 | `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
-| `crates/openmoat-cli/src/install.rs` | a `HookSpec` list and `HookFormat` in `HostConfig::at`; the directory, its variable and the file come from the spec's `install` |
+| `crates/openmoat-cli/src/install.rs` | nothing for an agent whose configuration is one directory moved by one variable: `HostConfig` takes the directory, variable, file, entries and layout from the spec's `install` |
 | `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec names a new `McpLayout` (a reader in `parse`) or `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
 | `tests/fixtures/hosts/<agent>/` | captured payloads and a `README.md` naming each one's source |
 | `crates/openmoat-cli/tests/e2e/<agent>.rs` | end-to-end tests, registered in `e2e/main.rs` |
-| `docs/INSTALL.md`, `README.md` | a row in the hooks table and in "Supported agents" |
+| `docs/INSTALL.md`, `README.md` | a row in the hooks table and in "Supported agents"; the configuration directory table in INSTALL and the known gaps list in THREAT_MODEL §5 are generated from the spec (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`) |
 | `docs/ARCHITECTURE.md` §3, `docs/THREAT_MODEL.md` §5 | the tool mapping rows and the agent's limits |
 | `CHANGELOG.md` | an `### Added` line under Unreleased |
 
@@ -125,16 +125,19 @@ checked in the fixtures `README.md`.
 ## Install, uninstall and the lock
 
 `moat init` calls `HostConfig::install`, which adds one entry per `HookSpec` (event,
-matcher, timeout) to the agent's hook file. It must stay idempotent (invariant 8):
+matcher, timeout) of the spec's `install.hooks` to the agent's hook file, in the
+layout `install.hook_format` names. It must stay idempotent (invariant 8):
 
 - Our entries are recognised by their command, `guard --host <id>`; re-running `init`
   updates them in place and never adds a second one.
 - Other keys and other hooks in the file are kept.
 - The file is copied to `<file>.moat-backup` before the first edit.
 - The matcher must name every tool the adapter maps. A tool missing from it never
-  reaches `guard` (see `TOOL_MATCHER`).
-- Use a timeout of `TOOL_HOOK_TIMEOUT_S` (600 s), long enough for a person to answer a
-  prompt.
+  reaches `guard` (see `TOOL_MATCHER` in `host/claude_code.rs`).
+- Use a timeout of `TOOL_HOOK_TIMEOUT_S` (600 s, `contract.rs`), long enough for a
+  person to answer a prompt. Every timeout must exceed `GUARD_BUDGET_S`, and only an
+  entry the host can block on gets `block_on_failure`; `tests/contract.rs` checks both
+  for every host.
 
 `moat uninstall` calls `HostConfig::remove`, which deletes only our entries and any
 event list or `hooks` object that leaves empty. Test that installing and then removing

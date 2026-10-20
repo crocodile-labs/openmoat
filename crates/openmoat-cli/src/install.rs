@@ -16,6 +16,7 @@ use openmoat_hosts::{Host, InstallSpec};
 pub use binary::{hook_binary, stale_hint};
 pub use dirs::Recorded;
 pub use hook_file::{HookState, Outcome, read_or_empty};
+pub use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, HookSpec};
 
 use crate::home::{Home, user_home};
 
@@ -58,134 +59,6 @@ pub fn backups(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// One hook entry we own in a host's configuration.
-#[derive(Debug, Clone, Copy)]
-pub struct HookSpec {
-    /// Host event name, e.g. `PreToolUse`.
-    pub event: &'static str,
-    /// Host matcher expression for that event.
-    pub matcher: &'static str,
-    /// Seconds the host waits for `moat guard` before treating it as failed.
-    pub timeout: u64,
-    /// Whether the entry asks the host to block the call when `moat guard`
-    /// fails to run, crashes or times out (Claude Code `onFailure`), where the
-    /// host's version knows the key ([`HostConfig::blocks_on_failure`]).
-    pub block_on_failure: bool,
-}
-
-/// Seconds a host waits for a tool-call hook. Long enough for a person to
-/// answer an `ask` prompted by the host; Claude Code and Codex default to 600.
-const TOOL_HOOK_TIMEOUT_S: u64 = 600;
-/// Seconds for the settings-change veto, which never waits for a person.
-const CONFIG_HOOK_TIMEOUT_S: u64 = 60;
-/// Seconds `moat guard` may take before it denies on its own. A host that times
-/// a hook out treats it as failed, and Claude Code, Codex and the Continue CLI
-/// then run the call; below every timeout above, so the host gets the deny.
-///
-/// The watchdog measures wall-clock time, which includes the time the guard
-/// waits to be scheduled. A guard decides in 10–20 ms, but on a machine loaded
-/// by parallel builds (load average near 100) a call can wait seconds for a CPU
-/// and for the audit database's lock; 10 s denied such calls that were only
-/// slow. 30 s leaves room for that and stays half the settings-change timeout.
-pub const GUARD_BUDGET_S: u64 = 30;
-const _: () = assert!(GUARD_BUDGET_S < CONFIG_HOOK_TIMEOUT_S);
-const _: () = assert!(GUARD_BUDGET_S < TOOL_HOOK_TIMEOUT_S);
-
-/// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
-/// never reaches `moat guard`.
-/// `Skill` and `EnterWorktree` without a `path` are recorded and left to Claude
-/// Code's own permission flow; changing this list makes existing entries stale,
-/// which `moat doctor` and `moat status` report with "run `moat init`".
-const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|mcp__.*";
-
-const CLAUDE_CODE_HOOKS: &[HookSpec] = &[
-    HookSpec {
-        event: "PreToolUse",
-        matcher: TOOL_MATCHER,
-        timeout: TOOL_HOOK_TIMEOUT_S,
-        block_on_failure: true,
-    },
-    HookSpec {
-        event: "ConfigChange",
-        matcher: "user_settings|project_settings|local_settings",
-        timeout: CONFIG_HOOK_TIMEOUT_S,
-        block_on_failure: false,
-    },
-];
-
-/// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
-/// web search and hosted tools have no hook. Codex has no key that blocks a
-/// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
-/// failed, reports the error, and continues the tool call"
-/// (<https://learn.chatgpt.com/docs/hooks>), so `guard` itself must answer.
-const CODEX_HOOKS: &[HookSpec] = &[HookSpec {
-    event: "PreToolUse",
-    matcher: "Bash|apply_patch|mcp__.*",
-    timeout: TOOL_HOOK_TIMEOUT_S,
-    block_on_failure: false,
-}];
-
-/// Cursor blocks a failed hook through `failClosed` on every entry
-/// ([`HookFormat::Cursor`]), not through `block_on_failure`.
-const CURSOR_HOOKS: &[HookSpec] = &[
-    HookSpec {
-        event: "beforeShellExecution",
-        matcher: "",
-        timeout: TOOL_HOOK_TIMEOUT_S,
-        block_on_failure: false,
-    },
-    HookSpec {
-        event: "beforeMCPExecution",
-        matcher: "",
-        timeout: TOOL_HOOK_TIMEOUT_S,
-        block_on_failure: false,
-    },
-    HookSpec {
-        event: "beforeReadFile",
-        matcher: "",
-        timeout: TOOL_HOOK_TIMEOUT_S,
-        block_on_failure: false,
-    },
-    HookSpec {
-        event: "preToolUse",
-        matcher: "",
-        timeout: TOOL_HOOK_TIMEOUT_S,
-        block_on_failure: false,
-    },
-];
-
-/// Milliseconds OpenClaw waits for OpenMoat's `before_tool_call` handler
-/// before it blocks the call (`plugins.entries.openmoat.hooks.timeouts`; its
-/// own default is 15 s). OpenClaw asks the person after the handler returns,
-/// so this only has to outlast the plugin's wait for `moat guard` (45 s,
-/// `integrations/openclaw/openmoat.mjs`), which outlasts [`GUARD_BUDGET_S`].
-pub const OPENCLAW_HOOK_TIMEOUT_S: u64 = 60;
-const _: () = assert!(GUARD_BUDGET_S < OPENCLAW_HOOK_TIMEOUT_S);
-
-/// OpenClaw runs `before_tool_call` for every tool, and blocks the call when
-/// the handler throws or times out
-/// (<https://docs.openclaw.ai/plugins/hooks/reference>, "Fail closed").
-const OPENCLAW_HOOKS: &[HookSpec] = &[HookSpec {
-    event: "before_tool_call",
-    matcher: "",
-    timeout: OPENCLAW_HOOK_TIMEOUT_S,
-    block_on_failure: false,
-}];
-
-/// How a host's hook file is laid out.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HookFormat {
-    /// `{"hooks": {"<Event>": [{"matcher", "hooks": [{type, command, args, timeout}]}]}}`
-    /// (Claude Code `settings.json`, Codex `hooks.json`).
-    Nested,
-    /// `{"version": 1, "hooks": {"<event>": [{"command": "<shell string>", "timeout", "failClosed"}]}}`
-    /// (Cursor `hooks.json`). Cursor is fail-open unless `failClosed` is set.
-    Cursor,
-    /// OpenClaw `openclaw.json`: OpenMoat's plugin file in `plugins.load.paths`
-    /// and its `plugins.entries.openmoat` ([`openclaw`]).
-    OpenClaw,
-}
-
 /// Where a host keeps its hook configuration and which events we subscribe to.
 #[derive(Debug, Clone)]
 pub struct HostConfig {
@@ -221,10 +94,20 @@ fn install_spec(host: Host) -> Result<&'static InstallSpec> {
     }
 }
 
+/// Whether `host`'s configuration is found by OpenClaw's location rules
+/// ([`openclaw::Location`]): its hook file has OpenClaw's layout, so its
+/// state directory and `openclaw.json` each follow their own variables.
+fn located_like_openclaw(host: Host) -> bool {
+    host.spec()
+        .install
+        .as_ref()
+        .is_some_and(|install| install.hook_format == HookFormat::OpenClaw)
+}
+
 /// `host`'s configuration directory as named by this shell's environment,
 /// when its variable is set (for OpenClaw, any of `openclaw::location::VARIABLES`).
 pub fn env_config_dir(host: Host) -> Result<Option<PathBuf>> {
-    if host == Host::OpenClaw {
+    if located_like_openclaw(host) {
         return Ok(openclaw::Location::from_env()?.map(|l| l.state_dir));
     }
     Ok(env_dir(dir_variable(host)?.0))
@@ -235,7 +118,7 @@ impl HostConfig {
     /// where this shell's environment or the default puts it.
     pub fn for_host(home: &Home, host: Host) -> Result<Self> {
         let recorded = Recorded::load(home)?;
-        if host == Host::OpenClaw {
+        if located_like_openclaw(host) {
             let location = match recorded.dir(host) {
                 Some(dir) => openclaw::Location::at(dir, recorded.file(host)),
                 None => match openclaw::Location::from_env()? {
@@ -243,7 +126,7 @@ impl HostConfig {
                     None => openclaw::Location::default_for(&user_home()?),
                 },
             };
-            return Ok(Self::openclaw(location));
+            return Self::with_spec(host, location.config, location.state_dir);
         }
         Self::at(host, recorded.dir(host).or(env_config_dir(host)?))
     }
@@ -251,10 +134,10 @@ impl HostConfig {
     /// For `moat init`: this shell's environment wins over the record, so a
     /// person moves an agent by running `init` with its variable set.
     pub fn for_init(home: &Home, host: Host) -> Result<Self> {
-        if host == Host::OpenClaw
+        if located_like_openclaw(host)
             && let Some(location) = openclaw::Location::from_env()?
         {
-            return Ok(Self::openclaw(location));
+            return Self::with_spec(host, location.config, location.state_dir);
         }
         match env_config_dir(host)? {
             Some(dir) => Self::at(host, Some(dir)),
@@ -262,48 +145,42 @@ impl HostConfig {
         }
     }
 
-    /// OpenClaw at `location`: `openclaw.json` wherever it is, the state
-    /// directory as [`Self::dir`].
-    fn openclaw(location: openclaw::Location) -> Self {
-        Self {
-            host: Host::OpenClaw,
-            settings_path: location.config,
-            dir: location.state_dir,
-            hooks: OPENCLAW_HOOKS,
-            format: HookFormat::OpenClaw,
-            blocks_on_failure: || false,
-        }
-    }
-
     /// OpenClaw's state directory and configuration file; `None` for any
     /// other host.
     pub fn openclaw_location(&self) -> Option<openclaw::Location> {
-        (self.host == Host::OpenClaw)
+        (self.format == HookFormat::OpenClaw)
             .then(|| openclaw::Location::at(self.dir.clone(), Some(self.settings_path.clone())))
     }
 
+    /// `host` with its hook file in `dir`, or in its default directory.
     fn at(host: Host, dir: Option<PathBuf>) -> Result<Self> {
         let install = install_spec(host)?;
         let dir = match dir {
             Some(dir) => dir,
             None => user_home()?.join(install.dir_name),
         };
-        let (hooks, format) = match host {
-            Host::ClaudeCode => (CLAUDE_CODE_HOOKS, HookFormat::Nested),
-            Host::Codex => (CODEX_HOOKS, HookFormat::Nested),
-            Host::OpenClaw => (OPENCLAW_HOOKS, HookFormat::OpenClaw),
-            _ => (CURSOR_HOOKS, HookFormat::Cursor),
-        };
-        let blocks_on_failure: fn() -> bool = match host {
-            Host::ClaudeCode => claude_version::blocks_on_failure,
-            _ => || false,
-        };
+        Self::with_spec(host, dir.join(install.config_file), dir)
+    }
+
+    /// `host` with its hook file at `settings_path` and `dir` as [`Self::dir`]
+    /// (for OpenClaw, `openclaw.json` wherever it is and the state directory),
+    /// writing the entries and layout its spec names.
+    fn with_spec(host: Host, settings_path: PathBuf, dir: PathBuf) -> Result<Self> {
+        let install = install_spec(host)?;
+        // Only Claude Code's entries ask for `onFailure`, and whether its
+        // version knows the key is asked of the `claude` on `PATH`.
+        let blocks_on_failure: fn() -> bool =
+            if install.hooks.iter().any(|spec| spec.block_on_failure) {
+                claude_version::blocks_on_failure
+            } else {
+                || false
+            };
         Ok(Self {
             host,
-            settings_path: dir.join(install.config_file),
+            settings_path,
             dir,
-            hooks,
-            format,
+            hooks: install.hooks,
+            format: install.hook_format,
             blocks_on_failure,
         })
     }

@@ -22,9 +22,24 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, wrong_event,
+    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
+    McpLayout, McpSpec, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
+
+/// Seconds OpenClaw waits for OpenMoat's `before_tool_call` handler
+/// before it blocks the call (`plugins.entries.openmoat.hooks.timeouts`; its
+/// own default is 15 s). OpenClaw asks the person after the handler returns,
+/// so this only has to outlast the plugin's wait for `moat guard` (45 s,
+/// `integrations/openclaw/openmoat.mjs` in the CLI crate), which outlasts
+/// [`GUARD_BUDGET_S`].
+const HOOK_TIMEOUT_S: u64 = 60;
+const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
+
+/// OpenClaw runs `before_tool_call` for every tool, and blocks the call when
+/// the handler throws or times out
+/// (<https://docs.openclaw.ai/plugins/hooks/reference>, "Fail closed").
+const HOOKS: &[HookSpec] = &[HookSpec::new("before_tool_call", "", HOOK_TIMEOUT_S, false)];
 
 mod bench;
 mod tools;
@@ -53,6 +68,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "OPENCLAW_STATE_DIR",
         dir_name: ".openclaw",
         config_file: "openclaw.json",
+        hooks: HOOKS,
+        hook_format: HookFormat::OpenClaw,
     }),
     // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
     // `mcp.servers`"; the documentation names no project file of them.

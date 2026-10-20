@@ -8,12 +8,7 @@ use super::*;
 use crate::home::Home;
 use crate::install::{HookFormat, HookSpec, hook_file};
 
-const SPECS: &[HookSpec] = &[HookSpec {
-    event: "before_tool_call",
-    matcher: "",
-    timeout: 60,
-    block_on_failure: false,
-}];
+const SPECS: &[HookSpec] = &[HookSpec::new("before_tool_call", "", 60, false)];
 
 fn config(dir: &Path) -> HostConfig {
     HostConfig {
@@ -38,7 +33,8 @@ fn root(config: &HostConfig) -> Value {
 #[test]
 fn the_plugin_source_names_the_binary_once_and_waits_less_than_openclaw() {
     const _: () = assert!(crate::install::GUARD_BUDGET_S < 45);
-    const _: () = assert!(45 < crate::install::OPENCLAW_HOOK_TIMEOUT_S);
+    let installed = Host::OpenClaw.spec().install.as_ref().unwrap().hooks;
+    assert!(installed.iter().all(|spec| 45 < spec.timeout));
     let text = plugin_text(Path::new(r#"/opt/my "tools"/moat"#)).unwrap();
     assert!(text.contains(r#"const MOAT = "/opt/my \"tools\"/moat";"#));
     assert!(!text.contains(BINARY_LINE));
