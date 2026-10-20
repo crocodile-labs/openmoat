@@ -6,13 +6,32 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
-    SandboxSpec, wrong_event,
+    Asks, CONFIG_HOOK_TIMEOUT_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
+    McpLayout, McpSpec, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) mod config_change;
+
+/// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
+/// never reaches `moat guard`.
+/// `Skill` and `EnterWorktree` without a `path` are recorded and left to Claude
+/// Code's own permission flow; changing this list makes existing entries stale,
+/// which `moat doctor` and `moat status` report with "run `moat init`".
+const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|mcp__.*";
+
+/// `PreToolUse` asks Claude Code to block a call whose hook fails
+/// (`onFailure`); the settings-change veto does not.
+const HOOKS: &[HookSpec] = &[
+    HookSpec::new("PreToolUse", TOOL_MATCHER, TOOL_HOOK_TIMEOUT_S, true),
+    HookSpec::new(
+        "ConfigChange",
+        "user_settings|project_settings|local_settings",
+        CONFIG_HOOK_TIMEOUT_S,
+        false,
+    ),
+];
 
 /// Claude Code asks on `PreToolUse`, except in a permission mode that puts no
 /// question to a person (`bypassPermissions`, `dontAsk`).
@@ -34,6 +53,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "CLAUDE_CONFIG_DIR",
         dir_name: ".claude",
         config_file: "settings.json",
+        hooks: HOOKS,
+        hook_format: HookFormat::Nested,
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideDefaultDir(".claude.json"),

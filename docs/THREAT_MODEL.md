@@ -421,6 +421,19 @@ something OpenMoat claims to stop.
   | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same | same |
   | Ours: hook missing, out of date or naming a binary that does not exist | `moat status` and `moat doctor`: `not protected` | same | same | same (the plugin file and its `openclaw.json` entries) | not applicable: `cn` fires no hooks (below) |
 
+  What `moat status` and `moat doctor` print as each host's `known gaps`, and what the
+  host does when its hook fails, generated from its `HostSpec` (`gaps`,
+  `on_hook_failure`; `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test
+  docs`); do not edit the list:
+
+  <!-- generated:hosts-gaps -->
+  - **Claude Code.** Known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295 calls run unchecked if the hook binary is missing or crashes. When the hook fails: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`moat init` sets `onFailure: "block"`).
+  - **Codex.** Known gaps: web search and hosted tools are not hooked; asks become denies; calls run unchecked if the hook binary is missing or crashes. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2 (or 2 with nothing on stderr), or times out (default 600 s).
+  - **Cursor.** Known gaps: commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined; file-tool asks become denies; Task and tools that name no path are not hooked; a failed hook blocks the call. When the hook fails: runs the call when the hook is missing, crashes or times out, unless the hook entry sets `failClosed: true`; then it blocks the call.
+  - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; a parameter rewrite by another plugin and OpenClaw's process input are not checked; calls run unchecked if the Gateway does not load the plugin; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `moat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin.
+  - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `moat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
+  <!-- /generated -->
+
   An OpenClaw `ask` becomes OpenClaw's approval request, which OpenClaw blocks when no
   one can answer it (no approval route, timeout).
   **OpenClaw runs every call unchecked when the Gateway does not load the plugin**:

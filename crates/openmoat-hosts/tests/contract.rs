@@ -6,7 +6,7 @@ use std::path::Path;
 
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
-use openmoat_hosts::{Host, HostError, reason_line};
+use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, Host, HostError, reason_line};
 use serde_json::json;
 
 /// Every host, the installable ones and those that run another's hook.
@@ -54,6 +54,48 @@ fn every_spec_is_complete() {
             assert!(!install.dir_variable.is_empty(), "{host:?}");
             assert!(!install.config_file.is_empty(), "{host:?}");
         }
+    }
+}
+
+/// Every hook a host installs waits longer than `moat guard` may take, so the
+/// host receives the guard's own deny rather than a timeout; and a failed hook
+/// blocks the call wherever the host has a key for it: Claude Code's
+/// `onFailure` on its tool hook, Cursor's `failClosed` (set on every entry of
+/// its layout), OpenClaw's plugin. Codex has no such key.
+#[test]
+fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
+    let expected: [(Host, HookFormat, &[&str]); 4] = [
+        (Host::ClaudeCode, HookFormat::Nested, &["PreToolUse"]),
+        (Host::Codex, HookFormat::Nested, &[]),
+        (Host::Cursor, HookFormat::Cursor, &[]),
+        (Host::OpenClaw, HookFormat::OpenClaw, &[]),
+    ];
+    assert_eq!(expected.len(), Host::ALL.len());
+    for (host, format, blocking) in expected {
+        let install = host.spec().install.as_ref().unwrap();
+        assert!(!install.hooks.is_empty(), "{host:?}");
+        for (i, hook) in install.hooks.iter().enumerate() {
+            assert!(!hook.event.is_empty(), "{host:?}");
+            assert!(
+                install.hooks[..i].iter().all(|h| h.event != hook.event),
+                "{host:?} {}: one entry per event",
+                hook.event
+            );
+            assert!(
+                hook.timeout > GUARD_BUDGET_S,
+                "{host:?} {}: {} s does not outlast the guard's {GUARD_BUDGET_S} s",
+                hook.event,
+                hook.timeout
+            );
+        }
+        assert_eq!(install.hook_format, format, "{host:?}");
+        let blocks: Vec<&str> = install
+            .hooks
+            .iter()
+            .filter(|h| h.block_on_failure)
+            .map(|h| h.event)
+            .collect();
+        assert_eq!(blocks, blocking, "{host:?}");
     }
 }
 

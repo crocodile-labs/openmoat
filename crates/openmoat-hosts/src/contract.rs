@@ -73,7 +73,9 @@ pub struct HostSpec {
     pub on_hook_failure: &'static str,
     /// What the hook and sandbox do not cover for this host, and what it does
     /// when the hook fails, as `moat status` and `moat doctor` report it.
-    /// Mirrors README "Limits" and `docs/THREAT_MODEL.md` §5; change them together.
+    /// Mirrors README "Limits" and `docs/THREAT_MODEL.md` §5, whose per-host
+    /// list of it and of [`Self::on_hook_failure`] is generated (`tests/docs.rs`);
+    /// change README with it.
     pub gaps: &'static str,
     /// Where `moat init` installs the hook; `None` for a host that runs another
     /// host's hook.
@@ -96,6 +98,82 @@ pub struct InstallSpec {
     pub dir_name: &'static str,
     /// The file in that directory the hook goes into.
     pub config_file: &'static str,
+    /// The hook entries `moat init` writes into that file, one per event.
+    pub hooks: &'static [HookSpec],
+    /// How that file lays out the entries.
+    pub hook_format: HookFormat,
+}
+
+/// Seconds `moat guard` may take before it denies on its own. A host that times
+/// a hook out treats it as failed, and Claude Code, Codex and the Continue CLI
+/// then run the call; below every hook timeout a spec sets, so the host gets the
+/// deny (the contract test checks every host).
+///
+/// The watchdog measures wall-clock time, which includes the time the guard
+/// waits to be scheduled. A guard decides in 10–20 ms, but on a machine loaded
+/// by parallel builds (load average near 100) a call can wait seconds for a CPU
+/// and for the audit database's lock; 10 s denied such calls that were only
+/// slow. 30 s leaves room for that and stays half the settings-change timeout.
+pub const GUARD_BUDGET_S: u64 = 30;
+
+/// Seconds a host waits for a tool-call hook. Long enough for a person to
+/// answer an `ask` prompted by the host; Claude Code and Codex default to 600.
+pub(crate) const TOOL_HOOK_TIMEOUT_S: u64 = 600;
+/// Seconds for the settings-change veto, which never waits for a person.
+pub(crate) const CONFIG_HOOK_TIMEOUT_S: u64 = 60;
+const _: () = assert!(GUARD_BUDGET_S < CONFIG_HOOK_TIMEOUT_S);
+const _: () = assert!(GUARD_BUDGET_S < TOOL_HOOK_TIMEOUT_S);
+
+/// One hook entry OpenMoat owns in a host's configuration.
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct HookSpec {
+    /// Host event name, e.g. `PreToolUse`.
+    pub event: &'static str,
+    /// Host matcher expression for that event.
+    pub matcher: &'static str,
+    /// Seconds the host waits for `moat guard` before treating it as failed.
+    pub timeout: u64,
+    /// Whether the entry asks the host to block the call when `moat guard`
+    /// fails to run, crashes or times out (Claude Code `onFailure`), where the
+    /// host's version knows the key (the CLI asks the `claude` on `PATH`).
+    pub block_on_failure: bool,
+}
+
+impl HookSpec {
+    /// The entry for `event` and `matcher`, waited for `timeout` seconds.
+    #[must_use]
+    pub const fn new(
+        event: &'static str,
+        matcher: &'static str,
+        timeout: u64,
+        block_on_failure: bool,
+    ) -> Self {
+        Self {
+            event,
+            matcher,
+            timeout,
+            block_on_failure,
+        }
+    }
+}
+
+/// How a host's hook file is laid out. The CLI writes and reads each layout;
+/// like [`McpLayout`] and [`SandboxFormat`] the enum is exhaustive, so a new
+/// layout fails to compile at every CLI `match` until it has its arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookFormat {
+    /// `{"hooks": {"<Event>": [{"matcher", "hooks": [{type, command, args, timeout}]}]}}`
+    /// (Claude Code `settings.json`, Codex `hooks.json`).
+    Nested,
+    /// `{"version": 1, "hooks": {"<event>": [{"command": "<shell string>", "timeout", "failClosed"}]}}`
+    /// (Cursor `hooks.json`). Cursor is fail-open unless `failClosed` is set,
+    /// so every entry of this layout sets it.
+    Cursor,
+    /// OpenClaw `openclaw.json`: OpenMoat's plugin file in `plugins.load.paths`
+    /// and its `plugins.entries.openmoat`, at the location OpenClaw's own
+    /// variables give.
+    OpenClaw,
 }
 
 /// Where a host reads its MCP server definitions. A file that does not exist

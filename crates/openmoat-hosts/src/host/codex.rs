@@ -6,11 +6,23 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
-    SandboxSpec, wrong_event,
+    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
+    SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
+
+/// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
+/// web search and hosted tools have no hook. Codex has no key that blocks a
+/// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
+/// failed, reports the error, and continues the tool call"
+/// (<https://learn.chatgpt.com/docs/hooks>), so `guard` itself must answer.
+const HOOKS: &[HookSpec] = &[HookSpec::new(
+    "PreToolUse",
+    "Bash|apply_patch|mcp__.*",
+    TOOL_HOOK_TIMEOUT_S,
+    false,
+)];
 
 /// Codex's `PreToolUse` rejects `permissionDecision: "ask"` as unsupported and
 /// then runs the call.
@@ -31,6 +43,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "CODEX_HOME",
         dir_name: ".codex",
         config_file: "hooks.json",
+        hooks: HOOKS,
+        hook_format: HookFormat::Nested,
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("config.toml"),

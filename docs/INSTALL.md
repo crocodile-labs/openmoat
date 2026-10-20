@@ -225,9 +225,22 @@ the default policy denies it to agents (`kernel-self`).
 
 ## Non-default config directories
 
-`moat` finds each agent's configuration the way the agent does: `CLAUDE_CONFIG_DIR`,
-`CODEX_HOME` and `CURSOR_CONFIG_DIR` replace `~/.claude`, `~/.codex` and `~/.cursor`,
-and `MOAT_HOME` replaces `~/.moat`. If you start Claude Code with `CLAUDE_CONFIG_DIR`
+`moat` finds each agent's configuration the way the agent does: the variable in the
+table replaces the agent's directory, and `MOAT_HOME` replaces `~/.moat`. OpenClaw also
+follows `OPENCLAW_HOME` and `OPENCLAW_CONFIG_PATH` (see the hosts table above). The
+table is generated from each agent's `HostSpec` (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test
+-p openmoat-hosts --test docs`); do not edit it.
+
+<!-- generated:hosts-install -->
+| Agent | Directory | Moved by | Hook file | Entries `moat init` writes |
+|---|---|---|---|---|
+| Claude Code | `~/.claude` | `CLAUDE_CONFIG_DIR` | `settings.json` | `PreToolUse` (600 s), `ConfigChange` (60 s) |
+| Codex | `~/.codex` | `CODEX_HOME` | `hooks.json` | `PreToolUse` (600 s) |
+| Cursor | `~/.cursor` | `CURSOR_CONFIG_DIR` | `hooks.json` | `beforeShellExecution` (600 s), `beforeMCPExecution` (600 s), `beforeReadFile` (600 s), `preToolUse` (600 s) |
+| OpenClaw | `~/.openclaw` | `OPENCLAW_STATE_DIR` | `openclaw.json` | `before_tool_call` (60 s) |
+<!-- /generated -->
+
+If you start Claude Code with `CLAUDE_CONFIG_DIR`
 set, run `moat init` once with the same value. `init` records the directory of each
 agent it sets up in `~/.moat/hosts.json` (pinned by the lock), and every later command
 (`status`, `doctor`, `allow`, `sandbox sync`, `uninstall`) uses the recorded directory,

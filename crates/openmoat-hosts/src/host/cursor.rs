@@ -13,8 +13,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec, SandboxFormat,
-    SandboxSpec, wrong_event,
+    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
+    SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -22,6 +22,15 @@ mod bench;
 mod pre_tool;
 
 use pre_tool::pre_tool_action;
+
+/// Cursor blocks a failed hook through `failClosed` on every entry
+/// ([`HookFormat::Cursor`]), not through `block_on_failure`.
+const HOOKS: &[HookSpec] = &[
+    HookSpec::new("beforeShellExecution", "", TOOL_HOOK_TIMEOUT_S, false),
+    HookSpec::new("beforeMCPExecution", "", TOOL_HOOK_TIMEOUT_S, false),
+    HookSpec::new("beforeReadFile", "", TOOL_HOOK_TIMEOUT_S, false),
+    HookSpec::new("preToolUse", "", TOOL_HOOK_TIMEOUT_S, false),
+];
 
 /// `preToolUse` accepts `ask` but runs the call, and `beforeReadFile` takes
 /// only allow or deny; both run file tools outside Cursor's sandbox, so a
@@ -46,6 +55,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_variable: "CURSOR_CONFIG_DIR",
         dir_name: ".cursor",
         config_file: "hooks.json",
+        hooks: HOOKS,
+        hook_format: HookFormat::Cursor,
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("mcp.json"),

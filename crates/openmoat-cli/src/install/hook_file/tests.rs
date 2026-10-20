@@ -11,18 +11,8 @@ fn state_home(config: &HostConfig) -> Home {
 }
 
 const SPECS: &[HookSpec] = &[
-    HookSpec {
-        event: "PreToolUse",
-        matcher: "Bash|Edit",
-        timeout: 600,
-        block_on_failure: true,
-    },
-    HookSpec {
-        event: "ConfigChange",
-        matcher: "user_settings",
-        timeout: 60,
-        block_on_failure: false,
-    },
+    HookSpec::new("PreToolUse", "Bash|Edit", 600, true),
+    HookSpec::new("ConfigChange", "user_settings", 60, false),
 ];
 
 /// Claude Code older than v2.1.295, or none on `PATH`: no `onFailure`.
@@ -154,17 +144,13 @@ fn codex_and_cursor_never_get_on_failure() {
 
 #[test]
 fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
+    const SHELL: &[HookSpec] = &[HookSpec::new("beforeShellExecution", "", 600, false)];
     let dir = tempfile::tempdir().unwrap();
     let cfg = HostConfig {
         host: Host::Cursor,
         settings_path: dir.path().join("hooks.json"),
         dir: dir.path().to_path_buf(),
-        hooks: &[HookSpec {
-            event: "beforeShellExecution",
-            matcher: "",
-            timeout: 600,
-            block_on_failure: false,
-        }],
+        hooks: SHELL,
         format: HookFormat::Cursor,
         blocks_on_failure: || false,
     };
