@@ -201,7 +201,13 @@ fn a_hook_running_the_moat_alias_stays_installed_until_init_rewrites_it() {
     assert_eq!(state(&cfg, &binary), HookState::Installed);
     assert!(runs_alias(&cfg, &binary));
     let rendered = render(&cfg, &binary, &before).unwrap().unwrap();
-    assert!(rendered.contains(&*binary.to_string_lossy()), "{rendered}");
+    // Compared as JSON: a Windows path's backslashes are escaped in the text.
+    let parsed: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(
+        parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str(),
+        Some(&*binary.to_string_lossy()),
+        "{rendered}"
+    );
     assert_eq!(install(&cfg, &binary, false).unwrap(), Outcome::Updated);
     let command = &root(&cfg)["hooks"]["PreToolUse"][0]["hooks"][0]["command"];
     assert_eq!(command.as_str(), Some(&*binary.to_string_lossy()));

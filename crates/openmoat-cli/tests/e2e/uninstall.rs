@@ -72,8 +72,12 @@ fn init_shows_each_agents_changes_before_asking() {
     let out = init_answering(&sb, "\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = stdout(&out);
-    let claude = shown.find("settings.json (after moat init)").expect(&shown);
-    let codex = shown.find("hooks.json (after moat init)").expect(&shown);
+    let claude = shown
+        .find("settings.json (after openmoat init)")
+        .expect(&shown);
+    let codex = shown
+        .find("hooks.json (after openmoat init)")
+        .expect(&shown);
     assert!(
         claude < shown.find("Protect Claude Code (").unwrap(),
         "{shown}"
