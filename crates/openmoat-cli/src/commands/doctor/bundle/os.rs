@@ -26,9 +26,7 @@ impl System {
 
 #[cfg(target_os = "macos")]
 fn version() -> Option<String> {
-    // Where macOS keeps its version.
-    let plist = std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist").ok()?;
-    macos_version(&plist).map(|v| format!("macOS {v}"))
+    crate::os_version::macos().map(|v| format!("macOS {v}"))
 }
 
 #[cfg(target_os = "linux")]
@@ -54,17 +52,6 @@ fn version() -> Option<String> {
     None
 }
 
-/// The `ProductVersion` string of a `SystemVersion.plist`.
-#[cfg_attr(
-    not(any(target_os = "macos", test)),
-    expect(dead_code, reason = "read on macOS only")
-)]
-fn macos_version(plist: &str) -> Option<String> {
-    let after = plist.split_once("<key>ProductVersion</key>")?.1;
-    let value = after.split_once("<string>")?.1.split_once("</string>")?.0;
-    Some(value.trim().to_owned()).filter(|v| !v.is_empty())
-}
-
 /// `PRETTY_NAME` of an `os-release` file, without its quotes.
 #[cfg_attr(
     not(any(target_os = "linux", test)),
@@ -83,10 +70,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_versions_are_read_from_the_system_files() {
-        let plist = "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t\
-                     <key>ProductVersion</key>\n\t<string>14.5</string>\n</dict>";
-        assert_eq!(macos_version(plist).as_deref(), Some("14.5"));
+    fn the_linux_version_is_read_from_os_release() {
         let release = "NAME=\"Ubuntu\"\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\nID=ubuntu\n";
         assert_eq!(pretty_name(release).as_deref(), Some("Ubuntu 24.04.1 LTS"));
         assert_eq!(pretty_name("ID=alpine\n"), None);

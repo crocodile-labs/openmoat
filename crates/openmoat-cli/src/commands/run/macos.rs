@@ -1,5 +1,6 @@
 //! `moat run` on macOS: the agent under `sandbox-exec` with the Seatbelt
-//! profile generated for the session (`crate::sandbox::seatbelt`).
+//! profile generated for the session (`crate::sandbox::seatbelt`). Before
+//! macOS 13 it refuses (exit 64): `sandbox-exec` there cannot read the profile.
 //!
 //! The Isolated tier here needs a Linux guest, since Seatbelt does not nest
 //! and bubblewrap is Linux-only (ADR-018). ADR-023 picks Apple's
@@ -17,6 +18,7 @@ use openmoat_core::{EvalContext, Policy};
 use crate::cli::IsolatedArgs;
 use crate::environment::find_in;
 use crate::exit::Code;
+use crate::os_version;
 use crate::sandbox::{Grants, Report, seatbelt_profile};
 
 /// Part of the base system; never one found on `PATH`. Apple has deprecated
@@ -43,6 +45,11 @@ pub fn confine(
     // directory wherever it is.
     _state: &Path,
 ) -> Result<Confined> {
+    // Refused here with a plain reason rather than by `sandbox-exec` with
+    // `unbound variable: TIOCSTI`; the profile keeps its deny either way.
+    if let Some(reason) = os_version::run_floor(os_version::macos().as_deref()) {
+        bail!("{}", refusal(&reason));
+    }
     let generated = seatbelt_profile(policy, ctx, grants)?;
     let mut command = Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(&generated.profile).arg(program);
@@ -81,6 +88,14 @@ impl Confined {
     pub fn status(mut self) -> Result<ExitStatus> {
         Ok(self.command.status()?)
     }
+}
+
+/// What `moat run` says on a macOS too old for its profile (exit 64).
+fn refusal(reason: &str) -> String {
+    format!(
+        "`moat run` {reason}. The agent was not started. The agent hooks still apply the \
+         policy to each tool call: start the agent without `moat run`"
+    )
 }
 
 /// The dirs `PATH` lists today, as [`find_in`] takes them.
@@ -134,6 +149,21 @@ mod tests {
         // The CLI maps `Err(_)` from `isolate()` to `Code::Usage` (64) in
         // `main.rs`; this test asserts the mapping stays in that enum.
         assert_eq!(Code::Usage as u8, 64);
+    }
+
+    #[test]
+    fn an_old_macos_is_refused_with_a_plain_reason() {
+        let reason = os_version::run_floor(Some("12.7")).unwrap();
+        let message = refusal(&reason);
+        assert!(
+            message.starts_with("`moat run` needs macOS 13 or later"),
+            "{message}"
+        );
+        assert!(
+            message.contains("hooks still apply the policy"),
+            "{message}"
+        );
+        assert!(!message.contains("unbound variable"), "{message}");
     }
 
     #[test]

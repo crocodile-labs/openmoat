@@ -204,7 +204,7 @@ ANTHROPIC_API_KEY=… OPENAI_API_KEY=… scripts/smoke-real-agents.sh   # or nam
 
 It creates a throwaway `HOME`, `MOAT_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` under a
 new temporary directory, runs `moat init` there, and walks through each check in
-headless mode (`claude -p`, `codex exec` inside `moat run`). Before each step it says what
+headless mode (`claude -p`, `codex exec` on its own and inside `moat run`). Before each step it says what
 to expect, and after it prints PASS, FAIL or LOOK (the model did not make the call).
 Before any agent starts it checks that none of those variables resolves to your real
 home, `~/.claude`, `~/.codex`, `~/.cursor`, `~/.moat` or `~/.ssh`, or to a config

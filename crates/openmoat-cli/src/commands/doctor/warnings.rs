@@ -59,6 +59,15 @@ pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Optio
     Some(format!("moat run         {why}"))
 }
 
+/// On a Mac with `version` (see [`crate::os_version::macos`]), a warning when
+/// it is too old for `moat run`, which refuses there.
+pub(super) fn old_macos(version: Option<&str>) -> Option<String> {
+    let reason = crate::os_version::run_floor(version)?;
+    Some(format!(
+        "moat run         {reason}; the agent hooks still apply the policy"
+    ))
+}
+
 /// Calls the guard denied in the last week because no decision came in time.
 pub(super) fn hangs(home: &Home, now_ms: i64) -> Option<String> {
     let path = home.hangs_path();
@@ -106,6 +115,15 @@ mod tests {
         assert!(row.starts_with("moat run         "), "{row}");
         assert!(row.contains("Move MOAT_HOME out of /"), "{row}");
         assert_eq!(state_in_grant(&home, &policy, false), None);
+    }
+
+    #[test]
+    fn an_old_macos_is_a_moat_run_warning() {
+        let row = old_macos(Some("12.7.6")).unwrap();
+        assert!(row.starts_with("moat run         needs macOS 13"), "{row}");
+        assert!(row.contains("hooks still apply the policy"), "{row}");
+        assert_eq!(old_macos(Some("13.0")), None);
+        assert_eq!(old_macos(None), None, "not macOS, or unreadable");
     }
 
     #[test]
