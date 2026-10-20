@@ -20,6 +20,22 @@ pub fn load_policy(path: &Path) -> Result<Policy> {
     Policy::parse(&read_policy(path)?).with_context(|| format!("invalid policy {}", path.display()))
 }
 
+/// Parse and lint the policy in `bytes`, already read from `path` (named in
+/// errors), with the limits [`read_policy`] applies. `moat guard` passes the
+/// bytes the lock check verified, so the policy it decides by is the pinned one.
+pub fn parse_policy(bytes: Vec<u8>, path: &Path) -> Result<Policy> {
+    let size = bytes.len();
+    if u64::try_from(size).map_or(true, |size| size > MAX_POLICY_BYTES) {
+        bail!(
+            "policy {} is {size} bytes; the limit is {MAX_POLICY_BYTES}",
+            path.display()
+        );
+    }
+    let text = String::from_utf8(bytes)
+        .with_context(|| format!("reading policy {} (must be UTF-8)", path.display()))?;
+    Policy::parse(&text).with_context(|| format!("invalid policy {}", path.display()))
+}
+
 /// The text of a policy file, at most [`MAX_POLICY_BYTES`] of UTF-8.
 pub fn read_policy(path: &Path) -> Result<String> {
     let file =
@@ -225,6 +241,20 @@ mod tests {
         );
         let root = base.ancestors().last().unwrap();
         assert_eq!(absolute(&root.join("..")).unwrap(), root);
+    }
+
+    #[test]
+    fn policy_bytes_get_the_limits_of_a_policy_file() {
+        let path = Path::new("policy.yaml");
+        let big = vec![b' '; usize::try_from(MAX_POLICY_BYTES).unwrap() + 1];
+        assert!(format!("{:#}", parse_policy(big, path).unwrap_err()).contains("the limit is"));
+        let latin1 = b"version: 1\n# na\xefve\n".to_vec();
+        assert!(format!("{:#}", parse_policy(latin1, path).unwrap_err()).contains("UTF-8"));
+        let text = openmoat_core::DEFAULT_POLICY;
+        assert_eq!(
+            parse_policy(text.as_bytes().to_vec(), path).unwrap(),
+            Policy::parse(text).unwrap()
+        );
     }
 
     #[test]

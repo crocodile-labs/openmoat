@@ -25,7 +25,7 @@ mod keys;
 mod relaxed;
 
 pub use digest::sha256_hex;
-use digest::{digest, digests, is_claude_settings};
+use digest::{ReadOnce, digest, digests, is_claude_settings};
 pub use relaxed::{check, split};
 
 const LOCK_VERSION: u32 = 1;
@@ -319,9 +319,13 @@ impl Lock {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let text =
-            fs::read_to_string(path).with_context(|| format!("reading lock {}", path.display()))?;
-        let lock: Self = serde_json::from_str(&text)
+        let bytes = fs::read(path).with_context(|| format!("reading lock {}", path.display()))?;
+        Self::parse(&bytes, path)
+    }
+
+    /// The lock in `bytes`, read from `path` (named in errors).
+    pub fn parse(bytes: &[u8], path: &Path) -> Result<Self> {
+        let lock: Self = serde_json::from_slice(bytes)
             .with_context(|| format!("parsing lock {}", path.display()))?;
         if lock.version != LOCK_VERSION {
             bail!(
@@ -340,15 +344,31 @@ impl Lock {
 
     /// Compare pinned digests with the files on disk. Empty means intact.
     pub fn verify(&self) -> Vec<Drift> {
-        let files = self.entries.keys().filter_map(|stored| {
+        self.verify_keeping(None).0
+    }
+
+    /// [`Lock::verify`], also returning the bytes of the pinned file `keep`
+    /// that were checked, when it is pinned and intact. Each file is read once,
+    /// so a caller that parses these bytes uses exactly what matched the pin,
+    /// even when the file changes after the check.
+    pub fn verify_keeping(&self, keep: Option<&Path>) -> (Vec<Drift>, Option<Vec<u8>>) {
+        let keep = keep.map(key);
+        let mut kept = None;
+        let mut drift = Vec::new();
+        for (stored, expected) in &self.entries {
             // A stored key is canonical as of pinning. If it no longer maps to
             // itself, a directory on the way was moved or replaced by a link:
             // the file the kernel will read is not the one that was pinned.
             if key(Path::new(stored)) != *stored {
-                return Some(Drift::Modified(PathBuf::from(stored)));
+                drift.push(Drift::Modified(PathBuf::from(stored)));
+                continue;
             }
-            self.verify_one(Path::new(stored))
-        });
+            match self.check_one(Path::new(stored), expected) {
+                Ok(read) if keep.as_ref() == Some(stored) => kept = Some(read.contents),
+                Ok(_) => {}
+                Err(found) => drift.push(found),
+            }
+        }
         let profiles = self.codex_profiles.iter().filter_map(|(stored, expected)| {
             let path = PathBuf::from(stored);
             if key(&path) != *stored {
@@ -363,7 +383,8 @@ impl Lock {
                 Err(e) => Some(Drift::Unreadable(path, format!("{e:#}"))),
             }
         });
-        files.chain(profiles).collect()
+        drift.extend(profiles);
+        (drift, kept)
     }
 
     /// Whether the lock pins the moat profile in the Codex config at `path`.
@@ -374,14 +395,25 @@ impl Lock {
     /// Drift for one pinned file, or `None` when it is intact or not pinned.
     pub fn verify_one(&self, path: &Path) -> Option<Drift> {
         let expected = self.entries.get(&key(path))?;
-        let path = PathBuf::from(key(path));
-        if fs::symlink_metadata(&path).is_err() {
-            return Some(Drift::Missing(path));
+        self.check_one(&PathBuf::from(key(path)), expected).err()
+    }
+
+    /// The pinned file at `path`, read once and matching `expected`, or how it
+    /// differs.
+    fn check_one(&self, path: &Path, expected: &str) -> Result<ReadOnce, Drift> {
+        if fs::symlink_metadata(path).is_err() {
+            return Err(Drift::Missing(path.to_path_buf()));
         }
-        match digests(&path, is_claude_settings(&path)) {
-            Ok(actual) if actual.contains(expected) => None,
-            Ok(_) => Some(self.modified(path)),
-            Err(e) => Some(Drift::Unreadable(path, format!("{e:#}"))),
+        let read = ReadOnce::from(path)
+            .map_err(|e| Drift::Unreadable(path.to_path_buf(), format!("{e:#}")))?;
+        if read
+            .digests(is_claude_settings(path))
+            .iter()
+            .any(|d| d == expected)
+        {
+            Ok(read)
+        } else {
+            Err(self.modified(path.to_path_buf()))
         }
     }
 

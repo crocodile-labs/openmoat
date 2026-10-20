@@ -46,17 +46,21 @@ pub fn lint(args: &LintArgs) -> Result<Code> {
 pub fn check(args: &CheckArgs) -> Result<Code> {
     // The installed policy decides nothing while the lock is broken: report the
     // `kernel-integrity` deny `guard` would answer instead of the policy's verdict.
-    if args.policy.is_none()
-        && let Some(decision) = integrity::check(&Home::locate()?)?.deny
-    {
-        return report(&decision, args.format);
-    }
     let home = Home::locate()?;
+    let mut checked_policy = None;
+    if args.policy.is_none() {
+        let verified = integrity::check(&home)?;
+        if let Some(decision) = verified.checked.deny {
+            return report(&decision, args.format);
+        }
+        checked_policy = verified.policy;
+    }
     let ctx = context::eval_context(&home, args.cwd.as_deref(), args.project.as_deref())?;
-    // The installed policy decides with the project's repository policy, as in `guard`.
+    // The installed policy decides with the project's repository policy, as in
+    // `guard`, and from the policy bytes the lock check verified.
     let policy = match &args.policy {
         Some(path) => context::load_policy(path)?,
-        None => crate::repo::effective_policy(&home, &ctx)?,
+        None => crate::repo::effective_policy_with(&home, checked_policy, &ctx)?,
     };
     // Decide the way `guard` would: symlinks resolved on this machine, and
     // programs resolved through the installation snapshot when one exists.

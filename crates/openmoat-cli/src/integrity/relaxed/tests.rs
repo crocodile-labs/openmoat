@@ -6,6 +6,11 @@ use super::*;
 
 const OWNED: &str = "Read(//**/.ssh/**)";
 
+/// The outcome of [`super::check`], without what it read.
+fn check(home: &Home) -> Result<Checked> {
+    super::check(home).map(|verified| verified.checked)
+}
+
 struct Setup {
     _dir: tempfile::TempDir,
     home: Home,

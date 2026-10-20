@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Decision, Verdict};
-use openmoat_hosts::HookRequest;
+use openmoat_hosts::{HookRequest, ProjectSettingsSpec};
 
 use crate::home::Home;
 use crate::integrity::{self, Drift, INTEGRITY_RULE, Lock};
@@ -14,11 +14,18 @@ use crate::project_settings;
 const CONFIG_CHANGE_RULE: &str = "config-change";
 
 /// The project settings file a `project_settings` or `local_settings` change
-/// is about; `None` for user settings and every other source.
-fn project_file(source: &str) -> Option<&'static str> {
+/// is about, with the spec that places it; `None` for user settings, every
+/// other source and a host without project settings.
+fn project_file(
+    request: &HookRequest,
+    source: &str,
+) -> Option<(&'static ProjectSettingsSpec, &'static str)> {
+    // The Continue CLI sends Claude Code's hooks, which read Claude Code's files.
+    let format = request.host.spec().speaks.unwrap_or(request.host);
+    let spec = format.spec().project_settings.as_ref()?;
     match source {
-        "project_settings" => Some(project_settings::FILES[0]),
-        "local_settings" => Some(project_settings::FILES[1]),
+        "project_settings" => Some((spec, spec.shared)),
+        "local_settings" => Some((spec, spec.local)),
         _ => None,
     }
 }
@@ -61,8 +68,8 @@ pub(super) fn decision(
         // while protecting nothing the lock does not already cover. A project
         // level's file is found from the session's directory and checked.
         None => {
-            if let Some(name) = project_file(source) {
-                for file in unnamed_project_files(request.cwd.as_deref(), name)? {
+            if let Some((spec, name)) = project_file(request, source) {
+                for file in unnamed_project_files(request.cwd.as_deref(), spec, name)? {
                     if !lock.pins(&file)
                         && let Some(blocked) = project_change(&file)
                     {
@@ -104,7 +111,7 @@ pub(super) fn decision(
     }
     // An unpinned project or local file (or a review copy of one, which holds
     // what it will become) comes from the repository: checked by its contents.
-    if project_file(source).is_some()
+    if project_file(request, source).is_some()
         && !lock.pins(path)
         && let Some(blocked) = project_change(path)
     {
@@ -126,7 +133,11 @@ pub(super) fn decision(
 /// The project files named `name` a change that names no file may be about,
 /// found from the session's directory (the guard's own when Claude Code sent
 /// none).
-fn unnamed_project_files(cwd: Option<&str>, name: &str) -> Result<Vec<PathBuf>> {
+fn unnamed_project_files(
+    cwd: Option<&str>,
+    spec: &ProjectSettingsSpec,
+    name: &str,
+) -> Result<Vec<PathBuf>> {
     let cwd = match cwd {
         Some(dir) => PathBuf::from(dir),
         None => std::env::current_dir().context("resolving working directory")?,
@@ -134,6 +145,7 @@ fn unnamed_project_files(cwd: Option<&str>, name: &str) -> Result<Vec<PathBuf>> 
     Ok(project_settings::candidates(
         &cwd,
         &crate::home::user_home()?,
+        spec,
         name,
     ))
 }

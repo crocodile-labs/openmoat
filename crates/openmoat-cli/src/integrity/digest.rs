@@ -34,25 +34,51 @@ pub(super) fn digest(path: &Path, settings: bool) -> Result<String> {
 /// regular file for a link (or re-pointing a link) changes every digest even
 /// when the bytes read through it are identical.
 pub(super) fn digests(path: &Path, settings: bool) -> Result<Vec<String>> {
-    let meta = fs::symlink_metadata(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut link = Vec::new();
-    if meta.file_type().is_symlink() {
-        let target =
-            fs::read_link(path).with_context(|| format!("reading link {}", path.display()))?;
-        link.extend_from_slice(b"symlink:");
-        link.extend_from_slice(target.to_string_lossy().as_bytes());
-        link.push(b'\n');
+    Ok(ReadOnce::from(path)?.digests(settings))
+}
+
+/// A pinned file as read once: the symlink target it names, if any, and the
+/// bytes read through it. The digests are computed from these bytes, and a
+/// caller that uses the file afterwards uses these same bytes, so what was
+/// checked is what is used even when the file changes in between.
+pub(super) struct ReadOnce {
+    /// `symlink:<target>\n` for a symlink, else empty.
+    link: Vec<u8>,
+    /// The file's contents.
+    pub contents: Vec<u8>,
+}
+
+impl ReadOnce {
+    /// Read the file at `path`.
+    pub fn from(path: &Path) -> Result<Self> {
+        let meta =
+            fs::symlink_metadata(path).with_context(|| format!("reading {}", path.display()))?;
+        let mut link = Vec::new();
+        if meta.file_type().is_symlink() {
+            let target =
+                fs::read_link(path).with_context(|| format!("reading link {}", path.display()))?;
+            link.extend_from_slice(b"symlink:");
+            link.extend_from_slice(target.to_string_lossy().as_bytes());
+            link.push(b'\n');
+        }
+        let contents = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+        Ok(Self { link, contents })
     }
-    let contents = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut out = Vec::new();
-    if settings && let Some(canonical) = without_cosmetic_key(&contents) {
-        out.push(sha256_hex(&[link.as_slice(), &canonical].concat()));
+
+    /// [`digests`] of these bytes.
+    pub fn digests(&self, settings: bool) -> Vec<String> {
+        let link = self.link.as_slice();
+        let contents = self.contents.as_slice();
+        let mut out = Vec::new();
+        if settings && let Some(canonical) = without_cosmetic_key(contents) {
+            out.push(sha256_hex(&[link, &canonical].concat()));
+        }
+        if !settings && let Some(canonical) = openclaw_without_servers(contents) {
+            out.push(sha256_hex(&[link, &canonical].concat()));
+        }
+        out.push(sha256_hex(&[link, contents].concat()));
+        out
     }
-    if !settings && let Some(canonical) = openclaw_without_servers(&contents) {
-        out.push(sha256_hex(&[link.as_slice(), &canonical].concat()));
-    }
-    out.push(sha256_hex(&[link, contents].concat()));
-    Ok(out)
 }
 
 /// An OpenClaw configuration that loads OpenMoat's plugin

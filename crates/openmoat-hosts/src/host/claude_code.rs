@@ -7,7 +7,8 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, CONFIG_HOOK_TIMEOUT_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpLayout, McpSpec, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    McpLayout, McpSpec, ProjectSettingsSpec, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S,
+    wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -71,6 +72,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "sandbox not available on native Windows; the hook still applies the policy \
              (use WSL2 for OS confinement)",
         ),
+    }),
+    // Merged over the user `settings.json`, where a key set wins
+    // (`disableAllHooks`, `hooks`, `env`, …).
+    project_settings: Some(ProjectSettingsSpec {
+        dir: ".claude",
+        shared: "settings.json",
+        local: "settings.local.json",
     }),
 };
 

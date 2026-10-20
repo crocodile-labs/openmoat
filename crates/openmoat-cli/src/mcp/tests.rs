@@ -33,7 +33,8 @@ fn accept_all(home: &Home) {
 }
 
 fn denied(home: &Home, tool: &str) -> Option<Decision> {
-    violation(home, Host::ClaudeCode, None, tool).unwrap()
+    let lock = Lock::load(&home.lock_path()).unwrap();
+    violation(home, &lock, Host::ClaudeCode, None, tool).unwrap()
 }
 
 #[test]
@@ -180,7 +181,10 @@ fn a_changed_openclaw_server_holds_back_only_its_tools() {
     let found = review(&home, &lock, &[Host::OpenClaw], None).unwrap();
     assert_eq!(found.changes.len(), 2, "{:?}", found.unreadable);
     accept(&home, &found.changes).unwrap();
-    let denied = |tool| violation(&home, Host::OpenClaw, None, tool).unwrap();
+    let denied = |tool| {
+        let lock = Lock::load(&home.lock_path()).unwrap();
+        violation(&home, &lock, Host::OpenClaw, None, tool).unwrap()
+    };
     assert!(denied("mcp__docs__search").is_none());
 
     fs::write(&file, config("sh")).unwrap();

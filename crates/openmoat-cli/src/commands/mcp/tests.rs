@@ -51,9 +51,10 @@ fn wrapping_re_pins_what_it_wrote_and_nothing_else_drifts() {
         None,
         "hosts.json was re-pinned"
     );
+    let lock = crate::integrity::Lock::load(&home.lock_path()).unwrap();
     for tool in ["mcp__gh__search", "mcp__db__query"] {
         assert_eq!(
-            mcp::violation(&home, Host::ClaudeCode, None, tool).unwrap(),
+            mcp::violation(&home, &lock, Host::ClaudeCode, None, tool).unwrap(),
             None,
             "{tool}"
         );

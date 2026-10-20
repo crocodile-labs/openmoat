@@ -154,7 +154,21 @@ impl Home {
     /// Load and lint the policy file at `path` as if it were installed, with
     /// `moat allow` rules merged in (`moat edit` checks its draft this way).
     pub fn load_policy_at(&self, path: &Path) -> Result<Policy> {
-        let mut policy = context::load_policy(path)?;
+        self.with_merged(context::load_policy(path)?)
+    }
+
+    /// [`Home::load_policy`] from the policy file's `checked` bytes when the
+    /// lock check kept them (`integrity::check`), so the file is not read
+    /// again; from disk otherwise.
+    pub fn load_checked_policy(&self, checked: Option<Vec<u8>>) -> Result<Policy> {
+        match checked {
+            Some(bytes) => self.with_merged(context::parse_policy(bytes, &self.policy_path())?),
+            None => self.load_policy(),
+        }
+    }
+
+    /// `policy` with the `moat allow` rules and installed packs merged in.
+    fn with_merged(&self, mut policy: Policy) -> Result<Policy> {
         let overlay = crate::approvals::Overlay::load(&self.overlay_path())?;
         if !overlay.allow.is_empty() {
             policy.allow.extend(overlay.allow);

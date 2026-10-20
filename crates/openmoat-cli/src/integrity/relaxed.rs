@@ -105,16 +105,33 @@ pub struct Checked {
     pub relaxed: Vec<Drift>,
 }
 
+/// What [`check`] read, so the caller decides by the same bytes it checked.
+#[derive(Debug)]
+pub struct Verified {
+    /// The lock, read and parsed once.
+    pub lock: Lock,
+    /// The policy file's bytes that matched their pin; `None` when the lock
+    /// does not pin the policy or it drifted.
+    pub policy: Option<Vec<u8>>,
+    /// The deny, or the settings drift decided through.
+    pub checked: Checked,
+}
+
 /// [`super::violation`] for `moat guard` and `moat policy check`: no deny
 /// while every drift is allowlisted settings drift, which is returned instead.
-pub fn check(home: &Home) -> Result<Checked> {
+pub fn check(home: &Home) -> Result<Verified> {
     let lock_path = home.lock_path();
     if !lock_path.is_file() {
         bail!("no policy lock at {}; run `moat init`", lock_path.display());
     }
     let lock = Lock::load(&lock_path)?;
-    let drift = lock.verify();
-    Ok(split(home, &lock, drift))
+    let (drift, policy) = lock.verify_keeping(Some(&home.policy_path()));
+    let checked = split(home, &lock, drift);
+    Ok(Verified {
+        lock,
+        policy,
+        checked,
+    })
 }
 
 /// Sort `drift`, found by `lock`, into a deny or relaxed drift. Relaxed only
