@@ -294,7 +294,7 @@ through the engine (§12).
 | `egress.net`, `egress.fetch` | the same for hosts. `fetch` takes rules from `fetch` and `net` lists. Both always deny `moat.cloud-metadata` (ADR-020) |
 | `secrets` | one entry per policy `secrets:` item (ADR-020), carrying `id`, `host`, `header`, `source` and `plain_http` for OS backends to read without the policy |
 | `limits` | empty until the policy schema defines process limits |
-| `decide_only` | rule ids per kind the IR cannot carry: `shell`, `env.read`, `env.set`, `mcp`, and `executables` program names |
+| `decide_only` | rule ids per kind the IR cannot carry: `shell`, `env.read`, `env.set`, `mcp`, and `executables` program names; `fs.read` and `fs.write` for `hook_only` deny groups, whose paths OS layers leave to the other rules (ADR-034) |
 | `losses` | every place the IR is stricter than the hook, with a message |
 | `allowances` | where OS layers may be wider than the hook: `sandbox.read_roots` (ADR-021). Kept out of `fs.read`, so the IR's own verdicts never widen; `Checker::check_os` applies them after the deny rules |
 

@@ -10,7 +10,9 @@
 //! An OS layer can only allow or deny, so lowering never widens: a hook `ask`
 //! becomes a deny, and whatever cannot be represented exactly is narrowed and
 //! recorded as a [`Loss`]. The IR's verdict on any read, write or host is
-//! therefore the engine's verdict with `ask` read as `deny`, or stricter.
+//! therefore the engine's verdict with `ask` read as `deny`, or stricter,
+//! except on the paths of a `hook_only` deny group, which only the hook
+//! denies and [`Enforcement::decide_only`] lists (ADR-034).
 
 use std::fmt;
 
@@ -40,7 +42,10 @@ pub struct Enforcement {
     /// Rules only the hook can apply, by kind. Shell semantics, environment
     /// variables, MCP tool names and executable pins name things an OS layer
     /// cannot see (a command line, a variable, a tool), so they are not lowered
-    /// and stay with the hook decision (ADR-018).
+    /// and stay with the hook decision (ADR-018). The file paths of a `deny`
+    /// group marked `hook_only` stay with it too (ADR-034): OS layers leave
+    /// them to the other rules, so these are the one place the IR's own
+    /// verdicts may be wider than the hook's.
     pub decide_only: Vec<DecideOnly>,
     /// Where the IR is stricter than the hook decision, with the reason.
     pub losses: Vec<Loss>,
@@ -111,7 +116,8 @@ pub enum Effect {
 /// The policy rules of one kind that only the hook applies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DecideOnly {
-    /// `shell`, `env.read`, `env.set`, `mcp` or `executables`.
+    /// `shell`, `env.read`, `env.set`, `mcp` or `executables`; `fs.read` or
+    /// `fs.write` for `hook_only` groups.
     pub kind: String,
     /// Rule group ids, or program names for `executables`.
     pub rules: Vec<String>,

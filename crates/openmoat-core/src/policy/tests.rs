@@ -150,6 +150,42 @@ fn mcp_first_sight_is_held_unless_the_policy_trusts_it() {
 }
 
 #[test]
+fn hook_only_is_for_deny_groups_that_name_files() {
+    let group = |list: &str, body: &str| {
+        Policy::parse(&format!(
+            "version: 1\n{list}:\n  - id: b\n    hook_only: true\n{body}"
+        ))
+    };
+    let ok = group(
+        "deny",
+        "    fs.read: ['~/.m2/settings.xml']\n    shell: ['x']\n",
+    )
+    .unwrap();
+    assert!(ok.deny[0].hook_only);
+    assert!(!Policy::parse(crate::DEFAULT_POLICY).unwrap().deny[0].hook_only);
+    let problem = |list: &str, body: &str| match group(list, body) {
+        Err(PolicyError::Rule { rule, problem }) if rule == "b" => problem,
+        other => panic!("{list}: {other:?}"),
+    };
+    for list in ["allow", "ask", "defer"] {
+        let message = problem(list, "    fs.read: ['/x']\n");
+        assert!(message.contains("`deny` groups only"), "{message}");
+    }
+    let net = problem("deny", "    fs.read: ['/x']\n    net: ['evil.example']\n");
+    assert!(net.contains("`net` or `fetch`"), "{net}");
+    let fetch = problem(
+        "deny",
+        "    fs.write: ['/x']\n    fetch: ['evil.example']\n",
+    );
+    assert!(fetch.contains("`net` or `fetch`"), "{fetch}");
+    let files = problem("deny", "    shell: ['x']\n");
+    assert!(files.contains("needs `fs.read` or `fs.write`"), "{files}");
+    // Written out only when set, so other policies serialise as before.
+    let yaml = serde_json::to_string(&Policy::parse(crate::DEFAULT_POLICY).unwrap()).unwrap();
+    assert_eq!(yaml.matches("hook_only").count(), 1, "{yaml}");
+}
+
+#[test]
 fn rejects_unknown_keys() {
     assert!(Policy::parse("version: 1\nbogus: 1\n").is_err());
 }

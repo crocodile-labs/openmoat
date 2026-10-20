@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- `build-credentials` denies the agent reading or writing `~/.m2/settings.xml`, `~/.m2/settings-security.xml` and `~/.gradle/gradle.properties`, through shell commands, file tools and MCP arguments. A deny group can now say `hook_only: true`: the host sandboxes and `moat run` leave its paths out, so `mvn` and `gradle` run inside them still read their settings, and `mvn package` or `./gradlew build` keep their verdict. Existing policies get it with `moat policy upgrade` ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+
 ### Fixed
 - `moat run` on macOS 12 and earlier refuses with a plain message (`moat run` needs macOS 13 or later; the agent hooks still apply the policy) instead of `sandbox-exec`'s `unbound variable: TIOCSTI`, and `moat doctor` warns there. The profile's `TIOCSTI` deny is unchanged, and where the macOS version cannot be read `moat run` starts as before ([#601](https://github.com/crocodile-labs/openmoat/pull/601)).
 

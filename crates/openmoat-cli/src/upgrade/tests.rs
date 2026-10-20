@@ -62,6 +62,24 @@ fn a_change_already_made_is_not_offered() {
 }
 
 #[test]
+fn a_policy_from_the_previous_default_is_offered_build_credentials() {
+    let new = openmoat_core::DEFAULT_POLICY;
+    let start = new.find("  # Maven and Gradle settings").unwrap();
+    let end = new.find("  - id: env-secrets").unwrap();
+    let old = format!("{}{}", &new[..start], &new[end..]);
+    let yours = old.replace(
+        "\"~/.zsh_history\"",
+        "\"~/.zsh_history\"\n      - \"~/mine\"",
+    );
+    let merged = merge(&old, &yours, new);
+    assert_eq!(merged.conflicts().count(), 0);
+    let policy = openmoat_core::Policy::parse(&merged.text).unwrap();
+    let group = policy.deny.iter().find(|g| g.id == "build-credentials");
+    assert!(group.is_some_and(|g| g.hook_only && g.fs_read.len() == 3));
+    assert!(merged.text.contains("~/mine"));
+}
+
+#[test]
 fn crlf_policies_line_up_with_the_lf_default() {
     let yours = BASE.replace('\n', "\r\n");
     let base = line_endings_of(&yours, BASE);

@@ -25,6 +25,8 @@ pub mod cursor;
 mod differential;
 pub mod exposure;
 pub mod git_env;
+#[cfg(test)]
+mod hook_only;
 pub mod install;
 pub mod landlock;
 mod patterns;

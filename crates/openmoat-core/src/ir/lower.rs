@@ -167,10 +167,12 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
 /// One rule per group and policy list that governs `kind`, patterns expanded as
 /// the engine expands them. A rule whose patterns name no location (all
 /// `${project}` without a project, or only exclusions) matches nothing in the
-/// engine either, so it is left out.
+/// engine either, so it is left out, as is a `hook_only` group (ADR-034),
+/// which [`decide_only`] lists instead.
 fn rules(groups: &[RuleGroup], kind: Kind, ctx: &EvalContext) -> Vec<Rule> {
     groups
         .iter()
+        .filter(|group| !group.hook_only)
         .flat_map(|group| {
             kind.rule_kinds().iter().map(move |list| Rule {
                 id: group.id.clone(),
@@ -202,6 +204,18 @@ fn decide_only(policy: &Policy) -> Vec<DecideOnly> {
         })
         .filter(|d| !d.rules.is_empty())
         .collect();
+    for kind in [Kind::FsRead, Kind::FsWrite] {
+        let rules: Vec<String> = groups()
+            .filter(|g| g.hook_only && !g.patterns(kind).is_empty())
+            .map(|g| g.id.clone())
+            .collect();
+        if !rules.is_empty() {
+            out.push(DecideOnly {
+                kind: kind.as_str().to_owned(),
+                rules,
+            });
+        }
+    }
     if !policy.executables.is_empty() {
         out.push(DecideOnly {
             kind: "executables".to_owned(),

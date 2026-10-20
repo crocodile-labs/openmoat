@@ -95,6 +95,19 @@ deny:
       # (and `pass` alone, which lists them) print no password
       - "{pass,*/pass} ?*"
       - "!{pass,*/pass} {ls,list,find,search,init,insert,add,rm,remove,delete,mv,rename,cp,copy,git,help,version,--help,-h,--version}"
+  # Maven and Gradle settings: repository passwords, signing keys, tokens. Not in
+  # secrets-paths, whose paths the OS sandboxes deny too: `mvn` and `gradle` run
+  # inside them must read these files. `hook_only` (ADR-034) denies the agent's own
+  # reads and writes (a shell command naming them, file and MCP tools) and leaves
+  # the sandboxes as they are; the build commands themselves keep their verdict.
+  - id: build-credentials
+    reason: build tool credentials
+    hook_only: true
+    fs.read: &build-credentials
+      - "~/.m2/settings.xml"
+      - "~/.m2/settings-security.xml"
+      - "~/.gradle/gradle.properties"
+    fs.write: *build-credentials
   - id: env-secrets
     reason: secret environment variable
     env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN",

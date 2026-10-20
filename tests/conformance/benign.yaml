@@ -833,6 +833,17 @@
 - id: benign-gradle-build
   action: { shell: "gradle build --offline" }
   expect: { verdict: allow, rules: [dev-shell] }
+# the build tools read `~/.m2/settings.xml` and `~/.gradle/gradle.properties`
+# themselves; `build-credentials` denies only the agent naming them
+- id: benign-mvn-quiet-package
+  action: { shell: "mvn -q package" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-gradlew-build
+  action: { shell: "./gradlew build" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-gradle-test
+  action: { shell: "gradle test" }
+  expect: { verdict: allow, rules: [dev-shell] }
 - id: benign-dotnet-build
   action: { shell: "dotnet build -c Release" }
   expect: { verdict: allow, rules: [dev-shell] }
@@ -1075,6 +1086,16 @@
   expect: { verdict: defer, rules: [default] }
 - id: benign-read-gradle-cache
   action: { shell: "ls ~/.gradle/caches/modules-2" }
+  expect: { verdict: defer, rules: [default] }
+# `build-credentials` names only the settings files, not the caches beside them
+- id: benign-file-tool-read-maven-pom
+  action: { fs_read: "~/.m2/repository/org/x/y/1.0/y-1.0.pom" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-file-tool-read-gradle-cache
+  action: { fs_read: "~/.gradle/caches/modules-2/files-2.1/org.x/y/1.0/y-1.0.jar" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-gradle-wrapper-properties
+  action: { shell: "cat ~/.gradle/wrapper/dists/gradle-8.10-bin/gradle-wrapper.properties" }
   expect: { verdict: defer, rules: [default] }
 - id: benign-echo-database-host
   action: { shell: "echo $DATABASE_HOST" }

@@ -103,7 +103,7 @@ fn compile_text(ir: &Enforcement) -> Result<()> {
     access_text(&mut out, "fetch", &ir.egress.fetch)?;
     writeln!(
         out,
-        "decide-only (the hook applies these; OS layers cannot see them)"
+        "decide-only (the hook applies these; OS layers cannot see them or leave them, ADR-034)"
     )?;
     for d in &ir.decide_only {
         writeln!(out, "  {}: {}", d.kind, d.rules.join(", "))?;

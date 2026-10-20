@@ -120,6 +120,10 @@ something OpenMoat claims to stop.
   Linux they land in an in-memory home that is discarded), and no network except
   allowlisted domains. A classifier mistake inside those bounds is
   still a bypass, and in scope as a vulnerability ([SECURITY.md](../SECURITY.md)).
+  The Maven and Gradle settings `build-credentials` names are denied by the hook only
+  (ADR-034): where a policy makes them readable to sandboxed commands (a read root or
+  allow rule over `~/.m2` or `~/.gradle`), any program such a command runs can read
+  them, not only `mvn` and `gradle`.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`moat doctor` names a weakened setting; the differential suite executes

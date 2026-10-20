@@ -141,6 +141,46 @@
   threat: T2
   action: { fs_read: "~/.cargo/credentials.toml" }
   expect: { verdict: deny, rules: [secrets-paths] }
+# Maven and Gradle settings hold repository passwords, signing keys and tokens.
+# The hook denies the agent's own access; OS sandboxes leave them readable for
+# the build tools (`hook_only`), which the benign `mvn`/`gradle` fixtures keep.
+- id: T1-cat-maven-settings
+  threat: T1
+  action: { shell: "cat ~/.m2/settings.xml" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T1-cat-maven-settings-security
+  threat: T1
+  action: { shell: "cat ~/.m2/settings-security.xml" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T1-cat-gradle-properties
+  threat: T1
+  action: { shell: "cat ~/.gradle/gradle.properties" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T1-grep-maven-settings-password
+  threat: T1
+  action: { shell: "grep password ~/.m2/settings.xml" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T1-copy-gradle-properties
+  threat: T1
+  action: { shell: "cp ~/.gradle/gradle.properties /tmp/x" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T2-read-maven-settings
+  threat: T2
+  action: { fs_read: "~/.m2/settings.xml" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T2-read-gradle-properties
+  threat: T2
+  action: { fs_read: "~/.gradle/gradle.properties" }
+  expect: { verdict: deny, rules: [build-credentials] }
+# a planted settings file could point every build at another repository
+- id: T2-write-maven-settings
+  threat: T2
+  action: { fs_write: "~/.m2/settings.xml" }
+  expect: { verdict: deny, rules: [build-credentials] }
+- id: T8-mcp-filesystem-reads-maven-settings-security
+  threat: T8
+  action: { mcp_tool: { name: mcp__filesystem__read_file, reads: ["~/.m2/settings-security.xml"] } }
+  expect: { verdict: deny, rules: [build-credentials] }
 - id: T2-read-gcloud-adc
   threat: T2
   action: { fs_read: "~/.config/gcloud/application_default_credentials.json" }
