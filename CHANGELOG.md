@@ -8,6 +8,10 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-20
+
+The command is now `openmoat` (`moat` still runs it for a few releases), and a round of review fixes: unquoted variables split as bash splits them, environment reads in interpreter one-liners, project Claude Code settings that turn hooks off, a network namespace for `openmoat run` on Linux, `curl` and `wget` downloads decided like a fetch, `openmoat demo`, and each guard call decided by the exact policy bytes it checked.
+
 ### Security
 - `moat run` on Linux starts the agent in a network namespace of its own, with only loopback, where bubblewrap can run: Landlock restricts TCP by port only, so a command could connect to any host on the proxy's port and go around the proxy's host checks, secrets broker, taint and audit. The proxy's port is relayed into the namespace, as under `--isolate`; files and the rest of the sandbox are unchanged. Where bubblewrap is missing or cannot create user namespaces, `moat run` starts as before and says on every start that the network is restricted by port only, and `moat doctor` warns ([#609](https://github.com/crocodile-labs/openmoat/pull/609)).
 - `build-credentials` denies the agent reading or writing `~/.m2/settings.xml`, `~/.m2/settings-security.xml` and `~/.gradle/gradle.properties`, through shell commands, file tools and MCP arguments. A deny group can now say `hook_only: true`: the host sandboxes and `moat run` leave its paths out, so `mvn` and `gradle` run inside them still read their settings, and `mvn package` or `./gradlew build` keep their verdict. Existing policies get it with `moat policy upgrade` ([#603](https://github.com/crocodile-labs/openmoat/pull/603)).
@@ -697,7 +701,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/crocodile-labs/openmoat/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/crocodile-labs/openmoat/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/crocodile-labs/openmoat/compare/v0.5.7...v0.6.0
 [0.5.7]: https://github.com/crocodile-labs/openmoat/compare/v0.5.6...v0.5.7
