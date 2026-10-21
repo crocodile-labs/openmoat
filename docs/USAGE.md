@@ -311,9 +311,16 @@ these takes one command in your own terminal (agents are denied all of them):
   loads it. An `ask` is a pi dialog; `pi -p` and `--mode json` have none, so there it
   is a deny you approve with `openmoat allow --last`. A call OpenMoat defers runs, as
   pi runs every call without OpenMoat.
+- **Gemini CLI**: `openmoat init --hosts gemini-cli` adds one `BeforeTool` hook named
+  `openmoat` to `~/.gemini/settings.json` (`$GEMINI_CLI_HOME/.gemini` when that is set);
+  restart Gemini CLI so it loads it. An `ask` arrives as Gemini CLI's own confirmation.
+  Gemini CLI saves `/model`, `/theme`, your sign-in method and display toggles in the
+  same file: those changes are reported by `openmoat doctor` and calls are still
+  checked. Any other change there, such as a hook, an MCP server or a tool setting,
+  denies every call until you run `openmoat doctor --accept` in your terminal.
 - **The `openmoat` binary is missing or broken**: Claude Code and Codex then run tool calls
   without the hook ("When the hook fails" in [THREAT_MODEL.md](THREAT_MODEL.md)), and Cursor,
-  OpenClaw and pi block them. Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
+  OpenClaw, pi and Gemini CLI block them. Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `openmoat uninstall` if you want it off.
 
 ## Report a bug

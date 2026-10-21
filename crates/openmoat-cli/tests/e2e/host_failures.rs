@@ -27,7 +27,7 @@ struct Shape {
     unknown_event: Value,
 }
 
-fn shapes() -> [Shape; 6] {
+fn shapes() -> [Shape; 7] {
     let pre_tool_use = |tool: &str| {
         json!({"session_id": "s", "cwd": "/p", "hook_event_name": "PreToolUse",
                "tool_name": tool, "tool_input": {"file_path": "~/.ssh/id_rsa"}})
@@ -93,6 +93,17 @@ fn shapes() -> [Shape; 6] {
             unknown_event: json!({"hook_event_name": "tool_result", "toolName": "bash",
                 "input": {"command": "ls"}}),
         },
+        // Gemini CLI: an unknown tool is `tool.unknown`, left to Gemini CLI too.
+        Shape {
+            name: "gemini-cli",
+            hook: "gemini-cli",
+            env: None,
+            governed: "gemini-cli/write_file.json",
+            unknown_tool: json!({"session_id": "s", "cwd": "/p", "hook_event_name": "BeforeTool",
+                "tool_name": "future_tool", "tool_input": {"path": "~/.ssh/id_rsa"}}),
+            unknown_event: json!({"session_id": "s", "cwd": "/p", "hook_event_name": "AfterTool",
+                "tool_name": "read_file", "tool_input": {"file_path": "/p/x"}}),
+        },
     ]
 }
 
@@ -115,7 +126,7 @@ impl Shape {
         let doc = json(out);
         let verdict = match self.hook {
             "cursor" => &doc["permission"],
-            "openclaw" | "pi" => &doc["decision"],
+            "openclaw" | "pi" | "gemini-cli" => &doc["decision"],
             _ => &doc["hookSpecificOutput"]["permissionDecision"],
         };
         verdict.as_str().unwrap_or_default().to_owned()
@@ -182,8 +193,8 @@ fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
             assert!(out.stdout.is_empty(), "{}: {}", shape.name, text(&out));
         }
     }
-    // OpenClaw's and pi's unknown tool is `default.tool.unknown`, not
-    // `ungoverned`. One row per host: older rows would fall off a shorter list.
+    // OpenClaw's, pi's and Gemini CLI's unknown tool is `default.tool.unknown`,
+    // not `ungoverned`. One row per host: older rows would fall off a shorter list.
     let recent = shapes().len().to_string();
     let shown = sb.moat(&["show", "--recent", &recent]);
     assert_eq!(
@@ -255,11 +266,11 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         assert_eq!(mode & 0o777, 0o600);
     }
     let doctor = sb.moat(&["doctor"]);
-    assert!(
-        text(&doctor).contains("! guard            6 call(s) denied with no decision within 30 s"),
-        "{}",
-        text(&doctor)
+    let denied = format!(
+        "! guard            {} call(s) denied with no decision within 30 s",
+        shapes().len()
     );
+    assert!(text(&doctor).contains(&denied), "{}", text(&doctor));
     assert!(
         text(&doctor).contains("most while reading the tool call (phase stdin)"),
         "{}",

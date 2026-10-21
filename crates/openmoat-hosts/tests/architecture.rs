@@ -31,12 +31,12 @@ const ALLOWED: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox.rs", 2),
     ("openmoat-cli/src/sandbox/install.rs", 2),
     ("openmoat-cli/src/taint.rs", 1),
-    ("openmoat-hosts/src/lib.rs", 14),
-    ("openmoat-hosts/src/registry.rs", 14),
+    ("openmoat-hosts/src/lib.rs", 16),
+    ("openmoat-hosts/src/registry.rs", 16),
     ("openmoat-hosts/src/wire/pre_tool_use.rs", 1),
 ];
 
-const VARIANTS: [&str; 7] = [
+const VARIANTS: [&str; 8] = [
     "Host::ClaudeCode",
     "Host::Codex",
     "Host::Cursor",
@@ -44,6 +44,7 @@ const VARIANTS: [&str; 7] = [
     "Host::OpenClaw",
     "Host::CopilotCli",
     "Host::Pi",
+    "Host::GeminiCli",
 ];
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {

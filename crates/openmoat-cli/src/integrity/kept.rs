@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::digest::{ReadOnce, is_claude_settings};
-use super::{Drift, Lock, key, keys};
+use super::{Drift, Lock, key, keys, spec_keys};
 use crate::home::Home;
 
 /// Pinned files' bytes as [`Lock::verify_keeping`] read them.
@@ -16,8 +16,9 @@ pub struct Kept {
     /// Each requested file that is pinned and intact, under the path it was
     /// requested by, with the bytes that matched its pin.
     intact: BTreeMap<PathBuf, Vec<u8>>,
-    /// Each Claude Code settings file whose top-level keys drifted and that is
-    /// a regular file, under the path its drift names, with the bytes read.
+    /// Each Claude Code settings file, or hook file with relaxed keys
+    /// (`spec_keys.rs`), whose top-level keys drifted and that is a regular
+    /// file, under the path its drift names, with the bytes read.
     drifted: BTreeMap<PathBuf, Vec<u8>>,
 }
 
@@ -48,7 +49,7 @@ impl Lock {
     /// [`Lock::verify`], also returning the bytes checked: of each pinned and
     /// intact file in `files` or directly in one of `dirs` (kept under the path
     /// requested: the file itself, or the directory joined with its name), and
-    /// of each Claude Code settings file whose keys drifted. Each file is read
+    /// of each settings file whose keys drifted (`drifted`). Each file is read
     /// once, so a caller that parses these bytes uses exactly what was checked,
     /// even when the file changes after the check.
     pub fn verify_keeping(&self, files: &[PathBuf], dirs: &[PathBuf]) -> (Vec<Drift>, Kept) {
@@ -86,7 +87,7 @@ impl Lock {
                 Err((found, read)) => {
                     if let (Drift::KeysChanged(path, _), Some(read)) = (&found, read)
                         && read.regular
-                        && is_claude_settings(path)
+                        && (is_claude_settings(path) || spec_keys::listed(path).is_some())
                     {
                         kept.drifted.insert(path.clone(), read.contents);
                     }

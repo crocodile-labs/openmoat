@@ -21,6 +21,10 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 use serde_json::{Value, json};
 
+mod payloads;
+
+use payloads::{copilot, cursor, cursor_tool, gemini, openclaw, pi};
+
 /// The part of a conformance fixture this suite reads. A fixture with its own
 /// context, session, repository policy, links or resolver is not a plain
 /// intent, so a row naming one fails ([`fixture`]).
@@ -81,9 +85,11 @@ enum Route {
     CopilotCli,
     /// pi `tool_call` in its terminal UI, through OpenMoat's extension.
     Pi,
+    /// Gemini CLI `BeforeTool`.
+    GeminiCli,
 }
 
-const ROUTES: [Route; 9] = [
+const ROUTES: [Route; 10] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -93,6 +99,7 @@ const ROUTES: [Route; 9] = [
     Route::OpenClaw,
     Route::CopilotCli,
     Route::Pi,
+    Route::GeminiCli,
 ];
 
 impl Route {
@@ -104,6 +111,7 @@ impl Route {
             Self::OpenClaw => Host::OpenClaw,
             Self::CopilotCli => Host::CopilotCli,
             Self::Pi => Host::Pi,
+            Self::GeminiCli => Host::GeminiCli,
         }
     }
 }
@@ -262,6 +270,29 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             Action::FsWrite { path: p.clone() },
         )),
         (Route::Pi, Intent::Fetch(_)) => Err("pi has no fetch tool"),
+        // On Windows Gemini CLI runs PowerShell, which is never classified.
+        (Route::GeminiCli, Intent::Shell(_)) if cfg!(windows) => {
+            Err("Gemini CLI runs PowerShell on Windows")
+        }
+        (Route::GeminiCli, Intent::Shell(c)) => Ok((
+            gemini("run_shell_command", &json!({ "command": c })),
+            shell(c),
+        )),
+        (Route::GeminiCli, Intent::Read(p)) => Ok((
+            gemini("read_file", &json!({ "file_path": p })),
+            Action::FsRead { path: p.clone() },
+        )),
+        (Route::GeminiCli, Intent::Write(p)) => Ok((
+            gemini(
+                "replace",
+                &json!({ "file_path": p, "old_string": "old", "new_string": "new" }),
+            ),
+            Action::FsWrite { path: p.clone() },
+        )),
+        (Route::GeminiCli, Intent::Fetch(u)) => Ok((
+            gemini("web_fetch", &json!({ "prompt": format!("Summarise {u}") })),
+            Action::Fetch { url: u.clone() },
+        )),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -285,54 +316,6 @@ fn pre_tool_use(route: Route, tool: &str, input: &Value) -> Value {
             "tool_input": input, "tool_use_id": "toolu_1",
         }),
     }
-}
-
-/// Cursor's common fields with one event's (`tests/fixtures/hosts/cursor`).
-fn cursor(event: &Value) -> Value {
-    let mut payload = json!({
-        "conversation_id": "conv-1", "generation_id": "gen-1",
-        "cursor_version": "2.3.1", "workspace_roots": [CWD],
-    });
-    let (Some(common), Some(own)) = (payload.as_object_mut(), event.as_object()) else {
-        unreachable!("both are JSON objects");
-    };
-    common.extend(own.clone());
-    payload
-}
-
-fn cursor_tool(tool: &str, input: &Value) -> Value {
-    cursor(&json!({
-        "hook_event_name": "preToolUse", "cwd": CWD, "tool_name": tool,
-        "tool_input": input, "tool_use_id": "tu-1",
-    }))
-}
-
-/// OpenMoat's OpenClaw plugin (`tests/fixtures/hosts/openclaw`).
-fn openclaw(tool: &str, params: &Value) -> Value {
-    json!({
-        "hook_event_name": "before_tool_call", "toolName": tool, "params": params,
-        "toolCallId": "call-1", "runId": "run-1", "sessionId": "sess-1",
-        "sessionKey": "agent:main:main", "agentId": "main", "cwd": CWD,
-        "configPath": format!("{HOME}/.openclaw/openclaw.json"), "platform": "darwin",
-    })
-}
-
-/// GitHub Copilot CLI's camelCase `preToolUse`, `toolArgs` as a JSON string
-/// (`tests/fixtures/hosts/copilot-cli`).
-fn copilot(tool: &str, args: &Value) -> Value {
-    json!({
-        "sessionId": "sess-1", "timestamp": 1_792_540_800_000_u64, "cwd": CWD,
-        "toolName": tool, "toolArgs": args.to_string(),
-    })
-}
-
-/// OpenMoat's pi extension (`tests/fixtures/hosts/pi`).
-fn pi(tool: &str, input: &Value) -> Value {
-    json!({
-        "hook_event_name": "tool_call", "toolName": tool, "input": input,
-        "toolCallId": "call-1", "sessionId": "sess-1", "cwd": CWD,
-        "hasUI": true, "platform": "darwin",
-    })
 }
 
 fn repo_root() -> PathBuf {
@@ -456,6 +439,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::OpenClaw, &shell, HookEvent::PreToolUse),
         (Route::CopilotCli, &read, HookEvent::PreToolUse),
         (Route::Pi, &shell, HookEvent::PreToolUse),
+        (Route::GeminiCli, &read, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

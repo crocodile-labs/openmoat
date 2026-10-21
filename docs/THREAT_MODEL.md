@@ -52,14 +52,14 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 | # | Class | Hook | OS layer |
 |---|---|---|---|
 | T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included | No reads of secret paths, network only through a proxy to allowed hosts |
-| T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, and MCP path arguments | Only under `openmoat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
+| T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, Gemini CLI `read_file`/`read_many_files`/`glob`/`grep_search`/`list_directory`, and MCP path arguments | Only under `openmoat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
 | T5 | Supply-chain execution (`curl … \| sh`, unknown installs, typo-squats, made-up package names, fresh malicious versions) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; an install of a name one typo or a common trick away from a popular package asks (`package-near-miss`, ADR-030), other installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries); inside `openmoat run`, npm and uv install no version published in the last 7 days (`sandbox.package_min_release_age_days`) |
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) ask (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `openmoat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and asks under an `ask` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands; a line not read in full or past a classifier limit asks, so padding cannot turn a deny into a defer | The sandbox bounds what any spelling can reach |
 | T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `openmoat mcp accept` (ADR-026) | Opt-in: `openmoat mcp proxy` pins each tool's description and input schema, hides a changed or new tool (every tool of a server it has not seen, ADR-032) until `openmoat mcp accept`, and with `--sandbox` starts the server under `openmoat run` |
-| T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` moved them), hook files, and agent runs of `openmoat allow\\|doctor\\|init\\|policy\\|secret\\|trust\\|uninstall`, `openmoat sandbox sync` and `openmoat audit anchor`, and reads of the audit log, the lock, `hosts.json`, the approvals, the trust records and the MCP pins (the policy stays readable); a policy pack is installed only when its OpenSSH signature verifies against a key a person trusted, and is pinned (ADR-031); the lock denies everything after drift, except drift of only Claude Code's own display toggles and permission lists, which is recorded and reported while the hook keeps deciding every call (§5); Claude Code `ConfigChange` blocks a drifted settings file, and a project settings file that turns hooks off or runs a program (§5); a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `openmoat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); the state read denies hold in Seatbelt (`openmoat run` on macOS) and the host sandboxes that take them; Landlock cannot deny inside a grant, so on Linux `openmoat run` refuses to start where a grant holds the state directory (§5) |
+| T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CURSOR_CONFIG_DIR` or `GEMINI_CLI_HOME` moved them), hook files (Gemini CLI's user and project `settings.json` and its `trustedFolders.json` too), and agent runs of `openmoat allow\\|doctor\\|init\\|policy\\|secret\\|trust\\|uninstall`, `openmoat sandbox sync` and `openmoat audit anchor`, and reads of the audit log, the lock, `hosts.json`, the approvals, the trust records and the MCP pins (the policy stays readable); a policy pack is installed only when its OpenSSH signature verifies against a key a person trusted, and is pinned (ADR-031); the lock denies everything after drift, except drift of only Claude Code's own display toggles and permission lists, or of Gemini CLI's model, theme, sign-in method and display keys, which is recorded and reported while the hook keeps deciding every call (§5); Claude Code `ConfigChange` blocks a drifted settings file, and a project settings file that turns hooks off or runs a program (§5); a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `openmoat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); the state read denies hold in Seatbelt (`openmoat run` on macOS) and the host sandboxes that take them; Landlock cannot deny inside a grant, so on Linux `openmoat run` refuses to start where a grant holds the state directory (§5) |
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/openmoat` or `bin/moat` and to the recorded binary, its other name beside it (`moat` runs the `openmoat` next to it), its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `openmoat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
 | T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts, except a `curl` or `wget` that provably sends nothing, which defers like `WebFetch` (ADR-035); `cloud-metadata` denies metadata and link-local services; `local-net` defers localhost to the agent's own prompt; `openmoat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host defers to the agent's own prompt (ADR-017, ADR-025); after a secret read, network and MCP calls in the same session ask (`session-taint`) | Host sandboxes allow only the policy's hosts; `openmoat run`, and host sandboxes with `sandbox.proxy_port`, go through `openmoat proxy` |
@@ -411,7 +411,9 @@ something OpenMoat claims to stop.
   [`command_runner.rs`][codex-runner], [Cursor hooks][cursor-hooks], the OpenClaw
   [hook reference][openclaw-hooks] (2026.10.5) and OpenMoat's own OpenClaw plugin
   (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`), Continue
-  [`hookRunner.ts`][cn-runner]); *unverified* marks what the source does not state,
+  [`hookRunner.ts`][cn-runner], and for Gemini CLI its [hooks reference][gemini-hooks]
+  and `packages/core/src/hooks/hookRunner.ts` of `@google/gemini-cli` 0.65.0, checked
+  2026-10-20); *unverified* marks what the source does not state,
   and the OpenClaw column is *unverified* against a running Gateway. OpenClaw has no
   command hook: its "hook" is OpenMoat's plugin, which runs `openmoat guard` and turns the
   outcome into OpenClaw's answer. The rows marked "ours" are tested end to end with
@@ -419,18 +421,18 @@ something OpenMoat claims to stop.
   each host's `HostSpec` (`on_hook_failure`, and `gaps` for its `known gaps` line, in
   `crates/openmoat-hosts/src/host/<id>.rs`) repeats the host rows.
 
-  | Case | Claude Code | Codex | Cursor | OpenClaw | Continue CLI |
-  |---|---|---|---|---|---|
-  | Hook binary missing or cannot start | 2.1.295 and later: blocks, `openmoat init` sets `onFailure: "block"` on `PreToolUse`; before: runs the call | runs the call | blocks: `openmoat init` sets `failClosed` (*unverified* for a missing binary; Cursor runs a shell string, which exits 127) | blocks: the plugin blocks when `openmoat` is missing or cannot start | runs the call |
-  | Hook crashes or exits non-zero, not 2, without output | 2.1.295 and later: blocks (`onFailure`); before: runs the call | runs the call | blocks (`failClosed`) | blocks (the plugin); a plugin handler that throws is blocked by OpenClaw | runs the call |
-  | Hook times out | 2.1.295 and later: blocks (`onFailure`); before: runs the call | runs the call | blocks (`failClosed`) | blocks: the plugin after 45 s without an answer, OpenClaw when the handler outlasts its timeout | runs the call (a killed hook counts as exit 0) |
-  | Timeout: host default / set by `openmoat init` | 600 s / 600 s (`ConfigChange` 60 s) | 600 s / 600 s | not documented (*unverified*) / 600 s | 15 s / 60 s (`plugins.entries.openmoat.hooks.timeouts.before_tool_call`; OpenClaw accepts up to 600 s) | 600 s / 600 s (Claude Code's entry) |
-  | Hook prints no or malformed JSON, exit 0 | runs the call | runs the call | blocks (permission hooks) | no output: no decision (a `defer`), OpenClaw's own checks decide; malformed: blocks (the plugin) | runs the call |
-  | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks (the plugin; with or without a readable deny) | blocks |
-  | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
-  | Ours: tool OpenMoat does not know | defer (no output: Claude Code's own prompt and rules decide), rule `ungoverned`, recorded | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | every tool reaches the plugin; one OpenMoat does not know is `tool.unknown`, which defers | as Claude Code |
-  | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same | same |
-  | Ours: hook missing, out of date or naming a binary that does not exist | `openmoat status` and `openmoat doctor`: `not protected` | same | same | same (the plugin file and its `openclaw.json` entries) | not applicable: `cn` fires no hooks (below) |
+  | Case | Claude Code | Codex | Cursor | OpenClaw | Gemini CLI | Continue CLI |
+  |---|---|---|---|---|---|---|
+  | Hook binary missing or cannot start | 2.1.295 and later: blocks, `openmoat init` sets `onFailure: "block"` on `PreToolUse`; before: runs the call | runs the call | blocks: `openmoat init` sets `failClosed` (*unverified* for a missing binary; Cursor runs a shell string, which exits 127) | blocks: the plugin blocks when `openmoat` is missing or cannot start | blocks: bash exits 127 with a message; on Windows the entry exits 2 when PowerShell cannot run `openmoat` (*unverified*) | runs the call |
+  | Hook crashes or exits non-zero, not 2, without output | 2.1.295 and later: blocks (`onFailure`); before: runs the call | runs the call | blocks (`failClosed`) | blocks (the plugin); a plugin handler that throws is blocked by OpenClaw | runs the call; with output, any exit but 0 and 1 blocks, and a killed hook counts as exit 0 | runs the call |
+  | Hook times out | 2.1.295 and later: blocks (`onFailure`); before: runs the call | runs the call | blocks (`failClosed`) | blocks: the plugin after 45 s without an answer, OpenClaw when the handler outlasts its timeout | runs the call: Gemini CLI has no fail-closed setting | runs the call (a killed hook counts as exit 0) |
+  | Timeout: host default / set by `openmoat init` | 600 s / 600 s (`ConfigChange` 60 s) | 600 s / 600 s | not documented (*unverified*) / 600 s | 15 s / 60 s (`plugins.entries.openmoat.hooks.timeouts.before_tool_call`; OpenClaw accepts up to 600 s) | 60 s / 600 s (in milliseconds in `settings.json`) | 600 s / 600 s (Claude Code's entry) |
+  | Hook prints no or malformed JSON, exit 0 | runs the call | runs the call | blocks (permission hooks) | no output: no decision (a `defer`), OpenClaw's own checks decide; malformed: blocks (the plugin) | no output: no decision (a `defer`), Gemini CLI's own policy decides; malformed: runs the call, the text shown as a message | runs the call |
+  | Exit 2 | blocks | blocks when stderr is not empty | blocks | blocks (the plugin; with or without a readable deny) | blocks when it prints something (stdout, else stderr, is the reason); silent, runs the call | blocks |
+  | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
+  | Ours: tool OpenMoat does not know | defer (no output: Claude Code's own prompt and rules decide), rule `ungoverned`, recorded | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown`, which asks (sent as a deny) | every tool reaches the plugin; one OpenMoat does not know is `tool.unknown`, which defers | every tool reaches the hook (matcher `*`); one OpenMoat does not know is `tool.unknown`, which defers; its to-do, tracker, plan, skill and subagent tools are `ungoverned` | as Claude Code |
+  | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same | same | same |
+  | Ours: hook missing, out of date or naming a binary that does not exist | `openmoat status` and `openmoat doctor`: `not protected` | same | same | same (the plugin file and its `openclaw.json` entries) | same | not applicable: `cn` fires no hooks (below) |
 
   What `openmoat status` and `openmoat doctor` print as each host's `known gaps`, and what the
   host does when its hook fails, generated from its `HostSpec` (`gaps`,
@@ -444,6 +446,7 @@ something OpenMoat claims to stop.
   - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; a parameter rewrite by another plugin and OpenClaw's process input are not checked; calls run unchecked if the Gateway does not load the plugin; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin.
   - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off; MCP servers are not pinned and MCP tools are told apart from built-in ones only by name; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
   - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
+  - **Gemini CLI.** Known gaps: no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings hooks at all and asks the person before every tool instead; a project's `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments, and is not checked; extension hooks run beside OpenMoat's; a hook that times out lets the call run. When the hook fails: runs the call when the hook times out, is killed by a signal or exits 1 (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits with any other code and prints something, as a missing `openmoat` does.
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
 
@@ -461,6 +464,29 @@ something OpenMoat claims to stop.
   call the plugin sends, not when the Gateway reloads. Files an `$include` in
   `openclaw.json` merges in are not pinned. OpenClaw versions before 2026.5.6 skip the
   hook for skill commands ([CVE-2026-53845][cve-2026-53845], GHSA-68xw-r643-9p5w).
+- **Gemini CLI: what its hook leaves open.** Gemini CLI has no fail-closed setting, so
+  a `BeforeTool` hook that times out or is killed lets the call run; `guard` denies on
+  its own after 30 s, well inside the 600 s `openmoat init` sets. Gemini CLI runs no
+  settings hooks at all in a folder it does not trust (OpenMoat's included), and asks
+  the person before every tool there instead. A project's `.gemini/settings.json` is
+  merged over the user file in a trusted folder: it can set `hooksConfig.enabled: false`
+  or name OpenMoat's entry in `hooksConfig.disabled`, and its own `BeforeTool` hooks
+  run beside OpenMoat's and may rewrite a call's arguments (`hookSpecificOutput.tool_input`)
+  after OpenMoat decided them; extension hooks can do the same. OpenMoat does not
+  check that file (`kernel-self` denies the agent writing it, and the user file and the
+  trust list, but a cloned repository can ship one). `allow` skips none of Gemini CLI's
+  own confirmations; an `ask` makes Gemini CLI confirm even where its policy or YOLO
+  mode would not. Its to-do, tracker, plan-mode and skill tools are not checked, nor a
+  subagent invocation (the subagent's own tool calls are). `web_fetch` names its URLs
+  inside a prompt; one is checked as a `fetch`, and a prompt with several is refused.
+  `read_mcp_resource` names no server, so a URI other than `file:` is `tool.unknown`.
+  The lock pins `~/.gemini/settings.json`, which Gemini CLI writes itself when the
+  person picks a model, a theme, a sign-in method or a display setting; a change of
+  only those keys is reported while calls are still decided, and any other change
+  denies every call (`kernel-integrity`) until `openmoat doctor --accept` (below,
+  "Some agent settings may drift"). There is no OS sandbox
+  from OpenMoat for Gemini CLI; its own `--sandbox` (Seatbelt or a container) is the
+  person's choice, or run it under `openmoat run`.
 - **OpenClaw tools OpenMoat does not check.** Another plugin's `before_tool_call` can
   rewrite a call's parameters after OpenMoat saw them (OpenClaw gives each handler the
   original call; only an approval freezes them), and plugins run inside the Gateway
@@ -540,6 +566,7 @@ something OpenMoat claims to stop.
   [codex-runner]: https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs
   [cursor-hooks]: https://cursor.com/docs/agent/hooks
   [openclaw-hooks]: https://docs.openclaw.ai/plugins/hooks/reference
+  [gemini-hooks]: https://geminicli.com/docs/hooks/reference/
   [cve-2026-53845]: https://nvd.nist.gov/vuln/detail/CVE-2026-53845
   [cn-runner]: https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts
 - **GitHub Copilot CLI.** From its [hooks reference][copilot-hooks] and the
@@ -664,7 +691,7 @@ something OpenMoat claims to stop.
   commands in the same process tree as the person's own terminals there, so it is not told
   apart. The `kernel-self` rules and the lock are what stop an agent from
   re-pinning or granting itself anything.
-- **Some Claude Code settings may drift without stopping the guard.** Claude Code's
+- **Some agent settings may drift without stopping the guard.** Claude Code's
   `settings.json` is pinned, but a change limited to an allowlist of its keys
   (`crates/openmoat-cli/src/integrity/relaxed.rs`) does not deny every call: display
   and reply toggles, the model Claude Code writes when the person switches models
@@ -688,6 +715,22 @@ something OpenMoat claims to stop.
   removed `permissions.deny` rule OpenMoat wrote, an unknown key, a symlink or a file
   that no longer parses still denies every call. The kernel-self rules deny the agent
   writes to the settings file in any case.
+  Gemini CLI's `settings.json` has a list of its own in its `HostSpec`
+  (`crates/openmoat-hosts/src/host/gemini_cli/settings.rs`, [POLICY.md](POLICY.md#8-the-policy-lock)):
+  `model.name`, `security.auth.selectedType`, `ui.theme`, `general.vimMode`,
+  `ide.hasSeenNudge` and display-only `ui.*` keys, each only as a string or a boolean.
+  The lock pins the digest of that file with those keys taken out, so a change
+  anywhere else is drift that denies, a listed key changed next to it included. A new
+  model changes which model answers, not where its requests go (the sign-in method's
+  endpoint, the environment) or what runs; a new sign-in method selects one of Gemini
+  CLI's own, never a credential, and `security.auth.enforcedType` and `useExternal`
+  stay pinned; a theme that is a path makes Gemini CLI read a JSON colour file in the
+  home directory, which runs nothing. `hooks`, `hooksConfig`, `tools` (its sandbox,
+  allowed, excluded and core tools, discovery and call commands), `mcpServers`, `mcp`,
+  `extensions`, `security.folderTrust`, `context`, `advanced`, a key that names or
+  starts a program, an unknown key, comments and a file that no longer parses still
+  deny every call (attack tests: `crates/openmoat-cli/src/integrity/spec_keys/tests.rs`,
+  `crates/openmoat-cli/tests/e2e/gemini_cli.rs`).
 - **Repository rules are hook-only, and a repository can block itself.** A
   repository policy is merged into the hook decision only. Host sandboxes and
   `openmoat proxy` are generated per user from the user policy, so a repository deny is

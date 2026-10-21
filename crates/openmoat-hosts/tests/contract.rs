@@ -10,7 +10,7 @@ use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, Host, HostError, reason_line};
 use serde_json::json;
 
 /// Every host, the installable ones and those that run another's hook.
-const HOSTS: [Host; 7] = [
+const HOSTS: [Host; 8] = [
     Host::ClaudeCode,
     Host::Codex,
     Host::Cursor,
@@ -18,6 +18,7 @@ const HOSTS: [Host; 7] = [
     Host::OpenClaw,
     Host::CopilotCli,
     Host::Pi,
+    Host::GeminiCli,
 ];
 
 fn calls() -> Vec<Call> {
@@ -59,21 +60,86 @@ fn every_spec_is_complete() {
     }
 }
 
+/// Keys that run a program, change a hook, the sandbox, tools, MCP servers,
+/// extensions, folder trust, what a session reads, the environment, updates
+/// or telemetry: never a relaxed key, nor below one.
+const NEVER_RELAXED: &[&str] = &[
+    "hooks",
+    "hooksConfig",
+    "tools",
+    "mcp",
+    "mcpServers",
+    "extensions",
+    "context",
+    "advanced",
+    "env",
+    "telemetry",
+    "privacy",
+    "security.folderTrust",
+    "security.toolSandboxing",
+    "security.environmentVariableRedaction",
+    "security.auth.enforcedType",
+    "security.auth.useExternal",
+    "general.preferredEditor",
+    "general.enableAutoUpdate",
+    "ide.enabled",
+    "ui.escapePastedAtSymbols",
+    "ui.renderProcess",
+];
+
+/// A relaxed key is a dotted path of plain names, listed once, under none of
+/// [`NEVER_RELAXED`], and never names a command; the host's directory keeps
+/// its name wherever the host's variable moves it, so the CLI finds the file
+/// by its `<dir_name>/<config_file>` ending.
+#[test]
+fn relaxed_keys_change_nothing_that_runs_or_decides() {
+    for host in Host::ALL {
+        let install = host.spec().install.as_ref().unwrap();
+        let keys = install.relaxed_keys;
+        if keys.is_empty() {
+            continue;
+        }
+        assert!(install.variable_names_home(), "{host:?}");
+        for (i, key) in keys.iter().enumerate() {
+            let path = key.path;
+            assert!(
+                path.split('.')
+                    .all(|n| !n.is_empty() && n.chars().all(char::is_alphanumeric)),
+                "{path}"
+            );
+            assert!(keys[..i].iter().all(|k| k.path != path), "{path} twice");
+            for never in NEVER_RELAXED {
+                assert!(
+                    path != *never && !path.starts_with(&format!("{never}.")),
+                    "{host:?}: {path} is under {never}"
+                );
+            }
+            let lower = path.to_ascii_lowercase();
+            for word in [
+                "command", "editor", "sandbox", "hook", "mcp", "tool", "env", "path",
+            ] {
+                assert!(!lower.contains(word), "{host:?}: {path} names `{word}`");
+            }
+        }
+    }
+}
+
 /// Every hook a host installs waits longer than `moat guard` may take, so the
 /// host receives the guard's own deny rather than a timeout; and a failed hook
 /// blocks the call wherever the host has a key for it: Claude Code's
 /// `onFailure` on its tool hook, Cursor's `failClosed` (set on every entry of
-/// its layout), OpenClaw's plugin, pi's extension. Codex has no such key, and
-/// GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
+/// its layout), OpenClaw's plugin, pi's extension. Codex and Gemini CLI have no
+/// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, HookFormat, &[&str]); 6] = [
+    let expected: [(Host, HookFormat, &[&str]); 7] = [
         (Host::ClaudeCode, HookFormat::Nested, &["PreToolUse"]),
         (Host::Codex, HookFormat::Nested, &[]),
         (Host::Cursor, HookFormat::Cursor, &[]),
         (Host::OpenClaw, HookFormat::OpenClaw, &[]),
         (Host::CopilotCli, HookFormat::Copilot, &[]),
         (Host::Pi, HookFormat::Pi, &[]),
+        (Host::GeminiCli, HookFormat::Gemini, &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, format, blocking) in expected {
@@ -175,6 +241,7 @@ fn every_verdict_reaches_the_host_as_it_must() {
     }
     // Claude Code 6 calls, Codex 4 (no read or fetch tool), Cursor 5 (no
     // fetch), OpenClaw 6, GitHub Copilot CLI 5 (its payload names no MCP
-    // server), pi 5 (no fetch)
-    assert_eq!(checked, 31);
+    // server), pi 5 (no fetch), Gemini CLI 6 (5 on Windows, whose PowerShell
+    // commands OpenMoat leaves to Gemini CLI)
+    assert_eq!(checked, 37 - usize::from(cfg!(windows)));
 }

@@ -106,12 +106,19 @@ fn located_like_openclaw(host: Host) -> bool {
 }
 
 /// `host`'s configuration directory as named by this shell's environment,
-/// when its variable is set (for OpenClaw, any of `openclaw::location::VARIABLES`).
+/// when its variable is set (for OpenClaw, any of `openclaw::location::VARIABLES`;
+/// for a variable that names a home, the directory's name inside it).
 pub fn env_config_dir(host: Host) -> Result<Option<PathBuf>> {
     if located_like_openclaw(host) {
         return Ok(openclaw::Location::from_env()?.map(|l| l.state_dir));
     }
-    Ok(env_dir(dir_variable(host)?.0))
+    let install = install_spec(host)?;
+    let dir = env_dir(install.dir_variable);
+    Ok(if install.variable_names_home() {
+        dir.map(|home| home.join(install.dir_name))
+    } else {
+        dir
+    })
 }
 
 impl HostConfig {

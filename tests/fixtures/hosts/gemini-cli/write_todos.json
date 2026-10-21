@@ -1,0 +1,11 @@
+{
+  "session_id": "8f0d5c1e-3b2a-4c6d-9e7f-0a1b2c3d4e5f",
+  "transcript_path": "",
+  "cwd": "/p",
+  "hook_event_name": "BeforeTool",
+  "timestamp": "2026-10-20T10:00:12.000Z",
+  "tool_name": "write_todos",
+  "tool_input": {
+    "todos": [{ "description": "Add the parser", "status": "in_progress" }]
+  }
+}

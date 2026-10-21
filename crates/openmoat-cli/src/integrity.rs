@@ -5,8 +5,9 @@
 //! changed or disappeared, so an agent that edits `~/.moat/policy.yaml` or removes
 //! a hook gets a `deny`, not a quieter kernel. Only a human can re-pin
 //! (`moat init`, or `moat doctor --accept` from a terminal). Drift of only the
-//! Claude Code settings `relaxed.rs` lists is reported the same way, but the
-//! guard keeps deciding through it.
+//! Claude Code settings `relaxed.rs` lists, or of only the keys a host's spec
+//! lists as relaxed (`spec_keys.rs`), is reported the same way, but the guard
+//! keeps deciding through it.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -24,6 +25,7 @@ mod digest;
 mod kept;
 mod keys;
 mod relaxed;
+mod spec_keys;
 
 pub use digest::sha256_hex;
 use digest::{digest, digests, is_claude_settings};
@@ -55,6 +57,11 @@ pub struct Lock {
     /// so the guard can tell a changed toggle from a changed hook (`relaxed.rs`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub permission_keys: BTreeMap<String, BTreeMap<String, String>>,
+    /// A hook file whose host lists relaxed keys (Gemini CLI's `settings.json`)
+    /// → SHA-256 of the file without them, so the guard can tell a new model
+    /// or theme from any other change (`spec_keys.rs`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub relaxed_rest: BTreeMap<String, String>,
     /// MCP server definitions a person accepted (`mcp/pins.rs`). `None` in a
     /// lock from before MCP pinning; their drift holds back only that server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -257,11 +264,13 @@ pub fn unpin(home: &Home, paths: &[PathBuf], rewritten: &[PathBuf]) -> Result<()
         lock.entries.remove(&path);
         lock.keys.remove(&path);
         lock.permission_keys.remove(&path);
+        lock.relaxed_rest.remove(&path);
     }
     let fresh = Lock::pin(Path::new(&lock.binary), rewritten)?;
     lock.entries.extend(fresh.entries);
     lock.keys.extend(fresh.keys);
     lock.permission_keys.extend(fresh.permission_keys);
+    lock.relaxed_rest.extend(fresh.relaxed_rest);
     lock.save(&lock_path)
 }
 
@@ -301,8 +310,12 @@ impl Lock {
     /// Pin the current contents of `paths`. Files that do not exist are skipped;
     /// callers pass only files they just wrote or verified.
     pub fn pin(binary: &Path, paths: &[PathBuf]) -> Result<Self> {
-        let (mut entries, mut keys, mut permission_keys) =
-            (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
+        let (mut entries, mut keys, mut permission_keys, mut relaxed_rest) = (
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+        );
         for path in paths {
             if path.is_file() {
                 entries.insert(key(path), digest(path, is_claude_settings(path))?);
@@ -311,6 +324,9 @@ impl Lock {
                 }
                 if let Some(digests) = relaxed::permission_digests(path) {
                     permission_keys.insert(key(path), digests);
+                }
+                if let Some(rest) = spec_keys::pinned_rest(path) {
+                    relaxed_rest.insert(key(path), rest);
                 }
             }
         }
@@ -322,6 +338,7 @@ impl Lock {
             codex_profiles: BTreeMap::new(),
             keys,
             permission_keys,
+            relaxed_rest,
             mcp_servers: None,
         })
     }

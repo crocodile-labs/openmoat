@@ -95,9 +95,10 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "Edit(./.copilot/hooks)",
             "Edit(./.copilot/settings.json)",
             "Edit(./.copilot/config.json)",
+            "Edit(./.gemini/settings.json)",
         ],
         "another agent's hook file below a directory the policy denies writing \
-         (`.cursor`, `.codex`, `.copilot`) is denied by path (#434); Claude Code keeps its own \
+         (`.cursor`, `.codex`, `.copilot`, `.gemini`) is denied by path (#434); Claude Code keeps its own \
          `.claude` settings read-only itself"
     );
     assert_eq!(linux.sandbox, mac.sandbox, "the sandbox block is the same");

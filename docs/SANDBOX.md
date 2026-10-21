@@ -52,9 +52,10 @@ the agent's own access.
   missing component read-only for the command (an empty `.envrc` or `.moat` shows up
   there meanwhile), and `Edit(./bin/moat)` would do that to a missing `bin`. The
   exception is a file below a directory the policy denies writing itself: `openmoat init`
-  also adds `Edit(./.cursor/hooks.json)`, `Edit(./.cursor/sandbox.json)` and
-  `Edit(./.codex/hooks.json)`, so sandboxed commands cannot plant another agent's
-  hooks there. A missing `.cursor` or `.codex` is read-only for the command, which
+  also adds `Edit(./.cursor/hooks.json)`, `Edit(./.cursor/sandbox.json)`,
+  `Edit(./.codex/hooks.json)` and `Edit(./.gemini/settings.json)`, so sandboxed commands
+  cannot plant another agent's hooks there. A missing `.cursor`, `.codex` or `.gemini`
+  is read-only for the command, which
   the policy denies creating anyway. Claude Code itself keeps the working directory's
   `.git/hooks`, `.git/config` and `.claude` settings read-only. Everything else the
   policy denies by a `**/` glob (a `.env` in a subdirectory, `.env.local`,

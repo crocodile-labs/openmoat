@@ -65,6 +65,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks/openmoat.json",
         hooks: HOOKS,
         hook_format: HookFormat::Copilot,
+        relaxed_keys: &[],
     }),
     mcp: None,
     sandbox: None,

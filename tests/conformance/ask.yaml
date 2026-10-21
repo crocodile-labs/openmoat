@@ -1481,6 +1481,11 @@
   threat: T9
   action: { fs_write: "~/.pi/agent/mcp.json" }
   expect: { verdict: ask, rules: [runs-later] }
+# Gemini CLI starts an extension's hooks and MCP servers in every session
+- id: ask-write-gemini-extension
+  threat: T9
+  action: { fs_write: "~/.gemini/extensions/helper/gemini-extension.json" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A line the lexer cannot read in full asks, whatever the catch-all: the atoms of
 # the part not read are missing, so a deny there must not become a defer
 - id: ask-deny-next-to-an-ansi-c-nul

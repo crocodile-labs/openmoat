@@ -1,0 +1,13 @@
+{
+  "session_id": "8f0d5c1e-3b2a-4c6d-9e7f-0a1b2c3d4e5f",
+  "transcript_path": "",
+  "cwd": "/p",
+  "hook_event_name": "BeforeTool",
+  "timestamp": "2026-10-20T10:00:06.000Z",
+  "tool_name": "grep_search",
+  "tool_input": {
+    "pattern": "aws_secret_access_key",
+    "dir_path": "/home/dev/.aws",
+    "include_pattern": "*"
+  }
+}
