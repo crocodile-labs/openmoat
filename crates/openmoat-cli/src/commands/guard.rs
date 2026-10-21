@@ -230,8 +230,7 @@ struct Evaluated {
     /// The session's fold to store, written with the record so the call
     /// opens one writable handle.
     cache: Option<taint::CacheWrite>,
-    /// The settings drift the lock let the call be decided through
-    /// ([`integrity::check`]).
+    /// The settings drift the lock let the call be decided through ([`integrity::check`]).
     drifted: Vec<Drift>,
     /// The file provenance rows the call adds when it runs (ADR-029).
     provenance: taint::provenance::Seen,
@@ -370,7 +369,8 @@ fn evaluate(
     )?;
     // Last: a push is checked for what it would publish (push.rs); only tightens.
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
-    let decision = push::check(&compiled.pushes(action), &out.known, tainted, decision);
+    let pushes = compiled.pushes(action);
+    let decision = push::check(&pushes, &snapshot, &out.known, tainted, decision);
     Ok((Some(request), decision))
 }
 

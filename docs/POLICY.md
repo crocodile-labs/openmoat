@@ -490,11 +490,14 @@ first. Differences from the hook:
 - Loopback, link-local, cloud metadata (`metadata.google.internal`, `metadata.goog`,
   `100.100.100.200`, `fd00:ec2::254`) and non-unicast destinations are refused whatever the
   policy allows. This applies to the name as written and to every address it resolves to.
-  `local-net` and an allow for `localhost` do not reach this machine through the proxy.
+  `local-net` and an allow for `localhost` do not reach this machine through the proxy,
+  and neither does an allow naming one of its other addresses (its LAN or public IPv4 or
+  IPv6 address), which is refused once the proxy has connected and seen both ends
+  share it.
 - Private and shared addresses are refused unless the policy names them: `10.0.0.0/8`,
   `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10` (CGNAT), `198.18.0.0/15`
   (benchmarking) and `fc00::/7` (unique local), including IPv4-mapped,
-  IPv4-compatible and NAT64 spellings, and the IPv4 addresses a 6to4 (`2002::/16`) or
+  IPv4-compatible, IPv4-translated (`::ffff:0:a.b.c.d`) and NAT64 spellings, and the IPv4 addresses a 6to4 (`2002::/16`) or
   Teredo (`2001::/32`: client and server) address leads to. This is checked on the name as written and on
   every address it resolves to. One such address refuses the whole name, so a wildcard
   allow whose name resolves into the LAN (DNS rebinding) does not reach it.

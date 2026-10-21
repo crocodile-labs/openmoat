@@ -247,6 +247,15 @@ impl Session {
         }
         Ok(session)
     }
+
+    /// The empty file and directory no one may open, which hidden paths are
+    /// covered with ([`bwrap::args`]).
+    pub(super) fn blanks(&self) -> (String, String) {
+        (
+            path_string(&self.dir.join("file")),
+            path_string(&self.dir.join("dir")),
+        )
+    }
 }
 
 impl Drop for Session {

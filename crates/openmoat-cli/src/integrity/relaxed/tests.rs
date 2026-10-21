@@ -392,3 +392,24 @@ fn a_settings_file_swapped_for_a_link_denies() {
     std::os::unix::fs::symlink(&other, &setup.settings).unwrap();
     assert_denied(&check(&setup.home).unwrap());
 }
+
+/// Claude Code reads a repeated key as its last value (`JSON.parse`), as the
+/// check does: a later `hooks` that changes them denies next to a relaxed key,
+/// and a byte-order mark or a comment, which the check does not read, denies.
+#[test]
+fn repeated_keys_a_byte_order_mark_and_comments_are_read_as_the_agent_reads_them() {
+    let setup = installed(&baseline(), true);
+    let pinned = baseline().to_string();
+    let body = pinned.strip_prefix('{').unwrap();
+    let repeated = format!(r#"{{"language":"french",{body}"#);
+    let hooks_last = format!("{},\"hooks\":{{}}}}", &repeated[..repeated.len() - 1]);
+    fs::write(&setup.settings, &hooks_last).unwrap();
+    assert_denied(&check(&setup.home).unwrap());
+    let hooks_first = format!(r#"{{"hooks":{{}},"language":"french",{body}"#);
+    fs::write(&setup.settings, &hooks_first).unwrap();
+    assert_relaxed(&check(&setup.home).unwrap());
+    for text in [format!("\u{feff}{repeated}"), format!("// x\n{repeated}")] {
+        fs::write(&setup.settings, text).unwrap();
+        assert_denied(&check(&setup.home).unwrap());
+    }
+}

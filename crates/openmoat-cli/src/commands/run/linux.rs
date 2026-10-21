@@ -25,7 +25,7 @@ use seccompiler::{
 
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::SOCKET_ARGS;
-use crate::sandbox::{Grants, Report, exposure, landlock_rules, session_tmpdir};
+use crate::sandbox::{Grants, Report, exposure, landlock_rules, netns_masks, session_tmpdir};
 
 /// `moat run --isolate`: bubblewrap around the same rules.
 mod isolate;
@@ -104,17 +104,21 @@ pub fn confine(
         // No port: Landlock allows no TCP connection at all.
         return Ok(agent);
     };
+    // What the deny rules name inside the read roots and `--write` paths,
+    // which Landlock grants whole.
+    let masks = netns_masks(policy, ctx, &generated.rules)?;
     match netns::network() {
         netns::Network::Namespace(bwrap) => netns::namespaced(
             &bwrap,
             &generated.rules,
+            &masks,
             agent.report,
             program,
             &ctx.cwd,
             port,
         ),
         netns::Network::PortOnly(why) => {
-            agent.warning = Some(netns::port_only_notice(port, &why));
+            agent.warning = Some(netns::port_only_notice(port, &why, &masks));
             Ok(agent)
         }
     }

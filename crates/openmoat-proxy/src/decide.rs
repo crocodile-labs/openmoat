@@ -38,6 +38,8 @@ const NAT64: [u16; 6] = [0x64, 0xff9b, 0, 0, 0, 0];
 /// RFC 8215 local-use NAT64 prefix `64:ff9b:1::/48`. The operator picks how the
 /// IPv4 address is embedded inside it, so its addresses count as local network.
 const NAT64_LOCAL: [u16; 3] = [0x64, 0xff9b, 1];
+/// RFC 2765 IPv4-translated prefix: `::ffff:0:a.b.c.d` reaches `a.b.c.d`.
+const SIIT: [u16; 6] = [0, 0, 0, 0, 0xffff, 0];
 /// Ranges on the local network (or the carrier's), each with its description.
 const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
     (
@@ -167,6 +169,11 @@ pub enum Forbidden {
     LinkLocal,
     /// A cloud metadata address outside the link-local ranges.
     Metadata,
+    /// An address of this machine other than loopback (its LAN or public
+    /// address), where services listening on every interface answer. Found
+    /// only once connected ([`connect`](crate::connect)): the connection's
+    /// own end has the same address.
+    ThisMachine,
     /// Unspecified, broadcast, multicast or `0.0.0.0/8`: never a server.
     NotUnicast,
     /// Private, CGNAT, benchmarking or unique-local (`fc00::/7`): reachable
@@ -183,6 +190,7 @@ impl Forbidden {
             Self::Loopback => "a loopback address",
             Self::LinkLocal => "a link-local address",
             Self::Metadata => "a cloud metadata address",
+            Self::ThisMachine => "an address of this machine",
             Self::NotUnicast => "not a unicast address",
             Self::Private(range) => range,
         }
@@ -235,11 +243,12 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
     }
 }
 
-/// The IPv4 address a well-known NAT64 (`64:ff9b::/96`) or deprecated
-/// IPv4-compatible (`::/96`) address reaches.
+/// The IPv4 address a well-known NAT64 (`64:ff9b::/96`), deprecated
+/// IPv4-compatible (`::/96`) or IPv4-translated (`::ffff:0:0/96`, which a
+/// stateless translator delivers, RFC 6145) address reaches.
 fn carried_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     let seg = ip.segments();
-    (seg[..6] == NAT64 || seg[..6] == [0; 6]).then(|| {
+    (seg[..6] == NAT64 || seg[..6] == [0; 6] || seg[..6] == SIIT).then(|| {
         let [a, b] = seg[6].to_be_bytes();
         let [c, d] = seg[7].to_be_bytes();
         Ipv4Addr::new(a, b, c, d)
@@ -321,7 +330,7 @@ pub fn named(addresses: &CompiledPolicy<'_>, ip: IpAddr) -> bool {
 /// The deny rules of `addresses` (compiled from [`address_policy`]) that
 /// match `ip`, if any: a deny naming an address holds for every name that
 /// resolves to it. Matched in canonical text form, and for a NAT64,
-/// IPv4-compatible, 6to4 or Teredo address also as the IPv4 addresses it
+/// IPv4-compatible, IPv4-translated, 6to4 or Teredo address also as the IPv4 addresses it
 /// reaches. Allow rules never widen anything here; an address no deny rule
 /// matches gives `None`.
 #[must_use]

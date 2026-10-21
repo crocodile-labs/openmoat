@@ -233,6 +233,9 @@ impl Proxy<'_> {
         // The body keeps being watched for brokered secrets as it goes by.
         let mut inspect = |chunk: &[u8]| {
             let Ok(n) = body.feed(chunk) else {
+                // The allow row is already written; this one says it was cut.
+                let decision = Decision::single(Verdict::Deny, RULE_REQUEST, MALFORMED_CHUNKS);
+                self.record(turn, Some(&request), &decision);
                 return Forward::Stop;
             };
             if let Some(leak) = watch.next(&chunk[..n]) {

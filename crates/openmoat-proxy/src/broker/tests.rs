@@ -128,6 +128,25 @@ fn without_plain_http_the_owner_head_is_left_alone() {
 }
 
 #[test]
+fn a_request_the_server_echoes_back_gets_no_value() {
+    // A TRACE answer (and IIS's TRACK) is the request as the server got it,
+    // so a value put in would come back to the agent.
+    let b = broker_with(VALUE, true).unwrap();
+    for method in ["TRACE", "TRACK", "trace"] {
+        let head = format!(
+            "{method} / HTTP/1.1\r\nHost: api.github.com\r\n\
+             Authorization: moat-secret:gh:placeholder\r\n\r\n"
+        );
+        assert!(
+            b.inject("api.github.com", head.as_bytes()).is_none(),
+            "{method}"
+        );
+    }
+    let head = b"TRACEX / HTTP/1.1\r\nHost: api.github.com\r\n\r\n";
+    assert!(b.inject("api.github.com", head).is_some());
+}
+
+#[test]
 fn a_secret_header_without_the_placeholder_is_replaced_by_the_secret() {
     let b = broker_with(VALUE, true).unwrap();
     let head = b"GET / HTTP/1.1\r\nAuthorization: Bearer chosen-by-client\r\n\

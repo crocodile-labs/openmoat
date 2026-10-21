@@ -175,6 +175,29 @@ fn transfer_encoding_in_an_http_1_0_request_is_malformed() {
 }
 
 #[test]
+fn framing_another_server_reads_differently_is_refused() {
+    for raw in [
+        // past 2^31 - 1, where a server holding the length in a signed 32-bit
+        // integer reads another number, as for chunk sizes (body.rs)
+        "POST http://a.com/ HTTP/1.1\r\nContent-Length: 2147483648\r\n\r\n",
+        "POST http://a.com/ HTTP/1.1\r\nContent-Length: 4294967306\r\n\r\n",
+        // a framing header spelled with `_`, which CGI-style servers read as `-`
+        "POST http://a.com/ HTTP/1.1\r\nContent-Length: 5\r\nTransfer_Encoding: chunked\r\n\r\n",
+        "POST http://a.com/ HTTP/1.1\r\ntransfer_encoding: chunked\r\n\r\n",
+        "POST http://a.com/ HTTP/1.1\r\nContent_Length: 5\r\n\r\n",
+        // a port is digits only (RFC 3986 §3.2.3); `u16::from_str` takes a `+`
+        "CONNECT a.com:+443 HTTP/1.1\r\n\r\n",
+        "GET http://a.com:+80/ HTTP/1.1\r\n\r\n",
+        "GET http://a.com/ HTTP/1.1\r\nHost: a.com:+80\r\n\r\n",
+    ] {
+        assert!(parse(raw.as_bytes()).is_err(), "{raw:?}");
+    }
+    ok("POST http://a.com/ HTTP/1.1\r\nContent-Length: 2147483647\r\n\r\n");
+    ok("GET http://a.com/ HTTP/1.1\r\nX_Other: 1\r\nHost: a.com:80\r\n\r\n");
+    assert_eq!(ok("CONNECT a.com:0443 HTTP/1.1\r\n\r\n").port(), 443);
+}
+
+#[test]
 fn well_formed_content_length_with_surrounding_whitespace_is_accepted() {
     // RFC 9112 §5.5 lets a receiver trim OWS around a header value; a plain
     // decimal integer is still a legitimate single length.
