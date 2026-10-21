@@ -163,7 +163,7 @@ pub fn refusal(
 /// commands, since Landlock alone cannot deny inside a granted directory and
 /// only the namespace's mounts can.
 #[cfg(any(target_os = "linux", test))]
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 pub fn kernel_self_refusal(held: &[(String, String)], why: &str) -> Option<String> {
     if held.is_empty() {
         return None;
