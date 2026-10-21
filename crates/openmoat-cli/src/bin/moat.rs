@@ -40,12 +40,14 @@ fn main() -> ExitCode {
 /// directory is the one the executable really lives in: on macOS
 /// `current_exe` is the path it was started by, so a `moat` linked from
 /// another directory (`~/bin/moat → …/bin/moat`) would otherwise look beside
-/// the link. The link's own directory is the fallback.
+/// the link. The link's own directory is the fallback. Windows keeps the path
+/// as started: its resolved form (`\\?\C:\…`) is not the one hooks record.
 fn beside() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let name = format!("openmoat{}", std::env::consts::EXE_SUFFIX);
-    std::fs::canonicalize(&exe)
-        .ok()
+    cfg!(unix)
+        .then(|| std::fs::canonicalize(&exe).ok())
+        .flatten()
         .into_iter()
         .chain([exe])
         .filter_map(|exe| exe.parent().map(|dir| dir.join(&name)))
