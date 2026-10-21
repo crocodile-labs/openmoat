@@ -7,7 +7,8 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    McpToolNames, ProjectSettingsSpec, SandboxFormat, SandboxSpec, SettingsFormat,
+    TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -37,7 +38,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
-    gaps: "web search and hosted tools are not hooked; asks become denies; calls run \
+    gaps: "web search and hosted tools are not hooked; asks become denies; Codex skips a \
+         new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = \
+         false` turns hooks off (`openmoat status` and `doctor` report that); calls run \
          unchecked if the hook binary is missing or crashes",
     install: Some(InstallSpec {
         dir_variable: "CODEX_HOME",
@@ -50,14 +53,26 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("config.toml"),
         user_layout: McpLayout::Toml,
-        project_file: Some((".codex/config.toml", McpLayout::Toml)),
+        project_files: &[(".codex/config.toml", McpLayout::Toml)],
+        tool_names: McpToolNames::Prefixed,
     }),
     sandbox: Some(SandboxSpec {
         format: SandboxFormat::CodexProfile,
         file: "config.toml",
         unavailable_on_windows: None,
     }),
-    project_settings: None,
+    // A trusted project's `.codex/` layer adds its `config.toml` and
+    // `hooks.json`, whose hooks run beside OpenMoat's; `[features] hooks =
+    // false` in it or in the user's `config.toml` turns every hook off
+    // (<https://learn.chatgpt.com/docs/hooks>).
+    project_settings: Some(ProjectSettingsSpec {
+        dir: ".codex",
+        shared: "config.toml",
+        local: Some("hooks.json"),
+        hook_dir: None,
+        format: SettingsFormat::Codex,
+        user_file: "config.toml",
+    }),
 };
 
 /// Codex sends only `PreToolUse`.

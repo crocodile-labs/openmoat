@@ -559,7 +559,7 @@ Seatbelt and Landlock rules of `openmoat run` are generated from it.
 | allow | `registries` | `api.github.com`, `github.com`, npm, crates.io, Go proxy, PyPI (shell clients and `WebFetch` alike) |
 | allow | `safe-mcp` | read-only GitHub and filesystem MCP tools |
 | ask | `git-internals` | writes to a `.git` at any depth (hooks, config, refs, a `gitdir:` file) and `git config`, `git remote`, `git -c`, `git --config-env`, `git --git-dir`, `git --work-tree`, `git --exec-path` in the forms `dev-shell` does not allow: git runs what they name later, outside any sandbox |
-| ask | `runs-later` | writes, at any depth, to what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) and to what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.lefthook.yml`, `.vscode/tasks.json`), including what an agent host starts in its next session (a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and in the home `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`), and OpenClaw's plugin directories (`~/.openclaw/extensions/`, a project's `.openclaw/extensions/`), and GitHub Copilot CLI's repository hook files (`.github/hooks/`) and, in the home, `~/.copilot/mcp-config.json`, `~/.copilot/installed-plugins/` and `~/.copilot/agents/`, and pi's extensions, MCP server lists and a project's pi settings (`~/.pi/agent/extensions/`, `~/.pi/agent/mcp.json`, a project's `.pi/extensions/`, `.pi/mcp.json` and `.pi/settings.json`), and Gemini CLI's extensions (`~/.gemini/extensions/`). OpenClaw's state database (`~/.openclaw/state/`, which holds its exec approvals and the `cron` jobs its Gateway runs; an OpenClaw `cron` add or update is decided as a write of it) is `kernel-self`, so writes to it are denied. `project-fs` and `openmoat allow --dir` leave the project ones out, so the write asks; reading them stays allowed. Hook only: the OS sandboxes list them as writable, since a deny there would make them unreadable or fail installs that write them (`husky`) |
+| ask | `runs-later` | writes, at any depth, to what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) and to what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.lefthook.yml`, `.vscode/tasks.json`), including what an agent host starts in its next session (a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and in the home `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`), and OpenClaw's plugin directories (`~/.openclaw/extensions/`, a project's `.openclaw/extensions/`), and GitHub Copilot CLI's repository hook files and MCP servers (`.github/hooks/`, `.github/mcp.json`) and, in the home, `~/.copilot/mcp-config.json`, `~/.copilot/installed-plugins/` and `~/.copilot/agents/`, and pi's extensions, MCP server lists and a project's pi settings (`~/.pi/agent/extensions/`, `~/.pi/agent/mcp.json`, a project's `.pi/extensions/`, `.pi/mcp.json` and `.pi/settings.json`), and Gemini CLI's extensions (`~/.gemini/extensions/`). OpenClaw's state database (`~/.openclaw/state/`, which holds its exec approvals and the `cron` jobs its Gateway runs; an OpenClaw `cron` add or update is decided as a write of it) is `kernel-self`, so writes to it are denied. `project-fs` and `openmoat allow --dir` leave the project ones out, so the write asks; reading them stays allowed. Hook only: the OS sandboxes list them as writable, since a deny there would make them unreadable or fail installs that write them (`husky`) |
 | ask | `persistence` | writes to `~/Library/LaunchAgents`, `~/.gitconfig`, `~/.config/git`, `~/.config/autostart`, `~/.config/systemd/user`; `crontab` |
 | ask | `home-sweep` | reading the home folder or `~/.config` themselves, which is what a recursive read of them reads (`grep -r . ~`, `tar czf h.tgz ~`, `find ~ -name '*.pem'`) |
 | ask | `secret-names` | a path through a variable whose value is not known (the `@unknown-path` atom, §3.1) whose file name is a key's, a token file's or a `.env` (`cat $X/id_rsa`, `cat "$d"/.env`); other such paths defer |
@@ -691,11 +691,18 @@ does not apply to it.
 
 The lock also pins each MCP server definition the agents read (ADR-026): Claude Code's
 `~/.claude.json` (`mcpServers` and each project's local `mcpServers`) and a project's
-`.mcp.json`, Codex's `config.toml` and a project's `.codex/config.toml`, and Cursor's
-`mcp.json` and a project's `.cursor/mcp.json`. Each entry is pinned by itself, by the
-SHA-256 of its canonical JSON, not by its file, so the rest of `~/.claude.json` may change
-freely. A definition that differs from its pin, or one added since, does not deny every
-call. It denies that server's tool calls (`mcp__<server>__…`) with rule
+`.mcp.json`, Codex's `config.toml` and a project's `.codex/config.toml`, Cursor's
+`mcp.json` and a project's `.cursor/mcp.json`, OpenClaw's `mcp.servers` in
+`openclaw.json`, GitHub Copilot CLI's `~/.copilot/mcp-config.json` and a project's
+`.mcp.json` and `.github/mcp.json` (wrapped in `mcpServers` or bare), pi's
+`~/.pi/agent/mcp.json` and a project's `.pi/mcp.json`, and Gemini CLI's `mcpServers` in
+its `settings.json` and a project's `.gemini/settings.json`. Each entry is pinned by
+itself, by the SHA-256 of its canonical JSON, not by its file, so the rest of
+`~/.claude.json` may change freely (Gemini CLI's user `settings.json` is also pinned
+whole as its hook file, so a server added there is drift like any other change). A
+definition that differs from its pin, or one added since, does not deny every
+call. It denies that server's tool calls (`mcp__<server>__…` as each agent spells it;
+`<server>-…` for Copilot, whose payload names only the tool) with rule
 `mcp-server-changed` until a person runs `openmoat mcp accept` or `openmoat doctor --accept`.
 Both show what changed (never the value of an `env` variable or header) and ask. A file
 that cannot be parsed holds back every MCP call of its agent. `openmoat init` pins what it

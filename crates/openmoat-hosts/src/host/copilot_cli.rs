@@ -25,8 +25,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, ProjectSettingsSpec,
-    TOOL_HOOK_TIMEOUT_S, wrong_event,
+    Asks, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout,
+    McpSpec, McpToolNames, ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -56,9 +56,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) \
          or its file is gone",
     gaps: "a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a \
-         repository's `settings.json` turns the hook off; MCP servers are not pinned and MCP \
-         tools are told apart from built-in ones only by name; asks become denies in \
-         autopilot; no OS sandbox is configured",
+         repository's `settings.json` turns the hook off (`openmoat status` and `doctor` \
+         report it); MCP tools are told apart from built-in ones only by name, so a changed \
+         server is traced by its `<server>-` prefix; asks become denies in autopilot; no OS \
+         sandbox is configured",
     install: Some(InstallSpec {
         dir_variable: "COPILOT_HOME",
         dir_name: ".copilot",
@@ -67,17 +68,35 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_format: HookFormat::Copilot,
         relaxed_keys: &[],
     }),
-    mcp: None,
+    // `mcp-config.json` in the configuration directory, and a project's
+    // `.mcp.json` and `.github/mcp.json` from the working directory up to the
+    // repository root, which may list the servers bare
+    // (<https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers>).
+    mcp: Some(McpSpec {
+        user_file: McpFile::InConfigDir("mcp-config.json"),
+        user_layout: McpLayout::Json,
+        project_files: &[
+            (".mcp.json", McpLayout::JsonOrBare),
+            (".github/mcp.json", McpLayout::JsonOrBare),
+        ],
+        tool_names: McpToolNames::Dashed,
+    }),
     sandbox: None,
     // A repository's settings are merged over the user's, and
     // `disableAllHooks: true` there skips the user hook files too. Its
     // `.github/hooks/*.json` load once the folder is trusted and run their
-    // commands outside any sandbox OpenMoat sets up.
+    // commands outside any sandbox OpenMoat sets up. The user's
+    // `settings.json` turns every hook off with the same key.
     project_settings: Some(ProjectSettingsSpec {
         dir: ".github/copilot",
         shared: "settings.json",
-        local: "settings.local.json",
-        hook_dir: Some(".github/hooks"),
+        local: Some("settings.local.json"),
+        hook_dir: Some(HookDir {
+            path: ".github/hooks",
+            extensions: &["json"],
+        }),
+        format: SettingsFormat::ClaudeCode,
+        user_file: "settings.json",
     }),
 };
 

@@ -153,7 +153,7 @@ pub struct StatusArgs {
 pub struct InitArgs {
     /// Hosts to install hooks for, without asking. Defaults to every supported host
     /// that is present, each confirmed at the terminal.
-    #[arg(long, value_delimiter = ',', value_parser = parse_host)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_host())]
     pub hosts: Option<Vec<Host>>,
 
     /// Set up every agent found without asking (for scripts).
@@ -173,7 +173,7 @@ pub struct InitArgs {
 #[derive(Debug, Args)]
 pub struct UninstallArgs {
     /// Hosts to remove OpenMoat from. Defaults to every supported host.
-    #[arg(long, value_delimiter = ',', value_parser = parse_host)]
+    #[arg(long, value_delimiter = ',', value_parser = parse_host())]
     pub hosts: Option<Vec<Host>>,
 
     /// Also delete OpenMoat's state directory (policy, lock, audit log). Not with
@@ -189,7 +189,7 @@ pub struct ReplayArgs {
     pub since: String,
 
     /// Only this host.
-    #[arg(long, value_parser = parse_host, conflicts_with = "session")]
+    #[arg(long, value_parser = parse_host(), conflicts_with = "session")]
     pub host: Option<Host>,
 
     /// One session by id, regardless of window.
@@ -208,7 +208,7 @@ pub struct ReportArgs {
     pub since: String,
 
     /// Only this host.
-    #[arg(long, value_parser = parse_host)]
+    #[arg(long, value_parser = parse_host())]
     pub host: Option<Host>,
 
     /// Output format.
@@ -270,7 +270,7 @@ pub struct AllowArgs {
     pub last: bool,
 
     /// Host of the session to approve (with --session).
-    #[arg(long, value_parser = parse_host, requires = "session")]
+    #[arg(long, value_parser = parse_host(), requires = "session")]
     pub host: Option<Host>,
 
     /// Approve for this session id only (exact command match).
@@ -419,7 +419,7 @@ pub struct BenchArgs {
 
     /// The host whose payloads to send and whose hook protocol reads the replies.
     /// Defaults to every host when testing OpenMoat.
-    #[arg(long, value_parser = parse_host)]
+    #[arg(long, value_parser = parse_host())]
     pub host: Option<Host>,
 
     /// Print on stderr the environment the hook gets and every payload sent.
@@ -434,7 +434,7 @@ pub struct BenchArgs {
 #[derive(Debug, Args)]
 pub struct GuardArgs {
     /// Host whose hook payload is on stdin.
-    #[arg(long, value_parser = parse_host)]
+    #[arg(long, value_parser = parse_host())]
     pub host: Host,
 }
 
@@ -474,8 +474,9 @@ pub enum Netns {
     Require,
 }
 
-fn parse_host(value: &str) -> Result<Host, String> {
-    value
-        .parse()
-        .map_err(|e: openmoat_hosts::HostError| e.to_string())
+/// A host id, with every one `--help` lists and the shell completes.
+fn parse_host() -> impl clap::builder::TypedValueParser<Value = Host> {
+    use clap::builder::TypedValueParser as _;
+    clap::builder::PossibleValuesParser::new(Host::ALL.map(Host::id))
+        .try_map(|id| id.parse::<Host>())
 }

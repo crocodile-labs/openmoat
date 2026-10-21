@@ -15,8 +15,9 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostSpec, InstallSpec, KeyShape, McpFile,
-    McpLayout, McpSpec, ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec,
+    Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostSpec, InstallSpec, KeyShape, McpFile,
+    McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec,
+    SettingsFormat,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;

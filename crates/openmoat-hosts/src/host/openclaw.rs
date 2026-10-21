@@ -23,7 +23,7 @@ use serde_json::Value;
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
     Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpLayout, McpSpec, wrong_event,
+    McpLayout, McpSpec, McpToolNames, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -77,7 +77,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     mcp: Some(McpSpec {
         user_file: McpFile::HookFile,
         user_layout: McpLayout::OpenClaw,
-        project_file: None,
+        project_files: &[],
+        tool_names: McpToolNames::OpenClaw,
     }),
     sandbox: None,
     project_settings: None,

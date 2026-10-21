@@ -156,7 +156,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     }
     report.note(warnings::RENAMED);
     // Loaded when a session starts here, where no `ConfigChange` fires.
-    for warning in crate::project_settings::warnings_here() {
+    for warning in crate::project_settings::warnings_here(&home) {
         let name = warning.host.display_name();
         report.warn(&format!("{name:<16} project settings {}", warning.text));
     }

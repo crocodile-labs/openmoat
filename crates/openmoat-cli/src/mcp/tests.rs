@@ -155,6 +155,80 @@ fn openclaw_tool_names_map_to_their_server() {
 }
 
 #[test]
+fn pi_and_copilot_tool_names_map_to_their_server() {
+    let pi = |tool: &str, name: &str| tool_of(Host::Pi, tool, name);
+    // pi writes every character but letters, digits and `_` as `_`.
+    assert!(pi("mcp__internal_tools__run", "internal-tools"));
+    assert!(pi("mcp__my_server__run", "my.server"));
+    assert!(!pi("mcp__other__run", "internal-tools"));
+    let copilot = |tool: &str, name: &str| tool_of(Host::CopilotCli, tool, name);
+    assert!(copilot(
+        "github-mcp-server-get_file_contents",
+        "github-mcp-server"
+    ));
+    assert!(copilot("my-server-run", "my.server"));
+    assert!(copilot("mcp__gh__run", "gh"));
+    assert!(!copilot("bash", "gh"));
+    assert!(!copilot("ghx-run", "gh"));
+    // Claude Code keeps `-` and has no dashed form.
+    assert!(!tool_of(
+        Host::ClaudeCode,
+        "mcp__internal_tools__run",
+        "internal-tools"
+    ));
+    assert!(!tool_of(Host::ClaudeCode, "gh-run", "gh"));
+}
+
+/// A state directory whose record puts `host`'s configuration in a temp
+/// directory, a lock with no MCP pins yet, and `name` there holding `servers`.
+fn setup_for(host: Host, name: &str, servers: &str) -> (tempfile::TempDir, Home, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let home = Home::at(dir.path().join("state"));
+    let cfg = dir.path().join("cfg");
+    fs::create_dir_all(&cfg).unwrap();
+    let mut recorded = Recorded::default();
+    recorded.dirs.insert(host.id().to_owned(), cfg.clone());
+    recorded.save(&home).unwrap();
+    Lock::pin(Path::new("/x/moat"), &[])
+        .unwrap()
+        .save(&home.lock_path())
+        .unwrap();
+    let file = cfg.join(name);
+    fs::write(&file, servers).unwrap();
+    (dir, home, file)
+}
+
+/// Copilot's `mcp-config.json` and pi's `mcp.json` sit in the configuration
+/// directory, beside the subdirectory that holds the hook file.
+#[test]
+fn copilot_and_pi_servers_are_pinned_from_their_configuration_directory() {
+    for (host, name, tool, other) in [
+        (Host::CopilotCli, "mcp-config.json", "gh-search", "db-query"),
+        (Host::Pi, "mcp.json", "mcp__gh__search", "mcp__db__query"),
+    ] {
+        let servers = |gh: &str| {
+            format!(
+                r#"{{"mcpServers": {{"gh": {{"command": "{gh}"}}, "db": {{"url": "https://db"}}}}}}"#
+            )
+        };
+        let (_dir, home, file) = setup_for(host, name, &servers("npx"));
+        let lock = Lock::load(&home.lock_path()).unwrap();
+        let found = review(&home, &lock, &[host], None).unwrap();
+        assert_eq!(found.changes.len(), 2, "{host}: {:?}", found.unreadable);
+        accept(&home, &found.changes).unwrap();
+        let denied = |tool| {
+            let lock = Lock::load(&home.lock_path()).unwrap();
+            violation(&home, &lock, host, None, tool).unwrap()
+        };
+        assert!(denied(tool).is_none(), "{host}");
+        fs::write(&file, servers("sh")).unwrap();
+        let deny = denied(tool).unwrap_or_else(|| panic!("{host}: changed server"));
+        assert_eq!(deny.rules, [SERVER_RULE], "{host}");
+        assert!(denied(other).is_none(), "{host}: other servers run");
+    }
+}
+
+#[test]
 fn a_changed_openclaw_server_holds_back_only_its_tools() {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));

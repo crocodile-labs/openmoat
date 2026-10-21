@@ -1338,6 +1338,12 @@
   threat: T9
   action: { fs_write: "~/.copilot/mcp-config.json" }
   expect: { verdict: ask, rules: [runs-later] }
+# Copilot CLI starts the servers a trusted repository's `.github/mcp.json` names
+- id: ask-write-copilot-repo-mcp
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.github/mcp.json" }
+  expect: { verdict: ask, rules: [runs-later] }
 - id: ask-write-gitlab-ci
   threat: T9
   action: { fs_write: "/p/.gitlab-ci.yml" }

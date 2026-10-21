@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 106] = [
+const PROTECTED_WRITES: [&str; 107] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -134,6 +134,7 @@ const PROTECTED_WRITES: [&str; 106] = [
     "**/.copilot/installed-plugins/**",
     "**/.copilot/agents/**",
     "**/.github/hooks/**",
+    "**/.github/mcp.json",
     "**/.github/copilot/**",
     "**/.github/copilot-instructions.md",
     // pi: its agent directory (extensions, settings, trust decisions) and a

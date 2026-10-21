@@ -82,7 +82,7 @@ pub struct ExportArgs {
     pub since: String,
 
     /// Only this host.
-    #[arg(long, value_parser = parse_host)]
+    #[arg(long, value_parser = parse_host())]
     pub host: Option<Host>,
 
     /// Only this session id.

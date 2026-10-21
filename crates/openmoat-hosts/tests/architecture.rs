@@ -24,7 +24,6 @@ const ALLOWED: &[(&str, usize)] = &[
     ("openmoat-cli/src/hangs.rs", 1),
     ("openmoat-cli/src/install.rs", 1),
     ("openmoat-cli/src/integrity.rs", 1),
-    ("openmoat-cli/src/mcp.rs", 1),
     ("openmoat-cli/src/mcp/pins.rs", 1),
     ("openmoat-cli/src/mcp/servers.rs", 2),
     ("openmoat-cli/src/mcp/wrap.rs", 1),

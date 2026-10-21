@@ -7,8 +7,8 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, CONFIG_HOOK_TIMEOUT_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpLayout, McpSpec, ProjectSettingsSpec, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S,
-    wrong_event,
+    McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, SandboxFormat, SandboxSpec,
+    SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -63,7 +63,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     mcp: Some(McpSpec {
         user_file: McpFile::BesideDefaultDir(".claude.json"),
         user_layout: McpLayout::ClaudeJson,
-        project_file: Some((".mcp.json", McpLayout::Json)),
+        project_files: &[(".mcp.json", McpLayout::Json)],
+        tool_names: McpToolNames::Prefixed,
     }),
     // Claude Code's sandbox runs on macOS, Linux and WSL2 only, and with
     // `failIfUnavailable` Claude Code exits at startup where it cannot run:
@@ -81,8 +82,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     project_settings: Some(ProjectSettingsSpec {
         dir: ".claude",
         shared: "settings.json",
-        local: "settings.local.json",
+        local: Some("settings.local.json"),
         hook_dir: None,
+        format: SettingsFormat::ClaudeCode,
+        user_file: "settings.json",
     }),
 };
 

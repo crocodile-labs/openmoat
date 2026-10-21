@@ -90,6 +90,7 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                 &config.state(binary),
                 config.host_present(),
                 recorded.skipped(host),
+                || crate::project_settings::switched_off(host, config.dir(), &config.settings_path),
                 || sandbox(home, host, plan.as_ref(), lock.as_ref()),
             );
             Ok(Protection {
@@ -104,18 +105,26 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
 }
 
 /// The level from the hook's state, the agent's presence, whether `moat init`
-/// skipped it, and (read only when the hook is installed) its sandbox check.
+/// skipped it, and (read only when the hook is installed) whether the agent's
+/// own settings turn the hook off and its sandbox check.
 fn level(
     hook: &HookState,
     present: bool,
     skipped: bool,
+    switched_off: impl FnOnce() -> Option<String>,
     sandbox: impl FnOnce() -> Result<(), String>,
 ) -> (Level, Option<String>) {
     let not_protected = |why: &str| (Level::NotProtected, Some(why.to_owned()));
     match hook {
-        HookState::Installed => match sandbox() {
-            Ok(()) => (Level::HookAndOsSandbox, None),
-            Err(why) => (Level::HookOnly, Some(why)),
+        HookState::Installed => match switched_off() {
+            Some(off) => (
+                Level::NotProtected,
+                Some(format!("hook turned off by {off}")),
+            ),
+            None => match sandbox() {
+                Ok(()) => (Level::HookAndOsSandbox, None),
+                Err(why) => (Level::HookOnly, Some(why)),
+            },
         },
         HookState::Missing if !present => (Level::NotFound, None),
         HookState::Missing if skipped => (Level::NotSetUp, None),
@@ -160,16 +169,36 @@ mod tests {
 
     #[test]
     fn an_installed_hook_with_a_matching_sandbox_is_hook_and_os_sandbox() {
-        let got = level(&HookState::Installed, true, false, || Ok(()));
+        let got = level(&HookState::Installed, true, false, || None, || Ok(()));
         assert_eq!(got, (Level::HookAndOsSandbox, None));
     }
 
     #[test]
     fn an_installed_hook_without_the_sandbox_is_hook_only_and_says_why() {
-        let got = level(&HookState::Installed, true, false, || {
-            Err("sandbox: drifted".to_owned())
-        });
+        let got = level(
+            &HookState::Installed,
+            true,
+            false,
+            || None,
+            || Err("sandbox: drifted".to_owned()),
+        );
         assert_eq!(got, (Level::HookOnly, Some("sandbox: drifted".to_owned())));
+    }
+
+    #[test]
+    fn an_installed_hook_the_agent_settings_turn_off_is_not_protected() {
+        let got = level(
+            &HookState::Installed,
+            true,
+            false,
+            || Some("settings.json: `disableAllHooks`".to_owned()),
+            || panic!("sandbox read for a hook that is off"),
+        );
+        assert_eq!(got.0, Level::NotProtected);
+        assert_eq!(
+            got.1.as_deref(),
+            Some("hook turned off by settings.json: `disableAllHooks`")
+        );
     }
 
     #[test]
@@ -183,7 +212,13 @@ mod tests {
             (stale, "hook out of date"),
             (unreadable, "hook file unreadable"),
         ] {
-            let got = level(&hook, true, false, || panic!("sandbox read without a hook"));
+            let got = level(
+                &hook,
+                true,
+                false,
+                || panic!("settings read without a hook"),
+                || panic!("sandbox read without a hook"),
+            );
             assert_eq!(got, (Level::NotProtected, Some(why.to_owned())));
         }
     }
@@ -191,11 +226,11 @@ mod tests {
     #[test]
     fn an_agent_left_out_or_absent_keeps_its_own_line() {
         assert_eq!(
-            level(&HookState::Missing, true, true, || Ok(())),
+            level(&HookState::Missing, true, true, || None, || Ok(())),
             (Level::NotSetUp, None)
         );
         assert_eq!(
-            level(&HookState::Missing, false, false, || Ok(())),
+            level(&HookState::Missing, false, false, || None, || Ok(())),
             (Level::NotFound, None)
         );
     }

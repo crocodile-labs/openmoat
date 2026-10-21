@@ -86,15 +86,16 @@ changes nothing.
 hook and sandbox checks above them, and one line of what that agent's hook and sandbox
 do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5). For tools that
 show them, `openmoat status --format json` prints the levels (`agents`), a policy update
-waiting for `openmoat policy upgrade` (`policy_update`, or `null`) and the pinned files that
-changed (`lock_drift`), and `openmoat doctor --format json` every check (`ok`, `problem`, `warning` or `note`, with its name and detail), with the same
+waiting for `openmoat policy upgrade` (`policy_update`, or `null`), the pinned files that
+changed (`lock_drift`), the MCP server definitions that differ from their pins
+(`mcp_changes`) and the project settings warnings (`project_settings`), and `openmoat doctor --format json` every check (`ok`, `problem`, `warning` or `note`, with its name and detail), with the same
 exit code as the text:
 
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
-| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw and GitHub Copilot CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
-| `not protected` | the hook is missing, out of date or unreadable; run `openmoat init` |
+| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi and Gemini CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
+| `not protected` | the hook is missing, out of date or unreadable (run `openmoat init`), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension (the line names the file and the setting; remove it) |
 
 Agents that are not set up or not found keep their `·` line. `openmoat status --format
 json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `level` is
