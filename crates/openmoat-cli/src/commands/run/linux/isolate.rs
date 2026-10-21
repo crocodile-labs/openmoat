@@ -124,8 +124,11 @@ pub(super) fn relay_to_proxy(socket: &Path, port: u16) -> Result<()> {
 
 /// Refuse, with bubblewrap's reason, where it cannot create the namespaces:
 /// a kernel or distribution that restricts unprivileged user namespaces.
-/// Otherwise whether it accepts [`DISABLE_USERNS`]: tried first, and only
-/// when that fails is the sandbox tried without it.
+/// Otherwise whether it accepts [`DISABLE_USERNS`]: tried first, and the
+/// sandbox is tried without it only when bubblewrap does not know the option
+/// ([`unknown_disable_userns`]). Any other failure with it refuses: a
+/// bubblewrap that knows the option but cannot apply it must not start an
+/// agent that may create user namespaces of its own.
 fn usable(bwrap: &Path) -> Result<bool> {
     let probe = |disable_userns: bool| {
         Command::new(bwrap)
@@ -136,10 +139,15 @@ fn usable(bwrap: &Path) -> Result<bool> {
             .output()
             .with_context(|| format!("starting {}", bwrap.display()))
     };
-    if probe(true)?.status.success() {
+    let with = probe(true)?;
+    if with.status.success() {
         return Ok(true);
     }
-    let out = probe(false)?;
+    let out = if unknown_disable_userns(&String::from_utf8_lossy(&with.stderr)) {
+        probe(false)?
+    } else {
+        with
+    };
     if !out.status.success() {
         bail!(
             "bubblewrap cannot create its namespaces here, so `openmoat run --isolate` refuses: {}\
@@ -149,6 +157,14 @@ fn usable(bwrap: &Path) -> Result<bool> {
         );
     }
     Ok(false)
+}
+
+/// Whether bubblewrap's `stderr` says it does not know [`DISABLE_USERNS`]:
+/// bubblewrap before 0.8 answers `bwrap: Unknown option --disable-userns`.
+fn unknown_disable_userns(stderr: &str) -> bool {
+    stderr.lines().any(|line| {
+        line.to_ascii_lowercase().contains("unknown option") && line.contains(DISABLE_USERNS)
+    })
 }
 
 /// Inside the sandbox: relay the proxy's port to the socket, then start the
@@ -250,7 +266,22 @@ impl Drop for Session {
 
 #[cfg(test)]
 mod tests {
-    use super::{DISABLE_USERNS, UNSHARE, unshare};
+    use super::{DISABLE_USERNS, UNSHARE, unknown_disable_userns, unshare};
+
+    #[test]
+    fn only_an_unknown_disable_userns_drops_it() {
+        assert!(unknown_disable_userns(
+            "bwrap: Unknown option --disable-userns\n"
+        ));
+        for other in [
+            "bwrap: setting up uid map: Permission denied",
+            "bwrap: Failed to disable user namespaces: Permission denied (--disable-userns)",
+            "bwrap: Unknown option --frobnicate",
+            "",
+        ] {
+            assert!(!unknown_disable_userns(other), "{other}");
+        }
+    }
 
     #[test]
     fn user_namespaces_are_disabled_only_where_bubblewrap_knows_how() {

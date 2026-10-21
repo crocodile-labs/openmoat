@@ -13,7 +13,7 @@
 //!
 //! Where bubblewrap is missing or cannot create the namespaces, `moat run`
 //! starts with Landlock and seccomp alone and says so on every start, and
-//! `moat doctor` warns.
+//! `moat doctor` warns; with `--netns=require` it refuses to start instead.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

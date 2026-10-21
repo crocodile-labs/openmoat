@@ -1374,26 +1374,59 @@
 - id: benign-ruby-env-fetch-rails-env
   action: { shell: "ruby -e \"puts ENV.fetch('RAILS_ENV')\"" }
   expect: { verdict: defer, rules: [default] }
+- id: benign-python-getattr-other-attribute
+  action: { shell: "python3 -c \"import os;print(getattr(os,'sep'))\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-subprocess-env-runs-a-command
+  action: { shell: "python3 -c \"import subprocess;subprocess.run(['env','CI=1','make'])\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-printenv-home
+  action: { shell: "python3 -c \"import subprocess;subprocess.run(['printenv','HOME'])\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pwsh-env-home
+  action: { shell: "pwsh -c 'echo $Env:HOME'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pwsh-get-environment-variable-path
+  action: { shell: "pwsh -c \"[Environment]::GetEnvironmentVariable('PATH')\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pwsh-env-drive-home
+  action: { shell: "pwsh -c 'Get-ChildItem Env:HOME'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pwsh-list-directory
+  action: { shell: "pwsh -c 'Get-ChildItem src'" }
+  expect: { verdict: defer, rules: [default] }
 # A curl or wget request that sends nothing is decided like a host's fetch tool (ADR-035)
 - id: benign-curl-get-docs
-  action: { shell: "curl https://docs.rs/serde" }
+  action: { shell: "curl -q https://docs.rs/serde" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-curl-get-to-file
-  action: { shell: "curl -sS https://example.com/file.txt -o out.txt" }
+  action: { shell: "curl -q -sS https://example.com/file.txt -o out.txt" }
   expect: { verdict: defer, rules: [default.fetch] }
 # wget follows redirects unless `--max-redirect=0` says not to
 - id: benign-wget-archive
-  action: { shell: "wget --max-redirect=0 https://x.test/a.tar.gz" }
+  action: { shell: "wget --no-config --no-netrc --max-redirect=0 https://x.test/a.tar.gz" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-curl-head
-  action: { shell: "curl -I https://example.com" }
+  action: { shell: "curl -q -I https://example.com" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-curl-explicit-get
-  action: { shell: "curl -X GET -fsS https://example.com/api" }
+  action: { shell: "curl -q -X GET -fsS https://example.com/api" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-wget-to-stdout
-  action: { shell: "wget -qO- --max-redirect 0 https://example.com/notes.txt" }
+  action: { shell: "wget --no-config --no-netrc -qO- --max-redirect 0 https://example.com/notes.txt" }
   expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-curl-get-allowed-host
-  action: { shell: "curl -sSL https://github.com/x/y/archive/main.tar.gz -o main.tar.gz" }
+  action: { shell: "curl -q -sSL https://github.com/x/y/archive/main.tar.gz -o main.tar.gz" }
   expect: { verdict: defer, rules: [default] }
+- id: benign-curl-short-cluster-to-project-file
+  action: { shell: "curl -q -fsSo out.txt https://example.com/f.txt" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-remote-name
+  action: { shell: "curl -q -O https://example.com/a.tar.gz" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-output-dir
+  action: { shell: "curl -q --output-dir dl --create-dirs -o a.tgz https://example.com/a.tgz" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-wget-directory-prefix
+  action: { shell: "wget --no-config --no-netrc --max-redirect=0 -P dl https://example.com/a.tgz" }
+  expect: { verdict: defer, rules: [default.fetch] }

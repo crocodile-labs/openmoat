@@ -17,6 +17,7 @@ use crate::integrity;
 use crate::render::Deferred;
 use crate::sandbox::{self, Plan};
 
+mod mcp;
 mod preview;
 #[cfg(test)]
 mod tests;
@@ -28,9 +29,8 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let binary = crate::install::hook_binary()?;
     refuse_writable_binary(&home, &binary)?;
     let mut out = Deferred::default();
-    if !dry_run {
-        refuse_repin(&home, &mut out)?;
-    }
+    // Whether a lock existed before this run; `repin` below always leaves one.
+    let lock_existed = !dry_run && refuse_repin(&home, &mut out)?;
     // Asked before anything is written, so declining everything changes nothing
     // but OpenMoat's own state directory.
     let hosts = choose_hosts(&home, args, &binary, &mut out)?;
@@ -78,7 +78,14 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             home.lock_path().display(),
             lock.entries.len()
         )?;
-        mcp_servers(&home, &binary, args.mcp_proxy, &hosts, &mut out)?;
+        mcp::servers(
+            &home,
+            &binary,
+            args.mcp_proxy,
+            &hosts,
+            lock_existed,
+            &mut out,
+        )?;
         if !hosts.is_empty() {
             backups(&home, &hosts, &mut out)?;
         }
@@ -86,27 +93,6 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     }
     out.finish()?;
     Ok(Code::Ok)
-}
-
-/// Pin the MCP server definitions the agents read (ADR-026) and, with
-/// `--mcp-proxy`, run their stdio servers through `moat mcp proxy`.
-fn mcp_servers(
-    home: &Home,
-    binary: &std::path::Path,
-    proxy: bool,
-    hosts: &[Host],
-    out: &mut Deferred,
-) -> Result<()> {
-    let cwd = std::env::current_dir().ok();
-    let pinned = crate::mcp::pin_current(home, binary, cwd.as_deref())?;
-    writeln!(
-        out,
-        "✔ mcp servers      {pinned} definitions pinned; a changed or new one waits for `openmoat mcp accept`"
-    )?;
-    if proxy {
-        super::mcp::wrap_servers(home, binary, hosts, &[], false, false, out)?;
-    }
-    Ok(())
 }
 
 /// Which checks guard `init`'s re-pin of an existing lock.
@@ -132,16 +118,18 @@ fn repin_checks(lock_exists: bool, interactive: bool) -> RepinChecks {
 }
 
 /// Refuse, before anything is written, a re-pin [`repin_checks`] does not
-/// allow. An unreadable lock is not refused: `init` is how a person recovers
-/// from one.
-fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<()> {
+/// allow; returns whether a lock exists. An unreadable lock counts as drift:
+/// `init` at a terminal is how a person recovers from one, and without a
+/// terminal it is refused like any other drift.
+fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<bool> {
     let lock_path = home.lock_path();
     let lock_exists = lock_path.exists();
     let checks = repin_checks(lock_exists, crate::terminal::interactive());
     let drift: Vec<String> = if lock_exists {
-        integrity::Lock::load(&lock_path)
-            .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
-            .unwrap_or_default()
+        integrity::Lock::load(&lock_path).map_or_else(
+            |error| vec![format!("{} cannot be read: {error:#}", lock_path.display())],
+            |lock| lock.verify().iter().map(ToString::to_string).collect(),
+        )
     } else {
         Vec::new()
     };
@@ -164,7 +152,7 @@ fn refuse_repin(home: &Home, out: &mut Deferred) -> Result<()> {
             drift.join("; ")
         )?;
     }
-    Ok(())
+    Ok(lock_exists)
 }
 
 /// Refuse, before anything is written, a binary an agent could replace; the

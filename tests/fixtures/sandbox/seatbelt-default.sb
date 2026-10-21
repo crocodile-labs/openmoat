@@ -248,7 +248,12 @@
   (literal "/Users/me/.bash_profile")
   (literal "/Users/me/.profile")
   (literal "/Users/me/.zprofile")
-  (literal "/Users/me/.zshenv"))
+  (literal "/Users/me/.zshenv")
+  (literal "/Users/me/.curlrc")
+  (literal "/Users/me/_curlrc")
+  (literal "/Users/me/.config/curlrc")
+  (literal "/Users/me/.wgetrc")
+  (subpath "/Users/me/.config/wget"))
 ; never the keychain: the agent and its scripts share this profile
 (deny mach-lookup
   (global-name "com.apple.SecurityServer")

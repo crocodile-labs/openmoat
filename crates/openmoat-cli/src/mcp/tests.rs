@@ -197,3 +197,48 @@ fn a_changed_openclaw_server_holds_back_only_its_tools() {
     let deny = denied("mcp__db__query").expect("unreadable");
     assert!(deny.reasons[0].contains("$include"), "{:?}", deny.reasons);
 }
+
+#[test]
+fn a_held_pin_leaves_new_and_changed_servers_unpinned() {
+    let (_dir, home, file) = setup(r#"{"mcpServers": {"gh": {"command": "npx"}}}"#);
+    accept_all(&home);
+    fs::write(
+        &file,
+        r#"{"mcpServers": {"gh": {"command": "sh"}, "planted": {"command": "evil"}}}"#,
+    )
+    .unwrap();
+    let held = pin(&home, &[Host::ClaudeCode], None, true).unwrap();
+    let names: BTreeSet<&str> = held.held.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, BTreeSet::from(["gh", "planted"]));
+    assert_eq!(held.count, 1, "the old pin of `gh` is kept");
+    assert!(denied(&home, "mcp__planted__run").is_some());
+    assert!(denied(&home, "mcp__gh__search").is_some());
+}
+
+#[test]
+fn a_held_pin_still_drops_removed_servers() {
+    let (_dir, home, file) = setup(r#"{"mcpServers": {"gh": {"command": "npx"}}}"#);
+    accept_all(&home);
+    fs::write(&file, r#"{"mcpServers": {}}"#).unwrap();
+    let held = pin(&home, &[Host::ClaudeCode], None, true).unwrap();
+    assert!(held.held.is_empty());
+    assert_eq!(held.count, 0);
+}
+
+#[test]
+fn a_held_pin_over_a_lock_without_mcp_pins_starts_them_empty() {
+    let (_dir, home, _) = setup(r#"{"mcpServers": {"planted": {"command": "evil"}}}"#);
+    let held = pin(&home, &[Host::ClaudeCode], None, true).unwrap();
+    assert_eq!(held.held.len(), 1);
+    assert_eq!(held.count, 0);
+    assert!(denied(&home, "mcp__planted__run").is_some());
+}
+
+#[test]
+fn an_unheld_pin_pins_everything() {
+    let (_dir, home, _) = setup(r#"{"mcpServers": {"gh": {"command": "npx"}}}"#);
+    let pinned = pin(&home, &[Host::ClaudeCode], None, false).unwrap();
+    assert!(pinned.held.is_empty());
+    assert_eq!(pinned.count, 1);
+    assert!(denied(&home, "mcp__gh__search").is_none());
+}

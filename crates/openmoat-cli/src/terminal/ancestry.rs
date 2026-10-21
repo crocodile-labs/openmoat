@@ -31,15 +31,27 @@ pub(super) struct Process {
 
 /// Executable names of the agent hosts, and `openmoat` itself under either
 /// name: `openmoat run` is the parent of the agent it starts.
+/// `cn` is the Continue CLI.
 const AGENTS: &[&str] = &[
     "claude",
     "codex",
     "cursor-agent",
+    "cn",
+    "copilot",
+    "gemini",
     "openclaw",
     "pi",
     "openmoat",
     "moat",
 ];
+
+/// The macOS helper processes of the Cursor editor, whose agent runs
+/// commands in terminals they start: `Cursor Helper`, `Cursor Helper
+/// (Plugin)` and the others, each `<name>.app/Contents/MacOS/<name>`. The
+/// editor's own process (`Cursor.app/Contents/MacOS/Cursor`) is not matched.
+/// A person's terminal inside the editor descends from a helper too, so the
+/// human-only commands are refused there: they need a terminal of one's own.
+const CURSOR_HELPER: &str = ".app/contents/macos/cursor helper";
 
 /// Directories the agents install their code under, for an agent that runs
 /// as `node <dir>/…/cli.js` or from a versioned file (`claude/versions/2.1.0`).
@@ -52,6 +64,9 @@ const AGENT_DIRS: &[&[&str]] = &[
     &["cursor-agent"],
     &["openclaw", "dist"],
     &["pi-coding-agent"],
+    &["@continuedev", "cli"],
+    &["@github", "copilot"],
+    &["@google", "gemini-cli"],
 ];
 
 /// More ancestors than any real process tree has; a longer chain is a loop.
@@ -93,8 +108,22 @@ fn walk(
 }
 
 /// The agent a command line runs, judged by its first two words: the program,
-/// and the script an interpreter (`node`) was given.
+/// and the script an interpreter (`node`) was given; or a Cursor helper,
+/// whose program path holds spaces (`ps` splits it into several words), so
+/// it is read from the words before the first option.
 fn agent_name(argv: &[String]) -> Option<String> {
+    let program: Vec<&str> = argv
+        .iter()
+        .map(String::as_str)
+        .take_while(|word| !word.starts_with('-'))
+        .collect();
+    if program
+        .join(" ")
+        .to_ascii_lowercase()
+        .contains(CURSOR_HELPER)
+    {
+        return Some("Cursor Helper".to_owned());
+    }
     argv.iter().take(2).find_map(|word| {
         let lower = word.trim_start_matches('-').to_ascii_lowercase();
         let segments: Vec<&str> = lower.split(['/', '\\']).filter(|s| !s.is_empty()).collect();

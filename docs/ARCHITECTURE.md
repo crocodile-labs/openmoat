@@ -152,7 +152,8 @@ week and the phase most of them were in.
   (`commands/locals.rs`); a path through one whose value is not known is `unparseable`. Shell options are read per shell
   (`invocation.rs`), git's global options are unwrapped (`git.rs`), `make` arguments
   that run code (`make.rs`), options that run programs (`options.rs`), option values
-  that name files in every spelling (`path_options.rs`) and decoder pipelines
+  that name files in every spelling (`path_options.rs`), the files `curl` and `wget`
+  write, read by the same parser as the fetch check (`options/transfer.rs`, ADR-035), and decoder pipelines
   (`decoders.rs`) are surfaced. Inline interpreter code (`python -c`, `python3.12 -c`, `node -e`, `lua -e`, `Rscript -e`, …;
   `tables.rs`) is scanned for paths, hosts and variable names, not parsed. Output is
   capped at 2048 atoms.
@@ -537,7 +538,8 @@ away. Codex has no such key: a failed hook "continues the tool call"
   `openmoat audit anchor`, `openmoat mcp accept`/`wrap`/`unwrap` and
   `openmoat proxy install`/`uninstall` refuse to
   run without a terminal (`terminal.rs`). They also refuse when an agent host (`claude`,
-  `codex`, `cursor-agent`) or `openmoat` itself (`openmoat run`) is among their parent processes,
+  `codex`, `cursor-agent`, `cn`, `copilot`, `gemini`, `openclaw`, `pi`, the Cursor
+  editor's `Cursor Helper` processes on macOS) or `openmoat` itself (`openmoat run`) is among their parent processes,
   or when those cannot be read (`terminal/ancestry.rs`: `/proc` on Linux, `/bin/ps` on
   macOS; not checked on Windows yet), and the home screen offers no approval there.
   Their answers are read from the controlling terminal (`/dev/tty`), not stdin. The
@@ -568,8 +570,13 @@ stored as sent. Redaction is two passes (`crates/openmoat-audit/src/redact.rs`):
    start the keychain tool per call, and it skips a source it cannot read. Rows of an
    ungoverned tool, a settings change or a call refused for lock drift are written
    before or without loading the policy and get the patterns only.
-2. **Patterns.** Bearer and basic auth, `key=value` credentials, common token shapes,
-   URL passwords.
+2. **Patterns.** Bearer and basic auth, `key=value` and quoted `"key": "value"`
+   credentials, `-u user:password`, common token shapes, URL passwords. A few
+   matches are kept because they hold no credential (`redact/judge.rs`): a name whose
+   last part is `count`, `file`, `path`, `dir`, `name`, `id`, `len`, `length`,
+   `size`, `type` or `url` (`token_count=`, `--token-file=`); a `-u` drive path or
+   `uid:gid` outside an HTTP client (`python -u C:\x`); prose after `Bearer` or
+   `Basic` (`bearer authentication`). Anything else that matches is masked.
 
 The policy has no other declaration of secret environment variables: `env-secrets` is
 a list of names the agent may not read (it includes `AWS_REGION`-style names), not of

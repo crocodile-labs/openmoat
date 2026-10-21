@@ -42,7 +42,7 @@ each ADR records the outcome it needs.
 | [032](ADR-032-mcp-proxy-holds-first-sight.md) | `moat mcp proxy` holds every tool of a server it has no pins for until a person runs `moat mcp accept`; existing pins stay; `mcp: { trust_first_sight: true }` restores pinning on first sight, and `moat policy lint` warns about it | accepted; supersedes the first-sight part of ADR-026 |
 | [033](ADR-033-openclaw-plugin-hook.md) | OpenClaw is supported through a dependency-free plugin whose `before_tool_call` handler runs `moat guard --host openclaw` and blocks on any failure; `moat init` installs and pins it and its `openclaw.json` entries; an ask is OpenClaw's own approval request | accepted |
 | [034](ADR-034-hook-only-deny-groups.md) | A `deny` group with `hook_only: true` is applied by the hook and left out of every OS layer, listed under `decide-only`; the default `build-credentials` denies the agent Maven and Gradle settings while `mvn` and `gradle` still read them in the sandboxes | accepted; refines ADR-019 and ADR-021 |
-| [035](ADR-035-bodyless-curl-is-a-fetch.md) | A `curl` or `wget` command that provably sends nothing but its URLs (an allowlist of options, no expansions, a domain-name host) is a `fetch` of each host, decided like `WebFetch`; anything else stays `net` | accepted; refines ADR-017 |
+| [035](ADR-035-bodyless-curl-is-a-fetch.md) | A `curl` or `wget` command that provably sends nothing but its URLs (an allowlist of options, no expansions, a domain-name host) is a `fetch` of each host, decided like `WebFetch`; anything else stays `net` | accepted; refines ADR-017; amended 2026-10-20 (`-q`/`--no-config --no-netrc` required, every written file checked, `-w` and server-chosen names stay `net`) |
 
 ## Names in older ADRs
 

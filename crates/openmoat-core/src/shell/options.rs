@@ -6,15 +6,13 @@
 //! command is classified as a command of its own, and the `--output` value and
 //! the venv directory and the files `gofmt` rewrites become `fs.write`s.
 
+pub(super) mod transfer;
+
 use super::commands::classify_wrapped;
 use super::{ClassifyError, ShellContext, Sink};
 
 /// `find` actions whose arguments, up to `;` or `+`, are a command to run.
 const FIND_EXEC: &[&str] = &["-exec", "-execdir", "-ok", "-okdir"];
-
-/// Short output-file options whose meaning is specific to one program
-/// (`grep -o` is a flag, `curl -o` takes a file).
-const OUTPUT_SHORT: &[(&str, &str)] = &[("curl", "-o"), ("wget", "-O")];
 
 pub(super) fn classify(
     argv: &[String],
@@ -37,6 +35,14 @@ pub(super) fn classify(
     }
     super::upload::classify(argv, program, ctx, sink)?;
     super::in_place::classify(argv, program, ctx, sink)?;
+    // curl and wget: every spelling of an output (`-sSo f`, `-oF`, `wget -qO f`),
+    // under `--output-dir`/`-P`, and the remote file name `-O` and wget save under
+    let client = transfer::Client::of(program);
+    if let Some(client) = client {
+        for file in transfer::written(argv, client) {
+            sink.write(ctx, &file)?;
+        }
+    }
     let mut i = 1;
     while let Some(arg) = argv.get(i) {
         i += 1;
@@ -52,15 +58,15 @@ pub(super) fn classify(
             i += end + 1;
             continue;
         }
-        let short = OUTPUT_SHORT
-            .iter()
-            .any(|(p, flag)| *p == program && arg == flag);
+        if client.is_some() {
+            continue;
+        }
         let target = match arg
             .strip_prefix("--output=")
             .or_else(|| arg.strip_prefix("--output-document="))
         {
             Some(value) => Some(value),
-            None if arg == "--output" || arg == "--output-document" || short => {
+            None if arg == "--output" || arg == "--output-document" => {
                 argv.get(i).map(String::as_str)
             }
             None => None,

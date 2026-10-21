@@ -42,6 +42,30 @@ fn agent_hosts_are_known_by_program_or_script() {
             "node /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
             "pi-coding-agent",
         ),
+        ("cn", "cn"),
+        ("/Users/me/.npm-global/bin/cn -p hello", "cn"),
+        (
+            "node /usr/local/lib/node_modules/@continuedev/cli/dist/index.js",
+            "@continuedev",
+        ),
+        ("copilot", "copilot"),
+        (
+            "node /usr/local/lib/node_modules/@github/copilot/index.js",
+            "@github",
+        ),
+        ("gemini", "gemini"),
+        (
+            "node /usr/local/lib/node_modules/@google/gemini-cli/dist/index.js",
+            "@google",
+        ),
+        (
+            "/Applications/Cursor.app/Contents/Frameworks/Cursor Helper (Plugin).app/Contents/MacOS/Cursor Helper (Plugin) --type=utility --utility-sub-type=node.mojom.NodeService",
+            "Cursor Helper",
+        ),
+        (
+            "/Applications/Cursor.app/Contents/Frameworks/Cursor Helper.app/Contents/MacOS/Cursor Helper --type=utility",
+            "Cursor Helper",
+        ),
         ("/usr/local/bin/moat run -- claude", "moat"),
         ("/usr/local/bin/openmoat run -- claude", "openmoat"),
         (
@@ -60,6 +84,9 @@ fn a_persons_shell_and_tools_are_not_agents() {
         "/bin/bash --login",
         "/usr/bin/login -pfl me /bin/zsh",
         "/Applications/Cursor.app/Contents/MacOS/Cursor",
+        "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin) --type=utility",
+        "vim --cmd x /tmp/Cursor Helper.app/Contents/MacOS/Cursor Helper",
+        "/usr/local/bin/cnpm install",
         "tmux new -s claude",
         "/Users/me/moat/bin/build.sh",
         "/Users/me/src/openmoat/target/debug/deps/e2e-1234",

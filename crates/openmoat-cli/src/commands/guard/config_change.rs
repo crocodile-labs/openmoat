@@ -158,10 +158,10 @@ fn unnamed_project_files(
 }
 
 /// A block for a project settings file that sets something that could turn
-/// OpenMoat off, run a program or redirect the agent, or that cannot be read;
-/// `None` when it may load.
+/// OpenMoat off, run a program or redirect the agent, that cannot be read, or
+/// that changed between the check and the decision; `None` when it may load.
 fn project_change(path: &Path) -> Option<Decision> {
-    let found = project_settings::check(path)?;
+    let found = project_settings::check_unchanged(path)?;
     let mut deny = Decision::new(Verdict::Deny);
     deny.rules.push(project_settings::RULE.to_owned());
     deny.reasons.push(format!(

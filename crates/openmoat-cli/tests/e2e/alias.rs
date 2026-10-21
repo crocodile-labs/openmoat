@@ -125,6 +125,24 @@ fn moat_without_openmoat_beside_it_fails_closed() {
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
 }
 
+/// A `moat` linked from another directory (`~/links/moat → bin/moat`) finds
+/// the `openmoat` beside the file it links to; macOS starts it by the link.
+#[cfg(unix)]
+#[test]
+fn a_linked_moat_finds_openmoat_beside_its_target() {
+    let (sb, bin) = home_with_bin();
+    let (openmoat, moat) = (bin.join(exe("openmoat")), bin.join(exe("moat")));
+    fs::copy(env!("CARGO_BIN_EXE_openmoat"), &openmoat).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_moat"), &moat).unwrap();
+    let links = sb.home.join("links");
+    fs::create_dir_all(&links).unwrap();
+    let link = links.join("moat");
+    std::os::unix::fs::symlink(&moat, &link).unwrap();
+    let out = run(&sb, &link, &["--version"], None);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(stdout(&out).contains("(OpenMoat)"), "{}", text(&out));
+}
+
 #[test]
 fn init_moves_hooks_written_as_moat_to_openmoat() {
     let (sb, bin) = home_with_bin();

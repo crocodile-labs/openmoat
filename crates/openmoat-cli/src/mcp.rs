@@ -206,15 +206,36 @@ pub fn accept_ids(
     accept(home, &chosen)
 }
 
-/// `moat init`: pin every definition the set-up hosts read now, keeping pins
-/// of project files elsewhere. Returns how many definitions the lock pins.
-pub fn pin_current(home: &Home, binary: &Path, cwd: Option<&Path>) -> Result<usize> {
+/// What [`pin_current`] did.
+#[derive(Debug, Default)]
+pub struct Pinned {
+    /// How many definitions the lock pins now.
+    pub count: usize,
+    /// New and changed definitions left unpinned for a person to accept.
+    pub held: Vec<Change>,
+}
+
+/// `moat init`: pin the definitions the set-up hosts read now, keeping pins
+/// of project files elsewhere. With `hold`, new and changed definitions are
+/// left unpinned and returned instead: pinning them would accept, unseen, a
+/// server a cloned project planted in its `.mcp.json`. Pins of removed
+/// servers are dropped either way; that starts nothing.
+pub fn pin_current(home: &Home, binary: &Path, cwd: Option<&Path>, hold: bool) -> Result<Pinned> {
+    pin(home, &set_up_hosts(home, binary), cwd, hold)
+}
+
+fn pin(home: &Home, hosts: &[Host], cwd: Option<&Path>, hold_new: bool) -> Result<Pinned> {
     let lock = Lock::load(&home.lock_path())?;
-    let found = review(home, &lock, &set_up_hosts(home, binary), cwd)?;
-    accept(home, &found.changes)?;
-    Ok(Lock::load(&home.lock_path())?
+    let found = review(home, &lock, hosts, cwd)?;
+    let (held, accepted): (Vec<Change>, Vec<Change>) = found
+        .changes
+        .into_iter()
+        .partition(|change| hold_new && change.blocks());
+    accept(home, &accepted)?;
+    let count = Lock::load(&home.lock_path())?
         .mcp_servers
-        .map_or(0, |p| p.len()))
+        .map_or(0, |p| p.len());
+    Ok(Pinned { count, held })
 }
 
 #[cfg(test)]

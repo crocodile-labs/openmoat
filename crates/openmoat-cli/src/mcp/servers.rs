@@ -117,8 +117,14 @@ fn user_files(home: &Home, host: Host, file: McpFile) -> Result<Vec<PathBuf>> {
 }
 
 /// `cwd` and each directory above it up to its project root; none outside a project.
+/// The directory is taken with its links resolved: `openmoat init` gets it
+/// from the operating system that way, a hook gets it as the agent spelt it
+/// (`/var/…` and `/private/var/…` on macOS), and both must name the same
+/// project file for its pins to be found.
 fn project_dirs(cwd: &Path) -> Result<Vec<PathBuf>> {
-    let Some(root) = crate::project::root_of(cwd, &user_home()?) else {
+    let (cwd, home) = (resolved(cwd), resolved(&user_home()?));
+    let cwd = cwd.as_path();
+    let Some(root) = crate::project::root_of(cwd, &home) else {
         return Ok(Vec::new());
     };
     Ok(cwd
@@ -126,6 +132,17 @@ fn project_dirs(cwd: &Path) -> Result<Vec<PathBuf>> {
         .take_while(|dir| dir.starts_with(&root))
         .map(Path::to_path_buf)
         .collect())
+}
+
+/// `path` with its links resolved on Unix; as given when it cannot be, and on
+/// Windows, whose resolved form (`\\?\C:\…`) would differ from every other
+/// spelling of the path OpenMoat records.
+fn resolved(path: &Path) -> PathBuf {
+    if cfg!(unix) {
+        std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    } else {
+        path.to_path_buf()
+    }
 }
 
 /// Read every server `sources` define.

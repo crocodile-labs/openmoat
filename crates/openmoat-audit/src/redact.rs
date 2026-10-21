@@ -9,22 +9,56 @@
 use std::borrow::Cow;
 use std::sync::LazyLock;
 
-use regex::{Regex, RegexBuilder};
+use regex::{Captures, Regex, RegexBuilder};
 use serde_json::Value;
 
 use crate::StoreError;
 
+mod judge;
+
 const REPLACEMENT: &str = "[redacted]";
 
+/// What replaces a pattern's match.
+#[derive(Clone, Copy)]
+enum Mask {
+    /// A replacement string, in which `${name}` stands for a group.
+    Text(&'static str),
+    /// A function of the match and of the whole text it was found in.
+    With(fn(&Captures<'_>, &str) -> String),
+}
+
+/// The credential words a name may hold as one `_`- or `-`-separated part.
+macro_rules! credential_word {
+    () => {
+        r"(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|authorization|private[_-]?key)"
+    };
+}
+
 /// Credential patterns that run before [`TOKEN_SHAPES`], and what replaces each match.
-const NAMED: &[(&str, &str)] = &[
+const NAMED: &[(&str, Mask)] = &[
     // Named credentials in key=value or key: value form; keep the key. The
     // credential word may be one `_`- or `-`-separated part of a longer name
     // (`AWS_SECRET_ACCESS_KEY`, `GH_TOKEN`, `access_token`), but not the start
-    // of a longer word (`tokenizer`, `secretary`, `max_tokens`).
+    // of a longer word (`tokenizer`, `secretary`, `max_tokens`). A name whose
+    // last part says the value is about the credential, not the credential
+    // (`token_count`, `--token-file`, `private_key_path`), keeps its value.
     (
-        r"(?i)\b((?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|authorization|private[_-]?key)(?:[_-][a-z0-9]+)*\s*[=:]\s*)(['\x22]?)((?:bearer|basic)\s+)?[^\s'\x22&;]+(['\x22]?)",
-        "${1}${2}${3}[redacted]${4}",
+        concat!(
+            r"(?i)\b(?P<key>(?:[a-z0-9]+[_-])*",
+            credential_word!(),
+            r"(?:[_-][a-z0-9]+)*\s*[=:]\s*)(?P<q>['\x22]?)(?P<scheme>(?:bearer|basic)\s+)?[^\s'\x22&;]+(?P<e>['\x22]?)"
+        ),
+        Mask::With(judge::named_value),
+    ),
+    // The same names as a quoted key with a quoted value, as JSON and Python
+    // literals write them (`{"token": "abc"}`, `{'password': 'a b'}`).
+    (
+        concat!(
+            r"(?i)(?P<key>['\x22](?:[a-z0-9]+[_-])*",
+            credential_word!(),
+            r#"(?:[_-][a-z0-9]+)*['\x22]\s*:\s*)(?P<v>\x22(?:\\.|[^\x22\\])+\x22|'(?:\\.|[^'\\])+')"#
+        ),
+        Mask::With(judge::quoted_value),
     ),
     // The same names as a flag with its value as the next argument
     // (`--token abc`, `--db-password abc`). The name must end in the
@@ -32,19 +66,23 @@ const NAMED: &[(&str, &str)] = &[
     // what follows, and a value cannot start with `-` (the next flag).
     (
         r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)(['\x22]?)[^\s'\x22&;|<>-][^\s'\x22&;|<>]*(['\x22]?)",
-        "${1}${2}[redacted]${3}",
+        Mask::Text("${1}${2}[redacted]${3}"),
     ),
     // `user:password` given to `-u` or `--user` (curl and others); a value
-    // without `:` (`git push -u origin`) has no password to mask.
+    // without `:` (`git push -u origin`) has no password to mask, and one
+    // outside an HTTP client that is a drive path or `uid:gid` keeps it.
     (
-        r"((?:^|\s)(?:-u|--user)(?:\s+|=)['\x22]?[^\s:'\x22]+:)[^\s'\x22]+",
-        "${1}[redacted]",
+        r"(?P<pre>(?:^|\s)(?:-u|--user)(?:\s+|=)['\x22]?)(?P<user>[^\s:'\x22]+):(?P<pass>[^\s'\x22]+)",
+        Mask::With(judge::user_password),
     ),
     (
-        r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}",
-        "Bearer [redacted]",
+        r"(?i)\bbearer\s+(?P<v>[A-Za-z0-9._~+/=-]{8,})",
+        Mask::With(judge::bearer),
     ),
-    (r"(?i)\bbasic\s+[A-Za-z0-9+/=]{8,}", "Basic [redacted]"),
+    (
+        r"(?i)\bbasic\s+(?P<v>[A-Za-z0-9+/=]{8,})",
+        Mask::With(judge::basic),
+    ),
 ];
 
 /// Well-known token formats with a vendor prefix, by name. Rarely anything
@@ -74,18 +112,20 @@ pub const TOKEN_SHAPES: &[(&str, &str)] = &[
 
 /// Credential patterns that run after [`TOKEN_SHAPES`]. A JSON web token is
 /// masked but not in [`TOKEN_SHAPES`]: sample ones are common in test data.
-const TAIL: &[(&str, &str)] = &[
+const TAIL: &[(&str, Mask)] = &[
     (
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
-        REPLACEMENT,
+        Mask::Text(REPLACEMENT),
     ),
     // Credentials embedded in URLs.
-    (r"(://[^/\s:@]+:)[^@/\s]+@", "${1}[redacted]@"),
+    (r"(://[^/\s:@]+:)[^@/\s]+@", Mask::Text("${1}[redacted]@")),
 ];
 
 /// Every pattern in the order it runs, with what replaces its match.
-fn rules() -> impl Iterator<Item = (&'static str, &'static str)> {
-    let shapes = TOKEN_SHAPES.iter().map(|(_, p)| (*p, REPLACEMENT));
+fn rules() -> impl Iterator<Item = (&'static str, Mask)> {
+    let shapes = TOKEN_SHAPES
+        .iter()
+        .map(|(_, p)| (*p, Mask::Text(REPLACEMENT)));
     NAMED
         .iter()
         .copied()
@@ -95,7 +135,7 @@ fn rules() -> impl Iterator<Item = (&'static str, &'static str)> {
 
 /// [`rules`] compiled; `None` when one does not compile, which a test rules
 /// out. Every text is then redacted whole rather than masked by fewer patterns.
-static PATTERNS: LazyLock<Option<Vec<(Regex, &'static str)>>> = LazyLock::new(|| {
+static PATTERNS: LazyLock<Option<Vec<(Regex, Mask)>>> = LazyLock::new(|| {
     rules()
         .map(|(pattern, replacement)| Regex::new(pattern).map(|re| (re, replacement)))
         .collect::<Result<_, _>>()
@@ -209,12 +249,15 @@ impl KnownSecrets {
 }
 
 /// Run `patterns` over `text`; with none, nothing of `text` is kept.
-fn mask_patterns(patterns: Option<&[(Regex, &str)]>, text: String) -> String {
+fn mask_patterns(patterns: Option<&[(Regex, Mask)]>, text: String) -> String {
     let Some(patterns) = patterns else {
         return REPLACEMENT.to_owned();
     };
-    patterns.iter().fold(text, |acc, (re, replacement)| {
-        re.replace_all(&acc, *replacement).into_owned()
+    patterns.iter().fold(text, |acc, (re, mask)| match mask {
+        Mask::Text(replacement) => re.replace_all(&acc, *replacement).into_owned(),
+        Mask::With(replace) => re
+            .replace_all(&acc, |caps: &Captures<'_>| replace(caps, &acc))
+            .into_owned(),
     })
 }
 
@@ -233,203 +276,4 @@ pub fn redact_value(value: Value) -> Value {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        KnownSecrets, PATTERNS, SHAPES, TOKEN_SHAPES, mask_patterns, redact, redact_value, rules,
-        token_shape,
-    };
-    use serde_json::json;
-
-    #[test]
-    fn every_pattern_compiles() {
-        assert!(
-            PATTERNS
-                .as_ref()
-                .is_some_and(|p| p.len() == rules().count())
-        );
-        assert!(
-            SHAPES
-                .as_ref()
-                .is_some_and(|p| p.len() == TOKEN_SHAPES.len())
-        );
-    }
-
-    #[test]
-    fn token_shapes_are_named_and_ordinary_text_has_none() {
-        assert_eq!(
-            token_shape("+ key = \"AKIAIOSFODNN7EXAMPLE\""),
-            Some("an AWS access key id")
-        );
-        assert_eq!(
-            token_shape("x=ghp_abcdefghijklmnopqrstuvwxyz0123"),
-            Some("a GitHub token")
-        );
-        for key in [
-            "sk-ant-api03-FAKE_fake-0000FAKEfake0000-FAKEfake",
-            "sk-proj-FAKE_fake-0000FAKEfake0000",
-        ] {
-            assert_eq!(
-                token_shape(&format!("k={key}")),
-                Some("an OpenAI or Anthropic key")
-            );
-            assert_eq!(redact(&format!("k={key}")), "k=[redacted]");
-        }
-        for text in [
-            "fn main() {}",
-            "token: ${{ secrets.X }}",
-            "sk-short",
-            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijkl",
-        ] {
-            assert_eq!(token_shape(text), None, "{text}");
-        }
-        let known = KnownSecrets::new([FAKE]).unwrap();
-        assert!(known.occurs_in(&format!("+v={}", FAKE.to_ascii_uppercase())));
-        assert!(!known.occurs_in("+v=other"));
-        assert!(!KnownSecrets::default().occurs_in(FAKE));
-    }
-
-    #[test]
-    fn without_patterns_nothing_is_kept() {
-        let text = "export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123".to_owned();
-        assert_eq!(mask_patterns(None, text), "[redacted]");
-    }
-
-    #[test]
-    fn redacts_string_leaves_of_a_document() {
-        let doc = json!({"shell": {"command": "curl -H \"X-Api-Key: abc123def456\" https://x", "n": 1, "list": ["token=ghp_abcdefghijklmnopqrstuvwxyz0123"]}});
-        let out = redact_value(doc);
-        let text = out.to_string();
-        assert!(!text.contains("abc123def456"), "{text}");
-        assert!(!text.contains("ghp_abc"), "{text}");
-        assert!(text.contains("X-Api-Key: [redacted]"), "{text}");
-        assert_eq!(out["shell"]["n"], 1);
-    }
-
-    #[test]
-    fn named_credentials_keep_their_key() {
-        assert_eq!(
-            redact("curl -H 'X-Api-Key: abc123def'"),
-            "curl -H 'X-Api-Key: [redacted]'"
-        );
-        assert_eq!(
-            redact("export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123"),
-            "export TOKEN=[redacted]"
-        );
-        assert_eq!(
-            redact("password=hunter2 user=bob"),
-            "password=[redacted] user=bob"
-        );
-    }
-
-    #[test]
-    fn credential_words_inside_longer_names() {
-        for (text, want) in [
-            (
-                "AWS_SECRET_ACCESS_KEY=wJalrFAKEfakeKEY aws s3 ls",
-                "AWS_SECRET_ACCESS_KEY=[redacted] aws s3 ls",
-            ),
-            (
-                "GH_TOKEN=abc123 gh pr list",
-                "GH_TOKEN=[redacted] gh pr list",
-            ),
-            ("export NPM_TOKEN='abc123'", "export NPM_TOKEN='[redacted]'"),
-            (
-                "DATABASE_PASSWORD=hunter2 ./run",
-                "DATABASE_PASSWORD=[redacted] ./run",
-            ),
-            ("MY_TOKEN: abc123", "MY_TOKEN: [redacted]"),
-            (
-                "curl 'https://x.test/?access_token=abc123&n=1'",
-                "curl 'https://x.test/?access_token=[redacted]&n=1'",
-            ),
-            ("tool --token=abc123", "tool --token=[redacted]"),
-            ("tool --token abc123 -v", "tool --token [redacted] -v"),
-            (
-                "psql --db-password \"abc123\"",
-                "psql --db-password \"[redacted]\"",
-            ),
-            (
-                "curl -u alice:s3cret https://x.test",
-                "curl -u alice:[redacted] https://x.test",
-            ),
-            (
-                "curl --user=alice:s3cret x.test",
-                "curl --user=alice:[redacted] x.test",
-            ),
-            (
-                "curl --user 'alice:s3cret' x.test",
-                "curl --user 'alice:[redacted]' x.test",
-            ),
-        ] {
-            assert_eq!(redact(text), want, "{text}");
-            assert_eq!(redact(want), want, "{want}");
-        }
-    }
-
-    #[test]
-    fn words_that_only_start_with_a_credential_word_are_kept() {
-        for text in [
-            "tokenizer=bpe max_tokens=100",
-            "the secretary: Jane",
-            "passwords are hashed",
-            "gh auth login --with-token < token.txt",
-            "docker login --password-stdin registry.example",
-            "tool --token --verbose",
-            "git push -u origin main",
-            "sort -u names.txt",
-        ] {
-            assert_eq!(redact(text), text);
-        }
-    }
-
-    #[test]
-    fn well_known_token_shapes() {
-        assert_eq!(redact("AKIAIOSFODNN7EXAMPLE"), "[redacted]");
-        assert_eq!(
-            redact("Authorization: Bearer abc.def-ghi_jkl"),
-            "Authorization: Bearer [redacted]"
-        );
-        assert!(redact("sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX").contains("[redacted]"));
-        assert_eq!(
-            redact("https://user:s3cret@host.example/x"),
-            "https://user:[redacted]@host.example/x"
-        );
-    }
-
-    #[test]
-    fn ordinary_commands_are_untouched() {
-        for cmd in [
-            "git status --short",
-            "cargo test -p openmoat-core",
-            "echo token",
-            "cat ~/.ssh/id_rsa",
-        ] {
-            assert_eq!(redact(cmd), cmd);
-        }
-    }
-
-    /// Generated for the test; no real secret is used.
-    const FAKE: &str = "q7Zp-fake-9xK2mW4v";
-
-    #[test]
-    fn known_values_are_masked_whatever_their_format() {
-        let known = KnownSecrets::new([FAKE, "q7Zp-fake-9xK2mW4v-longer", "short"]).unwrap();
-        let text = format!("curl https://x.test/?k={FAKE}&n=1 /tmp/{FAKE}-longer/f short");
-        assert_eq!(
-            known.redact(&text),
-            "curl https://x.test/?k=[redacted]&n=1 /tmp/[redacted]/f short"
-        );
-        let host = format!("http://{}.x.test:80", FAKE.to_ascii_lowercase());
-        assert_eq!(known.redact(&host), "http://[redacted].x.test:80");
-        let doc = known.redact_value(json!({"mcp": {"args": [FAKE]}}));
-        assert_eq!(doc["mcp"]["args"][0], "[redacted]");
-        assert_eq!(format!("{known:?}"), "KnownSecrets");
-        assert_eq!(KnownSecrets::default().redact(FAKE), FAKE);
-    }
-
-    #[test]
-    fn idempotent() {
-        let once = redact("GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123");
-        assert_eq!(redact(&once), once);
-    }
-}
+mod tests;

@@ -41,8 +41,8 @@ pub fn person() -> bool {
     interactive() && refuse_agent("openmoat").is_ok()
 }
 
-/// Refuse `command` when an agent host (Claude Code, Codex, the Cursor CLI)
-/// or `moat run` is among the processes that started this one, or when they
+/// Refuse `command` when an agent host (`ancestry::AGENTS`, a Cursor editor
+/// helper on macOS) or `moat run` is among the processes that started this one, or when they
 /// cannot be read. Windows is not checked yet: there only the terminal check
 /// applies.
 pub fn refuse_agent(command: &str) -> Result<()> {

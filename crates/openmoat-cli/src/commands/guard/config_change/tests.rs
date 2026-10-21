@@ -89,6 +89,9 @@ fn each_key_that_turns_hooks_off_or_runs_code_blocks_a_project_change() {
         json!({"enabledPlugins": {"tool@market": true}}),
         json!({"sandbox": {"enabled": false}}),
         json!({"sandbox": {"filesystem": {"allowWrite": ["~"]}}}),
+        json!({"enableAllProjectMcpServers": true}),
+        json!({"enabledMcpjsonServers": ["db"]}),
+        json!({"extraKnownMarketplaces": {"m": {"source": {"source": "github", "repo": "o/r"}}}}),
     ];
     for (source, name) in [
         ("project_settings", "settings.json"),

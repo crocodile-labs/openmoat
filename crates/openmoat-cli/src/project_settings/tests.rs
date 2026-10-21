@@ -61,9 +61,16 @@ fn names_each_key_that_turns_hooks_off_or_runs_a_program() {
         "otelHeadersHelper": "h", "statusLine": {"command": "s"},
         "subagentStatusLine": {"command": "s"}, "fileSuggestion": {"command": "f"},
         "enabledPlugins": {"p@m": true}, "sandbox": {"enabled": false},
+        "extraKnownMarketplaces": {"m": {"source": {"source": "github", "repo": "o/r"}}},
+        "enableAllProjectMcpServers": true, "enabledMcpjsonServers": ["db"],
     }));
-    assert_eq!(all.len(), 12, "{all:?}");
+    assert_eq!(all.len(), 15, "{all:?}");
     assert!(all[0].contains("OpenMoat's included"), "{all:?}");
+    assert!(
+        all.iter()
+            .any(|f| f.contains("`enabledMcpjsonServers` starts MCP servers")),
+        "{all:?}"
+    );
 }
 
 #[test]
@@ -74,15 +81,48 @@ fn leaves_permissions_and_empty_or_switched_off_values_alone() {
             "disableAllHooks": false, "hooks": {}, "env": {}, "apiKeyHelper": "",
             "statusLine": null, "enabledPlugins": {"p@m": false},
             "sandbox": {"enabled": true}, "model": "opus",
+            "enableAllProjectMcpServers": false, "enabledMcpjsonServers": [],
+            "extraKnownMarketplaces": {}, "disabledMcpjsonServers": ["db"],
         }))
         .is_empty()
+    );
+}
+
+/// A file that passes the check but is rewritten before the decision is
+/// reported, whatever it holds by then; one left as it was passes.
+#[test]
+fn a_file_rewritten_during_the_check_is_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, r#"{"model": "opus"}"#).unwrap();
+    assert_eq!(check_unchanged(&path), None);
+    let swapped = check_between(&path, || {
+        fs::write(&path, r#"{"disableAllHooks": true}"#).unwrap();
+    });
+    assert!(swapped.unwrap().contains("changed while"));
+    fs::write(&path, "{}").unwrap();
+    let touched = check_between(&path, || fs::write(&path, "{ }").unwrap());
+    assert!(
+        touched.unwrap().contains("changed while"),
+        "bytes, not meaning"
+    );
+    let gone = dir.path().join("gone.json");
+    let created = check_between(&gone, || fs::write(&gone, "{}").unwrap());
+    assert!(created.unwrap().contains("changed while"), "appeared");
+    fs::remove_file(&gone).unwrap();
+    assert_eq!(check_unchanged(&gone), None);
+    fs::write(&path, r#"{"hooks": {"Stop": [{}]}}"#).unwrap();
+    assert!(
+        check_between(&path, || panic!("not read again"))
+            .unwrap()
+            .contains("`hooks`")
     );
 }
 
 #[test]
 fn reading_tells_absent_from_broken() {
     let dir = tempfile::tempdir().unwrap();
-    assert!(read(&dir.path().join("none.json")).unwrap().is_none());
+    assert!(read_bytes(&dir.path().join("none.json")).unwrap().is_none());
     assert_eq!(check(&dir.path().join("none.json")), None);
     let path = dir.path().join("settings.json");
     fs::write(&path, "// comment\n{}").unwrap();

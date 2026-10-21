@@ -46,7 +46,7 @@ use zeroize::Zeroizing;
 
 use super::proxy::{self, Exit};
 use super::sandbox::write_report;
-use crate::cli::{IsolatedArgs, RunArgs};
+use crate::cli::{IsolatedArgs, Netns, RunArgs};
 use crate::context::{self, path_string};
 use crate::environment::find_in;
 use crate::exit::Code;
@@ -98,6 +98,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     } else {
         platform::confine(&policy, &ctx, grants, &program, state)?
     };
+    refuse_port_only(args.netns, agent.warning())?;
     agent.command().args(rest);
     agent
         .command()
@@ -239,6 +240,18 @@ pub fn port_only_network() -> Option<String> {
     platform::port_only_network()
 }
 
+/// Refuse to start, under `--netns=require`, an agent whose network is
+/// restricted by port only (`port_only`, the platform's warning).
+fn refuse_port_only(netns: Netns, port_only: Option<&str>) -> Result<()> {
+    match (netns, port_only) {
+        (Netns::Require, Some(why)) => bail!(
+            "`openmoat run --netns=require`: the agent cannot get a network of its own here, so \
+             it does not start.\n{why}"
+        ),
+        _ => Ok(()),
+    }
+}
+
 /// What the user must know before the agent starts, on standard error.
 fn notice(
     program: &Path,
@@ -289,4 +302,23 @@ fn notice(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Netns, refuse_port_only};
+
+    #[test]
+    fn require_refuses_a_port_only_network() {
+        let why = "moat run: the network is restricted by port only";
+        let refused = refuse_port_only(Netns::Require, Some(why)).unwrap_err();
+        assert!(format!("{refused:#}").contains("--netns=require"));
+        assert!(format!("{refused:#}").contains(why));
+        assert!(refuse_port_only(Netns::Require, None).is_ok());
+        assert!(
+            refuse_port_only(Netns::Auto, Some(why)).is_ok(),
+            "the default"
+        );
+        assert!(refuse_port_only(Netns::Auto, None).is_ok());
+    }
 }
