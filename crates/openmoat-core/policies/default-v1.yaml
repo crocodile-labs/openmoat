@@ -342,7 +342,10 @@ deny:
       - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
   - id: shell-rc
     reason: edits persist into every future shell session
-    fs.write: ["~/.zshrc", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zprofile", "~/.zshenv"]
+    # and the files curl and wget read on every run, which can add a body or an
+    # upload to each later call (`data = @~/.ssh/id_rsa`): `~/.config/wget/` is wget2's
+    fs.write: ["~/.zshrc", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zprofile", "~/.zshenv",
+      "~/.curlrc", "~/_curlrc", "~/.config/curlrc", "~/.wgetrc", "~/.config/wget/**"]
   - id: cloud-metadata
     reason: instance metadata and link-local services hand out cloud credentials
     # a `net` deny also covers `fetch` (ADR-017), so a fetch tool cannot read them either

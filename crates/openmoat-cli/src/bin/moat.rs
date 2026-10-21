@@ -36,12 +36,20 @@ fn main() -> ExitCode {
     ExitCode::from(failed)
 }
 
-/// `openmoat` in this executable's directory, when it is a file.
+/// `openmoat` in this executable's directory, when it is a file. The
+/// directory is the one the executable really lives in: on macOS
+/// `current_exe` is the path it was started by, so a `moat` linked from
+/// another directory (`~/bin/moat → …/bin/moat`) would otherwise look beside
+/// the link. The link's own directory is the fallback.
 fn beside() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let name = format!("openmoat{}", std::env::consts::EXE_SUFFIX);
-    let path = exe.parent()?.join(name);
-    path.is_file().then_some(path)
+    std::fs::canonicalize(&exe)
+        .ok()
+        .into_iter()
+        .chain([exe])
+        .filter_map(|exe| exe.parent().map(|dir| dir.join(&name)))
+        .find(|path| path.is_file())
 }
 
 /// Replace this process with `command`; returns only when that failed.

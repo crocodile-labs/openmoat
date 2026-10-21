@@ -76,6 +76,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
             .collect();
         render::json(&json!({
             "default_read_roots": plan.default_read_roots,
+            "hook_only": hook_only_json(&policy),
             "hosts": doc,
             "lightweight": {
                 "seatbelt": { "profile": &seatbelt.profile, "report": &seatbelt.report },
@@ -92,6 +93,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
         )?;
     }
     write_secrets(&mut out, &policy.secrets, &claude_doc, &plan.claude.report)?;
+    write_hook_only(&mut out, &policy)?;
     for shown in hosts {
         if let Some(note) = install::unavailable(shown.host) {
             writeln!(out, "{}  {note}", shown.host.display_name())?;
@@ -235,6 +237,63 @@ fn write_secrets(
     Ok(())
 }
 
+/// A `hook_only` group's id and its file patterns by kind (`fs.read`, `fs.write`).
+type HookOnly<'a> = (&'a str, Vec<(&'static str, &'a [String])>);
+
+/// The `hook_only` deny groups (ADR-034) and their file patterns by kind:
+/// the hook denies the agent's own reads and writes of them, the OS sandboxes
+/// leave them to the other rules.
+fn hook_only(policy: &openmoat_core::Policy) -> Vec<HookOnly<'_>> {
+    use openmoat_core::Kind;
+    policy
+        .deny
+        .iter()
+        .filter(|group| group.hook_only)
+        .map(|group| {
+            let kinds = [Kind::FsRead, Kind::FsWrite]
+                .into_iter()
+                .map(|kind| (kind.as_str(), group.patterns(kind)))
+                .filter(|(_, patterns)| !patterns.is_empty())
+                .collect();
+            (group.id.as_str(), kinds)
+        })
+        .collect()
+}
+
+/// [`hook_only`] for `--format json`.
+fn hook_only_json(policy: &openmoat_core::Policy) -> Value {
+    hook_only(policy)
+        .into_iter()
+        .map(|(id, kinds)| {
+            let mut entry = serde_json::Map::new();
+            entry.insert("id".to_owned(), json!(id));
+            for (kind, patterns) in kinds {
+                entry.insert(kind.to_owned(), json!(patterns));
+            }
+            Value::Object(entry)
+        })
+        .collect()
+}
+
+/// The [`hook_only`] groups, so nobody takes the OS sandbox to cover them.
+fn write_hook_only(out: &mut impl io::Write, policy: &openmoat_core::Policy) -> io::Result<()> {
+    let groups = hook_only(policy);
+    if groups.is_empty() {
+        return Ok(());
+    }
+    writeln!(
+        out,
+        "Hook only  decided by the hook only, not in the OS sandbox (ADR-034): the agent's own \
+         reads and writes are denied, commands the sandbox runs can still use these files"
+    )?;
+    for (id, kinds) in groups {
+        for (kind, patterns) in kinds {
+            writeln!(out, "  {id}  {kind}: {}", patterns.join(", "))?;
+        }
+    }
+    Ok(())
+}
+
 /// Losses and allowances, as `sandbox show`, `sandbox sync` and `doctor` print them.
 pub(super) fn write_report(out: &mut impl io::Write, report: &Report) -> io::Result<()> {
     for loss in &report.losses {
@@ -244,4 +303,40 @@ pub(super) fn write_report(out: &mut impl io::Write, report: &Report) -> io::Res
         writeln!(out, "  wider:    {allowance}")?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use openmoat_core::{DEFAULT_POLICY, Policy};
+
+    use super::{hook_only_json, write_hook_only};
+
+    #[test]
+    fn show_lists_the_hook_only_groups_as_outside_the_os_sandbox() {
+        let policy = Policy::parse(DEFAULT_POLICY).unwrap();
+        let mut out = Vec::new();
+        write_hook_only(&mut out, &policy).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains("decided by the hook only, not in the OS sandbox"),
+            "{text}"
+        );
+        assert!(
+            text.contains("build-credentials  fs.read: ~/.m2/settings.xml"),
+            "{text}"
+        );
+        assert!(text.contains("build-credentials  fs.write:"), "{text}");
+        let json = hook_only_json(&policy);
+        assert_eq!(json[0]["id"], "build-credentials");
+        assert_eq!(json[0]["fs.read"][0], "~/.m2/settings.xml");
+    }
+
+    #[test]
+    fn a_policy_without_hook_only_groups_shows_nothing_for_them() {
+        let policy = Policy::parse("version: 1\n").unwrap();
+        let mut out = Vec::new();
+        write_hook_only(&mut out, &policy).unwrap();
+        assert!(out.is_empty());
+        assert_eq!(hook_only_json(&policy), serde_json::json!([]));
+    }
 }

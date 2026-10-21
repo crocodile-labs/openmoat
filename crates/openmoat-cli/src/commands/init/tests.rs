@@ -1,4 +1,12 @@
-use super::{RepinChecks, repin_checks};
+use super::{RepinChecks, mcp, repin_checks};
+
+#[test]
+fn mcp_changes_over_an_existing_lock_wait_for_a_person() {
+    assert!(mcp::hold_changes(true, false), "a detached script");
+    assert!(!mcp::hold_changes(true, true), "a person at a terminal");
+    assert!(!mcp::hold_changes(false, false), "a first install");
+    assert!(!mcp::hold_changes(false, true));
+}
 
 #[test]
 fn a_first_install_is_open_to_scripts_and_agents() {

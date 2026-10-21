@@ -30,7 +30,10 @@ pub const EXAMPLES: &[(&str, &str)] = &[
         "echo Y2F0IH4vLnNzaC9pZF9yc2E= | base64 -d | sh",
     ),
     ("a misspelled package", "pip install reqeusts"),
-    ("a plain download", "curl -sS https://example.com/notes.txt"),
+    (
+        "a plain download",
+        "curl -q -sS https://example.com/notes.txt",
+    ),
     ("switching OpenMoat off", "openmoat uninstall"),
 ];
 

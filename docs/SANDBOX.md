@@ -23,7 +23,8 @@ command ends; the file on disk does not change (`contained` in
 default `build-credentials` (`~/.m2/settings.xml`, `~/.gradle/gradle.properties`), is
 left out of every generated sandbox, so `mvn` and `gradle` can read their settings
 wherever the sandbox lets commands read `~/.m2` or `~/.gradle`; the hook still denies
-the agent's own access.
+the agent's own access. `openmoat sandbox show` lists these groups and their paths as
+decided by the hook only, not in the OS sandbox (`hook_only` in `--format json`).
 
 - **Claude Code** (`settings.json`): the `sandbox` block (`enabled`,
   `failIfUnavailable: true`, `allowUnsandboxedCommands: false`, `excludedCommands: []`,
@@ -282,7 +283,8 @@ available, the Standard tier keeps its commands out of the home altogether.
   files as before, and the same Landlock rules and seccomp filter apply. Where
   bubblewrap is missing or cannot create the namespaces, `openmoat run` starts with
   Landlock and seccomp alone and says on every start that the network is restricted
-  by port only, and `openmoat doctor` warns.
+  by port only, and `openmoat doctor` warns. `openmoat run --netns=require` refuses to
+  start there instead (exit 64); the default, `--netns=auto`, is the behaviour above.
 - **What Linux does not protect.** Landlock can only grant access to whole directory
   trees, so inside the project the policy's deny rules do not hold for the agent's
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
@@ -388,7 +390,8 @@ openmoat run --isolate --write ~/.claude --write ~/.claude.json -- claude
   `openmoat run`.
 - **No user namespaces of its own.** Where bubblewrap accepts `--disable-userns`
   (0.8 and later), OpenMoat passes it, so the agent cannot create further user
-  namespaces inside; an older bubblewrap runs without it.
+  namespaces inside. Only a bubblewrap that does not know the option (`Unknown option
+  --disable-userns`, before 0.8) runs without it; any other failure with it refuses.
 
 It needs `bwrap` in `/usr/bin`, `/bin` or `/usr/local/bin` (`apt install bubblewrap`, `dnf install bubblewrap`; never taken from `PATH`, since it starts outside the sandbox) and
 unprivileged user namespaces; on Ubuntu 24.04 AppArmor restricts them unless

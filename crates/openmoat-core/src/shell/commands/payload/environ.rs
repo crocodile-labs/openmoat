@@ -2,8 +2,13 @@
 //! `os.getenv('X')`, `process.env.X`, `ENV['X']`, `$ENV{X}`, `getenv('X')`,
 //! `$env:X` read the variable they name; `print(os.environ)`,
 //! `console.log(process.env)`, `ENV.to_h`, `%ENV`, `getenv()` or a name chosen
-//! at run time (`os.environ[k]`) read all of them. The code is scanned, not
-//! parsed, like the rest of a payload: an alias (`e = os.environ`) is not followed.
+//! at run time (`os.environ[k]`) read all of them. Forms that name none of
+//! these bases (`getattr(os, 'environ')`, `subprocess.run(['env'])`,
+//! `Get-ChildItem Env:`) are in `indirect.rs`. The code is scanned, not
+//! parsed, like the rest of a payload: an alias (`e = os.environ`, `g = getattr`)
+//! is not followed.
+
+mod indirect;
 
 /// The ways code names the environment. `environ` also stands for `os.environ`.
 const BASES: &[&str] = &[
@@ -66,7 +71,8 @@ pub(super) fn reads(code: &str) -> (Vec<String>, Option<&'static str>) {
             whole = whole.or(Some(base));
         }
     }
-    (names, whole)
+    let indirect = indirect::reads(code, &mut names);
+    (names, whole.or(indirect))
 }
 
 fn is_ident(c: char) -> bool {

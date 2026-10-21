@@ -4,99 +4,112 @@
 //! The check is an allowlist. Every word must be a URL, or an option on the
 //! lists below whose value (when it takes one) is checked too; anything else
 //! (a body, a form, an upload, a header, credentials, a cookie, a config file,
-//! `--next`, an option not on the lists) keeps the command `net`. So does a
-//! word the shell expands (`$X`, `$(…)`, a backtick), an `@` in a value or in
-//! a URL's user part, and a variable set earlier on the line that points the
-//! program at another configuration file or a proxy (`CURL_HOME`, `WGETRC`).
+//! `--next`, `--write-out`, a server-chosen file name, an option not on the
+//! lists) keeps the command `net`. So does a word the shell expands (`$X`,
+//! `$(…)`, a backtick), an `@` in a value or in a URL's user part, and a
+//! variable set earlier on the line that points the program at another
+//! configuration file or a proxy (`CURL_HOME`, `WGETRC`).
+//!
+//! Both programs read configuration files on their own, which can add a body or
+//! an upload (`data = @~/.ssh/id_rsa` in `~/.curlrc`): curl only skips them when
+//! `-q`/`--disable` is its first argument, and wget needs `--no-config` and
+//! `--no-netrc` (it sends a `.netrc` `default` login to any host). The words are
+//! read by the same parser that finds the files the command writes
+//! (`options/transfer.rs`), so a write is never hidden in a short cluster.
 
 use crate::action::AtomicAction;
 use crate::lexer::Word;
 use crate::shell::Sink;
+use crate::shell::options::transfer::{self, Arg, Client};
 
-/// curl options that take no value and send nothing.
+/// curl long options that take no value and send nothing. Not `-J`/
+/// `--remote-header-name`: the server would choose the file name.
 const CURL_FLAGS: &[&str] = &[
-    "--silent",
-    "--show-error",
-    "--fail",
-    "--fail-with-body",
-    "--fail-early",
-    "--include",
-    "--head",
-    "--insecure",
-    "--verbose",
-    "--remote-name",
-    "--remote-name-all",
-    "--remote-header-name",
-    "--remote-time",
-    "--globoff",
-    "--no-buffer",
-    "--compressed",
-    "--progress-bar",
-    "--no-progress-meter",
-    "--create-dirs",
-    "--ipv4",
-    "--ipv6",
-    "--http1.1",
-    "--http2",
-    "--retry-connrefused",
-    "--retry-all-errors",
-    "--disable",
+    "silent",
+    "show-error",
+    "fail",
+    "fail-with-body",
+    "fail-early",
+    "include",
+    "head",
+    "insecure",
+    "verbose",
+    "remote-name",
+    "remote-name-all",
+    "remote-time",
+    "globoff",
+    "no-buffer",
+    "compressed",
+    "progress-bar",
+    "no-progress-meter",
+    "create-dirs",
+    "ipv4",
+    "ipv6",
+    "http1.1",
+    "http2",
+    "retry-connrefused",
+    "retry-all-errors",
+    "disable",
 ];
-/// curl options that take a value and send nothing.
+/// curl long options that take a value and send nothing. Not `--write-out`:
+/// since curl 8.3 its `%output{FILE}` writes text the agent chooses to a file.
 const CURL_VALUED: &[&str] = &[
-    "--output",
-    "--output-dir",
-    "--request",
-    "--max-time",
-    "--connect-timeout",
-    "--retry",
-    "--retry-delay",
-    "--retry-max-time",
-    "--range",
-    "--continue-at",
-    "--write-out",
-    "--max-redirs",
-    "--max-filesize",
-    "--limit-rate",
+    "output",
+    "output-dir",
+    "request",
+    "max-time",
+    "connect-timeout",
+    "retry",
+    "retry-delay",
+    "retry-max-time",
+    "range",
+    "continue-at",
+    "max-redirs",
+    "max-filesize",
+    "limit-rate",
 ];
 /// curl short flags with no value (`-sS`), and short options with one. `-L`
 /// (`--location`) is left out: a redirect leads where the hook cannot see.
-const CURL_SHORT_FLAGS: &str = "sSfiIkvOgNRJ46#q";
-const CURL_SHORT_VALUED: &str = "oXmrCw";
+const CURL_SHORT_FLAGS: &str = "sSfiIkvOgNR46#q";
+const CURL_SHORT_VALUED: &str = "oXmrC";
 
+/// wget long options that send nothing. Not `--content-disposition`: the
+/// server would choose the file name.
 const WGET_FLAGS: &[&str] = &[
-    "--quiet",
-    "--verbose",
-    "--no-verbose",
-    "--continue",
-    "--timestamping",
-    "--server-response",
-    "--no-clobber",
-    "--no-check-certificate",
-    "--show-progress",
-    "--no-parent",
-    "--no-directories",
-    "--spider",
-    "--content-disposition",
-    "--inet4-only",
-    "--inet6-only",
+    "quiet",
+    "verbose",
+    "no-verbose",
+    "continue",
+    "timestamping",
+    "server-response",
+    "no-clobber",
+    "no-check-certificate",
+    "show-progress",
+    "no-parent",
+    "no-directories",
+    "spider",
+    "inet4-only",
+    "inet6-only",
+    "no-config",
+    "no-netrc",
 ];
 const WGET_VALUED: &[&str] = &[
-    "--output-document",
-    "--directory-prefix",
-    "--tries",
-    "--timeout",
-    "--read-timeout",
-    "--connect-timeout",
-    "--dns-timeout",
-    "--wait",
-    "--waitretry",
-    "--limit-rate",
-    "--max-redirect",
-    "--progress",
+    "output-document",
+    "directory-prefix",
+    "tries",
+    "timeout",
+    "read-timeout",
+    "connect-timeout",
+    "dns-timeout",
+    "wait",
+    "waitretry",
+    "limit-rate",
+    "max-redirect",
+    "progress",
 ];
-/// wget's two-letter short options (`-nv`), single short flags, valued short options.
-const WGET_PAIRS: &[&str] = &["-nv", "-nc", "-nd", "-nH", "-np"];
+/// The letters wget's `-n` takes (`-nv`, `-nc`, `-nH`, …), single short
+/// flags, valued short options.
+const WGET_N_LETTERS: &[&str] = &["v", "c", "d", "H", "p"];
 const WGET_SHORT_FLAGS: &str = "qvcNS46";
 const WGET_SHORT_VALUED: &str = "OPtT";
 
@@ -111,24 +124,24 @@ fn redirects_config(name: &str) -> bool {
 }
 
 struct Options {
+    client: Client,
     flags: &'static [&'static str],
     valued: &'static [&'static str],
-    pairs: &'static [&'static str],
     short_flags: &'static str,
     short_valued: &'static str,
 }
 
 const CURL: Options = Options {
+    client: Client::Curl,
     flags: CURL_FLAGS,
     valued: CURL_VALUED,
-    pairs: &[],
     short_flags: CURL_SHORT_FLAGS,
     short_valued: CURL_SHORT_VALUED,
 };
 const WGET: Options = Options {
+    client: Client::Wget,
     flags: WGET_FLAGS,
     valued: WGET_VALUED,
-    pairs: WGET_PAIRS,
     short_flags: WGET_SHORT_FLAGS,
     short_valued: WGET_SHORT_VALUED,
 };
@@ -169,88 +182,83 @@ fn wget_follows_no_redirect(argv: &[String]) -> bool {
 }
 
 fn words_send_nothing(argv: &[String], options: &Options) -> bool {
-    let mut i = 1;
-    let mut options_ended = false;
-    while let Some(arg) = argv.get(i) {
-        i += 1;
-        if options_ended || !arg.starts_with('-') || arg == "-" {
-            if arg == "-" || !plain_url(arg) {
-                return false;
-            }
-            continue;
-        }
-        if arg == "--" {
-            options_ended = true;
-            continue;
-        }
-        let value = if let Some(long) = arg.strip_prefix("--") {
-            let (name, attached) = long
-                .split_once('=')
-                .map_or((long, None), |(n, v)| (n, Some(v)));
-            let name = format!("--{name}");
-            if options.flags.contains(&name.as_str()) && attached.is_none() {
-                continue;
-            }
-            if !options.valued.contains(&name.as_str()) {
-                return false;
-            }
-            let Some(value) = attached.or_else(|| next(argv, &mut i)) else {
-                return false;
-            };
-            if name == "--request" && !read_method(value) {
-                return false;
-            }
-            value
-        } else if options.pairs.contains(&arg.as_str()) {
-            continue;
-        } else {
-            match short(arg, options, argv, &mut i) {
-                Some(value) => value,
-                None => return false,
-            }
-        };
-        if value.starts_with('@') {
-            return false;
-        }
-    }
-    true
+    let parsed = transfer::parse(argv, options.client);
+    let long = |n: &str| {
+        parsed
+            .iter()
+            .any(|a| matches!(a, Arg::Long { name, exact: true, value: None } if *name == n))
+    };
+    // curl reads `.curlrc` unless `-q`/`--disable` is its very first argument;
+    // wget reads `.wgetrc` and `.netrc` unless told not to
+    let no_config = match options.client {
+        Client::Curl => matches!(argv.get(1).map(String::as_str), Some("-q" | "--disable")),
+        Client::Wget => long("no-config") && long("no-netrc"),
+    };
+    no_config
+        && parsed.iter().all(|a| sends_nothing_arg(a, options))
+        && names_known(&parsed, options)
 }
 
-/// The value of a cluster of short options (`-sSLo out`, `-oout`), `""` when
-/// it takes none; `None` when one of them is not on the lists.
-fn short<'a>(
-    arg: &'a str,
-    options: &Options,
-    argv: &'a [String],
-    i: &mut usize,
-) -> Option<&'a str> {
-    let cluster = &arg[1..];
-    for (pos, c) in cluster.char_indices() {
-        if options.short_flags.contains(c) {
-            continue;
+fn sends_nothing_arg(arg: &Arg<'_>, options: &Options) -> bool {
+    let value = match *arg {
+        Arg::EndOfOptions => return true,
+        Arg::Missing => return false,
+        Arg::Operand(word) => return word != "-" && plain_url(word),
+        Arg::Long { name, exact, value } => {
+            if !exact {
+                return false;
+            }
+            match value {
+                None => return options.flags.contains(&name),
+                Some(_) if !options.valued.contains(&name) => return false,
+                Some(v) if name == "request" && !read_method(v) => return false,
+                Some(v) if name == "output" && v.contains('#') => return false,
+                Some(v) => v,
+            }
         }
-        if !options.short_valued.contains(c) {
-            return None;
-        }
-        let rest = &cluster[pos + c.len_utf8()..];
-        let value = if rest.is_empty() {
-            next(argv, i)?
-        } else {
-            rest
-        };
-        // curl's `-X`, wget has none: only a method that sends no body
-        if c == 'X' && !read_method(value) {
-            return None;
-        }
-        return Some(value);
-    }
-    Some("")
+        Arg::Short { letter, value } => match value {
+            None => return options.short_flags.contains(letter),
+            // wget's `-nv` and friends
+            Some(v) if options.client == Client::Wget && letter == 'n' => {
+                return WGET_N_LETTERS.contains(&v);
+            }
+            Some(_) if !options.short_valued.contains(letter) => return false,
+            // curl's `-X`, wget has none: only a method that sends no body
+            Some(v) if letter == 'X' && !read_method(v) => return false,
+            // curl's `-o "#1"` names a file after a URL glob
+            Some(v) if letter == 'o' && v.contains('#') => return false,
+            Some(v) => v,
+        },
+    };
+    !value.starts_with('@')
 }
 
-fn next<'a>(argv: &'a [String], i: &mut usize) -> Option<&'a str> {
-    let value = argv.get(*i)?;
-    *i += 1;
-    Some(value)
+/// Whether every file saved under its remote name (`curl -O`, a `wget` without
+/// `-O`) gets a name the line shows.
+fn names_known(args: &[Arg<'_>], options: &Options) -> bool {
+    let has = |letter: char, long: &str| {
+        args.iter().any(|a| match *a {
+            Arg::Short { letter: l, .. } => l == letter,
+            Arg::Long { name, .. } => name == long,
+            _ => false,
+        })
+    };
+    let by_name = match options.client {
+        Client::Curl => has('O', "remote-name") || has('O', "remote-name-all"),
+        Client::Wget => !has('O', "output-document") && !has('\0', "spider"),
+    };
+    let known = |url: &&str| match options.client {
+        Client::Wget if transfer::last_segment(url).is_empty() => true,
+        Client::Curl | Client::Wget => transfer::names_its_file(url),
+    };
+    !by_name
+        || args
+            .iter()
+            .filter_map(|a| match *a {
+                Arg::Operand(url) => Some(url),
+                _ => None,
+            })
+            .all(|url| known(&url))
 }
 
 fn read_method(method: &str) -> bool {
@@ -283,104 +291,4 @@ pub(super) fn fetchable_host(host: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{CURL, WGET, fetchable_host, wget_follows_no_redirect, words_send_nothing};
-
-    fn argv(line: &str) -> Vec<String> {
-        line.split(' ').map(str::to_owned).collect()
-    }
-
-    #[test]
-    fn requests_that_send_nothing() {
-        for line in [
-            "curl https://docs.rs/serde",
-            "curl -sS https://example.com/f.txt -o out.txt",
-            "curl -X GET -fsS https://example.com/api",
-            "curl --request=HEAD https://example.com",
-            "curl -w %{http_code} https://example.com",
-            "curl -- https://example.com",
-        ] {
-            assert!(words_send_nothing(&argv(line), &CURL), "{line}");
-        }
-        for line in [
-            "wget https://x.test/a.tar.gz",
-            "wget -qO- https://x.test/a",
-            "wget -nv --tries=3 -P dl https://x.test/a",
-        ] {
-            assert!(words_send_nothing(&argv(line), &WGET), "{line}");
-        }
-    }
-
-    #[test]
-    fn redirects_keep_the_command_net() {
-        for line in ["curl -sSL https://x.test", "curl --location https://x.test"] {
-            assert!(!words_send_nothing(&argv(line), &CURL), "{line}");
-        }
-        assert!(wget_follows_no_redirect(&argv(
-            "wget --max-redirect=0 https://x.test"
-        )));
-        assert!(wget_follows_no_redirect(&argv(
-            "wget --max-redirect 0 https://x.test"
-        )));
-        for line in [
-            "wget https://x.test",
-            "wget --max-redirect=0 --max-redirect=5 https://x.test",
-            "wget --max-redirect=3 https://x.test",
-        ] {
-            assert!(!wget_follows_no_redirect(&argv(line)), "{line}");
-        }
-    }
-
-    #[test]
-    fn requests_that_may_send_data() {
-        for line in [
-            "curl -d x https://x.test",
-            "curl -sd x https://x.test",
-            "curl -X POST https://x.test",
-            "curl -sXPUT https://x.test",
-            "curl -H a:b https://x.test",
-            "curl -K cfg https://x.test",
-            "curl -u a:b https://x.test",
-            "curl -b c.txt https://x.test",
-            "curl -A agent https://x.test",
-            "curl https://x.test --next https://y.test",
-            "curl https://a:b@x.test/",
-            "curl @urls",
-            "curl -o @x https://x.test",
-            "curl --head=x https://x.test",
-            "curl -o",
-        ] {
-            assert!(!words_send_nothing(&argv(line), &CURL), "{line}");
-        }
-        for line in [
-            "wget --post-file=x https://x.test",
-            "wget --method=GET https://x.test",
-            "wget -i list",
-            "wget -e cmd https://x.test",
-            "wget --header=a:b https://x.test",
-        ] {
-            assert!(!words_send_nothing(&argv(line), &WGET), "{line}");
-        }
-    }
-
-    #[test]
-    fn only_domain_names_are_fetchable() {
-        assert!(fetchable_host("docs.rs"));
-        assert!(fetchable_host("x.test"));
-        assert!(fetchable_host("a-b.example.com"));
-        for host in [
-            "localhost",
-            "intranet",
-            "2852039166",
-            "0x7f000001",
-            "203.0.113.7",
-            "169.254.169.254",
-            "::1",
-            "fd00:ec2::254",
-            "169.254.169.254.nip.io",
-            "x.123",
-        ] {
-            assert!(!fetchable_host(host), "{host}");
-        }
-    }
-}
+mod tests;

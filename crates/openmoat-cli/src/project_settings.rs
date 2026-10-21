@@ -53,8 +53,10 @@ const COMMAND_KEYS: [(&str, &str); 7] = [
 /// Permission lists and modes are left out on purpose: they decide only
 /// whether Claude Code asks the person itself about a call the hook left to
 /// it, and Claude Code runs the `PreToolUse` hook in every mode, so OpenMoat's
-/// deny and ask stand whatever a project allows. MCP servers a project adds
-/// are held by their own pins (ADR-026).
+/// deny and ask stand whatever a project allows. The tool calls of MCP servers
+/// a project adds are held by their own pins (ADR-026), but Claude Code starts
+/// a server it is told to enable when settings load, which runs its command,
+/// so turning project servers on is named.
 #[must_use]
 pub fn findings(root: &Map<String, Value>) -> Vec<String> {
     let mut found = Vec::new();
@@ -85,6 +87,20 @@ pub fn findings(root: &Map<String, Value>) -> Vec<String> {
     {
         found.push("`enabledPlugins` turns on plugins, which can carry hooks".to_owned());
     }
+    if set(root.get("extraKnownMarketplaces")) {
+        found.push(
+            "`extraKnownMarketplaces` adds plugin marketplaces, whose plugins can carry hooks"
+                .to_owned(),
+        );
+    }
+    for key in ["enableAllProjectMcpServers", "enabledMcpjsonServers"] {
+        if set(root.get(key)) {
+            found.push(format!(
+                "`{key}` starts MCP servers the project's `.mcp.json` names, which runs their \
+                 commands (OpenMoat still holds back their tool calls)"
+            ));
+        }
+    }
     if root.get("sandbox").is_some_and(|v| !only_enables(v)) {
         found.push("`sandbox` changes Claude Code's sandbox settings".to_owned());
     }
@@ -114,26 +130,45 @@ fn only_enables(sandbox: &Value) -> bool {
     }
 }
 
-/// The settings object in `path`, or `None` when there is no such file (a
-/// deleted file loads nothing). Anything else that cannot be read, a file
-/// larger than [`MAX_BYTES`], or text that is not one JSON object is an error.
-pub fn read(path: &Path) -> Result<Option<Map<String, Value>>> {
+/// The bytes of `path`, or `None` when there is no such file (a deleted file
+/// loads nothing); an error for anything else that cannot be read and for a
+/// file larger than [`MAX_BYTES`].
+fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>> {
     let file = match fs::File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
     };
-    let mut text = String::new();
+    let mut bytes = Vec::new();
     file.take(MAX_BYTES + 1)
-        .read_to_string(&mut text)
+        .read_to_end(&mut bytes)
         .with_context(|| format!("reading {}", path.display()))?;
-    if text.len() as u64 > MAX_BYTES {
+    if bytes.len() as u64 > MAX_BYTES {
         bail!("{} is larger than {MAX_BYTES} bytes", path.display());
     }
-    match serde_json::from_str(&text) {
-        Ok(Value::Object(root)) => Ok(Some(root)),
+    Ok(Some(bytes))
+}
+
+/// The settings object `bytes` (read from `path`) hold; an error for text that
+/// is not one JSON object.
+fn parse(path: &Path, bytes: &[u8]) -> Result<Map<String, Value>> {
+    match serde_json::from_slice(bytes) {
+        Ok(Value::Object(root)) => Ok(root),
         Ok(_) => bail!("{} is not a JSON object", path.display()),
         Err(e) => Err(e).with_context(|| format!("{} is not valid JSON", path.display())),
+    }
+}
+
+/// What the bytes of one file set that [`findings`] names, or why they could
+/// not be read; `None` when the file is absent or sets nothing risky.
+fn judge(path: &Path, bytes: Option<&[u8]>) -> Option<String> {
+    match bytes.map(|bytes| parse(path, bytes)) {
+        None => None,
+        Some(Ok(root)) => {
+            let found = findings(&root);
+            (!found.is_empty()).then(|| found.join("; "))
+        }
+        Some(Err(e)) => Some(format!("cannot be checked: {e:#}")),
     }
 }
 
@@ -141,12 +176,33 @@ pub fn read(path: &Path) -> Result<Option<Map<String, Value>>> {
 /// read. `None` when the file is absent or sets nothing risky.
 #[must_use]
 pub fn check(path: &Path) -> Option<String> {
-    match read(path) {
-        Ok(None) => None,
-        Ok(Some(root)) => {
-            let found = findings(&root);
-            (!found.is_empty()).then(|| found.join("; "))
-        }
+    match read_bytes(path) {
+        Ok(bytes) => judge(path, bytes.as_deref()),
+        Err(e) => Some(format!("cannot be checked: {e:#}")),
+    }
+}
+
+/// [`check`] for a decision: a file that passes is read once more just before
+/// the decision, and one whose bytes changed in between (or that appeared or
+/// went) is reported, since what the host loads may not be what was checked.
+#[must_use]
+pub fn check_unchanged(path: &Path) -> Option<String> {
+    check_between(path, || {})
+}
+
+/// [`check_unchanged`] with `between` run after the first read.
+fn check_between(path: &Path, between: impl FnOnce()) -> Option<String> {
+    let first = match read_bytes(path) {
+        Ok(bytes) => bytes,
+        Err(e) => return Some(format!("cannot be checked: {e:#}")),
+    };
+    if let Some(found) = judge(path, first.as_deref()) {
+        return Some(found);
+    }
+    between();
+    match read_bytes(path) {
+        Ok(second) if second == first => None,
+        Ok(_) => Some("changed while OpenMoat was checking it".to_owned()),
         Err(e) => Some(format!("cannot be checked: {e:#}")),
     }
 }

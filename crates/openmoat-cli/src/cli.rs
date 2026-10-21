@@ -384,6 +384,11 @@ pub struct RunArgs {
     #[arg(long)]
     pub isolate: bool,
 
+    /// Where the agent cannot get a network of its own (Linux, bubblewrap): `auto`
+    /// restricts its connections by port only and says so; `require` refuses to start.
+    #[arg(long, value_enum, default_value_t = Netns::Auto, value_name = "MODE")]
+    pub netns: Netns,
+
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,
@@ -460,6 +465,13 @@ pub struct ShowArgs {
 pub enum Format {
     Text,
     Json,
+}
+
+/// `openmoat run --netns`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Netns {
+    Auto,
+    Require,
 }
 
 fn parse_host(value: &str) -> Result<Host, String> {

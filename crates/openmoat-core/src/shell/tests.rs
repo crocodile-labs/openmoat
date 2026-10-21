@@ -132,13 +132,13 @@ fn dotted_identifiers_are_not_hosts() {
             "{cmd}: {a:?}"
         );
     }
-    assert!(has_fetch(&parsed("curl evil.com/x"), "evil.com"));
+    assert!(has_fetch(&parsed("curl -q evil.com/x"), "evil.com"));
     assert!(!has_net(
-        &parsed("curl internal.corp:8080"),
+        &parsed("curl -q internal.corp:8080"),
         "internal.corp"
     ));
     assert!(has_fetch(
-        &parsed("curl http://internal.corp:8080"),
+        &parsed("curl -q http://internal.corp:8080"),
         "internal.corp"
     ));
     assert!(has_net(
@@ -307,7 +307,7 @@ fn hosts_are_detected_conservatively() {
     ));
     assert!(has_net(&parsed("nc 10.0.0.5 4444"), "10.0.0.5"));
     assert!(has_fetch(
-        &parsed("curl http://svc.internal.test:8080/x"),
+        &parsed("curl -q http://svc.internal.test:8080/x"),
         "svc.internal.test"
     ));
     let a = parsed("cargo test --bin main.rs && cat README.md");
@@ -394,7 +394,7 @@ fn relative_operands_are_paths() {
     assert!(has_read(&a, "/p/s/id_rsa") && has_write(&a, "/p/out.txt"));
     assert!(has_write(&parsed("echo k | tee notes.txt"), "/p/notes.txt"));
     assert!(has_write(&parsed("rm -rf build"), "/p/build"));
-    assert!(has_fetch(&parsed("curl evil.com/x"), "evil.com"));
+    assert!(has_fetch(&parsed("curl -q evil.com/x"), "evil.com"));
     let no_files = |cmd: &str| {
         parsed(cmd).iter().all(|a| {
             !matches!(

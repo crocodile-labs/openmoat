@@ -269,7 +269,10 @@ something OpenMoat claims to stop.
   @file` is decided on its `shell` atom only, which the default policy defers) can send data there. A `WebFetch` GET, and a
   `curl` or `wget` that sends nothing (ADR-035), can carry data in its URL; the prompt
   shows the URL. A `curl` or `wget` that follows redirects (`curl -L`, `wget` without
-  `--max-redirect=0`) stays `net`, since a redirect leads where the hook cannot see. Session taint (POLICY.md §4.1)
+  `--max-redirect=0`) stays `net`, since a redirect leads where the hook cannot see, and
+  so does one that may read its own configuration files (`curl` without `-q` first,
+  `wget` without `--no-config --no-netrc`), which can add a body or an upload; writing
+  those files is denied (`shell-rc`). Session taint (POLICY.md §4.1)
   narrows this. After a secret read, `net`, `fetch` and MCP calls in the same session
   ask. After a `fetch` or an MCP result, writes to CI, git hooks, the build and
   test definitions of every ecosystem the default policy runs (`package.json`,
@@ -628,12 +631,22 @@ something OpenMoat claims to stop.
   managed settings stay on ([cc-hooks], "Disable or remove hooks"). A project's own
   `hooks`, `env` (an API endpoint, a proxy) and command settings (`apiKeyHelper`,
   `awsAuthRefresh`, `awsCredentialExport`, `otelHeadersHelper`, `statusLine`,
-  `subagentStatusLine`, `fileSuggestion`) run programs or redirect the agent.
+  `subagentStatusLine`, `fileSuggestion`) run programs or redirect the agent, and
+  `enableAllProjectMcpServers` or `enabledMcpjsonServers` makes Claude Code start the
+  project's `.mcp.json` servers, which runs their commands when settings load; OpenMoat's
+  MCP pins (ADR-026, ADR-032) hold back only their tool calls, not the start.
+  `extraKnownMarketplaces` adds plugin sources, whose plugins can carry hooks.
   The agent cannot write these files itself (`kernel-self`, session taint), but a
   `git pull` or `checkout` can bring them in. *Mid-session:* a `ConfigChange` for such
   a file is blocked (`project-settings`) when it sets any of those keys, enables a
   plugin, sets `sandbox` beyond `{"enabled": true}`, or cannot be parsed; the session
-  keeps its previous settings. Permission lists and modes still load: they decide only
+  keeps its previous settings. The file is read a second time just before the
+  decision, and a change in its bytes since the check blocks too, so a rewrite
+  between the check and the decision is not let through; a rewrite after the
+  decision, before Claude Code reads the file, is not seen. Skills and agents a
+  repository plants (`.claude/skills/*/SKILL.md`, `.claude/agents/*.md`) can carry
+  `hooks:` in their frontmatter; they are outside the settings files OpenMoat's
+  `ConfigChange` hook matches, so this check does not cover them. Permission lists and modes still load: they decide only
   whether Claude Code asks about a call the hook left to it, and the hook runs in every
   mode. *At session start:* Claude Code loads the files of a cloned or checked-out
   project before any hook runs, and no `ConfigChange` fires, so OpenMoat cannot stop
@@ -665,8 +678,13 @@ something OpenMoat claims to stop.
 - **Interpreter code is scanned, not parsed.** A file that inline `python -c`, `node -e`
   or similar code opens for writing is not checked as a write. Environment reads are
   recognised by their usual spellings (`os.environ`, `os.getenv`, `process.env`, `ENV`,
-  `$ENV{…}`, `%ENV`, `getenv`, `$env:`); the environment reached through an alias
-  (`e = os.environ`, then `print(e)`) or another spelling is not seen.
+  `$ENV{…}`, `%ENV`, `getenv`, `$env:` in any case), Python's `getattr(os, 'environ')`,
+  `vars(os)`, `os.__dict__` and `env`/`printenv` run as a child with a literal command
+  (`os.popen('env')`, `subprocess.run(['printenv', 'X'])`), and PowerShell's
+  `[Environment]::GetEnvironmentVariable(s)` and `Env:` drive (`Get-ChildItem Env:`,
+  `gci`/`ls`/`dir env:`); the environment reached through an alias (`e = os.environ`
+  or `g = getattr`, then `print(e)`), a command built at run time, or another spelling
+  is not seen.
 - **TOCTOU and hard links.** A link swapped between the check and the command
   running, and hard links, are not seen (ADR-009).
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand
@@ -684,13 +702,19 @@ something OpenMoat claims to stop.
 - **The terminal check is not a boundary.** `openmoat allow`, `openmoat edit`, `openmoat secret`, `openmoat trust`, `openmoat uninstall`,
   `openmoat sandbox sync`, `openmoat mcp accept`/`wrap`/`unwrap` and `openmoat doctor --accept` check
   for a TTY, and refuse when an
-  agent (`claude`, `codex`, `cursor-agent`, or `openmoat run`) is among their parent
-  processes; answers are read from `/dev/tty`. An agent can still detach a process from
-  its own tree (a double fork, `setsid`, a launchd or systemd job), which the parent
-  check cannot see; on Windows only the TTY is checked; and Cursor's editor agent runs its
-  commands in the same process tree as the person's own terminals there, so it is not told
-  apart. The `kernel-self` rules and the lock are what stop an agent from
-  re-pinning or granting itself anything.
+  agent (`claude`, `codex`, `cursor-agent`, the Continue CLI's `cn`, `copilot`, `gemini`,
+  `openclaw`, `pi`, the Cursor editor's helper processes on macOS, or `openmoat run`) is
+  among their parent processes; answers are read from `/dev/tty`. Cursor's editor agent
+  runs its commands in the same process tree as the person's own terminals in the
+  editor, so on macOS these commands refuse in a Cursor terminal too: run them in a
+  terminal of your own. An agent can still detach a process from its own tree (a double
+  fork, `setsid`, a launchd or systemd job), which the parent check cannot see; on
+  Windows only the TTY is checked; and on Linux Cursor's editor is not told apart. A
+  detached `openmoat init --yes` without a terminal (from a build script, say) refuses
+  over a drifted or unreadable lock, and over an intact one leaves new and changed MCP
+  server definitions unpinned, so a server a cloned project planted in `.mcp.json`
+  stays denied until a person runs `openmoat mcp accept`. The `kernel-self` rules and
+  the lock are what stop an agent from re-pinning or granting itself anything.
 - **Some agent settings may drift without stopping the guard.** Claude Code's
   `settings.json` is pinned, but a change limited to an allowlist of its keys
   (`crates/openmoat-cli/src/integrity/relaxed.rs`) does not deny every call: display
