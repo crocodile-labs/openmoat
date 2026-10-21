@@ -16,6 +16,8 @@ extend-ignore-re = [
     "\\$!ba;",     # a sed branch to label `a`
     "\"-nd\"",     # wget's `-nd` (no directories)
     "`-oout`",     # curl's `-o` with its value attached
+    "bash-authorize",  # the npm package compared in docs/MOATBENCH.md, spelt as its author spells it
+    "\\./ba\\b",   # its install directory in the MoatBench comparison
 ]
 
 [default.extend-identifiers]

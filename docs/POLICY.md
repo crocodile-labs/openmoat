@@ -922,11 +922,11 @@ tunnel, which the proxy does not see.
 |---|---|---|
 | `openmoat proxy` | Every connection is decided by the full policy (address patterns too, not only domain names) and recorded in the audit log. Brokered secrets (§2.1) are injected. Loopback, link-local, metadata and unnamed private addresses are refused after DNS. | `openmoat proxy` must be running. While it is stopped, Claude Code's sandboxed commands have no network (`npm install`, `cargo build` and `git fetch` fail), and `openmoat doctor` and `openmoat status` warn. Programs that speak only SOCKS5 have none at all. |
 
-Keep the proxy running as a user service, for example a launchd agent or a systemd
-user unit running `openmoat proxy`. `openmoat init` cannot install one yet (#272); routing
-through `openmoat proxy` stays opt-in until it can.
+Keep the proxy running as a user service: `openmoat proxy install` writes a launchd agent
+on macOS or a systemd user unit on Linux (INSTALL.md). Windows has no user service yet
+(#272); run `openmoat proxy` in a terminal there.
 
-Codex's own proxy still decides Codex's commands. It hands what it allows on to `moat
+Codex's own proxy still decides Codex's commands. It hands what it allows on to `openmoat
 proxy` only when Codex starts with `HTTP_PROXY` and `HTTPS_PROXY` set to
 `http://127.0.0.1:<port>`, and its API hosts then need an allow rule (THREAT_MODEL.md §5).
 
