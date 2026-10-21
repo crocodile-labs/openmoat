@@ -16,7 +16,8 @@
 // allowances, `warning()` says where the network is restricted by port only,
 // and `status()` runs the agent in its sandbox; `inside(args)` is what
 // bubblewrap starts in its sandbox; `port_only_network()` is `moat doctor`'s
-// warning for the same.
+// warning for the same; `terminals()` lists the terminal devices this
+// process's standard streams are on, the only ones the sandbox opens.
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -89,6 +90,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         tmpdir: None,
         program: Some(path_string(&program)),
         writes: args.writes.iter().map(|w| resolved(w)).collect(),
+        // The person's other terminals stay out of reach of the agent's commands.
+        terminals: platform::terminals(),
     };
     let mut policy = home.load_policy()?;
     crate::install::self_paths::protect_recorded(&home, &mut policy)?;

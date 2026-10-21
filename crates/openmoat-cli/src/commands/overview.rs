@@ -99,7 +99,7 @@ pub fn run() -> Result<Code> {
         }
     };
     // The exact ask shown, not `--last`: a newer ask may have arrived meanwhile.
-    super::allow::run_for(&event.host, &event.session_id, &action, always)
+    super::allow::run_for(&event, &action, always)
 }
 
 /// Say when the default has changes the policy can take; at a terminal, offer
@@ -158,8 +158,19 @@ fn pending_ask(
     };
     let action = super::allow::asked(&event)?;
     let host: Host = event.host.parse()?;
-    let granted =
-        Grants::load(&home.grants_path())?.matches(&event.host, &event.session_id, &action, now);
+    // As `moat allow` binds it: an ask recorded without a working directory
+    // is approved in the current one.
+    let cwd = match event.cwd.as_deref() {
+        Some(cwd) => crate::context::absolute(std::path::Path::new(cwd))?,
+        None => std::env::current_dir()?,
+    };
+    let project = approvals::project_of(&cwd, &crate::home::user_home()?);
+    let scope = approvals::Scope {
+        host: &event.host,
+        session_id: &event.session_id,
+        project: &project,
+    };
+    let granted = Grants::load(&home.grants_path())?.matches(scope, &action, now);
     let permanent = Overlay::load(&home.overlay_path())?.covers(&action);
     Ok((!granted && !permanent).then_some((event, host, action)))
 }

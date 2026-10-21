@@ -491,9 +491,12 @@ away. Codex has no such key: a failed hook "continues the tool call"
   an allowlist of Claude Code keys (`integrity/relaxed.rs`): display and reply toggles
   (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …), the model the person
   switches to (`model` as a string, `switchModelsOnFlag` as a scalar) and Claude Code's own
-  permission lists and modes (`permissions.allow`, `ask`, `deny`, `defaultMode`,
-  `additionalDirectories`, `blockReadsOutsideWorkingDirectories`). They change only
-  Claude Code's own prompts; the hook still decides every call. A `deny` list that
+  permission lists and a mode that keeps its prompts (`permissions.allow`, `ask`, `deny`,
+  `blockReadsOutsideWorkingDirectories`, and `defaultMode` set to `default`, `plan` or
+  `dontAsk`, or removed). They change only Claude Code's own prompts; the hook still
+  decides every call. A `defaultMode` of `acceptEdits`, `auto`, `bypassPermissions` or
+  any other value runs deferred calls unasked, and `additionalDirectories` widens what
+  Claude Code's sandbox lets commands write, so either denies like other drift. A `deny` list that
   lost a rule OpenMoat wrote (recorded as `claude_rules` in `hosts.json`), any other or
   unknown key (`hooks`, `env`, `apiKeyHelper`, `statusLine`, plugin, MCP and `sandbox` keys),
   a file that no longer parses or is a symlink, a lock without the `permissions` digests,
@@ -545,8 +548,9 @@ away. Codex has no such key: a failed hook "continues the tool call"
   touches OpenMoat's home (ADR-028), and the commands that read them (`show`, `status`,
   `doctor`, `audit`) are a person's, run outside any sandbox.
 - **Signed policy** (ADR-031, `signing.rs`, `packs.rs`). `openmoat policy trust-key` adds an
-  OpenSSH key to `allowed_signers` for the namespace `openmoat-policy`; `openmoat policy
-  install` checks a pack's detached signature with the system `ssh-keygen -Y verify`
+  OpenSSH key to `allowed_signers` for the namespaces `openmoat-policy` (repository
+  policies) and `openmoat-pack` (packs, ADR-036); `openmoat policy
+  install` checks a pack's detached signature in `openmoat-pack` with the system `ssh-keygen -Y verify`
   (resolved through `environment.json`) before copying it to `policy.d/packs/` and
   recording it in `packs.json`. `Home::load_policy` merges every pack `packs.json` lists
   under `pack:<name>:` ids, only while the lock pins `packs.json` and each pack still has
@@ -803,7 +807,7 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | `crates/openmoat-hosts` | host adapters: `host/<id>.rs` per host with its `SPEC` (`host/claude_code.rs` with `claude_code/config_change.rs`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs`, `host/openclaw.rs` with `openclaw/tools.rs`: OpenClaw's `before_tool_call`, through OpenMoat's plugin, ADR-033; `host/copilot_cli.rs` with `copilot_cli/tools.rs`: GitHub Copilot CLI's `preToolUse`; `host/pi.rs` with `pi/tools.rs`: pi's `tool_call`, through OpenMoat's extension; `host/gemini_cli.rs` with `gemini_cli/tools.rs`: Gemini CLI's `BeforeTool`); `registry.rs` (maps each host to its spec and adapter); `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, `HookSpec`, `HookFormat`, `GUARD_BUDGET_S`, the `HostAdapter` trait, and what each host receives for `defer` and `ask`; `tests/docs.rs` generates the host tables in INSTALL and THREAT_MODEL from the specs); `wire/pre_tool_use.rs` (the format Claude Code, Codex and the Continue CLI send), `wire/pre_tool_use/artifact.rs` (the files Claude Code's `Artifact` and `ArtifactData` upload or save), `wire/mcp.rs` (MCP arguments), `glob.rs` (where a glob pattern's `..` climbs to); `bench.rs` (what `openmoat bench` needs from a host) |
 | `crates/openmoat-audit` | SQLite store (`store/`: schema, hash chain, export, session cache, `provenance.rs` file provenance rows), time-window and session queries (`query.rs`), redaction and token formats (`redact.rs`) |
 | `crates/openmoat-proxy` | egress proxy behind `openmoat proxy`: `request.rs` (HTTP head), `sni.rs` (ClientHello), `decide.rs` (host and address checks; `decide/ports.rs` which ports of a host), `upstream.rs` (DNS, connect), `server.rs` with `server/{wire,limits,capacity,recheck}.rs` (reading a head or ClientHello in time and answering a refusal; resource limits; recording refusals at accept; session taint at open and again while relaying), `tunnel.rs`, `audit.rs` (`Recorder` trait), `broker.rs` (secret injection and leak blocking), `session.rs` (per-session credentials and taint for `openmoat run`, ADR-027), `slots.rs` (each session's share of the connections), `local.rs` (`LocalService`: a service of the proxy's own process on its port, ADR-028) |
-| `crates/openmoat-cli` | the `openmoat` binary: `cli.rs` grammar (`cli/{mcp,policy,audit}.rs` for those command groups), `commands/{overview,init,uninstall,guard,show,status,doctor,allow,edit,secret,trust,mcp,replay,report,audit,team,policy,proxy,sandbox,run}.rs`, `commands/guard/{config_change,drift}.rs` (the ConfigChange decision; settings drift the guard decides through), `commands/audit/anchor.rs` and `commands/policy/pack.rs` (`openmoat audit anchor`; `openmoat policy trust-key`, `install`, `remove`), `protection.rs` (each agent's protection level for `status`, `doctor` and the home screen), `commands/run/{macos,linux,unsupported}.rs` (`openmoat run` per OS), `commands/run/release_age.rs` (the npm and uv release-age variables `openmoat run` sets), `commands/run/linux/isolate.rs` (`openmoat run --isolate`, the Isolated tier on Linux), `commands/run/linux/netns.rs` (`openmoat run`'s network namespace on Linux: loopback and a relay to the proxy), `commands/demo.rs` (`openmoat demo`: verdicts for example calls, nothing runs), `commands/service/` (`openmoat proxy install`: `macos.rs` launchd agent from `plist.rs`, `linux.rs` systemd user unit from `unit.rs`, `unsupported.rs`), `commands/bench/` (`openmoat bench`: `hosts.rs` host payloads and how each host reads a hook reply, `hook.rs` the throwaway home and time limit, `scenario.rs` reads the bundled scenarios, `score.rs` the scorecard; scenarios in `moatbench/<category>.yaml`), `install.rs` with `install/{hook_file,binary,dirs,claude_version,openclaw,pi}.rs` (`dirs.rs`: the recorded agent config directories; `claude_version.rs`: whether the Claude Code on PATH knows `onFailure`; `openclaw.rs`: OpenClaw's plugin file and `openclaw.json` entries; `pi.rs`: pi's extension, which is its hook file), `integrations/openclaw/openmoat.mjs` (the plugin `openmoat init` installs for OpenClaw; no dependencies, fails closed), `integrations/pi/openmoat.js` (the extension `openmoat init` installs for pi; no dependencies, fails closed), `sandbox/` (backends from the IR: Standard tier `claude`, `codex`, `cursor` and `install.rs` file I/O, `claude/mask.rs` whether Claude Code's own broker masks each policy secret; Lightweight tier `seatbelt`, `landlock`, `seccomp`; Isolated tier `bwrap`; `patterns.rs` classifies IR patterns for hosts without a project of their own; `differential.rs` checks every backend against the IR's reference semantics; `exposure.rs` whether `openmoat run`'s grants hold or lie inside the state directory, which makes `openmoat run` on Linux refuse), `home.rs`, `context.rs`, `project.rs`, `repo.rs` (repository policy file and whether it is trusted), `project_settings.rs` (what a project's `.claude/settings*.json` turns off or runs: the ConfigChange veto and the doctor/status warning), `time.rs`, `os_version.rs` (the macOS version: `openmoat run`'s macOS 13 floor, `doctor`, the bug-report bundle), `environment.rs` (search-path snapshot), `realpath.rs` (symlink resolution), `integrity/` (policy lock; `digest.rs` what a file is pinned by, `kept.rs` the bytes the lock check read, which the rest of the call parses, `keys.rs` the top-level keys drift names, `relaxed.rs` the Claude Code settings drift the guard decides through), `mcp.rs` with `mcp/{servers,pins,tools,relay,wrap}.rs` (ADR-026: MCP server definitions pinned in the lock, the `openmoat mcp proxy` JSON-RPC relay and its tool pins, `openmoat mcp wrap`; ADR-032: a new server's tools are held until accepted), `guard_relay.rs` with `guard_relay/{wire,client,service}.rs` (hook decisions inside `openmoat run`, ADR-028: framing, the sandboxed guard, the decision outside), `anchor.rs` with `anchor/git.rs` (audit anchors, ADR-031: the record, the file and `refs/moat/anchors` git plumbing, `verify --against`), `signing.rs` (OpenSSH signatures through the pinned `ssh-keygen`, namespace `openmoat-policy`), `packs.rs` (signed policy packs: `packs.json`, `policy.d/packs/`, merged under `pack:<name>:`), `approvals.rs` (grants and overlay), `secrets/` (brokered secret sources), `taint.rs` (session taint from the audit log; `taint/run.rs` links an `openmoat run`'s agent sessions to the run so its proxy applies their taint, ADR-027; `taint/provenance.rs` taint that follows written files, ADR-029), `push.rs` with `push/{git,range,scan}.rs` (the push check: git run read-only, which commits a push sends, what they add), `trust.rs` (trusted repository policies), `upgrade.rs` (`openmoat policy upgrade`: the default a policy started from, `merge.rs` the three-way merge), `terminal.rs` (terminal check; `terminal/ancestry.rs` whether an agent is among the parent processes, `terminal/own_binary.rs` whether the running executable is the one the lock records), `install/trust_note.rs` (a host's trust step after `init` writes its hook), `hangs.rs` (the guard-hangs side file and the phase a slow call reached), `render.rs`, `exit.rs` |
+| `crates/openmoat-cli` | the `openmoat` binary: `cli.rs` grammar (`cli/{mcp,policy,audit}.rs` for those command groups), `commands/{overview,init,uninstall,guard,show,status,doctor,allow,edit,secret,trust,mcp,replay,report,audit,team,policy,proxy,sandbox,run}.rs`, `commands/guard/{config_change,drift}.rs` (the ConfigChange decision; settings drift the guard decides through), `commands/audit/anchor.rs` and `commands/policy/pack.rs` (`openmoat audit anchor`; `openmoat policy trust-key`, `install`, `remove`), `protection.rs` (each agent's protection level for `status`, `doctor` and the home screen), `commands/run/{macos,linux,unsupported}.rs` (`openmoat run` per OS), `commands/run/release_age.rs` (the npm and uv release-age variables `openmoat run` sets), `commands/run/linux/isolate.rs` (`openmoat run --isolate`, the Isolated tier on Linux), `commands/run/linux/netns.rs` (`openmoat run`'s network namespace on Linux: loopback and a relay to the proxy), `commands/demo.rs` (`openmoat demo`: verdicts for example calls, nothing runs), `commands/service/` (`openmoat proxy install`: `macos.rs` launchd agent from `plist.rs`, `linux.rs` systemd user unit from `unit.rs`, `unsupported.rs`), `commands/bench/` (`openmoat bench`: `hosts.rs` host payloads and how each host reads a hook reply, `hook.rs` the throwaway home and time limit, `scenario.rs` reads the bundled scenarios, `score.rs` the scorecard; scenarios in `moatbench/<category>.yaml`), `install.rs` with `install/{hook_file,binary,dirs,claude_version,openclaw,pi}.rs` (`dirs.rs`: the recorded agent config directories; `claude_version.rs`: whether the Claude Code on PATH knows `onFailure`; `openclaw.rs`: OpenClaw's plugin file and `openclaw.json` entries; `pi.rs`: pi's extension, which is its hook file), `integrations/openclaw/openmoat.mjs` (the plugin `openmoat init` installs for OpenClaw; no dependencies, fails closed), `integrations/pi/openmoat.js` (the extension `openmoat init` installs for pi; no dependencies, fails closed), `sandbox/` (backends from the IR: Standard tier `claude`, `codex`, `cursor` and `install.rs` file I/O, `claude/mask.rs` whether Claude Code's own broker masks each policy secret, `claude/nodes.rs` the directory nodes left out of `denyWrite` and the `Edit(./…)` rules that keep them in place, `claude/state_dir.rs` the state directory hidden whole on Linux; Lightweight tier `seatbelt` (`seatbelt/braces.rs` brace expansion), `landlock`, `seccomp`; Isolated tier `bwrap`; `patterns.rs` classifies IR patterns for hosts without a project of their own; `differential.rs` checks every backend against the IR's reference semantics; `exposure.rs` whether `openmoat run`'s grants hold or lie inside the state directory, which makes `openmoat run` on Linux refuse), `home.rs`, `context.rs`, `project.rs`, `repo.rs` (repository policy file and whether it is trusted), `project_settings.rs` (what a project's `.claude/settings*.json` turns off or runs: the ConfigChange veto and the doctor/status warning), `time.rs`, `os_version.rs` (the macOS version: `openmoat run`'s macOS 13 floor, `doctor`, the bug-report bundle), `environment.rs` (search-path snapshot), `realpath.rs` (symlink resolution), `integrity/` (policy lock; `digest.rs` what a file is pinned by, `kept.rs` the bytes the lock check read, which the rest of the call parses, `keys.rs` the top-level keys drift names, `relaxed.rs` the Claude Code settings drift the guard decides through), `mcp.rs` with `mcp/{servers,pins,tools,relay,wrap}.rs` (ADR-026: MCP server definitions pinned in the lock, the `openmoat mcp proxy` JSON-RPC relay and its tool pins, `openmoat mcp wrap`; ADR-032: a new server's tools are held until accepted), `guard_relay.rs` with `guard_relay/{wire,client,service}.rs` (hook decisions inside `openmoat run`, ADR-028: framing, the sandboxed guard, the decision outside), `anchor.rs` with `anchor/git.rs` (audit anchors, ADR-031: the record, the file and `refs/moat/anchors` git plumbing, `verify --against`), `signing.rs` (OpenSSH signatures through the pinned `ssh-keygen`, namespace `openmoat-policy` for repository policies and `openmoat-pack` for packs), `packs.rs` (signed policy packs: `packs.json`, `policy.d/packs/`, merged under `pack:<name>:`), `approvals.rs` (grants and overlay), `secrets/` (brokered secret sources), `taint.rs` (session taint from the audit log; `taint/run.rs` links an `openmoat run`'s agent sessions to the run so its proxy applies their taint, ADR-027; `taint/provenance.rs` taint that follows written files, ADR-029), `push.rs` with `push/{git,range,scan}.rs` (the push check: git run read-only, which commits a push sends, what they add), `trust.rs` (trusted repository policies), `upgrade.rs` (`openmoat policy upgrade`: the default a policy started from, `merge.rs` the three-way merge), `terminal.rs` (terminal check; `terminal/ancestry.rs` whether an agent is among the parent processes, `terminal/own_binary.rs` whether the running executable is the one the lock records), `install/trust_note.rs` (a host's trust step after `init` writes its hook), `hangs.rs` (the guard-hangs side file and the phase a slow call reached), `render.rs`, `exit.rs` |
 | `crates/openmoat-core/policies/default-v1.yaml` | shipped default policy |
 | `tests/conformance/{attacks,benign,ask}.yaml` | executable security claims |
 | `tests/fixtures/hosts/<host>/*.json` | real host payloads |
@@ -1121,12 +1125,19 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   10 s budget, a payload over 1 MiB or a malformed reply each deny (`kernel-error`).
   The sandbox profiles are unchanged: no Unix socket and no second port.
 - **Seatbelt (macOS).** `(deny default)`, then:
-  - process basics (exec, fork, signals and process info in the same sandbox, ttys,
-    POSIX shm, the two directory-service lookups `opendirectoryd.libinfo` and
-    `.membership`). Not the keychain, not DNS, not `trustd`.
+  - process basics (exec, fork, signals and process info in the same sandbox,
+    pseudo-terminals, POSIX shm, the two directory-service lookups
+    `opendirectoryd.libinfo` and `.membership`). Not the keychain, not DNS, not `trustd`.
   - `file-read-metadata` everywhere.
-  - `/`, the devices and `/private/var/select`.
-  - the IR's allow rules and the grants.
+  - `/`, the devices and `/private/var/select`; of the terminals only `/dev/tty` and
+    the ones `openmoat run`'s standard streams are on (`seatbelt.terminal`, found by
+    device number in `/dev` by `run/macos.rs`), never the person's other `/dev/ttys*`.
+  - the IR's allow rules and the grants. The write allow rules keep their
+    exclusions of an agent's own configuration in the project (`AGENT_CONFIG` in
+    `sandbox/patterns.rs`: `.claude/hooks/`, `.mcp.json`, …), and a deny of the same
+    comes after every grant (`seatbelt.agent-config`, a loss); the other `runs-later`
+    exclusions (CI, commit-hook managers) are dropped, since installs write them
+    (`seatbelt.runs-later`).
   - last, the IR's deny rules, because Seatbelt applies the last match. Their `!`
     exceptions become `require-all`/`require-not`, so a deny with exceptions is exact.
     A read deny covers `file-read-data` and `file-read-xattr` and leaves `stat`
@@ -1141,7 +1152,9 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   loader needs to read `/`, a process cannot start from a file it cannot read, and
   `getconf DARWIN_USER_TEMP_DIR` needs the two directory-service lookups.
 - **Landlock (Linux 6.7+).** Read+execute below the IR's literal allow trees, the read
-  roots, the devices and the agent's executable. Full access below the project's write
+  roots, the devices and the agent's executable; of the terminals only `/dev/tty` and
+  the ones the standard streams are on (`/proc/self/fd`, `landlock.terminal`), not
+  `/dev/pts`. Full access below the project's write
   trees, the temp directory and `--write` paths. `ConnectTcp` to the proxy's port
   only. File access and TCP are hard requirements at ABI 4; abstract-socket and signal
   scoping (ABI 6) are added where the kernel has them. The rules are applied to a
@@ -1150,7 +1163,9 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   A deny rule or `!` exception inside a granted tree and the proxy's port on other
   hosts stay open. Each is listed as an allowance (`landlock.inside-grants`,
   `landlock.tcp-port`). A grant inside a denied path is not made, and a glob cannot be
-  granted (losses).
+  granted (losses). Without a network namespace, whose mounts could cover them, a
+  `--write` path holding an absolute `kernel-self` path (`sandbox::kernel_self_in_writes`)
+  refuses the run (`exposure::kernel_self_refusal`).
 - **seccomp (Linux).** Landlock does not restrict UDP, raw or Unix sockets, so the same
   thread applies a seccomp filter after the Landlock rules (`seccompiler`, built in
   `run/linux.rs` from `sandbox/seccomp.rs`). `socket()` is allowed only for an IPv4 or
@@ -1161,11 +1176,14 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   children's pipes. `io_uring_setup`, `io_uring_enter` and `io_uring_register` fail too,
   because a ring creates sockets (`IORING_OP_SOCKET`) without a `socket()` call the
   filter sees; so do `ptrace` and `process_vm_readv`/`writev`, so that a command cannot
-  read or change the agent's memory (its tokens), and debuggers do not work.
-  `sendto`, `sendmsg` and `sendmmsg` with `MSG_FASTOPEN` fail too: TCP Fast Open
+  read or change the agent's memory (its tokens), and debuggers do not work. So do
+  `keyctl`, `add_key` and `request_key` (the person's kernel keyrings), `unshare` with
+  any namespace flag and `clone` with one of them (a new user namespace would give a
+  command every capability inside it). `clone3` passes its flags in memory, which a
+  filter cannot read: a second filter answers it `ENOSYS`, so glibc falls back to
+  `clone`. `sendto`, `sendmsg` and `sendmmsg` with `MSG_FASTOPEN` fail too: TCP Fast Open
   connects an unconnected socket inside the send, without the `connect()` whose LSM
-  hook Landlock's port rule checks. x32 calls
-  of the same are refused, and a call under another architecture (32-bit `int 0x80`,
+  hook Landlock's port rule checks. x32 calls of the same are refused, and a call under another architecture (32-bit `int 0x80`,
   which has `socketcall`) kills the process. Name resolution needs a Unix socket or UDP,
   so only the proxy resolves names, as on macOS: a tool that ignores `HTTP(S)_PROXY`
   cannot resolve them. Programs that list network interfaces (`getifaddrs`, netlink)

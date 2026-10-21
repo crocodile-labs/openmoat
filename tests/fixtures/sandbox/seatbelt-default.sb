@@ -21,7 +21,6 @@
   (literal "/dev/random")
   (literal "/dev/urandom")
   (literal "/dev/tty")
-  (regex "^/dev/ttys[0-9][^/]*$")
   (subpath "/dev/fd")
   (subpath "/private/var/select"))
 ; seatbelt.platform
@@ -30,8 +29,10 @@
   (literal "/dev/zero")
   (literal "/dev/tty")
   (literal "/dev/dtracehelper")
-  (regex "^/dev/ttys[0-9][^/]*$")
   (subpath "/dev/fd"))
+; seatbelt.terminal
+(allow file-read* file-write-data
+  (literal "/dev/ttys003"))
 ; seatbelt.program
 (allow file-read*
   (literal "/Users/me/.local/share/agent/1.0/agent"))
@@ -77,7 +78,17 @@
     (require-not (require-any
       (subpath "/Users/me/proj/.git")
       (regex "^/Users/me/proj/(.*/)?\\.git(/.*)?$")
-      (subpath "/Users/me/proj/.moat")))))
+      (subpath "/Users/me/proj/.moat")
+      (regex "^/Users/me/proj/(.*/)?\\.claude/hooks(/.*)?$")
+      (regex "^/Users/me/proj/(.*/)?\\.mcp\\.json$")
+      (regex "^/Users/me/proj/(.*/)?\\.cursor/mcp\\.json$")
+      (regex "^/Users/me/proj/(.*/)?\\.codex/config\\.toml$")
+      (regex "^/Users/me/proj/(.*/)?\\.openclaw/extensions(/.*)?$")
+      (regex "^/Users/me/proj/(.*/)?\\.github/hooks(/.*)?$")
+      (regex "^/Users/me/proj/(.*/)?\\.github/mcp\\.json$")
+      (regex "^/Users/me/proj/(.*/)?\\.pi/extensions(/.*)?$")
+      (regex "^/Users/me/proj/(.*/)?\\.pi/mcp\\.json$")
+      (regex "^/Users/me/proj/(.*/)?\\.pi/settings\\.json$")))))
 ; seatbelt.tmpdir
 (allow file-read* file-write*
   (subpath "/private/var/folders/xy/T"))
@@ -254,6 +265,18 @@
   (literal "/Users/me/.config/curlrc")
   (literal "/Users/me/.wgetrc")
   (subpath "/Users/me/.config/wget"))
+; deny seatbelt.agent-config (fs.write)
+(deny file-write*
+  (regex "^/Users/me/proj/(.*/)?\\.claude/hooks(/.*)?$")
+  (regex "^/Users/me/proj/(.*/)?\\.mcp\\.json$")
+  (regex "^/Users/me/proj/(.*/)?\\.cursor/mcp\\.json$")
+  (regex "^/Users/me/proj/(.*/)?\\.codex/config\\.toml$")
+  (regex "^/Users/me/proj/(.*/)?\\.openclaw/extensions(/.*)?$")
+  (regex "^/Users/me/proj/(.*/)?\\.github/hooks(/.*)?$")
+  (regex "^/Users/me/proj/(.*/)?\\.github/mcp\\.json$")
+  (regex "^/Users/me/proj/(.*/)?\\.pi/extensions(/.*)?$")
+  (regex "^/Users/me/proj/(.*/)?\\.pi/mcp\\.json$")
+  (regex "^/Users/me/proj/(.*/)?\\.pi/settings\\.json$"))
 ; never the keychain: the agent and its scripts share this profile
 (deny mach-lookup
   (global-name "com.apple.SecurityServer")
@@ -262,10 +285,12 @@
 (deny file-ioctl (ioctl-command TIOCSTI))
 ; network: only OpenMoat's egress proxy, which decides each host by the policy
 (allow network-outbound (remote ip "localhost:18080"))
+; stricter: fs.write `seatbelt.agent-config`: commands may not write an agent's hooks, MCP servers or extensions in the project (`.claude/hooks`, `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks`, `.pi/…`, `.openclaw/extensions`), which the agent loads later outside the sandbox, even when the hook allowed it: change one outside `openmoat run`
 ; stricter: net `registries`: these hosts are reachable only through OpenMoat's proxy: a program that ignores HTTP(S)_PROXY cannot reach them
 ; wider: fs.read `seatbelt.metadata`: the existence, size and times of every file stay visible (stat); contents follow the rules
 ; wider: fs.read `seatbelt.platform`: every process reads these to start
 ; wider: fs.write `seatbelt.platform`: the devices every process writes
+; wider: fs.write `seatbelt.terminal`: the terminal `openmoat run` was started on (its standard input, output and error), and no other
 ; wider: fs.read `seatbelt.program`: the program `openmoat run` starts, which must be readable to start
 ; wider: fs.read `sandbox.read_roots`: the hook decides these reads by the rules (ask by default); OS layers allow them so commands can run, and deny rules still win
 ; wider: fs.write `seatbelt.runs-later`: commands may write CI configuration, commit-hook managers' files and editor tasks (an install runs `husky`); the hook asks before the agent writes one (`runs-later`)

@@ -25,7 +25,10 @@ use seccompiler::{
 
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::SOCKET_ARGS;
-use crate::sandbox::{Grants, Report, exposure, landlock_rules, netns_masks, session_tmpdir};
+use crate::sandbox::{
+    Grants, Report, exposure, kernel_self_in_writes, landlock_rules, netns_agent_config_masks,
+    netns_masks, session_tmpdir,
+};
 
 /// `moat run --isolate`: bubblewrap around the same rules.
 mod isolate;
@@ -40,25 +43,56 @@ const ABI_REQUIRED: ABI = ABI::V4;
 /// (`IORING_OP_SOCKET`) without the `socket()` call the filter checks. ptrace
 /// and `process_vm_*` would let a command the agent starts read or change
 /// another process in the sandbox, such as the agent and the tokens in its
-/// memory; debuggers such as `strace` and `gdb` do not work in here.
-const DENIED: [i64; 6] = [
+/// memory; debuggers such as `strace` and `gdb` do not work in here. The
+/// kernel keyrings (`keyctl`, `add_key`, `request_key`) hold the person's
+/// session keys (Kerberos tickets, filesystem keys), which Landlock does not
+/// cover.
+const DENIED: [i64; 9] = [
     libc::SYS_io_uring_setup,
     libc::SYS_io_uring_enter,
     libc::SYS_io_uring_register,
     libc::SYS_ptrace,
     libc::SYS_process_vm_readv,
     libc::SYS_process_vm_writev,
+    libc::SYS_keyctl,
+    libc::SYS_add_key,
+    libc::SYS_request_key,
 ];
+
+/// The flags that make `clone()` and `unshare()` create a namespace (mount,
+/// cgroup, UTS, IPC, user, PID, network). A new user namespace gives a command
+/// every capability inside it and a fresh view in which to mount over what
+/// the sandbox hides; the others need it unprivileged. Containers, Chromium's
+/// own sandbox and bubblewrap cannot start in here.
+const CLONE_NAMESPACES: [u64; 7] = [
+    0x0002_0000,
+    0x0200_0000,
+    0x0400_0000,
+    0x0800_0000,
+    0x1000_0000,
+    0x2000_0000,
+    0x4000_0000,
+];
+
+/// `CLONE_NEWTIME`, which `unshare()` takes too; in `clone()`'s flags that bit
+/// is part of the exit signal.
+const CLONE_NEWTIME: u64 = 0x80;
 
 /// x32 programs on x86-64 make calls under the same architecture, numbered
 /// from [`X32`]: the filter refuses their `socket()` and the calls above.
 /// A call made under another architecture (32-bit `int 0x80`, which has
 /// `socketcall`) kills the process.
 #[cfg(target_arch = "x86_64")]
-const X32_DENIED: &[i64] = &[41, 425, 426, 427, 521, 539, 540];
+const X32_DENIED: &[i64] = &[41, 425, 426, 427, 521, 539, 540, 248, 249, 250];
 #[cfg(not(target_arch = "x86_64"))]
 const X32_DENIED: &[i64] = &[];
 const X32: i64 = 0x4000_0000;
+
+/// `clone()`, `unshare()` and `clone3()` under x32, numbered from [`X32`].
+#[cfg(target_arch = "x86_64")]
+const X32_NAMESPACE_CALLS: [&[i64]; 3] = [&[56], &[272], &[435]];
+#[cfg(not(target_arch = "x86_64"))]
+const X32_NAMESPACE_CALLS: [&[i64]; 3] = [&[], &[], &[]];
 
 /// `ioctl()` requests the agent may not make on any file. `TIOCSTI` pushes
 /// characters into the input of the terminal the agent shares with the user,
@@ -94,9 +128,9 @@ const X32_IOCTL: &[i64] = &[];
 pub struct Confined {
     command: Command,
     report: Report,
-    /// The Landlock rules and seccomp filter of the thread that starts the
+    /// The Landlock rules and seccomp filters of the thread that starts the
     /// agent; `None` under bubblewrap, where `inside` applies them.
-    restrict: Option<(RulesetCreated, BpfProgram)>,
+    restrict: Option<(RulesetCreated, Vec<BpfProgram>)>,
     /// What bubblewrap's session created, removed when it ends.
     _session: Option<isolate::Session>,
     /// Where the sandbox is weaker than `moat run` promises: printed before
@@ -112,6 +146,7 @@ pub fn confine(
     state: &Path,
 ) -> Result<Confined> {
     let port = grants.proxy_port;
+    let writes = grants.writes.clone();
     let generated = landlock_rules(policy, ctx, grants)?;
     refuse_exposed(state, &generated.rules, false)?;
     // Built here also where `inside` applies them: a kernel without Landlock
@@ -125,16 +160,27 @@ pub fn confine(
     // which Landlock grants whole.
     let masks = netns_masks(policy, ctx, &generated.rules)?;
     match netns::network() {
-        netns::Network::Namespace(bwrap) => netns::namespaced(
-            &bwrap,
-            &generated.rules,
-            &masks,
-            agent.report,
-            program,
-            &ctx.cwd,
-            port,
-        ),
+        netns::Network::Namespace(bwrap) => {
+            // The agent configuration in the project, read-only where it exists.
+            let mut masks = masks;
+            masks.extend(netns_agent_config_masks(ctx));
+            netns::namespaced(
+                &bwrap,
+                &generated.rules,
+                &masks,
+                agent.report,
+                program,
+                &ctx.cwd,
+                port,
+            )
+        }
         netns::Network::PortOnly(why) => {
+            // Only the namespace's mounts keep these from commands inside a
+            // `--write` path: without it, refuse rather than leave them open.
+            let held = kernel_self_in_writes(policy, ctx, &writes)?;
+            if let Some(refusal) = exposure::kernel_self_refusal(&held, &why) {
+                bail!("{refusal}");
+            }
             agent.warning = Some(netns::port_only_notice(port, &why, &masks));
             Ok(agent)
         }
@@ -147,6 +193,30 @@ pub fn port_only_network() -> Option<String> {
 }
 
 pub use isolate::{inside, isolate};
+
+/// The terminals this process's standard input, output and error are on, as
+/// `/proc` names them (`/dev/pts/3`, `/dev/tty1`); not `/dev/tty` itself.
+pub fn terminals() -> Vec<String> {
+    use std::os::unix::fs::FileTypeExt as _;
+
+    let mut found = Vec::new();
+    for fd in 0..3 {
+        let Ok(path) = std::fs::read_link(format!("/proc/self/fd/{fd}")) else {
+            continue;
+        };
+        let path = crate::context::path_string(&path);
+        let name = path.strip_prefix("/dev/").unwrap_or_default();
+        let named = name
+            .strip_prefix("pts/")
+            .is_some_and(|n| n != "ptmx" && !n.contains('/'))
+            || (name.starts_with("tty") && name != "tty" && !name.contains('/'));
+        let device = std::fs::metadata(&path).is_ok_and(|m| m.file_type().is_char_device());
+        if named && device && !found.contains(&path) {
+            found.push(path);
+        }
+    }
+    found
+}
 
 /// Refuse to start where `rules` would show OpenMoat's state directory `state`
 /// to the agent: Landlock cannot deny inside a grant (`crate::sandbox::exposure`).
@@ -184,19 +254,57 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
             .add_rules(ports)
     };
     let ruleset = build().context("`openmoat run` needs Landlock ABI 4 (Linux 6.7 or later)")?;
-    let filter = seccomp_filter().context("generating the seccomp filter")?;
+    let filters = seccomp_filters().context("generating the seccomp filter")?;
     Ok(Confined {
         command,
         report,
-        restrict: Some((ruleset, filter)),
+        restrict: Some((ruleset, filters)),
         _session: None,
         warning: None,
     })
 }
 
+/// The filters, applied in order: [`seccomp_filter`], then [`clone3_filter`].
+fn seccomp_filters() -> Result<Vec<BpfProgram>> {
+    Ok(vec![seccomp_filter()?, clone3_filter()?])
+}
+
+/// `clone3()` passes its flags in memory, which a filter cannot read, so it
+/// fails with `ENOSYS`, as on a kernel without it: the C libraries then fall
+/// back to `clone()`, whose flags [`seccomp_filter`] reads.
+fn clone3_filter() -> Result<BpfProgram> {
+    let x32 = X32_NAMESPACE_CALLS[2].iter().map(|nr| X32 + nr);
+    let calls = [libc::SYS_clone3].into_iter().chain(x32);
+    let filter = SeccompFilter::new(
+        calls.map(|nr| (nr, Vec::new())).collect(),
+        SeccompAction::Allow,
+        SeccompAction::Errno(libc::ENOSYS.unsigned_abs()),
+        std::env::consts::ARCH.try_into()?,
+    )?;
+    Ok(filter.try_into()?)
+}
+
+/// One rule per flag in `flags`: the call is refused when its first argument
+/// has any of them.
+fn any_flag(flags: &[u64]) -> Result<Vec<SeccompRule>> {
+    flags
+        .iter()
+        .map(|&flag| {
+            let set = SeccompCondition::new(
+                0,
+                SeccompCmpArgLen::Dword,
+                SeccompCmpOp::MaskedEq(flag),
+                flag,
+            )?;
+            Ok(SeccompRule::new(vec![set])?)
+        })
+        .collect()
+}
+
 /// `socket()` only with the values in [`SOCKET_ARGS`], `ioctl()` with none of
-/// [`TERMINAL_INPUT`], [`SENDS`] without `MSG_FASTOPEN`, none of [`DENIED`]:
-/// those calls fail with `EPERM`, and every other call is allowed.
+/// [`TERMINAL_INPUT`], [`SENDS`] without `MSG_FASTOPEN`, `clone()` and
+/// `unshare()` with none of [`CLONE_NAMESPACES`], none of [`DENIED`]: those
+/// calls fail with `EPERM`, and every other call is allowed.
 fn seccomp_filter() -> Result<BpfProgram> {
     // `socket()` is refused when one argument has none of its values.
     let mut socket = Vec::new();
@@ -231,9 +339,24 @@ fn seccomp_filter() -> Result<BpfProgram> {
         )?;
         sends.push((nr, vec![SeccompRule::new(vec![masked])?]));
     }
+    let clone_rules = any_flag(&CLONE_NAMESPACES)?;
+    let mut unshare_flags = CLONE_NAMESPACES.to_vec();
+    unshare_flags.push(CLONE_NEWTIME);
+    let unshare_rules = any_flag(&unshare_flags)?;
+    let [x32_clone, x32_unshare, _] = X32_NAMESPACE_CALLS;
+    let clone = [libc::SYS_clone]
+        .into_iter()
+        .chain(x32_clone.iter().map(|nr| X32 + nr));
+    let clone = clone.map(|nr| (nr, clone_rules.clone()));
+    let unshare = [libc::SYS_unshare]
+        .into_iter()
+        .chain(x32_unshare.iter().map(|nr| X32 + nr));
+    let unshare = unshare.map(|nr| (nr, unshare_rules.clone()));
     let rules = refused
         .chain(ioctl)
         .chain(sends)
+        .chain(clone)
+        .chain(unshare)
         .chain([(libc::SYS_socket, socket)])
         .collect();
     let filter = SeccompFilter::new(
@@ -271,14 +394,16 @@ impl Confined {
             _session,
             ..
         } = self;
-        let Some((ruleset, filter)) = restrict else {
+        let Some((ruleset, filters)) = restrict else {
             return command.status().context("starting bubblewrap");
         };
         std::thread::spawn(move || {
             ruleset
                 .restrict_self()
                 .context("applying the Landlock rules")?;
-            seccompiler::apply_filter(&filter).context("applying the seccomp filter")?;
+            for filter in &filters {
+                seccompiler::apply_filter(filter).context("applying the seccomp filter")?;
+            }
             command.status().context("starting the agent")
         })
         .join()
@@ -288,130 +413,4 @@ impl Confined {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::net::{TcpListener, UdpSocket};
-    use std::os::unix::net::{UnixDatagram, UnixStream};
-
-    use super::*;
-
-    /// The real filter, on a thread of its own: the test's other threads keep
-    /// their sockets.
-    #[test]
-    fn the_filter_refuses_unix_and_udp_sockets_and_allows_tcp_and_socketpair() {
-        let filter = seccomp_filter().expect("the filter compiles");
-        let errno = |result: std::io::Result<()>| result.err().and_then(|e| e.raw_os_error());
-        let (unix, udp, tcp, pair) = std::thread::spawn(move || {
-            seccompiler::apply_filter(&filter).expect("the filter applies");
-            (
-                errno(UnixDatagram::unbound().map(drop)),
-                errno(UdpSocket::bind("127.0.0.1:0").map(drop)),
-                errno(TcpListener::bind("127.0.0.1:0").map(drop)),
-                errno(UnixStream::pair().map(drop)),
-            )
-        })
-        .join()
-        .expect("the filtered thread finishes");
-        assert_eq!((unix, udp), (Some(libc::EPERM), Some(libc::EPERM)));
-        assert_eq!((tcp, pair), (None, None));
-        assert!(
-            UdpSocket::bind("127.0.0.1:0").is_ok(),
-            "this thread is not filtered"
-        );
-    }
-
-    /// Sends on an unconnected TCP socket to a local listener, first with
-    /// `MSG_FASTOPEN` (which would connect it), then a plain `connect()` and
-    /// `send`. Prints the errno of each, 0 when it went through.
-    const FAST_OPEN_PROBE: &str = r#"
-import socket, sys
-listener = socket.socket()
-listener.bind(("127.0.0.1", 0))
-listener.listen(1)
-addr = listener.getsockname()
-def errno(f):
-    try:
-        f()
-        return 0
-    except OSError as e:
-        return e.errno
-s = socket.socket()
-fast = errno(lambda: s.sendto(b"x", socket.MSG_FASTOPEN, addr))
-t = socket.socket()
-plain = errno(lambda: (t.connect(addr), t.send(b"x")))
-print(fast, plain)
-"#;
-
-    fn fast_open_probe() -> String {
-        let out = Command::new("python3")
-            .args(["-c", FAST_OPEN_PROBE])
-            .output()
-            .expect("python3 runs");
-        String::from_utf8_lossy(&out.stdout).trim().to_owned()
-    }
-
-    /// TCP Fast Open connects inside `sendto()`, past Landlock's `connect()`
-    /// check: the filter refuses a send that asks for it, and no other.
-    #[test]
-    fn the_filter_refuses_tcp_fast_open_and_allows_other_sends() {
-        let filter = seccomp_filter().expect("the filter compiles");
-        let filtered = std::thread::spawn(move || {
-            seccompiler::apply_filter(&filter).expect("the filter applies");
-            fast_open_probe()
-        })
-        .join()
-        .expect("the filtered thread finishes");
-        assert_eq!(filtered, format!("{} 0", libc::EPERM));
-        // Unfiltered, the same send goes through, or fails as the kernel's
-        // `net.ipv4.tcp_fastopen` setting says: never the filter's EPERM.
-        let unfiltered = fast_open_probe();
-        assert!(
-            unfiltered.ends_with(" 0") && !unfiltered.starts_with(&format!("{} ", libc::EPERM)),
-            "{unfiltered}"
-        );
-    }
-
-    /// A child on a terminal of its own (`pty.fork` makes it the controlling
-    /// terminal, which TIOCSTI needs) reads the window size, then pushes one
-    /// byte into the terminal's input. Exits with TIOCSTI's errno, 0 when it
-    /// went through, 255 when TIOCGWINSZ failed.
-    const TERMINAL_PROBE: &str = r##"
-import fcntl, os, pty, termios
-pid, _ = pty.fork()
-if pid == 0:
-    try:
-        fcntl.ioctl(0, termios.TIOCGWINSZ, bytes(8))
-    except OSError:
-        os._exit(255)
-    try:
-        fcntl.ioctl(0, termios.TIOCSTI, b"#")
-        os._exit(0)
-    except OSError as e:
-        os._exit(e.errno)
-_, status = os.waitpid(pid, 0)
-os._exit(os.waitstatus_to_exitcode(status))
-"##;
-
-    fn terminal_probe() -> Option<i32> {
-        Command::new("python3")
-            .args(["-c", TERMINAL_PROBE])
-            .status()
-            .expect("python3 runs")
-            .code()
-    }
-
-    /// The real filter, on a thread of its own, on a terminal the test opens.
-    #[test]
-    fn the_filter_refuses_terminal_input_and_allows_other_terminal_calls() {
-        let filter = seccomp_filter().expect("the filter compiles");
-        let filtered = std::thread::spawn(move || {
-            seccompiler::apply_filter(&filter).expect("the filter applies");
-            terminal_probe()
-        })
-        .join()
-        .expect("the filtered thread finishes");
-        assert_eq!(filtered, Some(libc::EPERM));
-        // Unfiltered, TIOCSTI goes through, or fails with EIO where the kernel
-        // refuses it itself (`dev.tty.legacy_tiocsti=0`): never the filter's EPERM.
-        assert!(matches!(terminal_probe(), Some(0 | libc::EIO)));
-    }
-}
+mod tests;

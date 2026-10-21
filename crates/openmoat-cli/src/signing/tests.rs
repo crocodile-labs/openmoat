@@ -71,11 +71,16 @@ fn a_signature_from_a_trusted_key_names_its_signer() {
 
     let both = signers_for(dir.path(), &[("bob@x", &bob), ("alice@x", &alice)]);
     assert_eq!(
-        verify(&program, &both, &data, &sig).unwrap().as_deref(),
+        verify(&program, &both, &data, &sig, Signed::RepoPolicy)
+            .unwrap()
+            .as_deref(),
         Some("alice@x")
     );
     let only_bob = signers_for(dir.path(), &[("bob@x", &bob)]);
-    assert_eq!(verify(&program, &only_bob, &data, &sig).unwrap(), None);
+    assert_eq!(
+        verify(&program, &only_bob, &data, &sig, Signed::RepoPolicy).unwrap(),
+        None
+    );
     assert!(
         fingerprint(&program, &alice.with_extension("pub"))
             .unwrap()
@@ -93,13 +98,19 @@ fn changed_data_and_another_namespace_do_not_verify() {
     fs::write(&pack, "version: 1\n").unwrap();
     let sig = sign(&program, &alice, NAMESPACE, &pack);
     let changed = b"version: 1\nallow: []\n";
-    assert_eq!(verify(&program, &signers, changed, &sig).unwrap(), None);
+    assert_eq!(
+        verify(&program, &signers, changed, &sig, Signed::RepoPolicy).unwrap(),
+        None
+    );
 
     let commit = dir.path().join("commit.txt");
     fs::write(&commit, "version: 1\n").unwrap();
     let git_sig = sign(&program, &alice, "git", &commit);
     let data = fs::read(&commit).unwrap();
-    assert_eq!(verify(&program, &signers, &data, &git_sig).unwrap(), None);
+    assert_eq!(
+        verify(&program, &signers, &data, &git_sig, Signed::RepoPolicy).unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -107,7 +118,14 @@ fn a_signature_that_is_not_a_file_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let signers = dir.path().join("allowed_signers");
     fs::write(&signers, "").unwrap();
-    let error = verify(Path::new("ssh-keygen"), &signers, b"", dir.path()).unwrap_err();
+    let error = verify(
+        Path::new("ssh-keygen"),
+        &signers,
+        b"",
+        dir.path(),
+        Signed::Pack,
+    )
+    .unwrap_err();
     assert!(error.to_string().contains("not a regular file"), "{error}");
 }
 
@@ -116,7 +134,7 @@ fn signer_lines_are_limited_to_the_policy_namespace() {
     let line = signer_line("alice@example.com", "ssh-ed25519 AAAAC3Nza+/= alice\n").unwrap();
     assert_eq!(
         line,
-        "alice@example.com namespaces=\"openmoat-policy\" ssh-ed25519 AAAAC3Nza+/="
+        "alice@example.com namespaces=\"openmoat-policy,openmoat-pack\" ssh-ed25519 AAAAC3Nza+/="
     );
     for bad in ["", "a b", "a\"b", "x,y"] {
         assert!(signer_line(bad, "ssh-ed25519 AAAA").is_err(), "{bad:?}");
@@ -128,4 +146,72 @@ fn signer_lines_are_limited_to_the_policy_namespace() {
         principals("# c\nb x\na y\nb z\n\n"),
         ["b".to_owned(), "a".to_owned()]
     );
+}
+
+#[test]
+fn a_pack_signature_is_no_repository_policy_signature_and_the_reverse() {
+    let Some(program) = program() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let alice = keypair(&program, dir.path(), "alice");
+    let signers = signers_for(dir.path(), &[("alice@x", &alice)]);
+    let file = dir.path().join("policy.yaml");
+    fs::write(
+        &file,
+        "version: 1\nallow:\n  - id: a\n    shell: ['make deploy']\n",
+    )
+    .unwrap();
+    let data = fs::read(&file).unwrap();
+
+    let pack_sig = sign(&program, &alice, PACK_NAMESPACE, &file);
+    let as_pack = verify(&program, &signers, &data, &pack_sig, Signed::Pack).unwrap();
+    assert_eq!(as_pack.as_deref(), Some("alice@x"));
+    let as_repo = verify(&program, &signers, &data, &pack_sig, Signed::RepoPolicy).unwrap();
+    assert_eq!(as_repo, None, "a pack's signature over a repository policy");
+
+    // ssh-keygen does not replace an existing signature file.
+    fs::remove_file(&pack_sig).unwrap();
+    let repo_sig = sign(&program, &alice, NAMESPACE, &file);
+    let as_repo = verify(&program, &signers, &data, &repo_sig, Signed::RepoPolicy).unwrap();
+    assert_eq!(as_repo.as_deref(), Some("alice@x"));
+    let as_pack = verify(&program, &signers, &data, &repo_sig, Signed::Pack).unwrap();
+    assert_eq!(as_pack, None, "a repository policy's signature over a pack");
+}
+
+#[test]
+fn a_key_trusted_by_an_earlier_release_still_verifies_repository_policies_only() {
+    let Some(program) = program() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let alice = keypair(&program, dir.path(), "alice");
+    let public = fs::read_to_string(alice.with_extension("pub")).unwrap();
+    let words: Vec<&str> = public.split_whitespace().collect();
+    let earlier = format!(
+        "alice@x namespaces=\"{NAMESPACE}\" {} {}\n",
+        words[0], words[1]
+    );
+    let signers = dir.path().join("allowed_signers");
+    fs::write(&signers, &earlier).unwrap();
+    let file = dir.path().join("policy.yaml");
+    fs::write(&file, "version: 1\n").unwrap();
+    let data = fs::read(&file).unwrap();
+    let repo_sig = sign(&program, &alice, NAMESPACE, &file);
+    let found = verify(&program, &signers, &data, &repo_sig, Signed::RepoPolicy).unwrap();
+    assert_eq!(found.as_deref(), Some("alice@x"));
+    fs::remove_file(&repo_sig).unwrap();
+    let pack_sig = sign(&program, &alice, PACK_NAMESPACE, &file);
+    assert_eq!(
+        verify(&program, &signers, &data, &pack_sig, Signed::Pack).unwrap(),
+        None
+    );
+
+    // `moat policy trust-key` again replaces that line, and the pack verifies.
+    let now = signer_line("alice@x", &public).unwrap();
+    assert!(same_signer(earlier.trim(), &now));
+    fs::write(&signers, format!("{now}\n")).unwrap();
+    let found = verify(&program, &signers, &data, &pack_sig, Signed::Pack).unwrap();
+    assert_eq!(found.as_deref(), Some("alice@x"));
+    assert!(!same_signer(
+        "bob@x namespaces=\"x\" ssh-ed25519 AAAA",
+        &now
+    ));
+    assert!(!same_signer("", &now));
 }

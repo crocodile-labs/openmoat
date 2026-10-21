@@ -136,7 +136,14 @@ call that is, and how long ago it asked, then asks `Approve it? [y/N]`; anything
 approves nothing.
 
 A session grant lasts 24 hours and covers only that agent session: a new session
-asks again. For Claude Code, `claude --continue` resumes the session. A call whose
+asks again. For Claude Code, `claude --continue` resumes the session. A grant for a
+command also covers only the project it was asked in (its repository root, else its
+working directory): the same command in another repository asks again, since its
+scripts are not the ones you approved. The explicit form
+`openmoat allow "<command>" --host <id> --session <id>` binds the grant to the project
+of the current directory, or of `--project <dir>`. A command grant written by a release
+before this binding applies nowhere; `openmoat status` and `openmoat allowed` name it so
+you can approve it again. A call whose
 agent sent no session id gets no session grant, since it would hold in every session
 that sends none: approve it in the agent, or use `--always`.
 
@@ -297,7 +304,10 @@ these takes one command in your own terminal (agents are denied all of them):
 - **A wrapped MCP server shows no tools**, or its calls fail with error -32602 naming
   `openmoat mcp accept`: `openmoat mcp proxy` holds every tool of a server until you have read
   it, the first time the server starts through the proxy too. Run `openmoat mcp accept
-  <server>`: it shows each tool's name, description and input schema and asks.
+  <server>`: it shows each tool's name, title, description, input and output schemas and
+  annotations, and asks. After upgrading from a release that pinned only the name,
+  description and input schema, every pinned tool is held once this way; `openmoat status`
+  and `openmoat doctor` say so, and one `openmoat mcp accept` clears it.
 - **A command you need keeps asking or is denied**: `openmoat allow --last` for this session,
   `openmoat allow --last --always` for good, or `openmoat edit` for a wider rule. Please also
   report it with the "False positive" issue template, so the default policy stops doing it.
@@ -359,15 +369,15 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
 | `openmoat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
 | `openmoat audit report <file>…` | one report over verified exports from several machines |
-| `openmoat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h) or a permanent rule for exactly that command or those paths |
+| `openmoat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h; a command's only in the project it was asked in) or a permanent rule for exactly that command or those paths |
 | `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |
 | `openmoat allowed [--format json]` | list what you allowed: permanent rules, session grants still in force, trusted repositories, each with how to take it back |
 | `openmoat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
 | `openmoat secret add gh` · `openmoat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only |
 | `openmoat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
-| `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes |
+| `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
-| `openmoat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which pins each tool's description and input schema and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included (`--sandbox` also starts the server under `openmoat run`) · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
+| `openmoat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included (`--sandbox` also starts the server under `openmoat run`) · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `openmoat policy lint` · `openmoat policy check "<cmd>"` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them) |

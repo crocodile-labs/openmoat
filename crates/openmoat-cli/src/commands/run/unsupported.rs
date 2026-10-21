@@ -39,6 +39,11 @@ pub fn port_only_network() -> Option<String> {
     None
 }
 
+/// None: `moat run` refuses here.
+pub fn terminals() -> Vec<String> {
+    Vec::new()
+}
+
 impl Confined {
     pub fn command(&mut self) -> &mut Command {
         match *self {}

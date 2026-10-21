@@ -122,14 +122,34 @@ pub fn inline_flags(program: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-/// Programs for which every path argument is a write.
+/// Programs for which every path argument is a write. The `rename` tools
+/// (util-linux `rename FROM TO FILE…`, Perl `rename EXPR FILE…`) move every file
+/// they name; their expressions become writes of paths that rarely exist.
 pub const WRITE_ALL_PATHS: &[&str] = &[
-    "rm", "rmdir", "touch", "mkdir", "chmod", "chown", "chgrp", "truncate", "unlink", "shred",
-    "tee", "install", "mkfifo", "mknod", "mv",
+    "rm",
+    "rmdir",
+    "touch",
+    "mkdir",
+    "chmod",
+    "chown",
+    "chgrp",
+    "truncate",
+    "unlink",
+    "shred",
+    "tee",
+    "install",
+    "mkfifo",
+    "mknod",
+    "mv",
+    "rename",
+    "prename",
+    "perl-rename",
+    "file-rename",
 ];
 
 /// Programs for which the last operand is a write and the others are reads.
-pub const WRITE_LAST_PATH: &[&str] = &["cp", "ln", "rsync", "scp"];
+/// `link FILE NEW` makes the hard link `NEW`.
+pub const WRITE_LAST_PATH: &[&str] = &["cp", "ln", "link", "rsync", "scp"];
 
 /// Programs whose operands are files they read, so a plain name (`cat s`) is a
 /// file read (`operands.rs`). Pattern operands (`grep foo .`) become reads of

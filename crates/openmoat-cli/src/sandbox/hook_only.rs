@@ -43,6 +43,7 @@ fn grants() -> Grants {
         tmpdir: Some("/private/var/folders/xy/T".into()),
         program: Some("/usr/bin/agent".into()),
         writes: Vec::new(),
+        terminals: Vec::new(),
     }
 }
 

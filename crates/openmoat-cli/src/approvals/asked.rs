@@ -59,7 +59,7 @@ pub fn describe(action: &Action) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approvals::{Grants, Overlay};
+    use crate::approvals::{Grants, Overlay, Scope};
 
     /// 2026-10-03 00:00:00 UTC.
     const NOW: i64 = 1_790_985_600_000;
@@ -77,16 +77,18 @@ mod tests {
         assert_eq!(read("~/notes.md", None), read("/h/notes.md", None));
         assert_eq!(read("notes.md", None), None, "relative without a cwd");
         let mut g = Grants::default();
-        g.grant("cursor", "c1", &asked, NOW, None);
-        assert!(g.matches("cursor", "c1", &read("/p/notes.md", None).unwrap(), NOW));
-        assert!(!g.matches("cursor", "c1", &read("/p/other.md", None).unwrap(), NOW));
+        let c1 = Scope {
+            host: "cursor",
+            session_id: "c1",
+            project: "/p",
+        };
+        g.grant(c1, &asked, NOW, None);
+        assert!(g.matches(c1, &read("/p/notes.md", None).unwrap(), NOW));
+        assert!(!g.matches(c1, &read("/p/other.md", None).unwrap(), NOW));
         let write = Action::FsWrite {
             path: "/p/notes.md".to_owned(),
         };
-        assert!(
-            !g.matches("cursor", "c1", &write, NOW),
-            "a read is not a write"
-        );
+        assert!(!g.matches(c1, &write, NOW), "a read is not a write");
 
         let mut o = Overlay::default();
         assert!(!o.covers(&asked));

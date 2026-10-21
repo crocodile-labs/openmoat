@@ -278,7 +278,7 @@ Consequences worth remembering:
 - A reserved word that starts a command inside a compound one (`do`, `then`, `else`, `elif`, `if`, `while`, `until`, `!`, `{`) is not the program: `for f in a; do cat x; done` is the command `cat x`, and `done`, `fi`, `}` and `esac` alone run nothing. `for NAME in WORDS` is an `env.set` of `NAME`, and the words are read like any others. A variable set by a command of its own earlier on the line (`n=3; git log -$n`, a `for` variable, `export X=v`; also `readonly`, `local`, `declare` and `typeset` without options, which may set an array, a number or a reference) is a shell variable. When every value it can hold is text the line shows (no `$`, `$( … )`, glob or quoted `~`), it is substituted where it is used and the command is classified once per value, so `d=~/.ssh; cat $d/id_rsa` and `X=~/.ssh; cat $X/id_rsa` are reads of `~/.ssh/id_rsa`. Reading a lowercase one is then no `env.read`; an uppercase name, by convention an environment variable, keeps its `env.read`, and so does any variable whose value is not known. A prefix assignment (`D=x cmd $D`) does not count: the shell expands `$D` before it. A path that still contains a variable the shell expands (other than `$HOME` and `$PWD`, unless the line gave them a value it does not show, as `read HOME` or `HOME=$(cat f)` do; `${project}` is the policy's syntax, so in a command it is the shell's variable `project`, read as empty), or the output of a command (`cat $(cat list)`, `` cat `cmd` ``), is not known: the call gets rule `unparseable` (§4 step 5) and the literal path is still checked, so a deny on it wins. `$PWD` is the working directory. A child shell (`sh -c`) does not see the variables, so `x=1; sh -c 'echo $x'` reads `x`, and an uppercase name's read stays: `NPM_TOKEN=x; echo $NPM_TOKEN` is still a read of `NPM_TOKEN`. A path through a variable whose value is not known is also the atom `@unknown-path <word>`, which `secret-names` asks for when its file name is a key's, a token file's or a `.env`. Where `$IFS` or `${IFS}` stands in a word, the line is classified a second time with it read as a space and both results count, so `cat${IFS}~/.ssh/id_rsa` is a read of the key. A substituted variable used unquoted is split into words, as the shell does: where its value holds a space, tab or newline, and once more at the characters of each value the line gave `IFS` (an `IFS` set to a value the line does not show, as `read IFS` does, makes the call `unparseable`); every split counts. So `x='.env other'; cat $x` reads `.env` and `other`, `s=' '; cat${s}~/.ssh/id_rsa` is a read of the key (a `~` a split leaves at the start of a word is read as the home directory, stricter than the shell), an unquoted empty value is no word (`x=; $x env` is `env`), and a `*`, `?` or `[` in an unquoted value is a glob (`x='.e*'; cat $x`). A quoted use (`"$x"`) stays one word. A value that starts with a quoted `~` is not substituted (its path is not known). A `file:` URL in any argument (`curl file:///etc/passwd`, `--url=FILE:///…`, `%`-escapes decoded) is an `fs.read` of its path. Arguments that are a command line the program runs are classified as one: `watch 'cmd'`, `git rebase --exec`/`-x` (by any prefix git accepts), `git submodule foreach`, `git bisect run`, `git difftool --extcmd`/`-x`, `git filter-branch --*-filter`, `ssh`/`scp`/`sftp -o ProxyCommand=`/`LocalCommand`/`KnownHostsCommand`, `rsync -e`/`--rsh`, `su`/`runuser -c`/`--command`/`--session-command`, and `tar --to-command`, `-I`/`--use-compress-program`, `--checkpoint-action=exec=`, `-F`/`--info-script`/`--new-volume-script` and `--rsh-command`/`--rmt-command` (by any prefix GNU tar accepts, the value attached, after `=` or the next word). `pkexec` and `runuser -u USER` are wrappers like `sudo`.
 - Inline code given to an interpreter on the command line is scanned for paths, hosts and variable names (not parsed): `python`/`python3 -c` (also versioned, `python3.12 -c`, `python2.7 -c`), `node -e`/`--eval`/`-p`/`--print`, `deno eval`, `bun -e`, `perl -e`/`-E`, `ruby -e`, `php -r`, `osascript -e`, `pwsh`/`powershell -c`/`-Command`, `lua`/`luajit -e` and `Rscript -e` (`shell/tables.rs`). So `python3.12 -c "open('/Users/you/.ssh/id_rsa')"` is a read of the key. A variable the code reads by a quoted or spelled-out name (`os.environ['X']`, `os.environ.get('X')`, `os.getenv('X')`, `process.env.X`, `Deno.env.get('X')`, `ENV['X']`, `ENV.fetch('X')`, `$ENV{X}`, `$_ENV['X']`, `getenv('X')`, `$env:X` in any case, `getattr(os, 'environ')['X']`, `subprocess.run(['printenv', 'X'])`, PowerShell's `[Environment]::GetEnvironmentVariable('X')` and `Get-ChildItem Env:X`) is an `env.read` of it. Code that reads the whole environment is the atom `@env-dump <expression>`, which `env-dump` denies: the environment as the only argument of a call (`print(os.environ)`, `dict(os.environ)`, `console.log(process.env)`, `JSON.stringify(process.env)`), unless that call is handed on as a child's environment (`env=dict(os.environ)`); a method that returns every variable (`.items()`, `.values()`, `ENV.to_h`, `Deno.env.toObject()`, …); `%ENV`; `getenv()` without a name; a name chosen at run time (`os.environ[k]`, `$ENV{$_}`); a printing statement (`p ENV`); the environment as the whole code (`node -p process.env`); `getattr(os, 'environ')`, `vars(os)` or `os.__dict__` used any other way; `env` or `printenv` without arguments run as a child (`os.popen('env')`, `subprocess.run(['env'])`, `os.system('printenv | sort')`); or PowerShell's `[Environment]::GetEnvironmentVariables()` and a listing of the `Env:` drive (`Get-ChildItem Env:`, `gci`, `ls` or `dir env:`). An alias (`e = os.environ`) is not followed. Passing the environment on (`env={**os.environ}`) or setting a variable (`os.environ['A'] = '1'`) is neither.
 - Relative paths follow `cd` and `pushd` earlier in the same command line: `cd ~/.ssh && cat id_rsa` is a read of `~/.ssh/id_rsa`. Which commands run after a `cd` succeeds is not modelled (`cd x || cat y`, a failed `cd` before `;`), so a relative path is checked in every directory the line may be in (the session's directory and each `cd` target), strictest wins. A subshell `( … )` restores the directory when it closes; `$( … )` and `sh -c` start from the directory where they appear. `cd` alone is `~`. A target that cannot be known (`cd "$DIR"`, `cd -`, `cd s*`, `pushd +1`, `popd`, and `eval`/`source`, which may `cd` themselves) makes every later relative path unresolvable, so the command gets rule `unparseable` (step 5); absolute paths are still checked normally. More than 16 possible directories is `unparseable` too. `cd` itself adds no new action (a path-looking target is an `fs.read` like any argument). `CDPATH` is not consulted: the shell searches it for a target that does not start with `/`, `./` or `../`, but the classifier cannot see the environment the host started the shell with, so such a target is taken relative to the current directory. Setting `CDPATH` on the line itself (`CDPATH=~ cd .ssh`, `export CDPATH=…`) is an `env.set` that `opaque-code` asks for, and the shell start-up files that could preset it are denied by `shell-rc`.
-- `openmoat guard` checks a path where it really points as well as where it was written: after `ln -s ~/.ssh ./s`, `cat ./s/id_rsa`, `cat s/id_rsa`, `head s/id_rsa` and `grep -r . s/` are denied by `secrets-paths`. A link inside the project that points elsewhere inside the project stays allowed; one that points outside it is checked at its target (`ln -s /etc e; cat e/hosts` is decided as a read of `/etc/hosts`, which the default policy defers), also when the project itself sits under a linked directory (§3.2). `openmoat policy check` resolves symlinks the same way. Hard links and a link swapped after the check are not seen (ADR-009).
+- `openmoat guard` checks a path where it really points as well as where it was written: after `ln -s ~/.ssh ./s`, `cat ./s/id_rsa`, `cat s/id_rsa`, `head s/id_rsa` and `grep -r . s/` are denied by `secrets-paths`. A link inside the project that points elsewhere inside the project stays allowed; one that points outside it is checked at its target (`ln -s /etc e; cat e/hosts` is decided as a read of `/etc/hosts`, which the default policy defers), also when the project itself sits under a linked directory (§3.2). `openmoat policy check` resolves symlinks the same way. Hard links that already exist and a link swapped after the check are not seen (ADR-009). Making a hard link is a write of the file linked to, since a later write through the new name changes it: `ln` without `-s`, `link`, `cp -l` or `--link`, and the directory of `rsync --link-dest` (relative to the destination), so `ln ~/.claude/settings.json s.json` and `cp -al ~/.moat ./m` are denied by `kernel-self`.
 - A path operand or redirection target with an unquoted `*`, `?` or `[` is a glob the shell expands before the command runs, so it is checked as written **and** as every path it names in the real directories: `cat .en?`, `cat .e*`, `cat .[e]nv`, `base64 < .en?` and `cat ~/.ss?/id_rsa` are denied by `secrets-paths` like `cat .env`. The expansion follows `bash`: `*`, `?` and classes (`[ab]`, `[!a]`, `[^a]`; a set with a POSIX class, equivalence class or collating symbol such as `[[:alpha:]]` is taken as any one character, so it names at least what the shell opens) do not match a leading `.` unless the pattern starts with one (`cat *` does not read `.env`, `cat .e*` does), `**` is taken as any number of directories (as with `globstar` or in `zsh`), and a pattern that matches nothing is only its literal word. A component without glob characters after a globbed directory is named whether or not the file exists yet (`~/.ss?/id_rsa` names `~/.ssh/id_rsa` once `~/.ssh` matches), and every match is resolved through symlinks. A quoted or escaped pattern (`cat '.en?'`, `cat .en\?`) is one literal name; an operand with the same text as an unquoted glob elsewhere in the command line is expanded too. Directories are listed only for such operands. When the globs of one call name more than 256 paths, list more than 1024 directories or descend more than 8 levels of `**`, the call gets rule `unparseable` (step 5), and a deny among the paths that were named still wins. `openmoat policy check` expands globs the same way; without a filesystem (`decide()` with no resolver, the conformance suite without `files`) only the literal is checked.
 - Unquoted braces make several words before any other expansion, without the filesystem, as in `bash`: `cat .{env,x}` is checked as `cat .env .x`, so `cat .{env,x}`, `cat .e{n,m}v`, `cat ~/.ssh/{id_rsa,x}` and `{cat,.env}` are denied by `secrets-paths`. Comma lists, nested braces, integer and letter sequences with an optional step and zero padding (`{1..3}`, `{a..e..2}`, `{01..10}`) and several groups in one word (`{a,b}{1,2}`) are expanded in any position, the command name included, and each word made goes through the rules above (`cat .{e,x}n?` is globbed). As in `bash`, `{}`, `{x}`, `{a,b` and invalid sequences stay literal, `${…}` is a variable, quoted or escaped braces (`cat '.{env,x}'`, `\{a,b}`) are one literal name, empty results are dropped and a here-string is not expanded. A word whose braces would make more than 256 words gets rule `unparseable` (step 5); a deny elsewhere in the call still wins.
 - The explanation names the rules that produced the final verdict; weaker matches are shown as context (`also:` lines, `context` in JSON).
@@ -469,7 +469,7 @@ These appear in responses and in `openmoat show` alongside the ids from `policy.
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
 | `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
 | `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept` |
-| `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's description or input schema is not the one a person accepted (§8) |
+| `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's definition (title, description, input or output schema, annotations) is not the one a person accepted (§8) |
 | `kernel-error` | deny | `openmoat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
@@ -591,7 +591,7 @@ Seatbelt and Landlock rules of `openmoat run` are generated from it.
 | allow | `registries` | `api.github.com`, `github.com`, npm, crates.io, Go proxy, PyPI (shell clients and `WebFetch` alike) |
 | allow | `safe-mcp` | read-only GitHub and filesystem MCP tools |
 | ask | `git-internals` | writes to a `.git` at any depth (hooks, config, refs, a `gitdir:` file) and `git config`, `git remote`, `git -c`, `git --config-env`, `git --git-dir`, `git --work-tree`, `git --exec-path` in the forms `dev-shell` does not allow: git runs what they name later, outside any sandbox |
-| ask | `runs-later` | writes, at any depth, to what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) and to what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.lefthook.yml`, `.vscode/tasks.json`), including what an agent host starts in its next session (a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and in the home `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`), and OpenClaw's plugin directories (`~/.openclaw/extensions/`, a project's `.openclaw/extensions/`), and GitHub Copilot CLI's repository hook files and MCP servers (`.github/hooks/`, `.github/mcp.json`) and, in the home, `~/.copilot/mcp-config.json`, `~/.copilot/installed-plugins/` and `~/.copilot/agents/`, and pi's extensions, MCP server lists and a project's pi settings (`~/.pi/agent/extensions/`, `~/.pi/agent/mcp.json`, a project's `.pi/extensions/`, `.pi/mcp.json` and `.pi/settings.json`), and Gemini CLI's extensions (`~/.gemini/extensions/`). OpenClaw's state database (`~/.openclaw/state/`, which holds its exec approvals and the `cron` jobs its Gateway runs; an OpenClaw `cron` add or update is decided as a write of it) is `kernel-self`, so writes to it are denied. `project-fs` and `openmoat allow --dir` leave the project ones out, so the write asks; reading them stays allowed. Hook only: the OS sandboxes list them as writable, since a deny there would make them unreadable or fail installs that write them (`husky`) |
+| ask | `runs-later` | writes, at any depth, to what CI runs with the repository's secrets once a branch is pushed (`.github/workflows/`, `.gitlab-ci.yml`, `.circleci/`, `azure-pipelines.yml`, `Jenkinsfile`, `.buildkite/`) and to what runs on this machine outside any sandbox (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, `.lefthook.yml`, `.vscode/tasks.json`), including what an agent host starts in its next session (a project's `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json` and `.codex/config.toml`, and in the home `~/.claude.json`, `~/.claude/plugins/`, `~/.cursor/mcp.json` and `~/.cursor/cli-config.json`), and OpenClaw's plugin directories (`~/.openclaw/extensions/`, a project's `.openclaw/extensions/`), and GitHub Copilot CLI's repository hook files and MCP servers (`.github/hooks/`, `.github/mcp.json`) and, in the home, `~/.copilot/mcp-config.json`, `~/.copilot/installed-plugins/` and `~/.copilot/agents/`, and pi's extensions, MCP server lists and a project's pi settings (`~/.pi/agent/extensions/`, `~/.pi/agent/mcp.json`, a project's `.pi/extensions/`, `.pi/mcp.json` and `.pi/settings.json`), and Gemini CLI's extensions (`~/.gemini/extensions/`). OpenClaw's state database (`~/.openclaw/state/`, which holds its exec approvals and the `cron` jobs its Gateway runs; an OpenClaw `cron` add or update is decided as a write of it) is `kernel-self`, so writes to it are denied. `project-fs` and `openmoat allow --dir` leave the project ones out, so the write asks; reading them stays allowed. Hook only: the OS sandboxes list them as writable, since a deny there would make them unreadable or fail installs that write them (`husky`); the exception is `openmoat run` on macOS, which denies its commands writing a project's agent configuration (its `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks/`, `.github/mcp.json`, `.openclaw/extensions/` and `.pi/` files), a write the person allowed included ([SANDBOX.md](SANDBOX.md)) |
 | ask | `persistence` | writes to `~/Library/LaunchAgents`, `~/.gitconfig`, `~/.config/git`, `~/.config/autostart`, `~/.config/systemd/user`; `crontab` |
 | ask | `home-sweep` | reading the home folder or `~/.config` themselves, which is what a recursive read of them reads (`grep -r . ~`, `tar czf h.tgz ~`, `find ~ -name '*.pem'`) |
 | ask | `secret-names` | a path through a variable whose value is not known (the `@unknown-path` atom, §3.1) whose file name is a key's, a token file's or a `.env` (`cat $X/id_rsa`, `cat "$d"/.env`); other such paths defer |
@@ -674,9 +674,13 @@ One exception keeps a changed Claude Code toggle from stopping every agent. When
 only drift is in Claude Code's `settings.json`, limited to its own display and reply
 settings (`language`, `outputStyle`, `spinnerVerbs`, `autoMode`, …), the model you
 switch to (`model` and `switchModelsOnFlag`, which Claude Code writes itself) or its own
-permission lists and modes (`permissions.allow`, `ask`, `deny`, `defaultMode`,
-`additionalDirectories`, `blockReadsOutsideWorkingDirectories`), `openmoat guard` keeps
-deciding every call by the policy. These settings change only when Claude Code asks
+permission lists and a mode that keeps its prompts (`permissions.allow`, `ask`, `deny`,
+`blockReadsOutsideWorkingDirectories`, and `defaultMode` set to `default`, `plan` or
+`dontAsk`, or removed), `openmoat guard` keeps deciding every call by the policy. A
+`defaultMode` of `acceptEdits`, `auto` or `bypassPermissions` (or any other value)
+would run a call the policy defers without asking you, and `additionalDirectories`
+adds directories Claude Code's sandbox lets commands write; either is drift that
+denies every call until you run `openmoat doctor --accept`. These settings change only when Claude Code asks
 you; a hook deny stands whatever they say. The drift is recorded once per session
 (rule `settings-drift`), and `openmoat doctor` and `openmoat status` keep reporting it until
 you run `openmoat doctor --accept`. Removing a `permissions.deny` rule OpenMoat wrote, any
@@ -741,12 +745,18 @@ that cannot be parsed holds back every MCP call of its agent. `openmoat init` pi
 finds. The other re-pinning commands keep the MCP pins as they are.
 
 `openmoat mcp proxy` (opt-in per server with `openmoat mcp wrap`) pins each tool's name,
-description and input schema in `~/.moat/mcp/`. A tool with no pin, or one that changed,
+title, description, input schema, output schema and annotations in `~/.moat/mcp/`: what
+an agent shows the model, and the hints (`readOnlyHint`, `destructiveHint`) an agent may
+read to run a call without asking. A tool with no pin, or one that changed,
 is left out of `tools/list`, and a `tools/call` for it is answered with an error naming
 `openmoat mcp accept <server>` (rule `mcp-tool-held` in the audit log, host `mcp-proxy`).
 The first time the proxy sees a server, that is every tool it lists (ADR-032): `openmoat mcp
-accept <server>` shows each one's name, description and input schema, asks, and pins
-them. A server the proxy already pinned keeps its pins.
+accept <server>` shows each one's definition, asks, and pins
+them. A server the proxy already pinned keeps its pins. A pin written by a release that
+pinned only the name, description and input schema matches no listing, so after the
+upgrade each such tool is held once, even unchanged; `openmoat status` and `openmoat
+doctor` count the tools held for that reason, `openmoat mcp accept` names it for each,
+and one accept pins them all again.
 
 ```yaml
 mcp:
@@ -787,13 +797,20 @@ When a host prompts you because the verdict was `ask`, you can make the answer s
 ```bash
 openmoat allow --last                  # grant the most recent ask to that host session (exact command or files)
 openmoat allow --last --always         # or add a permanent allow rule
-openmoat allow "npm install left-pad" --host claude-code --session 7c1e
+openmoat allow "npm install left-pad" --host claude-code --session 7c1e --project ~/code/app
 ```
 
 Session grants live in `~/.moat/approvals.json` and match the exact command text, or
 the exact files and action (read or write) of a file ask, for one host session. File
 paths are compared made absolute against the call's working directory, `~` expanded
-and `.` and `..` collapsed. A grant applies to any `ask` for that command or those
+and `.` and `..` collapsed. A command grant, and one that also answers the session's
+taint asks (`s`), records the project it was approved in: the repository root of the
+asked call's working directory, else that directory, with symlinks resolved (for
+`openmoat allow "<command>" --session …`, the current directory or `--project <dir>`).
+It applies only to calls in that project. A file grant needs no project: it names
+absolute paths. A command or taint grant without a project (written by a release
+before this binding) applies nowhere, and `openmoat status` lists it as needing
+approval again. A grant applies to any `ask` for that command or those
 files, including an `unparseable` one; it never overrides a `deny`. A file ask approved
 with `--always` becomes an `fs.read` or `fs.write` rule for exactly its paths, as
 asked and with symlinks resolved; a path with glob characters is refused. Hosts do not report when a session ends,
@@ -905,11 +922,11 @@ tunnel, which the proxy does not see.
 |---|---|---|
 | `openmoat proxy` | Every connection is decided by the full policy (address patterns too, not only domain names) and recorded in the audit log. Brokered secrets (§2.1) are injected. Loopback, link-local, metadata and unnamed private addresses are refused after DNS. | `openmoat proxy` must be running. While it is stopped, Claude Code's sandboxed commands have no network (`npm install`, `cargo build` and `git fetch` fail), and `openmoat doctor` and `openmoat status` warn. Programs that speak only SOCKS5 have none at all. |
 
-Keep the proxy running as a user service, for example a launchd agent or a systemd
-user unit running `openmoat proxy`. `openmoat init` cannot install one yet (#272); routing
-through `openmoat proxy` stays opt-in until it can.
+Keep the proxy running as a user service: `openmoat proxy install` writes a launchd agent
+on macOS or a systemd user unit on Linux (INSTALL.md). Windows has no user service yet
+(#272); run `openmoat proxy` in a terminal there.
 
-Codex's own proxy still decides Codex's commands. It hands what it allows on to `moat
+Codex's own proxy still decides Codex's commands. It hands what it allows on to `openmoat
 proxy` only when Codex starts with `HTTP_PROXY` and `HTTPS_PROXY` set to
 `http://127.0.0.1:<port>`, and its API hosts then need an allow rule (THREAT_MODEL.md §5).
 
@@ -1013,7 +1030,12 @@ openmoat trust ~/code/app        # or of another project
 openmoat trust --revoke          # its allow rules stop applying; deny and ask stay
 ```
 
-`openmoat trust` prints each allow rule it lets in. It records the SHA-256 of the file's
+`openmoat trust` first shows what it would trust: the file's path and SHA-256, whether
+it replaces an earlier trust of another version, each allow rule it lets in (marked when
+a deny rule covers some of it), and the ask and deny rules that apply either way. Then
+it asks `Trust this file? [y/N]`; anything but `y`, end of input included, trusts
+nothing. An agent may have edited the file a moment before, so read it. It has no
+`--yes`. On `y` it records the SHA-256 of the file's
 bytes against the project root (symlinks resolved) in `~/.moat/trust.json`, never in
 the repository, and re-pins the lock. The record holds for that exact file in that
 exact checkout. After any change to the file (a pull, a branch switch, an edit), or for
@@ -1048,11 +1070,14 @@ A policy pack is a team's rules that you install for every project (ADR-031). It
 repository policy's shape (only `version`, `deny`, `ask` and `allow`, §10) and a
 detached OpenSSH signature. OpenMoat has no signature code of its own: it runs the
 system `ssh-keygen` (OpenSSH 8.1 or later), found through the environment snapshot
-`openmoat init` records (§8.1), in the namespace `openmoat-policy`.
+`openmoat init` records (§8.1), in the namespace `openmoat-pack` (ADR-036). A pack and a
+repository policy have the same shape, so each kind is signed in its own namespace: a
+signed pack copied into a project's `.moat/` is not a signed repository policy, and a
+repository policy's signature (`openmoat-policy`) does not install it as a pack.
 
 ```bash
 # whoever maintains the pack signs it
-ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-policy team.yaml   # writes team.yaml.sig
+ssh-keygen -Y sign -f ~/.ssh/id_ed25519 -n openmoat-pack team.yaml   # writes team.yaml.sig
 
 # each person trusts the maintainer's public key once, then installs the pack
 openmoat policy trust-key alice.pub --name alice@example.com
@@ -1062,8 +1087,11 @@ openmoat policy remove team
 ```
 
 - `openmoat policy trust-key` checks the key with `ssh-keygen -l`, prints its fingerprint,
-  and adds it to `~/.moat/allowed_signers` for the namespace `openmoat-policy` only, so
-  a key's signature over anything else (a git commit) is never a policy signature.
+  and adds it to `~/.moat/allowed_signers` for the namespaces `openmoat-policy` and
+  `openmoat-pack` only, so a key's signature over anything else (a git commit) is never a
+  policy signature. A key trusted by an earlier release is trusted for `openmoat-policy`
+  alone: its repository policy signatures still verify, and running `openmoat policy
+  trust-key` for it again replaces its line so it can sign packs.
 - `openmoat policy install` verifies the signature over the exact bytes it then installs.
   A signature that does not verify, or one from a key you did not trust, is refused
   (exit 64) and nothing is written. The pack and its signature are copied to

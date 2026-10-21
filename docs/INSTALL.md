@@ -5,7 +5,13 @@
 > [!NOTE]
 > **Read this when** you install or upgrade OpenMoat on macOS, Linux or Windows, run `openmoat init`, want to know what each agent's hook covers, or use other config directories.
 
-**On this page:** [Install](#install) · [Upgrading](#upgrading) · [Set up with openmoat init](#set-up-with-openmoat-init) · [Keep openmoat proxy running as a user service](#keep-openmoat-proxy-running-as-a-user-service) · [Undo with openmoat uninstall](#undo-with-openmoat-uninstall) · [Non-default config directories](#non-default-config-directories)
+**On this page:** [Install](#install) · [Set up with openmoat init](#set-up-with-openmoat-init) · [Undo with openmoat uninstall](#undo-with-openmoat-uninstall) · [Upgrading](#upgrading) · [Keep openmoat proxy running as a user service](#keep-openmoat-proxy-running-as-a-user-service) · [Teams: managed settings](#teams-managed-settings) · [Non-default config directories](#non-default-config-directories)
+
+In short: install the binary, run `openmoat init` in your own terminal, and start a new
+agent session. `openmoat init` writes the default policy, asks before it hooks each agent
+it finds, and backs up every file it changes; `openmoat uninstall` puts them back. The
+sections below follow that order, then cover upgrades, the proxy service, team setups
+and agents that keep their configuration somewhere other than the default.
 
 ## Install
 
@@ -73,6 +79,76 @@ gh release download --repo crocodile-labs/openmoat --pattern openmoat-installer.
 gh attestation verify openmoat-installer.sh --repo crocodile-labs/openmoat
 ```
 
+## Set up with `openmoat init`
+
+```bash
+openmoat init      # policy, lock, audit log; asks before hooking each agent it finds
+openmoat status    # policy, lock, hooks and protection level per agent, recent decisions
+```
+
+`openmoat init` writes `~/.moat/policy.yaml` (the default policy), pins it and the hook
+files in `~/.moat/policy.lock` and creates the audit log. Then it lists each agent
+whose configuration directory exists, with the files it would change, and asks once
+per agent:
+
+```
+Found these agents:
+  Claude Code  /Users/you/.claude (changes settings.json)
+  Codex        /Users/you/.codex (changes hooks.json, config.toml)
+Protect Claude Code (/Users/you/.claude)? [Y/n]
+Protect Codex (/Users/you/.codex)? [Y/n]
+```
+
+Only the agents you accept get the hook and sandbox settings. The last lines name the
+backups and how to undo: `Undo anytime: openmoat uninstall`. `init` never overwrites an
+existing policy, never duplicates a hook and backs up a host file before editing it
+(`<file>.moat-backup` for hooks, `<file>.moat-sandbox-backup` for sandbox settings), so
+it is safe to run again. The backups it creates are listed in `~/.moat/hosts.json`;
+a file of yours that already has one of those names is left alone, and
+`openmoat uninstall` never deletes it.
+
+To choose without questions, name the agents: `openmoat init --hosts claude-code` (or
+`codex`, `cursor`, `openclaw`, `copilot-cli`, `pi`, `gemini-cli`; comma-separated). `openmoat init --yes` sets up every agent found, for
+scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
+files and says how to go on. `openmoat init --dry-run` prints what would change first.
+
+Hooks run the `openmoat` you ran `openmoat init` with, by its stable path (ADR-016). After
+moving or reinstalling the binary somewhere else, run `openmoat init` again; `openmoat doctor`
+names a hook whose binary is missing or is a different `openmoat`.
+
+On native Windows, `init` does not turn on Claude Code's sandbox: it runs on macOS,
+Linux and WSL2 only, and Claude Code would not start with it required. The hook still
+applies the policy to Claude Code's tool calls, and `init`, `doctor` and `status` say so. For OS
+confinement, run Claude Code and `openmoat` inside WSL2. Codex's sandbox is set up as on
+other systems; Cursor's `sandbox.json` is not written, because Cursor documents its
+sandbox for macOS and Linux only.
+
+| Agent | What is hooked | Hook file |
+|---|---|---|
+| Claude Code | `PreToolUse`: `Bash`, `Monitor`, `PowerShell` (never parsed: `unparseable`), `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Glob`, `Grep`, `LSP`, `SendFile`, `Artifact` and `ArtifactData` (the local files they upload or save), `WebFetch` (as `fetch`), `WebSearch` (as `web.search`), MCP tools. `ConfigChange`: user, project and local settings | `~/.claude/settings.json` |
+| Codex | `PreToolUse`: shell commands, `apply_patch` (every file the patch names), MCP tools. Codex hooks cannot ask (`PermissionRequest` runs only when Codex itself prompts), so an `ask` blocks the call until you run `openmoat` or `openmoat allow --last`, for `apply_patch` too. Codex does not hook web search or hosted tools. Codex skips a new or changed user hook until you review and trust it in `/hooks` ([hooks docs](https://learn.chatgpt.com/docs/hooks)): after `openmoat init` (and after an upgrade that rewrites the entry), open `/hooks` in Codex and trust OpenMoat's (`openmoat init` and `openmoat doctor` remind you). `[features] hooks = false` in `config.toml` turns every hook off: `openmoat status` and `openmoat doctor` report Codex as not protected while yours sets it, and warn about a trusted project's `.codex/config.toml` or `.codex/hooks.json` that turns hooks off, adds hooks or starts programs | `~/.codex/hooks.json` |
+| Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` (`Read`, `Write`, `Edit`, `MultiEdit`, `StrReplace`, `Delete`, `Grep`, `Glob`, `WebSearch`, `WebFetch`, and any other tool: one that names a path is checked against it, one that does not asks as `tool.unknown`); installed with `failClosed`. Cursor prompts on `ask` only for shell and MCP calls, so an `ask` on `preToolUse` or `beforeReadFile` is sent as a deny until you run `openmoat` or `openmoat allow --last`. `openmoat init` also writes Cursor's own sandbox settings (`sandbox.json`) on macOS and Linux; Cursor still runs a command outside that sandbox when its Auto-review classifier approves it, in Run Everything mode, and in the CLI without `--sandbox enabled` ([SANDBOX.md](SANDBOX.md#cursors-sandbox)) | `~/.cursor/hooks.json`, `~/.cursor/sandbox.json` |
+| OpenClaw | Every tool, through OpenMoat's plugin and OpenClaw's `before_tool_call` hook: `exec` (PowerShell on Windows: `unparseable`), `read`, `write`, `edit`, `apply_patch`, `web_fetch`, `web_search`, `browser` `open`/`navigate`/`upload`, MCP tools (`<server>__<tool>`; each server in `mcp.servers` pinned), `gateway config.get`, `plugins` changes (as a write to `openclaw.json`), `cron` jobs added or updated (ask, `runs-later`), `view_image` (a file read, or a fetch of one URL), `nodes` `invoke` (`unparseable`); `process` input is `unparseable`; any other tool is `tool.unknown`. An `ask` becomes OpenClaw's own approval request; a hook that throws or takes over 60 s blocks the call. `openclaw.json` is read as JSON5 and written back as plain JSON (values kept, formatting not); `openmoat init` refuses a file with comments, which that would drop: move them out of the file first. `OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` are followed when `openmoat init` runs and recorded; run `init` again after changing them. An `$include` that may bring MCP servers holds back every OpenClaw MCP call. Restart the Gateway after `openmoat init` | `~/.openclaw/openclaw.json` (or `OPENCLAW_CONFIG_PATH`), `<state dir>/openmoat/openmoat.mjs` |
+| GitHub Copilot CLI | `preToolUse` for every tool, in a hook file of OpenMoat's own (Copilot loads every `*.json` in its hooks directory): `bash`, `write_bash` (the typed input, as a command), `powershell` and `write_powershell` (`unparseable`), `view`, `create`, `edit`, `str_replace_editor`, `apply_patch` (every file the patch names), `grep`, `glob`, `web_fetch` (as `fetch`), `web_search`; any other tool, MCP tools included, is checked by the paths and URLs its arguments name. An `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny. Copilot denies a call whose hook crashes or exits non-zero, but runs one whose hook times out; `openmoat init` sets `timeoutSec` to 600, far above the guard's own 30 s deadline. `disableAllHooks` in `~/.copilot/settings.json` or a repository's `.github/copilot/settings*.json` turns every hook off; agents are denied writing them, and `openmoat doctor` and `openmoat status` report Copilot as not protected while your `settings.json` sets it and warn about a repository that sets it or carries `.github/hooks/*.json`. The MCP servers in `~/.copilot/mcp-config.json` and a project's `.mcp.json` and `.github/mcp.json` are pinned; a call is traced to its server by the `<server>-` prefix of its tool name | `~/.copilot/hooks/openmoat.json` (or `$COPILOT_HOME/hooks/`) |
+| pi | Every tool, through OpenMoat's extension and pi's `tool_call` event, calls a `codemode` script makes included: `bash`, `powershell` (`unparseable`), `read`, `write`, `edit`, `grep`, `find`, `ls` (each `path` read as pi reads it: a leading `@` dropped, `~` the home), MCP tools (`mcp__<server>__<tool>`), `read_mcp_resource`; `codemode` and `tool_search` themselves touch nothing; any other tool is `tool.unknown`. An `ask` is a pi dialog; in print and JSON mode, which have no screen, it blocks the call until you run `openmoat` or `openmoat allow --last`. pi has no approval step of its own, so a deferred call runs. An extension that throws, or a guard that takes over 45 s, blocks the call. pi loads every file in `extensions/` on start: restart pi after `openmoat init`. `pi --no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns OpenMoat's extension off, leaves calls unchecked: `openmoat status` and `openmoat doctor` report such an entry (not the flag) and warn about a project's `.pi/settings.json` and `.pi/extensions/`. The MCP servers in `~/.pi/agent/mcp.json` and a project's `.pi/mcp.json` are pinned | `~/.pi/agent/extensions/openmoat.js` (OpenMoat's own file) |
+| Gemini CLI | `BeforeTool` for every tool (matcher `*`): `run_shell_command` (in its `dir_path`; PowerShell on Windows: `unparseable`), `read_file`, `write_file`, `replace`, `list_directory`, `glob` and `grep_search` (the directory searched, and where a `glob` pattern climbs to), `read_many_files` (each `include` up to its first wildcard), `web_fetch` (the one URL in its prompt, as `fetch`; a prompt with several is refused, so fetch each in its own call), `google_web_search` (as `web.search`), `read_mcp_resource` (a `file:` URI as a read), MCP tools (`mcp_<server>_<tool>`, named `mcp__<server>__<tool>`; each server in `mcpServers` pinned); its to-do, tracker, plan-mode, skill and subagent tools are not governed (a subagent's own tool calls are), and any other tool is `tool.unknown`. An `ask` is Gemini CLI's own confirmation, even in YOLO mode; an `allow` skips none of Gemini CLI's own confirmations. Gemini CLI has no fail-closed setting: a hook that times out (600 s), is killed by a signal or exits 1 lets the call run, while a missing `openmoat` (the shell exits 127) blocks it. In a folder Gemini CLI does not trust it runs no settings hooks and asks before every tool. `openmoat status` and `openmoat doctor` warn about a project's `.gemini/settings.json` that turns hooks off, adds hooks, sets a tool discovery command or starts MCP servers, and report Gemini CLI as not protected while your own `settings.json` turns OpenMoat's hook off (`hooksConfig.enabled: false`, or `openmoat` in `hooksConfig.disabled`). `openmoat init` refuses a `settings.json` with comments, which Gemini CLI allows: move them out first. When Gemini CLI saves its own `settings.json` for `/model`, `/theme`, a sign-in choice or a display toggle, `openmoat doctor` reports the change and calls are still checked ([POLICY.md](POLICY.md#8-the-policy-lock)); any other change to that file denies every call until you run `openmoat doctor --accept`. `GEMINI_CLI_HOME` moves the home directory `.gemini` is in | `~/.gemini/settings.json` |
+| Continue CLI (`cn`) | Runs the Claude Code hook, recorded as host `continue`. `cn` ignores an `ask`, so an `ask` blocks the call until you run `openmoat allow --last`. The released `cn` does not run hooks, so nothing is checked until it does; use `openmoat run` (`openmoat doctor` warns) | Claude Code's |
+
+## Undo with `openmoat uninstall`
+
+```bash
+openmoat uninstall                    # every agent; --hosts codex for one
+openmoat uninstall --purge            # also delete ~/.moat (policy, lock, audit log)
+```
+
+`openmoat uninstall` removes OpenMoat's hooks and sandbox settings from each agent and
+prints what it did per file. When the file is otherwise unchanged since `openmoat init`,
+the backup `init` took is written back byte for byte; a file `init` created is
+deleted; a file you changed since keeps your changes and only loses OpenMoat's
+entries (its backup stays next to it). The lock stops pinning those files. `~/.moat`
+stays unless you pass `--purge`. Like `openmoat allow`, it runs only from a terminal, and
+the default policy denies it to agents (`kernel-self`).
+
 ## Upgrading
 
 Upgrade the binary the way you installed it:
@@ -134,61 +210,6 @@ kinds of change have happened:
 The policy format and the commands may still change before 1.0
 ([README](../README.md#status)); every such change has a CHANGELOG line.
 
-## Set up with `openmoat init`
-
-```bash
-openmoat init      # policy, lock, audit log; asks before hooking each agent it finds
-openmoat status    # policy, lock, hooks and protection level per agent, recent decisions
-```
-
-`openmoat init` writes `~/.moat/policy.yaml` (the default policy), pins it and the hook
-files in `~/.moat/policy.lock` and creates the audit log. Then it lists each agent
-whose configuration directory exists, with the files it would change, and asks once
-per agent:
-
-```
-Found these agents:
-  Claude Code  /Users/you/.claude (changes settings.json)
-  Codex        /Users/you/.codex (changes hooks.json, config.toml)
-Protect Claude Code (/Users/you/.claude)? [Y/n]
-Protect Codex (/Users/you/.codex)? [Y/n]
-```
-
-Only the agents you accept get the hook and sandbox settings. The last lines name the
-backups and how to undo: `Undo anytime: openmoat uninstall`. `init` never overwrites an
-existing policy, never duplicates a hook and backs up a host file before editing it
-(`<file>.moat-backup` for hooks, `<file>.moat-sandbox-backup` for sandbox settings), so
-it is safe to run again. The backups it creates are listed in `~/.moat/hosts.json`;
-a file of yours that already has one of those names is left alone, and
-`openmoat uninstall` never deletes it.
-
-To choose without questions, name the agents: `openmoat init --hosts claude-code` (or
-`codex`, `cursor`, `openclaw`, `copilot-cli`, `pi`, `gemini-cli`; comma-separated). `openmoat init --yes` sets up every agent found, for
-scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
-files and says how to go on. `openmoat init --dry-run` prints what would change first.
-
-Hooks run the `openmoat` you ran `openmoat init` with, by its stable path (ADR-016). After
-moving or reinstalling the binary somewhere else, run `openmoat init` again; `openmoat doctor`
-names a hook whose binary is missing or is a different `openmoat`.
-
-On native Windows, `init` does not turn on Claude Code's sandbox: it runs on macOS,
-Linux and WSL2 only, and Claude Code would not start with it required. The hook still
-applies the policy to Claude Code's tool calls, and `init`, `doctor` and `status` say so. For OS
-confinement, run Claude Code and `openmoat` inside WSL2. Codex's sandbox is set up as on
-other systems; Cursor's `sandbox.json` is not written, because Cursor documents its
-sandbox for macOS and Linux only.
-
-| Agent | What is hooked | Hook file |
-|---|---|---|
-| Claude Code | `PreToolUse`: `Bash`, `Monitor`, `PowerShell` (never parsed: `unparseable`), `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Glob`, `Grep`, `LSP`, `SendFile`, `Artifact` and `ArtifactData` (the local files they upload or save), `WebFetch` (as `fetch`), `WebSearch` (as `web.search`), MCP tools. `ConfigChange`: user, project and local settings | `~/.claude/settings.json` |
-| Codex | `PreToolUse`: shell commands, `apply_patch` (every file the patch names), MCP tools. Codex hooks cannot ask (`PermissionRequest` runs only when Codex itself prompts), so an `ask` blocks the call until you run `openmoat` or `openmoat allow --last`, for `apply_patch` too. Codex does not hook web search or hosted tools. Codex skips a new or changed user hook until you review and trust it in `/hooks` ([hooks docs](https://learn.chatgpt.com/docs/hooks)): after `openmoat init` (and after an upgrade that rewrites the entry), open `/hooks` in Codex and trust OpenMoat's (`openmoat init` and `openmoat doctor` remind you). `[features] hooks = false` in `config.toml` turns every hook off: `openmoat status` and `openmoat doctor` report Codex as not protected while yours sets it, and warn about a trusted project's `.codex/config.toml` or `.codex/hooks.json` that turns hooks off, adds hooks or starts programs | `~/.codex/hooks.json` |
-| Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` (`Read`, `Write`, `Edit`, `MultiEdit`, `StrReplace`, `Delete`, `Grep`, `Glob`, `WebSearch`, `WebFetch`, and any other tool: one that names a path is checked against it, one that does not asks as `tool.unknown`); installed with `failClosed`. Cursor prompts on `ask` only for shell and MCP calls, so an `ask` on `preToolUse` or `beforeReadFile` is sent as a deny until you run `openmoat` or `openmoat allow --last`. `openmoat init` also writes Cursor's own sandbox settings (`sandbox.json`) on macOS and Linux; Cursor still runs a command outside that sandbox when its Auto-review classifier approves it, in Run Everything mode, and in the CLI without `--sandbox enabled` ([SANDBOX.md](SANDBOX.md#cursors-sandbox)) | `~/.cursor/hooks.json`, `~/.cursor/sandbox.json` |
-| OpenClaw | Every tool, through OpenMoat's plugin and OpenClaw's `before_tool_call` hook: `exec` (PowerShell on Windows: `unparseable`), `read`, `write`, `edit`, `apply_patch`, `web_fetch`, `web_search`, `browser` `open`/`navigate`/`upload`, MCP tools (`<server>__<tool>`; each server in `mcp.servers` pinned), `gateway config.get`, `plugins` changes (as a write to `openclaw.json`), `cron` jobs added or updated (ask, `runs-later`), `view_image` (a file read, or a fetch of one URL), `nodes` `invoke` (`unparseable`); `process` input is `unparseable`; any other tool is `tool.unknown`. An `ask` becomes OpenClaw's own approval request; a hook that throws or takes over 60 s blocks the call. `openclaw.json` is read as JSON5 and written back as plain JSON (values kept, formatting not); `openmoat init` refuses a file with comments, which that would drop: move them out of the file first. `OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` are followed when `openmoat init` runs and recorded; run `init` again after changing them. An `$include` that may bring MCP servers holds back every OpenClaw MCP call. Restart the Gateway after `openmoat init` | `~/.openclaw/openclaw.json` (or `OPENCLAW_CONFIG_PATH`), `<state dir>/openmoat/openmoat.mjs` |
-| GitHub Copilot CLI | `preToolUse` for every tool, in a hook file of OpenMoat's own (Copilot loads every `*.json` in its hooks directory): `bash`, `write_bash` (the typed input, as a command), `powershell` and `write_powershell` (`unparseable`), `view`, `create`, `edit`, `str_replace_editor`, `apply_patch` (every file the patch names), `grep`, `glob`, `web_fetch` (as `fetch`), `web_search`; any other tool, MCP tools included, is checked by the paths and URLs its arguments name. An `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny. Copilot denies a call whose hook crashes or exits non-zero, but runs one whose hook times out; `openmoat init` sets `timeoutSec` to 600, far above the guard's own 30 s deadline. `disableAllHooks` in `~/.copilot/settings.json` or a repository's `.github/copilot/settings*.json` turns every hook off; agents are denied writing them, and `openmoat doctor` and `openmoat status` report Copilot as not protected while your `settings.json` sets it and warn about a repository that sets it or carries `.github/hooks/*.json`. The MCP servers in `~/.copilot/mcp-config.json` and a project's `.mcp.json` and `.github/mcp.json` are pinned; a call is traced to its server by the `<server>-` prefix of its tool name | `~/.copilot/hooks/openmoat.json` (or `$COPILOT_HOME/hooks/`) |
-| pi | Every tool, through OpenMoat's extension and pi's `tool_call` event, calls a `codemode` script makes included: `bash`, `powershell` (`unparseable`), `read`, `write`, `edit`, `grep`, `find`, `ls` (each `path` read as pi reads it: a leading `@` dropped, `~` the home), MCP tools (`mcp__<server>__<tool>`), `read_mcp_resource`; `codemode` and `tool_search` themselves touch nothing; any other tool is `tool.unknown`. An `ask` is a pi dialog; in print and JSON mode, which have no screen, it blocks the call until you run `openmoat` or `openmoat allow --last`. pi has no approval step of its own, so a deferred call runs. An extension that throws, or a guard that takes over 45 s, blocks the call. pi loads every file in `extensions/` on start: restart pi after `openmoat init`. `pi --no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns OpenMoat's extension off, leaves calls unchecked: `openmoat status` and `openmoat doctor` report such an entry (not the flag) and warn about a project's `.pi/settings.json` and `.pi/extensions/`. The MCP servers in `~/.pi/agent/mcp.json` and a project's `.pi/mcp.json` are pinned | `~/.pi/agent/extensions/openmoat.js` (OpenMoat's own file) |
-| Gemini CLI | `BeforeTool` for every tool (matcher `*`): `run_shell_command` (in its `dir_path`; PowerShell on Windows: `unparseable`), `read_file`, `write_file`, `replace`, `list_directory`, `glob` and `grep_search` (the directory searched, and where a `glob` pattern climbs to), `read_many_files` (each `include` up to its first wildcard), `web_fetch` (the one URL in its prompt, as `fetch`; a prompt with several is refused, so fetch each in its own call), `google_web_search` (as `web.search`), `read_mcp_resource` (a `file:` URI as a read), MCP tools (`mcp_<server>_<tool>`, named `mcp__<server>__<tool>`; each server in `mcpServers` pinned); its to-do, tracker, plan-mode, skill and subagent tools are not governed (a subagent's own tool calls are), and any other tool is `tool.unknown`. An `ask` is Gemini CLI's own confirmation, even in YOLO mode; an `allow` skips none of Gemini CLI's own confirmations. Gemini CLI has no fail-closed setting: a hook that times out (600 s), is killed by a signal or exits 1 lets the call run, while a missing `openmoat` (the shell exits 127) blocks it. In a folder Gemini CLI does not trust it runs no settings hooks and asks before every tool. `openmoat status` and `openmoat doctor` warn about a project's `.gemini/settings.json` that turns hooks off, adds hooks, sets a tool discovery command or starts MCP servers, and report Gemini CLI as not protected while your own `settings.json` turns OpenMoat's hook off (`hooksConfig.enabled: false`, or `openmoat` in `hooksConfig.disabled`). `openmoat init` refuses a `settings.json` with comments, which Gemini CLI allows: move them out first. When Gemini CLI saves its own `settings.json` for `/model`, `/theme`, a sign-in choice or a display toggle, `openmoat doctor` reports the change and calls are still checked ([POLICY.md](POLICY.md#8-the-policy-lock)); any other change to that file denies every call until you run `openmoat doctor --accept`. `GEMINI_CLI_HOME` moves the home directory `.gemini` is in | `~/.gemini/settings.json` |
-| Continue CLI (`cn`) | Runs the Claude Code hook, recorded as host `continue`. `cn` ignores an `ask`, so an `ask` blocks the call until you run `openmoat allow --last`. The released `cn` does not run hooks, so nothing is checked until it does; use `openmoat run` (`openmoat doctor` warns) | Claude Code's |
-
 ## Keep `openmoat proxy` running as a user service
 
 The egress proxy records every connection and injects brokered secrets. The
@@ -224,10 +245,6 @@ user. Token values the policy brokers are read from the user's
 environment at run time by the proxy itself; they never touch the service
 file.
 
-On Windows `openmoat proxy install` is refused for now: Standard-tier proxy
-routing is not planned for the first release (#272). Run `openmoat proxy` in
-a terminal to keep the proxy up by hand.
-
 ### Upgrade note
 
 The service names the pinned `openmoat` by its stable path (ADR-016), so an
@@ -257,21 +274,6 @@ outside them cannot turn off a hook set in them. For teams:
 
 OpenMoat does not write or pin managed settings; whoever deploys them keeps them in step
 with `openmoat init` after an upgrade that changes the hook entries.
-
-## Undo with `openmoat uninstall`
-
-```bash
-openmoat uninstall                    # every agent; --hosts codex for one
-openmoat uninstall --purge            # also delete ~/.moat (policy, lock, audit log)
-```
-
-`openmoat uninstall` removes OpenMoat's hooks and sandbox settings from each agent and
-prints what it did per file. When the file is otherwise unchanged since `openmoat init`,
-the backup `init` took is written back byte for byte; a file `init` created is
-deleted; a file you changed since keeps your changes and only loses OpenMoat's
-entries (its backup stays next to it). The lock stops pinning those files. `~/.moat`
-stays unless you pass `--purge`. Like `openmoat allow`, it runs only from a terminal, and
-the default policy denies it to agents (`kernel-self`).
 
 ## Non-default config directories
 

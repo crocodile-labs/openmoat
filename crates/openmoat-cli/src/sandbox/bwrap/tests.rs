@@ -24,6 +24,7 @@ fn generated(home: &Path) -> Generated {
             .map(|t| t.to_string_lossy().into_owned()),
         program: Some("/usr/bin/agent".into()),
         writes: vec![format!("{home}/.claude"), format!("{home}/.cargo")],
+        terminals: Vec::new(),
     };
     let mut policy = Policy::parse(DEFAULT_POLICY).expect("default policy");
     // No read roots: the temp directory holding the test home is one.
@@ -243,4 +244,38 @@ allow:
         ],
         "the project stays the hook's and Landlock's, as without a namespace"
     );
+}
+
+/// In the network namespace the agent configuration directly in the project
+/// is bound read-only where it exists, under each spelling of the project; CI
+/// and commit-hook managers' files stay writable.
+#[test]
+fn the_network_namespace_keeps_the_projects_agent_configuration_read_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", real.display());
+    for d in [".github/hooks", ".github/workflows", ".pi", ".husky"] {
+        std::fs::create_dir_all(p(d)).unwrap();
+    }
+    for f in [".mcp.json", ".pi/settings.json"] {
+        std::fs::write(p(f), "{}").unwrap();
+    }
+    let project = real.display().to_string();
+    let masks = agent_config_masks(&[project, "/other/spelling".into()]);
+    let expected = [
+        Mount::ReadOnly(p(".mcp.json")),
+        Mount::ReadOnly(p(".github/hooks")),
+        Mount::ReadOnly(p(".pi/settings.json")),
+    ];
+    assert_eq!(masks[..3], expected, "{masks:?}");
+    assert_eq!(
+        masks.len(),
+        6,
+        "each again under the other spelling: {masks:?}"
+    );
+    assert!(masks.contains(&Mount::ReadOnly("/other/spelling/.mcp.json".into())));
+    for writable in [".github/workflows", ".husky"] {
+        assert!(!masks.contains(&Mount::ReadOnly(p(writable))), "{writable}");
+    }
+    assert_eq!(agent_config_masks(&[]), Vec::new());
 }

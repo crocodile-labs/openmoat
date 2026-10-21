@@ -18,6 +18,7 @@ fn generated(yaml: &str) -> Generated {
         tmpdir: Some("/tmp".into()),
         program: Some("/home/me/.local/bin/agent".into()),
         writes: vec!["/home/me/.agent".into()],
+        terminals: vec!["/dev/pts/3".into()],
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
     generate(&ir, &grants).expect("generates")
@@ -53,10 +54,20 @@ fn the_default_policy_grants_the_project_roots_and_session_paths_only() {
             rules.write
         );
     }
-    for never in ["/", "/home/me", "/home/me/.ssh"] {
+    for never in ["/", "/home/me", "/home/me/.ssh", "/dev/pts"] {
         assert!(!rules.read.contains(&never.to_owned()), "{never}");
         assert!(!rules.write.contains(&never.to_owned()), "{never}");
     }
+    // Only the run's own terminal and the controlling one, `/dev/tty`.
+    let terminals = |list: &[String]| {
+        let found = list
+            .iter()
+            .filter(|p| p.starts_with("/dev/pts") || p.starts_with("/dev/tty"));
+        found.cloned().collect::<Vec<_>>()
+    };
+    assert_eq!(terminals(&rules.read), ["/dev/tty", "/dev/pts/3"]);
+    assert_eq!(terminals(&rules.write), ["/dev/tty", "/dev/pts/3"]);
+    assert!(allowance(&out, Kind::FsWrite, "landlock.terminal").is_some());
     assert!(
         !rules.write.contains(&"/usr".to_owned()),
         "read roots stay read-only"

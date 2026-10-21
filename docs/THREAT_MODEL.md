@@ -58,7 +58,7 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 | T5 | Supply-chain execution (`curl … \| sh`, unknown installs, typo-squats, made-up package names, fresh malicious versions) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; an install of a name one typo or a common trick away from a popular package asks (`package-near-miss`, ADR-030), other installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts | Network only to allowed hosts (the registries); inside `openmoat run`, npm and uv install no version published in the last 7 days (`sandbox.package_min_release_age_days`) |
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) ask (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `openmoat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a kernel-controlled environment |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and asks under an `ask` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands; a line not read in full or past a classifier limit asks, so padding cannot turn a deny into a defer | The sandbox bounds what any spelling can reach |
-| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `openmoat mcp accept` (ADR-026) | Opt-in: `openmoat mcp proxy` pins each tool's description and input schema, hides a changed or new tool (every tool of a server it has not seen, ADR-032) until `openmoat mcp accept`, and with `--sandbox` starts the server under `openmoat run` |
+| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms; unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `openmoat mcp accept` (ADR-026) | Opt-in: `openmoat mcp proxy` pins each tool's title, description, input and output schemas and annotations (`readOnlyHint`, `destructiveHint`), hides a changed or new tool (every tool of a server it has not seen, ADR-032) until `openmoat mcp accept`, and with `--sandbox` starts the server under `openmoat run` |
 | T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CURSOR_CONFIG_DIR` or `GEMINI_CLI_HOME` moved them), hook files (Gemini CLI's user and project `settings.json` and its `trustedFolders.json` too), and agent runs of `openmoat allow\\|doctor\\|init\\|policy\\|secret\\|trust\\|uninstall`, `openmoat sandbox sync` and `openmoat audit anchor`, and reads of the audit log, the lock, `hosts.json`, the approvals, the trust records and the MCP pins (the policy stays readable); a policy pack is installed only when its OpenSSH signature verifies against a key a person trusted, and is pinned (ADR-031); the lock denies everything after drift, except drift of only Claude Code's own display toggles and permission lists, or of Gemini CLI's model, theme, sign-in method and display keys, which is recorded and reported while the hook keeps deciding every call (§5); Claude Code `ConfigChange` blocks a drifted settings file, and a project settings file that turns hooks off or runs a program (§5); a repository policy adds only deny and ask rules unless a person trusted that exact file in that checkout, and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `openmoat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); the state read denies hold in Seatbelt (`openmoat run` on macOS) and the host sandboxes that take them; Landlock cannot deny inside a grant, so on Linux `openmoat run` refuses to start where a grant holds the state directory (§5) |
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/openmoat` or `bin/moat` and to the recorded binary, its other name beside it (`moat` runs the `openmoat` next to it), its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `openmoat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
@@ -134,7 +134,14 @@ something OpenMoat claims to stop.
   [SANDBOX.md](SANDBOX.md#cursors-sandbox)). On Linux, Claude Code's sandbox denies a
   project script the `.env` files that exist under the session's working directory when
   the command starts (#359); one created later, or one in another readable directory
-  (`/add-dir`, a read root, a path outside the user directories), stays readable.
+  (`/add-dir`, a read root, a path outside the user directories), stays readable;
+  for the audit log, whose `-wal` and `-shm` files come and go, the whole state
+  directory is denied there instead. Claude Code's `denyWrite` cannot name a
+  directory without its contents, so another agent's directory (`.cursor`, `.codex`,
+  `.copilot`, `.gemini`) in a subdirectory, and on Linux any of them, can be moved
+  away by a sandboxed command and replaced by one holding its own hook file; on
+  macOS the working directory's and the home's are kept in place, and the hook
+  denies the agent's own `mv`, `rename` or `rm` of one.
   It also drops every glob among the write denies (#372): only `.env`, `.envrc` and
   `.moat` directly in the working directory, and that directory's own `.git` hooks and
   config, are kept from sandboxed writes there; a `.env` or `.moat` in a subdirectory,
@@ -210,6 +217,16 @@ something OpenMoat claims to stop.
     writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`
     in a read root, the project's `.git`; `.envrc` and `.moat` can be created. The hook still denies them for the agent's
     tool calls. `openmoat run --isolate` closes this where bubblewrap runs (below).
+    Without a network namespace, a `--write` path that holds what `kernel-self`
+    protects (`--write ~/.claude` holds `settings.json`) refuses to start, since
+    nothing could keep those paths from commands.
+  - An agent's own configuration in the project (`.claude/hooks/`, `.mcp.json`,
+    `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks/`, `.github/mcp.json`,
+    `.openclaw/extensions/`, `.pi/…`) is unwritable for commands on macOS, a write
+    the person allowed included; on Linux only the files existing directly in the
+    project are, where the agent gets a network namespace, and the rest stays
+    writable inside the project, which Landlock grants whole. CI files and commit-hook managers' files stay writable on both (installs
+    write them); the hook asks before the agent's tools write one.
   - Also on Linux, Landlock restricts TCP by port only. Where bubblewrap can run,
     `openmoat run` gives the agent a network namespace with only loopback, where the
     proxy's port is relayed in, so connections reach only the proxy. Where it is
@@ -220,16 +237,23 @@ something OpenMoat claims to stop.
     D-Bus session bus, other Unix sockets, UDP, raw, netlink and packet sockets are
     closed (`EPERM`), and `io_uring`, which could create sockets around the filter, is
     refused. A send with `MSG_FASTOPEN` (TCP Fast Open, which connects inside
-    `sendto()` without the `connect()` Landlock's port rule checks) is refused too. So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
-    the agent's memory, and debuggers do not work. Names resolve only through the
-    proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them. `socketpair()`
-    stays allowed; its sockets reach only each other.
+    `sendto()` without the `connect()` Landlock's port rule checks) is refused too.
+    So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
+    the agent's memory, and debuggers do not work. So are the kernel keyrings
+    (`keyctl`, `add_key`, `request_key`) and new namespaces (`unshare`, `clone` with a
+    namespace flag; `clone3` answers `ENOSYS`), so a command cannot read the person's
+    session keys or make a user namespace in which to mount over what the sandbox
+    hides; containers and Chromium's own sandbox do not start inside. Names resolve
+    only through the proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them.
+    `socketpair()` stays allowed; its sockets reach only each other.
   - The agent shares the user's terminal. Typing into it is refused: `TIOCSTI` on
     macOS (Seatbelt), `TIOCSTI` and `TIOCLINUX` on Linux (the seccomp filter, also
     inside `--isolate`), whatever the kernel's `dev.tty.legacy_tiocsti` says.
     Otherwise a script could leave a command in the terminal's input that the
-    user's shell runs after the session, outside the sandbox (CVE-2017-5226). Output
-    is not filtered: escape sequences a command prints reach the terminal emulator.
+    user's shell runs after the session, outside the sandbox (CVE-2017-5226). Of the
+    terminals only `/dev/tty` and the one `openmoat run` was started on can be opened,
+    so a command cannot read or write the person's other terminals; a program that
+    opens a pseudo-terminal of its own inside can fail. Output is not filtered: escape sequences a command prints reach the terminal emulator.
     OpenMoat's own text output (`openmoat show`, `openmoat status`, `openmoat policy check`, the
     guard's deny line) shows control characters in agent text as `?`.
 
@@ -723,7 +747,11 @@ something OpenMoat claims to stop.
   or `g = getattr`, then `print(e)`), a command built at run time, or another spelling
   is not seen.
 - **TOCTOU and hard links.** A link swapped between the check and the command
-  running, and hard links, are not seen (ADR-009).
+  running, and hard links that already exist, are not seen (ADR-009). Making a hard
+  link is decided as a write of the file it links to (`ln` without `-s`, `link`,
+  `cp -l`/`--link`, the directory of `rsync --link-dest`), so `kernel-self` and the
+  other write denies hold for it; a hard link made another way (an interpreter's
+  `os.link`, `cpio -l`, `pax -l`) is not seen.
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand
   is checked as every file it matches when the hook runs (POLICY.md §4), with
   `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`;
@@ -760,17 +788,21 @@ something OpenMoat claims to stop.
   (`crates/openmoat-cli/src/integrity/relaxed.rs`) does not deny every call: display
   and reply toggles, the model Claude Code writes when the person switches models
   (`model` as a string, `switchModelsOnFlag` as a string, number or boolean), and
-  Claude Code's own `permissions.allow`, `ask`, `deny`,
-  `defaultMode`, `additionalDirectories` and `blockReadsOutsideWorkingDirectories`.
+  Claude Code's own `permissions.allow`, `ask`, `deny` and
+  `blockReadsOutsideWorkingDirectories`, and `defaultMode` changed to `default`, `plan`
+  or `dontAsk` (or removed). A `defaultMode` that runs calls unasked (`acceptEdits`,
+  `auto`, `bypassPermissions`, any other value) and any change to
+  `additionalDirectories` deny every call, like other drift. `permissions.allow` stays
+  on the list: a rule there lets Claude Code run a call the policy defers without
+  asking, which is the person's own setting in Claude Code.
   A changed model changes which model answers, not where requests go (`env`) or what
   runs; an object or list under either model key, or a key of another name such as
   `availableModels`, still denies.
   The hook still decides every call by the policy, and Claude Code obeys a hook deny in
   every permission mode, so these change only when Claude Code asks the person about a
-  call the hook left to it. Two of them widen more than prompts: with
+  call the hook left to it. One of them widens more than prompts: with
   `blockReadsOutsideWorkingDirectories` off, sandboxed commands may read the home
-  directory outside the working directories, and `additionalDirectories` adds
-  directories sandboxed commands may write. No guard decision depends on the sandbox,
+  directory outside the working directories. No guard decision depends on the sandbox,
   `openmoat status` shows the agent as `hook only` while its sandbox differs from the
   policy, and `openmoat doctor` reports the drift until a person runs `openmoat doctor --accept`.
   A change under `hooks`, a key that runs a program or redirects the agent (`env`,
@@ -854,8 +886,9 @@ something OpenMoat claims to stop.
   `policy.yaml` is readable on purpose: the rules are no secret, and an agent that can
   read them can explain a deny.
 - **What a policy signature proves** (ADR-031). That a key the person trusted with
-  `openmoat policy trust-key` signed those exact bytes in the namespace `openmoat-policy`;
-  not that the signer meant well. A stolen signing key signs packs the person will
+  `openmoat policy trust-key` signed those exact bytes in the namespace of their kind
+  (`openmoat-policy` for a repository policy, `openmoat-pack` for a pack, ADR-036), so
+  one kind's signature is never taken for the other's; not that the signer meant well. A stolen signing key signs packs the person will
   install, and a trusted key's signed repository policy is trusted wherever
   `require_signed_repo_policy` is on. With it on, a repository policy no trusted key
   signed is not trusted even after `openmoat trust`, so a `trust.json` record cannot widen

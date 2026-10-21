@@ -8,7 +8,7 @@ use anyhow::Result;
 use openmoat_audit::Store;
 use openmoat_hosts::Host;
 
-use crate::approvals::{GRANT_TTL_MS, Grants};
+use crate::approvals::{self, GRANT_TTL_MS, Grants};
 use crate::cli::{Format, StatusArgs};
 use crate::exit::Code;
 use crate::home::Home;
@@ -106,9 +106,9 @@ fn mcp_changes(home: &Home, binary: &Path) -> Result<Vec<String>> {
     for (_, pins) in crate::mcp::tools::all(home)? {
         if !pins.held.is_empty() {
             lines.push(format!(
-                "MCP server `{}` lists {} changed or new tool(s)",
+                "MCP server `{}` lists {}",
                 pins.server,
-                pins.held.len()
+                pins.held_summary()
             ));
         }
     }
@@ -245,6 +245,19 @@ fn approvals(out: &mut impl io::Write, home: &Home) -> Result<bool> {
             time::duration(GRANT_TTL_MS)
         )?,
         None => writeln!(out, "approvals        no active session grants")?,
+    }
+    // Written before grants named their project: they apply nowhere now.
+    for grant in grants.active(now).filter(|g| g.unbound()) {
+        render::line(
+            out,
+            &format!(
+                "approvals        ! {} session {}: {} needs approving again: it names no \
+                 project, so it no longer applies (`openmoat allow --last` after its next ask)",
+                grant.host,
+                grant.session_id,
+                approvals::describe(&grant.action)
+            ),
+        )?;
     }
     Ok(true)
 }

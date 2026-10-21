@@ -11,7 +11,9 @@
 //! gitignore; on Windows paths are matched in POSIX form, `C:\x` as `/c/x`.
 //!
 //! On Linux `Read(./**/…)` and `Edit(./…)` rules are added for the sandbox
-//! runtime's sake (see the module documentation of [`super`]).
+//! runtime's sake (see the module documentation of [`super`]); on every OS the
+//! `Edit(./<dir>/<name>)` rules that keep another agent's directory in the
+//! working directory from being moved (`nodes.rs`).
 
 use openmoat_core::Kind;
 

@@ -78,24 +78,39 @@ const PERMISSIONS: &str = "permissions";
 const DENY: &str = "deny";
 
 /// Keys of `permissions` that may change: Claude Code's own permission lists
-/// and modes. They decide only whether Claude Code asks the person about a
-/// call the hook left to it; Claude Code runs the `PreToolUse` hook in every
-/// mode and a hook deny is final whatever these say.
+/// and a mode that keeps its prompts. They decide only whether Claude Code
+/// asks the person about a call the hook left to it; Claude Code runs the
+/// `PreToolUse` hook in every mode and a hook deny is final whatever these say.
+///
+/// Left out on purpose: `additionalDirectories`, which also adds directories
+/// Claude Code's own sandbox lets commands write, so it can widen an OS
+/// boundary the guard does not see; and a [`MODE`] other than
+/// [`PROMPTING_MODES`].
 const RELAXED_PERMISSIONS: &[&str] = &[
+    // Kept relaxed on purpose: the person's own allow list, which Claude Code
+    // reads only for calls the hook defers.
     "allow",
     "ask",
     // Only while every rule OpenMoat wrote stays (`keeps_owned_rules`).
     DENY,
-    // `default`, `acceptEdits`, `plan`, `bypassPermissions`: the hook runs in each.
-    "defaultMode",
-    // More working directories for Claude Code. OpenMoat's project is the git
-    // root, and its policy decides every path a call names.
-    "additionalDirectories",
+    // Only to a mode in `PROMPTING_MODES`, or removed (`mode_relaxed`).
+    MODE,
     // Narrows what sandboxed commands and file tools may read. Turning it off
     // widens only the OS sandbox: no guard decision reads the sandbox's state,
     // and `moat status` shows the agent as `hook only` while it is off.
     "blockReadsOutsideWorkingDirectories",
 ];
+
+/// The `permissions` key naming the mode Claude Code starts in.
+const MODE: &str = "defaultMode";
+
+/// The modes in which Claude Code still asks the person before a call the
+/// hook deferred runs: `default` asks, `plan` runs nothing, `dontAsk` refuses
+/// what no allow rule names. `acceptEdits` writes files unasked, `auto` lets a
+/// classifier run calls unasked and `bypassPermissions` runs every call
+/// unasked, so a change to one of them (or to any value not listed here) is
+/// drift: a deferred call would then run with nobody asked.
+const PROMPTING_MODES: &[&str] = &["default", "plan", "dontAsk"];
 
 /// The lock as `moat guard` decides by it.
 #[derive(Debug, Default)]
@@ -275,8 +290,16 @@ fn permissions_relaxed(
         return false;
     };
     let mut changed = differing(pinned, &digests);
-    changed.all(|key| RELAXED_PERMISSIONS.contains(&key.as_str()))
-        && (pinned.get(DENY) == digests.get(DENY) || keeps_owned_rules(now, owned))
+    changed.all(|key| {
+        RELAXED_PERMISSIONS.contains(&key.as_str()) && (key != MODE || mode_relaxed(now))
+    }) && (pinned.get(DENY) == digests.get(DENY) || keeps_owned_rules(now, owned))
+}
+
+/// Whether the changed [`MODE`] is removed or one of [`PROMPTING_MODES`].
+fn mode_relaxed(permissions: &Map<String, Value>) -> bool {
+    permissions
+        .get(MODE)
+        .is_none_or(|mode| mode.as_str().is_some_and(|m| PROMPTING_MODES.contains(&m)))
 }
 
 /// Whether `permissions.deny` still holds every rule OpenMoat wrote. With no

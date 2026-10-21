@@ -25,8 +25,45 @@ fn deploy(sb: &Sandbox, project: &Path) -> (String, String) {
     sb.guard_bash("s1", project, "make deploy")
 }
 
+/// `moat trust` as a person who answers yes to its question.
 fn trust(sb: &Sandbox, args: &[&str]) -> std::process::Output {
-    sb.moat_as_person(&[&["trust"], args].concat())
+    sb.moat_approving(&[&["trust"], args].concat())
+}
+
+#[test]
+fn trust_shows_what_it_trusts_and_writes_nothing_without_a_yes() {
+    let (sb, project) = repo();
+    let dir = project.to_string_lossy().into_owned();
+    write_policy(
+        &project,
+        &format!(
+            "{DEPLOY}  - id: keys\n    fs.read: ['~/.ssh/**']\ndeny:\n  - id: no-push\n    shell: ['git push']\n"
+        ),
+    );
+    // No answer (end of input) is no.
+    let out = sb.moat_as_person(&["trust", &dir]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    // The path is shown with the platform's separator (`.moat\policy.yaml` on Windows).
+    let shown = text(&out).replace('\\', "/");
+    for part in [
+        ".moat/policy.yaml",
+        "sha256:",
+        "adds 2 allow rule(s)",
+        "allow repo:deploy: shell: make deploy",
+        "allow repo:keys: fs.read: ~/.ssh/**",
+        "its 0 ask and 1 deny rule(s) apply trusted or not",
+        "deny repo:no-push: shell: git push",
+        "Trust this file? [y/N]",
+        "nothing trusted",
+    ] {
+        assert!(shown.contains(part), "{part}: {shown}");
+    }
+    assert!(!sb.home.join(".moat/trust.json").exists(), "{shown}");
+    assert_eq!(deploy(&sb, &project).0, "defer");
+
+    let out = sb.moat_approving(&["trust", &dir]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(deploy(&sb, &project).0, "allow");
 }
 
 #[test]

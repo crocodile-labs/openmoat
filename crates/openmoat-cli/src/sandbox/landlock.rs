@@ -21,16 +21,18 @@ use serde::{Deserialize, Serialize};
 use super::patterns::{Spot, literal_tree, push_unique, split, spot};
 use super::{Grants, Report};
 
-/// What every process reads and writes besides the policy's paths.
-const PLATFORM_READ: [&str; 6] = [
+/// What every process reads and writes besides the policy's paths: the
+/// controlling terminal is `/dev/tty`, and the session's own terminals come
+/// from [`Grants::terminals`], so no other terminal of the person's
+/// (`/dev/pts/*`) can be opened, read or written.
+const PLATFORM_READ: [&str; 5] = [
     "/dev/null",
     "/dev/zero",
     "/dev/random",
     "/dev/urandom",
     "/dev/tty",
-    "/dev/pts",
 ];
-const PLATFORM_WRITE: [&str; 4] = ["/dev/null", "/dev/zero", "/dev/tty", "/dev/pts"];
+const PLATFORM_WRITE: [&str; 3] = ["/dev/null", "/dev/zero", "/dev/tty"];
 
 /// The allowance listed when the proxy's port is reachable on any host.
 pub const TCP_PORT_ALLOWANCE: &str = "landlock.tcp-port";
@@ -80,6 +82,13 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
         "landlock.platform",
         own(&PLATFORM_WRITE),
         "the devices every process writes",
+    );
+    g.grant(
+        write,
+        "landlock.terminal",
+        grants.terminals.clone(),
+        "the terminal `openmoat run` was started on (its standard input, output and error), \
+         and no other",
     );
     let program = grants.program.iter().cloned().collect();
     g.grant(

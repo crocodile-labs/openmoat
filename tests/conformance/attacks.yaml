@@ -531,6 +531,50 @@
   context: { cwd: /p, project: /p, moved_dirs: { "~/.cursor": /srv/cursor } }
   action: { fs_write: "/srv/cursor/hooks.json" }
   expect: { verdict: deny, rules: [kernel-self] }
+# A hard link is a second name for the same file: a later write through the
+# project-side name rewrites the original, and a read through it reads a file
+# the policy hides. Linking to a protected file is a write of it.
+- id: T9-hard-link-claude-settings-into-project
+  threat: T9
+  action: { shell: "ln ~/.claude/settings.json s.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-hard-link-moat-policy
+  threat: T9
+  action: { shell: "ln -f ~/.moat/policy.yaml ./p.yaml" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-hard-link-into-target-directory
+  threat: T9
+  action: { shell: "ln -t . ~/.moat/environment.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-link-audit-db
+  threat: T9
+  action: { shell: "link ~/.moat/audit.db x" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-link-moat-approved-overlay
+  threat: T9
+  action: { shell: "link ~/.moat/policy.d/approved.yaml a.yaml" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cp-link-moat-state
+  threat: T9
+  action: { shell: "cp -al ~/.moat ./state" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cp-long-link-claude-settings
+  threat: T9
+  action: { shell: "cp --link ~/.claude/settings.json ./s.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rsync-link-dest-moat
+  threat: T9
+  action: { shell: "rsync -a --link-dest=/Users/me/.moat ./seed/ ./out/" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rsync-link-dest-claude-separate-value
+  threat: T9
+  action: { shell: "rsync -a --link-dest ~/.claude ./seed/ ./out/" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-hard-link-moved-moat-policy
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { shell: "ln /srv/moat/policy.yaml p.yaml" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # OpenClaw: `openclaw.json` loads OpenMoat's plugin, and the plugin file is what
 # runs `moat guard`; removing either lets every tool call run unchecked
 - id: T9-edit-openclaw-config
@@ -1338,6 +1382,42 @@
 - id: T9-rename-project-hook-dir
   threat: T9
   action: { shell: "mv .claude .claude-off" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-codex-dir
+  threat: T9
+  action: { shell: "mv .codex /tmp/old-codex" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-cursor-dir
+  threat: T9
+  action: { shell: "mv sub/.cursor sub/cursor-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-copilot-dir
+  threat: T9
+  action: { shell: "mv .copilot copilot-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-gemini-dir
+  threat: T9
+  action: { shell: "mv .gemini gemini-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-move-a-planted-dir-onto-project-hook-dir
+  threat: T9
+  action: { shell: "mv /tmp/planted .claude" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-replace-project-hook-dir-in-place
+  threat: T9
+  action: { shell: "mv -T planted .codex" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-swap-project-hook-dir
+  threat: T9
+  action: { shell: "rm -rf .claude && mv planted .claude" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-swap-project-gemini-dir-through-a-temp-name
+  threat: T9
+  action: { shell: "mv .gemini x && mv planted .gemini" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-tool-on-project-hook-dir
+  threat: T9
+  action: { shell: "rename .claude .claude-off .claude" }
   expect: { verdict: deny, rules: [kernel-self] }
 
 # T9 the kernel's own environment variables (state dir, test-only terminal override)

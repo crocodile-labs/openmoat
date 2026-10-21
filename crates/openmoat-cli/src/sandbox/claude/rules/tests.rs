@@ -40,8 +40,11 @@ fn every_os_gets_deny_rules_for_secrets_and_kernel_files() {
         assert!(has(&mac, rule), "{rule}: {:?}", mac.deny_rules);
     }
     for rule in &mac.deny_rules {
+        // `Edit(./.cursor/hooks.json)` and the like keep another agent's
+        // directory in the working directory in place (`nodes.rs`).
+        let node = rule.starts_with("Edit(./.") && rule.matches('/').count() == 2;
         assert!(
-            rule.starts_with("Read(//") || rule.starts_with("Edit(//"),
+            rule.starts_with("Read(//") || rule.starts_with("Edit(//") || node,
             "{rule}"
         );
         assert!(

@@ -121,6 +121,10 @@ pub struct Grants {
     /// Paths given to `moat run --write`, resolved, which commands may read
     /// and write (the agent's own state).
     pub writes: Vec<String>,
+    /// The terminal devices `moat run`'s standard input, output and error are
+    /// on, resolved: besides `/dev/tty` (the controlling terminal) the only
+    /// terminals commands may open, so none of the person's other terminals.
+    pub terminals: Vec<String>,
 }
 
 /// The IR of a `moat run` session in `ctx`, and `grants` plus this process's
@@ -192,6 +196,55 @@ pub fn netns_masks(
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
     Ok(bwrap::grant_masks(&ir, rules, &project_spellings(ctx)))
 }
+
+/// The read-only binds `moat run`'s network namespace on Linux adds over the
+/// agent configuration in the project of `ctx` ([`bwrap::agent_config_masks`]).
+#[cfg(target_os = "linux")]
+pub fn netns_agent_config_masks(ctx: &EvalContext) -> Vec<bwrap::Mount> {
+    bwrap::agent_config_masks(&project_spellings(ctx))
+}
+
+/// The paths `kernel-self` keeps from commands (OpenMoat's state, an agent's
+/// hook settings) that lie in one of `writes`, the `moat run --write` paths,
+/// each with the path that holds it. Landlock cannot deny inside a grant, so
+/// without a network namespace on Linux these would be open to commands
+/// ([`exposure::kernel_self_refusal`]). Only absolute rules count: a `**/`
+/// rule is everywhere, the project included, and stays the hook's there.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+pub fn kernel_self_in_writes(
+    policy: &Policy,
+    ctx: &EvalContext,
+    writes: &[String],
+) -> anyhow::Result<Vec<(String, String)>> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    let ci = crate::context::CASE_INSENSITIVE_PATHS;
+    let mut held = Vec::new();
+    let rules = ir.fs.write.deny.iter().chain(&ir.fs.read.deny);
+    for rule in rules.filter(|r| r.id == KERNEL_SELF_RULE) {
+        for pattern in patterns::split(&rule.patterns).0 {
+            let base = pattern
+                .split(['*', '?', '[', '{'])
+                .next()
+                .unwrap_or(pattern);
+            let base = base.trim_end_matches('/');
+            if !base.starts_with('/') {
+                continue;
+            }
+            let holder = writes.iter().find(|w| exposure::within(base, w, ci));
+            if let Some(holder) = holder
+                && !held.iter().any(|(_, p)| p == pattern)
+            {
+                held.push((holder.clone(), pattern.to_owned()));
+            }
+        }
+    }
+    Ok(held)
+}
+
+/// The rule id of the default policy's self-protection.
+#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
+const KERNEL_SELF_RULE: &str = "kernel-self";
 
 /// The project's spellings in `ctx`, the resolved one first.
 #[cfg(target_os = "linux")]

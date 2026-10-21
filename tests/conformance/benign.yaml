@@ -443,6 +443,14 @@
   threat: T9
   action: { shell: "mv src/a.rs src/b.rs" }
   expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-rename-project-files
+  threat: T9
+  action: { shell: "rename .jpeg .jpg photos/a.jpeg photos/b.jpeg" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-move-into-project-hook-dir
+  threat: T9
+  action: { shell: "mv notes.md .claude/notes.md" }
+  expect: { verdict: allow, rules: [dev-shell] }
 - id: benign-mkdir-touch-in-project
   action: { shell: "mkdir -p build/out && touch src/new.rs" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
@@ -454,6 +462,16 @@
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
 - id: benign-copy-into-working-directory
   action: { shell: "cp src/a.rs ." }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+# A hard link between project files writes only project files (T9's hard-link
+# fixtures): it stays allowed.
+- id: benign-hard-link-copy-in-project
+  threat: T9
+  action: { shell: "cp -al dist/ build/dist" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-hard-link-copy-with-backup-suffix
+  threat: T9
+  action: { shell: "cp -l -S .sl src/a.rs build/a.rs" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
 - id: benign-checkout-branch
   action: { shell: "git checkout main" }

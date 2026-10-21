@@ -25,15 +25,22 @@ fn now_ms() -> i64 {
     i64::try_from(since.as_millis()).unwrap()
 }
 
-/// `approvals.json` holding one Claude Code grant for session `s1`, created at
-/// `granted_at_ms` (no timestamp at all when `None`, as files from before expiry).
+/// `approvals.json` holding one Claude Code grant for session `s1` in the
+/// sandbox's project, created at `granted_at_ms` (no timestamp at all when
+/// `None`, as files from before expiry).
 fn write_grant(sb: &Sandbox, command: &str, granted_at_ms: Option<i64>) {
-    let mut grant =
-        serde_json::json!({"host": "claude-code", "session_id": "s1", "command": command});
+    // As OpenMoat writes it: links resolved, in slash form, without the
+    // verbatim prefix Windows adds.
+    let project = std::fs::canonicalize(sb.project()).unwrap();
+    let project = project.to_string_lossy();
+    let project = project.strip_prefix(r"\\?\").unwrap_or(&project);
+    let mut grant = serde_json::json!({"host": "claude-code", "session_id": "s1",
+        "action": {"shell": {"command": command}},
+        "project": project.replace('\\', "/")});
     if let Some(at) = granted_at_ms {
         grant["granted_at_ms"] = Value::from(at);
     }
-    let file = serde_json::json!({"version": 1, "entries": [grant]});
+    let file = serde_json::json!({"version": 2, "entries": [grant]});
     write_state(sb, "approvals.json", &file.to_string());
 }
 
@@ -226,4 +233,28 @@ fn allow_requires_a_terminal() {
                 .unwrap()
                 .contains("allow: []")
     );
+}
+
+#[test]
+fn a_command_grant_from_an_earlier_release_stops_applying_and_status_names_it() {
+    let sb = Sandbox::installed_asking(&[".claude"]);
+    let command = "npm install left-pad-pro";
+    // As an earlier release wrote it: no project.
+    let grant = serde_json::json!({"host": "claude-code", "session_id": "s1",
+        "action": {"shell": {"command": command}}, "granted_at_ms": now_ms()});
+    let file = serde_json::json!({"version": 2, "entries": [grant]});
+    write_state(&sb, "approvals.json", &file.to_string());
+    assert_eq!(
+        sb.moat_as_person(&["init", "--yes"]).status.code(),
+        Some(OK)
+    );
+    let d = decide(&sb, "s1", command);
+    assert_eq!(d["permissionDecision"], "ask", "{d}");
+    let status = text(&sb.moat(&["status"]));
+    assert!(
+        status.contains("needs approving again: it names no project"),
+        "{status}"
+    );
+    let listed = text(&sb.moat(&["allowed"]));
+    assert!(listed.contains("applies nowhere"), "{listed}");
 }

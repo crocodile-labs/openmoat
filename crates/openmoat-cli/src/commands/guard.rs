@@ -306,8 +306,11 @@ fn evaluate(
     if matches!(decision.verdict, Verdict::Ask | Verdict::Defer)
         && let Some(asked) = approvals::approvable(action, Some(&ctx.cwd), &ctx.home)
         && Grants::load_in(&home)?.matches(
-            host.id(),
-            &request.session_id,
+            approvals::Scope {
+                host: host.id(),
+                session_id: &request.session_id,
+                project: &approvals::project_in(&ctx),
+            },
             &asked,
             crate::time::now_ms(),
         )

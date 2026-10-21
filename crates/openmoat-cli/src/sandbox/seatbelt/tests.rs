@@ -9,6 +9,7 @@ fn generated(yaml: &str, proxy_port: Option<u16>) -> Generated {
         tmpdir: Some("/private/var/folders/xy/T".into()),
         program: Some("/Users/me/.local/share/agent/1.0/agent".into()),
         writes: vec!["/Users/me/.agent".into()],
+        terminals: vec!["/dev/ttys003".into()],
     };
     generated_with(yaml, &grants)
 }
@@ -99,8 +100,12 @@ fn the_hook_relay_adds_no_rule() {
 fn losses_and_allowances_are_listed() {
     let report = generated(DEFAULT_POLICY, None).report;
     let losses: Vec<String> = report.losses.iter().map(ToString::to_string).collect();
-    assert_eq!(losses.len(), 1, "{losses:?}");
-    assert!(losses[0].starts_with("net `registries`: "), "{losses:?}");
+    assert_eq!(losses.len(), 2, "{losses:?}");
+    assert!(
+        losses[0].starts_with("fs.write `seatbelt.agent-config`: "),
+        "{losses:?}"
+    );
+    assert!(losses[1].starts_with("net `registries`: "), "{losses:?}");
     let rules: Vec<String> = report
         .allowances
         .iter()
@@ -115,6 +120,7 @@ fn losses_and_allowances_are_listed() {
         "fs.read seatbelt.case",
         "fs.read seatbelt.program",
         "fs.write seatbelt.write",
+        "fs.write seatbelt.terminal",
     ] {
         assert!(rules.contains(&rule.to_owned()), "{rule}: {rules:?}");
     }
@@ -238,4 +244,89 @@ fn a_pattern_under_a_symlinked_directory_gets_its_real_spelling() {
     );
     assert_eq!(through_links(&format!("{real}/target/x")), None, "no link");
     assert_eq!(through_links("**/.env"), None, "not absolute");
+}
+
+/// The terminal the run was started on and `/dev/tty` are open; no other
+/// terminal of the person's is, and without one only `/dev/tty` is.
+#[test]
+fn only_the_runs_own_terminal_is_granted() {
+    let profile = generated(DEFAULT_POLICY, None).profile;
+    let granted = "; seatbelt.terminal\n(allow file-read* file-write-data\n  \
+                   (literal \"/dev/ttys003\"))\n";
+    assert!(profile.contains(granted), "{profile}");
+    assert!(profile.contains("(literal \"/dev/tty\")"));
+    assert!(!profile.contains("ttys[0-9]"), "{profile}");
+    assert_eq!(profile.matches("/dev/ttys").count(), 1, "{profile}");
+    let bare = generated_with(DEFAULT_POLICY, &Grants::default()).profile;
+    assert!(!bare.contains("/dev/ttys"), "{bare}");
+    assert!(bare.contains("(literal \"/dev/tty\")"));
+}
+
+/// An agent's own configuration in the project is left out of the project's
+/// write grant and denied after every grant, so a `--write` or temp directory
+/// grant cannot re-open it; CI files and commit-hook managers' files stay
+/// writable (an install runs `husky`).
+#[test]
+fn agent_configuration_in_the_project_is_never_writable() {
+    let out = generated(DEFAULT_POLICY, None);
+    let profile = &out.profile;
+    let deny = profile
+        .find("; deny seatbelt.agent-config (fs.write)\n(deny file-write*")
+        .expect("the agent configuration is denied");
+    assert!(deny > profile.rfind("(allow file-").unwrap_or_default());
+    let denied = &profile[deny..];
+    for re in [
+        r#"(regex "^/Users/me/proj/(.*/)?\\.claude/hooks(/.*)?$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.mcp\\.json$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.cursor/mcp\\.json$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.codex/config\\.toml$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.github/hooks(/.*)?$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.github/mcp\\.json$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.openclaw/extensions(/.*)?$")"#,
+        r#"(regex "^/Users/me/proj/(.*/)?\\.pi/settings\\.json$")"#,
+    ] {
+        assert!(denied.contains(re), "{re}: {profile}");
+    }
+    for ci in [".husky", ".github/workflows", "lefthook"] {
+        let escaped = ci.replace('.', "\\\\.");
+        assert!(
+            !profile.contains(&escaped),
+            "{ci} stays writable: {profile}"
+        );
+    }
+    let wider = out
+        .report
+        .allowances
+        .iter()
+        .find(|a| a.rule == "seatbelt.runs-later");
+    let wider = &wider.expect("CI files stay listed").patterns;
+    assert!(wider.contains(&"**/.husky/**".to_owned()), "{wider:?}");
+    assert!(!wider.contains(&"**/.mcp.json".to_owned()), "{wider:?}");
+    let loss = out
+        .report
+        .losses
+        .iter()
+        .find(|l| l.rule == "seatbelt.agent-config");
+    assert!(
+        loss.is_some_and(|l| l.message.contains("outside `openmoat run`")),
+        "{:?}",
+        out.report.losses
+    );
+}
+
+/// The project's `.claude`, `.codex`, `.cursor`, `.copilot` and `.gemini`
+/// themselves cannot be written: not renamed away, removed, or replaced by a
+/// directory moved into their place, while what is inside stays as the rules
+/// say.
+#[test]
+fn another_agents_directory_cannot_be_moved_or_replaced() {
+    let profile = generated(DEFAULT_POLICY, None).profile;
+    let kernel = profile
+        .find("; deny kernel-self (fs.write)\n(deny file-write*")
+        .expect("kernel-self write denies");
+    let denied = &profile[kernel..];
+    for name in ["claude", "codex", "cursor", "copilot", "gemini"] {
+        let node = format!("(regex \"^(.*/)?\\\\.{name}$\")");
+        assert!(denied.contains(&node), "{node}: {profile}");
+    }
 }

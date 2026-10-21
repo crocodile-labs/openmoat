@@ -81,6 +81,44 @@ pub fn port_only_network() -> Option<String> {
     None
 }
 
+/// The terminals (`/dev/ttys*`) this process's standard input, output and
+/// error are on. macOS has no `/proc` to name an open file, so each stream's
+/// device number is looked up among the terminals in `/dev`.
+pub fn terminals() -> Vec<String> {
+    use std::os::fd::{AsFd as _, BorrowedFd};
+    use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
+
+    let stat = |fd: BorrowedFd<'_>| {
+        let file = std::fs::File::from(fd.try_clone_to_owned().ok()?);
+        file.metadata().ok()
+    };
+    let (stdin, stdout, stderr) = (std::io::stdin(), std::io::stdout(), std::io::stderr());
+    let streams = [stdin.as_fd(), stdout.as_fd(), stderr.as_fd()];
+    let devices: Vec<u64> = streams
+        .into_iter()
+        .filter_map(stat)
+        .filter(|m| m.file_type().is_char_device())
+        .map(|m| m.rdev())
+        .collect();
+    if devices.is_empty() {
+        return Vec::new();
+    }
+    let Ok(entries) = std::fs::read_dir("/dev") else {
+        return Vec::new();
+    };
+    let mut found: Vec<String> = entries
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("ttys"))
+        .filter_map(|e| {
+            let meta = std::fs::symlink_metadata(e.path()).ok()?;
+            let terminal = meta.file_type().is_char_device() && devices.contains(&meta.rdev());
+            terminal.then(|| crate::context::path_string(&e.path()))
+        })
+        .collect();
+    found.sort();
+    found
+}
+
 impl Confined {
     pub fn command(&mut self) -> &mut Command {
         &mut self.command
@@ -178,6 +216,15 @@ mod tests {
             "{message}"
         );
         assert!(!message.contains("unbound variable"), "{message}");
+    }
+
+    /// Only terminal devices, never `/dev/tty` or another device; under
+    /// `cargo test` the streams are usually pipes, so often none.
+    #[test]
+    fn the_terminals_are_the_streams_own_ttys() {
+        for terminal in terminals() {
+            assert!(terminal.starts_with("/dev/ttys"), "{terminal}");
+        }
     }
 
     #[test]

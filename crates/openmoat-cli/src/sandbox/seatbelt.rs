@@ -19,30 +19,37 @@ use std::fmt::Write as _;
 use openmoat_core::Kind;
 use openmoat_core::ir::{Access, Effect, Enforcement, Rule};
 
-use super::patterns::{RUNS_LATER, literal_tree, runs_later_exclusion, split};
+use super::patterns::{
+    AGENT_CONFIG, RUNS_LATER, agent_config_exclusion, literal_tree, push_unique,
+    runs_later_exclusion, split,
+};
 use super::{Grants, Report};
+use braces::alternatives;
 
-/// Paths every process reads: `/` (the dynamic loader), the terminal and
-/// random devices, and `/private/var/select` (where `/bin/sh` finds its shell).
-const PLATFORM_READ: [&str; 9] = [
+mod braces;
+
+/// Paths every process reads: `/` (the dynamic loader), the controlling
+/// terminal (`/dev/tty`) and random devices, and `/private/var/select` (where
+/// `/bin/sh` finds its shell). No other terminal: the session's own come from
+/// [`Grants::terminals`], so a command cannot open another terminal of the
+/// person's and read what is typed there or write to it.
+const PLATFORM_READ: [&str; 8] = [
     "/",
     "/dev/null",
     "/dev/zero",
     "/dev/random",
     "/dev/urandom",
     "/dev/tty",
-    "/dev/ttys[0-9]*",
     "/dev/fd/**",
     "/private/var/select/**",
 ];
 
 /// Devices every process writes.
-const PLATFORM_WRITE: [&str; 6] = [
+const PLATFORM_WRITE: [&str; 5] = [
     "/dev/null",
     "/dev/zero",
     "/dev/tty",
     "/dev/dtracehelper",
-    "/dev/ttys[0-9]*",
     "/dev/fd/**",
 ];
 
@@ -126,6 +133,13 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
         platform(&PLATFORM_WRITE),
         devices,
     );
+    if !grants.terminals.is_empty() {
+        let message = "the terminal `openmoat run` was started on (its standard input, output \
+                       and error), and no other";
+        let both = "file-read* file-write-data";
+        let terminals = grants.terminals.clone();
+        p.grant(write, "seatbelt.terminal", both, terminals, message);
+    }
     if let Some(program) = &grants.program {
         let message = "the program `openmoat run` starts, which must be readable to start";
         p.grant(
@@ -170,6 +184,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
         "deny file-read-data file-read-xattr",
     );
     rules(&mut p.profile, &ir.fs.write.deny, "deny file-write*");
+    agent_config(&mut p, &ir.fs.write);
     p.profile.push_str(KEYCHAIN);
     p.profile.push_str(TERMINAL_INPUT);
     network(&mut p, &ir.egress.net, grants.proxy_port);
@@ -205,10 +220,11 @@ impl Generated {
             .iter()
             .any(|r| split(&r.patterns).1.iter().any(|p| runs_later_exclusion(p)));
         if runs_later {
+            let ci = RUNS_LATER.iter().filter(|f| !AGENT_CONFIG.contains(f));
             self.report.allowance(
                 Kind::FsWrite,
                 "seatbelt.runs-later",
-                RUNS_LATER.iter().map(|f| (*f).to_owned()).collect(),
+                ci.map(|f| (*f).to_owned()).collect(),
                 "commands may write CI configuration, commit-hook managers' files and editor \
                  tasks (an install runs `husky`); the hook asks before the agent writes one \
                  (`runs-later`)",
@@ -249,8 +265,9 @@ fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
     let patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
     let patterns = &patterns[..];
     let (mut positive, mut excluded) = split(patterns);
-    // files run later are the hook's to ask about: a deny here would fail installs
-    excluded.retain(|p| !runs_later_exclusion(p));
+    // CI and commit-hook managers' files run later are the hook's to ask about:
+    // a deny here would fail installs. An agent's own configuration stays out.
+    excluded.retain(|p| !runs_later_exclusion(p) || agent_config_exclusion(p));
     // `dir/**` becomes `(subpath dir)`, which covers `dir` itself.
     positive.retain(|p| !patterns.contains(&format!("{p}/**")));
     if positive.is_empty() {
@@ -274,6 +291,37 @@ fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
     out.push_str(")\n");
 }
 
+/// Commands may not write the agent configuration files ([`AGENT_CONFIG`])
+/// the write allow rules leave out, even where another grant (`--write`, the
+/// temp directory) covers them: the agent host loads them later, outside every
+/// sandbox, so the person changes one outside `openmoat run`.
+fn agent_config(p: &mut Generated, write: &Access) {
+    let mut patterns = Vec::new();
+    for r in &write.allow {
+        let (_, excluded) = split(&r.patterns);
+        for pattern in excluded.into_iter().filter(|e| agent_config_exclusion(e)) {
+            push_unique(&mut patterns, pattern.to_owned());
+        }
+    }
+    if patterns.is_empty() {
+        return;
+    }
+    let comment = "deny seatbelt.agent-config (fs.write)";
+    rule(
+        &mut p.profile,
+        comment,
+        "deny file-write*",
+        &with_real_paths(&patterns),
+    );
+    let message = "commands may not write an agent's hooks, MCP servers or extensions in the \
+                   project (`.claude/hooks`, `.mcp.json`, `.cursor/mcp.json`, \
+                   `.codex/config.toml`, `.github/hooks`, `.pi/…`, `.openclaw/extensions`), \
+                   which the agent loads later outside the sandbox, even when the hook allowed \
+                   it: change one outside `openmoat run`";
+    p.report
+        .loss(Kind::FsWrite, "seatbelt.agent-config", message.into());
+}
+
 /// Egress goes only to the proxy's loopback port: Seatbelt cannot name a host.
 fn network(p: &mut Generated, net: &Access, port: Option<u16>) {
     match port {
@@ -287,72 +335,6 @@ fn network(p: &mut Generated, net: &Access, port: Option<u16>) {
         None => p.profile.push_str("; network: none\n"),
     }
     p.report.proxy_only(net);
-}
-
-/// Most patterns one brace group may expand to; past it the pattern is
-/// translated as written.
-const MAX_ALTERNATIVES: usize = 64;
-
-/// `pattern` with its brace groups expanded (`src/{a,b}.rs` → `src/a.rs`,
-/// `src/b.rs`), as the
-/// engine's glob reads them; nested groups too. A pattern without braces, with
-/// an unclosed group, or with more than [`MAX_ALTERNATIVES`] results is
-/// returned as it is.
-fn alternatives(pattern: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    if expand(pattern, &mut out) {
-        out
-    } else {
-        vec![pattern.to_owned()]
-    }
-}
-
-/// Append every expansion of `pattern` to `out`; `false` when it cannot be
-/// expanded within the bound.
-fn expand(pattern: &str, out: &mut Vec<String>) -> bool {
-    let Some((open, close, options)) = first_group(pattern) else {
-        out.push(pattern.to_owned());
-        return true;
-    };
-    let (head, tail) = (&pattern[..open], &pattern[close + 1..]);
-    options.iter().all(|option| {
-        expand(&format!("{head}{option}{tail}"), out) && out.len() <= MAX_ALTERNATIVES
-    })
-}
-
-/// The first top-level brace group: its byte range and its comma-separated
-/// options (nested groups left in them). `None` without a closed group.
-fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
-    let (mut depth, mut open, mut start) = (0usize, None, 0);
-    let mut options = Vec::new();
-    let mut chars = pattern.char_indices();
-    while let Some((i, c)) = chars.next() {
-        match c {
-            '\\' => {
-                chars.next();
-            }
-            '{' => {
-                if depth == 0 {
-                    open = Some(i);
-                    start = i + 1;
-                }
-                depth += 1;
-            }
-            ',' if depth == 1 => {
-                options.push(&pattern[start..i]);
-                start = i + 1;
-            }
-            '}' if depth > 0 => {
-                depth -= 1;
-                if depth == 0 {
-                    options.push(&pattern[start..i]);
-                    return Some((open?, i, options));
-                }
-            }
-            _ => {}
-        }
-    }
-    None
 }
 
 /// `pattern` (an absolute glob, `!` for an exclusion) with its literal

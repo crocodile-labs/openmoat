@@ -157,6 +157,37 @@ pub fn refusal(
     })
 }
 
+/// Why `moat run` on Linux refuses to start without a network namespace
+/// (`why` there is none): `held`, each `--write` path with a `kernel-self`
+/// path inside it ([`super::kernel_self_in_writes`]), would be open to
+/// commands, since Landlock alone cannot deny inside a granted directory and
+/// only the namespace's mounts can.
+#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
+pub fn kernel_self_refusal(held: &[(String, String)], why: &str) -> Option<String> {
+    if held.is_empty() {
+        return None;
+    }
+    let mut writes: Vec<&str> = Vec::new();
+    for (write, _) in held {
+        if !writes.contains(&write.as_str()) {
+            writes.push(write);
+        }
+    }
+    let paths: Vec<&str> = held.iter().map(|(_, path)| path.as_str()).collect();
+    let flags: Vec<String> = writes.iter().map(|w| format!("--write {w}")).collect();
+    Some(format!(
+        "`openmoat run {}` holds {}, which the policy keeps from commands (`kernel-self`: \
+         OpenMoat's state and the agents' hook settings). Here {why}, so nothing can hide them \
+         inside the granted directory and Landlock alone cannot deny there: `openmoat run` \
+         refuses to start. Install bubblewrap (`apt install bubblewrap`) and allow \
+         unprivileged user namespaces, or grant a narrower path that holds none of them \
+         (such as the agent's session or cache directory)",
+        flags.join(" "),
+        paths.join(", ")
+    ))
+}
+
 // Its tests use Unix paths and symlinks.
 #[cfg(all(test, unix))]
 mod tests;
