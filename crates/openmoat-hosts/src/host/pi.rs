@@ -75,6 +75,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "extensions/openmoat.js",
         hooks: HOOKS,
         hook_format: HookFormat::Pi,
+        relaxed_keys: &[],
     }),
     // pi reads `<agent dir>/mcp.json` and a project's `.pi/mcp.json`
     // (`docs/mcp.md`); OpenMoat pins neither yet. MCP tool calls are still

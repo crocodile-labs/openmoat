@@ -15,8 +15,8 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    ProjectSettingsSpec, SandboxFormat, SandboxSpec,
+    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostSpec, InstallSpec, KeyShape, McpFile,
+    McpLayout, McpSpec, ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
@@ -149,17 +149,20 @@ pub enum Host {
     CopilotCli,
     /// pi, through OpenMoat's extension and its `tool_call` event.
     Pi,
+    /// Google's Gemini CLI (`BeforeTool`).
+    GeminiCli,
 }
 
 impl Host {
     /// Every host with a hook to install, in the order commands list them.
-    pub const ALL: [Host; 6] = [
+    pub const ALL: [Host; 7] = [
         Host::ClaudeCode,
         Host::Codex,
         Host::Cursor,
         Host::OpenClaw,
         Host::CopilotCli,
         Host::Pi,
+        Host::GeminiCli,
     ];
 
     /// The facts about this host.
@@ -322,7 +325,9 @@ pub struct HookRequest {
 #[non_exhaustive]
 pub enum HostError {
     /// `--host` named no supported host.
-    #[error("unknown host `{0}`; supported: claude-code, codex, cursor, openclaw, copilot-cli, pi")]
+    #[error(
+        "unknown host `{0}`; supported: claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli"
+    )]
     UnknownHost(String),
     /// The payload is not JSON or does not fit the host's schema.
     #[error("{problem}: {0}", problem = json_problem(.0))]
@@ -380,6 +385,7 @@ mod tests {
             Host::OpenClaw,
             Host::CopilotCli,
             Host::Pi,
+            Host::GeminiCli,
         ];
         for (i, host) in all.into_iter().enumerate() {
             let spec = host.spec();

@@ -2,7 +2,9 @@
 //!
 //! Claude Code (`settings.json`) and Codex (`hooks.json`) share the shape
 //! `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{type, command, args, timeout}]}]}}`.
-//! Our entries are recognised by their `args` (`guard --host <id>`), so re-running
+//! Gemini CLI's `settings.json` has the same nesting with one shell string as
+//! the `command` ([`gemini`]). Our entries are recognised by their `args`
+//! (`guard --host <id>`), or the end of that command string, so re-running
 //! `init` updates the binary path and matcher in place and never duplicates.
 //! Unrelated settings are preserved byte-for-byte as JSON values.
 
@@ -203,6 +205,15 @@ fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path, block: boo
             json!({ "matcher": spec.matcher, "hooks": [hook] })
         }
         HookFormat::Copilot => copilot::entry(config, spec, binary),
+        HookFormat::Gemini => json!({
+            "matcher": spec.matcher,
+            "hooks": [{
+                "name": gemini::NAME,
+                "type": "command",
+                "command": gemini::command(binary, config.host.id()),
+                "timeout": spec.timeout * 1000,
+            }],
+        }),
         // OpenClaw's file is edited by `openclaw` and pi's written by `pi`,
         // before any entry is built here.
         HookFormat::Cursor | HookFormat::OpenClaw | HookFormat::Pi => json!({
@@ -233,15 +244,28 @@ fn hook_binary(entry: &Value, config: &HostConfig) -> Option<String> {
             .strip_suffix(&suffix)?;
         return Some(quoted.trim().trim_matches('"').replace("\\\"", "\""));
     }
-    entry
-        .pointer("/hooks/0/command")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
+    let command = entry.pointer("/hooks/0/command").and_then(Value::as_str)?;
+    if config.format == HookFormat::Gemini {
+        return gemini::binary_of(command, config.host.id());
+    }
+    Some(command.to_owned())
 }
 
 fn is_ours(entry: &Value, config: &HostConfig) -> bool {
     if config.format == HookFormat::Copilot {
         return copilot::is_ours(entry, config);
+    }
+    if config.format == HookFormat::Gemini {
+        return entry
+            .get("hooks")
+            .and_then(Value::as_array)
+            .is_some_and(|hooks| {
+                hooks.iter().any(|h| {
+                    h.get("command")
+                        .and_then(Value::as_str)
+                        .is_some_and(|c| gemini::binary_of(c, config.host.id()).is_some())
+                })
+            });
     }
     if config.format == HookFormat::Cursor {
         let suffix = format!(" guard --host {}", config.host.id());
@@ -383,5 +407,6 @@ pub fn read_or_empty(path: &Path) -> Result<Value> {
 }
 
 mod copilot;
+mod gemini;
 #[cfg(test)]
 mod tests;

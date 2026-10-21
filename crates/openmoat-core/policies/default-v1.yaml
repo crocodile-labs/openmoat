@@ -263,6 +263,14 @@ deny:
       - "~/.pi/agent/extensions/openmoat.js"
       - "~/.pi/agent/settings.json"
       - "~/.pi/agent/trust.json"
+      # Gemini CLI: its directory, the settings that hold OpenMoat's hook (a
+      # project's are merged over them and can turn hooks off) and the folder
+      # trust list, which decides whether settings hooks run at all
+      - "~/.gemini"
+      - "**/.gemini"
+      - "~/.gemini/settings.json"
+      - "~/.gemini/trustedFolders.json"
+      - "**/.gemini/settings.json"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it
@@ -733,7 +741,9 @@ ask:
       # server lists, and a project's pi settings, which can add packages and turn
       # extensions off
       "~/.pi/agent/extensions/**", "**/.pi/extensions/**", "~/.pi/agent/mcp.json", "**/.pi/mcp.json",
-      "**/.pi/settings.json"]
+      "**/.pi/settings.json",
+      # Gemini CLI extensions, whose hooks and MCP servers it starts
+      "~/.gemini/extensions/**"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

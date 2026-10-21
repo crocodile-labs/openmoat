@@ -114,11 +114,11 @@ pub fn home_spellings() -> Result<(String, Option<String>)> {
 pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
     let recorded = crate::install::Recorded::load(state)?;
     let mut out = Vec::new();
-    let mut dirs = vec![(home::ENV, home::DIR_NAME, None)];
+    let mut dirs = vec![(home::DIR_NAME, env_dir(home::ENV), None)];
     // OpenClaw's variables do more than name a directory (`openclaw_moved`).
     for host in Host::ALL.into_iter().filter(|h| *h != Host::OpenClaw) {
-        let (var, name) = crate::install::dir_variable(host)?;
-        dirs.push((var, name, Some(host)));
+        let name = crate::install::dir_variable(host)?.1;
+        dirs.push((name, crate::install::env_config_dir(host)?, Some(host)));
     }
     let mut add = |default: &str, dir: &Path| -> Result<()> {
         let dir = path_string(&absolute(dir)?);
@@ -130,11 +130,8 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
         }
         Ok(())
     };
-    for (var, name, host) in dirs {
+    for (name, from_env, host) in dirs {
         let default = format!("~/{name}");
-        let from_env = std::env::var_os(var)
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from);
         let at_home = home::user_home()?.join(name);
         let from_record = host.and_then(|h| recorded.dir(h)).filter(|d| *d != at_home);
         for dir in from_env.into_iter().chain(from_record) {
@@ -145,6 +142,12 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
         add(default, &dir)?;
     }
     Ok(out)
+}
+
+fn env_dir(var: &str) -> Option<PathBuf> {
+    std::env::var_os(var)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// OpenClaw's state directory and configuration file where this shell's

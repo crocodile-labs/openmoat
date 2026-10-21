@@ -23,6 +23,7 @@ pub(crate) fn adapter(host: Host) -> &'static dyn HostAdapter {
         Host::OpenClaw => &host::openclaw::ADAPTER,
         Host::CopilotCli => &host::copilot_cli::ADAPTER,
         Host::Pi => &host::pi::ADAPTER,
+        Host::GeminiCli => &host::gemini_cli::ADAPTER,
     }
 }
 
@@ -42,6 +43,7 @@ mod tests {
             Host::OpenClaw,
             Host::CopilotCli,
             Host::Pi,
+            Host::GeminiCli,
         ] {
             let format = spec(host).speaks.unwrap_or(host);
             assert_eq!(adapter(host).spec().id, format.id(), "{host:?}");

@@ -13,13 +13,14 @@ use std::path::{Path, PathBuf};
 use openmoat_hosts::Host;
 
 /// Every host, the installable ones and those that run another's hook.
-const HOSTS: [Host; 7] = [
+const HOSTS: [Host; 8] = [
     Host::ClaudeCode,
     Host::Codex,
     Host::Cursor,
     Host::OpenClaw,
     Host::CopilotCli,
     Host::Pi,
+    Host::GeminiCli,
     Host::Continue,
 ];
 

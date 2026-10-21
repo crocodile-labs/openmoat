@@ -25,7 +25,7 @@ openmoat ──► openmoat-hosts ──► openmoat-core
 | Crate | Role | Rules |
 |---|---|---|
 | `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists and near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), the Codex `apply_patch` file list (`patch.rs`), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
-| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`, `host/pi.rs` with `pi/tools.rs`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
+| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`, `host/pi.rs` with `pi/tools.rs`, `host/gemini_cli.rs` with `gemini_cli/tools.rs` and `gemini_cli/settings.rs`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
 | `openmoat-proxy` | The egress proxy behind `openmoat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
 | `openmoat` (`crates/openmoat-cli`) | The `openmoat` binary, and `moat` (`src/bin/moat.rs`), the old name kept for a few releases, which starts the `openmoat` beside it: commands, hook installation, the policy lock and its MCP server pins, `openmoat mcp proxy` (`mcp/relay.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
@@ -228,7 +228,15 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | pi `grep`, `ls` / `find` | `path`, else the working directory / the same, and the directory of an absolute `pattern` | `FsRead` / `FsRead`, `ReadFiles` |
 | pi `mcp__<server>__<tool>`; `read_mcp_resource` | tool name and `input`; `server`, `uri` as for Claude Code's `ReadMcpResourceTool` | `McpTool` |
 | any other pi tool (an extension's) | tool name | `UnknownTool` (`tool.unknown`) |
-| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`, GitHub Copilot CLI `ask_user`, `report_intent`, `task`, `think`, `update_todo`, `read_bash`/`stop_bash`/`list_bash` and their PowerShell forms, pi `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`) | — | none: `ungoverned` |
+| Gemini CLI `run_shell_command` | `command`; `dir_path` (relative to `cwd`) as the working directory; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
+| Gemini CLI `read_file`, `list_directory` / `write_file`, `replace` | `file_path`, `dir_path` / `file_path` (`write_file` `content` for provenance) | `FsRead` / `FsWrite` |
+| Gemini CLI `glob`, `grep_search` (`search_file_content`) | `dir_path`, else `cwd`; for `glob` also the directory `pattern` names before its first wildcard | `FsRead`, `ReadFiles` |
+| Gemini CLI `read_many_files` | each `include`, up to its first wildcard | `ReadFiles` |
+| Gemini CLI `web_fetch` / `google_web_search` | the one URL in `prompt` (a `github.com` `blob` page as the `raw.githubusercontent.com` file Gemini CLI fetches; none or several is an adapter error) / `query` | `Fetch` / `WebSearch` |
+| Gemini CLI `read_mcp_resource` | `uri`: a `file:` URI as its path; any other URI | `FsRead`; `UnknownTool` |
+| Gemini CLI MCP tool (`mcp_<server>_<tool>`) | `mcp_context.server_name`, `mcp_context.tool_name` and `tool_input`; without `mcp_context` the name cannot be split | `McpTool` as `mcp__<server>__<tool>`; `UnknownTool` |
+| any other Gemini CLI tool (a custom subagent, a discovered tool) | tool name | `UnknownTool` (`tool.unknown`) |
+| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`, GitHub Copilot CLI `ask_user`, `report_intent`, `task`, `think`, `update_todo`, `read_bash`/`stop_bash`/`list_bash` and their PowerShell forms, pi `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`, Gemini CLI `write_todos`, `ask_user`, `tracker_*`, `update_topic`, plan-mode, `activate_skill`, `get_internal_docs`, `list_mcp_resources`, `invoke_agent` and the built-in subagents) | — | none: `ungoverned` |
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,
 written by `openmoat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
@@ -357,6 +365,7 @@ name the path as an allowance; where it is narrower, it must report a loss.
 | OpenClaw `before_tool_call` (OpenMoat's plugin) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | GitHub Copilot CLI `preToolUse` | `{"permissionDecision":…,"permissionDecisionReason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | pi `tool_call` (OpenMoat's extension) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
+| Gemini CLI `BeforeTool` | `{"decision":"allow"}`, or `{"decision":"ask"\|"deny","reason":…,"systemMessage":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
 
 A `defer` (ADR-025) writes no output for Claude Code, Codex and the Continue CLI and
@@ -394,6 +403,17 @@ schema but not enforced", so the call runs, and `beforeReadFile` takes only allo
 deny. The Cursor adapter marks those two events `HookEvent::PreToolUseNoAsk`, and an
 `ask` there is sent as a `deny` (exit 2) whose reason says to approve it with `openmoat` or
 `openmoat allow --last`, which approve the exact file. The audit log keeps the `ask`.
+
+Gemini CLI reads only `deny` (or `block`) and `ask` from a `BeforeTool` hook
+(`packages/core/src/scheduler/hook-utils.ts`, `@google/gemini-cli` 0.65.0). An `ask`
+forces its own confirmation, also where its policy, auto-edit or YOLO mode would run
+the call; `allow` and no output both leave the call to its policy, so an `allow` there
+skips none of Gemini CLI's confirmations and a `defer` writes nothing. Gemini CLI parses
+stdout as JSON whatever the exit code, so the deny document and exit 2 agree. It has no
+fail-closed key: a hook that times out, is killed or exits 1 lets the call run, and one
+that exits with another code and prints something blocks it. On Windows it runs the
+hook command with PowerShell, so the entry quotes the binary after `&` and exits 2 when
+PowerShell cannot run it (`install/hook_file/gemini.rs`).
 
 Claude Code sends its session's `permission_mode` with `PreToolUse`. Two modes put no
 question to a person: `bypassPermissions` skips Claude Code's prompts and `dontAsk`
@@ -457,7 +477,19 @@ away. Codex has no such key: a failed hook "continues the tool call"
   or drift in any other pinned file still denies every call. Allowlisted drift stays
   drift: `status` and `doctor` report it until a person re-pins, the commands that
   re-pin still refuse while it is there, and `openmoat proxy` and `openmoat run` still refuse to
-  start. Only a person re-pins: `openmoat init`, or
+  start. A host's spec can list keys of its own hook file the same way
+  (`InstallSpec::relaxed_keys`, `integrity/spec_keys.rs`): Gemini CLI writes its
+  `settings.json` itself for a new model, theme, sign-in method or display toggle
+  (`gemini_cli/settings.rs`: `model.name`, `ui.theme`, `security.auth.selectedType`,
+  `general.vimMode`, `ide.hasSeenNudge` and display-only `ui.*` keys, each a string or
+  a boolean). For such a file, found by its `<dir_name>/<config_file>` ending, the
+  lock also pins the digest of the file with those keys taken out (`relaxed_rest`);
+  drift whose rest still has that digest is decided through and reported, and that
+  host's list replaces Claude Code's for its file. A value of another shape, any
+  other key (`hooks`, `hooksConfig`, `tools`, `mcpServers`, `security.folderTrust`,
+  `context`, `advanced`, an unknown one), a file with comments or that no longer
+  parses, a link, or a lock without the rest's digest still denies every call.
+  Only a person re-pins: `openmoat init`, or
   `openmoat doctor --accept`, `openmoat allow`, `openmoat edit`, `openmoat secret`, `openmoat trust` and `openmoat sandbox sync` from an
   interactive terminal.
 - **ConfigChange veto.** Claude Code reports settings changes; while any pinned file
@@ -689,6 +721,7 @@ at that moment. `doctor` counts them as not covered; an event without a hash aft
                                (both listed in hosts.json; uninstall deletes only those)
 ~/.cursor/hooks.json           Cursor hooks ($CURSOR_CONFIG_DIR overrides)
 ~/.cursor/sandbox.json         Cursor sandbox keys, next to hooks.json
+~/.gemini/settings.json        Gemini CLI hooks ($GEMINI_CLI_HOME/.gemini when set)
 <project>/.moat/policy.yaml    repository policy, committed by the team (ADR-022)
 <project>/.moat/policy.yaml.sig  its optional detached signature (ADR-031)
 ```
@@ -715,7 +748,8 @@ crates/openmoat-cli/           the openmoat binary; tests/e2e/ runs it in isolat
                                moatbench/ holds the MoatBench scenarios `openmoat bench` bundles
 tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool call each,
                                with the verdict the default policy must give
-tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, copilot-cli, cursor, openclaw)
+tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, copilot-cli, cursor, openclaw,
+                               gemini-cli)
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
                                host_payload, literal_pattern, proxy_parse,

@@ -45,6 +45,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks.json",
         hooks: HOOKS,
         hook_format: HookFormat::Nested,
+        relaxed_keys: &[],
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("config.toml"),

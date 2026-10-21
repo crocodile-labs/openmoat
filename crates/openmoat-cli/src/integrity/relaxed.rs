@@ -1,5 +1,6 @@
-//! Drift in a Claude Code `settings.json` that leaves every guard decision as
-//! it was, so the guard keeps deciding each call instead of denying them all.
+//! Drift in a Claude Code `settings.json`, or in the keys a host's spec lists
+//! as relaxed (`spec_keys.rs`), that leaves every guard decision as it was, so
+//! the guard keeps deciding each call instead of denying them all.
 //!
 //! Such drift is still drift: `moat status` and `moat doctor` report it, and
 //! only a person re-pins it (`moat doctor --accept`). What may drift is an
@@ -17,6 +18,7 @@ use serde_json::{Map, Value};
 
 use super::digest::is_claude_settings;
 use super::keys::{differing, object_digests};
+use super::spec_keys;
 use super::{Drift, Kept, Lock, deny_for};
 use crate::home::Home;
 use crate::install::Recorded;
@@ -101,7 +103,7 @@ pub struct Checked {
     /// The `kernel-integrity` deny, when anything drifted beyond the allowlist.
     pub deny: Option<Decision>,
     /// Drift the guard decides through: allowlisted keys of a Claude Code
-    /// settings file only. Reported, never accepted.
+    /// settings file, or a host's relaxed keys, only. Reported, never accepted.
     pub relaxed: Vec<Drift>,
 }
 
@@ -173,7 +175,8 @@ pub(super) fn permission_digests(path: &Path) -> Option<BTreeMap<String, String>
 }
 
 /// Whether `drift` touches only allowlisted keys of a Claude Code settings
-/// file, `owned` being the `permissions.deny` rules OpenMoat wrote there and
+/// file, or only the relaxed keys of a host whose spec lists them, `owned`
+/// being the `permissions.deny` rules OpenMoat wrote in Claude Code's and
 /// `kept` holding the file's bytes as the check read them.
 fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String], kept: &Kept) -> bool {
     // A plain `Modified` has no keys to compare: no baseline, no object, a link.
@@ -181,6 +184,14 @@ fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String], kept: &Kept) -> bool
         return false;
     };
     let stored = path.to_string_lossy();
+    // A host's own list replaces Claude Code's for its file.
+    if let Some(keys) = spec_keys::listed(path) {
+        return lock
+            .relaxed_rest
+            .get(stored.as_ref())
+            .zip(kept.drifted(path))
+            .is_some_and(|(pinned, bytes)| spec_keys::only_relaxed(path, bytes, keys, pinned));
+    }
     let Some(pinned) = lock.keys.get(stored.as_ref()) else {
         return false;
     };

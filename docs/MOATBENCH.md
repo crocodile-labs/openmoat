@@ -22,7 +22,9 @@ openmoat bench --hook '<command>' --host claude-code    # against any hook comma
 
 `openmoat bench` creates a throwaway home under the system temporary directory, runs
 `openmoat init --yes` there, and for each scenario and each host that has a tool for
-every step (Claude Code, Codex, Cursor, OpenClaw) sends the steps to `openmoat guard --host <host>`
+every step (Claude Code, Codex, Cursor, OpenClaw, Gemini CLI; on Windows Gemini CLI's
+shell is PowerShell, which OpenMoat leaves to it, so its shell steps are skipped there)
+sends the steps to `openmoat guard --host <host>`
 as that host's hook payload. The scenarios' commands are never executed: only the
 hook runs. It reads the kernel verdict of each step back from the throwaway audit
 log and checks:
@@ -32,7 +34,9 @@ log and checks:
   `allow`, `ask` or `deny`; Codex cannot ask, nor can Cursor's file hooks, so there an
   `ask` must arrive as a `deny`, which exits 2. OpenMoat's OpenClaw plugin returns no
   decision for an `allow`, so OpenClaw's own checks still run and an `allow` reads as
-  `passthrough` there.
+  `passthrough` there. Gemini CLI reads `decision: deny` or `ask` from stdout whatever
+  the exit code; `decision: allow` and no output are `passthrough`, since its own
+  policy still decides.
 
 `--hook <command> --host <host>` sends the same payloads on stdin to any hook command
 instead, run through the system shell the way hosts run hooks (`sh -c`, `cmd /C` on

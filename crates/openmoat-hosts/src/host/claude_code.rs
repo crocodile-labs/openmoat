@@ -56,6 +56,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "settings.json",
         hooks: HOOKS,
         hook_format: HookFormat::Nested,
+        // Claude Code's list, with its permission lists, is the CLI's
+        // (`integrity/relaxed.rs`).
+        relaxed_keys: &[],
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideDefaultDir(".claude.json"),

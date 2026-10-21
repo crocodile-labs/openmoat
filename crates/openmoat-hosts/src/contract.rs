@@ -121,7 +121,9 @@ impl ProjectSettingsSpec {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct InstallSpec {
-    /// The environment variable that moves the configuration directory.
+    /// The environment variable that moves the configuration directory (for
+    /// [`HookFormat::Gemini`], the home directory it is in:
+    /// [`InstallSpec::variable_names_home`]).
     pub dir_variable: &'static str,
     /// The directory's name under the home directory otherwise.
     pub dir_name: &'static str,
@@ -131,6 +133,80 @@ pub struct InstallSpec {
     pub hooks: &'static [HookSpec],
     /// How that file lays out the entries.
     pub hook_format: HookFormat,
+    /// Keys of that file the host rewrites itself for a person's choice (a
+    /// model, a theme, a sign-in method) and that change no OpenMoat decision.
+    /// When the pinned file drifted in these keys only, each holding a value
+    /// of its [`RelaxedKey::shape`], `moat guard` keeps deciding every call and
+    /// `moat doctor` reports the drift; any other change still denies them all.
+    /// Only keys that cannot run a program, change a hook, the sandbox, MCP
+    /// servers, tools, the files the agent may touch or the network belong
+    /// here. Found by the file's path ending in `<dir_name>/<config_file>`.
+    /// Empty for most hosts; Claude Code's own list, with its permission
+    /// lists, is the CLI's (`integrity/relaxed.rs`).
+    pub relaxed_keys: &'static [RelaxedKey],
+}
+
+/// A key of a host's hook file that may drift while the guard keeps deciding
+/// ([`InstallSpec::relaxed_keys`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RelaxedKey {
+    /// The key's path from the top of the file, its names joined by `.`
+    /// (`model.name` is `{"model": {"name": …}}`).
+    pub path: &'static str,
+    /// The only kind of value it may change to.
+    pub shape: KeyShape,
+}
+
+impl RelaxedKey {
+    /// A key whose value is a string.
+    #[must_use]
+    pub const fn string(path: &'static str) -> Self {
+        Self {
+            path,
+            shape: KeyShape::String,
+        }
+    }
+
+    /// A key whose value is `true` or `false`.
+    #[must_use]
+    pub const fn flag(path: &'static str) -> Self {
+        Self {
+            path,
+            shape: KeyShape::Bool,
+        }
+    }
+}
+
+/// The kind of value a [`RelaxedKey`] may hold. A value of any other kind, an
+/// object or a list among them, is drift like any other key's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum KeyShape {
+    /// A JSON string.
+    String,
+    /// A JSON boolean.
+    Bool,
+}
+
+impl KeyShape {
+    /// Whether `value` is of this kind.
+    #[must_use]
+    pub fn holds(self, value: &serde_json::Value) -> bool {
+        match self {
+            Self::String => value.is_string(),
+            Self::Bool => value.is_boolean(),
+        }
+    }
+}
+
+impl InstallSpec {
+    /// Whether [`Self::dir_variable`] names a home directory that holds
+    /// [`Self::dir_name`] rather than the configuration directory itself, as
+    /// Gemini CLI's `GEMINI_CLI_HOME` does.
+    #[must_use]
+    pub fn variable_names_home(&self) -> bool {
+        self.hook_format == HookFormat::Gemini
+    }
 }
 
 /// Seconds `moat guard` may take before it denies on its own. A host that times
@@ -211,6 +287,13 @@ pub enum HookFormat {
     /// pi: the hook file is OpenMoat's extension itself, which pi loads from
     /// its agent directory's `extensions/`; the whole file is OpenMoat's.
     Pi,
+    /// Gemini CLI `settings.json`: `{"hooks": {"<Event>": [{"matcher", "hooks":
+    /// [{name, type, command, timeout}]}]}}`, with `command` one shell string
+    /// (bash, PowerShell on Windows) and `timeout` in milliseconds. Gemini CLI
+    /// has no fail-closed key. Its [`InstallSpec::dir_variable`]
+    /// (`GEMINI_CLI_HOME`) names the home directory `dir_name` is in, not that
+    /// directory.
+    Gemini,
 }
 
 /// Where a host reads its MCP server definitions. A file that does not exist
