@@ -50,7 +50,8 @@ pub fn signed_by(home: &Home, user: &Policy, found: &Found) -> Result<Option<Str
     ) else {
         return Ok(None);
     };
-    crate::signing::verify(&program, &signers, found.text.as_bytes(), &signature)
+    let what = crate::signing::Signed::RepoPolicy;
+    crate::signing::verify(&program, &signers, found.text.as_bytes(), &signature, what)
         .with_context(|| format!("checking the signature {}", signature.display()))
 }
 

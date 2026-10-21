@@ -38,6 +38,12 @@ struct SessionGrant<'a> {
     action: &'a Action,
     granted_at_ms: i64,
     expires_at_ms: i64,
+    /// The project it applies in; `None` for a file grant, which needs none,
+    /// and for one an earlier release wrote.
+    project: Option<&'a str>,
+    /// `false` for a grant an earlier release wrote without the project it
+    /// needs: it applies nowhere until approved again.
+    applies: bool,
 }
 
 #[derive(Serialize)]
@@ -64,6 +70,8 @@ pub fn run(args: &AllowedArgs) -> Result<Code> {
                 action: &g.action,
                 granted_at_ms: g.granted_at_ms,
                 expires_at_ms: g.granted_at_ms.saturating_add(GRANT_TTL_MS),
+                project: g.project.as_deref(),
+                applies: !g.unbound(),
             })
             .collect(),
         trusted_repos: trust
@@ -102,13 +110,22 @@ fn text(allowed: &Allowed<'_>, now: i64) -> Result<Code> {
         writeln!(out, "  none")?;
     }
     for grant in &allowed.session_grants {
-        writeln!(
-            out,
-            "  {} session {}: {} (ends in {})",
-            grant.host,
-            grant.session_id,
-            grant.what,
-            time::duration(grant.expires_at_ms.saturating_sub(now))
+        let place = match (grant.applies, grant.project) {
+            (false, _) => " (names no project, so it applies nowhere: approve it again)".to_owned(),
+            (true, Some(project)) if matches!(grant.action, Action::Shell { .. }) => {
+                format!(" in {project}")
+            }
+            (true, _) => String::new(),
+        };
+        render::line(
+            &mut out,
+            &format!(
+                "  {} session {}: {}{place} (ends in {})",
+                grant.host,
+                grant.session_id,
+                grant.what,
+                time::duration(grant.expires_at_ms.saturating_sub(now))
+            ),
         )?;
     }
     writeln!(out, "Trusted repositories (openmoat trust)")?;

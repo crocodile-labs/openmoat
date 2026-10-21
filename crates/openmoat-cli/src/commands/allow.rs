@@ -29,10 +29,13 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
         repin(&home, out)?;
         return sync_sandboxes();
     }
-    let (host, session, action) = match (&args.command, args.last) {
+    let (who, action) = match (&args.command, args.last) {
         (Some(command), false) => (
-            args.host.map(|h| h.id().to_owned()),
-            args.session.clone(),
+            Who {
+                host: args.host.map(|h| h.id().to_owned()),
+                session: args.session.clone(),
+                project: project_in(args.project.as_deref())?,
+            },
             Action::Shell {
                 command: command.trim().to_owned(),
             },
@@ -73,36 +76,51 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
                     return Ok(Code::Ok);
                 }
             };
-            let (host, session) = (Some(event.host), Some(event.session_id));
-            return approve(
-                &home,
-                host,
-                session,
-                &action,
-                args.always,
-                covers_taint,
-                out,
-            );
+            let who = Who::of(&event)?;
+            return approve(&home, who, &action, args.always, covers_taint, out);
         }
         _ => bail!("give a command, or --last to take the most recent ask"),
     };
-    approve(&home, host, session, &action, args.always, false, out)
+    approve(&home, who, &action, args.always, false, out)
 }
 
-/// Approve exactly `action` (from [`asked`]) for the host session, or for good
-/// with `always`: the home screen's answer, with the same checks as `run`.
-pub(super) fn run_for(host: &str, session: &str, action: &Action, always: bool) -> Result<Code> {
+/// Approve exactly `action` (from [`asked`]) of `event` for its host session,
+/// or for good with `always`: the home screen's answer, with the same checks as
+/// `run`.
+pub(super) fn run_for(event: &Event, action: &Action, always: bool) -> Result<Code> {
     let home = checked_home()?;
-    let (host, session) = (Some(host.to_owned()), Some(session.to_owned()));
-    approve(
-        &home,
-        host,
-        session,
-        action,
-        always,
-        false,
-        Deferred::default(),
-    )
+    let who = Who::of(event)?;
+    approve(&home, who, action, always, false, Deferred::default())
+}
+
+/// The host session a grant is for, and the project it applies in
+/// ([`approvals::project_of`]).
+struct Who {
+    host: Option<String>,
+    session: Option<String>,
+    project: String,
+}
+
+impl Who {
+    /// The session of an asked call, in the project of its working
+    /// directory; a call recorded without one is taken as asked in the
+    /// current directory, where the person approves it.
+    fn of(event: &Event) -> Result<Self> {
+        Ok(Self {
+            host: Some(event.host.clone()),
+            session: Some(event.session_id.clone()),
+            project: project_in(event.cwd.as_deref().map(Path::new))?,
+        })
+    }
+}
+
+/// The project of `dir`, or of the current directory without one.
+fn project_in(dir: Option<&Path>) -> Result<String> {
+    let dir = match dir {
+        Some(dir) => absolute(dir)?,
+        None => std::env::current_dir().context("determining the current directory")?,
+    };
+    Ok(approvals::project_of(&dir, &crate::home::user_home()?))
 }
 
 /// The state directory, once a person at a terminal is confirmed and the lock
@@ -135,8 +153,7 @@ fn checked_home() -> Result<Home> {
 /// asks from untrusted content ([`approvals::Grant::covers_taint`]).
 fn approve(
     home: &Home,
-    host: Option<String>,
-    session: Option<String>,
+    who: Who,
     action: &Action,
     always: bool,
     covers_taint: bool,
@@ -171,10 +188,15 @@ fn approve(
         writeln!(out, "  undo: openmoat allow --remove {}", rule.id)?;
         warn_if_shadowed(home, &rule.id, &mut out)?;
     } else {
-        let session = session.context(
+        let session = who.session.context(
             "give --host and --session for a session grant, --always for a permanent rule, or --last",
         )?;
-        let host = host.context("--session needs --host")?;
+        let host = who.host.context("--session needs --host")?;
+        let scope = approvals::Scope {
+            host: &host,
+            session_id: &session,
+            project: &who.project,
+        };
         if openmoat_hosts::is_unknown_session(&session) {
             bail!(
                 "this call came with no session id, so a session grant would hold in every \
@@ -188,9 +210,9 @@ fn approve(
         // The newest event so far: a taint ask is answered only if the session
         // read nothing untrusted after it, whatever the clock says.
         let seen = home.open_audit()?.latest_id()?.map_or(0, |id| id.0);
-        grants.grant(&host, &session, action, now, Some(seen));
+        grants.grant(scope, action, now, Some(seen));
         if covers_taint {
-            grants.cover_taint(&host, &session, action);
+            grants.cover_taint(scope, action);
         }
         grants.save(&path, now)?;
         let granted = format!(
@@ -214,6 +236,12 @@ fn approve(
             out,
             "  only in this agent session: a new session asks again{resume}"
         )?;
+        if matches!(action, Action::Shell { .. }) || covers_taint {
+            render::line(
+                &mut out,
+                &format!("  only in project {}: elsewhere it asks again", who.project),
+            )?;
+        }
     }
     repin(home, out)?;
     // a command rule is the hook's alone; a file rule is also a sandbox grant

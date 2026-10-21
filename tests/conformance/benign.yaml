@@ -455,6 +455,16 @@
 - id: benign-copy-into-working-directory
   action: { shell: "cp src/a.rs ." }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
+# A hard link between project files writes only project files (T9's hard-link
+# fixtures): it stays allowed.
+- id: benign-hard-link-copy-in-project
+  threat: T9
+  action: { shell: "cp -al dist/ build/dist" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-hard-link-copy-with-backup-suffix
+  threat: T9
+  action: { shell: "cp -l -S .sl src/a.rs build/a.rs" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
 - id: benign-checkout-branch
   action: { shell: "git checkout main" }
   expect: { verdict: allow, rules: [dev-shell] }

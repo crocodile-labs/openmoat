@@ -1,5 +1,9 @@
 //! OpenSSH signatures over policy files (ADR-031): the system `ssh-keygen`,
-//! `-Y verify` against `~/.moat/allowed_signers`, namespace [`NAMESPACE`].
+//! `-Y verify` against `~/.moat/allowed_signers`, in the namespace of what is
+//! signed ([`Signed`]): [`NAMESPACE`] for a repository policy,
+//! [`PACK_NAMESPACE`] for a policy pack. The two files have the same shape, so
+//! without separate namespaces a pack's signature would verify as a signed
+//! repository policy, and the reverse.
 //!
 //! No signature code of OpenMoat's own: `ssh-keygen` is resolved through the
 //! environment snapshot `moat init` recorded (`environment.rs`), like every
@@ -17,9 +21,34 @@ use anyhow::{Context as _, Result, bail};
 use crate::home::Home;
 use crate::integrity::Lock;
 
-/// The namespace every policy signature is made and checked in, so a key's
-/// signature over something else (a git commit, a file) is no policy signature.
+/// The namespace a repository policy's signature is made and checked in, so a
+/// key's signature over something else (a git commit, a file, a pack) is no
+/// repository policy signature. Releases before [`PACK_NAMESPACE`] signed
+/// packs in it too; repository signatures made then stay valid.
 pub const NAMESPACE: &str = "openmoat-policy";
+
+/// The namespace a policy pack's signature is made and checked in.
+pub const PACK_NAMESPACE: &str = "openmoat-pack";
+
+/// What a signature is over, which decides its namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signed {
+    /// A project's `.moat/policy.yaml` (`require_signed_repo_policy`).
+    RepoPolicy,
+    /// A pack `moat policy install` installs.
+    Pack,
+}
+
+impl Signed {
+    /// The `ssh-keygen -n` namespace of this kind of signature.
+    #[must_use]
+    pub fn namespace(self) -> &'static str {
+        match self {
+            Self::RepoPolicy => NAMESPACE,
+            Self::Pack => PACK_NAMESPACE,
+        }
+    }
+}
 
 /// The program's name, as the environment snapshot records it.
 const PROGRAM: &str = "ssh-keygen";
@@ -69,7 +98,7 @@ pub fn principals(signers: &str) -> Vec<String> {
 }
 
 /// The allowed-signers line trusting `key` (the text of a `.pub` file) for
-/// [`NAMESPACE`] only, under `principal`.
+/// [`NAMESPACE`] and [`PACK_NAMESPACE`] only, under `principal`.
 pub fn signer_line(principal: &str, key: &str) -> Result<String> {
     let valid = !principal.is_empty()
         && principal.len() <= MAX_PRINCIPAL_LEN
@@ -101,8 +130,25 @@ pub fn signer_line(principal: &str, key: &str) -> Result<String> {
         bail!("not an OpenSSH public key: `{kind}` is not a key type ssh-keygen signs with");
     }
     Ok(format!(
-        "{principal} namespaces=\"{NAMESPACE}\" {kind} {blob}"
+        "{principal} namespaces=\"{NAMESPACE},{PACK_NAMESPACE}\" {kind} {blob}"
     ))
+}
+
+/// Whether two allowed-signers lines trust the same key under the same
+/// principal, whatever namespaces they allow: `moat policy trust-key` replaces
+/// a line an earlier release wrote for [`NAMESPACE`] alone.
+#[must_use]
+pub fn same_signer(a: &str, b: &str) -> bool {
+    signer_key(a).is_some_and(|k| signer_key(b) == Some(k))
+}
+
+/// The principal, key type and key of an allowed-signers line.
+fn signer_key(line: &str) -> Option<(&str, &str, &str)> {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    match words.as_slice() {
+        &[principal, .., kind, key] => Some((principal, kind, key)),
+        _ => None,
+    }
 }
 
 /// The key's fingerprint as `ssh-keygen -l` prints it; an error when
@@ -125,14 +171,16 @@ pub fn fingerprint(program: &Path, key: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
 
-/// The principal of `signers` whose key made `signature` over `data` in
-/// [`NAMESPACE`], or `None` when no trusted key did. Each principal is tried
-/// in turn: `ssh-keygen -Y verify` checks one at a time.
+/// The principal of `signers` whose key made `signature` over `data`, a file
+/// of the kind `what`, in that kind's namespace, or `None` when no trusted key
+/// did. Each principal is tried in turn: `ssh-keygen -Y verify` checks one at
+/// a time.
 pub fn verify(
     program: &Path,
     signers: &Path,
     data: &[u8],
     signature: &Path,
+    what: Signed,
 ) -> Result<Option<String>> {
     // A FIFO would hold the caller until the host gives up on the hook.
     if !signature.is_file() {
@@ -141,22 +189,29 @@ pub fn verify(
     let text = std::fs::read_to_string(signers)
         .with_context(|| format!("reading {}", signers.display()))?;
     for principal in principals(&text) {
-        if verify_as(program, signers, &principal, data, signature)? {
+        if verify_as(
+            program,
+            signers,
+            (&principal, what.namespace()),
+            data,
+            signature,
+        )? {
             return Ok(Some(principal));
         }
     }
     Ok(None)
 }
 
+/// [`verify`] for one `(principal, namespace)`.
 fn verify_as(
     program: &Path,
     signers: &Path,
-    principal: &str,
+    (principal, namespace): (&str, &str),
     data: &[u8],
     signature: &Path,
 ) -> Result<bool> {
     let mut child = Command::new(program)
-        .args(["-Y", "verify", "-n", NAMESPACE, "-I", principal, "-f"])
+        .args(["-Y", "verify", "-n", namespace, "-I", principal, "-f"])
         .arg(signers)
         .arg("-s")
         .arg(signature)

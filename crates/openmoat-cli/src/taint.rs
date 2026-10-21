@@ -303,12 +303,14 @@ pub fn answered(
     // A grant for exactly this call, or one the person gave for every protected
     // write of the session (`moat allow --last`, answer `s`); either only while
     // the session has read nothing untrusted since.
-    let exact =
-        approvals::approvable(call.action, Some(call.cwd), call.user_home).and_then(|asked| {
-            grants
-                .newest(call.host.id(), call.session, &asked, now_ms)
-                .cloned()
-        });
+    let project = approvals::project_of(Path::new(call.cwd), Path::new(call.user_home));
+    let scope = approvals::Scope {
+        host: call.host.id(),
+        session_id: call.session,
+        project: &project,
+    };
+    let exact = approvals::approvable(call.action, Some(call.cwd), call.user_home)
+        .and_then(|asked| grants.newest(scope, &asked, now_ms).cloned());
     if exact.as_ref().is_some_and(|g| fresh(&g)) {
         let mut decision = untainted;
         decision.reasons.push(
@@ -318,7 +320,7 @@ pub fn answered(
         return Ok(decision);
     }
     if grants
-        .covering_taint(call.host.id(), call.session, now_ms)
+        .covering_taint(scope, now_ms)
         .is_some_and(|g| fresh(&g))
     {
         let mut decision = untainted;

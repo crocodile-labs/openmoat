@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 31 | 20 | 7 |
 | T7 | Obfuscation and nested execution | 130 | 102 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 13 | 0 | 6 |
-| T9 | Hook / policy tampering by the agent | 221 | 56 | 11 |
+| T9 | Hook / policy tampering by the agent | 231 | 56 | 13 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
 | T12 | Network to unknown hosts | 83 | 17 | 1 |
@@ -930,6 +930,16 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-remove-moved-claude-dir` (attacks): Deny [kernel-self]
 - `T9-edit-moved-codex-hooks` (attacks): Deny [kernel-self]
 - `T9-edit-moved-cursor-hooks` (attacks): Deny [kernel-self]
+- `T9-hard-link-claude-settings-into-project` (attacks): Deny [kernel-self]
+- `T9-hard-link-moat-policy` (attacks): Deny [kernel-self]
+- `T9-hard-link-into-target-directory` (attacks): Deny [kernel-self]
+- `T9-link-audit-db` (attacks): Deny [kernel-self]
+- `T9-link-moat-approved-overlay` (attacks): Deny [kernel-self]
+- `T9-cp-link-moat-state` (attacks): Deny [kernel-self]
+- `T9-cp-long-link-claude-settings` (attacks): Deny [kernel-self]
+- `T9-rsync-link-dest-moat` (attacks): Deny [kernel-self]
+- `T9-rsync-link-dest-claude-separate-value` (attacks): Deny [kernel-self]
+- `T9-hard-link-moved-moat-policy` (attacks): Deny [kernel-self]
 - `T9-edit-openclaw-config` (attacks): Deny [kernel-self]
 - `T9-sed-openclaw-config` (attacks): Deny [kernel-self]
 - `T9-replace-openclaw-plugin` (attacks): Deny [kernel-self]
@@ -1140,6 +1150,8 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-write-project-pi-prompt` (benign): Allow [project-fs]
 - `benign-read-repository-policy` (benign): Allow [project-fs]
 - `benign-move-project-file` (benign): Allow [dev-shell]
+- `benign-hard-link-copy-in-project` (benign): Allow [dev-shell, project-fs]
+- `benign-hard-link-copy-with-backup-suffix` (benign): Allow [dev-shell, project-fs]
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
 - `benign-python-test-file-named-after-moat` (benign): Allow [dev-shell, project-fs]
 

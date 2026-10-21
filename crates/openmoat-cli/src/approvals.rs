@@ -3,7 +3,8 @@
 //! Two files under `~/.moat`, both pinned by the policy lock so an agent cannot
 //! grant itself anything:
 //! - `approvals.json`: session grants, an exact command or exact files for one host
-//!   session, valid for [`GRANT_TTL_MS`] after they are written;
+//!   session, valid for [`GRANT_TTL_MS`] after they are written; a command only in
+//!   the project it was approved in;
 //! - `policy.d/approved.yaml`: permanent allow rules appended by `moat allow --always`,
 //!   `--site` and `--dir`, merged into the user policy at load time so `policy.yaml` is never rewritten.
 
@@ -50,6 +51,31 @@ pub struct Grant {
     /// that does not know the field reads it as a grant for `action` alone.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub covers_taint: bool,
+    /// The project the grant was approved in ([`project_of`]): a shell grant,
+    /// and one that [`covers_taint`](Self::covers_taint), applies only to calls
+    /// in it, since the same command means something else in another
+    /// repository. A file grant names absolute paths and needs none. `None` for
+    /// a grant an earlier release wrote: such a shell or taint grant applies
+    /// nowhere ([`Grant::unbound`]) until a person approves it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+}
+
+/// The project a call in `cwd` belongs to, as grants record it: the
+/// repository root, else `cwd` itself ([`crate::project::root_of`]), with its
+/// symlinks resolved when it exists so either spelling of it is the same
+/// project. `home` is the person's home directory.
+#[must_use]
+pub fn project_of(cwd: &Path, home: &Path) -> String {
+    let root = crate::project::root_of(cwd, home).unwrap_or_else(|| cwd.to_path_buf());
+    let real = fs::canonicalize(&root).unwrap_or(root);
+    crate::context::path_string(&real)
+}
+
+/// [`project_of`] the working directory of a call evaluated in `ctx`.
+#[must_use]
+pub fn project_in(ctx: &openmoat_core::EvalContext) -> String {
+    project_of(Path::new(&ctx.cwd), Path::new(&ctx.home))
 }
 
 /// A version 1 grant: a shell command.
@@ -73,6 +99,22 @@ impl Grant {
     #[must_use]
     pub fn active(&self, now_ms: i64) -> bool {
         (0..GRANT_TTL_MS).contains(&now_ms.saturating_sub(self.granted_at_ms))
+    }
+
+    /// Whether it needs a project to apply and names none: written by an
+    /// earlier release, so it applies nowhere and must be approved again.
+    #[must_use]
+    pub fn unbound(&self) -> bool {
+        self.needs_project() && self.project.is_none()
+    }
+
+    fn needs_project(&self) -> bool {
+        self.covers_taint || matches!(self.action, Action::Shell { .. })
+    }
+
+    /// Whether it applies to a call in `project` ([`project_of`]).
+    fn applies_in(&self, project: &str) -> bool {
+        !self.needs_project() || self.project.as_deref() == Some(project)
     }
 }
 
@@ -124,6 +166,7 @@ impl Grants {
                     granted_at_ms: g.granted_at_ms,
                     audit_row: None,
                     covers_taint: false,
+                    project: None,
                 });
                 Ok(Self {
                     version: GRANTS_VERSION,
@@ -149,93 +192,103 @@ impl Grants {
         )
     }
 
-    /// Grant `action` (spelled by [`approvable`]) to the host session as of
-    /// `now_ms`, having seen the audit log up to `audit_row`; granting it again
-    /// restarts its lifetime.
+    /// Grant `action` (spelled by [`approvable`]) to the host session in
+    /// `project` ([`project_of`]) as of `now_ms`, having seen the audit log up
+    /// to `audit_row`; granting it again restarts its lifetime and moves it to
+    /// `project`.
     pub fn grant(
         &mut self,
-        host: &str,
-        session_id: &str,
+        scope: Scope<'_>,
         action: &Action,
         now_ms: i64,
         audit_row: Option<i64>,
     ) {
-        self.entries
-            .retain(|g| !(g.host == host && g.session_id == session_id && g.action == *action));
+        // The same grant made earlier in this project, or by an earlier
+        // release in none, is replaced; one in another project stays.
+        self.entries.retain(|g| {
+            !(scope.owns(g)
+                && g.action == *action
+                && g.project.as_deref().is_none_or(|p| p == scope.project))
+        });
         self.entries.push(Grant {
-            host: host.to_owned(),
-            session_id: session_id.to_owned(),
+            host: scope.host.to_owned(),
+            session_id: scope.session_id.to_owned(),
             action: action.clone(),
             granted_at_ms: now_ms,
             audit_row,
             covers_taint: false,
+            project: Some(scope.project.to_owned()),
         });
     }
 
     /// Exact match of `action` (spelled by [`approvable`]) for this host session
-    /// among grants still valid at `now_ms`; no prefix or glob semantics.
-    /// A call without a session id never matches: every such call shares the
-    /// placeholder id, so a grant for it would hold in every session.
+    /// among grants still valid at `now_ms` that apply in the scope's project;
+    /// no prefix or glob semantics. A call without a session id never
+    /// matches: every such call shares the placeholder id, so a grant for it
+    /// would hold in every session.
     #[must_use]
-    pub fn matches(&self, host: &str, session_id: &str, action: &Action, now_ms: i64) -> bool {
-        self.granted_at(host, session_id, action, now_ms).is_some()
+    pub fn matches(&self, scope: Scope<'_>, action: &Action, now_ms: i64) -> bool {
+        self.granted_at(scope, action, now_ms).is_some()
     }
 
     /// When the grant [`Grants::matches`] finds was made, if there is one.
     #[must_use]
-    pub fn granted_at(
-        &self,
-        host: &str,
-        session_id: &str,
-        action: &Action,
-        now_ms: i64,
-    ) -> Option<i64> {
-        self.newest(host, session_id, action, now_ms)
-            .map(|g| g.granted_at_ms)
+    pub fn granted_at(&self, scope: Scope<'_>, action: &Action, now_ms: i64) -> Option<i64> {
+        self.newest(scope, action, now_ms).map(|g| g.granted_at_ms)
     }
 
     /// The newest grant [`Grants::matches`] finds, if there is one.
     #[must_use]
-    pub fn newest(
-        &self,
-        host: &str,
-        session_id: &str,
-        action: &Action,
-        now_ms: i64,
-    ) -> Option<&Grant> {
-        if openmoat_hosts::is_unknown_session(session_id) {
+    pub fn newest(&self, scope: Scope<'_>, action: &Action, now_ms: i64) -> Option<&Grant> {
+        if openmoat_hosts::is_unknown_session(scope.session_id) {
             return None;
         }
         self.active(now_ms)
-            .filter(|g| g.host == host && g.session_id == session_id && g.action == *action)
+            .filter(|g| scope.owns(g) && g.action == *action && g.applies_in(scope.project))
             .max_by_key(|g| g.granted_at_ms)
     }
 
     /// Make the grant for `action` in this host session also answer the
     /// session's other taint asks from untrusted content ([`Grant::covers_taint`]).
-    pub fn cover_taint(&mut self, host: &str, session_id: &str, action: &Action) {
+    pub fn cover_taint(&mut self, scope: Scope<'_>, action: &Action) {
         for g in &mut self.entries {
-            if g.host == host && g.session_id == session_id && g.action == *action {
+            if scope.owns(g) && g.action == *action && g.project.as_deref() == Some(scope.project) {
                 g.covers_taint = true;
             }
         }
     }
 
     /// The newest grant of this host session that answers its taint asks from
-    /// untrusted content, if one is still valid at `now_ms`.
+    /// untrusted content in the scope's project, if one is still valid at `now_ms`.
     #[must_use]
-    pub fn covering_taint(&self, host: &str, session_id: &str, now_ms: i64) -> Option<&Grant> {
-        if openmoat_hosts::is_unknown_session(session_id) {
+    pub fn covering_taint(&self, scope: Scope<'_>, now_ms: i64) -> Option<&Grant> {
+        if openmoat_hosts::is_unknown_session(scope.session_id) {
             return None;
         }
         self.active(now_ms)
-            .filter(|g| g.covers_taint && g.host == host && g.session_id == session_id)
+            .filter(|g| g.covers_taint && scope.owns(g) && g.applies_in(scope.project))
             .max_by_key(|g| g.granted_at_ms)
     }
 
     /// Grants still valid at `now_ms`.
     pub fn active(&self, now_ms: i64) -> impl Iterator<Item = &Grant> {
         self.entries.iter().filter(move |g| g.active(now_ms))
+    }
+}
+
+/// Where a grant is made or looked up: a host session, and the project of the
+/// call ([`project_of`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Scope<'a> {
+    pub host: &'a str,
+    pub session_id: &'a str,
+    pub project: &'a str,
+}
+
+impl Scope<'_> {
+    /// Whether `grant` belongs to this host session (in any project).
+    fn owns(&self, grant: &Grant) -> bool {
+        grant.host == self.host && grant.session_id == self.session_id
     }
 }
 

@@ -129,7 +129,8 @@ pub const WRITE_ALL_PATHS: &[&str] = &[
 ];
 
 /// Programs for which the last operand is a write and the others are reads.
-pub const WRITE_LAST_PATH: &[&str] = &["cp", "ln", "rsync", "scp"];
+/// `link FILE NEW` makes the hard link `NEW`.
+pub const WRITE_LAST_PATH: &[&str] = &["cp", "ln", "link", "rsync", "scp"];
 
 /// Programs whose operands are files they read, so a plain name (`cat s`) is a
 /// file read (`operands.rs`). Pattern operands (`grep foo .`) become reads of

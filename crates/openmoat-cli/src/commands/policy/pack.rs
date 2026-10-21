@@ -52,7 +52,7 @@ pub fn trust_key(args: &TrustKeyArgs) -> Result<Code> {
     let fingerprint = signing::fingerprint(&program, &args.key)?;
     let path = home.signers_path();
     // Only a pinned file is the person's; anything else there is replaced.
-    let mut text = match signing::trusted_signers(&home) {
+    let text = match signing::trusted_signers(&home) {
         Some(current) => fs::read_to_string(&current)
             .with_context(|| format!("reading {}", current.display()))?,
         None => String::new(),
@@ -63,18 +63,24 @@ pub fn trust_key(args: &TrustKeyArgs) -> Result<Code> {
         out.finish()?;
         return Ok(Code::Ok);
     }
-    if !text.is_empty() && !text.ends_with('\n') {
-        text.push('\n');
-    }
+    // The same key under the same name, trusted by an earlier release for
+    // repository policies alone: this line replaces it.
+    let mut text: String = text
+        .lines()
+        .filter(|l| !signing::same_signer(l, &line))
+        .flat_map(|l| [l, "\n"])
+        .collect();
     text.push_str(&line);
     text.push('\n');
     write_private(&path, text.as_bytes())?;
     let pinned = repin(&home)?;
     writeln!(
         out,
-        "✔ trusted {fingerprint} as {} to sign policy (namespace {})",
+        "✔ trusted {fingerprint} as {} to sign repository policies (namespace {}) and policy \
+         packs (namespace {})",
         args.name,
-        signing::NAMESPACE
+        signing::NAMESPACE,
+        signing::PACK_NAMESPACE
     )?;
     writeln!(out, "✔ lock re-pinned ({pinned} files)")?;
     out.finish()?;
@@ -112,15 +118,24 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     // from this same text, and the signature from these same bytes.
     let staged = home.packs_dir().join(format!(".{name}.staged.sig"));
     write_private(&staged, &signature)?;
-    let signer = signing::verify(&program, &signers, text.as_bytes(), &staged);
+    let signer = signing::verify(
+        &program,
+        &signers,
+        text.as_bytes(),
+        &staged,
+        signing::Signed::Pack,
+    );
     let _ = fs::remove_file(&staged);
     let Some(signer) = signer? else {
         bail!(
             "refusing {}: its signature {} does not verify against any key `openmoat policy \
-             trust-key` trusted (namespace {})",
+             trust-key` trusted (namespace {ns}: sign it with `ssh-keygen -Y sign -n {ns}`; a \
+             signature in {} is a repository policy's, not a pack's, and a key trusted by an \
+             earlier release signs packs only after `openmoat policy trust-key` again)",
             args.pack.display(),
             sig.display(),
-            signing::NAMESPACE
+            signing::NAMESPACE,
+            ns = signing::PACK_NAMESPACE,
         );
     };
     let pack =
