@@ -211,6 +211,7 @@ pub fn netns_agent_config_masks(ctx: &EvalContext) -> Vec<bwrap::Mount> {
 /// ([`exposure::kernel_self_refusal`]). Only absolute rules count: a `**/`
 /// rule is everywhere, the project included, and stays the hook's there.
 #[cfg(any(target_os = "linux", test))]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn kernel_self_in_writes(
     policy: &Policy,
     ctx: &EvalContext,
@@ -243,6 +244,7 @@ pub fn kernel_self_in_writes(
 
 /// The rule id of the default policy's self-protection.
 #[cfg(any(target_os = "linux", test))]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const KERNEL_SELF_RULE: &str = "kernel-self";
 
 /// The project's spellings in `ctx`, the resolved one first.
