@@ -5,6 +5,7 @@ use super::*;
 use crate::sandbox::{assert_golden, lower_for_hosts};
 
 mod git;
+mod nodes;
 
 pub(super) fn generated(yaml: &str) -> Generated {
     generated_for(yaml, false)
@@ -89,19 +90,20 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "Edit(./.env)",
             "Edit(./.envrc)",
             "Edit(./.moat)",
-            "Edit(./.cursor/hooks.json)",
-            "Edit(./.cursor/sandbox.json)",
-            "Edit(./.codex/hooks.json)",
-            "Edit(./.copilot/hooks)",
-            "Edit(./.copilot/settings.json)",
-            "Edit(./.copilot/config.json)",
-            "Edit(./.gemini/settings.json)",
         ],
         "another agent's hook file below a directory the policy denies writing \
-         (`.cursor`, `.codex`, `.copilot`, `.gemini`) is denied by path (#434); Claude Code keeps its own \
-         `.claude` settings read-only itself"
+         (`.cursor`, `.codex`, `.copilot`, `.gemini`) is denied by path on every OS (#434); \
+         Claude Code keeps its own `.claude` settings read-only itself"
     );
-    assert_eq!(linux.sandbox, mac.sandbox, "the sandbox block is the same");
+    let mut linux_sandbox = linux.sandbox.clone();
+    let deny_read = linux_sandbox["filesystem"]["denyRead"]
+        .as_array_mut()
+        .unwrap();
+    assert_eq!(deny_read.pop(), Some(json!("/Users/me/.moat")));
+    assert_eq!(
+        linux_sandbox, mac.sandbox,
+        "the sandbox block is otherwise the same"
+    );
     let dropped = linux
         .report
         .allowances

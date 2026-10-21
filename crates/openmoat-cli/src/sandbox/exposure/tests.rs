@@ -132,6 +132,7 @@ fn default_rules(moved_dirs: Vec<(String, String)>) -> Rules {
         tmpdir: Some("/tmp".into()),
         program: Some("/home/me/.local/bin/agent".into()),
         writes: Vec::new(),
+        terminals: Vec::new(),
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).unwrap();
     landlock::generate(&ir, &grants).unwrap().rules
@@ -208,4 +209,66 @@ fn the_refusal_names_the_root_and_offers_isolate_only_where_it_hides() {
         refusal(Path::new("/nowhere/granted"), &rules, Some(&tmp), false),
         None
     );
+}
+
+fn home_ctx() -> EvalContext {
+    EvalContext {
+        home: "/home/me".into(),
+        project: Some("/home/me/proj".into()),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: "/home/me/proj".into(),
+        case_insensitive_paths: false,
+    }
+}
+
+/// Without a network namespace on Linux, a `--write` path that holds what
+/// `kernel-self` protects (the documented `--write ~/.claude` holds Claude
+/// Code's `settings.json`) refuses the run, naming the paths and both fixes.
+#[test]
+fn a_write_path_holding_kernel_self_paths_is_refused_without_a_namespace() {
+    let policy = Policy::parse(DEFAULT_POLICY).unwrap();
+    let held = |writes: &[&str]| {
+        let writes: Vec<String> = writes.iter().map(|w| (*w).to_owned()).collect();
+        crate::sandbox::kernel_self_in_writes(&policy, &home_ctx(), &writes).unwrap()
+    };
+    let claude = held(&["/home/me/.claude"]);
+    let paths: Vec<&str> = claude.iter().map(|(_, p)| p.as_str()).collect();
+    for expected in [
+        "/home/me/.claude/settings.json",
+        "/home/me/.claude/settings.local.json",
+    ] {
+        assert!(paths.contains(&expected), "{expected}: {claude:?}");
+    }
+    assert!(claude.iter().all(|(w, _)| w == "/home/me/.claude"));
+    let why = "bubblewrap is not installed";
+    let refusal = kernel_self_refusal(&claude, why).unwrap();
+    for expected in [
+        "`openmoat run --write /home/me/.claude`",
+        "/home/me/.claude/settings.json",
+        why,
+        "refuses to start",
+        "apt install bubblewrap",
+        "unprivileged user namespaces",
+        "narrower path",
+    ] {
+        assert!(refusal.contains(expected), "{expected}: {refusal}");
+    }
+    // The state directory, its audit log beside it whatever exists yet.
+    let home = held(&["/home/me/.cache/agent", "/home/me"]);
+    assert!(
+        home.iter()
+            .any(|(w, p)| w == "/home/me" && p == "/home/me/.moat/audit.db*"),
+        "{home:?}"
+    );
+    // A narrower grant holds none: the run starts with Landlock alone.
+    for narrow in [
+        "/home/me/.claude/projects",
+        "/home/me/.cache/agent",
+        "/home/me/proj",
+    ] {
+        assert_eq!(held(&[narrow]), Vec::new(), "{narrow}");
+    }
+    assert_eq!(kernel_self_refusal(&[], why), None);
 }

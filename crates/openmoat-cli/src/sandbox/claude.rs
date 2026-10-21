@@ -44,9 +44,11 @@ mod deny_list;
 mod git_env;
 mod git_internals;
 pub mod mask;
+mod nodes;
 mod owned;
 mod rules;
 mod settings;
+mod state_dir;
 
 use anyhow::Result;
 use openmoat_core::ir::{Access, Effect, Enforcement, Rule};
@@ -59,8 +61,8 @@ pub use rules::deny_edit;
 pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
 use super::patterns::{
-    Spot, domain, git_exclusion, has_glob, is_below, literal_tree, push_unique,
-    runs_later_exclusion, split, spot,
+    Spot, domain, git_exclusion, has_glob, literal_tree, push_unique, runs_later_exclusion, split,
+    spot,
 };
 use super::{DEFAULT_NET_RULE, Report};
 use git_internals::runs_later;
@@ -95,11 +97,15 @@ pub struct Generated {
 /// commands' traffic goes to `moat proxy` there; with `linux`, for bubblewrap.
 pub fn generate(ir: &Enforcement, proxy_port: Option<u16>, linux: bool) -> Result<Generated> {
     let mut report = Report::default();
-    let filesystem = Filesystem::build(ir, &mut report)?;
+    let mut filesystem = Filesystem::build(ir, &mut report)?;
     let mut deny_rules = filesystem.static_rules(&mut report);
+    deny_rules.extend(filesystem.node_rules(&report));
     if linux {
+        filesystem.hide_state_dirs(&mut report);
         deny_rules.extend(filesystem.read_rules(&mut report));
-        deny_rules.extend(filesystem.edit_rules(&mut report));
+        for rule in filesystem.edit_rules(&mut report) {
+            push_unique(&mut deny_rules, rule);
+        }
     }
     let mut network = match proxy_port {
         None => network(&ir.egress.net, &mut report),
@@ -300,31 +306,6 @@ impl Filesystem {
                 }
             }
         }
-    }
-
-    /// A directory node in `denyWrite` (no rename or delete of `.claude`) would
-    /// make its whole subtree read-only, `.claude/worktrees/*` included, so a
-    /// node with more specific entries below it is left out and listed.
-    fn drop_directory_nodes(&mut self, report: &mut Report) {
-        let dropped: Vec<String> = self
-            .nodes
-            .iter()
-            .filter(|node| !self.trees.contains(node))
-            .filter(|node| self.deny_write.iter().any(|e| is_below(e, node)))
-            .cloned()
-            .collect();
-        if dropped.is_empty() {
-            return;
-        }
-        self.deny_write.retain(|e| !dropped.contains(e));
-        report.allowance(
-            Kind::FsWrite,
-            "claude-code.directory-nodes",
-            dropped,
-            "a directory in denyWrite covers its subtree, so these directory nodes are left out \
-             and only the files below them are denied; renaming or deleting the directory \
-             itself is left to the hook",
-        );
     }
 
     /// The `Read(./**/…)` rules that make Linux deny what each `/**/…` read

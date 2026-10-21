@@ -68,15 +68,44 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.pi/settings.json",
 ];
 
+/// The [`RUNS_LATER`] files an agent host loads as its own configuration when
+/// it next opens the project: hooks, MCP servers and extensions, which run
+/// with the person's rights. Nothing a build or an install writes, so
+/// `openmoat run` denies commands writing them; CI files and commit-hook
+/// managers' files stay writable there (an install runs `husky`).
+pub const AGENT_CONFIG: &[&str] = &[
+    "**/.claude/hooks/**",
+    "**/.mcp.json",
+    "**/.cursor/mcp.json",
+    "**/.codex/config.toml",
+    "**/.openclaw/extensions/**",
+    "**/.github/hooks/**",
+    "**/.github/mcp.json",
+    "**/.pi/extensions/**",
+    "**/.pi/mcp.json",
+    "**/.pi/settings.json",
+];
+
 /// A write exclusion of one of [`RUNS_LATER`], below the project or below a
 /// directory `moat allow --dir` granted.
 pub fn runs_later_exclusion(pattern: &str) -> bool {
+    exclusion_of(pattern, RUNS_LATER)
+}
+
+/// A write exclusion of one of [`AGENT_CONFIG`], as [`runs_later_exclusion`].
+pub fn agent_config_exclusion(pattern: &str) -> bool {
+    exclusion_of(pattern, AGENT_CONFIG)
+}
+
+/// Whether `pattern` names one of `files` below the project or below a
+/// directory `moat allow --dir` granted.
+fn exclusion_of(pattern: &str, files: &[&str]) -> bool {
     let rest = match spot(pattern) {
         Spot::Project(rest) => rest,
         Spot::Absolute(path) => path,
         Spot::Anywhere(_) => return false,
     };
-    RUNS_LATER
+    files
         .iter()
         .any(|file| rest == *file || rest.ends_with(&format!("/{file}")))
 }
@@ -193,5 +222,26 @@ mod tests {
         }
         let in_projects = asked.iter().filter(|p| p.starts_with("**/")).count();
         assert_eq!(in_projects, RUNS_LATER.len(), "{asked:?}");
+    }
+
+    /// Every agent configuration file is one `runs-later` asks for; CI files
+    /// and commit-hook managers' files are not among them.
+    #[test]
+    fn agent_configuration_is_part_of_runs_later() {
+        for file in AGENT_CONFIG {
+            assert!(RUNS_LATER.contains(file), "{file}");
+        }
+        for file in [
+            "**/.github/workflows/**",
+            "**/.husky/**",
+            "**/.vscode/tasks.json",
+        ] {
+            assert!(!AGENT_CONFIG.contains(&file), "{file}");
+        }
+        assert!(agent_config_exclusion("/__moat_project__/**/.mcp.json"));
+        assert!(agent_config_exclusion("/w/lib/**/.claude/hooks/**"));
+        assert!(!agent_config_exclusion("/__moat_project__/**/.husky/**"));
+        assert!(runs_later_exclusion("/__moat_project__/**/.husky/**"));
+        assert!(!agent_config_exclusion("**/.mcp.json"));
     }
 }

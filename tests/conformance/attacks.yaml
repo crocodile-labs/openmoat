@@ -1339,6 +1339,42 @@
   threat: T9
   action: { shell: "mv .claude .claude-off" }
   expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-codex-dir
+  threat: T9
+  action: { shell: "mv .codex /tmp/old-codex" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-cursor-dir
+  threat: T9
+  action: { shell: "mv sub/.cursor sub/cursor-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-copilot-dir
+  threat: T9
+  action: { shell: "mv .copilot copilot-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-project-gemini-dir
+  threat: T9
+  action: { shell: "mv .gemini gemini-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-move-a-planted-dir-onto-project-hook-dir
+  threat: T9
+  action: { shell: "mv /tmp/planted .claude" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-replace-project-hook-dir-in-place
+  threat: T9
+  action: { shell: "mv -T planted .codex" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-swap-project-hook-dir
+  threat: T9
+  action: { shell: "rm -rf .claude && mv planted .claude" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-swap-project-gemini-dir-through-a-temp-name
+  threat: T9
+  action: { shell: "mv .gemini x && mv planted .gemini" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-rename-tool-on-project-hook-dir
+  threat: T9
+  action: { shell: "rename .claude .claude-off .claude" }
+  expect: { verdict: deny, rules: [kernel-self] }
 
 # T9 the kernel's own environment variables (state dir, test-only terminal override)
 - id: T9-export-moat-home

@@ -134,7 +134,14 @@ something OpenMoat claims to stop.
   [SANDBOX.md](SANDBOX.md#cursors-sandbox)). On Linux, Claude Code's sandbox denies a
   project script the `.env` files that exist under the session's working directory when
   the command starts (#359); one created later, or one in another readable directory
-  (`/add-dir`, a read root, a path outside the user directories), stays readable.
+  (`/add-dir`, a read root, a path outside the user directories), stays readable;
+  for the audit log, whose `-wal` and `-shm` files come and go, the whole state
+  directory is denied there instead. Claude Code's `denyWrite` cannot name a
+  directory without its contents, so another agent's directory (`.cursor`, `.codex`,
+  `.copilot`, `.gemini`) in a subdirectory, and on Linux any of them, can be moved
+  away by a sandboxed command and replaced by one holding its own hook file; on
+  macOS the working directory's and the home's are kept in place, and the hook
+  denies the agent's own `mv`, `rename` or `rm` of one.
   It also drops every glob among the write denies (#372): only `.env`, `.envrc` and
   `.moat` directly in the working directory, and that directory's own `.git` hooks and
   config, are kept from sandboxed writes there; a `.env` or `.moat` in a subdirectory,
@@ -210,6 +217,16 @@ something OpenMoat claims to stop.
     writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`
     in a read root, the project's `.git`; `.envrc` and `.moat` can be created. The hook still denies them for the agent's
     tool calls. `openmoat run --isolate` closes this where bubblewrap runs (below).
+    Without a network namespace, a `--write` path that holds what `kernel-self`
+    protects (`--write ~/.claude` holds `settings.json`) refuses to start, since
+    nothing could keep those paths from commands.
+  - An agent's own configuration in the project (`.claude/hooks/`, `.mcp.json`,
+    `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks/`, `.github/mcp.json`,
+    `.openclaw/extensions/`, `.pi/…`) is unwritable for commands on macOS, a write
+    the person allowed included; on Linux only the files existing directly in the
+    project are, where the agent gets a network namespace, and the rest stays
+    writable inside the project, which Landlock grants whole. CI files and commit-hook managers' files stay writable on both (installs
+    write them); the hook asks before the agent's tools write one.
   - Also on Linux, Landlock restricts TCP by port only. Where bubblewrap can run,
     `openmoat run` gives the agent a network namespace with only loopback, where the
     proxy's port is relayed in, so connections reach only the proxy. Where it is
@@ -220,16 +237,23 @@ something OpenMoat claims to stop.
     D-Bus session bus, other Unix sockets, UDP, raw, netlink and packet sockets are
     closed (`EPERM`), and `io_uring`, which could create sockets around the filter, is
     refused. A send with `MSG_FASTOPEN` (TCP Fast Open, which connects inside
-    `sendto()` without the `connect()` Landlock's port rule checks) is refused too. So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
-    the agent's memory, and debuggers do not work. Names resolve only through the
-    proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them. `socketpair()`
-    stays allowed; its sockets reach only each other.
+    `sendto()` without the `connect()` Landlock's port rule checks) is refused too.
+    So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
+    the agent's memory, and debuggers do not work. So are the kernel keyrings
+    (`keyctl`, `add_key`, `request_key`) and new namespaces (`unshare`, `clone` with a
+    namespace flag; `clone3` answers `ENOSYS`), so a command cannot read the person's
+    session keys or make a user namespace in which to mount over what the sandbox
+    hides; containers and Chromium's own sandbox do not start inside. Names resolve
+    only through the proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them.
+    `socketpair()` stays allowed; its sockets reach only each other.
   - The agent shares the user's terminal. Typing into it is refused: `TIOCSTI` on
     macOS (Seatbelt), `TIOCSTI` and `TIOCLINUX` on Linux (the seccomp filter, also
     inside `--isolate`), whatever the kernel's `dev.tty.legacy_tiocsti` says.
     Otherwise a script could leave a command in the terminal's input that the
-    user's shell runs after the session, outside the sandbox (CVE-2017-5226). Output
-    is not filtered: escape sequences a command prints reach the terminal emulator.
+    user's shell runs after the session, outside the sandbox (CVE-2017-5226). Of the
+    terminals only `/dev/tty` and the one `openmoat run` was started on can be opened,
+    so a command cannot read or write the person's other terminals; a program that
+    opens a pseudo-terminal of its own inside can fail. Output is not filtered: escape sequences a command prints reach the terminal emulator.
     OpenMoat's own text output (`openmoat show`, `openmoat status`, `openmoat policy check`, the
     guard's deny line) shows control characters in agent text as `?`.
 

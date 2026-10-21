@@ -22,7 +22,9 @@ use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 
 use super::landlock::{self, INSIDE_GRANTS_ALLOWANCE, Rules, TCP_PORT_ALLOWANCE};
-use super::patterns::{has_glob, is_below, literal_tree, push_unique, runs_later_exclusion, split};
+use super::patterns::{
+    AGENT_CONFIG, has_glob, is_below, literal_tree, push_unique, runs_later_exclusion, split,
+};
 use super::{Grants, Report};
 
 /// A name below a directory that only a rule for the whole subtree (`dir/**`)
@@ -153,6 +155,28 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<M
     }
     held.sort_by_key(|m| depth(path_of(m)));
     literal_masks(ir, &held, project.first().map(String::as_str))
+}
+
+/// The masks `moat run`'s network namespace adds in the project (`project`,
+/// its resolved spelling first): each agent configuration file or directory
+/// ([`AGENT_CONFIG`]) that exists directly in it, bound read-only, so commands
+/// cannot write, remove or replace it. One created later, or one in a
+/// subdirectory, stays writable; Landlock grants the project whole.
+pub fn agent_config_masks(project: &[String]) -> Vec<Mount> {
+    let Some(real) = project.first() else {
+        return Vec::new();
+    };
+    let mut masks = Vec::new();
+    for pattern in AGENT_CONFIG {
+        let Some(rest) = pattern.strip_prefix("**/") else {
+            continue;
+        };
+        let path = format!("{real}/{}", rest.strip_suffix("/**").unwrap_or(rest));
+        if std::fs::symlink_metadata(&path).is_ok() {
+            masks.push(Mount::ReadOnly(path));
+        }
+    }
+    respelled(&masks, project)
 }
 
 /// The masks for the absolute paths deny rules name without a glob that exist

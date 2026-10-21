@@ -99,6 +99,13 @@ fn redirects_and_write_programs() {
         "mv removes its source: {a:?}"
     );
     assert!(has_write(&a, "/tmp/old"));
+    for program in ["rename", "prename", "perl-rename", "file-rename"] {
+        let a = parsed(&format!("{program} .claude .claude-off .claude"));
+        assert!(
+            has_write(&a, "/p/.claude"),
+            "{program} moves the files it names: {a:?}"
+        );
+    }
     assert!(has_read(&parsed("sort < ./in.txt"), "/p/in.txt"));
     assert!(has_write(&parsed("sed -i '' s/a/b/ ./f.txt"), "/p/f.txt"));
     let a = parsed("dd if=/dev/zero of=/dev/disk2");

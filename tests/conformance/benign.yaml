@@ -443,6 +443,14 @@
   threat: T9
   action: { shell: "mv src/a.rs src/b.rs" }
   expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-rename-project-files
+  threat: T9
+  action: { shell: "rename .jpeg .jpg photos/a.jpeg photos/b.jpeg" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-move-into-project-hook-dir
+  threat: T9
+  action: { shell: "mv notes.md .claude/notes.md" }
+  expect: { verdict: allow, rules: [dev-shell] }
 - id: benign-mkdir-touch-in-project
   action: { shell: "mkdir -p build/out && touch src/new.rs" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }

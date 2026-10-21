@@ -122,10 +122,29 @@ pub fn inline_flags(program: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-/// Programs for which every path argument is a write.
+/// Programs for which every path argument is a write. The `rename` tools
+/// (util-linux `rename FROM TO FILE…`, Perl `rename EXPR FILE…`) move every file
+/// they name; their expressions become writes of paths that rarely exist.
 pub const WRITE_ALL_PATHS: &[&str] = &[
-    "rm", "rmdir", "touch", "mkdir", "chmod", "chown", "chgrp", "truncate", "unlink", "shred",
-    "tee", "install", "mkfifo", "mknod", "mv",
+    "rm",
+    "rmdir",
+    "touch",
+    "mkdir",
+    "chmod",
+    "chown",
+    "chgrp",
+    "truncate",
+    "unlink",
+    "shred",
+    "tee",
+    "install",
+    "mkfifo",
+    "mknod",
+    "mv",
+    "rename",
+    "prename",
+    "perl-rename",
+    "file-rename",
 ];
 
 /// Programs for which the last operand is a write and the others are reads.

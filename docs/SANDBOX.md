@@ -63,6 +63,24 @@ decided by the hook only, not in the OS sandbox (`hook_only` in `--format json`)
   `.git/info/attributes`, submodule hooks, those hook files in a subdirectory,
   `bin/moat`) stays writable for sandboxed commands on Linux; `openmoat sandbox show`
   lists it (`claude-code.linux-write-globs`).
+  The directories themselves (`.claude`, `.codex`, `.cursor`, `.copilot`, `.gemini`)
+  are left out of `denyWrite`, which would make everything inside read-only
+  (`claude-code.directory-nodes`). On macOS Claude Code's sandbox keeps each directory
+  above a literal `denyWrite` path from being renamed or removed, so `openmoat init`
+  writes the `Edit(./.cursor/hooks.json)` rules above, and `Edit(./.copilot/hooks)`,
+  `Edit(./.copilot/settings.json)` and `Edit(./.copilot/config.json)`, on every OS: a
+  sandboxed command cannot move the working directory's `.cursor`, `.codex`,
+  `.copilot` or `.gemini` away and put another one with its own hooks in its place.
+  The home's are kept the same way by their literal entries, and `.claude` by Claude
+  Code itself. Such a directory in a subdirectory, and any of them on Linux, can
+  still be moved by a sandboxed command; the hook denies the agent moving, removing
+  or replacing one (`mv`, `rename`, `rm -rf`; `kernel-self`).
+  On Linux the audit log's `-wal` and `-shm` files come and go as `openmoat guard`
+  writes, and Claude Code's sandbox skips a `denyRead` path that is missing when a
+  command starts, so one made while it runs would stay readable: there the state
+  directory itself is in `denyRead` (`claude-code.linux-state-dir`). Under the home
+  Claude Code hides it already; a `MOAT_HOME` elsewhere is hidden from sandboxed
+  commands whole, its policy included. Claude Code's file tools still read the policy.
 - **Codex** (`config.toml`): a `[permissions.moat]` profile, `default_permissions =
   "moat"` and `features.network_proxy = true`. The `**/` denies (`.env` files) cover
   the project and the read roots inside the home, not system read roots such as
@@ -257,7 +275,10 @@ also hold what Claude Code starts in its next session, outside any sandbox (MCP 
 in `~/.claude.json`, plugins in `~/.claude/plugins/`), and in this tier every command the
 agent runs shares that grant. The hook asks before the agent's own tools write one
 (`runs-later`); a script it runs is not asked. Where the agent's own sandbox is
-available, the Standard tier keeps its commands out of the home altogether.
+available, the Standard tier keeps its commands out of the home altogether. On Linux
+without a network namespace (below) `openmoat run` refuses `--write ~/.claude`, which
+holds `settings.json`: grant narrower paths there (`--write ~/.claude/projects`, and so
+on) or install bubblewrap.
 
 - **macOS 13 or later:** a Seatbelt profile, started with `/usr/bin/sandbox-exec`.
   On macOS 12 and earlier `sandbox-exec` cannot read the profile's `TIOCSTI` deny,
@@ -271,8 +292,13 @@ available, the Standard tier keeps its commands out of the home altogether.
   [evidence in #351](https://github.com/crocodile-labs/openmoat/pull/351)). CI's
   macOS 15 runners (`macos-15-intel`) did not show it.
 - **Linux 6.7 or later:** Landlock rules, plus a seccomp filter that allows only TCP
-  sockets (no UDP, Unix sockets or `ptrace`) and no TCP Fast Open send
-  (`MSG_FASTOPEN`, which connects without the `connect()` Landlock checks). Windows refuses.
+  sockets (no UDP, Unix sockets or `ptrace`), no TCP Fast Open send
+  (`MSG_FASTOPEN`, which connects without the `connect()` Landlock checks), refuses
+  the kernel keyrings (`keyctl`,
+  `add_key`, `request_key`) and refuses new namespaces (`unshare`, and `clone` with a
+  namespace flag; `clone3`, whose flags a filter cannot read, answers `ENOSYS`, so the
+  C library falls back to `clone`). Containers, bubblewrap and Chromium's own sandbox
+  cannot start inside. Windows refuses.
 - **The network on Linux.** Landlock restricts TCP connections by port only, and a
   seccomp filter cannot read the address `connect()` is given (it gets a pointer), so
   those two alone would let a command reach any host on the proxy's port and go around
@@ -296,7 +322,24 @@ available, the Standard tier keeps its commands out of the home altogether.
   glob inside a read root or a `--write` path is covered for the session as under
   `--isolate` (hidden, or bound read-only for a write deny): `~/.cargo/credentials.toml`
   stays unreadable and, with `--write ~/.claude`, `~/.claude/settings.json` unwritable.
-  Without a namespace these stay open, and `openmoat run` names them on every start.
+  Without a namespace these stay open, and `openmoat run` names them on every start;
+  a `--write` path that holds what `kernel-self` protects (OpenMoat's state, an
+  agent's hook settings, existing or not) refuses to start instead (exit 64), naming
+  the paths: install bubblewrap and allow unprivileged user namespaces, or grant a
+  narrower path.
+- **Agents' configuration in the project.** Commands may not write the files an agent
+  loads as its own hooks, MCP servers or extensions in its next session: a project's
+  `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`,
+  `.github/hooks/`, `.github/mcp.json`, `.openclaw/extensions/`, `.pi/extensions/`,
+  `.pi/mcp.json` and `.pi/settings.json`, at any depth. On macOS Seatbelt denies them
+  after every grant, so this holds inside a `--write` path too, and also for a write
+  the hook asked about and the person allowed: change one outside `openmoat run`. CI
+  files and commit-hook managers' files (`.github/workflows/`, `.husky/`, …) stay
+  writable, since installs write them; the hook asks before the agent's own tools write
+  one (`runs-later`). On Linux, where the agent gets a network namespace, each of
+  them that exists directly in the project when the agent starts is bound read-only
+  for the session; one created later or in a subdirectory, and all of them without a
+  namespace, stay writable, since Landlock grants the project whole.
 - **OpenMoat's state directory.** For the same reason, `openmoat run` on Linux refuses to
   start when a tree it grants (the project, a read root, a `--write` path, the temp
   directory) holds the state directory (`MOAT_HOME`, default `~/.moat`) or lies inside
@@ -311,6 +354,12 @@ available, the Standard tier keeps its commands out of the home altogether.
   both with `Operation not permitted`. Typed characters would wait in the terminal's
   input, and the user's shell would run them after the session, outside the sandbox.
   What they write to the terminal (escape sequences included) still reaches it.
+  No other terminal is reachable: the sandbox opens only `/dev/tty` and the terminal
+  devices `openmoat run`'s standard input, output and error are on, not the person's
+  other terminals (`/dev/ttys*`, `/dev/pts/*`). A program that opens a new
+  pseudo-terminal inside (`script`, `expect`, a terminal library such as `node-pty`)
+  is not granted the new terminal's device either, so it can fail there; run it
+  outside `openmoat run`.
 - The agent and every command it starts may read the project, `sandbox.read_roots`,
   the temp directory and the agent's own executable; never the keychain. They may
   write the project, the temp directory and each `--write` path (the agent's state).
