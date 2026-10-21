@@ -53,7 +53,8 @@ fn the_entry_is_installed_once_and_removed_alone() {
         ours["hooks"][0]["command"]
             .as_str()
             .unwrap()
-            .ends_with(" guard --host gemini-cli")
+            // PowerShell adds `; if (-not $?) { exit 2 }` on Windows
+            .contains(" guard --host gemini-cli")
     );
     assert_eq!(
         state(&config, Path::new("/usr/bin/openmoat")),

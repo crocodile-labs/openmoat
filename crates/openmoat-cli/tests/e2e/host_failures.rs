@@ -266,11 +266,11 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
         assert_eq!(mode & 0o777, 0o600);
     }
     let doctor = sb.moat(&["doctor"]);
-    assert!(
-        text(&doctor).contains("! guard            6 call(s) denied with no decision within 30 s"),
-        "{}",
-        text(&doctor)
+    let denied = format!(
+        "! guard            {} call(s) denied with no decision within 30 s",
+        shapes().len()
     );
+    assert!(text(&doctor).contains(&denied), "{}", text(&doctor));
     assert!(
         text(&doctor).contains("most while reading the tool call (phase stdin)"),
         "{}",

@@ -60,7 +60,8 @@ fn init_adds_one_named_before_tool_entry() {
         hook["command"]
             .as_str()
             .unwrap()
-            .ends_with(" guard --host gemini-cli"),
+            // PowerShell adds `; if (-not $?) { exit 2 }` on Windows
+            .contains(" guard --host gemini-cli"),
         "{hook}"
     );
     let before = fs::read_to_string(settings(&sb)).unwrap();
@@ -75,12 +76,16 @@ fn init_adds_one_named_before_tool_entry() {
 #[test]
 fn a_secret_read_or_upload_is_denied() {
     let sb = Sandbox::installed(&[".gemini"]);
-    let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    let reason = reply["reason"].as_str().unwrap();
-    assert!(reason.contains("secrets-paths"), "{reason}");
-    assert_eq!(reply["systemMessage"], reply["reason"]);
+    // On Windows Gemini CLI runs commands in PowerShell, which OpenMoat leaves
+    // unparsed (`unparseable`, a defer), as for Claude Code's PowerShell tool.
+    if !cfg!(windows) {
+        let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
+        assert_eq!(code, Some(DENY), "{reply}");
+        assert_eq!(reply["decision"], "deny");
+        let reason = reply["reason"].as_str().unwrap();
+        assert!(reason.contains("secrets-paths"), "{reason}");
+        assert_eq!(reply["systemMessage"], reply["reason"]);
+    }
 
     let secret = sb.home.join(".aws").join("credentials");
     let read = payload(
@@ -115,8 +120,11 @@ fn allow_ask_and_no_decision_reach_gemini_as_its_own_shapes() {
     );
     let (code, reply) = guard(&sb, &ask);
     assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "ask");
-    assert!(reply["systemMessage"].to_string().contains("git-internals"));
+    // PowerShell on Windows: left to Gemini CLI unparsed, as above
+    if !cfg!(windows) {
+        assert_eq!(reply["decision"], "ask");
+        assert!(reply["systemMessage"].to_string().contains("git-internals"));
+    }
 
     // a call no rule matches, and a tool OpenMoat does not govern: nothing on
     // stdout, so Gemini CLI's own policy decides
