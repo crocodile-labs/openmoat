@@ -238,6 +238,22 @@ deny:
       # cron jobs its Gateway runs (an OpenClaw `cron` add or update is decided as a
       # write of it), so an agent cannot approve its own commands there
       - "~/.openclaw/state/**"
+      # GitHub Copilot CLI: its configuration directory, the hooks directory whose
+      # every file it loads (OpenMoat's included), and the user and repository
+      # settings whose `disableAllHooks` turns them all off; its session folders
+      # stay writable
+      - "~/.copilot"
+      - "~/.copilot/hooks"
+      - "~/.copilot/hooks/**"
+      - "~/.copilot/settings.json"
+      - "~/.copilot/config.json"
+      - "**/.copilot"
+      - "**/.copilot/hooks"
+      - "**/.copilot/hooks/**"
+      - "**/.copilot/settings.json"
+      - "**/.copilot/config.json"
+      - "**/.github/copilot/settings.json"
+      - "**/.github/copilot/settings.local.json"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it
@@ -336,7 +352,7 @@ allow:
       # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` asks)
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
-      "!${project}/**/.openclaw/extensions/**"]
+      "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -698,7 +714,11 @@ ask:
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
-      "~/.openclaw/extensions/**", "**/.openclaw/extensions/**"]
+      "~/.openclaw/extensions/**", "**/.openclaw/extensions/**",
+      # GitHub Copilot CLI: a repository's hook files, and the user's MCP servers,
+      # plugins and custom agents (whose frontmatter may carry hooks)
+      "**/.github/hooks/**",
+      "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

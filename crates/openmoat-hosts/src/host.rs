@@ -5,5 +5,6 @@
 pub(crate) mod claude_code;
 pub(crate) mod codex;
 pub(crate) mod continue_cli;
+pub(crate) mod copilot_cli;
 pub(crate) mod cursor;
 pub(crate) mod openclaw;

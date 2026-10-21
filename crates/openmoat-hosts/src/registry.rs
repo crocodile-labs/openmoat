@@ -21,6 +21,7 @@ pub(crate) fn adapter(host: Host) -> &'static dyn HostAdapter {
         Host::Codex => &host::codex::ADAPTER,
         Host::Cursor => &host::cursor::ADAPTER,
         Host::OpenClaw => &host::openclaw::ADAPTER,
+        Host::CopilotCli => &host::copilot_cli::ADAPTER,
     }
 }
 
@@ -38,6 +39,7 @@ mod tests {
             Host::Cursor,
             Host::Continue,
             Host::OpenClaw,
+            Host::CopilotCli,
         ] {
             let format = spec(host).speaks.unwrap_or(host);
             assert_eq!(adapter(host).spec().id, format.id(), "{host:?}");

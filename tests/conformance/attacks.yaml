@@ -564,6 +564,34 @@
   context: { cwd: /p, project: /p, moved_dirs: { "~/.openclaw/openclaw.json": /etc/openclaw/main.json5 } }
   action: { shell: "echo '{}' > /etc/openclaw/main.json5" }
   expect: { verdict: deny, rules: [kernel-self] }
+# GitHub Copilot CLI loads every file in its hooks directory, OpenMoat's
+# included, and `disableAllHooks` in its user or a repository's settings
+# skips them all
+- id: T9-edit-copilot-hook-file
+  threat: T9
+  action: { fs_write: "~/.copilot/hooks/openmoat.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-remove-copilot-hooks-dir
+  threat: T9
+  action: { shell: "rm -rf ~/.copilot/hooks" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-move-copilot-config-dir
+  threat: T9
+  action: { shell: "mv ~/.copilot ~/.copilot-old" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-disable-copilot-hooks-in-user-settings
+  threat: T9
+  action: { shell: "echo '{\"disableAllHooks\":true}' > ~/.copilot/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-disable-copilot-hooks-in-repo-settings
+  threat: T9
+  action: { fs_write: "/p/.github/copilot/settings.local.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-moved-copilot-hook-file
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.copilot": /srv/copilot } }
+  action: { fs_write: "/srv/copilot/hooks/openmoat.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # Cursor's sandbox.json: the user file OpenMoat writes, and a project's own,
 # which replaces its read boundary and adds hosts (#324)
 - id: T9-widen-cursor-sandbox

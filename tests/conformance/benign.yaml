@@ -86,6 +86,17 @@
   threat: T9
   action: { fs_read: "~/.openclaw/openclaw.json" }
   expect: { verdict: defer, rules: [default] }
+# GitHub Copilot CLI keeps a session's plan in its configuration directory:
+# `kernel-self` guards the hooks and settings there, not the session folders,
+# and a repository's instructions file is project work
+- id: benign-write-copilot-session-plan
+  threat: T9
+  action: { fs_write: "~/.copilot/session-state/s-1/plan.md" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-copilot-instructions
+  threat: T9
+  action: { fs_write: "/p/.github/copilot-instructions.md" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-read-repository-policy
   threat: T9
   action: { fs_read: "/p/.moat/policy.yaml" }

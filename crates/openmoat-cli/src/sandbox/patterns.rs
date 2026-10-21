@@ -61,6 +61,7 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.cursor/mcp.json",
     "**/.codex/config.toml",
     "**/.openclaw/extensions/**",
+    "**/.github/hooks/**",
 ];
 
 /// A write exclusion of one of [`RUNS_LATER`], below the project or below a

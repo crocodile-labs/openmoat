@@ -25,7 +25,7 @@ openmoat ──► openmoat-hosts ──► openmoat-core
 | Crate | Role | Rules |
 |---|---|---|
 | `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists and near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), the Codex `apply_patch` file list (`patch.rs`), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
-| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
+| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
 | `openmoat-proxy` | The egress proxy behind `openmoat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
 | `openmoat` (`crates/openmoat-cli`) | The `openmoat` binary, and `moat` (`src/bin/moat.rs`), the old name kept for a few releases, which starts the `openmoat` beside it: commands, hook installation, the policy lock and its MCP server pins, `openmoat mcp proxy` (`mcp/relay.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
@@ -216,8 +216,14 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | OpenClaw `cron` `add`, `update`, `next_check` | the state database: `<stateDir>/state/openclaw.sqlite` (beside `configPath` from a plugin that sends no `stateDir`) | `FsWrite` (`kernel-self` denies) |
 | OpenClaw `nodes` `invoke` / an action with `outPath` | the params as JSON / `outPath` | `ForeignShell` (`unparseable`) / `FsWrite` |
 | OpenClaw `view_image` | `path` and each of `paths`: local files (a `file://` URL as its path); `http(s)` URLs when no file is named; `data:` images touch nothing | `FsRead`, `ReadFiles`; `Fetch` for one URL, `UnknownTool` for several |
+| GitHub Copilot CLI `bash` / `write_bash`; `powershell` / `write_powershell` | `command` / `input` (typed into a running shell); `toolArgs` is parsed when it is a JSON string | `Shell`; `ForeignShell` |
+| GitHub Copilot CLI `view` / `create`, `edit`, `str_replace`; `str_replace_editor` | `path`; `str_replace_editor` `command` `view` reads, any other command writes | `FsRead` / `FsWrite` |
+| GitHub Copilot CLI `apply_patch` | the patch text: `toolArgs` itself, or its `input` or `patch` | `Patch` |
+| GitHub Copilot CLI `grep`, `rg`, `glob` | every path in `paths` and `path`, the directory of an absolute `glob` `pattern`, else the working directory | `FsRead`, `ReadFiles` |
+| GitHub Copilot CLI `web_fetch` / `web_search` | `url` / `query` | `Fetch` / `WebSearch` |
+| any other GitHub Copilot CLI tool, MCP tools included (the payload does not mark them) | tool name and arguments, as an MCP call's | `McpTool` |
 | any other OpenClaw tool (`message`, `sessions_*`, `cron` `run`/`remove`/`wake`, the other `nodes` actions, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |
-| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`) | — | none: `ungoverned` |
+| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`, GitHub Copilot CLI `ask_user`, `report_intent`, `task`, `think`, `update_todo`, `read_bash`/`stop_bash`/`list_bash` and their PowerShell forms) | — | none: `ungoverned` |
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,
 written by `openmoat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
@@ -331,6 +337,7 @@ name the path as an allowance; where it is narrower, it must report a loss.
 | Claude Code, Codex, Continue CLI `PreToolUse` | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":…,"permissionDecisionReason":…}}`; nothing for a `defer` | 0, or 2 on deny |
 | Cursor `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | `{"permission":…,"user_message":…,"agent_message":…}` | 0, or 2 on deny |
 | OpenClaw `before_tool_call` (OpenMoat's plugin) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
+| GitHub Copilot CLI `preToolUse` | `{"permissionDecision":…,"permissionDecisionReason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
 
 A `defer` (ADR-025) writes no output for Claude Code, Codex and the Continue CLI and
@@ -689,7 +696,7 @@ crates/openmoat-cli/           the openmoat binary; tests/e2e/ runs it in isolat
                                moatbench/ holds the MoatBench scenarios `openmoat bench` bundles
 tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool call each,
                                with the verdict the default policy must give
-tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, cursor, openclaw)
+tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, copilot-cli, cursor, openclaw)
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
                                host_payload, literal_pattern, proxy_parse,

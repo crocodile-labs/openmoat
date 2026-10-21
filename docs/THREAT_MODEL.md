@@ -442,6 +442,7 @@ something OpenMoat claims to stop.
   - **Codex.** Known gaps: web search and hosted tools are not hooked; asks become denies; calls run unchecked if the hook binary is missing or crashes. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2 (or 2 with nothing on stderr), or times out (default 600 s).
   - **Cursor.** Known gaps: commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined; file-tool asks become denies; Task and tools that name no path are not hooked; a failed hook blocks the call. When the hook fails: runs the call when the hook is missing, crashes or times out, unless the hook entry sets `failClosed: true`; then it blocks the call.
   - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; a parameter rewrite by another plugin and OpenClaw's process input are not checked; calls run unchecked if the Gateway does not load the plugin; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin.
+  - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off; MCP servers are not pinned and MCP tools are told apart from built-in ones only by name; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
 
@@ -508,6 +509,30 @@ something OpenMoat claims to stop.
   [openclaw-hooks]: https://docs.openclaw.ai/plugins/hooks/reference
   [cve-2026-53845]: https://nvd.nist.gov/vuln/detail/CVE-2026-53845
   [cn-runner]: https://github.com/continuedev/continue/blob/main/extensions/cli/src/hooks/hookRunner.ts
+- **GitHub Copilot CLI.** From its [hooks reference][copilot-hooks] and the
+  `@github/copilot` 1.0.101 package (not yet tested against a signed-in `copilot`):
+  a `preToolUse` hook that cannot start, crashes or exits non-zero denies the call
+  (since 1.0.57; exit 2 denies whatever stdout says), but **a hook that times out is
+  killed and the call goes on**: timeouts fail open for every event. `openmoat init`
+  sets `timeoutSec` to 600 and the guard denies on its own after 30 s, so only a guard
+  that cannot even run its own deadline reaches Copilot's. No output is no decision
+  (Copilot's own permission flow); an `ask` is Copilot's prompt, which autopilot turns
+  into a deny. **`disableAllHooks: true` in `~/.copilot/settings.json` or in a
+  repository's `.github/copilot/settings.json` or `settings.local.json` skips every
+  hook file**, OpenMoat's included; `kernel-self` denies the agent writes to those
+  files, the hooks directory and the configuration directory, and `openmoat doctor` and
+  `openmoat status` warn about a repository that sets it. A repository's own
+  `.github/hooks/*.json` load once the folder is trusted and run their commands with
+  the person's rights; writing one asks (`runs-later`) and the two commands warn about
+  each. Policy hooks an administrator puts in `/etc/github-copilot/policy.d` run first
+  and are not OpenMoat's to check. The hook payload does not mark MCP tools, so any
+  tool OpenMoat does not know is checked by the paths and URLs its arguments name, and
+  Copilot's MCP servers (`~/.copilot/mcp-config.json`, a write of which asks) are not
+  pinned. `write_bash` input is checked as a command, `powershell` is `unparseable`.
+  There is no OS sandbox from OpenMoat for Copilot CLI; run it under `openmoat run`
+  for one.
+
+  [copilot-hooks]: https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference
 - **The Continue CLI.** The released Continue CLI does not run hooks: `cn` 1.5.47 (continuedev/continue
   `main` at `5522c6f`) loads them but fires no event (continuedev/continue#11043 closed
   unmerged), so OpenMoat cannot check its tool calls today. Run `cn` under `openmoat run`. When a

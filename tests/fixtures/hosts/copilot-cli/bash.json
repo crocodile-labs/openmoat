@@ -1,0 +1,4 @@
+{
+  "sessionId": "sess-1", "timestamp": 1792540800000, "cwd": "/p",
+  "toolName": "bash", "toolArgs": "{\"command\":\"cargo test --workspace\",\"description\":\"Run the tests\"}"
+}

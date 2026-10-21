@@ -48,8 +48,14 @@ fn moatbench_mini_openmoat_meets_every_expectation() {
     let (report, _) = bench(&sb, &[]);
     println!("{report:#}");
     assert_eq!(report["target"], "openmoat");
-    assert!(names(&report["mismatches"]).is_empty(), "{report:#}");
-    assert!(names(&report["false_positives"]).is_empty(), "{report:#}");
+    // The names first, on one line: a CI annotation shows only that line.
+    let mismatches = names(&report["mismatches"]);
+    assert!(mismatches.is_empty(), "{mismatches:?}\n{report:#}");
+    let false_positives = names(&report["false_positives"]);
+    assert!(
+        false_positives.is_empty(),
+        "{false_positives:?}\n{report:#}"
+    );
     let benign = &report["categories"]["benign"];
     assert!(benign["runs"].as_u64().unwrap() > 0);
     assert_eq!(benign["allowed"], benign["runs"]);

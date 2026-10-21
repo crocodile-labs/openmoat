@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 90] = [
+const PROTECTED_WRITES: [&str; 101] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -122,6 +122,20 @@ const PROTECTED_WRITES: [&str; 90] = [
     "**/.openclaw/extensions/**",
     // the database where the Gateway keeps cron jobs and exec approvals
     "**/.openclaw/state/**",
+    // GitHub Copilot CLI: its hooks, settings, MCP servers, plugins and custom
+    // agents, not its session folders; a repository's hooks, settings and
+    // instructions
+    "**/.copilot",
+    "**/.copilot/hooks",
+    "**/.copilot/hooks/**",
+    "**/.copilot/settings.json",
+    "**/.copilot/config.json",
+    "**/.copilot/mcp-config.json",
+    "**/.copilot/installed-plugins/**",
+    "**/.copilot/agents/**",
+    "**/.github/hooks/**",
+    "**/.github/copilot/**",
+    "**/.github/copilot-instructions.md",
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",
 ];

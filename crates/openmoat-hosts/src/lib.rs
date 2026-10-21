@@ -145,11 +145,19 @@ pub enum Host {
     Continue,
     /// OpenClaw, through OpenMoat's plugin and its `before_tool_call` hook.
     OpenClaw,
+    /// GitHub Copilot CLI (`preToolUse`).
+    CopilotCli,
 }
 
 impl Host {
     /// Every host with a hook to install, in the order commands list them.
-    pub const ALL: [Host; 4] = [Host::ClaudeCode, Host::Codex, Host::Cursor, Host::OpenClaw];
+    pub const ALL: [Host; 5] = [
+        Host::ClaudeCode,
+        Host::Codex,
+        Host::Cursor,
+        Host::OpenClaw,
+        Host::CopilotCli,
+    ];
 
     /// The facts about this host.
     #[must_use]
@@ -311,7 +319,7 @@ pub struct HookRequest {
 #[non_exhaustive]
 pub enum HostError {
     /// `--host` named no supported host.
-    #[error("unknown host `{0}`; supported: claude-code, codex, cursor, openclaw")]
+    #[error("unknown host `{0}`; supported: claude-code, codex, cursor, openclaw, copilot-cli")]
     UnknownHost(String),
     /// The payload is not JSON or does not fit the host's schema.
     #[error("{problem}: {0}", problem = json_problem(.0))]
@@ -367,6 +375,7 @@ mod tests {
             Host::Cursor,
             Host::Continue,
             Host::OpenClaw,
+            Host::CopilotCli,
         ];
         for (i, host) in all.into_iter().enumerate() {
             let spec = host.spec();

@@ -1324,6 +1324,20 @@
   threat: T9
   action: { fs_write: "/p/packages/api/.github/workflows/ci.yml" }
   expect: { verdict: ask, rules: [runs-later] }
+# GitHub Copilot CLI runs a repository's `.github/hooks/*.json` at the next
+# session, and starts the user's MCP servers and plugins
+- id: ask-write-copilot-repo-hook
+  threat: T9
+  action: { fs_write: "/p/.github/hooks/format.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-echo-into-copilot-repo-hook
+  threat: T9
+  action: { shell: "echo '{}' > .github/hooks/x.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-copilot-mcp-config
+  threat: T9
+  action: { fs_write: "~/.copilot/mcp-config.json" }
+  expect: { verdict: ask, rules: [runs-later] }
 - id: ask-write-gitlab-ci
   threat: T9
   action: { fs_write: "/p/.gitlab-ci.yml" }

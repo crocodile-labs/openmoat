@@ -3,8 +3,50 @@ use serde_json::json;
 use super::*;
 
 fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
-    let spec = Host::ClaudeCode.spec().project_settings.as_ref().unwrap();
-    super::warnings(cwd, user_home, spec)
+    super::warnings(cwd, user_home, Host::ClaudeCode)
+}
+
+/// A repository's Copilot settings that turn hooks off, and each hook file in
+/// its `.github/hooks`, are named with the agent that loads them.
+#[test]
+fn copilot_repository_settings_and_hook_files_are_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let user_home = dir.path().join("home");
+    let project = user_home.join("proj");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join(".github/copilot")).unwrap();
+    fs::create_dir_all(project.join(".github/hooks")).unwrap();
+    let copilot = || super::warnings(&project, &user_home, Host::CopilotCli);
+    assert!(copilot().is_empty());
+    fs::write(
+        project.join(".github/copilot/settings.json"),
+        r#"{"model": "gpt-5"}"#,
+    )
+    .unwrap();
+    fs::write(project.join(".github/hooks/notes.txt"), "not a hook").unwrap();
+    assert!(
+        copilot().is_empty(),
+        "a model choice and other files are left alone"
+    );
+    fs::write(
+        project.join(".github/copilot/settings.local.json"),
+        r#"{"disableAllHooks": true}"#,
+    )
+    .unwrap();
+    fs::write(project.join(".github/hooks/audit.json"), "{}").unwrap();
+    let rows = copilot();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows[0].contains("`disableAllHooks`"), "{rows:?}");
+    assert!(rows[1].contains("audit.json: adds hooks"), "{rows:?}");
+    assert!(
+        rows.iter()
+            .all(|r| r.contains("A GitHub Copilot CLI session")),
+        "{rows:?}"
+    );
+    assert!(
+        warnings(&project, &user_home).is_empty(),
+        "not Claude Code's"
+    );
 }
 
 fn found(value: &Value) -> Vec<String> {
