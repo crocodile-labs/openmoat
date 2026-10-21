@@ -202,15 +202,34 @@ To try the same checks with your own agents and model keys, run:
 ANTHROPIC_API_KEY=… OPENAI_API_KEY=… scripts/smoke-real-agents.sh   # or name steps: egress push mcp
 ```
 
-It creates a throwaway `HOME`, `MOAT_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` under a
-new temporary directory, runs `openmoat init` there, and walks through each check in
-headless mode (`claude -p`, `codex exec` on its own and inside `openmoat run`). Before each step it says what
-to expect, and after it prints PASS, FAIL or LOOK (the model did not make the call).
+It creates a throwaway `HOME`, `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+`GEMINI_CLI_HOME`, `PI_CODING_AGENT_DIR` and `COPILOT_HOME` under a new temporary
+directory, runs `openmoat init` there, and walks through each check in headless mode
+(`claude -p`, `codex exec` on its own and inside `openmoat run`, `gemini`, `pi` and
+`copilot` with the prompt and auto-approve flags their `--help` names). Before each step
+it says what to expect, and after it prints PASS, FAIL or LOOK (the model did not make
+the call). The steps are `egress push near-miss mcp on-failure provenance codex-hook
+codex-run gemini gemini-drift pi copilot`:
+
+- `gemini`, `pi` and `copilot` run `openmoat init --hosts <id> --yes` for that agent,
+  check that `openmoat status` and `openmoat doctor` say `hook only`, then ask the agent
+  for a harmless command and `cat ~/.ssh/id_rsa`; they pass when the read is recorded as
+  `deny [secrets-paths]` and the fake key is not in the answer.
+- `gemini-drift` sets `model.name` in Gemini CLI's `settings.json` (calls must still be
+  decided and `doctor` must report the change), then adds a hook entry there (every call
+  must be denied with `kernel-integrity`), and puts the file back.
+
+Gemini CLI takes `GEMINI_API_KEY`, Copilot `COPILOT_GITHUB_TOKEN` (a fine-grained token
+with the "Copilot Requests" permission), and pi the key of `SMOKE_PI_PROVIDER` or of the
+first of Anthropic, OpenAI and Google whose key is set. A Gemini or Copilot key you did
+not set is asked for at the terminal without echo, and is given only to that agent's
+process. Sign-ins these agents keep in your own `~/.gemini`, `~/.pi` or `~/.copilot` are
+never copied; without a key the step prints SKIP and says why.
 Before any agent starts it checks that none of those variables resolves to your real
-home, `~/.claude`, `~/.codex`, `~/.cursor`, `~/.moat` or `~/.ssh`, or to a config
-directory you had set, and refuses to run if one does. The steps make real model calls
-billed to your keys. They use made-up tokens, a fake SSH key and a `pip` that only
-prints. The temporary directory is kept so you can inspect it.
+home, `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini`, `~/.pi`, `~/.copilot`, `~/.moat`
+or `~/.ssh`, or to a config directory you had set, and refuses to run if one does. The
+steps make real model calls billed to your keys. They use made-up tokens, a fake SSH key
+and a `pip` that only prints. The temporary directory is kept so you can inspect it.
 
 ## Fuzzing
 
