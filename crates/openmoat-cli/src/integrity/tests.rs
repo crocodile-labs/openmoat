@@ -86,26 +86,52 @@ fn the_policy_bytes_checked_are_the_bytes_parsed() {
     let pinned = openmoat_core::DEFAULT_POLICY;
     let policy = write(dir.path(), "policy.yaml", pinned);
     let lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&policy)).unwrap();
-    let (drift, kept) = lock.verify_keeping(Some(&policy));
+    let (drift, kept) = lock.verify_keeping(std::slice::from_ref(&policy), &[]);
     assert!(drift.is_empty());
-    let kept = kept.expect("an intact pinned file keeps the bytes it was checked by");
+    let kept = kept
+        .get(&policy)
+        .expect("an intact pinned file keeps the bytes it was checked by")
+        .to_vec();
     // The file changes after the check: what is parsed is still what matched the pin.
     fs::write(&policy, "version: 1\n").unwrap();
     assert_eq!(kept, pinned.as_bytes());
     let parsed = crate::context::parse_policy(kept, &policy).unwrap();
     assert_eq!(parsed, openmoat_core::Policy::parse(pinned).unwrap());
     // Drifted bytes are never kept.
-    let (drift, kept) = lock.verify_keeping(Some(&policy));
+    let (drift, kept) = lock.verify_keeping(std::slice::from_ref(&policy), &[]);
     assert_eq!(drift.len(), 1);
-    assert!(kept.is_none());
+    assert_eq!(kept.get(&policy), None);
 }
 
 #[test]
-fn only_the_named_file_is_kept() {
+fn only_the_named_files_are_kept() {
     let dir = tempfile::tempdir().unwrap();
     let policy = write(dir.path(), "policy.yaml", "version: 1\n");
     let other = dir.path().join("policy.lock");
     let lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&policy)).unwrap();
-    assert_eq!(lock.verify_keeping(None), (Vec::new(), None));
-    assert_eq!(lock.verify_keeping(Some(&other)), (Vec::new(), None));
+    assert_eq!(lock.verify_keeping(&[], &[]), (Vec::new(), Kept::default()));
+    assert_eq!(
+        lock.verify_keeping(std::slice::from_ref(&other), &[]),
+        (Vec::new(), Kept::default()),
+        "a file the lock does not pin is read from disk as before"
+    );
+}
+
+#[test]
+fn the_files_of_a_named_directory_are_kept_under_its_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let packs = dir.path().join("packs");
+    fs::create_dir(&packs).unwrap();
+    let pack = write(&packs, "team.yaml", "version: 1\n");
+    let elsewhere = write(dir.path(), "team.yaml", "version: 1\n");
+    let lock = Lock::pin(Path::new("/x/moat"), &[pack.clone(), elsewhere.clone()]).unwrap();
+    let (drift, kept) = lock.verify_keeping(&[], std::slice::from_ref(&packs));
+    assert!(drift.is_empty());
+    fs::write(&pack, "version: 1\ndeny: []\n").unwrap();
+    assert_eq!(kept.get(&pack), Some(b"version: 1\n".as_slice()));
+    assert_eq!(
+        kept.get(&elsewhere),
+        None,
+        "only files directly in the directory"
+    );
 }

@@ -299,7 +299,7 @@ pub fn answered(
     if with_secrets.rules.iter().any(|r| r == TAINT_RULE) {
         return Ok(tainted);
     }
-    let grants = Grants::load(&call.home.grants_path())?;
+    let grants = Grants::load_in(call.home)?;
     let read_row = session.untrusted_last_row;
     let fresh =
         |g: &&approvals::Grant| after_read(g.granted_at_ms, g.audit_row, last_read, read_row);

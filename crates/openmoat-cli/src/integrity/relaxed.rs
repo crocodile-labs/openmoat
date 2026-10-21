@@ -17,7 +17,7 @@ use serde_json::{Map, Value};
 
 use super::digest::is_claude_settings;
 use super::keys::{differing, object_digests};
-use super::{Drift, Lock, deny_for};
+use super::{Drift, Kept, Lock, deny_for};
 use crate::home::Home;
 use crate::install::Recorded;
 
@@ -110,9 +110,9 @@ pub struct Checked {
 pub struct Verified {
     /// The lock, read and parsed once.
     pub lock: Lock,
-    /// The policy file's bytes that matched their pin; `None` when the lock
-    /// does not pin the policy or it drifted.
-    pub policy: Option<Vec<u8>>,
+    /// The state directory, reading each pinned state file that matched its
+    /// pin from the bytes that matched (`kept.rs`), not from disk again.
+    pub home: Home,
     /// The deny, or the settings drift decided through.
     pub checked: Checked,
 }
@@ -128,24 +128,30 @@ pub fn check(home: &Home) -> Result<Verified> {
         );
     }
     let lock = Lock::load(&lock_path)?;
-    let (drift, policy) = lock.verify_keeping(Some(&home.policy_path()));
-    let checked = split(home, &lock, drift);
+    let (drift, home) = super::verify_state(home, &lock);
+    let checked = split(&home, &lock, drift);
     Ok(Verified {
         lock,
-        policy,
+        home,
         checked,
     })
 }
 
 /// Sort `drift`, found by `lock`, into a deny or relaxed drift. Relaxed only
 /// when all of it is: one tampered file denies every call, as it always did.
+/// A settings file's drift is sorted by the bytes the check read, which
+/// `home` keeps ([`super::verify_state`]); without them it denies.
 pub fn split(home: &Home, lock: &Lock, drift: Vec<Drift>) -> Checked {
     if drift.is_empty() {
         return Checked::default();
     }
     // `hosts.json` is pinned as well: when it drifted, that drift denies.
-    let relaxed = Recorded::load(home)
-        .is_ok_and(|r| drift.iter().all(|d| is_relaxed(lock, d, &r.claude_rules)));
+    let kept = home.kept();
+    let relaxed = Recorded::load(home).is_ok_and(|r| {
+        drift
+            .iter()
+            .all(|d| is_relaxed(lock, d, &r.claude_rules, kept))
+    });
     if relaxed {
         Checked {
             deny: None,
@@ -167,8 +173,9 @@ pub(super) fn permission_digests(path: &Path) -> Option<BTreeMap<String, String>
 }
 
 /// Whether `drift` touches only allowlisted keys of a Claude Code settings
-/// file, `owned` being the `permissions.deny` rules OpenMoat wrote there.
-fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String]) -> bool {
+/// file, `owned` being the `permissions.deny` rules OpenMoat wrote there and
+/// `kept` holding the file's bytes as the check read them.
+fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String], kept: &Kept) -> bool {
     // A plain `Modified` has no keys to compare: no baseline, no object, a link.
     let Drift::KeysChanged(path, _) = drift else {
         return false;
@@ -177,7 +184,11 @@ fn is_relaxed(lock: &Lock, drift: &Drift, owned: &[String]) -> bool {
     let Some(pinned) = lock.keys.get(stored.as_ref()) else {
         return false;
     };
-    let Some(root) = settings_object(path) else {
+    // Kept only for a regular Claude Code settings file.
+    let Some(root) = kept
+        .drifted(path)
+        .and_then(|bytes| settings_root(path, bytes))
+    else {
         return false;
     };
     let Some(now) = object_digests(&root, true) else {
@@ -212,7 +223,16 @@ fn settings_object(path: &Path) -> Option<Map<String, Value>> {
     if !is_claude_settings(path) || !fs::symlink_metadata(path).ok()?.file_type().is_file() {
         return None;
     }
-    match serde_json::from_slice(&fs::read(path).ok()?).ok()? {
+    settings_root(path, &fs::read(path).ok()?)
+}
+
+/// The JSON object in `bytes`, read from `path`; `None` unless `path` is a
+/// Claude Code settings file and `bytes` hold an object.
+fn settings_root(path: &Path, bytes: &[u8]) -> Option<Map<String, Value>> {
+    if !is_claude_settings(path) {
+        return None;
+    }
+    match serde_json::from_slice(bytes).ok()? {
         Value::Object(root) => Some(root),
         _ => None,
     }

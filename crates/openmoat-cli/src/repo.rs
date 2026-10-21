@@ -96,12 +96,15 @@ pub fn find(home: &Home, root: &Path) -> Result<Option<Found>> {
 
 /// The person's trust records. Only a file the lock pins counts: `moat trust`
 /// re-pins after writing it, so an unpinned one was written by someone else.
+/// Bytes the lock check kept are of a pinned file, as it matched its pin.
 pub fn trust(home: &Home) -> Result<Trust> {
     let path = home.trust_path();
-    if !Lock::load(&home.lock_path()).is_ok_and(|lock| lock.pins(&path)) {
-        return Ok(Trust::default());
-    }
-    Trust::load(&path)
+    home.load_state(&path, Trust::parse, |path| {
+        if !Lock::load(&home.lock_path()).is_ok_and(|lock| lock.pins(path)) {
+            return Ok(Trust::default());
+        }
+        Trust::load(path)
+    })
 }
 
 /// Whether the repository policy's allow rules apply. With
@@ -117,18 +120,10 @@ pub fn is_trusted(home: &Home, user: &Policy, found: &Found) -> Result<bool> {
 
 /// The user policy with the recorded `moat` binary's paths in `kernel-self`
 /// and the project's repository policy merged in, as `guard` decides with it.
+/// `guard` passes the [`Home`] the lock check returned, so the policy and
+/// every pinned state file merged in are the bytes that matched their pins.
 pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
-    effective_policy_with(home, None, ctx)
-}
-
-/// [`effective_policy`] with the user policy parsed from `checked`, the bytes
-/// the lock check verified, when it kept them (`Home::load_checked_policy`).
-pub fn effective_policy_with(
-    home: &Home,
-    checked: Option<Vec<u8>>,
-    ctx: &EvalContext,
-) -> Result<Policy> {
-    let mut user = home.load_checked_policy(checked)?;
+    let mut user = home.load_policy()?;
     crate::install::self_paths::protect_recorded(home, &mut user)?;
     let Some(root) = &ctx.project else {
         return Ok(user);

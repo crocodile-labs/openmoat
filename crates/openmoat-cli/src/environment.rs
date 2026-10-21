@@ -15,7 +15,7 @@ use openmoat_core::ProgramResolver;
 use serde::{Deserialize, Serialize};
 
 use crate::context::path_string;
-use crate::home::write_private;
+use crate::home::{Home, write_private};
 
 const SNAPSHOT_VERSION: u32 = 1;
 
@@ -105,7 +105,18 @@ impl Snapshot {
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)
             .with_context(|| format!("reading environment snapshot {}", path.display()))?;
-        let snapshot: Self = serde_json::from_str(&text)
+        Self::parse(&text, path)
+    }
+
+    /// [`Snapshot::load`] of `home`'s snapshot, from the bytes the lock check
+    /// kept when it kept them ([`Home::load_state`]).
+    pub fn load_in(home: &Home) -> Result<Self> {
+        home.load_state(&home.environment_path(), Self::parse, Self::load)
+    }
+
+    /// The snapshot in `text`, read from `path` (named in errors).
+    pub fn parse(text: &str, path: &Path) -> Result<Self> {
+        let snapshot: Self = serde_json::from_str(text)
             .with_context(|| format!("parsing environment snapshot {}", path.display()))?;
         if snapshot.version != SNAPSHOT_VERSION {
             bail!(
@@ -136,8 +147,8 @@ impl ProgramResolver for Snapshot {
 /// Where `program` is, as the snapshot `moat init` recorded resolves it: the
 /// pinned location, else the first on the recorded search path. `None`
 /// without a snapshot, so a poisoned `PATH` never picks the program.
-pub fn program(home: &crate::home::Home, program: &str) -> Option<PathBuf> {
-    let snapshot = Snapshot::load(&home.environment_path()).ok()?;
+pub fn program(home: &Home, program: &str) -> Option<PathBuf> {
+    let snapshot = Snapshot::load_in(home).ok()?;
     snapshot
         .programs
         .get(program)

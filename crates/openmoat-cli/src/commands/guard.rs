@@ -269,6 +269,8 @@ fn evaluate(
         return Ok((Some(request), decision));
     }
     out.drifted = verified.checked.relaxed;
+    // From here each pinned state file is read as the lock check matched it.
+    let home = verified.home;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
     if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {
@@ -288,9 +290,9 @@ fn evaluate(
         .context("resolving working directory")?;
     hangs::enter(Phase::Context);
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
-    let policy = crate::repo::effective_policy_with(&home, verified.policy, &ctx)?;
+    let policy = crate::repo::effective_policy(&home, &ctx)?;
     out.known = secrets::known(&policy.secrets, &ctx.home)?;
-    let snapshot = Snapshot::load(&home.environment_path())?;
+    let snapshot = Snapshot::load_in(&home)?;
     hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
     let mut decision = compiled.decide_with(action, &snapshot, &FsPathResolver);
@@ -298,7 +300,7 @@ fn evaluate(
     // `allow` (Cursor's file tools ask for a defer, so they need it); a deny stays a deny.
     if matches!(decision.verdict, Verdict::Ask | Verdict::Defer)
         && let Some(asked) = approvals::approvable(action, Some(&ctx.cwd), &ctx.home)
-        && Grants::load(&home.grants_path())?.matches(
+        && Grants::load_in(&home)?.matches(
             host.id(),
             &request.session_id,
             &asked,

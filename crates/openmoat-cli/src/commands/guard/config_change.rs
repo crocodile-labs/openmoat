@@ -56,9 +56,13 @@ pub(super) fn decision(
     // unpinned file's change would also load a tampered pinned one (every tool
     // call is denied then anyway). Drift the guard decides through loads: it
     // changes Claude Code's own toggles and asks, never a hook.
-    let drift = lock.verify();
+    let (drift, checked) = integrity::verify_state(home, &lock);
     let relaxed = !drift.is_empty();
-    if relaxed && integrity::split(home, &lock, drift.clone()).deny.is_some() {
+    if relaxed
+        && integrity::split(&checked, &lock, drift.clone())
+            .deny
+            .is_some()
+    {
         return Ok(drift_blocks_change(&drift));
     }
     let mut decision = Decision::new(Verdict::Allow);

@@ -46,6 +46,8 @@ pub(super) struct ReadOnce {
     link: Vec<u8>,
     /// The file's contents.
     pub contents: Vec<u8>,
+    /// Whether `path` was a regular file, not a link to one.
+    pub regular: bool,
 }
 
 impl ReadOnce {
@@ -62,7 +64,11 @@ impl ReadOnce {
             link.push(b'\n');
         }
         let contents = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
-        Ok(Self { link, contents })
+        Ok(Self {
+            link,
+            contents,
+            regular: meta.file_type().is_file(),
+        })
     }
 
     /// [`digests`] of these bytes.

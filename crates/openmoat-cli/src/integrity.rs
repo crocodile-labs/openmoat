@@ -21,11 +21,13 @@ use crate::home::{Home, write_private};
 use crate::install::{HookState, HostConfig};
 
 mod digest;
+mod kept;
 mod keys;
 mod relaxed;
 
 pub use digest::sha256_hex;
-use digest::{ReadOnce, digest, digests, is_claude_settings};
+use digest::{digest, digests, is_claude_settings};
+pub use kept::{Kept, verify_state};
 pub use relaxed::{check, split};
 
 const LOCK_VERSION: u32 = 1;
@@ -350,47 +352,7 @@ impl Lock {
 
     /// Compare pinned digests with the files on disk. Empty means intact.
     pub fn verify(&self) -> Vec<Drift> {
-        self.verify_keeping(None).0
-    }
-
-    /// [`Lock::verify`], also returning the bytes of the pinned file `keep`
-    /// that were checked, when it is pinned and intact. Each file is read once,
-    /// so a caller that parses these bytes uses exactly what matched the pin,
-    /// even when the file changes after the check.
-    pub fn verify_keeping(&self, keep: Option<&Path>) -> (Vec<Drift>, Option<Vec<u8>>) {
-        let keep = keep.map(key);
-        let mut kept = None;
-        let mut drift = Vec::new();
-        for (stored, expected) in &self.entries {
-            // A stored key is canonical as of pinning. If it no longer maps to
-            // itself, a directory on the way was moved or replaced by a link:
-            // the file the kernel will read is not the one that was pinned.
-            if key(Path::new(stored)) != *stored {
-                drift.push(Drift::Modified(PathBuf::from(stored)));
-                continue;
-            }
-            match self.check_one(Path::new(stored), expected) {
-                Ok(read) if keep.as_ref() == Some(stored) => kept = Some(read.contents),
-                Ok(_) => {}
-                Err(found) => drift.push(found),
-            }
-        }
-        let profiles = self.codex_profiles.iter().filter_map(|(stored, expected)| {
-            let path = PathBuf::from(stored);
-            if key(&path) != *stored {
-                return Some(Drift::Modified(path));
-            }
-            if fs::symlink_metadata(&path).is_err() {
-                return Some(Drift::Missing(path));
-            }
-            match crate::sandbox::install::codex_part_digest(&path) {
-                Ok(actual) if &actual == expected => None,
-                Ok(_) => Some(Drift::Modified(path)),
-                Err(e) => Some(Drift::Unreadable(path, format!("{e:#}"))),
-            }
-        });
-        drift.extend(profiles);
-        (drift, kept)
+        self.verify_keeping(&[], &[]).0
     }
 
     /// Whether the lock pins the moat profile in the Codex config at `path`.
@@ -401,26 +363,9 @@ impl Lock {
     /// Drift for one pinned file, or `None` when it is intact or not pinned.
     pub fn verify_one(&self, path: &Path) -> Option<Drift> {
         let expected = self.entries.get(&key(path))?;
-        self.check_one(&PathBuf::from(key(path)), expected).err()
-    }
-
-    /// The pinned file at `path`, read once and matching `expected`, or how it
-    /// differs.
-    fn check_one(&self, path: &Path, expected: &str) -> Result<ReadOnce, Drift> {
-        if fs::symlink_metadata(path).is_err() {
-            return Err(Drift::Missing(path.to_path_buf()));
-        }
-        let read = ReadOnce::from(path)
-            .map_err(|e| Drift::Unreadable(path.to_path_buf(), format!("{e:#}")))?;
-        if read
-            .digests(is_claude_settings(path))
-            .iter()
-            .any(|d| d == expected)
-        {
-            Ok(read)
-        } else {
-            Err(self.modified(path.to_path_buf()))
-        }
+        self.check_one(&PathBuf::from(key(path)), expected)
+            .err()
+            .map(|(drift, _)| drift)
     }
 
     /// Drift that renaming `proposal` over the pinned `target` would leave: the
@@ -438,17 +383,6 @@ impl Lock {
                 target: PathBuf::from(key(target)),
             }),
             Err(e) => Some(Drift::Unreadable(proposal.to_path_buf(), format!("{e:#}"))),
-        }
-    }
-
-    /// [`Drift::KeysChanged`] when the pin recorded the file's top-level keys
-    /// and some differ now, else [`Drift::Modified`].
-    fn modified(&self, path: PathBuf) -> Drift {
-        let now = keys::key_digests(&path);
-        let pinned = self.keys.get(&key(&path));
-        match pinned.zip(now).and_then(|(p, n)| keys::describe(p, &n)) {
-            Some(keys) => Drift::KeysChanged(path, keys),
-            None => Drift::Modified(path),
         }
     }
 
