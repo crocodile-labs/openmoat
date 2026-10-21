@@ -208,6 +208,9 @@ pub enum HookFormat {
     /// "bash", "powershell", "timeoutSec"}]}}`, with no `matcher` (the CLI
     /// skips an entry whose matcher is empty).
     Copilot,
+    /// pi: the hook file is OpenMoat's extension itself, which pi loads from
+    /// its agent directory's `extensions/`; the whole file is OpenMoat's.
+    Pi,
 }
 
 /// Where a host reads its MCP server definitions. A file that does not exist

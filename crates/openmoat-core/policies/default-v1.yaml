@@ -254,6 +254,15 @@ deny:
       - "**/.copilot/config.json"
       - "**/.github/copilot/settings.json"
       - "**/.github/copilot/settings.local.json"
+      # pi: the agent directory, OpenMoat's extension in it, the settings that
+      # can turn the extension off and the trust decisions that load a project's
+      # own extensions; other extensions ask (`runs-later`)
+      - "~/.pi"
+      - "~/.pi/agent"
+      - "~/.pi/agent/extensions"
+      - "~/.pi/agent/extensions/openmoat.js"
+      - "~/.pi/agent/settings.json"
+      - "~/.pi/agent/trust.json"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it
@@ -352,7 +361,8 @@ allow:
       # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` asks)
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
-      "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**"]
+      "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**",
+      "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -718,7 +728,12 @@ ask:
       # GitHub Copilot CLI: a repository's hook files, and the user's MCP servers,
       # plugins and custom agents (whose frontmatter may carry hooks)
       "**/.github/hooks/**",
-      "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**"]
+      "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**",
+      # pi extensions, which pi loads and runs with the agent's rights, its MCP
+      # server lists, and a project's pi settings, which can add packages and turn
+      # extensions off
+      "~/.pi/agent/extensions/**", "**/.pi/extensions/**", "~/.pi/agent/mcp.json", "**/.pi/mcp.json",
+      "**/.pi/settings.json"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

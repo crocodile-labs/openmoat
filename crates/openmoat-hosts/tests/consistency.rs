@@ -79,9 +79,11 @@ enum Route {
     OpenClaw,
     /// GitHub Copilot CLI `preToolUse`.
     CopilotCli,
+    /// pi `tool_call` in its terminal UI, through OpenMoat's extension.
+    Pi,
 }
 
-const ROUTES: [Route; 8] = [
+const ROUTES: [Route; 9] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -90,6 +92,7 @@ const ROUTES: [Route; 8] = [
     Route::CursorPreTool,
     Route::OpenClaw,
     Route::CopilotCli,
+    Route::Pi,
 ];
 
 impl Route {
@@ -100,6 +103,7 @@ impl Route {
             Self::CursorShell | Self::CursorReadFile | Self::CursorPreTool => Host::Cursor,
             Self::OpenClaw => Host::OpenClaw,
             Self::CopilotCli => Host::CopilotCli,
+            Self::Pi => Host::Pi,
         }
     }
 }
@@ -245,6 +249,19 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             copilot("web_fetch", &json!({ "url": u })),
             Action::Fetch { url: u.clone() },
         )),
+        (Route::Pi, Intent::Shell(c)) => Ok((pi("bash", &json!({ "command": c })), shell(c))),
+        (Route::Pi, Intent::Read(p)) => Ok((
+            pi("read", &json!({ "path": p })),
+            Action::FsRead { path: p.clone() },
+        )),
+        (Route::Pi, Intent::Write(p)) => Ok((
+            pi(
+                "edit",
+                &json!({ "path": p, "edits": [{ "oldText": "old", "newText": "new" }] }),
+            ),
+            Action::FsWrite { path: p.clone() },
+        )),
+        (Route::Pi, Intent::Fetch(_)) => Err("pi has no fetch tool"),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -306,6 +323,15 @@ fn copilot(tool: &str, args: &Value) -> Value {
     json!({
         "sessionId": "sess-1", "timestamp": 1_792_540_800_000_u64, "cwd": CWD,
         "toolName": tool, "toolArgs": args.to_string(),
+    })
+}
+
+/// OpenMoat's pi extension (`tests/fixtures/hosts/pi`).
+fn pi(tool: &str, input: &Value) -> Value {
+    json!({
+        "hook_event_name": "tool_call", "toolName": tool, "input": input,
+        "toolCallId": "call-1", "sessionId": "sess-1", "cwd": CWD,
+        "hasUI": true, "platform": "darwin",
     })
 }
 
@@ -429,6 +455,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::CursorPreTool, &read, HookEvent::PreToolUseNoAsk),
         (Route::OpenClaw, &shell, HookEvent::PreToolUse),
         (Route::CopilotCli, &read, HookEvent::PreToolUse),
+        (Route::Pi, &shell, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

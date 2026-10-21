@@ -21,8 +21,8 @@ programs it runs and the hosts it connects to, not on how the command is spelt. 
 rules give the same verdict every time, and `openmoat policy check` shows any verdict in
 advance. OpenMoat also writes the same policy into each agent's own OS sandbox, and
 keeps one policy and one tamper-evident log across **Claude Code**, **Codex**,
-**Cursor**, **OpenClaw** and **GitHub Copilot CLI** (OpenClaw and Copilot CLI get the
-hook only, no sandbox).
+**Cursor**, **OpenClaw**, **GitHub Copilot CLI** and **pi** (OpenClaw, Copilot CLI and
+pi get the hook only, no sandbox).
 
 Anything the policy has no rule for goes to your agent's own prompt, as before. It is one
 Rust binary, about 10 ms per check on macOS and Linux. No AI model decides, and nothing
@@ -33,7 +33,7 @@ repository.
 |---|---|---|---|---|
 | The agent's built-in controls | its own permission rules, and your answer to its prompt | no: the prompt shows the command as written | no: each agent has its own settings | each agent's own, if any |
 | Hook tools with pattern lists | matching the command text against patterns | no: another spelling of the same command is other text | depends on the tool | depends on the tool |
-| OpenMoat | rules in one policy file, checked against what the command opens, runs and connects to | yes: variables, `$'…'` quoting, base64 and other decoders, globs and `$(…)` are resolved first | yes: Claude Code, Codex, Cursor, OpenClaw and GitHub Copilot CLI | one local, hash-chained log you can export and verify |
+| OpenMoat | rules in one policy file, checked against what the command opens, runs and connects to | yes: variables, `$'…'` quoting, base64 and other decoders, globs and `$(…)` are resolved first | yes: Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI and pi | one local, hash-chained log you can export and verify |
 
 [Website](https://openmoat.dev) · [Docs](https://openmoat.dev/docs/) · [Quick start](https://openmoat.dev/docs/quickstart/) · [How it decides](https://openmoat.dev/docs/how-it-decides/) · [Limits](https://openmoat.dev/docs/limits/) · [Blog](https://openmoat.dev/blog/) · [Changelog](CHANGELOG.md)
 
@@ -43,8 +43,8 @@ repository.
 
 **Checks on every tool call**
 
-- **Agent hooks** for Claude Code, Codex, Cursor, OpenClaw and GitHub Copilot CLI check
-  every command, file read and write, web request and MCP call before it runs.
+- **Agent hooks** for Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI and pi
+  check every command, file read and write, web request and MCP call before it runs.
 - **A shell parser.** Variables, quoting, decoders, globs, braces, symlinks,
   here-documents and `$(…)` are checked as what they open, and commands handed to
   `ssh`, `git` or `watch` as commands of their own.
@@ -53,8 +53,9 @@ repository.
   agent instructions ask.
 - **Fails closed.** If its own check errors or hangs, the call is blocked. The
   exceptions: if the `openmoat` binary is missing, Codex and Claude Code before 2.1.295
-  run calls unchecked, and OpenClaw runs calls unchecked when its Gateway does not
-  load OpenMoat's plugin ([Limits](#limits)).
+  run calls unchecked, OpenClaw runs calls unchecked when its Gateway does not
+  load OpenMoat's plugin, and pi when it does not load OpenMoat's extension
+  ([Limits](#limits)).
 
 **Limits set by the operating system**
 
@@ -213,6 +214,7 @@ to OpenMoat itself.
 | Cursor | hooks and its OS sandbox (macOS, Linux; hooks only on Windows); asks only for shell and MCP calls; Cursor runs some commands outside its sandbox |
 | OpenClaw | hook only, through OpenMoat's `before_tool_call` plugin; an `ask` is OpenClaw's own approval request; not yet tested against a running Gateway |
 | GitHub Copilot CLI | hook only (`preToolUse`); an `ask` is Copilot's own prompt (a deny in autopilot); a hook that times out lets the call run; not yet tested against a signed-in `copilot` |
+| pi | hook only, through OpenMoat's `tool_call` extension; an `ask` is a pi dialog (a deny in print and JSON mode); a deferred call runs, since pi has no approval step; not yet tested against a running pi |
 | Continue CLI (`cn`) | partial: the released `cn` does not run hooks yet; use `openmoat run` |
 
 What each hook covers: [docs/INSTALL.md](docs/INSTALL.md). The OS sandboxes (Standard,
@@ -268,6 +270,10 @@ configures the sandbox and fills the gaps between them.
   hook times out (it fails open on timeouts; `openmoat init` sets 600 s, and the hook
   denies on its own after 30 s), and `disableAllHooks` in its settings turns every
   hook off; `openmoat doctor` warns about a repository's settings and hook files.
+- **pi** gets no OS sandbox from OpenMoat. An input change by an extension pi loads
+  after OpenMoat's is not checked, a trusted project's `.pi` extensions run with the
+  agent's rights, and calls run unchecked when pi does not load OpenMoat's extension
+  (`pi --no-extensions`).
 
 The full list, with the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 

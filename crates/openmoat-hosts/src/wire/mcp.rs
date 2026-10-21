@@ -78,6 +78,37 @@ pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
     })
 }
 
+/// A host's resource-read tool (Claude Code `ReadMcpResourceTool`, pi
+/// `read_mcp_resource`) asks MCP `server` for the resource at `uri`: decided
+/// as that server's `read_resource` tool, with a `file:` URI read as the file
+/// it names and any other URI as a host it may contact.
+pub(crate) fn read_resource(tool: &str, input: &Value) -> Result<Action, HostError> {
+    let server = crate::input_str(input, tool, "server")?;
+    let uri = crate::input_str(input, tool, "uri")?;
+    let (reads, hosts) = match openmoat_core::file_url_path(&uri) {
+        Some(path) => (vec![path], Vec::new()),
+        // A `file:` URI without an absolute path names no file that can be
+        // checked, so it is refused.
+        None if uri
+            .get(..5)
+            .is_some_and(|s| s.eq_ignore_ascii_case("file:")) =>
+        {
+            return Err(HostError::MalformedArguments {
+                tool: tool.to_owned(),
+                problem: format!("`{uri}` is a file URI without an absolute path"),
+            });
+        }
+        None => (Vec::new(), vec![uri]),
+    };
+    Ok(Action::McpTool {
+        name: format!("mcp__{server}__read_resource"),
+        reads,
+        writes: Vec::new(),
+        hosts,
+        unchecked: None,
+    })
+}
+
 #[derive(Default)]
 struct Resources {
     writes_by_default: bool,

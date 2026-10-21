@@ -97,6 +97,17 @@
   threat: T9
   action: { fs_write: "/p/.github/copilot-instructions.md" }
   expect: { verdict: allow, rules: [project-fs] }
+# pi: `kernel-self` guards OpenMoat's extension, the settings and trust decisions,
+# not reading them, and a project's prompt templates stay project work
+- id: benign-read-pi-settings
+  threat: T9
+  action: { fs_read: "~/.pi/agent/settings.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-project-pi-prompt
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.pi/prompts/review.md" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-read-repository-policy
   threat: T9
   action: { fs_read: "/p/.moat/policy.yaml" }

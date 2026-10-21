@@ -12,7 +12,7 @@ use std::path::Path;
 use anyhow::{Context as _, Result, bail};
 use serde_json::{Map, Value, json};
 
-use super::{HOOK_BACKUP, HookFormat, HookSpec, HostConfig, openclaw};
+use super::{HOOK_BACKUP, HookFormat, HookSpec, HostConfig, openclaw, pi};
 use crate::home::{Home, write_private};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -34,6 +34,10 @@ pub enum HookState {
 }
 
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
+    // pi's hook file is OpenMoat's extension itself, not JSON.
+    if config.format == HookFormat::Pi {
+        return pi::install(home, config, binary, dry_run);
+    }
     let path = &config.settings_path;
     let mut root = read_host(config)?;
     let edited = upsert_all(&mut root, config, binary)?;
@@ -65,6 +69,9 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
 /// with OpenMoat's hooks in it, as [`install`] would write it; `None` when it
 /// would not change. Writes nothing.
 pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Option<String>> {
+    if config.format == HookFormat::Pi {
+        return pi::render(binary, current);
+    }
     if config.format == HookFormat::OpenClaw {
         let parsed = openclaw::parse(current)
             .with_context(|| format!("parsing {}", config.settings_path.display()))?;
@@ -118,6 +125,9 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     let path = &config.settings_path;
     if !path.exists() {
         return HookState::Missing;
+    }
+    if config.format == HookFormat::Pi {
+        return pi::state(config, binary);
     }
     let root = match read_host(config) {
         Ok(v) => v,
@@ -193,8 +203,9 @@ fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path, block: boo
             json!({ "matcher": spec.matcher, "hooks": [hook] })
         }
         HookFormat::Copilot => copilot::entry(config, spec, binary),
-        // OpenClaw's file is edited by `openclaw`, before any entry is built here.
-        HookFormat::Cursor | HookFormat::OpenClaw => json!({
+        // OpenClaw's file is edited by `openclaw` and pi's written by `pi`,
+        // before any entry is built here.
+        HookFormat::Cursor | HookFormat::OpenClaw | HookFormat::Pi => json!({
             "command": cursor_command(config, binary),
             "timeout": spec.timeout,
             "failClosed": true,

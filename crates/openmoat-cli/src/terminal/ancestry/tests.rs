@@ -36,6 +36,12 @@ fn agent_hosts_are_known_by_program_or_script() {
             "/usr/local/bin/node /Users/me/.npm-global/lib/node_modules/openclaw/dist/index.js gateway",
             "openclaw",
         ),
+        ("pi", "pi"),
+        ("/Users/me/.local/bin/pi --continue", "pi"),
+        (
+            "node /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+            "pi-coding-agent",
+        ),
         ("/usr/local/bin/moat run -- claude", "moat"),
         ("/usr/local/bin/openmoat run -- claude", "openmoat"),
         (
@@ -59,6 +65,7 @@ fn a_persons_shell_and_tools_are_not_agents() {
         "/Users/me/src/openmoat/target/debug/deps/e2e-1234",
         "/Users/me/work/openclaw/scripts/ci/quality-gate.sh",
         "vim claude.md",
+        "/usr/bin/pip install x",
         "sshd: me@pts/0",
     ] {
         assert_eq!(agent_name(&argv(line)), None, "{line}");

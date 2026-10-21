@@ -27,7 +27,7 @@ struct Shape {
     unknown_event: Value,
 }
 
-fn shapes() -> [Shape; 5] {
+fn shapes() -> [Shape; 6] {
     let pre_tool_use = |tool: &str| {
         json!({"session_id": "s", "cwd": "/p", "hook_event_name": "PreToolUse",
                "tool_name": tool, "tool_input": {"file_path": "~/.ssh/id_rsa"}})
@@ -81,6 +81,18 @@ fn shapes() -> [Shape; 5] {
             unknown_event: json!({"hook_event_name": "after_tool_call", "toolName": "exec",
                 "params": {"command": "ls"}}),
         },
+        // OpenMoat's pi extension: as OpenClaw's plugin, an unknown tool is
+        // `tool.unknown`, which the default policy leaves to pi (no output).
+        Shape {
+            name: "pi",
+            hook: "pi",
+            env: None,
+            governed: "pi/bash.json",
+            unknown_tool: json!({"hook_event_name": "tool_call", "toolName": "future_tool",
+                "input": {"path": "~/.ssh/id_rsa"}, "sessionId": "s", "cwd": "/p"}),
+            unknown_event: json!({"hook_event_name": "tool_result", "toolName": "bash",
+                "input": {"command": "ls"}}),
+        },
     ]
 }
 
@@ -103,7 +115,7 @@ impl Shape {
         let doc = json(out);
         let verdict = match self.hook {
             "cursor" => &doc["permission"],
-            "openclaw" => &doc["decision"],
+            "openclaw" | "pi" => &doc["decision"],
             _ => &doc["hookSpecificOutput"]["permissionDecision"],
         };
         verdict.as_str().unwrap_or_default().to_owned()
@@ -170,7 +182,7 @@ fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
             assert!(out.stdout.is_empty(), "{}: {}", shape.name, text(&out));
         }
     }
-    // OpenClaw's unknown tool is `default.tool.unknown`, not `ungoverned`.
+    // OpenClaw's and pi's unknown tool is `default.tool.unknown`, not `ungoverned`.
     let shown = sb.moat(&["show", "--recent", "5"]);
     assert_eq!(
         text(&shown).matches("(ungoverned)").count(),
@@ -242,7 +254,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     }
     let doctor = sb.moat(&["doctor"]);
     assert!(
-        text(&doctor).contains("! guard            5 call(s) denied with no decision within 30 s"),
+        text(&doctor).contains("! guard            6 call(s) denied with no decision within 30 s"),
         "{}",
         text(&doctor)
     );
@@ -279,7 +291,7 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
     }
 
     let status = sb.moat(&["status", "--format", "json"]);
-    // OpenClaw has no directory in this sandbox, so it is `not-found`.
+    // OpenClaw and pi have no directory in this sandbox, so they are `not-found`.
     let agents: Vec<Value> = json(&status)["agents"]
         .as_array()
         .cloned()

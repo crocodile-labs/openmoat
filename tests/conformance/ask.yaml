@@ -1455,6 +1455,32 @@
   threat: T9
   action: { shell: "echo 'export default {}' > .openclaw/extensions/x/index.mjs" }
   expect: { verdict: ask, rules: [runs-later] }
+# pi extensions, MCP server lists and a project's pi settings: pi loads and runs
+# them with the agent's rights, the user's at the next start and a project's once
+# it is trusted; a project's settings can also turn OpenMoat's extension off
+- id: ask-write-pi-extension
+  threat: T9
+  action: { fs_write: "~/.pi/agent/extensions/helper.ts" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-pi-extension
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.pi/extensions/helper/index.ts" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-echo-into-project-pi-settings
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { shell: "echo '{\"extensions\":[\"!**/openmoat.js\"]}' > .pi/settings.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-pi-mcp
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.pi/mcp.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-pi-mcp
+  threat: T9
+  action: { fs_write: "~/.pi/agent/mcp.json" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A line the lexer cannot read in full asks, whatever the catch-all: the atoms of
 # the part not read are missing, so a deny there must not become a defer
 - id: ask-deny-next-to-an-ansi-c-nul

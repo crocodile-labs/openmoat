@@ -5,6 +5,7 @@ mod claude_version;
 mod dirs;
 mod hook_file;
 pub mod openclaw;
+pub mod pi;
 pub mod self_paths;
 
 use std::fs;
