@@ -172,6 +172,6 @@ fn every_verdict_reaches_the_host_as_it_must() {
         }
     }
     // Claude Code 6 calls, Codex 4 (no read or fetch tool), Cursor 5 (no
-    // fetch), OpenClaw 6, GitHub Copilot CLI 6
-    assert_eq!(checked, 27);
+    // fetch), OpenClaw 6, GitHub Copilot CLI 5 (its payload names no MCP server)
+    assert_eq!(checked, 26);
 }

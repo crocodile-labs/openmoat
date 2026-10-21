@@ -109,7 +109,7 @@ impl HostAdapter for Adapter {
     }
 
     fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {
-        Some(bench::payload(call, at))
+        bench::payload(call, at)
     }
 
     fn read_reply(&self, _call: &Call, exit: &Exit<'_>) -> Answer {

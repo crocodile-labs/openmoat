@@ -5,10 +5,12 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 
-/// The camelCase payload, `toolArgs` as the JSON string the CLI sends. MCP
-/// tools are named `<server>-<tool>` here, an assumption: the hook payload
-/// carries only the model-facing name.
-pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
+/// The camelCase payload, `toolArgs` as the JSON string the CLI sends; `None`
+/// for an MCP call. Copilot's hook payload carries only the model-facing tool
+/// name, not the server, so OpenMoat cannot match a server's rules (such as
+/// `safe-mcp`) for it: the call is checked by its arguments alone and a
+/// scenario's MCP expectations do not apply to this host.
+pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
     let (tool, args) = match call {
         Call::Shell(command) => ("bash".to_owned(), json!({ "command": command })),
         Call::Read(path) => ("view".to_owned(), json!({ "path": at.file(path) })),
@@ -21,13 +23,15 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
             json!({ "path": at.file(path), "old_str": "old", "new_str": CONTENT }),
         ),
         Call::Fetch(url) => ("web_fetch".to_owned(), json!({ "url": url })),
-        Call::Mcp { server, tool, args } => (format!("{server}-{tool}"), args.clone()),
+        Call::Mcp { .. } => return None,
     };
-    json!({
-        "sessionId": at.session, "timestamp": 1_792_540_800_000_u64, "cwd": at.cwd(),
-        "toolName": tool, "toolArgs": args.to_string(),
-    })
-    .to_string()
+    Some(
+        json!({
+            "sessionId": at.session, "timestamp": 1_792_540_800_000_u64, "cwd": at.cwd(),
+            "toolName": tool, "toolArgs": args.to_string(),
+        })
+        .to_string(),
+    )
 }
 
 /// Exit 2 denies whatever stdout says. On exit 0, empty stdout is no decision
