@@ -206,15 +206,25 @@ fn http_target(
 /// or a `Transfer-Encoding` whose tokens are anything but a single `chunked`.
 /// HTTP/1.0 has no transfer codings, so a 1.0 request carrying
 /// `Transfer-Encoding` is malformed (RFC 9112 §6.1): a server may read its
-/// body by another rule.
+/// body by another rule. So is a length past [`MAX_SIZE`](crate::body::MAX_SIZE),
+/// and a framing header spelled with `_`, which servers that pass headers on
+/// as CGI-style variables read as the header itself.
 fn check_framing(version: u8, headers: &[httparse::Header<'_>]) -> Result<(), RequestError> {
     const AMBIGUOUS: RequestError = RequestError::Unsupported(
         "ambiguous body framing (Content-Length with Transfer-Encoding, repeated, \
-         list-form length, or a transfer coding other than chunked)",
+         list-form or too large a length, a transfer coding other than chunked, or a \
+         framing header spelled with `_`)",
     );
     let mut lengths: Vec<&[u8]> = Vec::new();
     let mut encodings: Vec<&[u8]> = Vec::new();
     for h in headers {
+        let dashed = h.name.replace('_', "-");
+        if h.name.contains('_')
+            && (dashed.eq_ignore_ascii_case("content-length")
+                || dashed.eq_ignore_ascii_case("transfer-encoding"))
+        {
+            return Err(AMBIGUOUS);
+        }
         if h.name.eq_ignore_ascii_case("content-length") {
             lengths.push(h.value);
         } else if h.name.eq_ignore_ascii_case("transfer-encoding") {
@@ -248,9 +258,12 @@ fn check_framing(version: u8, headers: &[httparse::Header<'_>]) -> Result<(), Re
         // RFC 9112 §8.6: a `Content-Length` is one or more decimal digits.
         // The explicit all-ASCII-digit check rejects `+10`, `-10`, embedded
         // whitespace (`10 10`), hex (`0x0a`) and the list form (`10, 10`);
-        // `u64::from_str` guards against overflow after that.
+        // the number is then held to the largest chunk size the body follows.
         let digits_only = !trimmed.is_empty() && trimmed.bytes().all(|b| b.is_ascii_digit());
-        if !digits_only || trimmed.parse::<u64>().is_err() {
+        let in_range = trimmed
+            .parse::<u64>()
+            .is_ok_and(|n| n <= crate::body::MAX_SIZE);
+        if !digits_only || !in_range {
             return Err(AMBIGUOUS);
         }
     }
@@ -285,8 +298,14 @@ fn authority(raw: &str, default_port: Option<u16>) -> Result<(String, u16), Requ
         };
         (normalise_name(host).ok_or(BAD)?, port)
     };
+    // A port is digits only (RFC 3986 §3.2.3); `u16::from_str` also takes a
+    // leading `+`, which a server reading the forwarded `Host` may not.
     let port = match (port, default_port) {
-        (Some(p), _) => p.parse::<u16>().ok().filter(|p| *p != 0).ok_or(BAD)?,
+        (Some(p), _) => Some(p)
+            .filter(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|p| p.parse::<u16>().ok())
+            .filter(|p| *p != 0)
+            .ok_or(BAD)?,
         (None, Some(d)) => d,
         (None, None) => return Err(BAD),
     };

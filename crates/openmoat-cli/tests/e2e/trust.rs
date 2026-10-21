@@ -97,9 +97,10 @@ fn trust_is_person_only_and_refused_over_drift() {
     assert!(!sb.home.join(".moat/trust.json").exists());
 }
 
-/// T9: a trust record nobody pinned (written past `moat trust`) is ignored.
+/// T9: a trust record nobody pinned (written past `moat trust`) is never
+/// trusted: `init` pinned the file as missing, so planting one is drift.
 #[test]
-fn an_unpinned_trust_record_is_ignored() {
+fn a_planted_trust_record_is_never_trusted() {
     use sha2::{Digest as _, Sha256};
     use std::fmt::Write as _;
 
@@ -119,7 +120,9 @@ fn an_unpinned_trust_record_is_ignored() {
         .replace('\\', "/");
     let record = serde_json::json!({"version": 1, "repos": {root: digest}});
     std::fs::write(sb.home.join(".moat/trust.json"), record.to_string()).unwrap();
-    assert_eq!(deploy(&sb, &project).0, "defer");
+    let (verdict, reason) = deploy(&sb, &project);
+    assert_eq!(verdict, "deny", "{reason}");
+    assert!(reason.contains("kernel-integrity"), "{reason}");
 
     // The record itself is right: once a person pins it, it applies.
     let out = sb.moat_as_person(&["init", "--yes"]);

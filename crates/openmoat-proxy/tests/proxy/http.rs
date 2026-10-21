@@ -133,6 +133,39 @@ fn a_chunked_body_the_proxy_cannot_follow_is_refused() {
 }
 
 #[test]
+fn a_chunked_body_that_goes_wrong_after_the_head_is_cut_and_recorded() {
+    // The head and a good chunk are allowed and forwarded; the malformed
+    // chunk size comes in a later read, which the relay checks.
+    let h = start(None, Limits::default());
+    let port = h.port();
+    let mut s = h.connect();
+    s.write_all(
+        format!(
+            "POST http://allowed.test:{port}/a HTTP/1.1\r\nHost: allowed.test:{port}\r\n\
+             Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n"
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    let forwarded = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    assert!(forwarded.ends_with("5\r\nhello\r\n"), "{forwarded}");
+    s.write_all(b"5 5\r\nhello\r\n0\r\n\r\n").unwrap();
+    let _ = read_all(&mut s);
+    let deadline = std::time::Instant::now() + WAIT;
+    while h.rows().len() < 2 && std::time::Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(20));
+    }
+    let rows = h.rows();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[0].verdict, Verdict::Allow);
+    assert_eq!(
+        (rows[1].verdict, rows[1].rules.as_slice()),
+        (Verdict::Deny, &["proxy-request".to_owned()][..])
+    );
+    assert!(rows[1].reasons[0].contains("malformed chunked"), "{rows:?}");
+}
+
+#[test]
 fn a_refused_upload_still_reads_the_403() {
     // The proxy refuses before reading the body. Closing with that body
     // unread resets the connection, and the client loses the 403 it was sent.

@@ -299,3 +299,19 @@ fn quoted_keys_mask_their_quoted_value() {
     let doc = redact_value(json!({"command": r#"curl -d '{"password":"hunter22"}' x.test"#}));
     assert!(!doc.to_string().contains("hunter22"), "{doc}");
 }
+
+#[test]
+fn a_quoted_value_with_spaces_is_masked_whole() {
+    for text in [
+        r#"export DB_PASSWORD="correct horse battery staple""#,
+        "export DB_PASSWORD='correct horse battery staple'",
+        "mysql --password 'correct horse battery staple' db",
+        r#"curl -u "alice:correct horse battery staple" x.test"#,
+    ] {
+        let out = redact(text);
+        for word in ["correct", "horse", "battery", "staple"] {
+            assert!(!out.contains(word), "{text} -> {out}");
+        }
+        assert_eq!(redact(&out), out, "idempotent");
+    }
+}

@@ -18,12 +18,15 @@ mod git;
 mod range;
 mod scan;
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use openmoat_audit::KnownSecrets;
 use openmoat_core::{Decision, Push, Verdict};
 
 use git::{Git, Unchecked};
+
+use crate::environment::Snapshot;
 
 pub const SECRET_RULE: &str = "push-secret";
 pub const RUNS_LATER_RULE: &str = "push-runs-later";
@@ -61,13 +64,32 @@ struct Findings {
 /// `decision` for a call whose shell command holds `pushes`, after the push
 /// check. `known` holds the brokered secret values the guard can read;
 /// `tainted` is whether the session read untrusted content or a secret. A
-/// deny is returned as it is, without reading the repository.
-pub fn check(pushes: &[Push], known: &KnownSecrets, tainted: bool, decision: Decision) -> Decision {
+/// deny is returned as it is, without reading the repository. git is the one
+/// `snapshot`, the search path `openmoat init` recorded, finds; without one
+/// the push asks.
+pub fn check(
+    pushes: &[Push],
+    snapshot: &Snapshot,
+    known: &KnownSecrets,
+    tainted: bool,
+    decision: Decision,
+) -> Decision {
     if pushes.is_empty() || decision.verdict == Verdict::Deny {
         return decision;
     }
+    let Some(git) = snapshot.program("git") else {
+        return tighten(
+            decision,
+            Verdict::Ask,
+            UNCHECKED_RULE,
+            "what the push would publish was not checked: no git with an absolute path is in \
+             the search path `openmoat init` recorded"
+                .to_owned(),
+        );
+    };
     let budget = budget();
-    let findings = inspect(pushes, known, tainted, Instant::now() + budget, budget);
+    let at = (Instant::now() + budget, budget);
+    let findings = inspect(pushes, &git, known, tainted, at);
     if let Some(secret) = findings.secret {
         return tighten(
             decision,
@@ -105,10 +127,10 @@ pub fn check(pushes: &[Push], known: &KnownSecrets, tainted: bool, decision: Dec
 
 fn inspect(
     pushes: &[Push],
+    program: &Path,
     known: &KnownSecrets,
     tainted: bool,
-    deadline: Instant,
-    budget: Duration,
+    (deadline, budget): (Instant, Duration),
 ) -> Findings {
     let mut findings = Findings::default();
     for push in pushes {
@@ -121,7 +143,7 @@ fn inspect(
                 );
                 continue;
             };
-            let git = Git::new(dir, deadline, budget);
+            let git = Git::new(program, dir, deadline, budget);
             let scanned = range::revisions(&git, &spec).and_then(|revs| match revs {
                 Some(revs) => scan::scan(&git, &revs, known, tainted).map(Some),
                 None => Ok(None),

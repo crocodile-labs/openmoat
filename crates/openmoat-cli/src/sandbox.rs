@@ -173,13 +173,30 @@ pub fn bwrap_mounts(
     grants: Grants,
 ) -> anyhow::Result<bwrap::Generated> {
     let (ir, grants) = lower_for_session(policy, ctx, grants)?;
-    let project = ctx
-        .real_project
+    bwrap::generate(&ir, &grants, &project_spellings(ctx))
+}
+
+/// The masks `moat run`'s network namespace on Linux adds over the paths deny
+/// rules name inside the read roots and `--write` paths of `rules`
+/// ([`bwrap::grant_masks`]).
+#[cfg(target_os = "linux")]
+pub fn netns_masks(
+    policy: &Policy,
+    ctx: &EvalContext,
+    rules: &landlock::Rules,
+) -> anyhow::Result<Vec<bwrap::Mount>> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    Ok(bwrap::grant_masks(&ir, rules, &project_spellings(ctx)))
+}
+
+/// The project's spellings in `ctx`, the resolved one first.
+#[cfg(target_os = "linux")]
+fn project_spellings(ctx: &EvalContext) -> Vec<String> {
+    ctx.real_project
         .iter()
         .chain(&ctx.project)
         .cloned()
-        .collect::<Vec<_>>();
-    bwrap::generate(&ir, &grants, &project)
+        .collect()
 }
 
 /// Codex's `config.toml`, next to the hook file (`$CODEX_HOME` or `~/.codex`).

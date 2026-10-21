@@ -4,18 +4,19 @@
 //! The stdio transport is one JSON-RPC message (or batch) per line. The relay
 //! reads each line from the host and from the server. It changes two things only:
 //!
-//! - the result of a `tools/list` request leaves out tools held by the pins
-//!   (`tools.rs`): changed since a person accepted them, or new, which every
-//!   tool of a server with no pins yet is (ADR-032);
+//! - a response that lists tools (`result.tools`, whatever its id) leaves out
+//!   tools held by the pins (`tools.rs`): changed since a person accepted them,
+//!   or new, which every tool of a server with no pins yet is (ADR-032);
 //! - a `tools/call` for a held tool, or for a tool the pins never accepted, is
 //!   answered by the relay with error -32602 (unknown tool, as the MCP
 //!   specification has it) naming `moat mcp accept`, and never reaches the server.
 //!
 //! Every `tools/call` is recorded through [`Recorder`]; one that cannot be
-//! recorded is refused, as the egress proxy refuses a connection. Lines that are
-//! not JSON pass through untouched: the host could not read them either.
+//! recorded is refused, as the egress proxy refuses a connection. A line from the
+//! host that is not JSON the relay reads is answered with a parse error and not
+//! passed on; one from the server passes through untouched: the host could not
+//! read it either.
 
-use std::collections::BTreeSet;
 use std::io::{BufRead, Write};
 use std::sync::{Mutex, PoisonError};
 
@@ -29,6 +30,8 @@ use super::tools::ToolPins;
 const MAX_LINE: u64 = 64 * 1024 * 1024;
 /// JSON-RPC "invalid params", which MCP uses for an unknown tool.
 const UNKNOWN_TOOL: i64 = -32602;
+/// JSON-RPC "parse error".
+const PARSE_ERROR: i64 = -32700;
 
 /// Where the relay records each tool call.
 pub trait Recorder: Send + Sync {
@@ -52,8 +55,6 @@ struct State {
     /// No pins existed when the session started, the policy trusts first
     /// sight, and no listing came yet: the first listing is pinned as it is.
     first: bool,
-    /// Ids of `tools/list` requests whose responses are still to come.
-    lists: BTreeSet<String>,
     /// Why the pins could not be saved; every call is refused then.
     broken: Option<String>,
 }
@@ -86,7 +87,6 @@ impl Relay {
             state: Mutex::new(State {
                 pins: pins.unwrap_or_else(|| ToolPins::new(server)),
                 first,
-                lists: BTreeSet::new(),
                 broken: None,
             }),
             recorder,
@@ -101,8 +101,16 @@ impl Relay {
 
     /// One line from the host.
     pub fn host_line(&self, line: &str) -> Vec<Routed> {
+        // A line the relay cannot read is not passed on: a server's own parser
+        // may read it (a lone surrogate, an out-of-range number), and a
+        // `tools/call` in it would reach the server unchecked.
         let Ok(message) = serde_json::from_str::<Value>(line) else {
-            return vec![Routed::Server(line.to_owned())];
+            if line.trim().is_empty() {
+                return Vec::new();
+            }
+            let reply = json!({"jsonrpc": "2.0", "id": null, "error": {"code": PARSE_ERROR,
+                "message": "OpenMoat's MCP proxy cannot read this message, so it is not passed on"}});
+            return vec![Routed::Host(reply.to_string())];
         };
         let Value::Array(batch) = message else {
             return match self.request(&message) {
@@ -134,12 +142,6 @@ impl Relay {
     fn request(&self, message: &Value) -> Result<(), Option<Value>> {
         let id = message.get("id");
         match message.get("method").and_then(Value::as_str) {
-            Some("tools/list") => {
-                if let Some(id) = id {
-                    self.state().lists.insert(id.to_string());
-                }
-                Ok(())
-            }
             Some("tools/call") => {
                 let tool = message
                     .pointer("/params/name")
@@ -200,18 +202,15 @@ impl Relay {
         }
     }
 
-    /// Filter a `tools/list` response; `true` when `message` changed.
+    /// Filter a `tools/list` response; `true` when `message` changed. Every
+    /// response with a tools array counts as one, whatever its id: a client
+    /// matches ids by value (`Number(id)` in the TypeScript SDK), so a server
+    /// answering `"2"` or `2.0` would otherwise pass a listing unfiltered.
     fn response(&self, message: &mut Value) -> bool {
         if message.get("method").is_some() {
             return false;
         }
-        let Some(id) = message.get("id").map(Value::to_string) else {
-            return false;
-        };
         let mut state = self.state();
-        if !state.lists.remove(&id) {
-            return false;
-        }
         let Some(Value::Array(tools)) = message.pointer_mut("/result/tools") else {
             return false;
         };

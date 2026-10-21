@@ -114,6 +114,12 @@ pub fn connect(
     let mut last = None;
     for addr in &addrs {
         match TcpStream::connect_timeout(addr, timeout) {
+            // A connection to this machine leaves from the address it goes
+            // to (RFC 6724 rule 1, and the local route on IPv4). Nothing has
+            // been sent yet; the stream is dropped, so it closes.
+            Ok(stream) if !loopback_ok.contains(addr) && to_this_machine(&stream, addr.ip()) => {
+                return Err(Refusal::Address(*addr, Forbidden::ThisMachine));
+            }
             Ok(stream) => return Ok(stream),
             Err(e) => last = Some(e),
         }
@@ -122,4 +128,12 @@ pub fn connect(
         Some(e) => format!("cannot connect to {host}:{port}: {e}"),
         None => format!("cannot connect to {host}:{port}"),
     }))
+}
+
+/// Whether `stream`, connected to `peer`, reached this machine: its own end
+/// has the same address. A stream whose own address cannot be read counts.
+fn to_this_machine(stream: &TcpStream, peer: IpAddr) -> bool {
+    stream
+        .local_addr()
+        .map_or(true, |own| own.ip().to_canonical() == peer.to_canonical())
 }

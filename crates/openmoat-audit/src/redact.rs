@@ -36,6 +36,39 @@ macro_rules! credential_word {
 
 /// Credential patterns that run before [`TOKEN_SHAPES`], and what replaces each match.
 const NAMED: &[(&str, Mask)] = &[
+    // A named credential whose value is quoted, as the shell reads it: the
+    // whole quoted value is masked, spaces included (`DB_PASSWORD="a b c"`).
+    // The unquoted form below stops at the first space.
+    (
+        concat!(
+            r"(?i)\b(?P<key>(?:[a-z0-9]+[_-])*",
+            credential_word!(),
+            r#"(?:[_-][a-z0-9]+)*\s*[=:]\s*)(?P<q>\x22)(?P<scheme>(?:bearer|basic)\s+)?(?:\\.|[^\x22\\])+(?P<e>\x22)"#
+        ),
+        Mask::With(judge::named_value),
+    ),
+    (
+        concat!(
+            r"(?i)\b(?P<key>(?:[a-z0-9]+[_-])*",
+            credential_word!(),
+            r"(?:[_-][a-z0-9]+)*\s*[=:]\s*)(?P<q>')(?P<scheme>(?:bearer|basic)\s+)?[^']+(?P<e>')"
+        ),
+        Mask::With(judge::named_value),
+    ),
+    // The same for a flag with its quoted value as the next argument.
+    (
+        r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)\x22(?:\\.|[^\x22\\])+\x22",
+        Mask::Text("${1}\"[redacted]\""),
+    ),
+    (
+        r"(?i)(\s--?(?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|passw(?:or)?d|private[_-]?key)\s+)'[^']+'",
+        Mask::Text("${1}'[redacted]'"),
+    ),
+    // `-u "user:pass word"`: the quoted password, spaces included.
+    (
+        r"(?P<pre>(?:^|\s)(?:-u|--user)(?:\s+|=)(?P<q>['\x22]))(?P<user>[^\s:'\x22]+):(?P<pass>[^'\x22]+)['\x22]",
+        Mask::With(judge::quoted_user_password),
+    ),
     // Named credentials in key=value or key: value form; keep the key. The
     // credential word may be one `_`- or `-`-separated part of a longer name
     // (`AWS_SECRET_ACCESS_KEY`, `GH_TOKEN`, `access_token`), but not the start

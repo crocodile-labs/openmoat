@@ -21,6 +21,7 @@ mod mcp;
 mod preview;
 #[cfg(test)]
 mod tests;
+mod unattended;
 
 pub fn run(args: &InitArgs) -> Result<Code> {
     let dry_run = args.dry_run;
@@ -31,19 +32,25 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let mut out = Deferred::default();
     // Whether a lock existed before this run; `repin` below always leaves one.
     let lock_existed = !dry_run && refuse_repin(&home, &mut out)?;
+    // No person over an existing lock: what the lock trusts stays (`unattended.rs`).
+    let unattended = unattended::applies(lock_existed, crate::terminal::person());
+    if unattended {
+        let recorded = crate::install::self_paths::recorded_binary(&home)?;
+        unattended::refuse_other_binary(&recorded, &binary)?;
+    }
     // Asked before anything is written, so declining everything changes nothing
     // but OpenMoat's own state directory.
     let hosts = choose_hosts(&home, args, &binary, &mut out)?;
 
-    state(&home, dry_run, &mut out)?;
+    state(&home, dry_run, unattended, &mut out)?;
     if !dry_run {
         home.ensure_approval_files()?;
         // Recorded before the files are written: every command from here on,
         // this one included, finds each agent where this shell says it is.
-        record(&home, &hosts)?;
+        record(&home, &hosts, unattended)?;
     }
     for host in hosts.iter().copied() {
-        let config = HostConfig::for_init(&home, host)?;
+        let config = unattended::config(&home, host, unattended)?;
         let outcome = config.install(&home, &binary, dry_run)?;
         let verb = match outcome {
             Outcome::Installed => "installed",
@@ -78,14 +85,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             home.lock_path().display(),
             lock.entries.len()
         )?;
-        mcp::servers(
-            &home,
-            &binary,
-            args.mcp_proxy,
-            &hosts,
-            lock_existed,
-            &mut out,
-        )?;
+        mcp::servers(&home, &binary, args.mcp_proxy, &hosts, unattended, &mut out)?;
         if !hosts.is_empty() {
             backups(&home, &hosts, &mut out)?;
         }
@@ -173,8 +173,8 @@ fn refuse_writable_binary(home: &Home, binary: &std::path::Path) -> Result<()> {
 }
 
 /// OpenMoat's own state: the directory, the default policy (kept when there is
-/// one), the audit log and the search-path snapshot.
-fn state(home: &Home, dry_run: bool, out: &mut Deferred) -> Result<()> {
+/// one), the audit log and the search-path snapshot (kept when `unattended`).
+fn state(home: &Home, dry_run: bool, unattended: bool, out: &mut Deferred) -> Result<()> {
     let prefix = if dry_run { "would" } else { "✔" };
     if !dry_run {
         home.ensure()?;
@@ -216,6 +216,12 @@ fn state(home: &Home, dry_run: bool, out: &mut Deferred) -> Result<()> {
         writeln!(
             out,
             "would environment      {}",
+            home.environment_path().display()
+        )?;
+    } else if unattended && home.environment_path().is_file() {
+        writeln!(
+            out,
+            "· environment      {} kept: no person at a terminal to record a new search path",
             home.environment_path().display()
         )?;
     } else {
@@ -378,11 +384,13 @@ fn host_files(config: &HostConfig) -> Vec<PathBuf> {
 }
 
 /// Record where each of `hosts` keeps its configuration, so later commands
-/// find it without this shell's environment (`hosts.json`, pinned by the lock).
-fn record(home: &Home, hosts: &[Host]) -> Result<()> {
+/// find it without this shell's environment (`hosts.json`, pinned by the lock);
+/// `unattended`, a recorded host keeps its record.
+fn record(home: &Home, hosts: &[Host], unattended: bool) -> Result<()> {
     let mut recorded = Recorded::load(home)?;
     for host in hosts {
-        recorded.insert(&HostConfig::for_init(home, *host)?);
+        let config = HostConfig::for_init(home, *host)?;
+        unattended::record(&mut recorded, &config, unattended);
     }
     recorded.save(home)
 }

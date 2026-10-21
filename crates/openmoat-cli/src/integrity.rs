@@ -127,6 +127,14 @@ pub fn repin_with(
         paths.extend(crate::sandbox::install::cursor_sandbox_files(home)?);
     }
     let mut lock = Lock::pin(binary, &paths)?;
+    // A state file that is missing (one a person accepted as deleted) is
+    // pinned as missing: the guard would otherwise read one planted there
+    // later from disk, unpinned.
+    for path in state_files(home) {
+        lock.entries
+            .entry(key(&path))
+            .or_insert_with(|| kept::ABSENT.to_owned());
+    }
     lock.mcp_servers = mcp_servers;
     for path in profiles.iter().filter(|p| p.is_file()) {
         let digest = crate::sandbox::install::codex_part_digest(path)?;

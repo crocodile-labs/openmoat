@@ -10,6 +10,11 @@ use super::digest::{ReadOnce, is_claude_settings};
 use super::{Drift, Lock, key, keys, spec_keys};
 use crate::home::Home;
 
+/// The pin of a state file that was missing when a person re-pinned: one
+/// that appears there later is drift, never a file read unpinned from disk.
+/// No SHA-256 digest is this word.
+pub(super) const ABSENT: &str = "absent";
+
 /// Pinned files' bytes as [`Lock::verify_keeping`] read them.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Kept {
@@ -80,7 +85,7 @@ impl Lock {
             }
             match self.check_one(Path::new(stored), expected) {
                 Ok(read) => {
-                    if let Some(path) = requested(stored) {
+                    if let (Some(path), Some(read)) = (requested(stored), read) {
                         kept.intact.insert(path, read.contents);
                     }
                 }
@@ -117,14 +122,18 @@ impl Lock {
         })
     }
 
-    /// The pinned file at `path`, read once and matching `expected`, or how it
+    /// The pinned file at `path`, read once and matching `expected` (`None`
+    /// for a file pinned as [`ABSENT`] that is still missing), or how it
     /// differs with what was read, if it could be.
     pub(super) fn check_one(
         &self,
         path: &Path,
         expected: &str,
-    ) -> Result<ReadOnce, (Drift, Option<ReadOnce>)> {
+    ) -> Result<Option<ReadOnce>, (Drift, Option<ReadOnce>)> {
         if fs::symlink_metadata(path).is_err() {
+            if expected == ABSENT {
+                return Ok(None);
+            }
             return Err((Drift::Missing(path.to_path_buf()), None));
         }
         let read = ReadOnce::from(path).map_err(|e| {
@@ -138,7 +147,7 @@ impl Lock {
             .iter()
             .any(|d| d == expected)
         {
-            Ok(read)
+            Ok(Some(read))
         } else {
             Err((
                 self.modified(path.to_path_buf(), &read.contents),

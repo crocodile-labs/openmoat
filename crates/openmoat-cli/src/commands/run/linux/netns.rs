@@ -24,6 +24,7 @@ use super::isolate::{Session, relay_to_proxy, system_bwrap};
 use super::{Confined, Rules};
 use crate::context::path_string;
 use crate::sandbox::Report;
+use crate::sandbox::bwrap::{self, Mount};
 
 /// The namespaces: a user namespace, needed to create the network one
 /// unprivileged, and the network namespace, where bubblewrap brings up
@@ -92,15 +93,31 @@ fn refused(bwrap: &Path) -> Option<String> {
     }
 }
 
-/// What `moat run` prints on every start without a namespace (`why`).
-pub fn port_only_notice(port: u16, why: &str) -> String {
-    format!(
+/// What `moat run` prints on every start without a namespace (`why`), naming
+/// the `masks` only a namespace could have applied.
+pub fn port_only_notice(port: u16, why: &str, masks: &[Mount]) -> String {
+    let mut notice = format!(
         "moat run: the network is restricted by port only: {why}, so a command in the sandbox \
          can reach any host on port {port} and go around the proxy's checks and audit. With \
          bubblewrap (`apt install bubblewrap`) `openmoat run` gives the agent a network of its own \
          whose only exit is the proxy; `openmoat run --isolate` needs it too and also hides the \
          rest of the machine"
-    )
+    );
+    let open: Vec<&str> = masks
+        .iter()
+        .filter_map(|m| match m {
+            Mount::ReadOnly(p) | Mount::Hide { path: p, .. } => Some(p.as_str()),
+            Mount::ReadWrite(_) | Mount::Tmpfs(_) => None,
+        })
+        .collect();
+    if !open.is_empty() {
+        notice = format!(
+            "{notice}.\nmoat run: without it, these paths the policy denies stay open to \
+             commands, because a read root or `--write` path holds them: {}",
+            open.join(", ")
+        );
+    }
+    notice
 }
 
 /// What `moat doctor` warns where there is no namespace, if there is none.
@@ -116,10 +133,12 @@ pub fn doctor_warning() -> Option<String> {
 }
 
 /// `program` under `bwrap` in its own network namespace, `moat isolated`
-/// applying `rules` inside, in `cwd`, with the proxy on `port` relayed in.
+/// applying `rules` inside, in `cwd`, with the proxy on `port` relayed in and
+/// `masks` over the denied paths inside the grants.
 pub fn namespaced(
     bwrap: &Path,
     rules: &Rules,
+    masks: &[Mount],
     mut report: Report,
     program: &Path,
     cwd: &str,
@@ -131,6 +150,8 @@ pub fn namespaced(
     let moat = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .context("locating the moat binary")?;
+    let (blank_file, blank_dir) = session.blanks();
+    let masks = bwrap::args(masks, &blank_file, &blank_dir);
     let mut command = Command::new("/bin/sh");
     command.args(arguments(
         bwrap,
@@ -139,6 +160,7 @@ pub fn namespaced(
         port,
         &serde_json::to_string(rules)?,
         cwd,
+        &masks,
     ));
     command.arg(program);
     Ok(Confined {
@@ -150,7 +172,8 @@ pub fn namespaced(
     })
 }
 
-/// `/bin/sh`'s arguments up to the agent.
+/// `/bin/sh`'s arguments up to the agent; `masks` are bubblewrap's mount
+/// arguments over the whole root.
 fn arguments(
     bwrap: &Path,
     moat: &Path,
@@ -158,6 +181,7 @@ fn arguments(
     port: u16,
     rules: &str,
     cwd: &str,
+    masks: &[String],
 ) -> Vec<String> {
     let mut args = vec![
         "-c".to_owned(),
@@ -166,6 +190,7 @@ fn arguments(
     ];
     args.extend(UNSHARE.map(str::to_owned));
     args.extend(ROOT.map(str::to_owned));
+    args.extend(masks.iter().cloned());
     args.extend(["--chdir", cwd, "--"].map(str::to_owned));
     args.extend([
         path_string(moat),
@@ -195,7 +220,7 @@ mod tests {
             panic!("no bubblewrap, no namespace");
         };
         assert!(why.contains("bubblewrap is not installed"), "{why}");
-        let notice = port_only_notice(41_000, &why);
+        let notice = port_only_notice(41_000, &why, &[]);
         for expected in [
             "restricted by port only",
             "any host on port 41000",
@@ -204,6 +229,17 @@ mod tests {
         ] {
             assert!(notice.contains(expected), "{expected}: {notice}");
         }
+        assert!(!notice.contains("stay open"), "{notice}");
+        let masks = [
+            Mount::ReadWrite("/home/me/.claude".into()),
+            Mount::ReadOnly("/home/me/.claude/settings.json".into()),
+        ];
+        let notice = port_only_notice(41_000, &why, &masks);
+        assert!(
+            notice.contains("stay open to commands")
+                && notice.ends_with(": /home/me/.claude/settings.json"),
+            "{notice}"
+        );
     }
 
     #[test]
@@ -233,6 +269,11 @@ mod tests {
             41_000,
             "{}",
             "/work/project",
+            &[
+                "--ro-bind-try".to_owned(),
+                "/home/me/.claude/settings.json".to_owned(),
+                "/home/me/.claude/settings.json".to_owned(),
+            ],
         );
         let expected = [
             "-c",
@@ -244,6 +285,10 @@ mod tests {
             "--dev-bind",
             "/",
             "/",
+            // the masks over the whole root, after it
+            "--ro-bind-try",
+            "/home/me/.claude/settings.json",
+            "/home/me/.claude/settings.json",
             "--chdir",
             "/work/project",
             "--",

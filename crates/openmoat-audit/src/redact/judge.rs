@@ -123,6 +123,15 @@ pub(super) fn user_password(caps: &Captures<'_>, text: &str) -> String {
     format!("{}{user}:{REPLACEMENT}", group(caps, "pre"))
 }
 
+/// [`user_password`] of a quoted `user:password`, closing quote kept.
+pub(super) fn quoted_user_password(caps: &Captures<'_>, text: &str) -> String {
+    let masked = user_password(caps, text);
+    if masked == whole(caps) {
+        return masked;
+    }
+    format!("{masked}{}", group(caps, "q"))
+}
+
 /// Whether the word after a scheme name is prose rather than a credential.
 fn prose(caps: &Captures<'_>) -> bool {
     let value = group(caps, "v");

@@ -187,6 +187,29 @@ fn tunnelled_ipv4_addresses_are_checked_as_the_address_they_reach() {
 }
 
 #[test]
+fn ipv4_translated_addresses_are_checked_as_the_address_they_reach() {
+    // RFC 2765 / RFC 6145 `::ffff:0:a.b.c.d`: a stateless translator (SIIT)
+    // delivers it to `a.b.c.d`, like the NAT64 and IPv4-compatible forms.
+    for (ip, why) in [
+        ("::ffff:0:7f00:1", Some(Forbidden::Loopback)),
+        ("::ffff:0:a9fe:a9fe", Some(Forbidden::LinkLocal)),
+        ("::ffff:0:6464:64c8", Some(Forbidden::Metadata)),
+        (
+            "::ffff:0:a00:5",
+            Some(Forbidden::Private("a private address (10.0.0.0/8)")),
+        ),
+        ("::ffff:0:808:808", None),
+    ] {
+        assert_eq!(forbidden(ip.parse().unwrap()), why, "{ip}");
+    }
+    let yaml = "version: 1\ndeny:\n  - { id: no-host, net: [\"203.0.113.7\"] }\n";
+    let address = address_policy(&Policy::parse(yaml).unwrap());
+    let addresses = CompiledPolicy::compile(&address, &ctx()).unwrap();
+    let got = denied(&addresses, "::ffff:0:cb00:7107".parse().unwrap());
+    assert_eq!(got.map(|d| d.rules), Some(vec!["no-host".to_owned()]));
+}
+
+#[test]
 fn ordinary_addresses_are_not_forbidden() {
     for ip in [
         "93.184.215.14",
