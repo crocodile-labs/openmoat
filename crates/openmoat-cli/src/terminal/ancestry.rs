@@ -36,6 +36,7 @@ const AGENTS: &[&str] = &[
     "codex",
     "cursor-agent",
     "openclaw",
+    "pi",
     "openmoat",
     "moat",
 ];
@@ -43,12 +44,14 @@ const AGENTS: &[&str] = &[
 /// Directories the agents install their code under, for an agent that runs
 /// as `node <dir>/…/cli.js` or from a versioned file (`claude/versions/2.1.0`).
 /// OpenClaw's command is `openclaw.mjs` (its package `bin`); `openclaw/dist`
-/// covers a Gateway started from the package's built files.
+/// covers a Gateway started from the package's built files. pi runs as
+/// `node <…>/pi-coding-agent/dist/bundle/cli.js` (its package `bin`).
 const AGENT_DIRS: &[&[&str]] = &[
     &["claude", "versions"],
     &["claude-code"],
     &["cursor-agent"],
     &["openclaw", "dist"],
+    &["pi-coding-agent"],
 ];
 
 /// More ancestors than any real process tree has; a longer chain is a loop.

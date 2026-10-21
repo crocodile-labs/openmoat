@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "tool_call",
+  "toolName": "edit",
+  "input": {
+    "path": "~/.pi/agent/extensions/openmoat.js",
+    "edits": [{ "oldText": "return await guard(", "newText": "return; await guard(" }]
+  },
+  "toolCallId": "toolu_edit_2", "sessionId": "0199f3a2-7c1e-7b2a-9d4e-1f2a3b4c5d6e",
+  "cwd": "/p", "hasUI": true, "platform": "darwin"
+}

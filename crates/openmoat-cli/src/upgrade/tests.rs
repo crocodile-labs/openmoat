@@ -88,3 +88,21 @@ fn crlf_policies_line_up_with_the_lf_default() {
     assert_eq!(merged.text, new);
     assert_eq!(line_endings_of("lf\n", &yours), BASE);
 }
+
+/// After one upgrade only the stretches the person changed are offered: a
+/// default addition held back next to one of them is taken by the same upgrade.
+#[test]
+fn one_upgrade_leaves_only_the_persons_conflicts() {
+    let fs_write = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**"]"#;
+    let mine = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**", "!${project}/keys/**"]"#;
+    let rule = "  - id: my-rule\n    shell: [\"make deploy\"]\n";
+    let edited = DEFAULT_V0_3_0
+        .replace(fs_write, mine)
+        .replace("ask:\n", &format!("ask:\n{rule}"));
+    let first = merge(DEFAULT_V0_3_0, &edited, openmoat_core::DEFAULT_POLICY);
+    assert!(first.text.contains(mine) && first.text.contains(rule));
+    assert!(first.conflicts().count() > 0);
+    let again = merge(&first.base, &first.text, openmoat_core::DEFAULT_POLICY);
+    assert_eq!(again.applied().count(), 0);
+    assert_eq!(again.text, first.text);
+}

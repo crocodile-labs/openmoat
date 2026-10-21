@@ -443,6 +443,7 @@ something OpenMoat claims to stop.
   - **Cursor.** Known gaps: commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined; file-tool asks become denies; Task and tools that name no path are not hooked; a failed hook blocks the call. When the hook fails: runs the call when the hook is missing, crashes or times out, unless the hook entry sets `failClosed: true`; then it blocks the call.
   - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; a parameter rewrite by another plugin and OpenClaw's process input are not checked; calls run unchecked if the Gateway does not load the plugin; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin.
   - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off; MCP servers are not pinned and MCP tools are told apart from built-in ones only by name; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
+  - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
 
@@ -478,6 +479,38 @@ something OpenMoat claims to stop.
   a plugin bundle brings in its own `.mcp.json` are not, and an `$include` where
   servers may come from holds back every OpenClaw MCP call. There is no OS sandbox
   from OpenMoat for OpenClaw; run the Gateway under `openmoat run` for one.
+- **pi, when its hook fails.** pi has no command hook either: its "hook" is
+  OpenMoat's extension (`crates/openmoat-cli/integrations/pi/openmoat.js`, written to
+  `<agent dir>/extensions/openmoat.js`), which runs `openmoat guard` from pi's
+  `tool_call` event. From pi 1.3.0's documentation and source (`docs/extensions.md`,
+  "Errors and cleanup"; `dist/core/agent-session.js`), *unverified* against a running
+  pi: a handler that throws blocks the call, and pi waits for a handler without a
+  limit. The extension blocks when `openmoat` is missing or cannot start, crashes,
+  exits other than 0 or 2, answers what it cannot read, or gives no answer within
+  45 s; no output on exit 0 is no decision (a `defer`), and pi, which has no
+  approval step, runs the call. An `ask` is pi's confirmation dialog where pi has a
+  screen (the terminal UI, RPC mode); in print and JSON mode it reaches pi as a deny
+  that says how to approve it. **pi runs every call unchecked when it does not load
+  the extension**: `pi --no-extensions` (`-ne`), an `extensions` entry in pi's
+  `settings.json` that turns it off (`-extensions/openmoat.js`, or a `!` glob), the
+  same in a trusted project's `.pi/settings.json`, which pi resolves first, or a pi
+  started with a `PI_CODING_AGENT_DIR` other than the one `openmoat init` set up.
+  `kernel-self` denies the agent writes to the extension, its directory, pi's
+  `settings.json` and `trust.json` (wherever `PI_CODING_AGENT_DIR` puts them), and
+  the lock pins the extension, so an edit of it stops every call. Under `openmoat run`
+  the sandbox denies those writes to pi itself too, so pi cannot save its settings or
+  a trust decision there. A project's
+  `.pi/settings.json`, `.pi/extensions/` and `.pi/mcp.json` ask (`runs-later`).
+- **pi tools OpenMoat does not check.** pi runs `tool_call` handlers in extension
+  load order and lets each change the call's input; an extension loaded after
+  OpenMoat's (a pi package, a built-in extension) can change it after OpenMoat saw
+  it, and an extension can register a tool under a built-in's name (`read`,
+  `bash`), which OpenMoat then checks as the built-in. Extensions, including a
+  trusted project's, run inside pi with the agent's rights. `codemode` scripts run in
+  QuickJS without files or network; each tool a script calls is checked as its own
+  call. The MCP servers in pi's `mcp.json` are not pinned yet; their tool calls are
+  decided by the policy's `mcp` rules. There is no OS sandbox from OpenMoat for pi;
+  run pi under `openmoat run` for one.
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
   turns its own panics into a deny. A crash that bypasses that (killed, aborted, out of

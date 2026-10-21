@@ -1,0 +1,7 @@
+{
+  "hook_event_name": "tool_call",
+  "toolName": "read", "input": { "path": "README.md" },
+  "toolCallId": "toolu_code_1/1", "parentToolCallId": "toolu_code_1",
+  "sessionId": "0199f3a2-7c1e-7b2a-9d4e-1f2a3b4c5d6e",
+  "cwd": "/p", "hasUI": true, "platform": "darwin"
+}

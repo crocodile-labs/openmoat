@@ -63,7 +63,31 @@ struct Chunk<'h> {
     new: Vec<&'h Hunk>,
 }
 
+/// [`merge_once`] until no clean change is left. A default's stretch that
+/// touches one the person changed is held back with it, and the recorded base
+/// keeps the old lines there; the next diff can then line that stretch up on
+/// its own, as clean. Merging again here takes it now, so one upgrade leaves
+/// nothing to offer next time but the stretches the person changed.
 pub fn merge(base: &str, yours: &str, new: &str) -> Merge {
+    let mut merged = merge_once(base, yours, new);
+    // Each pass applies at least one change; a few are enough in practice.
+    for _ in 0..8 {
+        let next = merge_once(&merged.base, &merged.text, new);
+        if next.applied().next().is_none() {
+            break;
+        }
+        let earlier = merged.changes.into_iter().filter(|c| c.clean);
+        merged = Merge {
+            changes: earlier.chain(next.changes).collect(),
+            text: next.text,
+            base: next.base,
+            ..merged
+        };
+    }
+    merged
+}
+
+fn merge_once(base: &str, yours: &str, new: &str) -> Merge {
     let base_lines: Vec<&str> = base.split_inclusive('\n').collect();
     let your_lines: Vec<&str> = yours.split_inclusive('\n').collect();
     let new_lines: Vec<&str> = new.split_inclusive('\n').collect();

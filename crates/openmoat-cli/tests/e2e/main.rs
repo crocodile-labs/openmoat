@@ -44,6 +44,7 @@ mod openclaw;
 mod packs;
 mod paths;
 mod permission_mode;
+mod pi;
 mod policy_upgrade;
 mod protection;
 mod provenance;

@@ -62,7 +62,13 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root, owned));
         let path = &config.settings_path;
         let openclaw = config.format == HookFormat::OpenClaw;
-        let mut files = vec![(path.clone(), undo_host_json(path, ours, strip, openclaw)?)];
+        // pi's hook file is OpenMoat's extension itself.
+        let hook = if config.format == HookFormat::Pi {
+            undo_whole(path, ours, install::pi::is_ours)?
+        } else {
+            undo_host_json(path, ours, strip, openclaw)?
+        };
+        let mut files = vec![(path.clone(), hook)];
         // A sandbox in a file of its own.
         match sandbox {
             Some(SandboxFormat::CodexProfile) => {
@@ -215,6 +221,35 @@ fn undo_host_json(
     }
     let text = serde_json::to_string_pretty(&root)? + "\n";
     finish(path, &owned(&backups, ours), original, created, &text).map(Some)
+}
+
+/// A hook file that is OpenMoat's whole (pi's extension): deleted, or the
+/// person's file `init` backed up before writing it given back. A file there
+/// that `is_ours` does not recognise is the person's and stays.
+fn undo_whole(
+    path: &Path,
+    ours: &[PathBuf],
+    is_ours: impl Fn(&str) -> bool,
+) -> Result<Option<Undone>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    if !is_ours(&text) {
+        return Ok(None);
+    }
+    let backups = install::backups(path);
+    let original = backups
+        .iter()
+        .find(|b| fs::read_to_string(b).is_ok_and(|t| !is_ours(&t)));
+    finish(
+        path,
+        &owned(&backups, ours),
+        original,
+        original.is_none(),
+        "",
+    )
+    .map(Some)
 }
 
 fn undo_toml(path: &Path, ours: &[PathBuf]) -> Result<Option<Undone>> {

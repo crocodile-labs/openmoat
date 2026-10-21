@@ -25,7 +25,7 @@ openmoat ──► openmoat-hosts ──► openmoat-core
 | Crate | Role | Rules |
 |---|---|---|
 | `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists and near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), the Codex `apply_patch` file list (`patch.rs`), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
-| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
+| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`, `host/pi.rs` with `pi/tools.rs`), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, the `HostAdapter` trait), `registry.rs` (maps each host to its spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
 | `openmoat-proxy` | The egress proxy behind `openmoat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror` |
 | `openmoat` (`crates/openmoat-cli`) | The `openmoat` binary, and `moat` (`src/bin/moat.rs`), the old name kept for a few releases, which starts the `openmoat` beside it: commands, hook installation, the policy lock and its MCP server pins, `openmoat mcp proxy` (`mcp/relay.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files, the environment and the terminal; the only one that starts processes |
@@ -223,7 +223,12 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | GitHub Copilot CLI `web_fetch` / `web_search` | `url` / `query` | `Fetch` / `WebSearch` |
 | any other GitHub Copilot CLI tool, MCP tools included (the payload does not mark them) | tool name and arguments, as an MCP call's | `McpTool` |
 | any other OpenClaw tool (`message`, `sessions_*`, `cron` `run`/`remove`/`wake`, the other `nodes` actions, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |
-| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`, GitHub Copilot CLI `ask_user`, `report_intent`, `task`, `think`, `update_todo`, `read_bash`/`stop_bash`/`list_bash` and their PowerShell forms) | — | none: `ungoverned` |
+| pi `bash` / `powershell` | `command` | `Shell` / `ForeignShell` |
+| pi `read` / `write`, `edit` | `path` as pi resolves it: Unicode spaces as spaces, a leading `@` dropped, a `file:` URL as its path, on Windows `/c/…`, `/mnt/c/…`, `/cygdrive/c/…` as `C:/…`; a relative path with no `cwd` is an adapter error | `FsRead` / `FsWrite` |
+| pi `grep`, `ls` / `find` | `path`, else the working directory / the same, and the directory of an absolute `pattern` | `FsRead` / `FsRead`, `ReadFiles` |
+| pi `mcp__<server>__<tool>`; `read_mcp_resource` | tool name and `input`; `server`, `uri` as for Claude Code's `ReadMcpResourceTool` | `McpTool` |
+| any other pi tool (an extension's) | tool name | `UnknownTool` (`tool.unknown`) |
+| anything else (Claude Code `Task`, `Skill`, Codex `update_plan`, Cursor `preToolUse` `Shell`, `Task`, `MCP:<tool>`, OpenClaw `session_status`, `ask_user`, `process` `poll`/`log`/`list`/`kill`, `plugins` `list`/`inspect`/`search`, `cron` `status`/`list`/`get`/`runs`, `nodes` `status`/`describe`/`pending`/`camera_list`/`device_*`/`which`, GitHub Copilot CLI `ask_user`, `report_intent`, `task`, `think`, `update_todo`, `read_bash`/`stop_bash`/`list_bash` and their PowerShell forms, pi `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`) | — | none: `ungoverned` |
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,
 written by `openmoat init` to `<OpenClaw state dir>/openmoat/openmoat.mjs` with the binary's path,
@@ -238,6 +243,19 @@ blocks the call (ADR-033). `openclaw.json` is JSON5; OpenMoat reads it with its 
 JSON5 reader (`crates/openmoat-cli/src/json5.rs`) and writes it back as plain JSON, and
 refuses to write a file with comments. The lock pins it without `mcp.servers`, whose
 servers are pinned one by one with the other hosts' (ADR-026).
+
+pi has no command hook either. OpenMoat's extension (`crates/openmoat-cli/integrations/pi/openmoat.js`)
+is pi's hook file: `openmoat init` writes it whole, with the binary's path, to
+`<agent dir>/extensions/openmoat.js` (`~/.pi/agent`, or `PI_CODING_AGENT_DIR`), where pi loads
+it on start, and the lock pins it whole (`install/pi.rs`). Its `tool_call` handler runs
+`openmoat guard --host pi` with the event (`toolName`, `input`, `toolCallId`,
+`parentToolCallId`), the session id, `ctx.cwd`, `ctx.hasUI` and the platform on stdin, and maps
+the answer: `deny` (exit 2) to `{ block: true, reason }`, `ask` to pi's confirmation dialog,
+`allow` or nothing to no result. Anything else (no `openmoat`, a crash, another exit code, an
+unreadable answer, no answer in 45 s) blocks the call, and pi blocks a call whose handler
+throws. Without a screen (`hasUI` false: print and JSON mode) the call is `PreToolUseNoAsk`, so
+an `ask` arrives as a deny that says how to approve it. `openmoat uninstall` deletes the file,
+or gives back a file of the person's that `init` backed up.
 
 Claude Code calls only reach OpenMoat for tools in the installed matcher
 (`crates/openmoat-cli/src/install.rs`); a tool outside it is never seen. `Skill`
@@ -338,6 +356,7 @@ name the path as an allowance; where it is narrower, it must report a loss.
 | Cursor `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | `{"permission":…,"user_message":…,"agent_message":…}` | 0, or 2 on deny |
 | OpenClaw `before_tool_call` (OpenMoat's plugin) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | GitHub Copilot CLI `preToolUse` | `{"permissionDecision":…,"permissionDecisionReason":…}`; nothing for a `defer` | 0, or 2 on deny |
+| pi `tool_call` (OpenMoat's extension) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
 
 A `defer` (ADR-025) writes no output for Claude Code, Codex and the Continue CLI and

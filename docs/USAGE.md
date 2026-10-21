@@ -305,9 +305,15 @@ these takes one command in your own terminal (agents are denied all of them):
   written back as plain JSON; one with comments is left alone until you move them out.
   An `ask` arrives as OpenClaw's own approval request (`/approve`, the Control UI or
   your channel's buttons).
+- **pi**: `openmoat init --hosts pi` writes OpenMoat's extension to
+  `~/.pi/agent/extensions/openmoat.js` (or the `extensions/` of `PI_CODING_AGENT_DIR`:
+  run `init` with the variable pi runs with); start pi again, or run `/reload`, so it
+  loads it. An `ask` is a pi dialog; `pi -p` and `--mode json` have none, so there it
+  is a deny you approve with `openmoat allow --last`. A call OpenMoat defers runs, as
+  pi runs every call without OpenMoat.
 - **The `openmoat` binary is missing or broken**: Claude Code and Codex then run tool calls
-  without the hook ("When the hook fails" in [THREAT_MODEL.md](THREAT_MODEL.md)), and Cursor
-  and OpenClaw block them. Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
+  without the hook ("When the hook fails" in [THREAT_MODEL.md](THREAT_MODEL.md)), and Cursor,
+  OpenClaw and pi block them. Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `openmoat uninstall` if you want it off.
 
 ## Report a bug
