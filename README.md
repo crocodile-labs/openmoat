@@ -337,7 +337,7 @@ Found a way past OpenMoat? Report it privately, as described in [SECURITY.md](SE
 
 ## Status
 
-**Usable daily.** The latest release is `0.8.0`. The policy format and commands can
+**Usable daily.** The latest release is `0.9.0`. The policy format and commands can
 still change before 1.0. What is planned: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License

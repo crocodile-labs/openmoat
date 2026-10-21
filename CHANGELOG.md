@@ -8,6 +8,8 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
 ### Security
 - `openmoat proxy` refuses a connection that reaches this machine through one of its other addresses (its LAN or public IPv4 or IPv6 address, where services listening on every interface answer as on loopback); it is closed before a byte is sent (`proxy-address`) ([#619](https://github.com/crocodile-labs/openmoat/pull/619)).
 - `openmoat proxy` checks an IPv4-translated address (`::ffff:0:a.b.c.d`) as the IPv4 address it reaches, as it does NAT64 and IPv4-compatible ones, so `::ffff:0:a9fe:a9fe` is refused as link-local ([#619](https://github.com/crocodile-labs/openmoat/pull/619)).
@@ -749,7 +751,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/crocodile-labs/openmoat/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/crocodile-labs/openmoat/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/crocodile-labs/openmoat/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/crocodile-labs/openmoat/compare/v0.5.7...v0.6.0
