@@ -491,7 +491,7 @@ fn classify_arguments(
         }
     }
     if let Some(dest) = &copy {
-        for path in copy::written(dest, &sources) {
+        for path in copy::writes(argv, program, dest, &sources) {
             sink.write(ctx, &path)?;
         }
     }

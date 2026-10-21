@@ -101,11 +101,28 @@ fn claude_codes_own_lists_and_toggles_leave_calls_decided() {
     let sb = sandbox();
     edit_settings(&sb, |s| {
         s["permissions"]["allow"] = json!(["Bash(ls)"]);
-        s["permissions"]["defaultMode"] = json!("acceptEdits");
+        s["permissions"]["defaultMode"] = json!("plan");
         s["language"] = json!("french");
     });
     assert_eq!(read_src(&sb).0, "allow");
     assert_eq!(read_ssh_key(&sb).0, "deny");
+}
+
+/// A mode in which Claude Code runs a deferred call unasked, or more
+/// directories for its sandbox to write, is drift like a hook change.
+#[test]
+fn a_mode_that_skips_claude_codes_prompts_or_more_directories_denies_every_call() {
+    let changes: [fn(&mut Value); 4] = [
+        |s| s["permissions"]["defaultMode"] = json!("bypassPermissions"),
+        |s| s["permissions"]["defaultMode"] = json!("acceptEdits"),
+        |s| s["permissions"]["defaultMode"] = json!("auto"),
+        |s| s["permissions"]["additionalDirectories"] = json!(["/tmp/elsewhere"]),
+    ];
+    for change in changes {
+        let sb = sandbox();
+        edit_settings(&sb, change);
+        assert_frozen(&sb);
+    }
 }
 
 /// Claude Code writes these when the person switches models (#591).

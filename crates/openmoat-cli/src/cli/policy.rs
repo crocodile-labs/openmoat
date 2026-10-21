@@ -37,7 +37,7 @@ pub struct InstallArgs {
     /// The pack: a policy file with only `version`, `deny`, `ask` and `allow`.
     pub pack: PathBuf,
 
-    /// Its detached signature (`ssh-keygen -Y sign -n openmoat-policy`). Defaults
+    /// Its detached signature (`ssh-keygen -Y sign -n openmoat-pack`). Defaults
     /// to the pack's path with `.sig` appended.
     #[arg(long, value_name = "PATH")]
     pub sig: Option<PathBuf>,

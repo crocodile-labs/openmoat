@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use openmoat_core::Action;
 
 use super::*;
-use crate::approvals::{Grants, Overlay};
+use crate::approvals::{Grants, Overlay, Scope};
 use crate::environment::Snapshot;
 use crate::home::write_private;
 use crate::install::Recorded;
@@ -16,6 +16,13 @@ use crate::trust::Trust;
 
 const POLICY: &str = "version: 1\ndefaults: { '*': defer }\n";
 const PACK: &str = "version: 1\ndeny:\n  - id: no-publish\n    shell: ['cargo publish*']\n";
+
+/// The session the kept grant is for.
+const S1: Scope<'static> = Scope {
+    host: "claude-code",
+    session_id: "s1",
+    project: "/code/app",
+};
 
 /// Every state file the guard reads, with one pack, all pinned.
 fn installed(dir: &Path) -> (Home, Lock) {
@@ -29,7 +36,7 @@ fn installed(dir: &Path) -> (Home, Lock) {
         command: "make".into(),
     };
     let now = crate::time::now_ms();
-    grants.grant("claude-code", "s1", &make, now, None);
+    grants.grant(S1, &make, now, None);
     grants.save(&home.grants_path(), now).unwrap();
     let snapshot = r#"{"version":1,"captured_at_ms":1,"path":["/kept"],"programs":{}}"#;
     write_private(&home.environment_path(), snapshot.as_bytes()).unwrap();
@@ -102,11 +109,7 @@ fn every_state_file_the_guard_uses_is_the_one_checked() {
         command: "make".into(),
     };
     let now = crate::time::now_ms();
-    assert!(
-        Grants::load_in(&kept)
-            .unwrap()
-            .matches("claude-code", "s1", &make, now)
-    );
+    assert!(Grants::load_in(&kept).unwrap().matches(S1, &make, now));
     assert_eq!(
         Snapshot::load_in(&kept).unwrap().path,
         [PathBuf::from("/kept")]

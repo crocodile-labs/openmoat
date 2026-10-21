@@ -277,6 +277,11 @@ pub struct AllowArgs {
     #[arg(long, conflicts_with = "always")]
     pub session: Option<String>,
 
+    /// A directory of the project a session grant for a command applies in
+    /// (its repository root, else the directory). Defaults to the current directory.
+    #[arg(long, value_name = "DIR", requires = "session")]
+    pub project: Option<PathBuf>,
+
     /// Add a permanent allow rule to ~/.moat/policy.d/approved.yaml instead.
     #[arg(long)]
     pub always: bool,

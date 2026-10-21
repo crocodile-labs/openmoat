@@ -78,6 +78,88 @@ pub(super) fn written(dest: &Destination<'_>, sources: &[&str]) -> Vec<String> {
     }
 }
 
+/// Everything a copy, a move or a link writes: [`written`], and when it makes
+/// hard links, each file it links to. A hard link is a second name for the
+/// same file, so a later write through the new name (a project file to every
+/// check) writes the original: `ln ~/.claude/settings.json s.json`, then an
+/// edit of `s.json`, rewrites Claude Code's hooks. So the original is a write
+/// too, and a deny on writing it (`kernel-self`) holds. Hard links come from
+/// `ln` without `-s`, `link`, `cp -l` / `--link`, and the files under each
+/// `rsync --link-dest DIR` (relative to the destination, as rsync reads it).
+pub(super) fn writes(
+    argv: &[String],
+    program: &str,
+    dest: &Destination<'_>,
+    sources: &[&str],
+) -> Vec<String> {
+    let mut out = written(dest, sources);
+    if hard_links(argv, program) {
+        out.extend(sources.iter().map(|s| (*s).to_owned()));
+    }
+    if program == "rsync" {
+        out.extend(link_dests(argv).map(|dir| relative_to(dest.word, dir)));
+    }
+    out
+}
+
+/// Whether `argv` makes hard links to its sources.
+fn hard_links(argv: &[String], program: &str) -> bool {
+    // Long options of each, and the short letters that take a value: the
+    // letters after one are its value (`-t/tmp/sx`), not options.
+    let flag = |long_name: &str, short: char| {
+        options(argv).any(|arg| match arg.strip_prefix("--") {
+            // an unambiguous prefix, as GNU reads it (`--sym`)
+            Some(long) => long.len() >= 2 && long_name.starts_with(long),
+            None => arg
+                .chars()
+                .skip(1)
+                .take_while(|c| !matches!(c, 'S' | 't'))
+                .any(|c| c == short),
+        })
+    };
+    match program {
+        "link" => true,
+        "ln" => !flag("symbolic", 's'),
+        "cp" => flag("link", 'l'),
+        _ => false,
+    }
+}
+
+/// The options of `argv`, up to `--`.
+fn options(argv: &[String]) -> impl Iterator<Item = &str> {
+    argv.iter()
+        .skip(1)
+        .take_while(|a| *a != "--")
+        .map(String::as_str)
+        .filter(|a| a.starts_with('-') && a.len() > 1)
+}
+
+/// Each `DIR` of rsync's `--link-dest=DIR` or `--link-dest DIR` (or a prefix
+/// of the option longer than `--link`, which `--links` shares).
+fn link_dests(argv: &[String]) -> impl Iterator<Item = &str> {
+    let name = |long: &str| long.starts_with("link-") && "link-dest".starts_with(long);
+    argv.iter()
+        .enumerate()
+        .skip(1)
+        .take_while(|(_, a)| *a != "--")
+        .filter_map(move |(i, arg)| {
+            let long = arg.strip_prefix("--")?;
+            match long.split_once('=') {
+                Some((key, dir)) => name(key).then_some(dir),
+                None => argv.get(i + 1).map(String::as_str).filter(|_| name(long)),
+            }
+        })
+}
+
+/// `dir` as rsync reads a relative `--link-dest`: inside the destination.
+fn relative_to(dest: &str, dir: &str) -> String {
+    if paths::is_absolute(dir) || dir.starts_with(['~', '$']) {
+        dir.to_owned()
+    } else {
+        format!("{}/{dir}", dest.trim_end_matches('/'))
+    }
+}
+
 /// The name a source gets inside a directory, when the command line shows it.
 fn entry_name(source: &str) -> Option<&str> {
     let name = source.rsplit('/').next().unwrap_or(source);
@@ -138,16 +220,71 @@ fn is_no_target(arg: &str) -> bool {
 mod tests {
     use super::{destination, written};
 
-    fn writes(cmd: &str) -> Vec<String> {
+    /// [`written`] or, with `all`, [`super::writes`] of `cmd`, its sources
+    /// taken as `commands.rs` takes them.
+    fn of(cmd: &str, all: bool) -> Vec<String> {
         let argv: Vec<String> = cmd.split(' ').map(str::to_owned).collect();
         let dest = destination(&argv, &argv[0]).expect("a copy");
-        let sources: Vec<&str> = argv[1..]
+        let end = argv.iter().position(|a| a == "--");
+        let sources: Vec<&str> = argv
             .iter()
             .enumerate()
-            .filter(|(i, a)| i + 1 != dest.index && !a.starts_with('-'))
+            .skip(1)
+            .filter(|(i, a)| {
+                *i != dest.index
+                    && *a != "--"
+                    && (end.is_some_and(|e| *i > e) || !a.starts_with('-'))
+            })
             .map(|(_, a)| a.as_str())
             .collect();
-        written(&dest, &sources)
+        if all {
+            super::writes(&argv, &argv[0], &dest, &sources)
+        } else {
+            written(&dest, &sources)
+        }
+    }
+
+    fn writes(cmd: &str) -> Vec<String> {
+        of(cmd, false)
+    }
+
+    #[test]
+    fn a_hard_link_also_writes_the_file_it_links_to() {
+        assert_eq!(
+            of("ln ~/.claude/settings.json s.json", true),
+            ["s.json", "~/.claude/settings.json"]
+        );
+        assert_eq!(of("ln -f -- ~/.moat/x y", true), ["y", "~/.moat/x"]);
+        assert_eq!(of("ln -t . ~/.moat/x", true), ["./x", "~/.moat/x"]);
+        assert_eq!(of("link ~/.moat/x y", true), ["y", "~/.moat/x"]);
+        assert_eq!(of("cp -al ~/.moat ./m", true), ["./m", "~/.moat"]);
+        assert_eq!(of("cp --li ~/.moat/x y", true), ["y", "~/.moat/x"]);
+        assert_eq!(
+            of("rsync -a --link-dest=/h/.moat src/ out/", true),
+            ["out/", "/h/.moat"]
+        );
+        assert_eq!(
+            of("rsync -a --link-dest ../prev src/ out/", true),
+            ["out/", "out/../prev"]
+        );
+    }
+
+    #[test]
+    fn a_symbolic_link_or_a_plain_copy_writes_only_its_destination() {
+        for cmd in [
+            "ln -s ~/.moat/x y",
+            "ln -sf ~/.moat/x y",
+            "ln --sym ~/.moat/x y",
+            "cp ~/.moat/x y",
+            "cp -L ~/.moat/x y",
+            "cp --links-not-an-option ~/.moat/x y",
+            "rsync -a --links src/ out/",
+        ] {
+            assert_eq!(of(cmd, true), of(cmd, false), "{cmd}");
+        }
+        // the letters after `-t` and `-S` are their value, not options
+        assert_eq!(of("ln -s -S.l ~/.moat/x y", true), ["y"]);
+        assert_eq!(of("cp -t/tmp/l ~/.moat/x", true), ["/tmp/l/x"]);
     }
 
     #[test]

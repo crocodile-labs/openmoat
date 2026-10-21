@@ -110,12 +110,13 @@ fn the_read_block_toggle_alone_is_relaxed() {
 
 #[test]
 fn claude_codes_own_lists_modes_and_toggles_are_relaxed() {
-    let changes: [fn(&mut Value); 9] = [
+    let changes: [fn(&mut Value); 10] = [
         |s| s["permissions"]["allow"] = json!(["Bash(*)"]),
         |s| s["permissions"]["ask"] = json!(["Bash(git push:*)"]),
         |s| s["permissions"]["deny"] = json!([OWNED, "Bash(rm:*)"]),
-        |s| s["permissions"]["defaultMode"] = json!("bypassPermissions"),
-        |s| s["permissions"]["additionalDirectories"] = json!(["/tmp/x"]),
+        |s| s["permissions"]["defaultMode"] = json!("default"),
+        |s| s["permissions"]["defaultMode"] = json!("plan"),
+        |s| s["permissions"]["defaultMode"] = json!("dontAsk"),
         |s| s["language"] = json!("french"),
         |s| s["spinnerVerbs"] = json!({"mode": "append", "verbs": ["x"]}),
         |s| s["autoMode"] = json!({"environment": ["a note"]}),
@@ -128,6 +129,54 @@ fn claude_codes_own_lists_modes_and_toggles_are_relaxed() {
     for change in changes {
         assert_relaxed(&after(change));
     }
+}
+
+#[test]
+fn a_mode_that_runs_calls_unasked_or_more_directories_denies() {
+    let changes: [fn(&mut Value); 7] = [
+        |s| s["permissions"]["defaultMode"] = json!("bypassPermissions"),
+        |s| s["permissions"]["defaultMode"] = json!("acceptEdits"),
+        |s| s["permissions"]["defaultMode"] = json!("auto"),
+        |s| s["permissions"]["defaultMode"] = json!("someFutureMode"),
+        |s| s["permissions"]["defaultMode"] = json!(["plan"]),
+        |s| s["permissions"]["additionalDirectories"] = json!(["/tmp/x"]),
+        // A relaxed change next to it does not make it relaxed.
+        |s| {
+            s["language"] = json!("french");
+            s["permissions"]["defaultMode"] = json!("bypassPermissions");
+        },
+    ];
+    for change in changes {
+        assert_denied(&after(change));
+    }
+}
+
+#[test]
+fn leaving_a_mode_that_runs_calls_unasked_is_relaxed() {
+    let mut start = baseline();
+    start["permissions"]["defaultMode"] = json!("bypassPermissions");
+    start["permissions"]["additionalDirectories"] = json!(["/tmp/x"]);
+    for change in [
+        |s: &mut Value| s["permissions"]["defaultMode"] = json!("default"),
+        |s: &mut Value| {
+            s["permissions"]
+                .as_object_mut()
+                .unwrap()
+                .remove("defaultMode");
+        },
+    ] {
+        let setup = installed(&start, true);
+        let mut now = start.clone();
+        change(&mut now);
+        fs::write(&setup.settings, now.to_string()).unwrap();
+        assert_relaxed(&check(&setup.home).unwrap());
+    }
+    // Removing directories it had narrows them: still drift, as any change.
+    let setup = installed(&start, true);
+    let mut now = start.clone();
+    now["permissions"]["additionalDirectories"] = json!([]);
+    fs::write(&setup.settings, now.to_string()).unwrap();
+    assert_denied(&check(&setup.home).unwrap());
 }
 
 #[test]

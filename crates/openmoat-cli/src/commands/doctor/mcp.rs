@@ -70,10 +70,9 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
                     Area::Mcp,
                     false,
                     format!(
-                        "mcp tools        `{}` lists {} tool(s) that changed or are new, hidden until \
-                         `openmoat mcp accept {}`",
+                        "mcp tools        `{}` lists {}, hidden until `openmoat mcp accept {}`",
                         pins.server,
-                        pins.held.len(),
+                        pins.held_summary(),
                         pins.server
                     ),
                 );

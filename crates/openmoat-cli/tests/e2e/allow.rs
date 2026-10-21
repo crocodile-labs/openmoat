@@ -86,10 +86,39 @@ fn allow_last_says_what_it_approves_and_asks_first() {
 #[test]
 fn allow_explicit_session_grant() {
     let sb = Sandbox::installed_asking(&[".claude"]);
-    let out = sb.moat_as_person(&["allow", INSTALL, "--host", "claude-code", "--session", "s9"]);
+    let project = sb.project().to_string_lossy().into_owned();
+    let args = ["allow", INSTALL, "--host", "claude-code", "--session", "s9"];
+    // From the home directory, without --project: the grant is for the home
+    // directory, not the project the agent works in.
+    let out = sb.moat_as_person(&args);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(guard(&sb, "s9", INSTALL).0, "ask", "another project");
+
+    let out = sb.moat_as_person(&[&args[..], &["--project", &project]].concat());
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("only in project"), "{}", text(&out));
     assert_eq!(guard(&sb, "s9", INSTALL).0, "allow");
     assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
+}
+
+#[test]
+fn a_session_grant_for_a_command_holds_only_in_its_project() {
+    let sb = Sandbox::installed_asking(&[".claude"]);
+    assert_eq!(guard(&sb, "s1", INSTALL).0, "ask");
+    let out = sb.moat_approving(&["allow", "--last"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(guard(&sb, "s1", INSTALL).0, "allow");
+
+    // The same session, the same command, another repository: its
+    // `package.json` and install scripts are not the ones approved.
+    let other = sb.home.join("other");
+    std::fs::create_dir_all(other.join(".git")).unwrap();
+    let (verdict, reason) = sb.guard_bash("s1", &other, INSTALL);
+    assert_eq!(verdict, "ask", "{reason}");
+    // A subdirectory of the approved repository is the same project.
+    let sub = sb.project().join("src");
+    std::fs::create_dir_all(&sub).unwrap();
+    assert_eq!(sb.guard_bash("s1", &sub, INSTALL).0, "allow");
 }
 
 #[test]
