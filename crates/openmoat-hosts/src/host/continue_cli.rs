@@ -26,11 +26,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          other than 2, or times out (default 600 s)",
     gaps: "the released Continue CLI does not run hooks, so OpenMoat cannot check its tool \
          calls; run it under `openmoat run`",
-    install: None,
     // `cn` reads its own configuration and fires no hook.
     mcp: None,
-    sandbox: None,
-    project_settings: None,
+    ..HostSpec::BASE
 };
 
 /// Set by `cn` for every command hook it runs, next to `CLAUDE_PROJECT_DIR`

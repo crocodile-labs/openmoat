@@ -7,6 +7,8 @@ use openmoat_core::{Decision, Verdict};
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod base;
+
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
 /// format ([`HostSpec::speaks`]) uses that host's adapter.

@@ -50,7 +50,6 @@ pub(crate) const EVENT: &str = "tool_call";
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "pi",
     display_name: "pi",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: None,
         on_no_ask: Some("pi runs without a screen to ask on (print or JSON mode)"),
@@ -77,8 +76,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "extensions/openmoat.js",
         hooks: HOOKS,
         hook_format: HookFormat::Pi,
-        relaxed_keys: &[],
-        trust_step: None,
+        ..InstallSpec::BASE
     }),
     // pi reads `<agent dir>/mcp.json` and a trusted project's `.pi/mcp.json`,
     // `{"mcpServers": {…}}`, and names a server's tools `mcp__<server>__<tool>`
@@ -89,7 +87,6 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         project_files: &[(".pi/mcp.json", McpLayout::Json)],
         tool_names: McpToolNames::Underscored,
     }),
-    sandbox: None,
     // A trusted project's `.pi/settings.json` can turn the user's extensions
     // off and add packages, and its `.pi/extensions/` load with the agent's
     // rights; the user's `settings.json` can turn OpenMoat's extension off
@@ -107,6 +104,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Pi,
         user_file: "settings.json",
     }),
+    ..HostSpec::BASE
 };
 
 /// What OpenMoat's extension sends from `tool_call`.

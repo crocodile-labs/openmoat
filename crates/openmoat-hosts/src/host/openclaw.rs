@@ -55,7 +55,6 @@ mod tools;
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "openclaw",
     display_name: "OpenClaw",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: None,
         on_no_ask: None,
@@ -77,8 +76,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: CONFIG_FILE,
         hooks: HOOKS,
         hook_format: HookFormat::OpenClaw,
-        relaxed_keys: &[],
-        trust_step: None,
+        ..InstallSpec::BASE
     }),
     // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
     // `mcp.servers`"; the documentation names no project file of them.
@@ -88,8 +86,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         project_files: &[],
         tool_names: McpToolNames::OpenClaw,
     }),
-    sandbox: None,
-    project_settings: None,
+    ..HostSpec::BASE
 };
 
 pub(crate) const EVENT: &str = "before_tool_call";

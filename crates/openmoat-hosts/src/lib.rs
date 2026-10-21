@@ -177,6 +177,20 @@ impl Host {
         Host::GeminiCli,
     ];
 
+    /// Every host OpenMoat knows: [`Host::ALL`] and the hosts that only speak
+    /// another's format ([`HostSpec::speaks`]). Tests that must cover every
+    /// host iterate this, so a new host is checked without editing them.
+    pub const EVERY: [Host; 8] = [
+        Host::ClaudeCode,
+        Host::Codex,
+        Host::Cursor,
+        Host::Continue,
+        Host::OpenClaw,
+        Host::CopilotCli,
+        Host::Pi,
+        Host::GeminiCli,
+    ];
+
     /// The facts about this host.
     #[must_use]
     pub fn spec(self) -> &'static HostSpec {

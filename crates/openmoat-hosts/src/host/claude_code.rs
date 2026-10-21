@@ -39,7 +39,6 @@ const HOOKS: &[HookSpec] = &[
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "claude-code",
     display_name: "Claude Code",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: None,
         on_no_ask: Some("Claude Code's permission mode does not ask"),
@@ -59,7 +58,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         // Claude Code's list, with its permission lists, is the CLI's
         // (`integrity/relaxed.rs`).
         relaxed_keys: &[],
-        trust_step: None,
+        ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideDefaultDir(".claude.json"),
@@ -88,6 +87,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::ClaudeCode,
         user_file: "settings.json",
     }),
+    ..HostSpec::BASE
 };
 
 /// Claude Code's format, also sent by the Continue CLI.
