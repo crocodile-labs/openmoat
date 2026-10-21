@@ -1,6 +1,8 @@
-//! Claude Code settings a repository carries: `.claude/settings.json` (shared
-//! with the project) and `.claude/settings.local.json` (the person's own), as
-//! the host's spec names them (`HostSpec::project_settings`).
+//! Agent settings a repository carries: Claude Code's `.claude/settings.json`
+//! (shared with the project) and `.claude/settings.local.json` (the person's
+//! own), GitHub Copilot CLI's `.github/copilot/settings*.json` and the hook
+//! files in its `.github/hooks`, as each host's spec names them
+//! (`HostSpec::project_settings`).
 //!
 //! OpenMoat pins only the user settings file, which holds its hooks. Claude
 //! Code merges the project and local files over it, and a key set there wins:
@@ -161,37 +163,70 @@ pub fn candidates(
     spec: &ProjectSettingsSpec,
     name: &str,
 ) -> Vec<PathBuf> {
+    project_dirs(cwd, user_home)
+        .into_iter()
+        .map(|dir| dir.join(spec.dir).join(name))
+        .collect()
+}
+
+/// `cwd` and its project root, each only when it can be a project root.
+fn project_dirs(cwd: &Path, user_home: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = vec![cwd.to_path_buf()];
     if let Some(root) = crate::project::root_of(cwd, user_home)
         && !dirs.contains(&root)
     {
         dirs.push(root);
     }
-    dirs.into_iter()
-        .filter(|dir| crate::project::trusted(dir, user_home))
-        .map(|dir| dir.join(spec.dir).join(name))
-        .collect()
+    dirs.retain(|dir| crate::project::trusted(dir, user_home));
+    dirs
 }
 
-/// One warning per project settings file `spec` names for `cwd` that sets
-/// something [`findings`] names or cannot be read, for `moat doctor` and
-/// `moat status`. The host loads these when a session starts, where no
-/// `ConfigChange` fires, so OpenMoat can only point at them.
+/// Every `*.json` file in `dir`, sorted; none when `dir` cannot be read.
+fn hook_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .filter(|path| path.extension().is_some_and(|e| e == "json") && path.is_file())
+        .collect();
+    files.sort();
+    files
+}
+
+/// One warning per project settings file `host`'s spec names for `cwd` that
+/// sets something [`findings`] names or cannot be read, and one per hook file
+/// in its project hook directory, for `moat doctor` and `moat status`. The
+/// host loads these when a session starts, where no `ConfigChange` fires, so
+/// OpenMoat can only point at them.
 #[must_use]
-pub fn warnings(cwd: &Path, user_home: &Path, spec: &ProjectSettingsSpec) -> Vec<String> {
-    spec.files()
+pub fn warnings(cwd: &Path, user_home: &Path, host: Host) -> Vec<String> {
+    let Some(spec) = host.spec().project_settings.as_ref() else {
+        return Vec::new();
+    };
+    let row = |path: &Path, found: &str| {
+        format!(
+            "{}: {found}. A {} session started here loads it; review the file \
+             and remove what you did not add",
+            path.display(),
+            host.display_name()
+        )
+    };
+    let mut rows: Vec<String> = spec
+        .files()
         .iter()
         .flat_map(|name| candidates(cwd, user_home, spec, name))
-        .filter_map(|path| {
-            check(&path).map(|found| {
-                format!(
-                    "{}: {found}. A Claude Code session started here loads it; review the file \
-                     and remove what you did not add",
-                    path.display()
-                )
-            })
-        })
-        .collect()
+        .filter_map(|path| check(&path).map(|found| row(&path, &found)))
+        .collect();
+    if let Some(dir) = spec.hook_dir {
+        for path in project_dirs(cwd, user_home)
+            .into_iter()
+            .flat_map(|root| hook_files(&root.join(dir)))
+        {
+            rows.push(row(&path, "adds hooks that run commands"));
+        }
+    }
+    rows
 }
 
 /// One [`warnings`] line and the host whose project settings it is about.
@@ -210,9 +245,8 @@ pub fn warnings_here() -> Vec<Warning> {
     };
     Host::ALL
         .into_iter()
-        .filter_map(|host| Some((host, host.spec().project_settings.as_ref()?)))
-        .flat_map(|(host, spec)| {
-            warnings(&cwd, &user_home, spec)
+        .flat_map(|host| {
+            warnings(&cwd, &user_home, host)
                 .into_iter()
                 .map(move |text| Warning { host, text })
         })

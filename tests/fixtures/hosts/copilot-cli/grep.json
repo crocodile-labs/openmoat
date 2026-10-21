@@ -1,0 +1,4 @@
+{
+  "sessionId": "sess-1", "timestamp": 1792540800000, "cwd": "/p",
+  "toolName": "grep", "toolArgs": "{\"pattern\":\"fn main\",\"paths\":[\"/p/src\",\"/p/tests\"],\"output_mode\":\"files_with_matches\"}"
+}

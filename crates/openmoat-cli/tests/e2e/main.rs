@@ -20,6 +20,7 @@ mod closed_pipe;
 mod codex;
 mod config_change;
 mod continue_cli;
+mod copilot_cli;
 mod cursor;
 mod cursor_sandbox;
 mod differential;

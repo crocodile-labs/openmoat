@@ -192,6 +192,7 @@ fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path, block: boo
             }
             json!({ "matcher": spec.matcher, "hooks": [hook] })
         }
+        HookFormat::Copilot => copilot::entry(config, spec, binary),
         // OpenClaw's file is edited by `openclaw`, before any entry is built here.
         HookFormat::Cursor | HookFormat::OpenClaw => json!({
             "command": cursor_command(config, binary),
@@ -209,6 +210,9 @@ fn cursor_command(config: &HostConfig, binary: &Path) -> String {
 
 /// The binary one of our entries runs, unquoted from Cursor's shell string.
 fn hook_binary(entry: &Value, config: &HostConfig) -> Option<String> {
+    if config.format == HookFormat::Copilot {
+        return copilot::binary(entry, config);
+    }
     if config.format == HookFormat::Cursor {
         let suffix = format!(" guard --host {}", config.host.id());
         let quoted = entry
@@ -225,6 +229,9 @@ fn hook_binary(entry: &Value, config: &HostConfig) -> Option<String> {
 }
 
 fn is_ours(entry: &Value, config: &HostConfig) -> bool {
+    if config.format == HookFormat::Copilot {
+        return copilot::is_ours(entry, config);
+    }
     if config.format == HookFormat::Cursor {
         let suffix = format!(" guard --host {}", config.host.id());
         return entry
@@ -254,7 +261,7 @@ fn upsert(
     let Value::Object(top) = root else {
         bail!("{} is not a JSON object", config.settings_path.display());
     };
-    if config.format == HookFormat::Cursor {
+    if has_version(config) {
         top.entry("version").or_insert_with(|| json!(1));
     }
     let hooks = top
@@ -333,10 +340,15 @@ pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
     if removed && hooks.is_empty() {
         top.remove("hooks");
     }
-    if removed && config.format == HookFormat::Cursor && top.len() == 1 {
+    if removed && has_version(config) && top.len() == 1 {
         top.retain(|key, value| key != "version" || *value != json!(1));
     }
     removed
+}
+
+/// Whether the layout carries `"version": 1` beside `hooks` (Cursor, Copilot).
+fn has_version(config: &HostConfig) -> bool {
+    matches!(config.format, HookFormat::Cursor | HookFormat::Copilot)
 }
 
 /// `config`'s hook file parsed, an empty object when there is none; OpenClaw's
@@ -359,5 +371,6 @@ pub fn read_or_empty(path: &Path) -> Result<Value> {
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
+mod copilot;
 #[cfg(test)]
 mod tests;

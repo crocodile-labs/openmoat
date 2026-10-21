@@ -10,12 +10,13 @@ use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, Host, HostError, reason_line};
 use serde_json::json;
 
 /// Every host, the installable ones and those that run another's hook.
-const HOSTS: [Host; 5] = [
+const HOSTS: [Host; 6] = [
     Host::ClaudeCode,
     Host::Codex,
     Host::Cursor,
     Host::Continue,
     Host::OpenClaw,
+    Host::CopilotCli,
 ];
 
 fn calls() -> Vec<Call> {
@@ -61,14 +62,16 @@ fn every_spec_is_complete() {
 /// host receives the guard's own deny rather than a timeout; and a failed hook
 /// blocks the call wherever the host has a key for it: Claude Code's
 /// `onFailure` on its tool hook, Cursor's `failClosed` (set on every entry of
-/// its layout), OpenClaw's plugin. Codex has no such key.
+/// its layout), OpenClaw's plugin. Codex has no such key, and GitHub Copilot
+/// CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, HookFormat, &[&str]); 4] = [
+    let expected: [(Host, HookFormat, &[&str]); 5] = [
         (Host::ClaudeCode, HookFormat::Nested, &["PreToolUse"]),
         (Host::Codex, HookFormat::Nested, &[]),
         (Host::Cursor, HookFormat::Cursor, &[]),
         (Host::OpenClaw, HookFormat::OpenClaw, &[]),
+        (Host::CopilotCli, HookFormat::Copilot, &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, format, blocking) in expected {
@@ -169,6 +172,6 @@ fn every_verdict_reaches_the_host_as_it_must() {
         }
     }
     // Claude Code 6 calls, Codex 4 (no read or fetch tool), Cursor 5 (no
-    // fetch), OpenClaw 6
-    assert_eq!(checked, 21);
+    // fetch), OpenClaw 6, GitHub Copilot CLI 6
+    assert_eq!(checked, 27);
 }

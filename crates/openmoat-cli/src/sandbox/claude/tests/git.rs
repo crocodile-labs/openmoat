@@ -83,8 +83,10 @@ fn an_allowed_directory_keeps_git_writable_except_what_runs_code() {
 fn files_run_later_are_asked_by_the_hook_not_denied_by_the_sandbox() {
     let out = generated(DEFAULT_POLICY);
     let deny = list(&out, "/filesystem/denyWrite");
+    // `.github/copilot/settings*.json` is `kernel-self`'s, denied everywhere.
     for name in [
-        ".github",
+        ".github/workflows",
+        ".github/hooks",
         ".husky",
         "Jenkinsfile",
         ".gitlab-ci.yml",

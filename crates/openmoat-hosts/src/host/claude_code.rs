@@ -79,6 +79,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".claude",
         shared: "settings.json",
         local: "settings.local.json",
+        hook_dir: None,
     }),
 };
 

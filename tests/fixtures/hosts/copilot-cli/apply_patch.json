@@ -1,0 +1,4 @@
+{
+  "sessionId": "sess-1", "timestamp": 1792540800000, "cwd": "/p",
+  "toolName": "apply_patch", "toolArgs": "*** Begin Patch\n*** Update File: /p/src/lib.rs\n@@\n-old\n+new\n*** Add File: /p/src/new.rs\n+fn x() {}\n*** End Patch\n"
+}

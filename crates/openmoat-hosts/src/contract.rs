@@ -104,6 +104,9 @@ pub struct ProjectSettingsSpec {
     pub shared: &'static str,
     /// The person's own file, kept out of version control.
     pub local: &'static str,
+    /// A directory of the project whose every `*.json` file the host loads as
+    /// hooks (GitHub Copilot CLI's `.github/hooks`); `None` when it has none.
+    pub hook_dir: Option<&'static str>,
 }
 
 impl ProjectSettingsSpec {
@@ -200,6 +203,11 @@ pub enum HookFormat {
     /// and its `plugins.entries.openmoat`, at the location OpenClaw's own
     /// variables give.
     OpenClaw,
+    /// GitHub Copilot CLI: a hook file of OpenMoat's own in its hooks
+    /// directory, `{"version": 1, "hooks": {"<event>": [{"type": "command",
+    /// "bash", "powershell", "timeoutSec"}]}}`, with no `matcher` (the CLI
+    /// skips an entry whose matcher is empty).
+    Copilot,
 }
 
 /// Where a host reads its MCP server definitions. A file that does not exist

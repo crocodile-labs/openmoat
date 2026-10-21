@@ -77,9 +77,11 @@ enum Route {
     CursorPreTool,
     /// OpenClaw `before_tool_call`, through OpenMoat's plugin.
     OpenClaw,
+    /// GitHub Copilot CLI `preToolUse`.
+    CopilotCli,
 }
 
-const ROUTES: [Route; 7] = [
+const ROUTES: [Route; 8] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -87,6 +89,7 @@ const ROUTES: [Route; 7] = [
     Route::CursorReadFile,
     Route::CursorPreTool,
     Route::OpenClaw,
+    Route::CopilotCli,
 ];
 
 impl Route {
@@ -96,6 +99,7 @@ impl Route {
             Self::Codex => Host::Codex,
             Self::CursorShell | Self::CursorReadFile | Self::CursorPreTool => Host::Cursor,
             Self::OpenClaw => Host::OpenClaw,
+            Self::CopilotCli => Host::CopilotCli,
         }
     }
 }
@@ -223,6 +227,24 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             openclaw("web_fetch", &json!({ "url": u, "extractMode": "markdown" })),
             Action::Fetch { url: u.clone() },
         )),
+        (Route::CopilotCli, Intent::Shell(c)) => {
+            Ok((copilot("bash", &json!({ "command": c })), shell(c)))
+        }
+        (Route::CopilotCli, Intent::Read(p)) => Ok((
+            copilot("view", &json!({ "path": p })),
+            Action::FsRead { path: p.clone() },
+        )),
+        (Route::CopilotCli, Intent::Write(p)) => Ok((
+            copilot(
+                "edit",
+                &json!({ "path": p, "old_str": "old", "new_str": "new" }),
+            ),
+            Action::FsWrite { path: p.clone() },
+        )),
+        (Route::CopilotCli, Intent::Fetch(u)) => Ok((
+            copilot("web_fetch", &json!({ "url": u })),
+            Action::Fetch { url: u.clone() },
+        )),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -275,6 +297,15 @@ fn openclaw(tool: &str, params: &Value) -> Value {
         "toolCallId": "call-1", "runId": "run-1", "sessionId": "sess-1",
         "sessionKey": "agent:main:main", "agentId": "main", "cwd": CWD,
         "configPath": format!("{HOME}/.openclaw/openclaw.json"), "platform": "darwin",
+    })
+}
+
+/// GitHub Copilot CLI's camelCase `preToolUse`, `toolArgs` as a JSON string
+/// (`tests/fixtures/hosts/copilot-cli`).
+fn copilot(tool: &str, args: &Value) -> Value {
+    json!({
+        "sessionId": "sess-1", "timestamp": 1_792_540_800_000_u64, "cwd": CWD,
+        "toolName": tool, "toolArgs": args.to_string(),
     })
 }
 
@@ -397,6 +428,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::CursorReadFile, &read, HookEvent::PreToolUseNoAsk),
         (Route::CursorPreTool, &read, HookEvent::PreToolUseNoAsk),
         (Route::OpenClaw, &shell, HookEvent::PreToolUse),
+        (Route::CopilotCli, &read, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();
