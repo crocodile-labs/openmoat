@@ -120,6 +120,45 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
             masks.mounts.push(Mount::Hide { path, dir: false });
         }
     }
+    masks.mounts.extend(literal_masks(ir, &trees, real));
+    let mut mounts = trees;
+    mounts.extend(respelled(&masks.mounts, project));
+    Ok(Generated {
+        rules,
+        mounts,
+        placeholders,
+        report,
+    })
+}
+
+/// The masks `moat run`'s network namespace adds over the whole root it binds
+/// (`commands/run/linux/netns.rs`): each existing path a deny rule names
+/// without a glob inside a read root or a `--write` path of `rules`, hidden or
+/// made read-only as under `--isolate`. Landlock alone cannot deny inside those
+/// grants, so `--write ~/.claude` would leave `~/.claude/settings.json`, and a
+/// read root `~/.cargo` its `credentials.toml`, open to every command. The
+/// project (`project`, its resolved spelling first) is left to the hook.
+pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<Mount> {
+    let trees = |paths: &[String], mount: fn(String) -> Mount| {
+        paths
+            .iter()
+            .filter(|p| !p.starts_with("/dev/"))
+            .map(|p| mount(p.clone()))
+            .collect::<Vec<_>>()
+    };
+    let mut held = trees(&rules.read, Mount::ReadOnly);
+    for tree in trees(&rules.write, Mount::ReadWrite) {
+        held.retain(|m| path_of(m) != path_of(&tree));
+        held.push(tree);
+    }
+    held.sort_by_key(|m| depth(path_of(m)));
+    literal_masks(ir, &held, project.first().map(String::as_str))
+}
+
+/// The masks for the absolute paths deny rules name without a glob that exist
+/// inside `trees` (outermost first), outside the project `real`.
+fn literal_masks(ir: &Enforcement, trees: &[Mount], real: Option<&str>) -> Vec<Mount> {
+    let mut masks = Vec::new();
     for (path, kind, subtree) in denied_literals(ir) {
         let in_project = real.is_some_and(|p| path == p || is_below(&path, p));
         // The innermost tree holding it decides what is visible there.
@@ -142,16 +181,9 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
             // Not visible (a `tmpfs`, nothing), or read-only already.
             _ => None,
         };
-        masks.mounts.extend(mask);
+        masks.extend(mask);
     }
-    let mut mounts = trees;
-    mounts.extend(respelled(&masks.mounts, project));
-    Ok(Generated {
-        rules,
-        mounts,
-        placeholders,
-        report,
-    })
+    masks
 }
 
 /// The `bwrap` arguments for `mounts`, with `blank_file` and `blank_dir` as

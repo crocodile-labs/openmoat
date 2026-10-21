@@ -713,7 +713,10 @@ something OpenMoat claims to stop.
   detached `openmoat init --yes` without a terminal (from a build script, say) refuses
   over a drifted or unreadable lock, and over an intact one leaves new and changed MCP
   server definitions unpinned, so a server a cloned project planted in `.mcp.json`
-  stays denied until a person runs `openmoat mcp accept`. The `kernel-self` rules and
+  stays denied until a person runs `openmoat mcp accept`. It also refuses a binary
+  other than the one the lock records, and keeps the recorded agent directories
+  (`hosts.json`) and search-path snapshot (`environment.json`) instead of taking them
+  from its own environment. The `kernel-self` rules and
   the lock are what stop an agent from re-pinning or granting itself anything.
 - **Some agent settings may drift without stopping the guard.** Claude Code's
   `settings.json` is pinned, but a change limited to an allowlist of its keys

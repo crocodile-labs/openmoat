@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use super::{Spec, revisions, spec};
 use crate::push::git::{Git, Unchecked};
-use crate::push::testrepo::Repo;
+use crate::push::testrepo::{Repo, git_program};
 
 fn argv(cmd: &str) -> Vec<String> {
     cmd.split(' ').map(str::to_owned).collect()
@@ -10,7 +10,7 @@ fn argv(cmd: &str) -> Vec<String> {
 
 fn git_in(dir: &std::path::Path) -> Git {
     let budget = Duration::from_secs(10);
-    Git::new(dir, Instant::now() + budget, budget)
+    Git::new(git_program(), dir, Instant::now() + budget, budget)
 }
 
 /// The subjects of the commits `cmd` would publish from `repo`, newest first.
@@ -127,7 +127,12 @@ fn a_source_that_names_no_commit_is_not_checked() {
 #[test]
 fn git_stops_at_the_deadline() {
     let repo = Repo::new();
-    let late = Git::new(&repo.work, Instant::now(), Duration::from_millis(0));
+    let late = Git::new(
+        git_program(),
+        &repo.work,
+        Instant::now(),
+        Duration::from_millis(0),
+    );
     let err = revisions(&late, &Spec::default()).unwrap_err();
     assert_eq!(err, Unchecked("git did not answer within 0 ms".to_owned()));
 }

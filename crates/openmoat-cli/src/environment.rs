@@ -148,12 +148,27 @@ impl ProgramResolver for Snapshot {
 /// pinned location, else the first on the recorded search path. `None`
 /// without a snapshot, so a poisoned `PATH` never picks the program.
 pub fn program(home: &Home, program: &str) -> Option<PathBuf> {
-    let snapshot = Snapshot::load_in(home).ok()?;
-    snapshot
-        .programs
-        .get(program)
-        .cloned()
-        .or_else(|| find_in(&snapshot.path, &snapshot.pathext, program))
+    Snapshot::load_in(home).ok()?.program(program)
+}
+
+impl Snapshot {
+    /// [`program`] in this snapshot, for a program OpenMoat itself runs. Only
+    /// an absolute location counts: a relative search-path entry (`.`,
+    /// `node_modules/.bin`) names a directory of whatever repository the
+    /// command runs in, where an agent can put a program of that name.
+    pub fn program(&self, program: &str) -> Option<PathBuf> {
+        let absolute: Vec<PathBuf> = self
+            .path
+            .iter()
+            .filter(|dir| dir.is_absolute())
+            .cloned()
+            .collect();
+        self.programs
+            .get(program)
+            .filter(|p| p.is_absolute())
+            .cloned()
+            .or_else(|| find_in(&absolute, &self.pathext, program))
+    }
 }
 
 /// `PATHEXT` (`.COM;.EXE;…`) as lowercase extensions; the default list when empty.
@@ -244,6 +259,33 @@ mod tests {
             snap.resolve("git").as_deref(),
             Some(planted.to_str().unwrap())
         );
+    }
+
+    /// A program OpenMoat runs itself (`git` for the push check, `ssh-keygen`)
+    /// is never found through a relative search-path entry, which names a
+    /// directory of the repository the call runs in.
+    #[cfg(unix)]
+    #[test]
+    fn a_program_openmoat_runs_is_never_found_through_a_relative_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let system = dir.path().join("system");
+        fs::create_dir_all(&system).unwrap();
+        let real = executable(&system, "git");
+        let snap = |path: Vec<PathBuf>, pinned: Option<PathBuf>| Snapshot {
+            version: SNAPSHOT_VERSION,
+            captured_at_ms: 0,
+            path,
+            programs: pinned
+                .map(|p| BTreeMap::from([("git".to_owned(), p)]))
+                .unwrap_or_default(),
+            pathext: Vec::new(),
+        };
+        let relative = PathBuf::from("node_modules/.bin");
+        let found = snap(vec![relative.clone(), system.clone()], None).program("git");
+        assert_eq!(found, Some(real.clone()));
+        let pinned_relative = snap(vec![system], Some(relative.join("git"))).program("git");
+        assert_eq!(pinned_relative, Some(real), "a relative pin is no pin");
+        assert_eq!(snap(vec![relative], None).program("git"), None);
     }
 
     #[cfg(windows)]

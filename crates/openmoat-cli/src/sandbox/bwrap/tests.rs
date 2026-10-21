@@ -183,3 +183,64 @@ fn args_bind_the_placeholders_over_hidden_paths() {
          --ro-bind /b/dir /p/secrets"
     );
 }
+
+/// `moat run`'s network namespace binds the whole root, where Landlock alone
+/// cannot deny inside a grant: `--write ~/.agent` left the agent's denied
+/// `settings.json` writable, and a read root `~/.tools` its denied token
+/// readable, to every command.
+#[test]
+fn the_network_namespace_masks_denied_paths_inside_its_grants() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", home.display());
+    for d in ["proj", ".agent", ".tools"] {
+        std::fs::create_dir_all(p(d)).unwrap();
+    }
+    for f in ["proj/token", ".agent/settings.json", ".tools/token"] {
+        std::fs::write(p(f), "x").unwrap();
+    }
+    let ctx = EvalContext {
+        home: home.to_string_lossy().into_owned(),
+        project: Some(p("proj")),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: p("proj"),
+        case_insensitive_paths: false,
+    };
+    let policy = Policy::parse(
+        r#"
+version: 1
+defaults: { "*": deny }
+deny:
+  - id: own
+    fs.read: ["~/.tools/token", "${project}/token"]
+    fs.write: ["~/.agent", "~/.agent/settings.json"]
+allow:
+  - id: work
+    fs.write: ["${project}/**"]
+"#,
+    )
+    .expect("test policy");
+    let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
+    let rules = Rules {
+        read: vec![p(".tools"), "/dev/null".into()],
+        write: vec![p("proj"), p(".agent")],
+        connect_port: Some(18080),
+    };
+    let masks = grant_masks(&ir, &rules, &[p("proj")]);
+    assert_eq!(
+        masks,
+        [
+            // outermost first: the directory node pinned before the file
+            // inside it is made read-only
+            Mount::ReadWrite(p(".agent")),
+            Mount::Hide {
+                path: p(".tools/token"),
+                dir: false,
+            },
+            Mount::ReadOnly(p(".agent/settings.json")),
+        ],
+        "the project stays the hook's and Landlock's, as without a namespace"
+    );
+}

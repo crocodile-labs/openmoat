@@ -165,7 +165,7 @@ impl Broker {
             .collect();
         // Each line keeps its `\r`; only the `\n`s are split on and re-added.
         let lines = head.strip_suffix(b"\n\r\n")?;
-        if owned.is_empty() {
+        if owned.is_empty() || echoed(head) {
             return None;
         }
         let mut out = Zeroizing::new(Vec::with_capacity(head.len() + 256));
@@ -252,6 +252,14 @@ fn replace(mut line: &[u8], from: &[u8], to: &[u8], out: &mut Vec<u8>) {
         line = &line[at + from.len()..];
     }
     out.extend_from_slice(line);
+}
+
+/// Whether `head` is a `TRACE` (or IIS's `TRACK`): the answer is the request as
+/// the server got it, so a value put in would come back to the agent.
+/// Compared without regard to case, as some servers read methods.
+fn echoed(head: &[u8]) -> bool {
+    head.get(..6)
+        .is_some_and(|m| m.eq_ignore_ascii_case(b"TRACE ") || m.eq_ignore_ascii_case(b"TRACK "))
 }
 
 /// The name of a `Name: value` header line.

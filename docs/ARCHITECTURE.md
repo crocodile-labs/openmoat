@@ -455,7 +455,10 @@ away. Codex has no such key: a failed hook "continues the tool call"
 - **Policy lock** (ADR-006). `~/.moat/policy.lock` pins SHA-256 digests of the policy,
   `environment.json`, `approvals.json`, `policy.d/approved.yaml`, `trust.json` and every
   hook file OpenMoat installed, keyed by location so a swap for a symlink is a
-  modification. Claude Code's `settings.json` is pinned by the canonical JSON without
+  modification. One of those state files that is missing when the lock is written
+  (`trust.json` before the first `openmoat trust`, or a file a person accepted as
+  deleted) is pinned as `absent`, so a file that appears there later is drift rather
+  than read unpinned. Claude Code's `settings.json` is pinned by the canonical JSON without
   its top-level `theme` key, which Claude Code writes itself on first run (#287); a
   file that does not parse is drift, and a whole-file digest from an older lock still
   verifies until the next re-pin. The lock also pins the part of Codex's `config.toml` that holds OpenMoat's sandbox profile
@@ -839,16 +842,19 @@ host outside TLS termination.
      (`taint/run.rs`); a history that cannot be read refuses (`proxy-session`).
   3. Resolve the name with the system resolver (IP literals skip it). Refuse the
      connection when any resolved address is loopback, link-local, a cloud metadata
-     address (`100.100.100.200`, `fd00:ec2::254`; NAT64, IPv4-mapped, 6to4 and Teredo
-     forms included)
+     address (`100.100.100.200`, `fd00:ec2::254`; NAT64, IPv4-mapped, IPv4-translated,
+     6to4 and Teredo forms included)
      or not unicast. Also refuse it when an address is private, CGNAT, benchmarking or
      unique-local and no allow rule names that address (POLICY.md §5.2). Those rules are
      compiled once at start-up into a second policy that holds only address patterns.
      Each resolved address is also matched against the policy's deny rules (in canonical
-     text form, and a NAT64, 6to4 or Teredo address also as the IPv4 addresses it
+     text form, and a NAT64, IPv4-translated, 6to4 or Teredo address also as the IPv4 addresses it
      carries); a match refuses
      the connection (`proxy-address`, the deny rule's id in the reasons), while allow rules
-     on addresses never open more here. Connect only to an address that was checked.
+     on addresses never open more here. Connect only to an address that was checked. A
+     connection whose own end has the address it reached went to this machine (its LAN
+     or public address, where services on every interface answer) and is closed before
+     a byte is sent (`proxy-address`).
   4. For CONNECT:
      - answer `200`, then read the TLS `ClientHello` (up to 64 KiB, reassembled across
        records);
@@ -860,15 +866,19 @@ host outside TLS termination.
      - the `Host` header must match the target;
      - drop hop-by-hop headers (`Connection` and the headers it names, `Proxy-*`, `TE`,
        `Trailer`, `Upgrade`, `Keep-Alive`) and add `Connection: close`;
-     - refuse `Content-Length` with `Transfer-Encoding`, or more than one `Content-Length`;
+     - refuse `Content-Length` with `Transfer-Encoding`, more than one `Content-Length`,
+       one over 2^31 - 1, a framing header spelled with `_` (`Transfer_Encoding`), and a
+       port with anything but digits;
      - refuse an HTTP/1.0 request that carries `Transfer-Encoding` (RFC 9112 §6.1);
      - forward one request: its head and its body, delimited by `Content-Length` or
        `chunked` framing (a request with neither has no body). Whatever the client sends
        after that body, such as a pipelined request for another host, is read and
        dropped, never forwarded. Chunked framing the proxy cannot follow, including a
-       chunk size over 2^31 - 1, is refused (`proxy-request`);
+       chunk size over 2^31 - 1, is refused (`proxy-request`); when the relay finds it
+       after the head, the connection closes and a second row records why;
      - after the row is recorded, put the value of each brokered secret the host owns
-       and that sets `plain_http` into the head (POLICY.md §2.1). The head is zeroed once
+       and that sets `plain_http` into the head (POLICY.md §2.1), except into a `TRACE`
+       or `TRACK`, whose answer echoes the request. The head is zeroed once
        it is written. A secret without `plain_http` is not injected, and the row's reasons
        say so.
   6. Record one audit row: host `proxy`, the method as the tool, the action

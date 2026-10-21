@@ -135,3 +135,50 @@ fn the_files_of_a_named_directory_are_kept_under_its_path() {
         "only files directly in the directory"
     );
 }
+
+/// A person who re-pins over a deleted state file (`openmoat doctor --accept`
+/// over "approvals.json is missing") pins its absence: a file planted there
+/// later is drift, not trusted unpinned from disk.
+#[test]
+fn a_state_file_missing_at_a_re_pin_cannot_be_planted_later() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = Home::at(dir.path().join("state"));
+    write_private(&home.policy_path(), b"version: 1\n").unwrap();
+    let binary = Path::new("/x/moat");
+    Lock::pin(binary, &[home.policy_path()])
+        .unwrap()
+        .save(&home.lock_path())
+        .unwrap();
+    let lock = repin(&home, binary, HookPins::Keep).unwrap();
+    assert!(lock.verify().is_empty(), "{:?}", lock.verify());
+    let planted = [
+        (home.grants_path(), r#"{"version":2,"entries":[]}"#),
+        (home.overlay_path(), "version: 1\nallow: []\n"),
+        (home.hosts_path(), r#"{"version":1,"dirs":{}}"#),
+        (
+            home.environment_path(),
+            r#"{"version":1,"captured_at_ms":1,"path":["/x"],"programs":{}}"#,
+        ),
+    ];
+    for (path, text) in planted {
+        write_private(&path, text.as_bytes()).unwrap();
+        assert!(
+            lock.verify()
+                .iter()
+                .any(|d| matches!(d, Drift::Modified(p) if p.ends_with(path.file_name().unwrap()))),
+            "{} was planted after the re-pin",
+            path.display()
+        );
+        fs::remove_file(&path).unwrap();
+    }
+    // Missing as pinned is no drift (`policy.d`, created above, stays).
+    fs::remove_dir(home.overlay_path().parent().unwrap()).unwrap();
+    let (drift, kept) = verify_state(&home, &lock);
+    assert!(drift.is_empty(), "{drift:?}");
+    assert!(
+        crate::approvals::Grants::load_in(&kept)
+            .unwrap()
+            .entries
+            .is_empty()
+    );
+}

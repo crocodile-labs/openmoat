@@ -27,6 +27,10 @@ pub struct Out {
 
 /// git in one directory, with the time left for the whole check.
 pub struct Git {
+    /// The `git` the environment snapshot `openmoat init` recorded, by its
+    /// absolute path: the hook's own `PATH` may name a directory of the
+    /// repository (a relative entry), and this git runs outside any sandbox.
+    program: PathBuf,
     dir: PathBuf,
     deadline: Instant,
     budget: Duration,
@@ -45,9 +49,16 @@ const GLOBAL: &[&str] = &[
 ];
 
 impl Git {
-    /// git in `dir`, stopping at `deadline`; `budget` is only for messages.
-    pub fn new(dir: impl Into<PathBuf>, deadline: Instant, budget: Duration) -> Self {
+    /// `program` (git) in `dir`, stopping at `deadline`; `budget` is only for
+    /// messages.
+    pub fn new(
+        program: impl Into<PathBuf>,
+        dir: impl Into<PathBuf>,
+        deadline: Instant,
+        budget: Duration,
+    ) -> Self {
         Self {
+            program: program.into(),
             dir: dir.into(),
             deadline,
             budget,
@@ -66,7 +77,7 @@ impl Git {
         if Instant::now() >= self.deadline {
             return Err(self.timeout());
         }
-        let mut child = Command::new("git")
+        let mut child = Command::new(&self.program)
             .args(GLOBAL)
             .args(args)
             .current_dir(&self.dir)

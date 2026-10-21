@@ -288,10 +288,14 @@ available, the Standard tier keeps its commands out of the home altogether.
 - **What Linux does not protect.** Landlock can only grant access to whole directory
   trees, so inside the project the policy's deny rules do not hold for the agent's
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
-  and add files under `.git/hooks`. The same goes for secrets inside a read root
-  (`~/.cargo/credentials.toml`). [EVIDENCE.md](EVIDENCE.md) marks each as a gap. The
+  and add files under `.git/hooks`. [EVIDENCE.md](EVIDENCE.md) marks each as a gap. The
   hook still decides the agent's own tool calls on them. `openmoat run --isolate` covers
-  these paths where bubblewrap runs (below).
+  these paths where bubblewrap runs (below). Outside the project, where the agent gets
+  a network namespace, each existing file or directory a deny rule names without a
+  glob inside a read root or a `--write` path is covered for the session as under
+  `--isolate` (hidden, or bound read-only for a write deny): `~/.cargo/credentials.toml`
+  stays unreadable and, with `--write ~/.claude`, `~/.claude/settings.json` unwritable.
+  Without a namespace these stay open, and `openmoat run` names them on every start.
 - **OpenMoat's state directory.** For the same reason, `openmoat run` on Linux refuses to
   start when a tree it grants (the project, a read root, a `--write` path, the temp
   directory) holds the state directory (`MOAT_HOME`, default `~/.moat`) or lies inside
@@ -309,7 +313,8 @@ available, the Standard tier keeps its commands out of the home altogether.
 - The agent and every command it starts may read the project, `sandbox.read_roots`,
   the temp directory and the agent's own executable; never the keychain. They may
   write the project, the temp directory and each `--write` path (the agent's state).
-  Deny rules still win (`~/.claude/settings.json` stays unwritable).
+  Deny rules still win (`~/.claude/settings.json` stays unwritable; on Linux only where
+  the agent gets a network namespace, above).
 - git uses a bare repository only when named: `openmoat run` (and `--isolate`) appends
   `safe.bareRepository=explicit` to the agent's `GIT_CONFIG_COUNT` entries, keeping
   the ones it inherits, and refuses to start when `GIT_CONFIG_COUNT` is not a number.

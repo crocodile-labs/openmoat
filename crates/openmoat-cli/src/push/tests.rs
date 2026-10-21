@@ -1,8 +1,14 @@
 use openmoat_audit::KnownSecrets;
 use openmoat_core::{Decision, Push, Verdict};
 
-use super::testrepo::{Repo, fake_token};
-use super::{RUNS_LATER_RULE, SECRET_RULE, UNCHECKED_RULE, check};
+use super::testrepo::{Repo, fake_token, snapshot};
+use super::{RUNS_LATER_RULE, SECRET_RULE, UNCHECKED_RULE};
+use crate::environment::Snapshot;
+
+/// [`super::check`] with the `git` of this test's search path pinned.
+fn check(pushes: &[Push], known: &KnownSecrets, tainted: bool, decision: Decision) -> Decision {
+    super::check(pushes, &snapshot(), known, tainted, decision)
+}
 
 fn push(repo: &Repo, cmd: &str) -> Vec<Push> {
     vec![Push {
@@ -121,6 +127,33 @@ fn a_push_too_large_to_read_or_in_an_unknown_place_asks() {
         dirs: vec![None],
     }];
     let d = check(&unknown, &KnownSecrets::default(), false, allowed());
+    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.rules, [UNCHECKED_RULE]);
+}
+
+/// The guard runs git outside every sandbox, so only the `git` the snapshot
+/// pins by an absolute path: never one found through the hook's `PATH`,
+/// whose relative entries name directories of the repository pushed from.
+#[test]
+fn a_push_asks_when_the_snapshot_pins_no_absolute_git() {
+    let pushes = vec![Push {
+        argv: vec!["git".into(), "push".into()],
+        dirs: vec![Some("/code/app".into())],
+    }];
+    let relative: Snapshot = serde_json::from_value(serde_json::json!({
+        "version": 1,
+        "captured_at_ms": 0,
+        "path": ["."],
+        "programs": { "git": "./git" },
+    }))
+    .unwrap();
+    let d = super::check(
+        &pushes,
+        &relative,
+        &KnownSecrets::default(),
+        false,
+        allowed(),
+    );
     assert_eq!(d.verdict, Verdict::Ask);
     assert_eq!(d.rules, [UNCHECKED_RULE]);
 }
