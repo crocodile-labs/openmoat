@@ -9,8 +9,8 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
-- A search tool's glob pattern whose `..` segments climb out of the directory it searches, also after a wildcard (`*/../..`, `{..,x}`), is checked against the directory it reaches: Claude Code's `Glob`, Gemini CLI's `glob` and `read_many_files`, pi's `find` and Copilot CLI's `glob`; a deny on reading that directory holds ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
-- Claude Code's `Artifact` and `ArtifactData` tools are checked: every local file they upload to a claude.ai page is a read, like `SendFile`'s, and each file `Artifact` saves with `out_dir` is a write; `openmoat init` adds them to the hook's matcher ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- A search tool's glob pattern whose `..` segments climb out of the directory it searches, also after a wildcard (`*/../..`, `{..,x}`), is checked against the directory it reaches: Claude Code's `Glob`, Gemini CLI's `glob` and `read_many_files`, pi's `find` and Copilot CLI's `glob`; a deny on reading that directory holds ([#625](https://github.com/crocodile-labs/openmoat/pull/625)).
+- Claude Code's `Artifact` and `ArtifactData` tools are checked: every local file they upload to a claude.ai page is a read, like `SendFile`'s, and each file `Artifact` saves with `out_dir` is a write; `openmoat init` adds them to the hook's matcher ([#625](https://github.com/crocodile-labs/openmoat/pull/625)).
 
 ## [0.9.0] - 2026-10-22
 
