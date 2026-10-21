@@ -27,12 +27,16 @@ pub const WRAPPERS: &[&str] = &[
     "stdbuf",
     "chroot",
     "unbuffer",
+    // a new session, detached from the terminal (`setsid -f cmd…`)
+    "setsid",
+    // `flock FILE cmd…`: runs the command holding a lock on FILE
+    "flock",
     "npx",
     "bunx",
 ];
 
 /// Wrappers that take one positional value before the wrapped command.
-pub const WRAPPERS_WITH_VALUE: &[&str] = &["timeout", "chroot"];
+pub const WRAPPERS_WITH_VALUE: &[&str] = &["timeout", "chroot", "flock"];
 
 /// Package runners whose listed subcommand executes an arbitrary program
 /// (`pnpm exec sh -c …`, `yarn dlx pkg`, `npm exec -- cmd`, `bun x pkg`,
@@ -70,6 +74,7 @@ pub const WRAPPER_OPTIONS_WITH_VALUE: &[(&str, &[&str])] = &[
     ("watch", &["-n", "-d"]),
     ("stdbuf", &["-i", "-o", "-e"]),
     ("exec", &["-a"]),
+    ("flock", &["-w", "--timeout", "-E", "--conflict-exit-code"]),
 ];
 
 pub const ENV_BUILTINS: &[&str] = &["export", "declare", "typeset", "local", "readonly", "set"];

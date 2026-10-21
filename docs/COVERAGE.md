@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 31 | 20 | 7 |
 | T7 | Obfuscation and nested execution | 130 | 102 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 13 | 0 | 6 |
-| T9 | Hook / policy tampering by the agent | 215 | 56 | 11 |
+| T9 | Hook / policy tampering by the agent | 221 | 56 | 11 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
 | T12 | Network to unknown hosts | 83 | 17 | 1 |
@@ -1004,6 +1004,12 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-unbuffer-openmoat-allow` (attacks): Deny [kernel-self]
 - `T9-tmux-bare-openmoat` (attacks): Deny [kernel-self]
 - `T9-python-pty-bare-openmoat` (attacks): Deny [kernel-self]
+- `T9-setsid-openmoat-allow` (attacks): Deny [kernel-self]
+- `T9-setsid-wait-openmoat-trust` (attacks): Deny [kernel-self]
+- `T9-flock-openmoat-init` (attacks): Deny [kernel-self]
+- `T9-openmoat-proxy-install` (attacks): Deny [kernel-self]
+- `T9-openmoat-proxy-uninstall-by-path` (attacks): Deny [kernel-self]
+- `T9-nohup-moat-proxy-uninstall` (attacks): Deny [kernel-self]
 - `T9-zsh-interactive-moat-doctor-accept` (attacks): Deny [kernel-self]
 - `T9-absolute-script-moat-doctor-accept` (attacks): Deny [kernel-self]
 - `T9-absolute-script-linux-command-form` (attacks): Deny [kernel-self]

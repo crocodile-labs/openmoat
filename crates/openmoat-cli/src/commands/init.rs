@@ -67,6 +67,9 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             binary.display(),
             host.id()
         )?;
+        if let Some(note) = crate::install::trust_note::after_install(host, outcome) {
+            writeln!(out, "{prefix} {:<16} next: {note}", host.display_name())?;
+        }
     }
 
     sandboxes(&home, &binary, &hosts, dry_run, &mut out)?;

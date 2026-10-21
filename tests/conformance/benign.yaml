@@ -1430,3 +1430,12 @@
 - id: benign-wget-directory-prefix
   action: { shell: "wget --no-config --no-netrc --max-redirect=0 -P dl https://example.com/a.tgz" }
   expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-setsid-build
+  action: { shell: "setsid -f cargo build" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-flock-make
+  action: { shell: "flock /tmp/build.lock make" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-openmoat-proxy-status
+  action: { shell: "openmoat proxy status" }
+  expect: { verdict: defer, rules: [default] }

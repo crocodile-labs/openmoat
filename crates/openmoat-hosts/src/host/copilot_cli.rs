@@ -67,6 +67,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::Copilot,
         relaxed_keys: &[],
+        trust_step: None,
     }),
     // `mcp-config.json` in the configuration directory, and a project's
     // `.mcp.json` and `.github/mcp.json` from the working directory up to the

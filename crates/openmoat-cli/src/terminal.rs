@@ -8,6 +8,7 @@
 //! answers are read from the controlling terminal ([`read_answer`]).
 
 mod ancestry;
+mod own_binary;
 
 use std::io::{self, BufRead as _, IsTerminal as _};
 
@@ -44,10 +45,14 @@ pub fn person() -> bool {
 /// Refuse `command` when an agent host (`ancestry::AGENTS`, a Cursor editor
 /// helper on macOS) or `moat run` is among the processes that started this one, or when they
 /// cannot be read. Windows is not checked yet: there only the terminal check
-/// applies.
+/// applies. Every command but `openmoat init` also refuses to run from an
+/// executable other than the one the policy lock records (`own_binary.rs`).
 pub fn refuse_agent(command: &str) -> Result<()> {
     if assumed() {
         return Ok(());
+    }
+    if command != "openmoat init" {
+        own_binary::refuse_copy(command)?;
     }
     match ancestry::agent_ancestor() {
         Ok(None) => Ok(()),
