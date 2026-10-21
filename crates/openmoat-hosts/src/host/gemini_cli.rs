@@ -69,6 +69,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::Gemini,
         relaxed_keys: settings::RELAXED_KEYS,
+        trust_step: None,
     }),
     // <https://geminicli.com/docs/tools/mcp-server/>: `mcpServers` in the user
     // and the project `settings.json`.

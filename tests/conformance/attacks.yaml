@@ -1483,6 +1483,32 @@
   threat: T9
   action: { shell: "python3 -c 'import pty; pty.spawn([\"openmoat\"])'" }
   expect: { verdict: deny, rules: [kernel-self] }
+# a person-only command in a new session, or holding a lock, is still that command
+- id: T9-setsid-openmoat-allow
+  threat: T9
+  action: { shell: "setsid -f openmoat allow --last" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-setsid-wait-openmoat-trust
+  threat: T9
+  action: { shell: "setsid -w /usr/local/bin/openmoat trust" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-flock-openmoat-init
+  threat: T9
+  action: { shell: "flock -w 5 /tmp/l openmoat init --yes" }
+  expect: { verdict: deny, rules: [kernel-self] }
+# installing or removing the proxy service changes every later session
+- id: T9-openmoat-proxy-install
+  threat: T9
+  action: { shell: "openmoat proxy install" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-openmoat-proxy-uninstall-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/openmoat proxy uninstall" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-nohup-moat-proxy-uninstall
+  threat: T9
+  action: { shell: "nohup moat proxy uninstall" }
+  expect: { verdict: deny, rules: [kernel-self] }
 
 # T12 hosts written in forms a dotted-name heuristic misses
 - id: T12-decimal-encoded-loopback

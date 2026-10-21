@@ -161,8 +161,8 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         report.warn(&format!("{name:<16} project settings {}", warning.text));
     }
     for agent in protection::report(&home, &binary)? {
-        if let Some(summary) = agent.summary() {
-            report.note(&format!("{:<16} protection: {summary}", agent.name));
+        if let Some(line) = crate::install::trust_note::protection_line(&agent) {
+            report.note(&line);
             report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
         }
     }

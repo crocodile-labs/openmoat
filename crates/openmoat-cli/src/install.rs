@@ -7,6 +7,7 @@ mod hook_file;
 pub mod openclaw;
 pub mod pi;
 pub mod self_paths;
+pub mod trust_note;
 
 use std::fs;
 use std::path::{Path, PathBuf};

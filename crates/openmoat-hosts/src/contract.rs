@@ -186,6 +186,10 @@ pub struct InstallSpec {
     /// Empty for most hosts; Claude Code's own list, with its permission
     /// lists, is the CLI's (`integrity/relaxed.rs`).
     pub relaxed_keys: &'static [RelaxedKey],
+    /// What the person must do in the host after `moat init` writes or changes
+    /// its hook entry before the host runs it, when the host keeps a record
+    /// of its own that OpenMoat cannot see; `moat doctor` repeats it.
+    pub trust_step: Option<&'static str>,
 }
 
 /// A key of a host's hook file that may drift while the guard keeps deciding

@@ -303,6 +303,9 @@ deny:
       - "*/{moat,openmoat} uninstall*"
       - "{moat,openmoat} sandbox sync*"
       - "*/{moat,openmoat} sandbox sync*"
+      # a service installed or removed runs or stops the proxy for every later session
+      - "{moat,openmoat} proxy {install,uninstall}*"
+      - "*/{moat,openmoat} proxy {install,uninstall}*"
       # a brokered secret's host is where its value goes
       - "{moat,openmoat} secret*"
       - "*/{moat,openmoat} secret*"

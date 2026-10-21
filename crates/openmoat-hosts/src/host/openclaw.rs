@@ -78,6 +78,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::OpenClaw,
         relaxed_keys: &[],
+        trust_step: None,
     }),
     // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
     // `mcp.servers`"; the documentation names no project file of them.

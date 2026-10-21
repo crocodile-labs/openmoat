@@ -59,6 +59,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::Cursor,
         relaxed_keys: &[],
+        trust_step: None,
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("mcp.json"),

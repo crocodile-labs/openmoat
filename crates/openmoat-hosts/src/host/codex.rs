@@ -49,6 +49,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::Nested,
         relaxed_keys: &[],
+        // Codex runs a new or changed user hook only once the person trusts it
+        // in `/hooks` (Codex's hooks documentation).
+        trust_step: Some(
+            "open Codex and trust OpenMoat's hook in /hooks; Codex runs a changed hook only then",
+        ),
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("config.toml"),

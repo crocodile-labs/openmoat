@@ -78,6 +78,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::Pi,
         relaxed_keys: &[],
+        trust_step: None,
     }),
     // pi reads `<agent dir>/mcp.json` and a trusted project's `.pi/mcp.json`,
     // `{"mcpServers": {…}}`, and names a server's tools `mcp__<server>__<tool>`
