@@ -31,5 +31,16 @@ echo "  claude: ${MOAT_CLAUDE_BIN:-<none; claude layer skipped>}"
 
 # Arguments (CI: `differential sandbox_exec`) choose the tests whose name
 # contains any of them; the default is the differential suite.
-cargo test --locked -p openmoat --test e2e -- --nocapture "${@:-differential}"
+if [ -z "${GITHUB_ACTIONS:-}" ]; then
+    cargo test --locked -p openmoat --test e2e -- --nocapture "${@:-differential}"
+else
+    # As in quality-gate.sh: the failing tests and their panic lines become
+    # annotations, shown on the run without reading its log.
+    log="${RUNNER_TEMP:-/tmp}/differential.log"
+    if ! cargo test --locked -p openmoat --test e2e -- --nocapture "${@:-differential}" 2>&1 | tee "$log"; then
+        { grep -E "^test .* FAILED$" "$log"; grep -A1 "panicked at" "$log" | grep -v '^--$'; } |
+            head -10 | sed -e 's/%/%25/g' -e 's/^/::error title=differential::/'
+        exit 1
+    fi
+fi
 echo "✔ differential suite passed"
