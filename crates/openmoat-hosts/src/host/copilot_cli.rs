@@ -46,7 +46,6 @@ const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", TOOL_HOOK_TIMEOUT_S, false
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "copilot-cli",
     display_name: "GitHub Copilot CLI",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: None,
         on_no_ask: None,
@@ -66,8 +65,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks/openmoat.json",
         hooks: HOOKS,
         hook_format: HookFormat::Copilot,
-        relaxed_keys: &[],
-        trust_step: None,
+        ..InstallSpec::BASE
     }),
     // `mcp-config.json` in the configuration directory, and a project's
     // `.mcp.json` and `.github/mcp.json` from the working directory up to the
@@ -82,7 +80,6 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
         tool_names: McpToolNames::Dashed,
     }),
-    sandbox: None,
     // A repository's settings are merged over the user's, and
     // `disableAllHooks: true` there skips the user hook files too. Its
     // `.github/hooks/*.json` load once the folder is trusted and run their
@@ -99,6 +96,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::ClaudeCode,
         user_file: "settings.json",
     }),
+    ..HostSpec::BASE
 };
 
 /// Copilot CLI's camelCase `preToolUse`.

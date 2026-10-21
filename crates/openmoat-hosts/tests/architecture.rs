@@ -30,8 +30,9 @@ const ALLOWED: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox.rs", 2),
     ("openmoat-cli/src/sandbox/install.rs", 2),
     ("openmoat-cli/src/taint.rs", 1),
-    ("openmoat-hosts/src/lib.rs", 16),
-    ("openmoat-hosts/src/registry.rs", 16),
+    // `Host` and its two lists, `ALL` and `EVERY`.
+    ("openmoat-hosts/src/lib.rs", 24),
+    ("openmoat-hosts/src/registry.rs", 8),
     ("openmoat-hosts/src/wire/pre_tool_use.rs", 1),
 ];
 

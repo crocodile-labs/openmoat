@@ -46,7 +46,6 @@ const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "*", TOOL_HOOK_TIMEOUT_S, fals
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "gemini-cli",
     display_name: "Gemini CLI",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: None,
         on_no_ask: None,
@@ -69,7 +68,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hooks: HOOKS,
         hook_format: HookFormat::Gemini,
         relaxed_keys: settings::RELAXED_KEYS,
-        trust_step: None,
+        ..InstallSpec::BASE
     }),
     // <https://geminicli.com/docs/tools/mcp-server/>: `mcpServers` in the user
     // and the project `settings.json`.
@@ -79,7 +78,6 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         project_files: &[(".gemini/settings.json", McpLayout::Json)],
         tool_names: McpToolNames::Prefixed,
     }),
-    sandbox: None,
     // A trusted folder's `.gemini/settings.json` is merged over the user's:
     // `hooksConfig.disabled` lists are joined, and its `BeforeTool` hooks run
     // beside OpenMoat's and may rewrite a call's arguments (`docs/hooks/`,
@@ -92,6 +90,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Gemini,
         user_file: "settings.json",
     }),
+    ..HostSpec::BASE
 };
 
 /// Gemini CLI's `BeforeTool` hook.

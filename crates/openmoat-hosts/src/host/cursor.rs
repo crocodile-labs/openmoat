@@ -40,7 +40,6 @@ const HOOKS: &[HookSpec] = &[
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "cursor",
     display_name: "Cursor",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: None,
         on_no_ask: Some("Cursor does not prompt for this hook"),
@@ -58,8 +57,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks.json",
         hooks: HOOKS,
         hook_format: HookFormat::Cursor,
-        relaxed_keys: &[],
-        trust_step: None,
+        ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("mcp.json"),
@@ -85,6 +83,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Cursor,
         user_file: "hooks.json",
     }),
+    ..HostSpec::BASE
 };
 
 /// Cursor's hooks, each named in the payload.

@@ -30,7 +30,6 @@ const HOOKS: &[HookSpec] = &[HookSpec::new(
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "codex",
     display_name: "Codex",
-    speaks: None,
     asks: Asks {
         on_pre_tool_use: Some("Codex hooks cannot ask"),
         on_no_ask: None,
@@ -48,12 +47,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks.json",
         hooks: HOOKS,
         hook_format: HookFormat::Nested,
-        relaxed_keys: &[],
         // Codex runs a new or changed user hook only once the person trusts it
         // in `/hooks` (Codex's hooks documentation).
         trust_step: Some(
             "open Codex and trust OpenMoat's hook in /hooks; Codex runs a changed hook only then",
         ),
+        ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("config.toml"),
@@ -78,6 +77,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Codex,
         user_file: "config.toml",
     }),
+    ..HostSpec::BASE
 };
 
 /// Codex sends only `PreToolUse`.
