@@ -9,13 +9,13 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Security
-- The person-only `openmoat` commands are also denied under `setsid` and `flock`, and `openmoat proxy install` and `openmoat proxy uninstall` are person-only like `uninstall`: a service installed or removed changes every later session ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
-- The person-only commands (all but `openmoat init`) refuse to run from an executable other than the `openmoat` the policy lock records or its `moat` alias: a copy of the binary under another name, started where the agent is no longer among its parent processes, got past the guard's check by name. Run them from the installed `openmoat`, or run `openmoat init` from the new binary to point the hooks at it ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- The person-only `openmoat` commands are also denied under `setsid` and `flock`, and `openmoat proxy install` and `openmoat proxy uninstall` are person-only like `uninstall`: a service installed or removed changes every later session ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
+- The person-only commands (all but `openmoat init`) refuse to run from an executable other than the `openmoat` the policy lock records or its `moat` alias: a copy of the binary under another name, started where the agent is no longer among its parent processes, got past the guard's check by name. Run them from the installed `openmoat`, or run `openmoat init` from the new binary to point the hooks at it ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 - A search tool's glob pattern whose `..` segments climb out of the directory it searches, also after a wildcard (`*/../..`, `{..,x}`), is checked against the directory it reaches: Claude Code's `Glob`, Gemini CLI's `glob` and `read_many_files`, pi's `find` and Copilot CLI's `glob`; a deny on reading that directory holds ([#625](https://github.com/crocodile-labs/openmoat/pull/625)).
 - Claude Code's `Artifact` and `ArtifactData` tools are checked: every local file they upload to a claude.ai page is a read, like `SendFile`'s, and each file `Artifact` saves with `out_dir` is a write; `openmoat init` adds them to the hook's matcher ([#625](https://github.com/crocodile-labs/openmoat/pull/625)).
 
 ### Changed
-- `openmoat init` prints, after it writes or changes Codex's hook entry, that Codex runs it only once you trust it in `/hooks`; `openmoat doctor` says so on Codex's protection line. `openmoat-hosts` (library API, breaking): `InstallSpec::trust_step` ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- `openmoat init` prints, after it writes or changes Codex's hook entry, that Codex runs it only once you trust it in `/hooks`; `openmoat doctor` says so on Codex's protection line. `openmoat-hosts` (library API, breaking): `InstallSpec::trust_step` ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 
 ## [0.9.0] - 2026-10-22
 
