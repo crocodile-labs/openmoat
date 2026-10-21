@@ -24,7 +24,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, wrong_event,
+    Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec,
+    McpFile, McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, SettingsFormat, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -64,8 +65,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's \
          (a package's) and an extension that replaces a built-in tool are not checked; \
          a trusted project's `.pi` settings and extensions load with the agent's rights; \
-         calls run unchecked if pi does not load the extension; a failed or slow hook \
-         blocks the call",
+         calls run unchecked if pi does not load the extension (`openmoat status` and \
+         `doctor` report a settings entry that turns it off, not `--no-extensions`); a \
+         failed or slow hook blocks the call",
     // The agent directory, `~/.pi/agent` unless `PI_CODING_AGENT_DIR` moves it;
     // pi loads every `.js` and `.ts` file in its `extensions/` on start
     // (pi 1.3.0 `docs/configuration.md`, `docs/environment-variables.md`).
@@ -77,14 +79,33 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_format: HookFormat::Pi,
         relaxed_keys: &[],
     }),
-    // pi reads `<agent dir>/mcp.json` and a project's `.pi/mcp.json`
-    // (`docs/mcp.md`); OpenMoat pins neither yet. MCP tool calls are still
-    // decided by the policy's `mcp` rules.
-    mcp: None,
+    // pi reads `<agent dir>/mcp.json` and a trusted project's `.pi/mcp.json`,
+    // `{"mcpServers": {…}}`, and names a server's tools `mcp__<server>__<tool>`
+    // with every character but letters, digits and `_` as `_` (`docs/mcp.md`).
+    mcp: Some(McpSpec {
+        user_file: McpFile::InConfigDir("mcp.json"),
+        user_layout: McpLayout::Json,
+        project_files: &[(".pi/mcp.json", McpLayout::Json)],
+        tool_names: McpToolNames::Underscored,
+    }),
     sandbox: None,
-    // A trusted project's `.pi/settings.json` is not Claude Code's format;
-    // writes to it ask (`runs-later` in the default policy).
-    project_settings: None,
+    // A trusted project's `.pi/settings.json` can turn the user's extensions
+    // off and add packages, and its `.pi/extensions/` load with the agent's
+    // rights; the user's `settings.json` can turn OpenMoat's extension off
+    // with an `extensions` entry (`docs/settings.md`, "Resources";
+    // `dist/core/package-manager.js` `isEnabledByOverrides`). Writes to the
+    // project files ask (`runs-later` in the default policy).
+    project_settings: Some(ProjectSettingsSpec {
+        dir: ".pi",
+        shared: "settings.json",
+        local: None,
+        hook_dir: Some(HookDir {
+            path: ".pi/extensions",
+            extensions: &["js", "ts"],
+        }),
+        format: SettingsFormat::Pi,
+        user_file: "settings.json",
+    }),
 };
 
 /// What OpenMoat's extension sends from `tool_call`.

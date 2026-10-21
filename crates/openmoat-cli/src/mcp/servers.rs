@@ -12,6 +12,10 @@
 //!   `mcp.servers`"). The lock pins the rest of that file whole
 //!   (`integrity/digest.rs`). Plugin bundles bring their own `.mcp.json`; they
 //!   are plugin code, which `runs-later` asks before an agent writes.
+//! - GitHub Copilot CLI: `mcp-config.json` in its configuration directory, and a
+//!   project's `.mcp.json` and `.github/mcp.json`, wrapped in `mcpServers` or bare.
+//! - pi: `mcp.json` in its agent directory, and a project's `.pi/mcp.json`.
+//! - Gemini CLI: `mcpServers` in its `settings.json`, the user's and a project's.
 //!
 //! Project files are looked for in the working directory and each directory above
 //! it up to the project root. A file that does not exist lists no servers.
@@ -79,14 +83,18 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
             user: true,
         })
         .collect();
-    if let (Some((relative, layout)), Some(cwd)) = (mcp.project_file, cwd) {
+    if let Some(cwd) = cwd
+        && !mcp.project_files.is_empty()
+    {
         for dir in project_dirs(cwd)? {
-            out.push(Source {
-                host,
-                path: dir.join(relative),
-                layout,
-                user: false,
-            });
+            for (relative, layout) in mcp.project_files {
+                out.push(Source {
+                    host,
+                    path: dir.join(relative),
+                    layout: *layout,
+                    user: false,
+                });
+            }
         }
     }
     Ok(out)
@@ -103,6 +111,7 @@ fn user_files(home: &Home, host: Host, file: McpFile) -> Result<Vec<PathBuf>> {
     Ok(match file {
         McpFile::HookFile => vec![config.settings_path],
         McpFile::BesideHookFile(name) => vec![config.settings_path.with_file_name(name)],
+        McpFile::InConfigDir(name) => vec![config.dir().join(name)],
         McpFile::BesideDefaultDir(name) => {
             let user = user_home()?;
             let default = host.spec().install.as_ref().map(|i| user.join(i.dir_name));
@@ -202,6 +211,23 @@ pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
                 }
             }
         }
+        Layout::JsonOrBare => {
+            if text.trim().is_empty() {
+                return Ok(Vec::new());
+            }
+            let root: Value = serde_json::from_str(text).context("parsing JSON")?;
+            for (name, entry) in servers_in(&root, "mcpServers") {
+                add(format!("/mcpServers/{}", escape(name)), name, entry);
+            }
+            // Read whichever way the file is laid out: a top-level entry
+            // that looks like a server is pinned too, so a bare file cannot
+            // start a server OpenMoat did not see.
+            for (name, entry) in root.as_object().into_iter().flatten() {
+                if name != "mcpServers" && looks_like_server(entry) {
+                    add(format!("/{}", escape(name)), name, entry);
+                }
+            }
+        }
         Layout::Toml => {
             let doc: DocumentMut = text.parse().context("parsing TOML")?;
             if let Some(Value::Object(servers)) = doc.get("mcp_servers").map(toml_to_json) {
@@ -242,6 +268,13 @@ fn refuse_include(root: &Value) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// An object naming how a server starts or is reached.
+fn looks_like_server(entry: &Value) -> bool {
+    ["command", "url", "type"]
+        .iter()
+        .any(|key| entry.get(key).is_some())
 }
 
 /// The `(name, entry)` pairs of the object at `key` in `value`.
@@ -378,6 +411,28 @@ mod tests {
         }
         // An `$include` elsewhere cannot bring servers.
         assert!(parse(&openclaw, r#"{"agents": {"$include": "./a.json5"}}"#).is_ok());
+    }
+
+    #[test]
+    fn copilot_project_files_are_read_wrapped_or_bare() {
+        let copilot = Source {
+            path: PathBuf::from("/p/.mcp.json"),
+            ..source(Layout::JsonOrBare)
+        };
+        let wrapped = r#"{"mcpServers": {"gh": {"type": "local", "command": "npx"}}}"#;
+        let bare = r#"{"gh": {"type": "local", "command": "npx"}, "web": {"url": "https://x"},
+            "note": "not a server", "empty": {}}"#;
+        let ids = |text| -> Vec<String> {
+            parse(&copilot, text)
+                .unwrap()
+                .into_iter()
+                .map(|s| s.id)
+                .collect()
+        };
+        assert_eq!(ids(wrapped), ["/p/.mcp.json#/mcpServers/gh"]);
+        assert_eq!(ids(bare), ["/p/.mcp.json#/gh", "/p/.mcp.json#/web"]);
+        assert!(parse(&copilot, "").unwrap().is_empty());
+        assert!(parse(&copilot, "[").is_err());
     }
 
     #[test]

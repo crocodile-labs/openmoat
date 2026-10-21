@@ -260,6 +260,10 @@ configures the sandbox and fills the gaps between them.
   sandbox covers only `Bash`, `PowerShell` and `Monitor`. On Linux, plain `openmoat run`
   does not protect files inside the project; `openmoat run --isolate` does.
 - **Tools no hook exposes** are not seen (Codex web search and hosted tools).
+- **Codex runs a new or changed hook only once you trust it** in Codex's `/hooks`
+  (after `openmoat init`, open `/hooks` and trust OpenMoat's entry), and
+  `[features] hooks = false` in its `config.toml` turns hooks off; `openmoat status`
+  and `openmoat doctor` report the second, not the first.
 - **A missing hook binary:** if `openmoat` is missing or killed, Codex and Claude Code
   before 2.1.295 run the call unchecked; `openmoat status` reports it. With Claude Code
   2.1.295 or later, `openmoat init` sets the hook's `onFailure: "block"`, so the call is
@@ -270,16 +274,18 @@ configures the sandbox and fills the gaps between them.
 - **GitHub Copilot CLI** gets no OS sandbox from OpenMoat. Copilot runs a call whose
   hook times out (it fails open on timeouts; `openmoat init` sets 600 s, and the hook
   denies on its own after 30 s), and `disableAllHooks` in its settings turns every
-  hook off; `openmoat doctor` warns about a repository's settings and hook files.
+  hook off; `openmoat status` and `openmoat doctor` report it in your settings and warn
+  about a repository's settings and hook files.
 - **pi** gets no OS sandbox from OpenMoat. An input change by an extension pi loads
   after OpenMoat's is not checked, a trusted project's `.pi` extensions run with the
   agent's rights, and calls run unchecked when pi does not load OpenMoat's extension
-  (`pi --no-extensions`).
+  (`pi --no-extensions`, which OpenMoat cannot see, or an `extensions` entry in pi's
+  settings, which `openmoat status` and `openmoat doctor` report).
 - **Gemini CLI** gets no OS sandbox from OpenMoat and has no fail-closed setting: a
   hook that times out lets the call run. In a folder Gemini CLI does not trust it runs
   no settings hooks and asks you before every tool instead. A project's
   `.gemini/settings.json` can turn hooks off or rewrite a call's arguments with a hook
-  of its own, and is not checked. When Gemini CLI saves its own `settings.json` for a
+  of its own; `openmoat status` and `openmoat doctor` warn about one. When Gemini CLI saves its own `settings.json` for a
   new model, theme or sign-in method, `openmoat doctor` reports the change and calls
   are still checked; any other change to that file denies every call until you run
   `openmoat doctor --accept`.

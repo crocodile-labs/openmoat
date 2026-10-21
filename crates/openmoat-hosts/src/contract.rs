@@ -102,19 +102,61 @@ pub struct ProjectSettingsSpec {
     pub dir: &'static str,
     /// The file shared with the project.
     pub shared: &'static str,
-    /// The person's own file, kept out of version control.
-    pub local: &'static str,
-    /// A directory of the project whose every `*.json` file the host loads as
-    /// hooks (GitHub Copilot CLI's `.github/hooks`); `None` when it has none.
-    pub hook_dir: Option<&'static str>,
+    /// A second file the host reads from that directory: the person's own,
+    /// kept out of version control (Claude Code's `settings.local.json`), or
+    /// another file of the project's (Codex's `hooks.json`); `None` when the
+    /// host reads none.
+    pub local: Option<&'static str>,
+    /// A directory of the project whose files the host loads as hooks or
+    /// extensions (GitHub Copilot CLI's `.github/hooks`, pi's `.pi/extensions`);
+    /// `None` when it has none.
+    pub hook_dir: Option<HookDir>,
+    /// Which keys of these files turn OpenMoat's hook off, run a program or
+    /// redirect the agent; the CLI has one reader per format.
+    pub format: SettingsFormat,
+    /// The person's own settings file in the configuration directory, read
+    /// in the same format: what in it turns OpenMoat's hook off is reported
+    /// by `moat status` and `moat doctor` as "not protected". For Claude Code
+    /// and Gemini CLI it is the hook file itself.
+    pub user_file: &'static str,
 }
 
 impl ProjectSettingsSpec {
-    /// Both files, the shared one first.
+    /// The files of a project's settings directory, the shared one first.
     #[must_use]
-    pub const fn files(&self) -> [&'static str; 2] {
-        [self.shared, self.local]
+    pub fn files(&self) -> Vec<&'static str> {
+        std::iter::once(self.shared).chain(self.local).collect()
     }
+}
+
+/// A directory of a project whose files a host loads and runs.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct HookDir {
+    /// The directory, relative to the project.
+    pub path: &'static str,
+    /// The file name extensions it loads (`json`, or `js` and `ts`).
+    pub extensions: &'static [&'static str],
+}
+
+/// The layout and meaning of a host's settings files, for the checks of
+/// [`ProjectSettingsSpec`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsFormat {
+    /// Claude Code's `settings.json` keys (`disableAllHooks`, `hooks`, `env`,
+    /// helper commands, plugins, sandbox), which GitHub Copilot CLI reads too.
+    ClaudeCode,
+    /// Gemini CLI's `settings.json`: `hooksConfig.enabled`,
+    /// `hooksConfig.disabled`, `hooks`, and the tool discovery commands.
+    Gemini,
+    /// pi's `settings.json`: the `extensions` entries that turn an extension
+    /// off (`-path`, `!glob`) or load more code (`extensions`, `packages`).
+    Pi,
+    /// Codex's `config.toml` (`[features] hooks`, inline `[hooks]`, `notify`,
+    /// MCP servers, sandbox and model provider keys) and `hooks.json`.
+    Codex,
+    /// Cursor's `hooks.json`, whose `hooks` run beside OpenMoat's.
+    Cursor,
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.
@@ -305,10 +347,31 @@ pub struct McpSpec {
     pub user_file: McpFile,
     /// How that file lays out its servers.
     pub user_layout: McpLayout,
-    /// A project's file, relative to the working directory and each directory
-    /// above it up to the project root, and its layout; `None` when the host
-    /// documents none.
-    pub project_file: Option<(&'static str, McpLayout)>,
+    /// A project's files, relative to the working directory and each
+    /// directory above it up to the project root, and their layout; empty
+    /// when the host documents none.
+    pub project_files: &'static [(&'static str, McpLayout)],
+    /// How the host names a server's tools in its hook payloads.
+    pub tool_names: McpToolNames,
+}
+
+/// How a host names an MCP server's tools in the hook payload, so a tool call
+/// can be traced to the server definition it came from. Every form also
+/// matches `mcp__<server>__…`: matching too much only holds back another
+/// server's tools while one is unaccepted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpToolNames {
+    /// `mcp__<server>__<tool>`, the server's name as written or with every
+    /// character but letters, digits, `_` and `-` as `_` (Claude Code).
+    Prefixed,
+    /// `mcp__<server>__<tool>` with every character but letters, digits and
+    /// `_` as `_`, `-` included (pi 1.3.0 `docs/mcp.md`, "Configuration rules").
+    Underscored,
+    /// `<server>-<tool>` (GitHub Copilot CLI: the hook sees only the name the
+    /// model calls, its built-in GitHub server's tools are `github-mcp-server-…`).
+    Dashed,
+    /// OpenClaw's `<prefix>__<tool>`, its prefix derived from the server name.
+    OpenClaw,
 }
 
 /// Where a host's user-level MCP server file is.
@@ -318,6 +381,10 @@ pub enum McpFile {
     HookFile,
     /// The file of this name beside the hook file.
     BesideHookFile(&'static str),
+    /// The file of this name in the configuration directory, whose hook file
+    /// is in a subdirectory of it (GitHub Copilot CLI's `mcp-config.json`
+    /// beside `hooks/`, pi's `mcp.json` beside `extensions/`).
+    InConfigDir(&'static str),
     /// The file of this name in the home directory while the configuration
     /// directory is the default `~/<dir_name>`, inside the configuration
     /// directory otherwise (Claude Code's `~/.claude.json`).
@@ -335,6 +402,10 @@ pub enum McpLayout {
     Toml,
     /// OpenClaw `openclaw.json`, JSON5: `{mcp: {servers: {"<name>": {...}}}}`.
     OpenClaw,
+    /// GitHub Copilot CLI's project files, which may hold the servers under
+    /// `mcpServers` or bare, each top-level key a server
+    /// (<https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers>).
+    JsonOrBare,
 }
 
 /// The OS sandbox OpenMoat writes into a host's own settings.

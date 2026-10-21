@@ -205,3 +205,88 @@ fn uninstall_deletes_the_extension_and_gives_back_a_file_of_the_persons() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(!extension.exists(), "{}", text(&out));
 }
+
+/// The protection entry `status --format json` prints for `host`, run in `cwd`.
+fn agent_status(sb: &Sandbox, cwd: &std::path::Path, host: &str) -> (Value, Value) {
+    let mut cmd = sb.command();
+    cmd.current_dir(cwd).args(["status", "--format", "json"]);
+    let doc = parse(&output(&mut cmd, None));
+    let agent = doc["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["host"] == host)
+        .unwrap()
+        .clone();
+    (agent, doc)
+}
+
+/// The servers in pi's `mcp.json` are pinned at `init`; a changed one holds
+/// back its `mcp__<server>__…` tools, spelled as pi spells them.
+#[test]
+fn a_changed_mcp_server_in_the_agent_directory_is_held_back() {
+    let sb = Sandbox::bare(&[AGENT_DIR]);
+    let config = sb.home.join(AGENT_DIR).join("mcp.json");
+    let servers = |command: &str| {
+        json!({ "mcpServers": { "internal-tools": { "command": command } } }).to_string()
+    };
+    fs::write(&config, servers("npx")).unwrap();
+    let out = sb.moat(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains("1 definitions pinned"),
+        "{}",
+        text(&out)
+    );
+    let call = || guard(&sb, &payload(&sb, "mcp__internal_tools__run", &json!({})));
+    assert_eq!(call().0, Some(OK));
+    fs::write(&config, servers("sh")).unwrap();
+    let (code, reply) = call();
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert!(reason(&reply).contains("mcp-server-changed"), "{reply}");
+}
+
+/// An `extensions` entry in pi's own settings that excludes OpenMoat's
+/// extension leaves the hook pinned but never loaded; a project's settings
+/// and extensions are warned about.
+#[test]
+fn settings_that_turn_the_extension_off_are_reported() {
+    let sb = sandbox();
+    let project = sb.project();
+    let (agent, _) = agent_status(&sb, &project, "pi");
+    assert_eq!(agent["level"], "hook-only", "{agent}");
+
+    let settings = sb.home.join(AGENT_DIR).join("settings.json");
+    fs::write(&settings, r#"{"extensions": ["-extensions/openmoat.js"]}"#).unwrap();
+    let (agent, _) = agent_status(&sb, &project, "pi");
+    assert_eq!(agent["level"], "not-protected", "{agent}");
+    assert!(
+        agent["reason"]
+            .to_string()
+            .contains("-extensions/openmoat.js"),
+        "{agent}"
+    );
+    fs::remove_file(&settings).unwrap();
+
+    fs::create_dir_all(project.join(".pi/extensions")).unwrap();
+    fs::write(
+        project.join(".pi/settings.json"),
+        r#"{"extensions": ["!*.js"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        project.join(".pi/extensions/helper.ts"),
+        "export default () => {}",
+    )
+    .unwrap();
+    let (_, doc) = agent_status(&sb, &project, "pi");
+    let warnings = doc["project_settings"].to_string();
+    assert!(
+        warnings.contains("`!*.js` turns OpenMoat's extension off"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("helper.ts: is an extension pi loads"),
+        "{warnings}"
+    );
+}

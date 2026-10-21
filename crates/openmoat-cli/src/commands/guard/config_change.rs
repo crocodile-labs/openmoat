@@ -25,7 +25,7 @@ fn project_file(
     let spec = format.spec().project_settings.as_ref()?;
     match source {
         "project_settings" => Some((spec, spec.shared)),
-        "local_settings" => Some((spec, spec.local)),
+        "local_settings" => Some((spec, spec.local?)),
         _ => None,
     }
 }

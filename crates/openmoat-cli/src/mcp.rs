@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use openmoat_core::{Decision, Verdict};
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, McpToolNames};
 
 use crate::home::Home;
 use crate::install::HostConfig;
@@ -120,12 +120,42 @@ pub fn violation(
     Ok(Some(decision))
 }
 
-/// Whether `tool` (`mcp__…` as the adapter names it) is one of server `name`'s
-/// tools as `host` names them. Matching too much holds back another server's
-/// tools while this one is unaccepted; matching too little would let a changed
-/// server run, so OpenClaw's spellings are all tried.
+/// Whether `tool` (the name the adapter recorded) is one of server `name`'s
+/// tools as `host` names them ([`McpToolNames`]). Matching too much holds back
+/// another server's tools while this one is unaccepted; matching too little
+/// would let a changed server run, so every spelling is tried.
 pub fn tool_of(host: Host, tool: &str, name: &str) -> bool {
-    pins::tool_of(tool, name) || (host == Host::OpenClaw && openclaw_tool_of(tool, name))
+    if pins::tool_of(tool, name) {
+        return true;
+    }
+    match host.spec().mcp.as_ref().map(|mcp| mcp.tool_names) {
+        Some(McpToolNames::OpenClaw) => openclaw_tool_of(tool, name),
+        Some(McpToolNames::Underscored) => {
+            tool.starts_with(&format!("mcp__{}__", spelled(name, |c| c == '_', '_')))
+        }
+        Some(McpToolNames::Dashed) => [
+            name.to_owned(),
+            spelled(name, |c| c == '_' || c == '-', '-'),
+            spelled(name, |c| c == '_' || c == '-', '_'),
+        ]
+        .iter()
+        .any(|n| tool.starts_with(&format!("{n}-"))),
+        Some(McpToolNames::Prefixed) | None => false,
+    }
+}
+
+/// `name` with every character but ASCII letters, digits and those `keep`
+/// allows as `with`.
+fn spelled(name: &str, keep: impl Fn(char) -> bool, with: char) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || keep(c) {
+                c
+            } else {
+                with
+            }
+        })
+        .collect()
 }
 
 /// OpenClaw names a server's tools `<prefix>__<tool>`

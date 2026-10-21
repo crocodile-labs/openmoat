@@ -6,7 +6,9 @@
 //! `{"command": "<moat>", "args": ["mcp", "proxy", "--server", "<name>", "--", "npx", "-y", "pkg"]}`.
 //! The original stays in the arguments after `--`, so unwrapping needs no other
 //! record, and `env`, `cwd` and the rest stay as they were. Only user-level files
-//! are changed (`~/.claude.json`, Cursor's `mcp.json`, Codex's `config.toml`): a
+//! are changed (`~/.claude.json`, Cursor's `mcp.json`, Codex's `config.toml`,
+//! OpenClaw's `openclaw.json`, Copilot's `mcp-config.json`, pi's `mcp.json`,
+//! Gemini CLI's `settings.json`): a
 //! project's `.mcp.json` is shared through its repository, where the path of this
 //! machine's `moat` means nothing. Each file is backed up before its first change,
 //! and `hosts.json` records every wrapped definition for `moat uninstall`.
@@ -45,12 +47,13 @@ pub struct Done {
 }
 
 /// `entry`'s `command` and `args` when it is a stdio server: a `command`
-/// string, and no `type` other than `stdio`.
+/// string, and no `type` other than `stdio` (`local` in GitHub Copilot CLI's
+/// `mcp-config.json`).
 fn stdio(entry: &Value) -> Option<(String, Vec<String>)> {
     if entry
         .get("type")
         .and_then(Value::as_str)
-        .is_some_and(|t| t != "stdio")
+        .is_some_and(|t| t != "stdio" && t != "local")
     {
         return None;
     }
@@ -143,7 +146,7 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
         let text =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let new = match layout {
-            Layout::Json | Layout::ClaudeJson => edit_json(&text, &dones)?,
+            Layout::Json | Layout::ClaudeJson | Layout::JsonOrBare => edit_json(&text, &dones)?,
             Layout::Toml => edit_toml(&text, &dones)?,
             Layout::OpenClaw => {
                 // JSON5 is written back as JSON, so a file with comments is not.
@@ -253,6 +256,14 @@ mod tests {
         assert!(wrapped(&json!({"command": "x", "args": [1]}), bin, "a", false).is_none());
         let sandboxed = wrapped(&json!({"type": "stdio", "command": "x"}), bin, "a", true).unwrap();
         assert_eq!(sandboxed["args"][4], "--sandbox");
+        // GitHub Copilot CLI calls a stdio server `local`.
+        let local = json!({"type": "local", "command": "x", "tools": ["*"]});
+        let wrapped_local = wrapped(&local, bin, "a", false).unwrap();
+        assert_eq!(wrapped_local["type"], "local");
+        assert_eq!(
+            unwrapped(&wrapped_local).unwrap(),
+            json!({"type": "local", "command": "x", "args": [], "tools": ["*"]})
+        );
         assert!(
             unwrapped(&json!({"command": "npx", "args": ["mcp", "proxy", "--", "x"]})).is_none()
         );

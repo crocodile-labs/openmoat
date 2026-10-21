@@ -14,7 +14,8 @@ use serde_json::Value;
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
     Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    McpToolNames, ProjectSettingsSpec, SandboxFormat, SandboxSpec, SettingsFormat,
+    TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -62,7 +63,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("mcp.json"),
         user_layout: McpLayout::Json,
-        project_file: Some((".cursor/mcp.json", McpLayout::Json)),
+        project_files: &[(".cursor/mcp.json", McpLayout::Json)],
+        tool_names: McpToolNames::Prefixed,
     }),
     // Cursor documents its sandbox for macOS and Linux only.
     sandbox: Some(SandboxSpec {
@@ -72,7 +74,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy",
         ),
     }),
-    project_settings: None,
+    // A project's `.cursor/hooks.json` runs its hooks beside the user's
+    // (<https://cursor.com/docs/agent/hooks>, "Configuration").
+    project_settings: Some(ProjectSettingsSpec {
+        dir: ".cursor",
+        shared: "hooks.json",
+        local: None,
+        hook_dir: None,
+        format: SettingsFormat::Cursor,
+        user_file: "hooks.json",
+    }),
 };
 
 /// Cursor's hooks, each named in the payload.

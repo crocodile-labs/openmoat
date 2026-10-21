@@ -26,7 +26,7 @@ use serde_json::Value;
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
     Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    TOOL_HOOK_TIMEOUT_S, wrong_event,
+    McpToolNames, ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -58,8 +58,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     gaps: "no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no \
          settings hooks at all and asks the person before every tool instead; a project's \
          `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's \
-         arguments, and is not checked; extension hooks run beside OpenMoat's; a hook that \
-         times out lets the call run",
+         arguments (`openmoat status` and `doctor` warn about one); extension hooks run beside \
+         OpenMoat's; a hook that times out lets the call run",
     // `GEMINI_CLI_HOME` replaces the home directory `.gemini` is looked up in
     // (`homedir()` in `packages/core/src/utils/paths.ts`).
     install: Some(InstallSpec {
@@ -75,10 +75,22 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     mcp: Some(McpSpec {
         user_file: McpFile::HookFile,
         user_layout: McpLayout::Json,
-        project_file: Some((".gemini/settings.json", McpLayout::Json)),
+        project_files: &[(".gemini/settings.json", McpLayout::Json)],
+        tool_names: McpToolNames::Prefixed,
     }),
     sandbox: None,
-    project_settings: None,
+    // A trusted folder's `.gemini/settings.json` is merged over the user's:
+    // `hooksConfig.disabled` lists are joined, and its `BeforeTool` hooks run
+    // beside OpenMoat's and may rewrite a call's arguments (`docs/hooks/`,
+    // `config/settingsSchema.ts`, 0.65.0). There is no local file.
+    project_settings: Some(ProjectSettingsSpec {
+        dir: ".gemini",
+        shared: "settings.json",
+        local: None,
+        hook_dir: None,
+        format: SettingsFormat::Gemini,
+        user_file: "settings.json",
+    }),
 };
 
 /// Gemini CLI's `BeforeTool` hook.

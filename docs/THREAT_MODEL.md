@@ -444,12 +444,12 @@ something OpenMoat claims to stop.
 
   <!-- generated:hosts-gaps -->
   - **Claude Code.** Known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295 calls run unchecked if the hook binary is missing or crashes. When the hook fails: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`openmoat init` sets `onFailure: "block"`).
-  - **Codex.** Known gaps: web search and hosted tools are not hooked; asks become denies; calls run unchecked if the hook binary is missing or crashes. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2 (or 2 with nothing on stderr), or times out (default 600 s).
+  - **Codex.** Known gaps: web search and hosted tools are not hooked; asks become denies; Codex skips a new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = false` turns hooks off (`openmoat status` and `doctor` report that); calls run unchecked if the hook binary is missing or crashes. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2 (or 2 with nothing on stderr), or times out (default 600 s).
   - **Cursor.** Known gaps: commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined; file-tool asks become denies; Task and tools that name no path are not hooked; a failed hook blocks the call. When the hook fails: runs the call when the hook is missing, crashes or times out, unless the hook entry sets `failClosed: true`; then it blocks the call.
   - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; a parameter rewrite by another plugin and OpenClaw's process input are not checked; calls run unchecked if the Gateway does not load the plugin; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin.
-  - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off; MCP servers are not pinned and MCP tools are told apart from built-in ones only by name; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
-  - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
-  - **Gemini CLI.** Known gaps: no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings hooks at all and asks the person before every tool instead; a project's `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments, and is not checked; extension hooks run beside OpenMoat's; a hook that times out lets the call run. When the hook fails: runs the call when the hook times out, is killed by a signal or exits 1 (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits with any other code and prints something, as a missing `openmoat` does.
+  - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it); MCP tools are told apart from built-in ones only by name, so a changed server is traced by its `<server>-` prefix; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
+  - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension (`openmoat status` and `doctor` report a settings entry that turns it off, not `--no-extensions`); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
+  - **Gemini CLI.** Known gaps: no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings hooks at all and asks the person before every tool instead; a project's `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments (`openmoat status` and `doctor` warn about one); extension hooks run beside OpenMoat's; a hook that times out lets the call run. When the hook fails: runs the call when the hook times out, is killed by a signal or exits 1 (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits with any other code and prints something, as a missing `openmoat` does.
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
 
@@ -475,9 +475,12 @@ something OpenMoat claims to stop.
   merged over the user file in a trusted folder: it can set `hooksConfig.enabled: false`
   or name OpenMoat's entry in `hooksConfig.disabled`, and its own `BeforeTool` hooks
   run beside OpenMoat's and may rewrite a call's arguments (`hookSpecificOutput.tool_input`)
-  after OpenMoat decided them; extension hooks can do the same. OpenMoat does not
-  check that file (`kernel-self` denies the agent writing it, and the user file and the
-  trust list, but a cloned repository can ship one). `allow` skips none of Gemini CLI's
+  after OpenMoat decided them; extension hooks can do the same. `kernel-self` denies the
+  agent writing that file, the user file and the trust list, but a cloned repository
+  can ship one: `openmoat status` and `openmoat doctor` warn about a project file that
+  turns hooks off, adds hooks, sets a tool discovery command or starts MCP servers, and
+  report Gemini CLI as not protected while the user file turns OpenMoat's hook off
+  (which `openmoat init` pins as it finds it). `allow` skips none of Gemini CLI's
   own confirmations; an `ask` makes Gemini CLI confirm even where its policy or YOLO
   mode would not. Its to-do, tracker, plan-mode and skill tools are not checked, nor a
   subagent invocation (the subagent's own tool calls are). `web_fetch` names its URLs
@@ -537,8 +540,14 @@ something OpenMoat claims to stop.
   `bash`), which OpenMoat then checks as the built-in. Extensions, including a
   trusted project's, run inside pi with the agent's rights. `codemode` scripts run in
   QuickJS without files or network; each tool a script calls is checked as its own
-  call. The MCP servers in pi's `mcp.json` are not pinned yet; their tool calls are
-  decided by the policy's `mcp` rules. There is no OS sandbox from OpenMoat for pi;
+  call. The MCP servers in pi's `mcp.json` and a project's `.pi/mcp.json` are pinned
+  like every host's (ADR-026): a changed or new one holds back its own tool calls
+  (`mcp__<server>__…`, the name as pi spells it) until a person accepts it. An
+  `extensions` entry in pi's `settings.json` that excludes OpenMoat's extension
+  (`-extensions/openmoat.js`, `!*.js`) makes `openmoat status` and `openmoat doctor`
+  report pi as not protected, and one in a project's `.pi/settings.json`, or an
+  extension in its `.pi/extensions/`, is warned about; `pi --no-extensions` cannot be
+  seen. There is no OS sandbox from OpenMoat for pi;
   run pi under `openmoat run` for one.
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
@@ -584,14 +593,17 @@ something OpenMoat claims to stop.
   repository's `.github/copilot/settings.json` or `settings.local.json` skips every
   hook file**, OpenMoat's included; `kernel-self` denies the agent writes to those
   files, the hooks directory and the configuration directory, and `openmoat doctor` and
-  `openmoat status` warn about a repository that sets it. A repository's own
+  `openmoat status` report Copilot as not protected while the user file sets it and
+  warn about a repository that sets it. A repository's own
   `.github/hooks/*.json` load once the folder is trusted and run their commands with
   the person's rights; writing one asks (`runs-later`) and the two commands warn about
   each. Policy hooks an administrator puts in `/etc/github-copilot/policy.d` run first
   and are not OpenMoat's to check. The hook payload does not mark MCP tools, so any
-  tool OpenMoat does not know is checked by the paths and URLs its arguments name, and
-  Copilot's MCP servers (`~/.copilot/mcp-config.json`, a write of which asks) are not
-  pinned. `write_bash` input is checked as a command, `powershell` is `unparseable`.
+  tool OpenMoat does not know is checked by the paths and URLs its arguments name.
+  Copilot's MCP servers (`~/.copilot/mcp-config.json`, and a project's `.mcp.json` and
+  `.github/mcp.json`, wrapped in `mcpServers` or bare; a write of any of them asks) are
+  pinned (ADR-026), and a call is traced to its server by the `<server>-` prefix of the
+  tool name: a changed server holds back the calls whose name starts with it. `write_bash` input is checked as a command, `powershell` is `unparseable`.
   There is no OS sandbox from OpenMoat for Copilot CLI; run it under `openmoat run`
   for one.
 
@@ -660,6 +672,19 @@ something OpenMoat claims to stop.
   where OpenMoat could check (*unverified*).
 
   [cc-settings]: https://code.claude.com/docs/en/settings
+- **Codex runs only hooks a person trusted.** Codex skips a non-managed hook, new or
+  changed, until the person reviews and trusts that exact definition in `/hooks`
+  (trust is recorded against the hook's hash), and `[features] hooks = false` in a
+  `config.toml` turns every hook off ([codex-hooks-doc]). OpenMoat cannot see the trust
+  record, so after `openmoat init` Codex's own startup warning is the sign that the
+  hook is not running yet. `openmoat status` and `openmoat doctor` report Codex as not
+  protected while the user's `config.toml` turns hooks off, and warn about a trusted
+  project's `.codex/config.toml` or `.codex/hooks.json` that turns them off, adds hooks
+  (which run beside OpenMoat's), sets `notify`, starts MCP servers, changes the sandbox
+  or the model provider. A project's Cursor `.cursor/hooks.json`, which a trusted
+  workspace runs beside the user's hooks, is warned about the same way.
+
+  [codex-hooks-doc]: https://learn.chatgpt.com/docs/hooks
 - **Codex does not send a command's `workdir`.** Codex's shell tools take a `workdir`
   argument and run the command there, but the `PreToolUse` payload carries only the
   command, so a relative path in it is checked against the session's directory, not
@@ -872,7 +897,7 @@ something OpenMoat claims to stop.
 - **End-to-end tests** run the real binary as a hook in isolated homes: lock drift,
   `ConfigChange`, approvals, install paths, every host's payloads.
 - **MoatBench mini** ([MOATBENCH.md](MOATBENCH.md)): multi-step attack and benign
-  scenarios sent as Claude Code, Codex and Cursor payloads to the real binary, with a
+  scenarios sent as each agent's hook payloads to the real binary, with a
   scorecard of verdicts, false positives and known gaps.
 - **Fuzzing.** `cargo fuzz` targets for the shell path through the engine, policy
   parsing, host payloads and `openmoat allow --always` patterns run in CI on every pull

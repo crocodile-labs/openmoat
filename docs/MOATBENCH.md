@@ -22,8 +22,10 @@ openmoat bench --hook '<command>' --host claude-code    # against any hook comma
 
 `openmoat bench` creates a throwaway home under the system temporary directory, runs
 `openmoat init --yes` there, and for each scenario and each host that has a tool for
-every step (Claude Code, Codex, Cursor, OpenClaw, Gemini CLI; on Windows Gemini CLI's
-shell is PowerShell, which OpenMoat leaves to it, so its shell steps are skipped there)
+every step (Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI;
+Copilot's payload does not name an MCP tool's server and pi has no fetch tool, so
+scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell,
+which OpenMoat leaves to it, so its shell steps are skipped there)
 sends the steps to `openmoat guard --host <host>`
 as that host's hook payload. The scenarios' commands are never executed: only the
 hook runs. It reads the kernel verdict of each step back from the throwaway audit
@@ -51,6 +53,14 @@ Windows), and reads each reply by that host's hook protocol
 | `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none | exit 0 with no output, or `decision: allow`: OpenClaw's own checks decide |
 | `error` | any other exit, a timeout (10 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) | the same, or exit 0 with any other output (the plugin blocks the call) |
 
+| Answer | GitHub Copilot CLI | pi (OpenMoat's extension) | Gemini CLI |
+|---|---|---|---|
+| `allow` | exit 0, `permissionDecision: allow` | exit 0, `decision: allow` | none: `decision: allow` is read as `passthrough` (its own policy still decides) |
+| `ask` | exit 0, `permissionDecision: ask` | exit 0, `decision: ask` (the extension's dialog) | `decision: ask`, whatever the exit code |
+| `deny` | exit 2, or exit 0 with `permissionDecision: deny` | exit 2 with `decision: deny` | `decision: deny` or `block`, whatever the exit code; without one, an exit other than 0 and 1 with something printed |
+| `passthrough` | exit 0 with no output | exit 0 with no output | exit 0 with no output |
+| `error` | any other exit (Copilot then denies), a timeout or a hook that cannot start | any other reply (the extension blocks the call) | exit 1, a signal, a silent non-zero exit or unreadable output on exit 0 (Gemini CLI then runs the call) |
+
 A step is then compared with what the host must end up doing: an expected `ask`
 becomes a `deny` where the host cannot ask, and an expected `allow` is also met by
 `passthrough`. An expected `defer` (ADR-025) is `passthrough` on Claude Code,
@@ -70,7 +80,7 @@ scripts. `openmoat bench` exits 0 whenever it ran, whatever the scores; 64 on a 
 error (`--hook` without `--host`).
 
 ```text
-MoatBench mini: openmoat (claude-code, codex, cursor, openclaw)
+MoatBench mini: openmoat (claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli)
 category          runs  blocked  asked  allowed  passthrough  error
 benign              20        0      0       20            0      0
 exfiltration        18       17      0        0            1      0

@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 31 | 20 | 7 |
 | T7 | Obfuscation and nested execution | 130 | 102 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 13 | 0 | 6 |
-| T9 | Hook / policy tampering by the agent | 215 | 55 | 11 |
+| T9 | Hook / policy tampering by the agent | 215 | 56 | 11 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
 | T12 | Network to unknown hosts | 83 | 17 | 1 |
@@ -879,6 +879,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-write-copilot-repo-hook` (ask): Ask [runs-later]
 - `ask-echo-into-copilot-repo-hook` (ask): Ask [runs-later]
 - `ask-write-copilot-mcp-config` (ask): Ask [runs-later]
+- `ask-write-copilot-repo-mcp` (ask): Ask [runs-later]
 - `ask-write-gitlab-ci` (ask): Ask [runs-later]
 - `ask-write-circleci` (ask): Ask [runs-later]
 - `ask-write-azure-pipelines` (ask): Ask [runs-later]

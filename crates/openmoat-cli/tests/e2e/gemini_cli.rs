@@ -306,3 +306,59 @@ fn uninstall_gives_the_settings_back() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), original);
 }
+
+/// The protection entry and the report `status --format json` prints, in `cwd`.
+fn status_in(sb: &Sandbox, cwd: &std::path::Path) -> (Value, Value) {
+    let mut cmd = sb.command();
+    cmd.current_dir(cwd).args(["status", "--format", "json"]);
+    let doc = parse(&crate::common::output(&mut cmd, None));
+    let agent = doc["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["host"] == "gemini-cli")
+        .unwrap()
+        .clone();
+    (agent, doc)
+}
+
+/// `init` pins the settings file as it finds it: a `hooksConfig` that turns
+/// hooks off stays, and the agent is reported as not protected.
+#[test]
+fn hooks_turned_off_in_the_user_settings_is_not_protected() {
+    let sb = Sandbox::bare(&[".gemini"]);
+    fs::write(
+        settings(&sb),
+        json!({ "hooksConfig": { "enabled": false } }).to_string(),
+    )
+    .unwrap();
+    let out = sb.moat(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let (agent, _) = status_in(&sb, &sb.home);
+    assert_eq!(agent["level"], "not-protected", "{agent}");
+    assert!(
+        agent["reason"].to_string().contains("hooksConfig.enabled"),
+        "{agent}"
+    );
+}
+
+/// A trusted folder's `.gemini/settings.json` loads at start: `status` names
+/// what in it turns OpenMoat off or adds a hook.
+#[test]
+fn a_project_settings_file_that_disables_openmoat_is_warned_about() {
+    let sb = Sandbox::installed(&[".gemini"]);
+    let project = sb.project();
+    let (agent, doc) = status_in(&sb, &project);
+    assert_eq!(agent["level"], "hook-only", "{agent}");
+    assert_eq!(doc["project_settings"], json!([]), "{doc}");
+    fs::create_dir_all(project.join(".gemini")).unwrap();
+    let theirs = json!({
+        "hooksConfig": { "disabled": ["openmoat"] },
+        "hooks": { "BeforeTool": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "./x" }] }] },
+    });
+    fs::write(project.join(".gemini/settings.json"), theirs.to_string()).unwrap();
+    let (_, doc) = status_in(&sb, &project);
+    let warnings = doc["project_settings"].to_string();
+    assert!(warnings.contains("`hooksConfig.disabled`"), "{warnings}");
+    assert!(warnings.contains("`hooks` adds hooks"), "{warnings}");
+}

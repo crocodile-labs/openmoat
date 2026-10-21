@@ -372,7 +372,7 @@ allow:
       # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` asks)
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
-      "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**",
+      "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
       "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
@@ -736,9 +736,9 @@ ask:
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
       "~/.openclaw/extensions/**", "**/.openclaw/extensions/**",
-      # GitHub Copilot CLI: a repository's hook files, and the user's MCP servers,
+      # GitHub Copilot CLI: a repository's hook files and MCP servers, and the user's MCP servers,
       # plugins and custom agents (whose frontmatter may carry hooks)
-      "**/.github/hooks/**",
+      "**/.github/hooks/**", "**/.github/mcp.json",
       "~/.copilot/mcp-config.json", "~/.copilot/installed-plugins/**", "~/.copilot/agents/**",
       # pi extensions, which pi loads and runs with the agent's rights, its MCP
       # server lists, and a project's pi settings, which can add packages and turn

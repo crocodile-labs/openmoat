@@ -213,6 +213,24 @@ part that failed (other simple commands, other MCP arguments), and the engine me
 | OpenClaw `browser` | `open`, `navigate`: `url` or `targetUrl`; `upload`: `paths`; any other action | `Net`; `ReadFiles`; `UnknownTool` |
 | OpenClaw `gateway` / `plugins` | `config.get` / `install`, `enable`, `disable`, `uninstall`, `reload`, `reloadAndResume`: the plugin's `configPath` | `FsRead` / `FsWrite` (`kernel-self` denies it) |
 | OpenClaw `process` input (`send-keys`, `submit`, `paste`, …), Code Mode `exec` | the params as JSON | `ForeignShell` (`unparseable`) |
+| GitHub Copilot CLI `bash`, `local_shell` / `write_bash` | `command` / `input` (typed into a running shell) | `Shell` |
+| GitHub Copilot CLI `powershell` / `write_powershell` | `command` / `input` | `ForeignShell` |
+| GitHub Copilot CLI `view`; `str_replace_editor` `view` / `create`, `edit`, `str_replace`; other `str_replace_editor` commands | `path` | `FsRead` / `FsWrite` |
+| GitHub Copilot CLI `apply_patch` | the patch text (or `input`, `patch`) | `Patch` |
+| GitHub Copilot CLI `grep`, `rg`, `glob` | `paths`, else the working directory | `FsRead`, `ReadFiles` |
+| GitHub Copilot CLI `web_fetch` / `web_search` | `url` / `query` | `Fetch` / `WebSearch` |
+| any other GitHub Copilot CLI tool (MCP tools are `<server>-<tool>`; the payload does not mark them), except `ask_user`, `report_intent`, `task`, `think`, `update_todo` and the shell read/stop/list tools (ungoverned) | tool name and arguments | `McpTool` |
+| pi `bash` / `powershell` | `command` | `Shell` / `ForeignShell` |
+| pi `read` / `write`, `edit` | `path`, as pi resolves it (a leading `@` dropped, `~` the home, relative to `cwd`) | `FsRead` / `FsWrite` |
+| pi `grep`, `ls`, `find` | `path`, else the working directory; an absolute `find` pattern also reads its directory | `FsRead`, `ReadFiles` |
+| pi `mcp__<server>__<tool>`; `read_mcp_resource` | tool name and arguments; `server`, `uri` | `McpTool` |
+| any other pi tool, except `codemode`, `tool_search` and the MCP resource lists (ungoverned) | tool name | `UnknownTool` (`tool.unknown`) |
+| Gemini CLI `run_shell_command` | `command`, in `dir_path`; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
+| Gemini CLI `read_file`, `list_directory` / `write_file`, `replace` | `file_path`, `dir_path` / `file_path` | `FsRead` / `FsWrite` |
+| Gemini CLI `glob`, `grep_search`, `read_many_files` | the directory searched, where a pattern climbs to, each `include` up to its first wildcard | `FsRead`, `ReadFiles` |
+| Gemini CLI `web_fetch` / `google_web_search` | the one URL in `prompt` (several are refused) / `query` | `Fetch` / `WebSearch` |
+| Gemini CLI MCP tools (with `mcp_context`); `read_mcp_resource` | `mcp__<server_name>__<tool_name>` and the arguments; `uri` | `McpTool` |
+| any other Gemini CLI tool (a subagent, a discovered tool), except its to-do, tracker, plan-mode and skill tools (ungoverned) | tool name | `UnknownTool` (`tool.unknown`) |
 | OpenClaw `<server>__<tool>` | `mcp__<server>__<tool>` and `params` | `McpTool` |
 | OpenClaw `cron` `add`, `update`, `next_check` | the state database: `<stateDir>/state/openclaw.sqlite` (beside `configPath` from a plugin that sends no `stateDir`) | `FsWrite` (`kernel-self` denies) |
 | OpenClaw `nodes` `invoke` / an action with `outPath` | the params as JSON / `outPath` | `ForeignShell` (`unparseable`) / `FsWrite` |

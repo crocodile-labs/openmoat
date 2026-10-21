@@ -169,3 +169,65 @@ fn uninstall_deletes_the_hook_file_init_created() {
     assert!(!hook_file(&sb).exists(), "{}", text(&out));
     assert!(sb.home.join(".copilot").is_dir(), "the directory stays");
 }
+
+/// The servers in `~/.copilot/mcp-config.json` are pinned at `init`; a changed
+/// one holds back the tool calls named `<server>-…` until a person accepts it,
+/// and the others run.
+#[test]
+fn a_changed_mcp_server_holds_back_its_tools_until_accepted() {
+    let sb = Sandbox::bare(&[".copilot"]);
+    let config = sb.home.join(".copilot/mcp-config.json");
+    let servers = |gh: &str| {
+        json!({ "mcpServers": {
+            "gh": { "type": "local", "command": gh, "tools": ["*"] },
+            "db": { "type": "http", "url": "https://db.example/mcp" },
+        }})
+        .to_string()
+    };
+    fs::write(&config, servers("npx")).unwrap();
+    let out = sb.moat(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains("2 definitions pinned"),
+        "{}",
+        text(&out)
+    );
+    let project = sb.project();
+    let call = |tool: &str| guard(&sb, &payload(&project, tool, &json!({ "q": "x" })));
+    assert_eq!(call("gh-search").0, Some(OK));
+
+    fs::write(&config, servers("sh")).unwrap();
+    let (code, out) = call("gh-search");
+    assert_eq!(code, Some(DENY), "{out}");
+    assert!(out.contains("mcp-server-changed"), "{out}");
+    assert_eq!(call("db-query").0, Some(OK), "other servers run");
+
+    let accept = sb.moat_approving(&["mcp", "accept", "gh"]);
+    assert_eq!(accept.status.code(), Some(OK), "{}", text(&accept));
+    assert_eq!(call("gh-search").0, Some(OK));
+}
+
+/// `disableAllHooks` in Copilot's own `settings.json` skips OpenMoat's hook
+/// file: the hook is installed and pinned, yet the agent is not protected.
+#[test]
+fn disable_all_hooks_in_the_user_settings_is_not_protected() {
+    let sb = sandbox();
+    let settings = sb.home.join(".copilot/settings.json");
+    fs::write(&settings, r#"{"disableAllHooks": true}"#).unwrap();
+    let status = sb.moat(&["status", "--format", "json"]);
+    let report: Value = serde_json::from_slice(&status.stdout).unwrap();
+    let copilot = report["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["host"] == "copilot-cli")
+        .unwrap();
+    assert_eq!(copilot["level"], "not-protected", "{copilot}");
+    assert!(
+        copilot["reason"].to_string().contains("disableAllHooks"),
+        "{copilot}"
+    );
+    fs::write(&settings, r#"{"disableAllHooks": false}"#).unwrap();
+    let doctor = text(&sb.moat(&["doctor"]));
+    assert!(doctor.contains("hook only"), "{doctor}");
+}

@@ -62,6 +62,7 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.codex/config.toml",
     "**/.openclaw/extensions/**",
     "**/.github/hooks/**",
+    "**/.github/mcp.json",
     "**/.pi/extensions/**",
     "**/.pi/mcp.json",
     "**/.pi/settings.json",
