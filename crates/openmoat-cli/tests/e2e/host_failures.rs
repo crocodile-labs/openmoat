@@ -182,8 +182,10 @@ fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
             assert!(out.stdout.is_empty(), "{}: {}", shape.name, text(&out));
         }
     }
-    // OpenClaw's and pi's unknown tool is `default.tool.unknown`, not `ungoverned`.
-    let shown = sb.moat(&["show", "--recent", "5"]);
+    // OpenClaw's and pi's unknown tool is `default.tool.unknown`, not
+    // `ungoverned`. One row per host: older rows would fall off a shorter list.
+    let recent = shapes().len().to_string();
+    let shown = sb.moat(&["show", "--recent", &recent]);
     assert_eq!(
         text(&shown).matches("(ungoverned)").count(),
         3,
