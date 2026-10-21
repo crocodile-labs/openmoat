@@ -9,7 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Fixed
-- `openmoat guard` and `openmoat policy check` also read each other pinned state file once per call: the `openmoat allow` overlay (`policy.d/approved.yaml`), installed policy packs (`packs.json`, `policy.d/packs/`), `hosts.json`, `environment.json`, `approvals.json` and `trust.json` are parsed from the bytes whose digest matched the lock, and drift in a Claude Code `settings.json` is sorted by the bytes found to differ, so a file rewritten after the check is never the one used. Files the lock does not pin are read as before ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- `openmoat guard` and `openmoat policy check` also read each other pinned state file once per call: the `openmoat allow` overlay (`policy.d/approved.yaml`), installed policy packs (`packs.json`, `policy.d/packs/`), `hosts.json`, `environment.json`, `approvals.json` and `trust.json` are parsed from the bytes whose digest matched the lock, and drift in a Claude Code `settings.json` is sorted by the bytes found to differ, so a file rewritten after the check is never the one used. Files the lock does not pin are read as before ([#614](https://github.com/crocodile-labs/openmoat/pull/614)).
 
 ## [0.8.0] - 2026-10-20
 
