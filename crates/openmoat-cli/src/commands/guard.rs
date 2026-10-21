@@ -9,9 +9,10 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_audit::{KnownSecrets, NewEvent, Store};
+use openmoat_audit::{KnownSecrets, Store};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::{HookEvent, HookRequest, Host};
+use record::{Recorded, record};
 
 use crate::approvals::{self, Grants};
 use crate::cli::GuardArgs;
@@ -28,6 +29,7 @@ use crate::{push, render, secrets, taint, time};
 
 mod config_change;
 mod drift;
+mod record;
 
 const UNGOVERNED_RULE: &str = "ungoverned";
 const KERNEL_ERROR_RULE: &str = "kernel-error";
@@ -37,6 +39,10 @@ const SESSION_GRANT_RULE: &str = "approved-session";
 /// time to record: a session too long to fold in time is denied with a
 /// recorded reason, its progress kept, rather than by the budget's deny.
 const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
+
+/// The least time a call that got here late on a loaded machine still gets to
+/// read on a few events from its session's cache row.
+const MIN_TAINT_TIME: Duration = Duration::from_secs(1);
 
 pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
@@ -221,7 +227,7 @@ fn relay_once(reply: &guard_relay::Reply) -> Code {
     }
 }
 
-/// What deciding a call leaves for [`record`], besides the decision.
+/// What deciding a call leaves for [`record()`], besides the decision.
 #[derive(Default)]
 struct Evaluated {
     /// The brokered secret values to mask in the audit row, set as soon as
@@ -326,10 +332,8 @@ fn evaluate(
             write.write(&writable);
         }
     };
-    // A call that got here late on a loaded machine still gets a moment to
-    // read on a few events from its cache row.
     let mut progress = taint::Progress {
-        deadline: (started + TAINT_BUDGET).max(Instant::now() + Duration::from_secs(1)),
+        deadline: (started + TAINT_BUDGET).max(Instant::now() + MIN_TAINT_TIME),
         save: &mut save,
         folded: 0,
     };
@@ -372,81 +376,6 @@ fn evaluate(
     let pushes = compiled.pushes(action);
     let decision = push::check(&pushes, &snapshot, &out.known, tainted, decision);
     Ok((Some(request), decision))
-}
-
-/// What [`record`] writes.
-struct Recorded<'a> {
-    request: Option<&'a HookRequest>,
-    decision: &'a Decision,
-    /// Settings drift the call was decided through; the first call of a
-    /// session records it with its row, and the host's answer stays as decided.
-    drifted: &'a [Drift],
-    started: Instant,
-    known: KnownSecrets,
-    cache: Option<taint::CacheWrite>,
-    provenance: taint::provenance::Seen,
-}
-
-/// Record the decision, after the session cache on the same handle. The cache
-/// write never waits for the lock and its result is ignored; it is a separate
-/// statement before the record's own transaction, so it cannot touch the
-/// hash chain.
-fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
-    let Recorded {
-        request,
-        decision,
-        drifted,
-        started,
-        known,
-        cache,
-        provenance,
-    } = recorded;
-    hangs::enter(Phase::Record);
-    let home = Home::locate()?;
-    home.require_exists()?;
-    let store = Store::open_existing(&home.audit_path())?;
-    if let Some(cache) = cache {
-        hangs::enter(Phase::Cache);
-        // Before `with_secrets`: the cache is keyed as the unmasked reader reads it.
-        cache.write(&store);
-        hangs::enter(Phase::Record);
-    }
-    let store = store.with_secrets(known);
-    let noted = match request {
-        Some(r) => drift::noted(&store, &r.session_id, decision, drifted)?,
-        None => None,
-    };
-    let decision = noted.as_ref().unwrap_or(decision);
-    let latency_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
-    let event = NewEvent {
-        host: host.id(),
-        session_id: request.map_or("unknown", |r| r.session_id.as_str()),
-        call_id: request.and_then(|r| r.call_id.as_deref()),
-        cwd: request.and_then(|r| r.cwd.as_deref()),
-        tool: request.map_or("unknown", |r| r.tool.as_str()),
-        action: request.and_then(|r| r.action.as_ref()),
-        decision,
-        latency_us,
-    };
-    let id = store.record(&event)?;
-    // A call that may have run wrote and read what it named (ADR-029); like
-    // the row, provenance that cannot be written fails the call.
-    if let Some(r) = request
-        && taint::ran(host, decision.verdict)
-    {
-        provenance.write(&store, id, host.id(), &r.session_id)?;
-    }
-    // Under `moat run`, the run's proxy applies this session's taint too
-    // (ADR-027); a link that cannot be written fails the call like the row.
-    let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
-    if let (Some(run), Some(r)) = (taint::run::run_session(run.as_deref()), request) {
-        taint::run::link(&store, run, host, &r.session_id)?;
-    }
-    // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
-    if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
-        eprintln!("moat: trace {id}  (openmoat show {id})");
-    }
-    Ok(())
 }
 
 fn read_stdin() -> Result<String> {

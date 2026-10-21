@@ -21,6 +21,10 @@ pub use contract::{
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
+pub use host::openclaw::{
+    CONFIG_FILE as OPENCLAW_CONFIG_FILE, STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME,
+    STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
+};
 
 use std::fmt;
 use std::str::FromStr;

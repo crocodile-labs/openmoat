@@ -7,6 +7,11 @@ use super::StoreError;
 /// Schema version this build writes, kept in `PRAGMA user_version`.
 pub(super) const SCHEMA_VERSION: i64 = 4;
 
+/// The first version with the hash chain ([`V2`]).
+pub(super) const CHAIN_VERSION: i64 = 2;
+/// The first version with file provenance ([`V4`]).
+pub(super) const PROVENANCE_VERSION: i64 = 4;
+
 /// Version 1: the events table.
 const V1: &str = "
 CREATE TABLE IF NOT EXISTS events (

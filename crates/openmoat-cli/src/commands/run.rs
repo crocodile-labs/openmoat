@@ -181,6 +181,10 @@ fn guard_service(home: &Home, run_session: &str) -> Result<(Service, Zeroizing<S
     Ok((service, token))
 }
 
+/// A project's package-manager configuration this large or larger is not read:
+/// it is a configuration file, not a lockfile.
+const MAX_PACKAGE_CONFIG_BYTES: u64 = 1 << 20;
+
 /// npm and uv skip versions published within the policy's release age
 /// (ADR-030), unless the person set their own cut-off.
 fn package_release_age(policy: &Policy, project: Option<&str>) -> Vec<(&'static str, String)> {
@@ -193,8 +197,8 @@ fn package_release_age(policy: &Policy, project: Option<&str>) -> Vec<(&'static 
             project_has: &|file| in_project(file).is_some_and(|p| p.exists()),
             project_file: &|file| {
                 let path = in_project(file)?;
-                // a configuration file, not a lockfile: a large one is not read
-                let small = std::fs::metadata(&path).is_ok_and(|m| m.len() < 1 << 20);
+                let small =
+                    std::fs::metadata(&path).is_ok_and(|m| m.len() < MAX_PACKAGE_CONFIG_BYTES);
                 small.then(|| std::fs::read_to_string(&path).ok()).flatten()
             },
         },

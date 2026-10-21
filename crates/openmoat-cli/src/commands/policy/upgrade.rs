@@ -8,15 +8,14 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, bail};
 use similar::{Algorithm, udiff::unified_diff};
 
+use crate::VERSION;
 use crate::cli::UpgradeArgs;
 use crate::context::read_policy;
 use crate::exit::Code;
 use crate::home::{Home, write_private};
 use crate::integrity::{self, HookPins};
-use crate::render::Deferred;
+use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 use crate::upgrade::{Base, Plan};
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let home = Home::locate()?;
@@ -85,7 +84,7 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
             Algorithm::Myers,
             &plan.current,
             &plan.merge.text,
-            3,
+            DIFF_CONTEXT_LINES,
             Some(("policy.yaml (installed)", "policy.yaml (upgraded)")),
         );
         write!(out, "{diff}")?;
@@ -200,7 +199,7 @@ fn undo(home: &Home, yes: bool) -> Result<Code> {
         Algorithm::Myers,
         &current,
         &previous,
-        3,
+        DIFF_CONTEXT_LINES,
         Some((
             "policy.yaml (installed)",
             "policy.yaml (before the upgrade)",

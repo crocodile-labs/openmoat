@@ -39,7 +39,14 @@ const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 /// OpenClaw runs `before_tool_call` for every tool, and blocks the call when
 /// the handler throws or times out
 /// (<https://docs.openclaw.ai/plugins/hooks/reference>, "Fail closed").
-const HOOKS: &[HookSpec] = &[HookSpec::new("before_tool_call", "", HOOK_TIMEOUT_S, false)];
+const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", HOOK_TIMEOUT_S, false)];
+
+/// The variable that moves OpenClaw's state directory.
+pub const STATE_DIR_VARIABLE: &str = "OPENCLAW_STATE_DIR";
+/// OpenClaw's state directory's name in the home directory.
+pub const STATE_DIR_NAME: &str = ".openclaw";
+/// OpenClaw's configuration file's name in its state directory.
+pub const CONFIG_FILE: &str = "openclaw.json";
 
 mod bench;
 mod tools;
@@ -65,9 +72,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // `OPENCLAW_CONFIG_PATH` puts it elsewhere
     // (<https://docs.openclaw.ai/help/environment>).
     install: Some(InstallSpec {
-        dir_variable: "OPENCLAW_STATE_DIR",
-        dir_name: ".openclaw",
-        config_file: "openclaw.json",
+        dir_variable: STATE_DIR_VARIABLE,
+        dir_name: STATE_DIR_NAME,
+        config_file: CONFIG_FILE,
         hooks: HOOKS,
         hook_format: HookFormat::OpenClaw,
         relaxed_keys: &[],

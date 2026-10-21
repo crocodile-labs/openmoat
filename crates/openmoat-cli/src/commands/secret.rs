@@ -15,7 +15,7 @@ use crate::context::read_policy;
 use crate::exit::Code;
 use crate::home::{Home, write_private};
 use crate::integrity;
-use crate::render::Deferred;
+use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 
 /// `moat secret add gh`: the GitHub API token most agents use, from the
 /// variable `gh` and git's tools read.
@@ -123,7 +123,7 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         Algorithm::Myers,
         &before,
         &after,
-        3,
+        DIFF_CONTEXT_LINES,
         Some(("policy.yaml (installed)", "policy.yaml (with the secret)")),
     );
     write!(out, "{diff}")?;

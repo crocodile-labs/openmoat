@@ -10,6 +10,10 @@ use std::ops::Range;
 
 use similar::{Algorithm, DiffTag, capture_diff_slices};
 
+/// Most passes [`merge`] makes after the first. Each applies at least one
+/// change; a few are enough in practice.
+const MAX_EXTRA_PASSES: usize = 8;
+
 /// One stretch where the new default differs from the base and the policy does
 /// not have that difference yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,8 +74,7 @@ struct Chunk<'h> {
 /// nothing to offer next time but the stretches the person changed.
 pub fn merge(base: &str, yours: &str, new: &str) -> Merge {
     let mut merged = merge_once(base, yours, new);
-    // Each pass applies at least one change; a few are enough in practice.
-    for _ in 0..8 {
+    for _ in 0..MAX_EXTRA_PASSES {
         let next = merge_once(&merged.base, &merged.text, new);
         if next.applied().next().is_none() {
             break;

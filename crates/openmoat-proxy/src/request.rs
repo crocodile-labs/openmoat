@@ -6,6 +6,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+use openmoat_core::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN};
 use zeroize::Zeroizing;
 
 /// Most headers one request head may carry.
@@ -319,10 +320,10 @@ pub(crate) fn normalise_name(raw: &str) -> Option<String> {
         return Some(IpAddr::V4(ip).to_string());
     }
     let valid = !name.is_empty()
-        && name.len() <= 253
+        && name.len() <= MAX_DNS_NAME_LEN
         && name.split('.').all(|label| {
             !label.is_empty()
-                && label.len() <= 63
+                && label.len() <= MAX_DNS_LABEL_LEN
                 && label
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')

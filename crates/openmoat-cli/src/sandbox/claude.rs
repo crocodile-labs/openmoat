@@ -58,11 +58,11 @@ pub use deny_list::apply_rules;
 pub use rules::deny_edit;
 pub use settings::{apply, deny_write, in_sync, protect, remove, weaknesses};
 
-use super::Report;
 use super::patterns::{
     Spot, domain, git_exclusion, has_glob, is_below, literal_tree, push_unique,
     runs_later_exclusion, split, spot,
 };
+use super::{DEFAULT_NET_RULE, Report};
 use git_internals::runs_later;
 
 /// Claude Code's own directory, whose settings it keeps read-only in the
@@ -422,7 +422,7 @@ fn network(net: &Access, report: &mut Report) -> Value {
     if net.default == Effect::Allow {
         report.loss(
             Kind::Net,
-            "default.net",
+            DEFAULT_NET_RULE,
             "Claude Code's allowlist cannot allow every host: sandboxed commands reach only listed hosts"
                 .into(),
         );

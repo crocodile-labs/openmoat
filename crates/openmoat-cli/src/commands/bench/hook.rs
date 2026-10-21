@@ -19,6 +19,9 @@ pub const TIMEOUT: Duration = Duration::from_secs(10);
 /// A hook reply larger than this is cut off; no real decision needs more.
 const MAX_REPLY_BYTES: u64 = 1024 * 1024;
 
+/// How often [`wait`] checks whether the hook has exited.
+const POLL_INTERVAL: Duration = Duration::from_millis(2);
+
 /// What came back from one run of the hook.
 pub enum Reply {
     /// The hook exited; `code` is `None` when a signal ended it.
@@ -175,7 +178,7 @@ fn wait(child: &mut Child, deadline: Instant) -> Option<ExitStatus> {
         match child.try_wait() {
             Ok(Some(status)) => return Some(status),
             Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(2));
+                std::thread::sleep(POLL_INTERVAL);
             }
             _ => {
                 let _ = child.kill();

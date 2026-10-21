@@ -24,8 +24,8 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
         Call::Fetch(url) => ("web_fetch".to_owned(), json!({ "url": url })),
         Call::Mcp { server, tool, args } => (format!("{server}__{tool}"), args.clone()),
     };
-    let state = at.home.join(".openclaw");
-    let config = state.join("openclaw.json");
+    let state = at.home.join(super::STATE_DIR_NAME);
+    let config = state.join(super::CONFIG_FILE);
     json!({
         "hook_event_name": super::EVENT, "toolName": tool, "params": params,
         "toolCallId": at.call_id, "sessionId": at.session, "cwd": at.cwd(),

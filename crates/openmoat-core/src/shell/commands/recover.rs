@@ -3,6 +3,10 @@
 
 use crate::lexer::{self, LexError, Token};
 
+/// Most times a line is lexed again: one per here-document left open, and one
+/// for a trailing backslash.
+const MAX_RELEXES: usize = 8;
+
 /// Lex `command` as bash runs it. Bash ends a here-document that has no
 /// delimiter line at the end of the input (with a warning) and keeps a
 /// backslash that ends the input as a character; the lexer refuses both, which
@@ -10,8 +14,7 @@ use crate::lexer::{self, LexError, Token};
 /// delimiter line or the backslash written out.
 pub(super) fn lex_like_bash(command: &str) -> Result<Vec<Token>, LexError> {
     let mut line = command.to_owned();
-    // one try per here-document left open, and one for a trailing backslash
-    for _ in 0..8 {
+    for _ in 0..MAX_RELEXES {
         match lexer::lex(&line) {
             Err(LexError::UnterminatedHereDoc { delimiter }) => {
                 line = format!("{line}\n{delimiter}\n");

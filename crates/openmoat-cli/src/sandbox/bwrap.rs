@@ -21,7 +21,7 @@ use anyhow::{Result, bail};
 use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 
-use super::landlock::{self, Rules};
+use super::landlock::{self, INSIDE_GRANTS_ALLOWANCE, Rules, TCP_PORT_ALLOWANCE};
 use super::patterns::{has_glob, is_below, literal_tree, push_unique, runs_later_exclusion, split};
 use super::{Grants, Report};
 
@@ -69,14 +69,14 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
     for allowance in report
         .allowances
         .iter()
-        .filter(|a| a.rule == "landlock.inside-grants")
+        .filter(|a| a.rule == INSIDE_GRANTS_ALLOWANCE)
     {
         for pattern in &allowance.patterns {
             push_unique(&mut unenforced, pattern.clone());
         }
     }
     // The network namespace reaches only the proxy; the mounts take over the rest.
-    let replaced = ["landlock.inside-grants", "landlock.tcp-port"];
+    let replaced = [INSIDE_GRANTS_ALLOWANCE, TCP_PORT_ALLOWANCE];
     report
         .allowances
         .retain(|a| !replaced.contains(&a.rule.as_str()));

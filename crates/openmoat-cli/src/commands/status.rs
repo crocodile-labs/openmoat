@@ -17,6 +17,9 @@ use crate::integrity::{self, HookPinGap, Lock};
 use crate::sandbox::{Plan, install as host_sandbox};
 use crate::{protection, render, time};
 
+/// How many of the newest audit events `status` lists.
+const RECENT_EVENTS: usize = 5;
+
 pub fn run(args: &StatusArgs) -> Result<Code> {
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
@@ -329,7 +332,7 @@ fn audit(out: &mut impl io::Write, home: &Home) -> Result<bool> {
         audit_path.display(),
         store.count()?
     )?;
-    let recent = store.recent(5)?;
+    let recent = store.recent(RECENT_EVENTS)?;
     if !recent.is_empty() {
         writeln!(out)?;
         render::event_table(&recent)?;

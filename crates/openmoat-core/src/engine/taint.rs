@@ -23,8 +23,8 @@ use crate::verdict::{Decision, Verdict};
 /// `RepoPolicy::merge`) is also taint-significant.
 const SECRET_RULE: &str = "secrets-paths";
 
-/// The rule id a tightened decision carries.
-const TAINT_RULE: &str = "session-taint";
+/// The rule id a decision tightened by session taint carries.
+pub const TAINT_RULE: &str = "session-taint";
 
 /// Where secret material in a session came from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

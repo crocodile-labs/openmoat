@@ -21,6 +21,7 @@ use zeroize::Zeroizing;
 
 use super::wire::{MAX_OUTPUT, REQUEST_MAGIC, Reply, Request};
 use super::{SOCKET_ENV, Stream, TOKEN_ENV};
+use crate::exit::Code;
 use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::taint::run::{LINK_HOST, RUN_SESSION_ENV};
@@ -98,10 +99,10 @@ impl Service {
         let mut reply = Reply {
             nonce: request.nonce.clone(),
             // Exit 2, the one code every host honours, unless the guard said 0.
-            code: if output.status.code() == Some(0) {
-                0
+            code: if output.status.code() == Some(Code::Ok as i32) {
+                Code::Ok as u8
             } else {
-                2
+                Code::Deny as u8
             },
             stdout: output.stdout,
             stderr: output.stderr,

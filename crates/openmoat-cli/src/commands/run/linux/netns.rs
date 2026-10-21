@@ -25,6 +25,7 @@ use super::{Confined, Rules};
 use crate::context::path_string;
 use crate::sandbox::Report;
 use crate::sandbox::bwrap::{self, Mount};
+use crate::sandbox::landlock::TCP_PORT_ALLOWANCE;
 
 /// The namespaces: a user namespace, needed to create the network one
 /// unprivileged, and the network namespace, where bubblewrap brings up
@@ -40,9 +41,6 @@ const ROOT: [&str; 3] = ["--dev-bind", "/", "/"];
 /// ignored across `exec`); `moat isolated` handles `SIGINT` itself, so the
 /// agent it starts gets the default back and decides what Ctrl-C means.
 const IGNORE_INTERRUPT: &str = "trap '' INT; exec \"$0\" \"$@\"";
-
-/// The rule `crate::sandbox::landlock` lists for the port-only restriction.
-const TCP_PORT_ALLOWANCE: &str = "landlock.tcp-port";
 
 /// How the agent's network is confined.
 #[derive(Debug, PartialEq, Eq)]

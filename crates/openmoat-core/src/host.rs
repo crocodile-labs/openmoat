@@ -14,6 +14,12 @@
 
 use crate::shell::tables::{FILE_EXTENSIONS, KNOWN_TLDS};
 
+/// Longest DNS name in text form, without the trailing dot (RFC 1035 §2.3.4).
+pub const MAX_DNS_NAME_LEN: usize = 253;
+
+/// Longest label of a DNS name (RFC 1035 §2.3.4).
+pub const MAX_DNS_LABEL_LEN: usize = 63;
+
 /// Host of a URL, with or without its scheme.
 #[must_use]
 pub fn of_url(url: &str) -> Option<String> {

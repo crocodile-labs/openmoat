@@ -38,6 +38,9 @@ mod upgrade;
 
 use std::process::ExitCode;
 
+/// This build's version, as `openmoat --version` prints it.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 use clap::Parser;
 
 fn main() -> ExitCode {

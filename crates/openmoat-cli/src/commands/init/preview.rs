@@ -8,7 +8,7 @@ use similar::{Algorithm, udiff::unified_diff};
 
 use crate::home::Home;
 use crate::install::HostConfig;
-use crate::render::Deferred;
+use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 use crate::sandbox::{self, Plan};
 
 /// One file `init` would write: its path, its text now and after.
@@ -38,7 +38,7 @@ pub(super) fn show(
             Algorithm::Myers,
             &change.before,
             &change.after,
-            3,
+            DIFF_CONTEXT_LINES,
             Some((
                 &format!("{name} (now)"),
                 &format!("{name} (after openmoat init)"),

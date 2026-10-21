@@ -14,6 +14,10 @@ use crate::sni::{self, Hello};
 const LINGER: Duration = Duration::from_secs(1);
 const LINGER_BYTES: usize = 1 << 20;
 
+/// Most bytes read for a `ClientHello`. Records add 5 bytes per 16 KiB of
+/// handshake, so this covers [`sni::MAX_HELLO`].
+const MAX_HELLO_READ: usize = sni::MAX_HELLO + 1024;
+
 /// Read until a complete request head is in `buf`.
 pub(super) fn read_head(
     client: &TcpStream,
@@ -40,8 +44,7 @@ pub(super) fn read_hello(
     buf: &mut Vec<u8>,
     deadline: Instant,
 ) -> Result<(Option<String>, bool), String> {
-    // Records add 5 bytes per 16 KiB of handshake, so this covers MAX_HELLO.
-    let max = sni::MAX_HELLO + 1024;
+    let max = MAX_HELLO_READ;
     loop {
         match sni::server_name(buf) {
             Ok(Hello::ServerName(name)) => return Ok((name, false)),
