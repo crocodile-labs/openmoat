@@ -3,11 +3,13 @@
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{DEFAULT_POLICY, Policy};
 
 use crate::context;
+use crate::integrity::Kept;
 
 /// The state directory's name under the home directory, and under a project
 /// for its repository policy (`repo.rs`).
@@ -19,6 +21,10 @@ pub const ENV: &str = "MOAT_HOME";
 #[derive(Debug, Clone)]
 pub struct Home {
     root: PathBuf,
+    /// The bytes the lock check matched for pinned state files, which the
+    /// loaders here and of each state file use instead of reading it again
+    /// ([`Home::keeping`]); empty otherwise.
+    kept: Arc<Kept>,
 }
 
 impl Home {
@@ -28,24 +34,63 @@ impl Home {
         #[cfg(test)]
         refuse_in_unit_tests();
         match std::env::var_os(ENV).filter(|v| !v.is_empty()) {
-            Some(custom) => Ok(Self {
-                root: PathBuf::from(custom),
-            }),
+            Some(custom) => Ok(Self::rooted(PathBuf::from(custom))),
             None => Ok(Self::under(&user_home()?)),
         }
     }
 
     /// The default state directory of a person whose home directory is `home`.
     pub fn under(home: &Path) -> Self {
-        Self {
-            root: home.join(DIR_NAME),
-        }
+        Self::rooted(home.join(DIR_NAME))
     }
 
     /// A state directory at `root`, for unit tests.
     #[cfg(test)]
     pub fn at(root: PathBuf) -> Self {
-        Self { root }
+        Self::rooted(root)
+    }
+
+    fn rooted(root: PathBuf) -> Self {
+        Self {
+            root,
+            kept: Arc::default(),
+        }
+    }
+
+    /// This state directory, reading each pinned file `kept` holds from the
+    /// bytes the lock check matched (`integrity::verify_state`), so what was
+    /// checked is what is used even when the file changes after the check.
+    /// Only `moat guard` and `moat policy check` use one, and neither writes
+    /// these files.
+    pub fn keeping(&self, kept: Kept) -> Self {
+        Self {
+            root: self.root.clone(),
+            kept: Arc::new(kept),
+        }
+    }
+
+    /// The bytes the lock check kept ([`Home::keeping`]).
+    pub fn kept(&self) -> &Kept {
+        &self.kept
+    }
+
+    /// The state file at `path`: `parse`d from the bytes the lock check kept
+    /// for it, else as `load` reads it from disk (a file the lock does not pin,
+    /// or a home that keeps nothing).
+    pub fn load_state<T>(
+        &self,
+        path: &Path,
+        parse: impl FnOnce(&str, &Path) -> Result<T>,
+        load: impl FnOnce(&Path) -> Result<T>,
+    ) -> Result<T> {
+        match self.kept.get(path) {
+            Some(bytes) => {
+                let text = std::str::from_utf8(bytes)
+                    .with_context(|| format!("reading {} (must be UTF-8)", path.display()))?;
+                parse(text, path)
+            }
+            None => load(path),
+        }
     }
 
     pub fn root(&self) -> &Path {
@@ -153,9 +198,13 @@ impl Home {
         Ok(true)
     }
 
-    /// Load and lint the installed user policy, with `moat allow` rules merged in.
+    /// Load and lint the installed user policy, with `moat allow` rules merged
+    /// in; from the bytes the lock check kept when it kept them.
     pub fn load_policy(&self) -> Result<Policy> {
         let path = self.policy_path();
+        if let Some(bytes) = self.kept.get(&path) {
+            return self.with_merged(context::parse_policy(bytes.to_vec(), &path)?);
+        }
         if !path.is_file() {
             bail!("no policy at {}; run `openmoat init`", path.display());
         }
@@ -168,19 +217,9 @@ impl Home {
         self.with_merged(context::load_policy(path)?)
     }
 
-    /// [`Home::load_policy`] from the policy file's `checked` bytes when the
-    /// lock check kept them (`integrity::check`), so the file is not read
-    /// again; from disk otherwise.
-    pub fn load_checked_policy(&self, checked: Option<Vec<u8>>) -> Result<Policy> {
-        match checked {
-            Some(bytes) => self.with_merged(context::parse_policy(bytes, &self.policy_path())?),
-            None => self.load_policy(),
-        }
-    }
-
     /// `policy` with the `moat allow` rules and installed packs merged in.
     fn with_merged(&self, mut policy: Policy) -> Result<Policy> {
-        let overlay = crate::approvals::Overlay::load(&self.overlay_path())?;
+        let overlay = crate::approvals::Overlay::load_in(self)?;
         if !overlay.allow.is_empty() {
             policy.allow.extend(overlay.allow);
             policy
@@ -363,16 +402,14 @@ mod tests {
         let root = dir.path().join(".moat");
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
-        Home { root: root.clone() }.ensure().unwrap();
+        Home::at(root.clone()).ensure().unwrap();
         assert_eq!(mode(&root), 0o700);
     }
 
     #[test]
     fn an_unreadable_audit_log_is_not_reported_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let home = Home {
-            root: dir.path().join("state"),
-        };
+        let home = Home::at(dir.path().join("state"));
         let missing = home.open_audit().err().unwrap().to_string();
         assert!(missing.contains("run `openmoat init`"), "{missing}");
 

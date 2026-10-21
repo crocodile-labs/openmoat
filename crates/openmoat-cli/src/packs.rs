@@ -62,8 +62,13 @@ impl Packs {
         }
         let text =
             fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        Self::parse(&text, path)
+    }
+
+    /// The pack record in `text`, read from `path` (named in errors).
+    pub fn parse(text: &str, path: &Path) -> Result<Self> {
         let packs: Self =
-            serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+            serde_json::from_str(text).with_context(|| format!("parsing {}", path.display()))?;
         if packs.version != PACKS_VERSION {
             bail!(
                 "{} has version {}; this build supports {PACKS_VERSION}",
@@ -149,16 +154,31 @@ pub fn apply(policy: &mut Policy, name: &str, pack: &RepoPolicy) -> Result<()> {
 
 /// Merge every installed pack into `policy`. Only a `packs.json` the lock pins
 /// counts (`moat policy install` re-pins after writing it), and each pack must
-/// still have the digest it was installed with.
+/// still have the digest it was installed with. Bytes the lock check kept
+/// ([`Home::load_state`]) are of a pinned file, as it matched its pin.
 pub fn merge_installed(home: &Home, policy: &mut Policy) -> Result<()> {
     let path = home.packs_path();
-    if !path.is_file() || !Lock::load(&home.lock_path()).is_ok_and(|lock| lock.pins(&path)) {
+    let from_disk = |path: &Path| {
+        if !path.is_file() || !Lock::load(&home.lock_path()).is_ok_and(|lock| lock.pins(path)) {
+            return Ok(None);
+        }
+        Packs::load(path).map(Some)
+    };
+    let Some(packs) = home.load_state(
+        &path,
+        |text, path| Packs::parse(text, path).map(Some),
+        from_disk,
+    )?
+    else {
         return Ok(());
-    }
-    for (name, record) in Packs::load(&path)?.packs {
+    };
+    for (name, record) in packs.packs {
         let file = pack_path(home, &name);
-        let text = fs::read_to_string(&file)
-            .with_context(|| format!("reading policy pack {}", file.display()))?;
+        let text = match home.kept().get(&file) {
+            Some(bytes) => String::from_utf8(bytes.to_vec()).map_err(anyhow::Error::from),
+            None => fs::read_to_string(&file).map_err(anyhow::Error::from),
+        }
+        .with_context(|| format!("reading policy pack {}", file.display()))?;
         if sha256_hex(text.as_bytes()) != record.sha256 {
             bail!(
                 "policy pack {} changed since `openmoat policy install`; reinstall it",

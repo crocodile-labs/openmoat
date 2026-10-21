@@ -67,7 +67,11 @@ exits. There is no daemon.
    denies the call with `kernel-integrity` before the policy is read, except drift of
    only the Claude Code settings keys `integrity/relaxed.rs` allowlists (§6): then the
    call is decided as usual and the first call of the session records the drift with
-   rule `settings-drift`. Otherwise a tool
+   rule `settings-drift`. The check reads each pinned file once: the rest of the call
+   parses OpenMoat's own state files (policy, `moat allow` overlay, policy packs,
+   `hosts.json`, `environment.json`, `approvals.json`, `trust.json`) from the bytes
+   that matched their pins, and sorts settings drift by the bytes found to differ
+   (`integrity/kept.rs`). Otherwise a tool
    the adapter does not govern (no action) is recorded with rule `ungoverned` and
    deferred: the host decides it as if no hook had answered (Cursor, whose hooks have
    no such answer, gets an allow). An `McpTool` call is then checked against the MCP

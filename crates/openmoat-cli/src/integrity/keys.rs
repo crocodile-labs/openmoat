@@ -12,10 +12,15 @@ use super::sha256_hex;
 /// Top-level key → SHA-256 of its value, for a `.json` file holding an object or
 /// a `.toml` file. `None` for any other file, or one that cannot be read or parsed.
 pub(super) fn key_digests(path: &Path) -> Option<BTreeMap<String, String>> {
-    let text = fs::read_to_string(path).ok()?;
+    key_digests_of(path, &fs::read(path).ok()?)
+}
+
+/// [`key_digests`] of `contents`, already read from `path`.
+pub(super) fn key_digests_of(path: &Path, contents: &[u8]) -> Option<BTreeMap<String, String>> {
+    let text = std::str::from_utf8(contents).ok()?;
     match path.extension()?.to_str()? {
         "json" => {
-            let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+            let value: serde_json::Value = serde_json::from_str(text).ok()?;
             object_digests(value.as_object()?, is_claude_settings(path))
         }
         "toml" => {

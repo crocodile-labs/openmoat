@@ -131,6 +131,22 @@ fn claude_codes_own_lists_modes_and_toggles_are_relaxed() {
 }
 
 #[test]
+fn settings_drift_is_sorted_by_the_bytes_the_check_read() {
+    let setup = installed(&baseline(), true);
+    let mut toggled = baseline();
+    toggled["language"] = json!("french");
+    fs::write(&setup.settings, toggled.to_string()).unwrap();
+    let lock = Lock::load(&setup.home.lock_path()).unwrap();
+    let (drift, home) = super::super::verify_state(&setup.home, &lock);
+    // Rewritten after the check: the drift found is sorted, not the new file.
+    toggled["hooks"] = json!({});
+    fs::write(&setup.settings, toggled.to_string()).unwrap();
+    assert_relaxed(&split(&home, &lock, drift.clone()));
+    // Without the bytes the check read, nothing tells what drifted: deny.
+    assert_denied(&split(&setup.home, &lock, drift));
+}
+
+#[test]
 fn any_hook_change_denies() {
     let changes: [fn(&mut Value); 5] = [
         |s| s["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = json!("/tmp/evil guard"),

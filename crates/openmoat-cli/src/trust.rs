@@ -37,8 +37,13 @@ impl Trust {
         }
         let text =
             fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        Self::parse(&text, path)
+    }
+
+    /// The trust records in `text`, read from `path` (named in errors).
+    pub fn parse(text: &str, path: &Path) -> Result<Self> {
         let trust: Self =
-            serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+            serde_json::from_str(text).with_context(|| format!("parsing {}", path.display()))?;
         if trust.version != TRUST_VERSION {
             bail!(
                 "{} has version {}; this build supports {TRUST_VERSION}",

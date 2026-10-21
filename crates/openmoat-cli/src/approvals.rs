@@ -14,7 +14,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Action, RuleGroup};
 use serde::{Deserialize, Serialize};
 
-use crate::home::write_private;
+use crate::home::{Home, write_private};
 use crate::time;
 
 mod asked;
@@ -99,8 +99,19 @@ impl Grants {
         }
         let text =
             fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        Self::parse(&text, path)
+    }
+
+    /// [`Grants::load`] of `home`'s grants, from the bytes the lock check
+    /// kept when it kept them ([`Home::load_state`]).
+    pub fn load_in(home: &Home) -> Result<Self> {
+        home.load_state(&home.grants_path(), Self::parse, Self::load)
+    }
+
+    /// The grants in `text`, read from `path` (named in errors).
+    pub fn parse(text: &str, path: &Path) -> Result<Self> {
         let parse = || format!("parsing {}", path.display());
-        let value: serde_json::Value = serde_json::from_str(&text).with_context(parse)?;
+        let value: serde_json::Value = serde_json::from_str(text).with_context(parse)?;
         match value.get("version").and_then(serde_json::Value::as_u64) {
             Some(1) => {
                 let old: GrantsV1 = serde_json::from_value(value).with_context(parse)?;
@@ -252,7 +263,18 @@ impl Overlay {
         }
         let text =
             fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let overlay: Self = openmoat_core::yaml::from_str(&text)
+        Self::parse(&text, path)
+    }
+
+    /// [`Overlay::load`] of `home`'s overlay, from the bytes the lock check
+    /// kept when it kept them ([`Home::load_state`]).
+    pub fn load_in(home: &Home) -> Result<Self> {
+        home.load_state(&home.overlay_path(), Self::parse, Self::load)
+    }
+
+    /// The overlay in `text`, read from `path` (named in errors).
+    pub fn parse(text: &str, path: &Path) -> Result<Self> {
+        let overlay: Self = openmoat_core::yaml::from_str(text)
             .with_context(|| format!("parsing {}", path.display()))?;
         if overlay.version != OVERLAY_VERSION {
             bail!(

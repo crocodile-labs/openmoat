@@ -41,15 +41,22 @@ pub struct Recorded {
 }
 
 impl Recorded {
-    /// The record in `home`; empty when `init` has not written one.
+    /// The record in `home`; empty when `init` has not written one. From the
+    /// bytes the lock check kept when it kept them ([`Home::load_state`]).
     pub fn load(home: &Home) -> Result<Self> {
-        let path = home.hosts_path();
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let text =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let recorded: Self = serde_json::from_str(&text)
+        home.load_state(&home.hosts_path(), Self::parse, |path| {
+            if !path.exists() {
+                return Ok(Self::default());
+            }
+            let text =
+                fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+            Self::parse(&text, path)
+        })
+    }
+
+    /// The record in `text`, read from `path` (named in errors).
+    pub fn parse(text: &str, path: &Path) -> Result<Self> {
+        let recorded: Self = serde_json::from_str(text)
             .with_context(|| format!("parsing {}; run `openmoat init`", path.display()))?;
         if recorded.version != VERSION {
             bail!(
