@@ -14,11 +14,12 @@ GitHub milestone. Neither carries dates.
 
 ## Where it is today
 
-The latest release is `0.8.0` (stable), from GitHub Releases, the Homebrew tap and
+The latest release is `0.9.0` (stable), from GitHub Releases, the Homebrew tap and
 crates.io (README, Install). What exists:
 
-- One policy for Claude Code, Codex, Cursor and OpenClaw, checked through each host's own
-  hooks (OpenClaw's through a `before_tool_call` plugin, ADR-033).
+- One policy for Claude Code, Codex, Cursor, the Continue CLI, OpenClaw, GitHub Copilot
+  CLI, pi and Gemini CLI, checked through each host's own hooks (OpenClaw's through a
+  `before_tool_call` plugin, ADR-033; pi's through an extension).
 - Policy kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`, `mcp`,
   `web.search` and `tool.unknown`, and four verdicts: `allow`, `defer` (the agent's own
   prompt decides, the default for anything no rule names, ADR-025), `ask` and `deny`.
