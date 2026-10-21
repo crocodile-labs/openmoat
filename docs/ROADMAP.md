@@ -14,7 +14,7 @@ GitHub milestone. Neither carries dates.
 
 ## Where it is today
 
-The latest release is `0.7.0` (stable), from GitHub Releases, the Homebrew tap and
+The latest release is `0.8.0` (stable), from GitHub Releases, the Homebrew tap and
 crates.io (README, Install). What exists:
 
 - One policy for Claude Code, Codex, Cursor and OpenClaw, checked through each host's own
