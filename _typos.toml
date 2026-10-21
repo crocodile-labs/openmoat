@@ -61,3 +61,5 @@ isntal = "isntal"
 isntall = "isntall"
 # The name of a third-party MCP server in the MCP tool-name tests (`vigil-harbor`).
 harbor = "harbor"
+# Claude Code's `Artifact` and `ArtifactData` tools.
+artifact = "artifact"
