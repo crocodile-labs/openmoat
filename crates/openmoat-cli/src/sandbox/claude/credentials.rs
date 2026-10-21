@@ -70,6 +70,19 @@ fn entries(secrets: &[BrokeredSecret], allowed: &[String], report: &mut Report) 
             );
             continue;
         }
+        if let Some(port) = secret.port {
+            // Claude Code's broker injects for a host on every port; the
+            // secret names one.
+            report.loss(
+                Kind::Net,
+                &format!("{SECRET_RULE_PREFIX}{}", secret.id),
+                format!(
+                    "the secret names port {port}, and Claude Code's broker cannot bind a secret \
+                     to a port; the secret still works through `openmoat proxy`"
+                ),
+            );
+            continue;
+        }
         let (kind, value) = match &secret.source {
             SecretSource::Env(name) => (
                 EntryKind::EnvVar,

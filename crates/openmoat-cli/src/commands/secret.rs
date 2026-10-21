@@ -181,6 +181,7 @@ fn secret(args: &SecretAddArgs) -> Result<Secret> {
         header,
         source,
         plain_http: false,
+        port: None,
     })
 }
 

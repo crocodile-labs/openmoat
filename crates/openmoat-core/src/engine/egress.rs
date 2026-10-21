@@ -197,6 +197,7 @@ mod tests {
             header: "Authorization".into(),
             source: Source::Env("GH_TOKEN".into()),
             plain_http: false,
+            port: None,
         }];
         let fetch = |url: &str| atoms(&Action::Fetch { url: url.into() }, &[], &secrets);
         assert!(fetch("https://api.github.com/?t=moat-secret:gh:placeholder").is_empty());

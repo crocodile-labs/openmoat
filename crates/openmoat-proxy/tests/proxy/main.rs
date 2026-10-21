@@ -103,6 +103,22 @@ fn upstream() -> (SocketAddr, Receiver<Vec<u8>>) {
     (addr, rx)
 }
 
+/// `yaml` with each allowed host pattern also named on `port`, where the
+/// local upstream listens: a pattern without a port allows 443 and 80 only.
+fn on_port(yaml: &str, port: u16) -> Policy {
+    let mut policy = Policy::parse(yaml).unwrap();
+    for group in &mut policy.allow {
+        let ported: Vec<String> = group
+            .net
+            .iter()
+            .filter(|p| !p.contains(':'))
+            .map(|p| format!("{p}:{port}"))
+            .collect();
+        group.net.extend(ported);
+    }
+    policy
+}
+
 struct Harness {
     proxy: SocketAddr,
     upstream: SocketAddr,
@@ -153,7 +169,7 @@ fn launch_with(
         ("mixed-denied.test", vec![local, ip("203.0.113.7")]),
         ("denied-v6.test", vec![ip("2001:db8::5")]),
     ]));
-    let policy: &'static Policy = Box::leak(Box::new(Policy::parse(POLICY).unwrap()));
+    let policy: &'static Policy = Box::leak(Box::new(on_port(POLICY, upstream.port())));
     let ctx = EvalContext {
         home: "/home/u".to_owned(),
         project: None,

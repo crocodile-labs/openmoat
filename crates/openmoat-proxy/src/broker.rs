@@ -142,26 +142,44 @@ impl Broker {
             })
     }
 
-    /// Ids of the secrets `host` owns that are not put into plain-HTTP
-    /// requests, because their policy entry does not set `plain_http`.
-    pub(crate) fn withheld(&self, host: &str) -> Vec<&str> {
+    /// Why each secret `host` owns is not put into a plain-HTTP request to
+    /// `port`: its policy entry does not set `plain_http`, or names another
+    /// port (80 when it names none).
+    pub(crate) fn withheld(&self, host: &str, port: u16) -> Vec<String> {
         self.held
             .iter()
-            .filter(|h| h.secret.host == host && !h.secret.plain_http)
-            .map(|h| h.secret.id.as_str())
+            .filter(|h| h.secret.host == host)
+            .filter_map(|h| {
+                let id = &h.secret.id;
+                if !h.secret.plain_http {
+                    Some(format!(
+                        "secret `{id}` not injected: plain HTTP needs `plain_http: true`"
+                    ))
+                } else if h.secret.plain_http_port() != port {
+                    Some(format!(
+                        "secret `{id}` not injected: it goes to port {} only, not {port}",
+                        h.secret.plain_http_port()
+                    ))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
     /// `head` (a plain-HTTP request head the proxy wrote, lines ending in
-    /// CRLF) with the secrets of `host` that allow `plain_http` put in: in
+    /// CRLF) to `host` on `port`, with the secrets of `host` that allow
+    /// `plain_http` on that port (80 unless the secret names one) put in: in
     /// each header a secret names, the placeholder becomes the value; a secret
     /// whose header is absent, or holds no placeholder, gets its own header
     /// line. `None` when there is no such secret.
-    pub(crate) fn inject(&self, host: &str, head: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    pub(crate) fn inject(&self, host: &str, port: u16, head: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
         let owned: Vec<&Held> = self
             .held
             .iter()
-            .filter(|h| h.secret.host == host && h.secret.plain_http)
+            .filter(|h| {
+                h.secret.host == host && h.secret.plain_http && h.secret.plain_http_port() == port
+            })
             .collect();
         // Each line keeps its `\r`; only the `\n`s are split on and re-added.
         let lines = head.strip_suffix(b"\n\r\n")?;

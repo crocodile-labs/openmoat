@@ -122,6 +122,7 @@ secrets:
     header: Authorization           # the request header the value goes in
     source: { env: GITHUB_TOKEN }   # or { file: ~/.config/moat/gh } or { keychain: { service: moat, account: gh } }
     plain_http: false               # optional; true also injects into plain-HTTP (clear-text) requests
+    port: 8080                      # optional, with plain_http only: the port those requests go to (default 80)
 ```
 
 `openmoat secret add gh` adds exactly this entry, shows the diff and asks, then re-pins and
@@ -145,6 +146,9 @@ sandbox can broker it too, below).
 - **`plain_http`** is off unless set. A plain-HTTP request carries the value in clear text,
   readable by anyone on the network path, so OpenMoat injects into one only for a secret
   that says `plain_http: true`.
+- **`port`** (1 to 65535, an integer) is the one port of the plain-HTTP requests that get
+  the value; without it, 80. It needs `plain_http: true`, and a policy that sets it
+  without, or sets 0, does not load.
 - **Never wider.** A secret opens nothing: its host still needs a `net` or `fetch` allow
   rule, or the proxy refuses it.
 - **Lint.** `openmoat policy lint` warns in four cases:
@@ -159,7 +163,9 @@ sandbox can broker it too, below).
 What the proxy does with them:
 
 - **Injection, plain HTTP with `plain_http: true` only.** In a plain-HTTP request to
-  `host` (any port), every `header` line has the placeholder replaced by the value. When
+  `host` on the secret's port (`port`, or 80), every `header` line has the placeholder
+  replaced by the value. A request to another port of `host` keeps the placeholder, and
+  its audit row says ``secret `<id>` not injected: it goes to port <port> only``. When
   the request has no such header, `header: <value>` is added. The placeholder elsewhere
   (the path, other headers) is left as it is. The value then crosses the network in clear
   text.
@@ -194,7 +200,8 @@ as a Claude Code `mask` entry for that one host, and turns on Claude Code's
 own placeholder in that variable or file, and Claude Code's proxy sends the value to the
 host. The value is read by Claude Code from the same source, not by `openmoat proxy`. A
 secret Claude Code cannot mask (a `keychain` source, a host outside `net` allow, or a
-`plain_http: true` secret beside HTTPS-only ones) is left to `openmoat proxy` as above; on
+`plain_http: true` secret beside HTTPS-only ones, or a secret that names a `port`, which
+Claude Code's broker cannot bind a secret to) is left to `openmoat proxy` as above; on
 macOS a `file` source is denied rather than masked. `openmoat sandbox show` and
 `openmoat doctor` list what Claude Code does with each secret ([SANDBOX.md](SANDBOX.md#host-sandboxes-standard-tier)).
 
@@ -474,7 +481,7 @@ These appear in responses and in `openmoat show` alongside the ids from `policy.
 | `push-unchecked` | ask | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
 | `approved-session` | allow | an `ask` for a shell command that a person granted with `openmoat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` |
-| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret` | deny | `openmoat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, or a brokered secret sent to a host other than its own (§2.1, §5.2) |
+| `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret`, `proxy-port`, `proxy-capacity` | deny | `openmoat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, a brokered secret sent to a host other than its own, an allowed host on a port no rule names, or (counted, without a host) connections over its capacity (§2.1, §5.2) |
 
 ### 5.2 `openmoat proxy`
 
@@ -485,6 +492,18 @@ first. Differences from the hook:
 - The proxy cannot prompt. A host whose verdict is `ask` is refused, and so is a host with
   no rule under the default policy (`defaults: fetch: ask`). To open a host to the proxy,
   allow it in a `net` or `fetch` list.
+- Ports count. A host pattern without a port (`example.com`, `*.example.com`, `*`)
+  allows its hosts on 443 and 80 only. A pattern `host:port` (`example.com:8443`,
+  `*.example.com:8443`, `10.0.0.5:5432`) allows the hosts its host part matches on that
+  one port, whether or not a pattern without a port names them. Any other port of an
+  allowed host is refused with `proxy-port`. The port is decimal digits, 1 to 65535,
+  with no sign and no leading zero; IPv6 addresses take no port and are reached on 443
+  and 80 only. `openmoat policy lint` warns about a port written any other way
+  (`example.com:*`, `example.com:0`, `[::1]:8443`), which matches nothing. Deny rules
+  hold on every port (`*:22` denies port 22 everywhere), and an exclusion without a port
+  (`!evil.example.com`) excludes the host on every port. The hook decides by host
+  alone: a `host:port` pattern matches no tool call there, so list the bare host too
+  when the hook should allow it.
 - A `fetch` allow opens the host to every method through the proxy, including requests with a
   body. Inside a CONNECT tunnel the method cannot be seen until TLS termination exists.
 - Loopback, link-local, cloud metadata (`metadata.google.internal`, `metadata.goog`,
@@ -506,10 +525,23 @@ first. Differences from the hook:
   (`192.168.1.*`, `fd12::*`). There is no CIDR syntax. The pattern is matched against
   the resolved address in canonical text form (`::ffff:10.0.0.5` is matched as
   `10.0.0.5`; a NAT64 or IPv4-compatible address only by its IPv6 text). A deny rule
-  matching that text still wins. Patterns starting with `*`, `?`, `[` or `{`, and name
-  patterns such as `*.corp.example`, never open a private address.
+  matching that text still wins. An IPv4 pattern with a port (`10.0.0.5:5432`) opens the
+  address on that port only, and an exclusion (`!10.0.0.9`) holds on every port. Patterns
+  starting with `*`, `?`, `[` or `{`, and name patterns such as `*.corp.example`, never
+  open a private address.
 - A deny rule naming an address (`net: ["203.0.113.7"]`, `2001:db8::*`) holds for every
   name that resolves to it, public addresses included: one such address refuses the name.
+- Names are resolved as fully qualified (`example.com.`), so the resolver never tries a
+  search domain first (`example.com.corp.internal`, where a wildcard record could answer
+  for it). On Windows the name is resolved as written; its resolver appends no search
+  suffix to a name with a dot by default.
+- In `openmoat run`, where every request carries the session's credential (ADR-027),
+  an open connection is checked against the session's taint again every second, and
+  closed, with a `session-taint` row, when the session has read secret material since it
+  opened and its host is no longer one the taint allows.
+- Connections refused before a request is read, because the proxy holds all the
+  connections it may (`503`), are recorded as `proxy-capacity` rows without a host: the
+  first at once, then one row per 10 seconds with the count since.
 
 ### 5.3 What an operating-system layer can enforce
 
@@ -968,9 +1000,12 @@ ask:
 - `openmoat policy check` without `--policy` decides with it, as `guard` does. With
   `--policy`, only that file is used.
 - Agents cannot change it: `kernel-self` denies writes to `**/.moat/**`.
-- Hook only. Host sandboxes (§9) and `openmoat proxy` are generated from your policy,
+- Host sandboxes (§9) and the standalone `openmoat proxy` are generated from your policy,
   per user and not per repository. A repository deny is not enforced there, and a
-  trusted repository allow does not widen them.
+  trusted repository allow does not widen them. `openmoat run`, which knows its project,
+  adds the repository's deny rules to the hosts its own proxy decides (`net` and `fetch`
+  denies refuse a host there as in the hook). Its ask and allow rules, trusted or not,
+  are not used there: the proxy cannot ask, and an allow would widen it.
 
 ```bash
 openmoat trust                   # trust the repository policy of the current directory's project

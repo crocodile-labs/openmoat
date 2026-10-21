@@ -185,3 +185,95 @@ fn connections_that_never_authenticate_hold_at_most_half_the_slots() {
     assert!(reply.starts_with("HTTP/1.1 503"), "{reply}");
     assert!(reply.contains("waiting to authenticate"), "{reply}");
 }
+
+/// A session's taint that a test can change while a connection is open.
+struct Growing(Mutex<Taint>);
+
+impl TaintLookup for Growing {
+    fn taint(&self, _: &str) -> Result<Taint, String> {
+        Ok(self.0.lock().unwrap().clone())
+    }
+}
+
+/// A tunnel opened while the session was clean is closed, and the refusal
+/// recorded, once the session reads secret material: its host is then refused.
+#[test]
+fn a_tunnel_opened_before_a_secret_read_is_closed_after_it() {
+    let lookup: &'static Growing = Box::leak(Box::new(Growing(Mutex::new(Taint::default()))));
+    let sessions: &'static Sessions<'static> = Box::leak(Box::new(Sessions::new(
+        vec![Credential::new("run-a", token_a().as_bytes()).unwrap()],
+        lookup,
+    )));
+    let limits = Limits {
+        taint_recheck: Duration::from_millis(100),
+        ..Limits::default()
+    };
+    // An upstream that keeps the tunnel open: it reads and never answers.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let silent = listener.local_addr().unwrap();
+    let (tx, received) = mpsc::channel();
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let tx = tx.clone();
+            thread::spawn(move || {
+                let mut buf = vec![0; 65536];
+                while let Ok(n) = stream.read(&mut buf) {
+                    if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    let h = launch_with(
+        None,
+        limits,
+        Broker::default(),
+        (silent, received),
+        Some(sessions),
+    );
+    let mut s = h.connect();
+    let right = basic("run-a", token_a());
+    write!(
+        s,
+        "CONNECT allowed.test:{} HTTP/1.1\r\nProxy-Authorization: {right}\r\n\r\n",
+        h.port()
+    )
+    .unwrap();
+    let mut established = [0u8; 39];
+    s.read_exact(&mut established).unwrap();
+    s.write_all(&client_hello("allowed.test")).unwrap();
+    assert_eq!(
+        h.received.recv_timeout(WAIT).unwrap(),
+        client_hello("allowed.test")
+    );
+    // The session reads a secret; the open tunnel is closed within a few checks.
+    *lookup.0.lock().unwrap() = Taint {
+        secrets: vec![TaintSecret {
+            source: "read /home/u/.config/token".to_owned(),
+            host: None,
+        }],
+        untrusted: None,
+    };
+    let started = std::time::Instant::now();
+    assert_eq!(read_all(&mut s), "", "closed without an answer");
+    assert!(started.elapsed() < Duration::from_secs(3));
+    let _ = s.write_all(b"after");
+    assert!(
+        h.nothing_forwarded(),
+        "nothing after the taint reached the upstream"
+    );
+    let rows = h.rows();
+    assert_eq!(rows.first().map(|r| r.verdict), Some(Verdict::Allow));
+    let last = rows.last().unwrap();
+    assert_eq!(
+        (last.verdict, last.rules.as_slice()),
+        (Verdict::Deny, &["session-taint".to_owned()][..])
+    );
+    assert!(
+        last.reasons.iter().any(|r| r.contains("taint grew")),
+        "{:?}",
+        last.reasons
+    );
+}

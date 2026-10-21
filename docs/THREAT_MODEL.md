@@ -219,7 +219,8 @@ something OpenMoat claims to stop.
   - On Linux a seccomp filter allows only IPv4 and IPv6 TCP sockets, so the user's
     D-Bus session bus, other Unix sockets, UDP, raw, netlink and packet sockets are
     closed (`EPERM`), and `io_uring`, which could create sockets around the filter, is
-    refused. So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
+    refused. A send with `MSG_FASTOPEN` (TCP Fast Open, which connects inside
+    `sendto()` without the `connect()` Landlock's port rule checks) is refused too. So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
     the agent's memory, and debuggers do not work. Names resolve only through the
     proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them. `socketpair()`
     stays allowed; its sockets reach only each other.
@@ -294,7 +295,8 @@ something OpenMoat claims to stop.
 - **Session taint is minimal.** It follows host tool calls only. `openmoat run`'s proxy
   applies it to the run's connections (ADR-027): after a hook-visible call of a linked
   agent session read secret material, a request to any host but that secret's own is
-  refused. A hook inside `openmoat run` gets its decision from the `openmoat run` process
+  refused, and a connection opened before the read is closed within about a second
+  (the proxy checks each open connection's session again every second). A hook inside `openmoat run` gets its decision from the `openmoat run` process
   (ADR-028), which writes the links. Connections through the standalone `openmoat proxy` (the host
   sandboxes' `sandbox.proxy_port`) carry no session, and taint does not apply to them.
   It does not count these as untrusted content: shell network to
@@ -408,6 +410,16 @@ something OpenMoat claims to stop.
   checks the cleartext TLS server name against the CONNECT host and refuses an
   encrypted one (ECH, unless `sandbox.proxy_allow_ech`), but it does not see the HTTP
   `Host` header inside the tunnel, which some CDNs still route by.
+- **Claude Code's own broker injects a `plain_http` secret on every port of its host.**
+  `openmoat proxy` injects into plain HTTP on the secret's port only (80 unless it names
+  one); a secret that names a port is left out of Claude Code's mask list, but one that
+  does not is masked by Claude Code for its host on any port when every brokered
+  secret is `plain_http: true`.
+- **Connections refused at accept are counted, not listed.** A `503` before the
+  request is read has no host to record; `openmoat proxy` writes one `proxy-capacity`
+  row at once and then one per 10 seconds with the count, written when the next
+  connection arrives after that time, so the count of a burst's end can be missing
+  until then.
 - **When the hook fails, most hosts run the call.** The host rows below come from
   each host's documentation or source as of 2026-10-07 ([Claude Code hooks][cc-hooks],
   [Codex hooks][codex-hooks] and [`pre_tool_use.rs`][codex-pre],

@@ -228,6 +228,34 @@ fn names_are_checked_like_dns_labels() {
     }
 }
 
+/// The name is decided without its trailing dot and resolved with one, so the
+/// resolver tries no search domain first; Windows gets it as decided.
+#[test]
+fn a_name_is_resolved_as_fully_qualified() {
+    let expected = |name: &str| {
+        if cfg!(windows) {
+            name.to_owned()
+        } else {
+            format!("{name}.")
+        }
+    };
+    for raw in ["Api.Example.com.", "api.example.com", "intranet"] {
+        let name = normalise_name(raw).unwrap();
+        assert!(!name.ends_with('.'), "{name}");
+        assert_eq!(
+            crate::upstream::resolver_name(&name),
+            expected(raw.to_ascii_lowercase().trim_end_matches('.'))
+        );
+    }
+    // A CONNECT host written with the dot is the same host, resolved the same way.
+    let dotted = ok("CONNECT api.example.com.:443 HTTP/1.1\r\n\r\n");
+    assert_eq!(dotted.host(), "api.example.com");
+    assert_eq!(
+        crate::upstream::resolver_name(dotted.host()),
+        expected("api.example.com")
+    );
+}
+
 #[test]
 fn an_address_in_another_spelling_is_not_a_name() {
     // The system resolver reads these as IPv4 addresses; only the canonical

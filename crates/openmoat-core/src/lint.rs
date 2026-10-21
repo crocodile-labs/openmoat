@@ -8,6 +8,8 @@
 
 use std::fmt;
 
+mod ports;
+
 use crate::kind::Kind;
 use crate::paths;
 use crate::pattern::{self, GlobPattern, ShellPattern};
@@ -65,6 +67,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
         excluded_positives(group, &mut out);
         fetch_exclusions_net_matches(group, &mut out);
     }
+    ports::malformed(policy, &mut out);
     secrets(policy, &mut out);
     if policy.sandbox.as_ref().is_some_and(|s| s.proxy_allow_ech) {
         out.push(Warning {

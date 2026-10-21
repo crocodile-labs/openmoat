@@ -38,12 +38,13 @@ fn secret_read() -> Taint {
 /// the bytes the upstream received, and the rows. `held` connections of
 /// `run-a` are open already.
 fn exchange(lookup: &Fixed, credential: Option<&str>, held: usize) -> (String, Vec<u8>, Vec<Row>) {
-    let policy =
-        Policy::parse("version: 1\nallow:\n  - { id: hosts, net: [allowed.test] }\n").unwrap();
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let policy = super::allowed_on(upstream.local_addr().unwrap().port());
     let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
     let address_policy = decide::address_policy(&policy);
     let addresses = CompiledPolicy::compile(&address_policy, &ctx()).unwrap();
-    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port_policy = decide::port_policy(&policy);
+    let ports = CompiledPolicy::compile(&port_policy, &ctx()).unwrap();
     upstream.set_nonblocking(true).unwrap();
     let rows = Rows::default();
     let sessions = two_sessions(lookup);
@@ -65,6 +66,7 @@ fn exchange(lookup: &Fixed, credential: Option<&str>, held: usize) -> (String, V
     };
     let served = Served {
         addresses: &addresses,
+        ports: &ports,
         shares: Shares::new(limits.max_connections),
     };
     let _held: Vec<_> = (0..held)

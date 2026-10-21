@@ -18,6 +18,10 @@ pub struct Limits {
     /// sessions, one session (or the connections not yet authenticated) may
     /// hold at most half of them.
     pub max_connections: usize,
+    /// In session mode, how often an open connection is checked against its
+    /// session's taint again: one that the session's taint would now refuse
+    /// (it read secret material since) is closed.
+    pub taint_recheck: Duration,
 }
 
 impl Limits {
@@ -33,6 +37,7 @@ impl Limits {
             ("handshake_timeout", self.handshake_timeout),
             ("idle_timeout", self.idle_timeout),
             ("connect_timeout", self.connect_timeout),
+            ("taint_recheck", self.taint_recheck),
         ];
         let bad = sizes
             .iter()
@@ -62,6 +67,7 @@ impl Default for Limits {
             idle_timeout: Duration::from_mins(2),
             connect_timeout: Duration::from_secs(10),
             max_connections: 256,
+            taint_recheck: Duration::from_secs(1),
         }
     }
 }
