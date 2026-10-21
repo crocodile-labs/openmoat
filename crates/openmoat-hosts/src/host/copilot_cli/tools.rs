@@ -130,16 +130,29 @@ fn search(tool: &str, args: &Value, cwd: Option<&str>) -> Result<Action, HostErr
             Some(_) => return Err(malformed()),
         }
     }
-    // A `grep` pattern is a regular expression, not a path.
-    if tool == "glob"
-        && let Some(dir) = args
-            .get("pattern")
-            .and_then(Value::as_str)
-            .and_then(crate::pattern_dir)
-    {
-        paths.push(dir);
-    }
     paths.retain(|p| !p.is_empty());
+    // A `grep` pattern is a regular expression, not a path. A relative `glob`
+    // pattern that climbs (`../..`) reads above each searched directory.
+    let pattern = args.get("pattern").and_then(Value::as_str);
+    if tool == "glob"
+        && let Some(pattern) = pattern
+    {
+        let roots = if paths.is_empty() {
+            vec![cwd.unwrap_or(".").to_owned()]
+        } else {
+            paths.clone()
+        };
+        let reached: Vec<String> = roots
+            .iter()
+            .filter_map(|root| crate::glob_reach(root, pattern))
+            .collect();
+        if !reached.is_empty() && paths.is_empty() && crate::pattern_dir(pattern).is_none() {
+            paths.extend(roots);
+        }
+        paths.extend(crate::pattern_dir(pattern));
+        paths.extend(reached);
+        paths.dedup();
+    }
     Ok(match paths.len() {
         0 => crate::search_root(args, cwd),
         1 => Action::FsRead {

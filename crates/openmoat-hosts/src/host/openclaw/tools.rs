@@ -185,12 +185,33 @@ fn exec(call: &Call<'_>) -> Result<Action, HostError> {
         Some(_) => return Err(malformed(call, "`env` is not an object".to_owned())),
     }
     line.push_str(&command);
+    if let Some(dir) = home_workdir(call.params.get("workdir")) {
+        line = format!("{dir} && {line}");
+    }
     Ok(Action::Shell { command: line })
 }
 
+/// A `workdir` under the home directory (`~`, `~/x`), which OpenClaw expands
+/// itself, as a `cd` to put before the command: the guard takes a working
+/// directory literally, so `~/.ssh` would be a directory named `~` in its own.
+/// The rest of the path is quoted, so only the `~` is expanded.
+fn home_workdir(workdir: Option<&Value>) -> Option<String> {
+    let dir = workdir.and_then(Value::as_str)?;
+    let rest = match dir.strip_prefix('~')? {
+        "" => return Some("cd ~".to_owned()),
+        rest if rest.starts_with(['/', '\\']) => &rest[1..],
+        _ => return None,
+    };
+    Some(format!("cd ~/'{}'", rest.replace('\'', r"'\''")))
+}
+
 /// The directory `exec` runs in: `workdir`, taken from the workspace when
-/// relative, else the workspace.
+/// relative, else the workspace. A `workdir` under `~` is the workspace here
+/// and a `cd` in the command ([`home_workdir`]).
 pub(super) fn workdir(workdir: Option<&Value>, cwd: Option<String>) -> Option<String> {
+    if home_workdir(workdir).is_some() {
+        return cwd;
+    }
     match (
         workdir.and_then(Value::as_str).filter(|w| !w.is_empty()),
         cwd,

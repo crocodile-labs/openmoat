@@ -10,6 +10,7 @@
 
 pub mod bench;
 mod contract;
+mod glob;
 mod host;
 mod registry;
 mod wire;
@@ -32,6 +33,8 @@ use std::str::FromStr;
 use openmoat_core::{Action, Decision, Verdict};
 use serde_json::Value;
 use thiserror::Error;
+
+use glob::{below, glob_reach};
 
 /// Session id recorded when a host omits it.
 const UNKNOWN_SESSION: &str = "unknown";
@@ -89,18 +92,22 @@ fn search_path(input: &Value) -> Option<&str> {
 /// The directories a Claude Code `Glob` reads. An absolute or `~` `pattern`
 /// carries its own directory, which Claude Code searches instead of `path`
 /// (its Glob tool splits the pattern with `isAbsolute`); `path` is read too
-/// when given, so either spelling is checked.
+/// when given, so either spelling is checked. A relative pattern that climbs
+/// out of the searched directory (`../..`) reads where it climbs to as well.
 fn glob_roots(input: &Value, cwd: Option<&str>) -> Action {
-    let from_pattern = input
-        .get("pattern")
-        .and_then(Value::as_str)
-        .and_then(pattern_dir);
-    match (from_pattern, search_path(input)) {
-        (Some(dir), Some(path)) => Action::ReadFiles {
-            paths: vec![path.to_owned(), dir],
+    let pattern = input.get("pattern").and_then(Value::as_str).unwrap_or("");
+    let root = search_path(input).or(cwd).unwrap_or(".");
+    let mut paths = match (pattern_dir(pattern), search_path(input)) {
+        (Some(dir), Some(path)) => vec![path.to_owned(), dir],
+        (Some(dir), None) => vec![dir],
+        (None, _) => vec![root.to_owned()],
+    };
+    paths.extend(glob_reach(root, pattern));
+    match paths.len() {
+        1 => Action::FsRead {
+            path: paths.remove(0),
         },
-        (Some(dir), None) => Action::FsRead { path: dir },
-        (None, _) => search_root(input, cwd),
+        _ => Action::ReadFiles { paths },
     }
 }
 

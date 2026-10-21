@@ -20,7 +20,7 @@ pub(crate) mod config_change;
 /// `Skill` and `EnterWorktree` without a `path` are recorded and left to Claude
 /// Code's own permission flow; changing this list makes existing entries stale,
 /// which `moat doctor` and `moat status` report with "run `moat init`".
-const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|mcp__.*";
+const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|Artifact|ArtifactData|mcp__.*";
 
 /// `PreToolUse` asks Claude Code to block a call whose hook fails
 /// (`onFailure`); the settings-change veto does not.
