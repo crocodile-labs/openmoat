@@ -68,7 +68,8 @@ fn metadata_is_refused_even_through_an_allowed_name() {
 #[test]
 fn loopback_is_refused_unless_it_is_the_listed_server() {
     let h = start(None, Limits::default());
-    // loop.test resolves to 127.0.0.1 too, but on a port nobody listed
+    // loop.test resolves to 127.0.0.1 too, but on a port nobody listed (the
+    // policy allows `loop.test:1`, so the loopback check is what refuses it)
     let reply = h.exchange("GET http://loop.test:1/ HTTP/1.1\r\n\r\n");
     assert!(
         reply.starts_with("HTTP/1.1 403") && reply.contains("loopback"),

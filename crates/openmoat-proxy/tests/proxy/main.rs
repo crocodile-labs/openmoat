@@ -22,7 +22,8 @@ allow:
   - id: deny-names
     net: ["denied.test", "mixed-denied.test", "denied-v6.test"]
   - id: test-hosts
-    net: ["allowed.test", "rebind.test", "mixed.test", "loop.test", "169.254.169.254", "owner.test", "127.0.0.1"]
+    # `loop.test:1`: a port the policy allows where no listed server listens
+    net: ["allowed.test", "rebind.test", "mixed.test", "loop.test", "loop.test:1", "169.254.169.254", "owner.test", "127.0.0.1"]
   - id: lan-names
     net: ["lan.test", "mixed-lan.test", "*.wild.test"]
 "#;
