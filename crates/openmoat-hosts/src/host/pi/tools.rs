@@ -51,13 +51,17 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
         "grep" | "ls" => Action::FsRead { path: root(call)? },
         // `find` matches `pattern` below `path`; an absolute pattern names its
         // own directory, which is read too.
+        // A `..` in the pattern may climb out of `path` too.
         "find" => {
             let root = root(call)?;
-            match crate::pattern_dir(&field("pattern")?) {
-                Some(dir) if dir != root => Action::ReadFiles {
-                    paths: vec![root, dir],
-                },
-                _ => Action::FsRead { path: root },
+            let pattern = field("pattern")?;
+            let mut paths = vec![root.clone()];
+            paths.extend(crate::pattern_dir(&pattern));
+            paths.extend(crate::glob_reach(&root, &pattern));
+            paths.dedup();
+            match paths.len() {
+                1 => Action::FsRead { path: root },
+                _ => Action::ReadFiles { paths },
             }
         }
         "read_mcp_resource" => crate::wire::mcp::read_resource(tool, call.input)?,

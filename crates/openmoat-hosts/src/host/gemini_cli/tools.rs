@@ -176,23 +176,29 @@ fn search_root(input: &Value, cwd: Option<&str>) -> Action {
 /// out of the searched directory (`../..`).
 fn glob(input: &Value, cwd: Option<&str>) -> Action {
     let root = search_dir(input, cwd);
-    let from_pattern = input
+    let pattern = input
         .get("pattern")
         .and_then(Value::as_str)
-        .filter(|p| !p.is_empty())
+        .filter(|p| !p.is_empty());
+    let from_pattern = pattern
         .map(|p| static_part(p, None))
         .filter(|dir| dir != ".");
+    // A `..` after a wildcard climbs too (`*/../..`).
+    let climbed = pattern.and_then(|p| crate::glob_reach(&root, p));
+    let mut paths = vec![root.clone()];
     match from_pattern {
-        Some(dir) if !is_relative(&dir) => Action::ReadFiles {
-            paths: vec![root, dir],
-        },
-        Some(dir) => {
-            let below = format!("{}/{dir}", root.trim_end_matches(['/', '\\']));
-            Action::ReadFiles {
-                paths: vec![root, below],
-            }
-        }
-        None => Action::FsRead { path: root },
+        Some(dir) if !is_relative(&dir) => paths.push(dir),
+        Some(dir) => paths.push(crate::below(&root, &dir)),
+        None => {}
+    }
+    if let Some(climbed) = climbed
+        && !paths.contains(&climbed)
+    {
+        paths.push(climbed);
+    }
+    match paths.len() {
+        1 => Action::FsRead { path: root },
+        _ => Action::ReadFiles { paths },
     }
 }
 
@@ -214,6 +220,8 @@ fn read_many(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Action, Hos
             .filter(|p| !p.is_empty())
             .ok_or_else(|| malformed("`include` holds a value that is not a path"))?;
         paths.push(static_part(pattern, cwd));
+        // A `..` after a wildcard climbs out of the working directory too.
+        paths.extend(crate::glob_reach(cwd.unwrap_or("."), pattern));
     }
     Ok(Action::ReadFiles { paths })
 }

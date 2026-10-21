@@ -34,6 +34,41 @@ fn action(tool: &str, params: Value) -> Option<Action> {
     call(tool, params, json!({})).unwrap().action
 }
 
+/// OpenClaw expands a `~` `workdir`; the guard takes a working directory
+/// literally, so `~/.ssh` would be a `~` directory below its own and
+/// `cat id_rsa` would name no secret. It becomes a `cd` the classifier expands.
+#[test]
+fn exec_in_a_home_workdir_is_a_cd_before_the_command() {
+    let req = call(
+        "exec",
+        json!({"command": "cat id_rsa", "workdir": "~/.ssh", "env": {"A": "1"}}),
+        json!({}),
+    )
+    .unwrap();
+    assert_eq!(req.cwd.as_deref(), Some("/p"));
+    assert_eq!(
+        req.action,
+        Some(Action::Shell {
+            command: "cd ~/'.ssh' && A='1' cat id_rsa".into()
+        })
+    );
+    let home = call("exec", json!({"command": "ls", "workdir": "~"}), json!({})).unwrap();
+    assert_eq!(home.cwd.as_deref(), Some("/p"));
+    assert_eq!(
+        home.action,
+        Some(Action::Shell {
+            command: "cd ~ && ls".into()
+        })
+    );
+    let quoted = action("exec", json!({"command": "ls", "workdir": "~/a'b"}));
+    assert_eq!(
+        quoted,
+        Some(Action::Shell {
+            command: r"cd ~/'a'\''b' && ls".into()
+        })
+    );
+}
+
 #[test]
 fn exec_is_a_shell_command_with_its_env_and_workdir() {
     let exec = fixture("exec");

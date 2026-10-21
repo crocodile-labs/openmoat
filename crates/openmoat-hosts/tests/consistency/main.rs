@@ -21,6 +21,7 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 use serde_json::{Value, json};
 
+mod attacks;
 mod payloads;
 
 use payloads::{copilot, cursor, cursor_tool, gemini, openclaw, pi};

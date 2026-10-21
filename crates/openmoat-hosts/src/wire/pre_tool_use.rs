@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod artifact;
 pub(crate) mod bench;
 
 pub(crate) const EVENT: &str = "PreToolUse";
@@ -108,6 +109,9 @@ fn map_tool(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Option<Actio
         "Glob" => crate::glob_roots(input, cwd),
         "Grep" => crate::search_root(input, cwd),
         "ReadMcpResourceTool" => crate::wire::mcp::read_resource(tool, input)?,
+        // Claude Code uploads local files to a claude.ai page, or saves its files.
+        "Artifact" => return artifact::artifact(input),
+        "ArtifactData" => return artifact::artifact_data(input),
         // Entering an existing worktree moves the session, and so the project
         // root, to `path`: read as a directory, so a deny on it holds. A new
         // worktree (`name`) goes under the project's `.claude/worktrees/` and is
