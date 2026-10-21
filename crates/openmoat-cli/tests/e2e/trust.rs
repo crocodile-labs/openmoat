@@ -43,7 +43,8 @@ fn trust_shows_what_it_trusts_and_writes_nothing_without_a_yes() {
     // No answer (end of input) is no.
     let out = sb.moat_as_person(&["trust", &dir]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let shown = text(&out);
+    // The path is shown with the platform's separator (`.moat\policy.yaml` on Windows).
+    let shown = text(&out).replace('\\', "/");
     for part in [
         ".moat/policy.yaml",
         "sha256:",
