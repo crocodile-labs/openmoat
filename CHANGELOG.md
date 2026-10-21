@@ -8,6 +8,8 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
 ### Security
 - The person-only `openmoat` commands are also denied under `setsid` and `flock`, and `openmoat proxy install` and `openmoat proxy uninstall` are person-only like `uninstall`: a service installed or removed changes every later session ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 - The person-only commands (all but `openmoat init`) refuse to run from an executable other than the `openmoat` the policy lock records or its `moat` alias: a copy of the binary under another name, started where the agent is no longer among its parent processes, got past the guard's check by name. Run them from the installed `openmoat`, or run `openmoat init` from the new binary to point the hooks at it ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
@@ -32,17 +34,6 @@ view at the end of the file.
 - A change of Claude Code's `permissions.defaultMode` to a mode that runs calls without asking (`acceptEdits`, `auto`, `bypassPermissions`, or any value other than `default`, `plan` and `dontAsk`) and any change to `permissions.additionalDirectories` are drift that denies every call until `openmoat doctor --accept`, instead of being decided through ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 - Making a hard link is decided as a write of the file it links to (`ln` without `-s`, `link`, `cp -l`/`--link`, `rsync --link-dest`), so a hard link to OpenMoat's state or an agent's hook settings is denied by `kernel-self` ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 - Policy packs are signed in their own namespace, `openmoat-pack`, so a signed pack is never accepted as a signed repository policy, or the reverse. This breaks installing a pack signed in `openmoat-policy`: sign it again with `ssh-keygen -Y sign -n openmoat-pack`, and run `openmoat policy trust-key` again for a key trusted before; installed packs and repository policy signatures keep working ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
-
-### Added
-- Connections the proxy refuses at accept for capacity (`503`) are recorded as `proxy-capacity` rows: the first at once, then one row per 10 seconds with the count ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
-- `openmoat policy lint` warns about a `net` or `fetch` pattern whose port is not one (`example.com:*`, `example.com:0`, `[::1]:8443`), which matches nothing ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
-
-### Changed
-- `openmoat init` prints, after it writes or changes Codex's hook entry, that Codex runs it only once you trust it in `/hooks`; `openmoat doctor` says so on Codex's protection line. `openmoat-hosts` (library API, breaking): `InstallSpec::trust_step` ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
-
-## [0.9.0] - 2026-10-22
-
-### Security
 - `openmoat proxy` refuses a connection that reaches this machine through one of its other addresses (its LAN or public IPv4 or IPv6 address, where services listening on every interface answer as on loopback); it is closed before a byte is sent (`proxy-address`) ([#619](https://github.com/crocodile-labs/openmoat/pull/619)).
 - `openmoat proxy` checks an IPv4-translated address (`::ffff:0:a.b.c.d`) as the IPv4 address it reaches, as it does NAT64 and IPv4-compatible ones, so `::ffff:0:a9fe:a9fe` is refused as link-local ([#619](https://github.com/crocodile-labs/openmoat/pull/619)).
 - `openmoat proxy` refuses a plain-HTTP `Content-Length` over 2^31 - 1 (chunk sizes already were), a `Transfer_Encoding` or `Content_Length` header (servers that pass headers on as CGI-style variables read it as the framing header), and a port with a sign (`:+80`) in the target or `Host` ([#619](https://github.com/crocodile-labs/openmoat/pull/619)).
@@ -66,6 +57,8 @@ view at the end of the file.
 - A write of a repository's `.github/mcp.json`, whose servers GitHub Copilot CLI starts in a trusted folder, asks (`runs-later`) and taints like the other agent configuration files ([#623](https://github.com/crocodile-labs/openmoat/pull/623)).
 
 ### Added
+- Connections the proxy refuses at accept for capacity (`503`) are recorded as `proxy-capacity` rows: the first at once, then one row per 10 seconds with the count ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
+- `openmoat policy lint` warns about a `net` or `fetch` pattern whose port is not one (`example.com:*`, `example.com:0`, `[::1]:8443`), which matches nothing ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
 - `openmoat run --netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only; the default, `--netns=auto`, is unchanged ([#618](https://github.com/crocodile-labs/openmoat/pull/618)).
 - `openmoat sandbox show` lists the `hook_only` deny groups (ADR-034), such as `build-credentials`, with their paths, as decided by the hook only and not in the OS sandbox (`hook_only` in `--format json`) ([#618](https://github.com/crocodile-labs/openmoat/pull/618)).
 - GitHub Copilot CLI is a supported agent (`openmoat init --hosts copilot-cli`): OpenMoat's `preToolUse` hook goes into a file of its own, `~/.copilot/hooks/openmoat.json` (or `$COPILOT_HOME/hooks/`), pinned by the lock, and checks shell commands, typed shell input, file reads and writes, patches, searches, fetches and MCP calls; an `ask` is Copilot's own prompt. Copilot runs a call whose hook times out, so `openmoat init` sets `timeoutSec` to 600, far above the guard's own 30 s deadline. `kernel-self` denies the agent writes to `~/.copilot` itself, its hooks directory, `settings.json` and `config.json`, and a repository's `.github/copilot/settings*.json`, whose `disableAllHooks` would turn every hook off; writing a repository's `.github/hooks/*.json`, `~/.copilot/mcp-config.json`, plugins or custom agents asks (`runs-later`), and `openmoat doctor` and `openmoat status` warn about a repository that turns hooks off or carries hook files. No OS sandbox is configured for Copilot CLI; existing policies get the rules with `openmoat policy upgrade` ([#615](https://github.com/crocodile-labs/openmoat/pull/615)).
@@ -77,6 +70,7 @@ view at the end of the file.
 - `--help` of `openmoat init`, `uninstall`, `guard`, `bench`, `replay` and the audit commands lists every host id `--hosts`/`--host` takes, and the shell completes them ([#623](https://github.com/crocodile-labs/openmoat/pull/623)).
 
 ### Changed
+- `openmoat init` prints, after it writes or changes Codex's hook entry, that Codex runs it only once you trust it in `/hooks`; `openmoat doctor` says so on Codex's protection line. `openmoat-hosts` (library API, breaking): `InstallSpec::trust_step` ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 - `openmoat-hosts` (library API, breaking): `Host::CopilotCli`, `HookFormat::Copilot` and `ProjectSettingsSpec::hook_dir`; `Host::ALL` has one more host ([#615](https://github.com/crocodile-labs/openmoat/pull/615)).
 - `openmoat-hosts` (library API, breaking): `Host::Pi`, `HookFormat::Pi`; `Host::ALL` has one more host ([#616](https://github.com/crocodile-labs/openmoat/pull/616)).
 - `openmoat-hosts` (library API, breaking): `Host::GeminiCli`, `HookFormat::Gemini`, `InstallSpec::relaxed_keys` (`RelaxedKey`, `KeyShape`) and `InstallSpec::variable_names_home`; `Host::ALL` has one more host ([#617](https://github.com/crocodile-labs/openmoat/pull/617)).
