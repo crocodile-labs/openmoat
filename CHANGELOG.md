@@ -9,7 +9,7 @@ view at the end of the file.
 ## [Unreleased]
 
 ### Added
-- `openmoat-hosts` (library API): `HostSpec::BASE` and `InstallSpec::BASE`, the defaults a host spec takes for the fields it does not name, so a new optional field is added once rather than in every host; `Host::EVERY`, every host including those that speak another's format ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- `openmoat-hosts` (library API): `HostSpec::BASE` and `InstallSpec::BASE`, the defaults a host spec takes for the fields it does not name, so a new optional field is added once rather than in every host; `Host::EVERY`, every host including those that speak another's format ([#631](https://github.com/crocodile-labs/openmoat/pull/631)).
 
 ## [0.9.0] - 2026-10-22
 
