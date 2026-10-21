@@ -42,6 +42,15 @@ fn ctx() -> EvalContext {
     }
 }
 
+/// A policy that allows `allowed.test`, also on `port`, where the test's
+/// upstream listens (a host rule alone allows 443 and 80 only).
+fn allowed_on(port: u16) -> Policy {
+    Policy::parse(&format!(
+        "version: 1\nallow:\n  - {{ id: hosts, net: [allowed.test, 'allowed.test:{port}'] }}\n"
+    ))
+    .unwrap()
+}
+
 /// The proxy end of a loopback connection, and the client end.
 fn pair() -> (TcpStream, TcpStream) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -52,12 +61,13 @@ fn pair() -> (TcpStream, TcpStream) {
 
 #[test]
 fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
-    let policy =
-        Policy::parse("version: 1\nallow:\n  - { id: hosts, net: [allowed.test] }\n").unwrap();
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let policy = allowed_on(upstream.local_addr().unwrap().port());
     let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
     let address_policy = decide::address_policy(&policy);
     let addresses = CompiledPolicy::compile(&address_policy, &ctx()).unwrap();
-    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port_policy = decide::port_policy(&policy);
+    let ports = CompiledPolicy::compile(&port_policy, &ctx()).unwrap();
     let rules = Rules::default();
     let proxy = Proxy {
         policy: &compiled,
@@ -77,6 +87,7 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
     proxy_end.shutdown(Shutdown::Write).unwrap();
     let served = Served {
         addresses: &addresses,
+        ports: &ports,
         shares: Shares::new(8),
     };
     proxy.handle(&proxy_end, &served, None);
@@ -111,6 +122,8 @@ fn with_echo(request: &[u8]) -> (String, Vec<Vec<String>>) {
     let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
     let address_policy = decide::address_policy(&policy);
     let addresses = CompiledPolicy::compile(&address_policy, &ctx()).unwrap();
+    let port_policy = decide::port_policy(&policy);
+    let ports = CompiledPolicy::compile(&port_policy, &ctx()).unwrap();
     let rules = Rules::default();
     let proxy = Proxy {
         policy: &compiled,
@@ -128,6 +141,7 @@ fn with_echo(request: &[u8]) -> (String, Vec<Vec<String>>) {
     client.shutdown(Shutdown::Write).unwrap();
     let served = Served {
         addresses: &addresses,
+        ports: &ports,
         shares: Shares::new(8),
     };
     proxy.handle(&proxy_end, &served, None);

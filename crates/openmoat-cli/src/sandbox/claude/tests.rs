@@ -448,3 +448,26 @@ fn mixed_plain_http_policy_matches_the_golden_settings() {
     .unwrap();
     assert_golden("claude-mixed-plain-http.json", &(actual + "\n"));
 }
+
+/// Claude Code's broker cannot bind a secret to a port: a secret that names
+/// one is left to `openmoat proxy`, with a loss, rather than injected on every port.
+#[test]
+fn a_secret_bound_to_a_port_is_left_to_the_proxy() {
+    let out = generated(
+        "version: 1\n\
+         allow:\n  - id: a\n    net: ['dev.internal']\n\
+         secrets:\n  \
+         - id: dev\n    host: dev.internal\n    header: Authorization\n    source: { env: DEV_TOKEN }\n    plain_http: true\n    port: 8080\n",
+    );
+    assert!(
+        out.sandbox.get("credentials").is_none(),
+        "{:?}",
+        out.sandbox
+    );
+    assert!(
+        out.report
+            .losses
+            .iter()
+            .any(|l| l.rule == "secrets.dev" && l.to_string().contains("port 8080"))
+    );
+}

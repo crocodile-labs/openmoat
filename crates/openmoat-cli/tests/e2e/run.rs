@@ -10,6 +10,9 @@ use crate::common::{OK, Sandbox, USAGE, output, stderr, text};
 /// Linux: the network reaches only the proxy on loopback.
 #[cfg(target_os = "linux")]
 mod network;
+/// The run's proxy holds the repository policy's deny rules, and no more of it.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod repo_net;
 
 /// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
 /// outside the home so that writing the home is not a temp-directory write.

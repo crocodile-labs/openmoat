@@ -9,7 +9,11 @@
 //! Every resolved address is also checked against the deny rules, so a deny
 //! naming an address holds for a name that resolves to it.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+mod ports;
+
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+pub use self::ports::{DEFAULT_PORTS, RULE_PORT, host_port, port_policy};
 
 use openmoat_core::{
     Action, AtomicAction, CompiledPolicy, Decision, Defaults, Kind, MapPathResolver, Policy, Taint,
@@ -76,17 +80,11 @@ const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
 
 /// Decide whether `host`, normalised as [`Request::host`](crate::Request::host)
 /// reports it, may be reached. Only an `allow` lets the connection proceed.
+/// The port is not looked at here: [`host_port`] decides both.
 #[must_use]
 pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
-    if METADATA_NAMES
-        .iter()
-        .any(|m| host == *m || host.strip_suffix(m).is_some_and(|p| p.ends_with('.')))
-    {
-        return Decision::single(
-            Verdict::Deny,
-            RULE_ADDRESS,
-            format!("{host} is a cloud metadata service"),
-        );
+    if let Some(refused) = metadata(host) {
+        return refused;
     }
     let atom = AtomicAction::Fetch {
         host: host.to_owned(),
@@ -107,6 +105,20 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
             .push("the proxy cannot ask, so a host the hook would ask for or leave to the agent is refused".to_owned());
     }
     decision
+}
+
+/// The refusal of a cloud metadata service's name, whatever the policy says.
+fn metadata(host: &str) -> Option<Decision> {
+    METADATA_NAMES
+        .iter()
+        .any(|m| host == *m || host.strip_suffix(m).is_some_and(|p| p.ends_with('.')))
+        .then(|| {
+            Decision::single(
+                Verdict::Deny,
+                RULE_ADDRESS,
+                format!("{host} is a cloud metadata service"),
+            )
+        })
 }
 
 /// The refusal for a request to `host:port` from a session with `taint`, if
@@ -274,18 +286,22 @@ fn tunnelled_v4(ip: Ipv6Addr) -> impl Iterator<Item = Ipv4Addr> {
 /// Anything else is left undecided (`ask`), which neither opens a
 /// [`Forbidden::Private`] address ([`named`]) nor refuses one ([`denied`]), so
 /// a wildcard such as `*` or `*.example`, or a name such as
-/// `db.internal:5432`, never reaches the local network by DNS.
+/// `db.internal:5432`, never reaches the local network by DNS. Exclusions are
+/// all kept, and one without a port excludes the address on every port.
 #[must_use]
 pub fn address_policy(policy: &Policy) -> Policy {
     let allow = policy
         .allow
         .iter()
         .map(|g| {
+            // Every exclusion is kept: it can only narrow what the list names.
             let keep = |list: &[String]| {
-                list.iter()
-                    .filter(|p| names_address(p))
+                let kept: Vec<String> = list
+                    .iter()
+                    .filter(|p| p.starts_with('!') || names_address(p))
                     .cloned()
-                    .collect::<Vec<_>>()
+                    .collect();
+                ports::with_ports(&kept, false)
             };
             openmoat_core::RuleGroup {
                 id: g.id.clone(),
@@ -321,6 +337,24 @@ fn names_address(pattern: &str) -> bool {
 pub fn named(addresses: &CompiledPolicy<'_>, ip: IpAddr) -> bool {
     let atom = AtomicAction::Fetch {
         host: ip.to_canonical().to_string(),
+    };
+    addresses
+        .evaluate_atomic(&atom)
+        .is_some_and(|d| d.verdict == Verdict::Allow)
+}
+
+/// Whether `addresses` allows `addr`'s address: [`named`], or, for IPv4, an
+/// allow rule that names it with this port (`10.0.0.5:5432`).
+#[must_use]
+pub fn named_on(addresses: &CompiledPolicy<'_>, addr: SocketAddr) -> bool {
+    if named(addresses, addr.ip()) {
+        return true;
+    }
+    let IpAddr::V4(v4) = addr.ip().to_canonical() else {
+        return false;
+    };
+    let atom = AtomicAction::Fetch {
+        host: format!("{v4}:{}", addr.port()),
     };
     addresses
         .evaluate_atomic(&atom)

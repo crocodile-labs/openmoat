@@ -301,6 +301,13 @@ impl Exit {
         ctx: EvalContext,
         credential: Option<Credential>,
     ) -> Result<Self> {
+        // `moat run` knows its project: the repository policy's deny rules
+        // refuse hosts at its proxy too (its allow rules never widen it).
+        let policy = if credential.is_some() {
+            crate::repo::with_repo_denies(home, &ctx, policy)?
+        } else {
+            policy
+        };
         CompiledPolicy::compile(&policy, &ctx)?;
         let (broker, known) = secrets::broker(&policy.secrets, &ctx.home)?;
         let audit_path = home.audit_path();

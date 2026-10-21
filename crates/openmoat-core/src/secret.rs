@@ -50,6 +50,11 @@ pub struct Secret {
     /// placeholder.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub plain_http: bool,
+    /// The port of the plain-HTTP requests that get the value, 1 to 65535;
+    /// 80 when unset. A request to another port of the host keeps the
+    /// placeholder. Only with `plain_http`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
 }
 
 /// Where OpenMoat reads a secret's value. The agent should not be able to read it
@@ -84,6 +89,12 @@ impl Secret {
     #[must_use]
     pub fn placeholder(&self) -> String {
         format!("moat-secret:{}:placeholder", self.id)
+    }
+
+    /// The port of the plain-HTTP requests the value goes into: `port`, or 80.
+    #[must_use]
+    pub fn plain_http_port(&self) -> u16 {
+        self.port.unwrap_or(80)
     }
 
     /// True when the host is this machine: `localhost`, a name under it, or
@@ -151,6 +162,16 @@ fn check_one(secret: &Secret) -> Result<(), String> {
         return Err(format!(
             "header `{header}` frames the request or connection; it cannot carry a secret"
         ));
+    }
+    match secret.port {
+        Some(0) => return Err("port must be 1 to 65535".into()),
+        Some(port) if !secret.plain_http => {
+            return Err(format!(
+                "port {port} names where plain-HTTP requests get the value; it needs \
+                 `plain_http: true`"
+            ));
+        }
+        _ => {}
     }
     match &secret.source {
         Source::File(path) if !(crate::paths::is_absolute(path) || path.starts_with("~/")) => Err(
@@ -244,6 +265,7 @@ mod tests {
             header: secret.header.clone(),
             source: secret.source.clone(),
             plain_http: false,
+            port: None,
         };
         for shown in [format!("{policy:?}"), format!("{brokered:?}")] {
             assert!(shown.contains("\"gh\""), "{shown}");
@@ -274,6 +296,24 @@ mod tests {
             s.host = host.into();
             assert_eq!(s.is_loopback(), loopback, "{host}");
         }
+    }
+
+    #[test]
+    fn a_plain_http_secret_goes_to_port_80_unless_it_names_one() {
+        let plain = format!("{GH}    source: {{ env: T }}\n    plain_http: true\n");
+        assert_eq!(parse(&plain).unwrap().secrets[0].plain_http_port(), 80);
+        let on = parse(&format!("{plain}    port: 8080\n")).unwrap();
+        assert_eq!(on.secrets[0].port, Some(8080));
+        assert_eq!(on.secrets[0].plain_http_port(), 8080);
+        assert!(problem(&format!("{plain}    port: 0\n")).contains("1 to 65535"));
+        for bad in ["65536", "-1", "80.5", "http", "[80, 81]"] {
+            assert!(
+                parse(&format!("{plain}    port: {bad}\n")).is_err(),
+                "{bad}"
+            );
+        }
+        let without = format!("{GH}    source: {{ env: T }}\n    port: 8080\n");
+        assert!(problem(&without).contains("needs `plain_http: true`"));
     }
 
     #[test]

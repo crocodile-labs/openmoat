@@ -86,3 +86,36 @@ fn a_trickling_client_cannot_stretch_the_handshake_timeout() {
     assert!(reply.starts_with("HTTP/1.1 400"), "{reply}");
     assert!(started.elapsed() < Duration::from_secs(2));
 }
+
+/// A refusal at accept leaves a row, without one row per connection.
+#[test]
+fn refusals_at_accept_are_recorded_coalesced() {
+    let limits = Limits {
+        max_connections: 1,
+        handshake_timeout: Duration::from_secs(3),
+        ..Limits::default()
+    };
+    let h = start(None, limits);
+    let _held = h.connect();
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let mut refused = 0;
+    while std::time::Instant::now() < deadline && refused < 5 {
+        if h.exchange("GET http://allowed.test/ HTTP/1.1\r\n\r\n")
+            .starts_with("HTTP/1.1 503")
+        {
+            refused += 1;
+        }
+    }
+    assert_eq!(refused, 5);
+    let rows: Vec<Row> = h
+        .rows()
+        .into_iter()
+        .filter(|r| r.rules == ["proxy-capacity"])
+        .collect();
+    assert_eq!(rows.len(), 1, "one row for the burst: {rows:?}");
+    assert_eq!(rows[0].verdict, Verdict::Deny);
+    assert!(
+        rows[0].reasons[0].starts_with("1 connection refused"),
+        "{rows:?}"
+    );
+}

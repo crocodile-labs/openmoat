@@ -57,6 +57,17 @@ impl RepoPolicy {
         merged.lint()?;
         Ok(merged)
     }
+
+    /// `user` with only this policy's deny rules added: what `openmoat run`'s
+    /// proxy decides hosts with. Its ask rules are left out, since the proxy
+    /// cannot ask and a team's "ask before any network" would cut the run off,
+    /// and its allow rules too, trusted or not: they would widen the proxy.
+    pub fn merge_deny(&self, user: &Policy) -> Result<Policy, PolicyError> {
+        let mut merged = user.clone();
+        merged.deny.extend(prefixed(&self.deny));
+        merged.lint()?;
+        Ok(merged)
+    }
 }
 
 fn prefixed(groups: &[RuleGroup]) -> impl Iterator<Item = RuleGroup> + '_ {
@@ -131,6 +142,22 @@ mod tests {
             decide(&trusted, "cat ~/.ssh/id_rsa"),
             (Verdict::Deny, vec!["secrets".into()])
         );
+    }
+
+    #[test]
+    fn merging_denies_only_adds_no_ask_and_no_allow() {
+        let repo = "version: 1\ndeny:\n  - id: no-status\n    shell: ['git status']\n\
+            ask:\n  - id: publish\n    shell: ['cargo publish']\n\
+            allow:\n  - id: wide\n    shell: ['make *']\n";
+        let user = Policy::parse(USER).unwrap();
+        let p = RepoPolicy::parse(repo).unwrap().merge_deny(&user).unwrap();
+        assert_eq!(
+            decide(&p, "git status"),
+            (Verdict::Deny, vec!["repo:no-status".into()])
+        );
+        assert!(p.repo_ask.is_empty());
+        assert_eq!(p.allow, user.allow);
+        assert_eq!(decide(&p, "make deploy").0, Verdict::Ask);
     }
 
     #[test]

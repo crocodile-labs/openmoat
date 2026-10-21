@@ -32,10 +32,17 @@ fn sink() -> (SocketAddr, Receiver<Vec<u8>>) {
     (addr, rx)
 }
 
+/// With `plain_http`, the secret names the upstream's port: plain-HTTP
+/// injection goes to port 80 unless the secret names another.
 fn brokered_to(upstream: (SocketAddr, Receiver<Vec<u8>>), plain_http: bool) -> Harness {
+    let port = if plain_http {
+        format!("    port: {}\n", upstream.0.port())
+    } else {
+        String::new()
+    };
     let policy = Policy::parse(&format!(
         "version: 1\nsecrets:\n  - id: svc\n    host: owner.test\n    header: X-Api-Key\n    \
-         source: {{ env: FAKE_SVC_KEY }}\n    plain_http: {plain_http}\n",
+         source: {{ env: FAKE_SVC_KEY }}\n    plain_http: {plain_http}\n{port}",
     ))
     .unwrap();
     let secrets = policy

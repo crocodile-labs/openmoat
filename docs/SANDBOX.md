@@ -271,7 +271,8 @@ available, the Standard tier keeps its commands out of the home altogether.
   [evidence in #351](https://github.com/crocodile-labs/openmoat/pull/351)). CI's
   macOS 15 runners (`macos-15-intel`) did not show it.
 - **Linux 6.7 or later:** Landlock rules, plus a seccomp filter that allows only TCP
-  sockets (no UDP, Unix sockets or `ptrace`). Windows refuses.
+  sockets (no UDP, Unix sockets or `ptrace`) and no TCP Fast Open send
+  (`MSG_FASTOPEN`, which connects without the `connect()` Landlock checks). Windows refuses.
 - **The network on Linux.** Landlock restricts TCP connections by port only, and a
   seccomp filter cannot read the address `connect()` is given (it gets a pointer), so
   those two alone would let a command reach any host on the proxy's port and go around

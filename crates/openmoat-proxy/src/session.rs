@@ -9,8 +9,11 @@
 //! The session id then selects the session's taint ([`TaintLookup`]) and its
 //! share of the connections (`slots.rs`).
 
+use std::collections::HashMap;
 use std::fmt;
 use std::net::SocketAddr;
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use openmoat_core::Taint;
 use zeroize::Zeroizing;
@@ -118,6 +121,9 @@ pub enum AuthError {
 pub struct Sessions<'a> {
     credentials: Vec<Credential>,
     taint: &'a dyn TaintLookup,
+    /// The last taint looked up per session, and when: what the open
+    /// connections are checked against again ([`Sessions::taint_within`]).
+    recent: Mutex<HashMap<String, (Instant, Taint)>>,
 }
 
 impl fmt::Debug for Sessions<'_> {
@@ -132,7 +138,11 @@ impl<'a> Sessions<'a> {
     /// Accept `credentials`; look each session's taint up in `taint`.
     #[must_use]
     pub fn new(credentials: Vec<Credential>, taint: &'a dyn TaintLookup) -> Self {
-        Self { credentials, taint }
+        Self {
+            credentials,
+            taint,
+            recent: Mutex::new(HashMap::new()),
+        }
     }
 
     /// The session that `headers` (every `Proxy-Authorization` value of the
@@ -163,7 +173,26 @@ impl<'a> Sessions<'a> {
 
     /// The taint of `session`, from the lookup.
     pub fn taint(&self, session: &str) -> Result<Taint, String> {
-        self.taint.taint(session)
+        let taint = self.taint.taint(session)?;
+        let mut recent = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
+        recent.insert(session.to_owned(), (Instant::now(), taint.clone()));
+        Ok(taint)
+    }
+
+    /// The taint of `session` as looked up at most `max_age` ago, looked up
+    /// again when it is older. Each open connection of a session is checked
+    /// against its taint every so often; this keeps that to one lookup per
+    /// `max_age` for the whole session. A new connection uses [`Self::taint`].
+    pub fn taint_within(&self, session: &str, max_age: Duration) -> Result<Taint, String> {
+        {
+            let recent = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some((at, taint)) = recent.get(session)
+                && at.elapsed() < max_age
+            {
+                return Ok(taint.clone());
+            }
+        }
+        self.taint(session)
     }
 }
 

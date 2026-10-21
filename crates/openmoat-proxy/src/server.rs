@@ -5,10 +5,15 @@
 //! bound elsewhere → decide the host → (session mode) apply the session's
 //! taint → resolve and check the addresses → connect → (CONNECT) answer 200,
 //! read the `ClientHello` and check its SNI → record → relay, watching a
-//! plain-HTTP body for brokered secrets too. Nothing reaches the destination
-//! before the record is written; a failed record closes the connection.
+//! plain-HTTP body for brokered secrets too, and (session mode) checking the
+//! session's taint again every so often (`recheck.rs`). Nothing reaches the
+//! destination before the record is written; a failed record closes the
+//! connection. Connections refused at accept for capacity are recorded in
+//! coalesced rows (`capacity.rs`).
 
+mod capacity;
 mod limits;
+mod recheck;
 mod wire;
 
 use std::io::{self, ErrorKind, Write as _};
@@ -20,6 +25,8 @@ use std::time::Instant;
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
 use zeroize::Zeroizing;
 
+pub use self::capacity::RULE_CAPACITY;
+use self::capacity::{Full, Refusals};
 pub use self::limits::Limits;
 use self::wire::{read_head, read_hello, refuse, respond, summary};
 use crate::audit::{Connection, Recorder};
@@ -81,6 +88,8 @@ impl std::fmt::Debug for Proxy<'_> {
 /// What every connection of one [`Proxy::serve`] shares.
 struct Served<'s> {
     addresses: &'s CompiledPolicy<'s>,
+    /// [`decide::port_policy`] of the policy, compiled.
+    ports: &'s CompiledPolicy<'s>,
     shares: Shares,
 }
 
@@ -100,12 +109,17 @@ impl Proxy<'_> {
         let address_policy = decide::address_policy(self.policy.policy());
         let addresses = CompiledPolicy::compile(&address_policy, self.policy.context())
             .map_err(io::Error::other)?;
+        let port_policy = decide::port_policy(self.policy.policy());
+        let ports = CompiledPolicy::compile(&port_policy, self.policy.context())
+            .map_err(io::Error::other)?;
         let served = Served {
             addresses: &addresses,
+            ports: &ports,
             shares: Shares::new(self.limits.max_connections),
         };
         let served = &served;
         let active = AtomicUsize::new(0);
+        let refusals = Refusals::default();
         thread::scope(|scope| {
             loop {
                 let client = match listener.accept() {
@@ -113,17 +127,22 @@ impl Proxy<'_> {
                     Err(e) if is_transient(&e) => continue,
                     Err(e) => return Err(e),
                 };
+                refusals.flush(self.recorder, Instant::now());
                 let _ = client.set_write_timeout(Some(self.limits.handshake_timeout));
+                let full = |kind: Full| {
+                    respond(&client, 503, kind.reply());
+                    refusals.refused(kind, self.recorder, Instant::now());
+                };
                 let slot = Slot::take(&active, self.limits.max_connections);
                 let Some(slot) = slot else {
-                    respond(&client, 503, "too many connections");
+                    full(Full::Slots);
                     continue;
                 };
                 // Until it authenticates, a connection counts against the
                 // share of all such connections (#555).
                 let pending = if self.sessions.is_some() {
                     let Some(share) = served.shares.take(PENDING) else {
-                        respond(&client, 503, "too many connections waiting to authenticate");
+                        full(Full::Pending);
                         continue;
                     };
                     Some(share)
@@ -185,13 +204,13 @@ impl Proxy<'_> {
             return;
         }
         let rest = Zeroizing::new(buf.split_off(request.head_len));
-        let decision = decide::host(self.policy, request.host());
+        let decision = decide::host_port(self.policy, served.ports, request.host(), request.port());
         if decision.verdict != Verdict::Allow {
             self.record(turn, Some(&request), &decision);
             refuse(client, 403, &summary(&decision));
             return;
         }
-        if let Some(refusal) = self.tainted(turn, &request) {
+        if let Some(refusal) = self.tainted(turn, &request, None) {
             self.record(turn, Some(&request), &refusal);
             refuse(client, 403, &summary(&refusal));
             return;
@@ -255,13 +274,9 @@ impl Proxy<'_> {
                     None => return,
                 }
             }
-            Target::Http { head, host, .. } => {
+            Target::Http { head, host, port } => {
                 let mut decision = decision.clone();
-                decision
-                    .reasons
-                    .extend(self.broker.withheld(host).iter().map(|id| {
-                        format!("secret `{id}` not injected: plain HTTP needs `plain_http: true`")
-                    }));
+                decision.reasons.extend(self.broker.withheld(host, *port));
                 if !self.record(turn, Some(&request), &decision) {
                     refuse(client, 403, "audit log unavailable");
                     return;
@@ -269,14 +284,25 @@ impl Proxy<'_> {
                 let inspect: tunnel::Inspect<'_> = &mut inspect;
                 // Only the owner host's head carries a value; it is zeroed
                 // with `first_bytes` once written.
-                let injected = self.broker.inject(host, head);
+                let injected = self.broker.inject(host, *port, head);
                 let head = injected.as_deref().map_or(head.as_slice(), Vec::as_slice);
                 let body_bytes = &rest[..body_in_rest];
                 (Zeroizing::new([head, body_bytes].concat()), Some(inspect))
             }
         };
         if (&upstream).write_all(&first_bytes).is_ok() {
-            tunnel::relay(client, &upstream, self.limits.idle_timeout, inspect);
+            let still_allowed = || self.still_untainted(turn, &request);
+            let recheck = turn.session.map(|_| tunnel::Recheck {
+                every: self.limits.taint_recheck,
+                still_allowed: &still_allowed,
+            });
+            tunnel::relay(
+                client,
+                &upstream,
+                self.limits.idle_timeout,
+                inspect,
+                recheck,
+            );
         }
     }
 
@@ -322,22 +348,6 @@ impl Proxy<'_> {
         self.record(turn, Some(request), &decision);
         refuse(client, 503, &summary(&decision));
         None
-    }
-
-    /// The refusal the connection's session taint calls for, if any. A
-    /// session whose history cannot be read is refused (fail closed).
-    fn tainted(&self, turn: Turn<'_>, request: &Request) -> Option<Decision> {
-        let (Some(sessions), Some(session)) = (self.sessions, turn.session) else {
-            return None;
-        };
-        match sessions.taint(session) {
-            Ok(taint) => decide::tainted(self.policy, request.host(), request.port(), &taint),
-            Err(why) => Some(Decision::single(
-                Verdict::Deny,
-                RULE_SESSION,
-                format!("the session's history cannot be read, so its taint is unknown: {why}"),
-            )),
-        }
     }
 
     /// Answer the CONNECT, then hold the tunnel's first bytes until its SNI

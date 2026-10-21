@@ -95,7 +95,7 @@ fn the_owner_head_gets_the_value_in_place_of_the_placeholder() {
     let head = b"GET /moat-secret:gh:placeholder HTTP/1.1\r\nHost: api.github.com\r\n\
                  authorization: Bearer moat-secret:gh:placeholder\r\n\
                  X-Other: moat-secret:gh:placeholder\r\nConnection: close\r\n\r\n";
-    let out = b.inject("api.github.com", head).unwrap();
+    let out = b.inject("api.github.com", 80, head).unwrap();
     assert_eq!(
         String::from_utf8(out.to_vec()).unwrap(),
         format!(
@@ -110,21 +110,28 @@ fn the_owner_head_gets_the_value_in_place_of_the_placeholder() {
 fn a_missing_header_is_added_and_other_hosts_get_nothing() {
     let b = broker_with(VALUE, true).unwrap();
     let head = b"GET / HTTP/1.1\r\nHost: api.github.com\r\nConnection: close\r\n\r\n";
-    let out = b.inject("api.github.com", head).unwrap();
+    let out = b.inject("api.github.com", 80, head).unwrap();
     let added = format!("Connection: close\r\nAuthorization: {VALUE}\r\n\r\n");
     assert!(out.ends_with(added.as_bytes()));
-    assert!(b.inject("github.com", head).is_none());
-    assert!(Broker::default().inject("api.github.com", head).is_none());
-    assert!(b.withheld("api.github.com").is_empty());
+    assert!(b.inject("github.com", 80, head).is_none());
+    assert!(
+        Broker::default()
+            .inject("api.github.com", 80, head)
+            .is_none()
+    );
+    assert!(b.withheld("api.github.com", 80).is_empty());
 }
 
 #[test]
 fn without_plain_http_the_owner_head_is_left_alone() {
     let b = broker(VALUE).unwrap();
     let head = b"GET / HTTP/1.1\r\nAuthorization: moat-secret:gh:placeholder\r\n\r\n";
-    assert!(b.inject("api.github.com", head).is_none());
-    assert_eq!(b.withheld("api.github.com"), ["gh"]);
-    assert!(b.withheld("github.com").is_empty());
+    assert!(b.inject("api.github.com", 80, head).is_none());
+    assert_eq!(
+        b.withheld("api.github.com", 80),
+        ["secret `gh` not injected: plain HTTP needs `plain_http: true`"]
+    );
+    assert!(b.withheld("github.com", 80).is_empty());
 }
 
 #[test]
@@ -138,12 +145,12 @@ fn a_request_the_server_echoes_back_gets_no_value() {
              Authorization: moat-secret:gh:placeholder\r\n\r\n"
         );
         assert!(
-            b.inject("api.github.com", head.as_bytes()).is_none(),
+            b.inject("api.github.com", 80, head.as_bytes()).is_none(),
             "{method}"
         );
     }
     let head = b"TRACEX / HTTP/1.1\r\nHost: api.github.com\r\n\r\n";
-    assert!(b.inject("api.github.com", head).is_some());
+    assert!(b.inject("api.github.com", 80, head).is_some());
 }
 
 #[test]
@@ -151,15 +158,45 @@ fn a_secret_header_without_the_placeholder_is_replaced_by_the_secret() {
     let b = broker_with(VALUE, true).unwrap();
     let head = b"GET / HTTP/1.1\r\nAuthorization: Bearer chosen-by-client\r\n\
                  authorization: Bearer moat-secret:gh:placeholder\r\nX-Other: 1\r\n\r\n";
-    let out = String::from_utf8(b.inject("api.github.com", head).unwrap().to_vec()).unwrap();
+    let out = String::from_utf8(b.inject("api.github.com", 80, head).unwrap().to_vec()).unwrap();
     assert_eq!(
         out,
         format!("GET / HTTP/1.1\r\nauthorization: Bearer {VALUE}\r\nX-Other: 1\r\n\r\n")
     );
     let head = b"GET / HTTP/1.1\r\nAUTHORIZATION: chosen-by-client\r\n\r\n";
-    let out = String::from_utf8(b.inject("api.github.com", head).unwrap().to_vec()).unwrap();
+    let out = String::from_utf8(b.inject("api.github.com", 80, head).unwrap().to_vec()).unwrap();
     assert_eq!(
         out,
         format!("GET / HTTP/1.1\r\nAuthorization: {VALUE}\r\n\r\n")
     );
+}
+
+/// Plain-HTTP injection is bound to a port: 80, or the one the secret names.
+/// Another port of the owner host keeps the placeholder; it is not refused.
+#[test]
+fn only_the_secrets_port_gets_the_value() {
+    let head = b"GET / HTTP/1.1\r\nAuthorization: moat-secret:gh:placeholder\r\n\r\n";
+    let default = broker_with(VALUE, true).unwrap();
+    assert!(default.inject("api.github.com", 80, head).is_some());
+    assert!(default.inject("api.github.com", 8080, head).is_none());
+    assert_eq!(
+        default.withheld("api.github.com", 8080),
+        ["secret `gh` not injected: it goes to port 80 only, not 8080"]
+    );
+    assert!(default.leak("api.github.com", head).is_none());
+    let policy = Policy::parse(
+        "version: 1\nsecrets:\n  - id: gh\n    host: api.github.com\n    header: Authorization\n    \
+         source: { env: FAKE_TOKEN }\n    plain_http: true\n    port: 8080\n",
+    )
+    .unwrap();
+    let secrets = policy
+        .secrets
+        .into_iter()
+        .map(|s| (s, Zeroizing::new(VALUE.to_owned())))
+        .collect();
+    let named = Broker::new(secrets).unwrap();
+    let out = named.inject("api.github.com", 8080, head).unwrap();
+    assert!(String::from_utf8_lossy(&out).contains(VALUE));
+    assert!(named.inject("api.github.com", 80, head).is_none());
+    assert!(named.withheld("api.github.com", 8080).is_empty());
 }

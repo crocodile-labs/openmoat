@@ -4,7 +4,8 @@
 //! loopback port:
 //!
 //! - Hosts are decided by openmoat-core's [`CompiledPolicy`](openmoat_core::CompiledPolicy)
-//!   as `moat guard` decides a fetch tool's URL: only an `allow` passes.
+//!   as `moat guard` decides a fetch tool's URL: only an `allow` passes. A host
+//!   is reached on 443 and 80 unless a rule names `host:port` ([`port_policy`]).
 //! - Cloud metadata and link-local addresses are refused whatever the policy
 //!   says, by name and on every address the proxy resolves. Private and CGNAT
 //!   addresses are refused unless an allow rule names the address.
@@ -44,15 +45,16 @@ mod upstream;
 pub use audit::{Connection, RecordError, Recorder};
 pub use broker::{Broker, BrokerError, Carried, Leak, RULE_SECRET};
 pub use decide::{
-    Forbidden, RULE_ADDRESS, RULE_AUDIT, RULE_REQUEST, RULE_SNI, RULE_UPSTREAM, address_policy,
-    denied as address_denied, forbidden, host as decide_host, named as address_named,
-    tainted as decide_tainted,
+    DEFAULT_PORTS, Forbidden, RULE_ADDRESS, RULE_AUDIT, RULE_PORT, RULE_REQUEST, RULE_SNI,
+    RULE_UPSTREAM, address_policy, denied as address_denied, forbidden, host as decide_host,
+    host_port as decide_host_port, named as address_named, named_on as address_named_on,
+    port_policy, tainted as decide_tainted,
 };
 pub use local::LocalService;
 pub use request::{
     MAX_HEADERS, ProxyCredential, Request, RequestError, Target, parse as parse_request,
 };
-pub use server::{Limits, Proxy};
+pub use server::{Limits, Proxy, RULE_CAPACITY};
 pub use session::{
     AuthError, Credential, CredentialError, MIN_TOKEN_LEN, RULE_SESSION, Sessions, TaintLookup,
     constant_time_eq,

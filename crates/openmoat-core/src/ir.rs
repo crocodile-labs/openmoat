@@ -176,6 +176,10 @@ pub struct BrokeredSecret {
     pub source: crate::SecretSource,
     /// Also inject into plain-HTTP requests; off unless the policy sets it.
     pub plain_http: bool,
+    /// The one port of the plain-HTTP requests that get the value, when the
+    /// policy names one (80 otherwise).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
 }
 
 impl std::fmt::Debug for BrokeredSecret {

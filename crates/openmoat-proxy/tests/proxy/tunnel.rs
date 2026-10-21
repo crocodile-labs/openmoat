@@ -106,3 +106,22 @@ fn a_connection_that_cannot_be_recorded_is_refused() {
         ["audit log unavailable: disk full"; 2]
     );
 }
+
+/// An allowed host is reached on 443, 80 and the ports its rules name
+/// (`allowed.test:<upstream port>` here), and refused on any other.
+#[test]
+fn an_allowed_host_on_a_port_no_rule_names_is_refused() {
+    let h = start(None, Limits::default());
+    for port in [22, 8443] {
+        let reply = h.exchange(&format!("CONNECT allowed.test:{port} HTTP/1.1\r\n\r\n"));
+        assert!(reply.starts_with("HTTP/1.1 403"), "{port}: {reply}");
+        assert!(reply.contains("proxy-port"), "{port}: {reply}");
+    }
+    assert!(h.nothing_forwarded());
+    let rows = h.rows();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.rules == ["proxy-port"]), "{rows:?}");
+    // The port a rule names is served.
+    let (_, reply) = tunnel(&h, "allowed.test", "allowed.test");
+    assert_eq!(reply.as_bytes(), UPSTREAM_REPLY);
+}

@@ -25,8 +25,30 @@ pub struct SystemResolver;
 
 impl Resolve for SystemResolver {
     fn resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
-        Ok((host, port).to_socket_addrs()?.collect())
+        Ok((resolver_name(host).as_str(), port)
+            .to_socket_addrs()?
+            .collect())
     }
+}
+
+/// The name the system resolver is given for `host` (normalised, without a
+/// trailing dot): absolute, `host.`, so the resolver never tries
+/// `host.<search domain>` first (with `ndots` above the name's dots, as in
+/// Kubernetes, a wildcard in a search domain would answer for the allowed
+/// name). glibc, musl and macOS's resolver read a trailing dot as a fully
+/// qualified name. On Windows the name is passed as it is: its DNS client
+/// already appends no suffix to a name with a dot in it, and how
+/// `getaddrinfo` there treats a trailing dot with the hosts file and other
+/// name services is not documented.
+#[cfg(not(windows))]
+pub(crate) fn resolver_name(host: &str) -> String {
+    format!("{host}.")
+}
+
+/// See the other platforms' `resolver_name`.
+#[cfg(windows)]
+pub(crate) fn resolver_name(host: &str) -> String {
+    host.to_owned()
 }
 
 /// Why no connection was made.
@@ -76,7 +98,7 @@ impl Refusal {
 /// Resolve `host`, refuse if any address is forbidden or matched by a deny
 /// rule of `addresses` (compiled from [`decide::address_policy`]), then
 /// connect to the first address that answers. A private address passes only
-/// when `addresses` names it.
+/// when `addresses` names it, alone or with `port`.
 /// `loopback_ok` lists loopback addresses that may be reached anyway (tests);
 /// nothing exempts link-local or metadata.
 pub fn connect(
@@ -101,7 +123,7 @@ pub fn connect(
     for addr in &addrs {
         match decide::forbidden(addr.ip()) {
             Some(Forbidden::Loopback) if loopback_ok.contains(addr) => {}
-            Some(Forbidden::Private(_)) if decide::named(addresses, addr.ip()) => {}
+            Some(Forbidden::Private(_)) if decide::named_on(addresses, *addr) => {}
             Some(why) => return Err(Refusal::Address(*addr, why)),
             None => {}
         }

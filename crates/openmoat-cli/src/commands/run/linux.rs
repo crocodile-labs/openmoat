@@ -67,6 +67,23 @@ const X32: i64 = 0x4000_0000;
 /// paste buffer. The kernel reads the request as 32 bits, so does the filter.
 const TERMINAL_INPUT: [libc::Ioctl; 2] = [libc::TIOCSTI, libc::TIOCLINUX];
 
+/// Calls that send on a socket, with the index of their `flags` argument.
+/// With `MSG_FASTOPEN` such a call connects an unconnected TCP socket itself
+/// (TCP Fast Open, `tcp_sendmsg_fastopen`), without the `connect()` whose LSM
+/// hook Landlock's port rule checks; refused, so where the network is
+/// restricted by port only a command cannot reach another port that way.
+const SENDS: [(i64, u8); 3] = [
+    (libc::SYS_sendto, 3),
+    (libc::SYS_sendmsg, 2),
+    (libc::SYS_sendmmsg, 3),
+];
+
+/// The same calls under x32, numbered from [`X32`].
+#[cfg(target_arch = "x86_64")]
+const X32_SENDS: &[(i64, u8)] = &[(44, 3), (518, 2), (538, 3)];
+#[cfg(not(target_arch = "x86_64"))]
+const X32_SENDS: &[(i64, u8)] = &[];
+
 /// `ioctl()` under x32, numbered from [`X32`].
 #[cfg(target_arch = "x86_64")]
 const X32_IOCTL: &[i64] = &[514];
@@ -178,8 +195,8 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
 }
 
 /// `socket()` only with the values in [`SOCKET_ARGS`], `ioctl()` with none of
-/// [`TERMINAL_INPUT`], none of [`DENIED`]: those calls fail with `EPERM`, and
-/// every other call is allowed.
+/// [`TERMINAL_INPUT`], [`SENDS`] without `MSG_FASTOPEN`, none of [`DENIED`]:
+/// those calls fail with `EPERM`, and every other call is allowed.
 fn seccomp_filter() -> Result<BpfProgram> {
     // `socket()` is refused when one argument has none of its values.
     let mut socket = Vec::new();
@@ -201,8 +218,22 @@ fn seccomp_filter() -> Result<BpfProgram> {
     let ioctl = ioctl.map(|nr| (nr, terminal.clone()));
     let x32 = X32_DENIED.iter().map(|nr| X32 + nr);
     let refused = DENIED.into_iter().chain(x32).map(|nr| (nr, Vec::new()));
+    // A send is refused when its flags hold `MSG_FASTOPEN`.
+    let fast_open = argument(libc::MSG_FASTOPEN).context("MSG_FASTOPEN out of range")?;
+    let mut sends = Vec::new();
+    let x32_sends = X32_SENDS.iter().map(|&(nr, arg)| (X32 + nr, arg));
+    for (nr, arg) in SENDS.into_iter().chain(x32_sends) {
+        let masked = SeccompCondition::new(
+            arg,
+            SeccompCmpArgLen::Dword,
+            SeccompCmpOp::MaskedEq(fast_open),
+            fast_open,
+        )?;
+        sends.push((nr, vec![SeccompRule::new(vec![masked])?]));
+    }
     let rules = refused
         .chain(ioctl)
+        .chain(sends)
         .chain([(libc::SYS_socket, socket)])
         .collect();
     let filter = SeccompFilter::new(
@@ -285,6 +316,57 @@ mod tests {
         assert!(
             UdpSocket::bind("127.0.0.1:0").is_ok(),
             "this thread is not filtered"
+        );
+    }
+
+    /// Sends on an unconnected TCP socket to a local listener, first with
+    /// `MSG_FASTOPEN` (which would connect it), then a plain `connect()` and
+    /// `send`. Prints the errno of each, 0 when it went through.
+    const FAST_OPEN_PROBE: &str = r#"
+import socket, sys
+listener = socket.socket()
+listener.bind(("127.0.0.1", 0))
+listener.listen(1)
+addr = listener.getsockname()
+def errno(f):
+    try:
+        f()
+        return 0
+    except OSError as e:
+        return e.errno
+s = socket.socket()
+fast = errno(lambda: s.sendto(b"x", socket.MSG_FASTOPEN, addr))
+t = socket.socket()
+plain = errno(lambda: (t.connect(addr), t.send(b"x")))
+print(fast, plain)
+"#;
+
+    fn fast_open_probe() -> String {
+        let out = Command::new("python3")
+            .args(["-c", FAST_OPEN_PROBE])
+            .output()
+            .expect("python3 runs");
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    }
+
+    /// TCP Fast Open connects inside `sendto()`, past Landlock's `connect()`
+    /// check: the filter refuses a send that asks for it, and no other.
+    #[test]
+    fn the_filter_refuses_tcp_fast_open_and_allows_other_sends() {
+        let filter = seccomp_filter().expect("the filter compiles");
+        let filtered = std::thread::spawn(move || {
+            seccompiler::apply_filter(&filter).expect("the filter applies");
+            fast_open_probe()
+        })
+        .join()
+        .expect("the filtered thread finishes");
+        assert_eq!(filtered, format!("{} 0", libc::EPERM));
+        // Unfiltered, the same send goes through, or fails as the kernel's
+        // `net.ipv4.tcp_fastopen` setting says: never the filter's EPERM.
+        let unfiltered = fast_open_probe();
+        assert!(
+            unfiltered.ends_with(" 0") && !unfiltered.starts_with(&format!("{} ", libc::EPERM)),
+            "{unfiltered}"
         );
     }
 

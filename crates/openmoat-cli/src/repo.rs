@@ -138,6 +138,24 @@ pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
         .with_context(|| format!("merging repository policy {}", found.path.display()))
 }
 
+/// `user` with the deny rules of the project's repository policy added, trusted
+/// or not, and nothing else of it: what `openmoat run`'s proxy decides hosts
+/// with. Its allow rules would widen the proxy, and its ask rules would refuse
+/// what the team only wants asked about (the proxy cannot ask). A repository
+/// policy that exists but cannot be read is an error, as for `guard`.
+pub fn with_repo_denies(home: &Home, ctx: &EvalContext, user: Policy) -> Result<Policy> {
+    let Some(root) = &ctx.project else {
+        return Ok(user);
+    };
+    let Some(found) = find(home, Path::new(root))? else {
+        return Ok(user);
+    };
+    found
+        .policy
+        .merge_deny(&user)
+        .with_context(|| format!("merging repository policy {}", found.path.display()))
+}
+
 /// One line for `status` and `doctor` about the repository policy of the
 /// project around the current directory: its digest and which form applies.
 pub fn summary(home: &Home) -> Result<Option<String>> {

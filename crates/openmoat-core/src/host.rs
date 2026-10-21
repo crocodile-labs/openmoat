@@ -20,6 +20,49 @@ pub const MAX_DNS_NAME_LEN: usize = 253;
 /// Longest label of a DNS name (RFC 1035 §2.3.4).
 pub const MAX_DNS_LABEL_LEN: usize = 63;
 
+/// The host part and port of a `net` or `fetch` pattern written `host:port`
+/// (`api.example.com:8443`, `*.example.com:8443`, `10.0.0.5:5432`): exactly one
+/// `:`, then a port of 1 to 65535 in decimal digits with no sign and no leading
+/// zero. `None` for any other pattern: one without a port, an IPv6 address
+/// (more than one `:`, which takes no port), or a port written another way
+/// ([`malformed_port_pattern`]). A leading `!` (an exclusion) is not part of it.
+#[must_use]
+pub fn port_pattern(pattern: &str) -> Option<(&str, u16)> {
+    let (host, port) = pattern.split_once(':')?;
+    if host.is_empty() || port.contains(':') {
+        return None;
+    }
+    port_number(port).map(|port| (host, port))
+}
+
+/// A port in decimal digits, 1 to 65535, without a sign or a leading zero.
+fn port_number(text: &str) -> Option<u16> {
+    let digits = !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit());
+    (digits && !text.starts_with('0'))
+        .then(|| text.parse::<u16>().ok())
+        .flatten()
+}
+
+/// Whether a `net` or `fetch` pattern reads as `host:port` but its port is not
+/// one [`port_pattern`] accepts (`example.com:*`, `example.com:0`,
+/// `example.com:08443`), or names an IPv6 address with a port (`[::1]:8443`):
+/// such a pattern matches no host the hook or the proxy sees. A pattern whose
+/// part before the one `:` is hex digits and globs (`fe80:*`) is an IPv6 glob.
+#[must_use]
+pub fn malformed_port_pattern(pattern: &str) -> bool {
+    let body = pattern.strip_prefix('!').unwrap_or(pattern);
+    if body.starts_with('[') && body.contains("]:") {
+        return true;
+    }
+    let Some((host, port)) = body.split_once(':') else {
+        return false;
+    };
+    let ipv6_glob = host
+        .chars()
+        .all(|c| c.is_ascii_hexdigit() || "*?[]{},".contains(c));
+    !port.contains(':') && !ipv6_glob && port_number(port).is_none()
+}
+
 /// Host of a URL, with or without its scheme.
 #[must_use]
 pub fn of_url(url: &str) -> Option<String> {
@@ -190,6 +233,48 @@ mod tests {
         }
         for url in ["https://", "http:///x", "http://..evil/", "http://a b/"] {
             assert_eq!(of_url(url), None, "{url}");
+        }
+    }
+
+    #[test]
+    fn port_patterns_are_read_strictly() {
+        for (pattern, want) in [
+            ("api.example.com:8443", Some(("api.example.com", 8443))),
+            ("*.example.com:443", Some(("*.example.com", 443))),
+            ("10.0.0.5:5432", Some(("10.0.0.5", 5432))),
+            ("*:65535", Some(("*", 65535))),
+            ("example.com", None),
+            ("example.com:0", None),
+            ("example.com:65536", None),
+            ("example.com:+80", None),
+            ("example.com:080", None),
+            ("example.com:8*", None),
+            ("example.com:", None),
+            (":443", None),
+            ("fd00::5", None),
+            ("::1", None),
+            ("[::1]:443", None),
+        ] {
+            assert_eq!(port_pattern(pattern), want, "{pattern}");
+        }
+        for malformed in [
+            "example.com:*",
+            "example.com:0",
+            "!example.com:080",
+            "example.com:https",
+            "[fd00::5]:8443",
+        ] {
+            assert!(malformed_port_pattern(malformed), "{malformed}");
+        }
+        for fine in [
+            "example.com",
+            "example.com:8443",
+            "fe80:*",
+            "fd00::5",
+            "*",
+            "::1",
+        ] {
+            assert!(!malformed_port_pattern(fine), "{fine}");
         }
     }
 
