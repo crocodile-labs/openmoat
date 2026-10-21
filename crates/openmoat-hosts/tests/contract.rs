@@ -10,16 +10,7 @@ use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, Host, HostError, reason_line};
 use serde_json::json;
 
 /// Every host, the installable ones and those that run another's hook.
-const HOSTS: [Host; 8] = [
-    Host::ClaudeCode,
-    Host::Codex,
-    Host::Cursor,
-    Host::Continue,
-    Host::OpenClaw,
-    Host::CopilotCli,
-    Host::Pi,
-    Host::GeminiCli,
-];
+const HOSTS: [Host; Host::EVERY.len()] = Host::EVERY;
 
 fn calls() -> Vec<Call> {
     vec![

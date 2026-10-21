@@ -1,7 +1,7 @@
 //! The defaults a host spec takes for the fields it does not name, so a new
 //! optional field is added once here rather than in every host's spec.
 
-use super::{Asks, HookFormat, HostSpec, InstallSpec};
+use super::{Asks, HookFormat, HostDocs, HostSpec, InstallSpec};
 
 impl HostSpec {
     /// The value a host spec takes for every field it does not name: `None`
@@ -24,6 +24,7 @@ impl HostSpec {
         mcp: None,
         sandbox: None,
         project_settings: None,
+        docs: HostDocs::BASE,
     };
 }
 

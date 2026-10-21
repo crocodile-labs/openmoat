@@ -6,29 +6,25 @@
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use openmoat_hosts::Host;
-
-/// Every host, the installable ones and those that run another's hook.
-const HOSTS: [Host; 8] = [
-    Host::ClaudeCode,
-    Host::Codex,
-    Host::Cursor,
-    Host::OpenClaw,
-    Host::CopilotCli,
-    Host::Pi,
-    Host::GeminiCli,
-    Host::Continue,
-];
+use openmoat_hosts::{Host, HostSpec};
 
 const END: &str = "<!-- /generated -->";
 const UPDATE: &str = "OPENMOAT_TEST_UPDATE_DOCS";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Every host, in the order the docs list them: the installable ones, then
+/// those that run another's hook.
+fn hosts() -> Vec<Host> {
+    let rest = Host::EVERY.into_iter().filter(|h| !Host::ALL.contains(h));
+    Host::ALL.into_iter().chain(rest).collect()
 }
 
 /// `docs/INSTALL.md` "Non-default config directories": where each agent keeps
@@ -58,7 +54,7 @@ fn install_table() -> Vec<String> {
 /// `docs/THREAT_MODEL.md` §5: what `moat status` and `moat doctor` print as each
 /// agent's known gaps, and what the agent does when its hook fails.
 fn gaps_list() -> Vec<String> {
-    HOSTS
+    hosts()
         .iter()
         .map(|host| {
             let spec = host.spec();
@@ -68,6 +64,45 @@ fn gaps_list() -> Vec<String> {
             )
         })
         .collect()
+}
+
+/// `README.md` "Supported agents": how each agent is hooked, what checks its
+/// calls, and its `--hosts` id (none for an agent with no hook to install).
+fn agents_table() -> Vec<String> {
+    let mut lines = vec![
+        "| Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |".to_owned(),
+        "|---|---|---|---|".to_owned(),
+    ];
+    for host in hosts() {
+        let spec = host.spec();
+        let id = match spec.install {
+            Some(_) => format!("`{}`", spec.id),
+            None => "none".to_owned(),
+        };
+        lines.push(format!(
+            "| {} | {} | {} | {id} |",
+            spec.display_name, spec.docs.hooked_by, spec.docs.protection
+        ));
+    }
+    lines
+}
+
+/// `docs/ARCHITECTURE.md` §3 "Host tool mapping": each agent's rows.
+fn tools_table() -> Vec<String> {
+    let mut lines = vec![
+        "| Agent | Host tool | Field read | Action |".to_owned(),
+        "|---|---|---|---|".to_owned(),
+    ];
+    for host in Host::ALL {
+        let spec = host.spec();
+        for row in spec.docs.tools {
+            lines.push(format!(
+                "| {} | {} | {} | {} |",
+                spec.display_name, row.tool, row.reads, row.action
+            ));
+        }
+    }
+    lines
 }
 
 /// `text` with the block named `name` replaced by `body`, each line indented
@@ -121,6 +156,136 @@ fn install_lists_each_agents_directory_and_hook_entries() {
 #[test]
 fn threat_model_lists_each_agents_gaps_and_hook_failure() {
     check("docs/THREAT_MODEL.md", &[("hosts-gaps", gaps_list())]);
+}
+
+#[test]
+fn readme_lists_each_agent_and_how_it_is_hooked() {
+    check("README.md", &[("hosts-agents", agents_table())]);
+}
+
+#[test]
+fn architecture_lists_each_agents_tool_mapping() {
+    check("docs/ARCHITECTURE.md", &[("hosts-tools", tools_table())]);
+}
+
+/// What the README says protects an agent's calls follows from its sandbox:
+/// "hook + OS sandbox" exactly when OpenMoat writes one, with where it runs
+/// when it is not written on native Windows.
+#[test]
+fn each_protection_text_matches_the_hosts_sandbox() {
+    for host in Host::EVERY {
+        let spec: &HostSpec = host.spec();
+        let text = spec.docs.protection;
+        assert!(!spec.docs.hooked_by.is_empty(), "{host:?}");
+        if spec.install.is_none() {
+            assert!(text.contains("openmoat run"), "{host:?}: {text}");
+            continue;
+        }
+        match &spec.sandbox {
+            None => assert_eq!(text, "hook only", "{host:?}"),
+            Some(sandbox) if sandbox.unavailable_on_windows.is_none() => {
+                assert_eq!(text, "hook + OS sandbox", "{host:?}");
+            }
+            Some(_) => assert!(
+                text.starts_with("hook + OS sandbox (") && text.contains("); hook only on "),
+                "{host:?}: {text}"
+            ),
+        }
+    }
+}
+
+/// The quoted strings a `match` arm on `line` matches (`"a" | "b" =>`,
+/// `("a" | "b", _) =>`), the empty string aside.
+fn arm_literals(line: &str) -> Vec<&str> {
+    let line = line.trim_start();
+    if !(line.starts_with('"') || line.starts_with("(\"")) {
+        return Vec::new();
+    }
+    let Some((pattern, _)) = line.split_once("=>") else {
+        return Vec::new();
+    };
+    pattern
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// `dir`'s `.rs` files that map tools: all but its tests, bench and doc rows.
+fn mapping_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if path.extension().is_some_and(|e| e == "rs")
+            && !["tests.rs", "bench.rs", "doc.rs"].contains(&name.as_str())
+        {
+            out.push(path);
+        }
+    }
+}
+
+/// Every tool name (or tool action) a host's code matches in a `match` arm
+/// appears, in backticks, in that host's rows of the tool table, so a tool the
+/// adapter learns cannot be left out of the docs. Code shared by several
+/// hosts' formats (`wire/pre_tool_use`) is covered by the rows of the hosts
+/// that use it together.
+#[test]
+fn every_tool_an_adapter_matches_has_a_documentation_row() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut rows_of: BTreeMap<PathBuf, String> = BTreeMap::new();
+    for host in Host::ALL {
+        let spec = host.spec();
+        assert!(!spec.docs.tools.is_empty(), "{host:?} documents no tool");
+        let mut rows = String::new();
+        for row in spec.docs.tools {
+            let _ = writeln!(rows, "{} {} {}", row.tool, row.reads, row.action);
+        }
+        let module = spec.id.replace('-', "_");
+        let main = src.join("host").join(format!("{module}.rs"));
+        let text = fs::read_to_string(&main).unwrap_or_else(|e| panic!("{main:?}: {e}"));
+        let mut files = vec![main];
+        mapping_files(&src.join("host").join(&module), &mut files);
+        if text.contains("wire::pre_tool_use") {
+            files.push(src.join("wire/pre_tool_use.rs"));
+            mapping_files(&src.join("wire/pre_tool_use"), &mut files);
+        }
+        for file in files {
+            rows_of.entry(file).or_default().push_str(&rows);
+        }
+    }
+    let (mut missing, mut checked) = (Vec::new(), 0);
+    for (file, rows) in &rows_of {
+        for line in fs::read_to_string(file).unwrap().lines() {
+            for literal in arm_literals(line) {
+                checked += 1;
+                if !rows.contains(&format!("`{literal}`")) {
+                    missing.push(format!("{}: `{literal}`", file.display()));
+                }
+            }
+        }
+    }
+    assert!(checked > 50, "the scan found too few tools: {checked}");
+    assert!(
+        missing.is_empty(),
+        "tools matched in code but missing from the docs rows (`host/<id>/doc.rs`):\n{}",
+        missing.join("\n")
+    );
+}
+
+#[test]
+fn arm_literals_reads_the_patterns_of_an_arm() {
+    assert_eq!(arm_literals(r#"  "a" | "b" => x,"#), ["a", "b"]);
+    assert_eq!(
+        arm_literals(r#"  ("open" | "x", Some(u)) => y"#),
+        ["open", "x"]
+    );
+    assert_eq!(arm_literals(r#"  "" => cd,"#), Vec::<&str>::new());
+    assert!(arm_literals(r#"  let a = "b";"#).is_empty());
+    assert!(arm_literals(r#"  name if name == "x" => y"#).is_empty());
 }
 
 #[test]

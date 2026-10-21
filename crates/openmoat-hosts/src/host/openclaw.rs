@@ -49,6 +49,7 @@ pub const STATE_DIR_NAME: &str = ".openclaw";
 pub const CONFIG_FILE: &str = "openclaw.json";
 
 mod bench;
+mod doc;
 mod tools;
 
 /// OpenClaw puts an `ask` to the person itself (`requireApproval`).
@@ -86,6 +87,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         project_files: &[],
         tool_names: McpToolNames::OpenClaw,
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 

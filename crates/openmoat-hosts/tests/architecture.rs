@@ -8,9 +8,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use openmoat_hosts::Host;
+
 /// Lines naming a `Host` variant, per file (relative to `crates/`), outside
-/// `openmoat-hosts/src/host/` and test files. `lib.rs` defines the variants and
-/// `registry.rs` maps them to their modules; the rest is to move.
+/// `openmoat-hosts/src/host/` and test files. The host list in `host.rs` names
+/// each host without the `Host::` prefix and is checked on its own below; the
+/// rest is to move.
 const ALLOWED: &[(&str, usize)] = &[
     ("openmoat-cli/src/commands/allow.rs", 1),
     ("openmoat-cli/src/commands/doctor.rs", 2),
@@ -30,22 +33,18 @@ const ALLOWED: &[(&str, usize)] = &[
     ("openmoat-cli/src/sandbox.rs", 2),
     ("openmoat-cli/src/sandbox/install.rs", 2),
     ("openmoat-cli/src/taint.rs", 1),
-    // `Host` and its two lists, `ALL` and `EVERY`.
-    ("openmoat-hosts/src/lib.rs", 24),
-    ("openmoat-hosts/src/registry.rs", 8),
+    // An inline test of what Claude Code, Codex and the Continue CLI answer.
+    ("openmoat-hosts/src/lib.rs", 1),
     ("openmoat-hosts/src/wire/pre_tool_use.rs", 1),
 ];
 
-const VARIANTS: [&str; 8] = [
-    "Host::ClaudeCode",
-    "Host::Codex",
-    "Host::Cursor",
-    "Host::Continue",
-    "Host::OpenClaw",
-    "Host::CopilotCli",
-    "Host::Pi",
-    "Host::GeminiCli",
-];
+/// `Host::<Variant>` for every host, from the host list itself.
+fn variants() -> Vec<String> {
+    Host::EVERY
+        .iter()
+        .map(|host| format!("Host::{host:?}"))
+        .collect()
+}
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(dir).unwrap() {
@@ -60,8 +59,8 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// Whether `line` names a variant as a whole word (`Host::Codex`, not
 /// `Host::CodexLike`).
-fn names_a_host(line: &str) -> bool {
-    VARIANTS.iter().any(|variant| {
+fn names_a_host(line: &str, variants: &[String]) -> bool {
+    variants.iter().any(|variant| {
         line.match_indices(variant).any(|(at, _)| {
             !line[at + variant.len()..]
                 .chars()
@@ -78,6 +77,7 @@ fn only_host_modules_name_a_host() {
     for root in ["openmoat-hosts/src", "openmoat-cli/src"] {
         rust_files(&crates.join(root), &mut files);
     }
+    let variants = variants();
     let mut found = BTreeMap::new();
     for file in files {
         let relative = file
@@ -94,7 +94,7 @@ fn only_host_modules_name_a_host() {
         let lines = fs::read_to_string(&file)
             .unwrap()
             .lines()
-            .filter(|l| names_a_host(l))
+            .filter(|l| names_a_host(l, &variants))
             .count();
         if lines > 0 {
             found.insert(relative, lines);
@@ -120,4 +120,37 @@ fn only_host_modules_name_a_host() {
             "{file} now names a host on {lines} lines: lower its entry in ALLOWED"
         );
     }
+}
+
+/// The host list in `host.rs` is the one place that names every host: one
+/// `Variant => module` line per host, in [`Host::EVERY`] order, and one file
+/// `host/<module>.rs` per line and no other.
+#[test]
+fn the_host_list_names_every_host_once_with_its_module() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let text = fs::read_to_string(src.join("host.rs")).unwrap();
+    let list = text.split_once("hosts! {").unwrap().1;
+    let list = list.split_once("\n}").unwrap().0;
+    let lines: Vec<(&str, &str)> = list
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with("//"))
+        .map(|l| l.split_once(" => ").unwrap())
+        .collect();
+    let named: Vec<String> = lines.iter().map(|(v, _)| (*v).to_owned()).collect();
+    let every: Vec<String> = Host::EVERY.iter().map(|h| format!("{h:?}")).collect();
+    assert_eq!(named, every);
+    let mut modules: Vec<String> = lines
+        .iter()
+        .map(|(_, rest)| rest.split([' ', ',']).next().unwrap().to_owned())
+        .collect();
+    modules.sort();
+    let mut files: Vec<String> = fs::read_dir(src.join("host"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+        .map(|p| p.file_stem().unwrap().to_string_lossy().into_owned())
+        .collect();
+    files.sort();
+    assert_eq!(modules, files, "a file under host/ is not on the list");
 }

@@ -10,7 +10,7 @@
 use serde::Deserialize;
 
 use crate::Host;
-use crate::contract::{Asks, HostSpec};
+use crate::contract::{Asks, HostDocs, HostSpec};
 
 /// `cn` sends Claude Code's hooks, ignores `ask` and runs the call.
 pub(crate) static SPEC: HostSpec = HostSpec {
@@ -28,6 +28,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          calls; run it under `openmoat run`",
     // `cn` reads its own configuration and fires no hook.
     mcp: None,
+    // Its tool calls are Claude Code's, mapped by Claude Code's rows.
+    docs: HostDocs {
+        hooked_by: "`cn` runs the Claude Code hook, but the released `cn` runs no hooks yet",
+        protection: "not checked yet; use `openmoat run`",
+        ..HostDocs::BASE
+    },
     ..HostSpec::BASE
 };
 

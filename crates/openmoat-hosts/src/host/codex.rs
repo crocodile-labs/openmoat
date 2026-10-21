@@ -13,6 +13,8 @@ use crate::contract::{
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod doc;
+
 /// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
 /// web search and hosted tools have no hook. Codex has no key that blocks a
 /// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
@@ -77,6 +79,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Codex,
         user_file: "config.toml",
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 
