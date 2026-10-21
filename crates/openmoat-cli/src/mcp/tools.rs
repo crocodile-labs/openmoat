@@ -24,7 +24,12 @@ use super::pins::canonical;
 use crate::home::{Home, write_private};
 use crate::integrity::sha256_hex;
 
+/// The format version of a server's tool-pin file this build reads and writes.
 const VERSION: u32 = 1;
+
+/// Characters of a server's name kept in its pin file's name; the digest
+/// beside them tells longer names apart.
+const MAX_FILE_NAME_CHARS: usize = 64;
 
 /// One tool's pinned definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,7 +205,7 @@ fn describe(server: &str, name: &str, old: Option<&ToolPin>, new: &ToolPin) -> S
         Algorithm::Myers,
         &before,
         &after,
-        3,
+        crate::render::DIFF_CONTEXT_LINES,
         Some((labels.0.as_str(), labels.1.as_str())),
     );
     let _ = write!(text, "{diff}");
@@ -213,7 +218,7 @@ fn describe(server: &str, name: &str, old: Option<&ToolPin>, new: &ToolPin) -> S
 pub fn path(home: &Home, name: &str) -> PathBuf {
     let safe: String = name
         .chars()
-        .take(64)
+        .take(MAX_FILE_NAME_CHARS)
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
                 c

@@ -45,8 +45,8 @@ pub mod yaml;
 pub use action::{Action, AtomicAction};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart
 // from the policy's brokered `Secret`.
-pub use engine::{CompiledPolicy, EvalContext, Secret as TaintSecret, Taint, evaluate};
-pub use host::file_url_path;
+pub use engine::{CompiledPolicy, EvalContext, Secret as TaintSecret, TAINT_RULE, Taint, evaluate};
+pub use host::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN, file_url_path};
 pub use kind::{Kind, UnknownKind};
 pub use patch::writes as patch_writes;
 pub use paths::resolve as resolve_path;
@@ -55,7 +55,7 @@ pub use policy::{Defaults, McpSettings, Policy, PolicyError, RuleGroup, SandboxS
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};
-pub use secret::{Secret, Source as SecretSource};
+pub use secret::{SECRET_RULE_PREFIX, Secret, Source as SecretSource};
 pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
 pub use taint::TaintSettings;

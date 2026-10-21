@@ -19,7 +19,7 @@ mod egress;
 mod taint;
 
 use atoms::checked_atoms;
-pub use taint::{Secret, Taint};
+pub use taint::{Secret, TAINT_RULE, Taint};
 
 /// Everything the engine needs from the environment. Supplied by the caller.
 #[derive(Debug, Clone)]

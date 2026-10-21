@@ -12,7 +12,7 @@ use crate::kind::Kind;
 use crate::paths;
 use crate::pattern::{self, GlobPattern, ShellPattern};
 use crate::policy::{Defaults, Policy, RuleGroup};
-use crate::secret::Source as SecretSource;
+use crate::secret::{SECRET_RULE_PREFIX, Source as SecretSource};
 
 /// Placeholders so `~` and `${project}` compare equal on both sides without
 /// `{…}` being read as glob alternation.
@@ -92,7 +92,7 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
     for secret in &policy.secrets {
         let mut warn = |message: String| {
             out.push(Warning {
-                rule: format!("secrets.{}", secret.id),
+                rule: format!("{SECRET_RULE_PREFIX}{}", secret.id),
                 message,
             });
         };

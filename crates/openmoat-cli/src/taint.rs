@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{Cached, Event, EventId, Store};
-use openmoat_core::{Action, CompiledPolicy, Decision, Taint, Verdict};
+use openmoat_core::{Action, CompiledPolicy, Decision, TAINT_RULE, Taint, Verdict};
 use openmoat_hosts::{HookEvent, Host};
 use serde::{Deserialize, Serialize};
 
@@ -26,9 +26,6 @@ use crate::realpath::FsPathResolver;
 
 pub mod provenance;
 pub mod run;
-
-/// The rule id the core gives a taint ask.
-const TAINT_RULE: &str = "session-taint";
 
 /// What a session was exposed to, and when it last read untrusted content.
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,7 +178,7 @@ impl CacheWrite {
 fn digest(host: Host, policy: &CompiledPolicy<'_>, cwd: &str) -> Result<String> {
     let mut bytes = Vec::new();
     for part in [
-        env!("CARGO_PKG_VERSION").to_owned(),
+        crate::VERSION.to_owned(),
         host.id().to_owned(),
         serde_json::to_string(policy.policy())?,
         format!("{:?}", policy.context()),

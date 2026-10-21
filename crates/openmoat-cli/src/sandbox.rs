@@ -43,6 +43,10 @@ use serde::Serialize;
 /// directory: it only marks the patterns that name `${project}`.
 pub const PROJECT: &str = "/__moat_project__";
 
+/// The rule id of the policy's `defaults: net`, which a backend reports when
+/// it cannot reproduce an allow-by-default network.
+pub const DEFAULT_NET_RULE: &str = "default.net";
+
 /// The loopback port of `moat proxy` the host sandboxes send their commands'
 /// traffic to (`sandbox.proxy_port`); `None` leaves each host's own proxy in
 /// charge (opt-in until `moat proxy` can run as a service, #272).
@@ -347,7 +351,7 @@ impl Report {
     fn proxy_only(&mut self, net: &Access) {
         if net.default == Effect::Allow {
             let message = "every host is reachable only through OpenMoat's proxy";
-            self.loss(openmoat_core::Kind::Net, "default.net", message.into());
+            self.loss(openmoat_core::Kind::Net, DEFAULT_NET_RULE, message.into());
         }
         for rule in &net.allow {
             let message = "these hosts are reachable only through OpenMoat's proxy: a program that \

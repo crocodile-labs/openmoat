@@ -47,6 +47,7 @@ view at the end of the file.
 - `openmoat-hosts` (library API, breaking): `Host::Pi`, `HookFormat::Pi`; `Host::ALL` has one more host ([#616](https://github.com/crocodile-labs/openmoat/pull/616)).
 - `openmoat-hosts` (library API, breaking): `Host::GeminiCli`, `HookFormat::Gemini`, `InstallSpec::relaxed_keys` (`RelaxedKey`, `KeyShape`) and `InstallSpec::variable_names_home`; `Host::ALL` has one more host ([#617](https://github.com/crocodile-labs/openmoat/pull/617)).
 - `openmoat-hosts` (library API, breaking): `McpSpec::project_files` (a list) replaces `project_file`, `McpSpec::tool_names` (`McpToolNames`), `McpFile::InConfigDir`, `McpLayout::JsonOrBare`; `ProjectSettingsSpec::local` is an `Option`, `hook_dir` a `HookDir`, and it has `format` (`SettingsFormat`) and `user_file` ([#623](https://github.com/crocodile-labs/openmoat/pull/623)).
+- Internal: named constants for limits, timeouts and file names; redundant comments removed; no behaviour change ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
 
 ### Fixed
 - A `moat` started through a symbolic link in another directory (`~/bin/moat → …/bin/moat`) finds the `openmoat` beside the file it links to; on macOS it looked only beside the link. The link's own directory is still tried after it ([#618](https://github.com/crocodile-labs/openmoat/pull/618)).

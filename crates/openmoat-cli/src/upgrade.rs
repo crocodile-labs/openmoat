@@ -77,7 +77,7 @@ pub fn available(home: &Home) -> Option<String> {
     let count = Plan::for_home(home).ok()?.applicable();
     (count > 0).then(|| {
         let plural = if count == 1 { "" } else { "s" };
-        let version = env!("CARGO_PKG_VERSION");
+        let version = crate::VERSION;
         format!("{count} change{plural} from the OpenMoat {version} default")
     })
 }

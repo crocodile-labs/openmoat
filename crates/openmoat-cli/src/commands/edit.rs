@@ -13,7 +13,7 @@ use crate::context::read_policy;
 use crate::exit::Code;
 use crate::home::{Home, write_private};
 use crate::integrity::{self, HookPins};
-use crate::render::Deferred;
+use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 
 /// The editor when neither `VISUAL` nor `EDITOR` is set.
 const FALLBACK_EDITOR: &str = if cfg!(windows) { "notepad" } else { "vi" };
@@ -66,7 +66,7 @@ fn edit(home: &Home, draft: &Path, before: &str) -> Result<Code> {
             Algorithm::Myers,
             before,
             &after,
-            3,
+            DIFF_CONTEXT_LINES,
             Some(("policy.yaml (installed)", "policy.yaml (edited)")),
         );
         write!(out, "{diff}")?;

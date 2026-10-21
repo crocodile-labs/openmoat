@@ -15,6 +15,10 @@ const RULES_WIDTH: usize = 14;
 const TABLE_ACTION_WIDTH: usize = 70;
 const REPLAY_ACTION_WIDTH: usize = 52;
 
+/// Unchanged lines around each change in the diffs shown before a file is
+/// written, as `diff -u` shows them.
+pub const DIFF_CONTEXT_LINES: usize = 3;
+
 #[derive(Serialize)]
 struct DecisionReport<'a> {
     verdict: Verdict,
@@ -139,6 +143,8 @@ pub struct DemoRow {
 
 /// Width of the command column of `moat demo`.
 const DEMO_COMMAND_WIDTH: usize = 48;
+/// Width of the reason line below each `moat demo` row.
+const DEMO_REASON_WIDTH: usize = 100;
 
 /// The `moat demo` table: a row per example, its reason indented below it.
 pub fn demo(rows: &[DemoRow], source: &str) -> Result<()> {
@@ -164,7 +170,10 @@ pub fn demo(rows: &[DemoRow], source: &str) -> Result<()> {
         )?;
         line(
             &mut out,
-            &truncate(&format!("    {}: {}", row.shows, row.reason), 100),
+            &truncate(
+                &format!("    {}: {}", row.shows, row.reason),
+                DEMO_REASON_WIDTH,
+            ),
         )?;
     }
     writeln!(

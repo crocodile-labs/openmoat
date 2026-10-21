@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use openmoat_audit::Event;
-use openmoat_core::{Action, PathResolver as _, RuleGroup, Verdict};
+use openmoat_core::{Action, PathResolver as _, RuleGroup, TAINT_RULE, Verdict};
 
 use crate::approvals::{self, GRANT_TTL_MS, Grants, Overlay};
 use crate::cli::AllowArgs;
@@ -88,9 +88,6 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
     };
     approve(&home, host, session, &action, args.always, false, out)
 }
-
-/// The rule id the core gives a session-taint ask.
-const TAINT_RULE: &str = "session-taint";
 
 /// Approve exactly `action` (from [`asked`]) for the host session, or for good
 /// with `always`: the home screen's answer, with the same checks as `run`.

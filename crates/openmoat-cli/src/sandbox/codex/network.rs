@@ -4,8 +4,8 @@ use openmoat_core::Kind;
 use openmoat_core::ir::{Access, Effect};
 use toml_edit::{Item, Table, value};
 
-use crate::sandbox::Report;
 use crate::sandbox::patterns::{domain, split};
+use crate::sandbox::{DEFAULT_NET_RULE, Report};
 
 /// `[permissions.moat.network]`: Codex's proxy allows the listed domains.
 pub(super) fn network(net: &Access, report: &mut Report) -> Table {
@@ -13,7 +13,7 @@ pub(super) fn network(net: &Access, report: &mut Report) -> Table {
     if net.default == Effect::Allow {
         report.loss(
             Kind::Net,
-            "default.net",
+            DEFAULT_NET_RULE,
             "the profile cannot allow every host: commands reach only listed hosts".into(),
         );
     }

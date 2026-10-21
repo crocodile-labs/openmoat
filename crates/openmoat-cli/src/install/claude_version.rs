@@ -19,6 +19,8 @@ use std::time::{Duration, Instant};
 const ON_FAILURE_SINCE: Version = (2, 1, 295);
 /// How long `claude --version` may take before it counts as unknown.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+/// How often the probe checks whether `claude --version` has exited.
+const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 type Version = (u64, u64, u64);
 
@@ -72,7 +74,7 @@ fn run_version(mut command: Command) -> Option<String> {
                 let _ = child.wait();
                 return None;
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => std::thread::sleep(POLL_INTERVAL),
         }
     }
     let mut text = String::new();

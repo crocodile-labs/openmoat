@@ -27,11 +27,11 @@ use serde_json::{Map, Value, json};
 
 pub use settings::{apply, in_sync, remove, weaknesses};
 
-use super::Report;
 use super::patterns::{
     Spot, domain, git_exclusion, is_below, literal_tree, push_unique, runs_later_exclusion, split,
     spot,
 };
+use super::{DEFAULT_NET_RULE, Report};
 
 /// What OpenMoat writes into `sandbox.json`.
 #[derive(Debug, Clone, PartialEq)]
@@ -232,7 +232,7 @@ fn network(net: &Access, report: &mut Report) -> Value {
     if net.default == Effect::Allow {
         let message = "sandbox.json is written to deny unlisted hosts: sandboxed commands reach \
                        only listed hosts";
-        report.loss(Kind::Net, "default.net", message.into());
+        report.loss(Kind::Net, DEFAULT_NET_RULE, message.into());
     }
     for rule in &net.deny {
         let (positive, _) = split(&rule.patterns);

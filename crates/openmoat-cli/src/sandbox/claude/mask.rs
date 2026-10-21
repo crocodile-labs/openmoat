@@ -9,7 +9,7 @@
 //! `network.allowedDomains`. (<https://code.claude.com/docs/en/sandboxing>,
 //! "Mask credentials" and "Mask credential files".)
 
-use openmoat_core::{Secret, SecretSource};
+use openmoat_core::{SECRET_RULE_PREFIX, Secret, SecretSource};
 use serde_json::{Value, json};
 
 use super::Generated;
@@ -63,7 +63,7 @@ pub fn states<'a>(
     secrets
         .iter()
         .map(|secret| {
-            let rule = format!("secrets.{}", secret.id);
+            let rule = format!("{SECRET_RULE_PREFIX}{}", secret.id);
             let state = if let Some(loss) = report.losses.iter().find(|l| l.rule == rule) {
                 Mask::Skipped(loss.message.clone())
             } else if !tls || !has_entry(root, secret) {

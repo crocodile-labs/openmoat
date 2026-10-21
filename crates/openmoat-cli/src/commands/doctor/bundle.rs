@@ -158,7 +158,7 @@ fn document(facts: Facts<'_>, user_home: Option<&Path>) -> Result<Value> {
     let bundle = Bundle {
         notice: NOTICE,
         moat: Build {
-            version: env!("CARGO_PKG_VERSION"),
+            version: crate::VERSION,
             target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
             profile: if cfg!(debug_assertions) {
                 "debug"

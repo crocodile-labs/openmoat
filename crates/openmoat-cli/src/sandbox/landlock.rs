@@ -32,6 +32,11 @@ const PLATFORM_READ: [&str; 6] = [
 ];
 const PLATFORM_WRITE: [&str; 4] = ["/dev/null", "/dev/zero", "/dev/tty", "/dev/pts"];
 
+/// The allowance listed when the proxy's port is reachable on any host.
+pub const TCP_PORT_ALLOWANCE: &str = "landlock.tcp-port";
+/// The allowance listed for denied paths inside a granted directory.
+pub const INSIDE_GRANTS_ALLOWANCE: &str = "landlock.inside-grants";
+
 /// The paths and port the agent's processes may use; everything else is denied.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rules {
@@ -107,7 +112,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
         let message = "Landlock allows TCP connections by port only: the proxy's port is \
                        reachable on any host";
         g.report
-            .allowance(Kind::Net, "landlock.tcp-port", Vec::new(), message);
+            .allowance(Kind::Net, TCP_PORT_ALLOWANCE, Vec::new(), message);
     }
     g.report.proxy_only(&ir.egress.net);
     Ok(g)
@@ -195,7 +200,7 @@ impl Generated {
         let message = "Landlock cannot deny inside a granted directory, so these stay open where \
                        a grant covers them; the hook still decides them";
         self.report
-            .allowance(kind, "landlock.inside-grants", patterns, message);
+            .allowance(kind, INSIDE_GRANTS_ALLOWANCE, patterns, message);
     }
 }
 

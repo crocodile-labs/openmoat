@@ -14,19 +14,19 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use openmoat_hosts::{
+    OPENCLAW_CONFIG_FILE as CONFIG_FILE, OPENCLAW_STATE_DIR_NAME as STATE_DIR_NAME,
+    OPENCLAW_STATE_DIR_VARIABLE,
+};
 
 use crate::home::user_home;
 
 /// The variables, in the order they are resolved.
 pub const VARIABLES: [&str; 3] = [
     "OPENCLAW_HOME",
-    "OPENCLAW_STATE_DIR",
+    OPENCLAW_STATE_DIR_VARIABLE,
     "OPENCLAW_CONFIG_PATH",
 ];
-/// The state directory's name in the home directory.
-pub const STATE_DIR_NAME: &str = ".openclaw";
-/// The configuration file's name in the state directory.
-pub const CONFIG_FILE: &str = "openclaw.json";
 
 /// One OpenClaw installation's state directory and configuration file.
 #[derive(Debug, Clone, PartialEq, Eq)]

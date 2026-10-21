@@ -24,6 +24,9 @@ pub const NAMESPACE: &str = "openmoat-policy";
 /// The program's name, as the environment snapshot records it.
 const PROGRAM: &str = "ssh-keygen";
 
+/// Longest principal [`signer_line`] accepts.
+const MAX_PRINCIPAL_LEN: usize = 128;
+
 /// `ssh-keygen` as the environment snapshot resolves it: the pinned location,
 /// else the first on the recorded search path. `None` without a snapshot.
 pub fn locate(home: &Home) -> Option<PathBuf> {
@@ -69,7 +72,7 @@ pub fn principals(signers: &str) -> Vec<String> {
 /// [`NAMESPACE`] only, under `principal`.
 pub fn signer_line(principal: &str, key: &str) -> Result<String> {
     let valid = !principal.is_empty()
-        && principal.len() <= 128
+        && principal.len() <= MAX_PRINCIPAL_LEN
         && principal
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "@._+-".contains(c));

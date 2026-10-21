@@ -253,8 +253,8 @@ impl Store {
         }
         Ok(Self {
             conn,
-            chained: found >= 2,
-            provenance: found >= 4,
+            chained: found >= schema::CHAIN_VERSION,
+            provenance: found >= schema::PROVENANCE_VERSION,
             secrets: KnownSecrets::default(),
         })
     }

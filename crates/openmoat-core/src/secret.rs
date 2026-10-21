@@ -7,7 +7,12 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::host::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN};
 use crate::policy::PolicyError;
+
+/// What a brokered secret's id is prefixed with where it stands for a rule id
+/// (`secrets.<id>`): lint warnings, policy errors and sandbox losses.
+pub const SECRET_RULE_PREFIX: &str = "secrets.";
 
 /// Headers a secret may not be put in: they frame the request or the
 /// connection, so a secret there would change how the request is read.
@@ -99,12 +104,15 @@ impl Secret {
 pub(crate) fn check(secrets: &[Secret]) -> Result<(), PolicyError> {
     for (i, secret) in secrets.iter().enumerate() {
         let fail = |problem: String| PolicyError::Rule {
-            rule: format!("secrets.{}", secret.id),
+            rule: format!("{SECRET_RULE_PREFIX}{}", secret.id),
             problem,
         };
         check_one(secret).map_err(fail)?;
         if let Some(earlier) = secrets[..i].iter().find(|s| s.id == secret.id) {
-            return Err(PolicyError::DuplicateId(format!("secrets.{}", earlier.id)));
+            return Err(PolicyError::DuplicateId(format!(
+                "{SECRET_RULE_PREFIX}{}",
+                earlier.id
+            )));
         }
         if let Some(earlier) = secrets[..i]
             .iter()
@@ -164,10 +172,10 @@ fn check_one(secret: &Secret) -> Result<(), String> {
 
 /// The form `moat proxy` reports hosts in, so the comparison is exact.
 fn is_host(host: &str) -> bool {
-    host.len() <= 253
+    host.len() <= MAX_DNS_NAME_LEN
         && host.split('.').all(|label| {
             !label.is_empty()
-                && label.len() <= 63
+                && label.len() <= MAX_DNS_LABEL_LEN
                 && label
                     .bytes()
                     .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')

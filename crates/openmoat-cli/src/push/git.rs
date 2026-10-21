@@ -36,6 +36,13 @@ pub struct Git {
     budget: Duration,
 }
 
+/// Most bytes [`Git::value`] reads: a one-line value (a hash, a ref name) is
+/// far shorter.
+const MAX_VALUE_BYTES: usize = 64 * 1024;
+
+/// How often [`Git::run`] checks whether git has exited.
+const POLL_INTERVAL: Duration = Duration::from_millis(2);
+
 /// Global options for every command, before the subcommand.
 const GLOBAL: &[&str] = &[
     "--no-pager",
@@ -133,7 +140,7 @@ impl Git {
                     });
                 }
                 Ok(None) if Instant::now() < self.deadline => {
-                    std::thread::sleep(Duration::from_millis(2));
+                    std::thread::sleep(POLL_INTERVAL);
                 }
                 Ok(None) => {
                     let _ = child.kill();
@@ -148,7 +155,7 @@ impl Git {
     /// The first line of what `git <args>` prints when it succeeds, `None` when
     /// it fails or prints nothing.
     pub fn value(&self, args: &[&str]) -> Result<Option<String>, Unchecked> {
-        let out = self.run(args, 64 * 1024)?;
+        let out = self.run(args, MAX_VALUE_BYTES)?;
         if !out.ok {
             return Ok(None);
         }
