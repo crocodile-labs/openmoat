@@ -20,7 +20,7 @@ use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::{Host, ProjectSettingsSpec, SettingsFormat};
+use openmoat_hosts::{Host, ProjectSettingsSpec, SettingsFile, SettingsReader};
 use serde_json::{Map, Value};
 
 use crate::home::Home;
@@ -32,129 +32,44 @@ pub const RULE: &str = "project-settings";
 /// A settings file larger than this is refused unread rather than parsed.
 const MAX_BYTES: u64 = 1024 * 1024;
 
-/// Keys that name a command Claude Code runs, each with what it is for.
-const COMMAND_KEYS: [(&str, &str); 7] = [
-    ("apiKeyHelper", "the command that makes the API key"),
-    (
-        "awsAuthRefresh",
-        "the command that refreshes AWS credentials",
-    ),
-    (
-        "awsCredentialExport",
-        "the command that exports AWS credentials",
-    ),
-    (
-        "otelHeadersHelper",
-        "the command that makes telemetry headers",
-    ),
-    ("statusLine", "a status line command"),
-    ("subagentStatusLine", "a subagent status line command"),
-    ("fileSuggestion", "a file suggestion command"),
-];
-
-/// What a project settings file sets that could switch OpenMoat off, run a
-/// program or redirect the agent; empty when it sets none of that.
-///
-/// Permission lists and modes are left out on purpose: they decide only
-/// whether Claude Code asks the person itself about a call the hook left to
-/// it, and Claude Code runs the `PreToolUse` hook in every mode, so OpenMoat's
-/// deny and ask stand whatever a project allows. The tool calls of MCP servers
-/// a project adds are held by their own pins (ADR-026), but Claude Code starts
-/// a server it is told to enable when settings load, which runs its command,
-/// so turning project servers on is named.
+/// What a Claude Code settings file sets that could switch OpenMoat off, run
+/// a program or redirect the agent (`openmoat-hosts`, `host/claude_code`):
+/// `ConfigChange` is Claude Code's hook, also sent by the Continue CLI.
 #[must_use]
 pub fn findings(root: &Map<String, Value>) -> Vec<String> {
-    let mut found = Vec::new();
-    if root
-        .get("disableAllHooks")
-        .is_some_and(|v| v != &Value::Bool(false))
-    {
-        found.push("`disableAllHooks` turns off every hook, OpenMoat's included".to_owned());
-    }
-    if set(root.get("hooks")) {
-        found.push("`hooks` adds hooks that run commands".to_owned());
-    }
-    if set(root.get("env")) {
-        found.push(
-            "`env` sets environment variables for the session (an API endpoint, a key, a proxy)"
-                .to_owned(),
-        );
-    }
-    for (key, what) in COMMAND_KEYS {
-        if set(root.get(key)) {
-            found.push(format!("`{key}` sets {what}"));
-        }
-    }
-    if root
-        .get("enabledPlugins")
-        .and_then(Value::as_object)
-        .is_some_and(|plugins| plugins.values().any(|v| v != &Value::Bool(false)))
-    {
-        found.push("`enabledPlugins` turns on plugins, which can carry hooks".to_owned());
-    }
-    if set(root.get("extraKnownMarketplaces")) {
-        found.push(
-            "`extraKnownMarketplaces` adds plugin marketplaces, whose plugins can carry hooks"
-                .to_owned(),
-        );
-    }
-    for key in ["enableAllProjectMcpServers", "enabledMcpjsonServers"] {
-        if set(root.get(key)) {
-            found.push(format!(
-                "`{key}` starts MCP servers the project's `.mcp.json` names, which runs their \
-                 commands (OpenMoat still holds back their tool calls)"
-            ));
-        }
-    }
-    if root.get("sandbox").is_some_and(|v| !only_enables(v)) {
-        found.push("`sandbox` changes Claude Code's sandbox settings".to_owned());
-    }
-    found
+    openmoat_hosts::claude_code_settings_findings(root)
 }
 
-/// How to read one settings file of a host: its format, the directory its
+/// How to read one settings file of a host: its reader, the directory its
 /// relative entries resolve from, and OpenMoat's hook file, which an entry
 /// may name to turn it off (pi).
 #[derive(Debug, Clone, Copy)]
 pub struct Reading<'a> {
-    pub format: SettingsFormat,
+    pub reader: &'static dyn SettingsReader,
     pub base: &'a Path,
     pub hook_file: &'a Path,
 }
 
 impl Reading<'_> {
+    /// `root` as the file the host's reader is handed.
+    fn file<'r>(
+        &'r self,
+        root: &'r Map<String, Value>,
+        home: Option<&'r Path>,
+    ) -> SettingsFile<'r> {
+        SettingsFile::new(root, self.base, self.hook_file, home)
+    }
+
     /// What a project's file `root` sets that [`findings`] names, in this format.
     fn findings(&self, root: &Map<String, Value>) -> Vec<String> {
-        match self.format {
-            SettingsFormat::ClaudeCode => findings(root),
-            SettingsFormat::Gemini => gemini::findings(root),
-            SettingsFormat::Pi => pi::findings(root, self.base, self.hook_file),
-            SettingsFormat::Codex => codex::findings(root),
-            SettingsFormat::Cursor => cursor_findings(root),
-        }
+        let home = crate::home::user_home().ok();
+        self.reader.findings(&self.file(root, home.as_deref()))
     }
 
     /// What the person's own file `root` sets that turns OpenMoat's hook off.
     fn switched_off(&self, root: &Map<String, Value>) -> Vec<String> {
-        match self.format {
-            SettingsFormat::ClaudeCode => findings(root)
-                .into_iter()
-                .filter(|found| found.starts_with("`disableAllHooks`"))
-                .collect(),
-            SettingsFormat::Gemini => gemini::switched_off(root),
-            SettingsFormat::Pi => pi::switched_off(root, self.base, self.hook_file),
-            SettingsFormat::Codex => codex::switched_off(root),
-            SettingsFormat::Cursor => Vec::new(),
-        }
-    }
-}
-
-/// A project's Cursor `hooks.json`: its hooks run beside OpenMoat's.
-fn cursor_findings(root: &Map<String, Value>) -> Vec<String> {
-    if set(root.get("hooks")) {
-        vec!["`hooks` adds hooks that run commands".to_owned()]
-    } else {
-        Vec::new()
+        let home = crate::home::user_home().ok();
+        self.reader.switched_off(&self.file(root, home.as_deref()))
     }
 }
 
@@ -168,7 +83,7 @@ pub fn switched_off(host: Host, config_dir: &Path, hook_file: &Path) -> Option<S
     let spec = host.spec().project_settings.as_ref()?;
     let path = config_dir.join(spec.user_file);
     let reading = Reading {
-        format: spec.format,
+        reader: spec.reader,
         base: config_dir,
         hook_file,
     };
@@ -181,29 +96,6 @@ pub fn switched_off(host: Host, config_dir: &Path, hook_file: &Path) -> Option<S
         Err(e) => vec![format!("cannot be checked: {e:#}")],
     };
     (!found.is_empty()).then(|| format!("{}: {}", path.display(), found.join("; ")))
-}
-
-/// A value that sets something: not `null`, `false`, `""`, `{}` or `[]`.
-fn set(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null | Value::Bool(false)) => false,
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Object(o)) => !o.is_empty(),
-        Some(Value::Array(a)) => !a.is_empty(),
-        Some(_) => true,
-    }
-}
-
-/// `{"enabled": true}` (or nothing at all): a project may turn the sandbox on,
-/// never widen or turn off what it allows.
-fn only_enables(sandbox: &Value) -> bool {
-    match sandbox {
-        Value::Null => true,
-        Value::Object(o) => o
-            .iter()
-            .all(|(k, v)| k == "enabled" && v == &Value::Bool(true)),
-        _ => false,
-    }
 }
 
 /// The bytes of `path`, or `None` when there is no such file (a deleted file
@@ -389,7 +281,7 @@ pub fn warnings(cwd: &Path, user_home: &Path, host: Host, hook_file: &Path) -> V
         for path in candidates(cwd, user_home, spec, name) {
             let base = path.parent().unwrap_or(&path).to_path_buf();
             let reading = Reading {
-                format: spec.format,
+                reader: spec.reader,
                 base: &base,
                 hook_file,
             };
@@ -399,13 +291,7 @@ pub fn warnings(cwd: &Path, user_home: &Path, host: Host, hook_file: &Path) -> V
         }
     }
     if let Some(dir) = &spec.hook_dir {
-        let what = match spec.format {
-            SettingsFormat::Pi => "is an extension pi loads with the agent's rights",
-            SettingsFormat::ClaudeCode
-            | SettingsFormat::Gemini
-            | SettingsFormat::Codex
-            | SettingsFormat::Cursor => "adds hooks that run commands",
-        };
+        let what = spec.reader.hook_dir_effect();
         for path in project_dirs(cwd, user_home)
             .into_iter()
             .flat_map(|root| hook_files(&root.join(dir.path), dir.extensions))
@@ -440,10 +326,6 @@ pub fn warnings_here(home: &Home) -> Vec<Warning> {
         })
         .collect()
 }
-
-mod codex;
-mod gemini;
-mod pi;
 
 #[cfg(test)]
 mod tests;

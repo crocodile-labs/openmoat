@@ -14,13 +14,14 @@ use serde_json::Value;
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
     Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
-    ProjectSettingsSpec, SandboxFormat, SandboxSpec, SettingsFormat,
+    ProjectSettingsSpec, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
 mod doc;
+mod project_settings;
 mod pre_tool;
 
 use pre_tool::pre_tool_action;
@@ -81,7 +82,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         shared: "hooks.json",
         local: None,
         hook_dir: None,
-        format: SettingsFormat::Cursor,
+        reader: &project_settings::READER,
         user_file: "hooks.json",
     }),
     docs: doc::DOCS,

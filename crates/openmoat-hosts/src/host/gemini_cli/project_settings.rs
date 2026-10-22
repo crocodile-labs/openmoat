@@ -6,7 +6,22 @@
 
 use serde_json::{Map, Value};
 
-use super::set;
+use crate::contract::{SettingsFile, SettingsReader, set};
+
+#[derive(Debug)]
+pub(crate) struct Reader;
+
+pub(crate) static READER: Reader = Reader;
+
+impl SettingsReader for Reader {
+    fn findings(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        findings(file.root)
+    }
+
+    fn switched_off(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        switched_off(file.root)
+    }
+}
 
 /// The `name` OpenMoat's entry carries (`install/hook_file`).
 const HOOK_NAME: &str = "openmoat";

@@ -7,10 +7,25 @@
 
 use serde_json::{Map, Value};
 
-use super::set;
+use crate::contract::{SettingsFile, SettingsReader, set};
+
+#[derive(Debug)]
+pub(crate) struct Reader;
+
+pub(crate) static READER: Reader = Reader;
+
+impl SettingsReader for Reader {
+    fn findings(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        findings(file.root)
+    }
+
+    fn switched_off(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        switched_off(file.root)
+    }
+}
 
 /// What in `root` turns every Codex hook off, OpenMoat's included.
-pub(super) fn switched_off(root: &Map<String, Value>) -> Vec<String> {
+fn switched_off(root: &Map<String, Value>) -> Vec<String> {
     let features = root.get("features");
     ["hooks", "codex_hooks"]
         .into_iter()
@@ -26,7 +41,7 @@ pub(super) fn switched_off(root: &Map<String, Value>) -> Vec<String> {
 /// What a trusted project's `.codex/config.toml` or `.codex/hooks.json` sets
 /// that turns OpenMoat off, adds a hook, runs a program, starts MCP servers or
 /// changes the sandbox OpenMoat configures.
-pub(super) fn findings(root: &Map<String, Value>) -> Vec<String> {
+fn findings(root: &Map<String, Value>) -> Vec<String> {
     let mut found = switched_off(root);
     if set(root.get("hooks")) {
         found.push("`hooks` adds hooks that run commands".to_owned());

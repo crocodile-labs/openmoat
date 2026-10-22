@@ -26,12 +26,13 @@ use serde_json::Value;
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
     Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
-    ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
 mod doc;
+mod project_settings;
 mod settings;
 mod tools;
 
@@ -88,7 +89,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         shared: "settings.json",
         local: None,
         hook_dir: None,
-        format: SettingsFormat::Gemini,
+        reader: &project_settings::READER,
         user_file: "settings.json",
     }),
     docs: doc::DOCS,

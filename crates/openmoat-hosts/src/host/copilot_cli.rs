@@ -26,7 +26,7 @@ use serde_json::Value;
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
     Asks, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
-    McpSpec, McpServersJson, ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    McpSpec, McpServersJson, ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -95,7 +95,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             path: ".github/hooks",
             extensions: &["json"],
         }),
-        format: SettingsFormat::ClaudeCode,
+        reader: &super::claude_code::project_settings::READER,
         user_file: "settings.json",
     }),
     docs: doc::DOCS,
