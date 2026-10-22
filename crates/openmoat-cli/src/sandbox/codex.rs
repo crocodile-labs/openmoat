@@ -468,13 +468,6 @@ fn nested_git(report: &mut Report) {
 /// The hook asks before the agent writes a [`RUNS_LATER`] file; a profile glob
 /// could only deny it, reads included, so sandboxed commands may write one.
 fn runs_later(report: &mut Report) {
-    if report
-        .allowances
-        .iter()
-        .any(|a| a.rule == "codex.runs-later")
-    {
-        return;
-    }
     report.allowance(
         Kind::FsWrite,
         "codex.runs-later",
