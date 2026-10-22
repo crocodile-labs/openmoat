@@ -204,16 +204,16 @@ Every command, and what to do when OpenMoat gets in your way:
 
 ## How it compares (MoatBench)
 
-Run on 2026-10-19 on macOS with OpenMoat 0.7.0, cc-safety-net 2.6.16, bash-authorize 0.9.9
+Run on 2026-10-21 on macOS with OpenMoat 0.9.0, cc-safety-net 2.6.16, bash-authorize 0.9.9
 and guardhook 0.2.0. Each tool got the same 28 MoatBench attack steps as Claude Code
 `PreToolUse` payloads; a step counts as caught when the answer is deny or ask.
 
 | Guard | Attack steps caught (of 28) | Misses auto-approved | False positives (7 benign runs) | Median ms per call |
 |---|---|---|---|---|
-| OpenMoat 0.7.0 | 28 (100%) | 0 | 0 | 104 |
-| [cc-safety-net](https://github.com/kenryu42/cc-safety-net) 2.6.16 | 14 (50%) | 0 | 0 | 226 |
-| [bash-authorize](https://github.com/rse/bash-authorize) 0.9.9 | 7 (25%) | 5 | 0 | 656 |
-| [guardhook](https://github.com/aurelio-nakamura/guardhook) 0.2.0 | 4 (14%) | 0 | 0 | 223 |
+| OpenMoat 0.9.0 | 28 (100%) | 0 | 0 | 75 |
+| [cc-safety-net](https://github.com/kenryu42/cc-safety-net) 2.6.16 | 14 (50%) | 0 | 0 | 153 |
+| [bash-authorize](https://github.com/rse/bash-authorize) 0.9.9 | 7 (25%) | 5 | 0 | 241 |
+| [guardhook](https://github.com/aurelio-nakamura/guardhook) 0.2.0 | 4 (14%) | 0 | 0 | 116 |
 
 - Three of the 28 steps target OpenMoat's own files and commands. Without them,
   OpenMoat catches 25 of 25, cc-safety-net 14 of 25, bash-authorize 7 of 25 and

@@ -202,11 +202,11 @@ fixture in `tests/conformance/benign.yaml` or `ask.yaml`.
 
 MoatBench can score any Claude Code hook, not only OpenMoat's: `openmoat bench --hook '<command>' --host claude-code` sends each scenario step to that command as a Claude Code `PreToolUse` payload and reads its answer the way Claude Code does. Nothing in the scenarios is executed; only the hook runs. This section records one such run.
 
-**Run:** 2026-10-19, macOS 12 (Intel), Node 24, every guard in its default configuration.
+**Run:** 2026-10-21, macOS 12 (Intel), Node 24, every guard in its default configuration. (A first run on 2026-10-19 with OpenMoat 0.7.0 caught the same steps for every guard.)
 
 | Guard | Version | What it says it is for |
 |---|---|---|
-| [OpenMoat](https://github.com/crocodile-labs/openmoat) | 0.7.0 | policy for shell, file, network, MCP and its own files |
+| [OpenMoat](https://github.com/crocodile-labs/openmoat) | 0.9.0 | policy for shell, file, network, MCP and its own files |
 | [cc-safety-net](https://github.com/kenryu42/cc-safety-net) | 2.6.16 | destructive commands and secret access, shell and file tools |
 | [bash-authorize](https://github.com/rse/bash-authorize) | 0.9.9 | classifies Bash commands; auto-approves the ones it judges inert |
 | [guardhook](https://github.com/aurelio-nakamura/guardhook) | 0.2.0 | catastrophic and risky shell commands |
@@ -239,14 +239,14 @@ cc-safety-net at its `paranoid` level caught the same 14 steps.
 
 ### Time per call
 
-Wall time per hook call, process start included, median of three runs of each of the 119 calls. For scale: `/bin/sh -c true` took 13.5 ms and `node -e 0` 75.8 ms on the same machine. OpenMoat's figure includes writing its audit row.
+Wall time per hook call, process start included, median of three runs of each of the 119 calls. The three other guards run on Node, so their figures include Node's start. OpenMoat's figure includes writing its audit row.
 
 | Guard | Median ms | 95th percentile ms |
 |---|---|---|
-| OpenMoat | 104 | 160 |
-| cc-safety-net | 226 | 391 |
-| bash-authorize | 656 | 1266 |
-| guardhook | 223 | 351 |
+| OpenMoat | 75 | 121 |
+| cc-safety-net | 153 | 183 |
+| bash-authorize | 241 | 276 |
+| guardhook | 116 | 127 |
 
 ### What the differences come from
 
