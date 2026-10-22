@@ -39,7 +39,19 @@ pub fn interactive() -> bool {
 /// Whether a person, not an agent, is at the terminal: what the home screen
 /// needs before it offers to approve or accept anything.
 pub fn person() -> bool {
-    interactive() && refuse_agent("openmoat").is_ok()
+    person_for("openmoat")
+}
+
+/// [`person`] as `command` asks it: `openmoat init` takes a person running a
+/// binary the lock does not record yet, since pointing the hooks at it is
+/// what it is for ([`refuse_agent`]).
+pub fn person_for(command: &str) -> bool {
+    interactive() && refuse_agent(command).is_ok()
+}
+
+/// Whether `command` must run from the binary the policy lock records.
+fn checks_binary(command: &str) -> bool {
+    command != "openmoat init"
 }
 
 /// Refuse `command` when an agent host (`ancestry::AGENTS`, a Cursor editor
@@ -51,7 +63,7 @@ pub fn refuse_agent(command: &str) -> Result<()> {
     if assumed() {
         return Ok(());
     }
-    if command != "openmoat init" {
+    if checks_binary(command) {
         own_binary::refuse_copy(command)?;
     }
     match ancestry::agent_ancestor() {
@@ -84,4 +96,25 @@ pub fn read_answer() -> io::Result<String> {
         Err(error) => eprintln!("moat: no controlling terminal to read the answer from: {error}"),
     }
     Ok(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checks_binary;
+
+    /// `openmoat init` is how a person points the hooks at a new binary, so
+    /// neither its own check nor its "is a person here" check may require the
+    /// binary the lock records; every other person-only command does.
+    #[test]
+    fn only_init_runs_from_a_binary_the_lock_does_not_record() {
+        assert!(!checks_binary("openmoat init"));
+        for command in [
+            "openmoat",
+            "openmoat allow",
+            "openmoat trust",
+            "openmoat uninstall",
+        ] {
+            assert!(checks_binary(command), "{command}");
+        }
+    }
 }
