@@ -1,0 +1,39 @@
+name: demo video
+
+# Records docs/DEMO.md's "installation to a blocked attack" video with VHS on a
+# clean Linux runner: a real terminal, the real release build, nothing staged.
+# The video is an artifact of the run; a person adds it to the README and site.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/demo/install-demo.sh"
+      - "scripts/demo/install-demo.tape"
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    name: record the install demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: rust toolchain
+        # The channel, components and targets come from rust-toolchain.toml.
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: charmbracelet/vhs-action@f6d7db07a432fcd3b06772628d36a57f96d95dcf # v2.1.1
+        with:
+          path: scripts/demo/install-demo.tape
+          install-fonts: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: install-demo
+          path: |
+            docs/assets/install-demo.mp4
+            docs/assets/install-demo.gif
+          if-no-files-found: error

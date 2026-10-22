@@ -13,9 +13,9 @@ Require bash
 Require cargo
 
 Set Shell bash
-Set FontSize 18
-Set Width 1400
-Set Height 860
+Set FontSize 24
+Set Width 1600
+Set Height 1000
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 45ms
