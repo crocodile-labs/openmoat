@@ -53,7 +53,7 @@ const TOOLS: &[ToolRow] = &[
     ToolRow::new(
         "`preToolUse`, any other tool that names no path key, except to-do tools \
          (`TodoWrite`, `TodoRead`, `todo_write`: ungoverned)",
-        "tool name",
+        "tool name and arguments",
         "`UnknownTool` (`tool.unknown`)",
     ),
     ToolRow::new(

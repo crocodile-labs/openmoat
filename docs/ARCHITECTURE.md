@@ -231,9 +231,9 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Cursor | `preToolUse`, any other tool that names a path under those keys (an editing tool need not have a write verb in its name) | every such path | `FsWrite`, `Patch` |
 | Cursor | `preToolUse` `WebFetch` | `url` | `Fetch` |
 | Cursor | `preToolUse` `WebSearch` | `query` (`allowed_domains` and `blocked_domains` only filter results) | `WebSearch` |
-| Cursor | `preToolUse`, any other tool that names no path key, except to-do tools (`TodoWrite`, `TodoRead`, `todo_write`: ungoverned) | tool name | `UnknownTool` (`tool.unknown`) |
+| Cursor | `preToolUse`, any other tool that names no path key, except to-do tools (`TodoWrite`, `TodoRead`, `todo_write`: ungoverned) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 | Cursor | `preToolUse` `Shell`, `Task`, `MCP:<tool>` (`beforeShellExecution` and `beforeMCPExecution` decide shell and MCP calls; a `Task` subagent's own calls are hooked) | — | none: `ungoverned` |
-| OpenClaw | `exec` | `command`, with each `env` entry written as `NAME='value'` before it; `workdir` as the working directory (one under `~` as a `cd` before the command); PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
+| OpenClaw | `exec` | `command`, with each `env` entry written as `NAME='value'` before it; `workdir` as a `cd` before the command, the project staying the session's; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
 | OpenClaw | Code Mode `exec` | the params as JSON | `ForeignShell` (`unparseable`) |
 | OpenClaw | `process` | `list`, `poll`, `log`, `kill`, `clear`, `remove`: ungoverned; any other action (`send-keys`, `submit`, `paste`, `write`, typed into a running session): the params as JSON | none; `ForeignShell` (`unparseable`) |
 | OpenClaw | `read` / `write`, `edit` | `path` and `file_path` when both are given; a relative path with no workspace (`cwd`) is an adapter error | `FsRead`, `ReadFiles` / `FsWrite`, `Patch` |
@@ -247,31 +247,31 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | OpenClaw | `view_image` | `path` and each of `paths`: local files (a `file://` URL as its path); `http(s)` URLs when no file is named; `data:` images touch nothing | `FsRead`, `ReadFiles`; `Fetch` for one URL, `UnknownTool` for several |
 | OpenClaw | `<server>__<tool>` | `mcp__<server>__<tool>` and `params` | `McpTool` |
 | OpenClaw | `ask_user`, `session_status`, `agents_list`, `agents_wait`, the goal tools, `progress_card`, `theme`, `screen`, `wait`, `tool_search`, `tool_describe`, `heartbeat_respond` | — | none: `ungoverned` |
-| OpenClaw | any other tool (`message`, `sessions_*`, a plugin's tool) | tool name | `UnknownTool` (`tool.unknown`) |
-| GitHub Copilot CLI | `bash`, `local_shell` / `write_bash` | `command` / `input` (typed into a running shell); `toolArgs` is parsed when it is a JSON string | `Shell` |
-| GitHub Copilot CLI | `powershell` / `write_powershell` | `command` / `input` | `ForeignShell` |
+| OpenClaw | any other tool (`message`, `sessions_*`, a plugin's tool) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| GitHub Copilot CLI | `bash`, `local_shell` / `write_bash` | `command` (asks when it leaves the shell in a directory OpenMoat cannot know) / `input` (typed into a running shell: asks); `toolArgs` is parsed when it is a JSON string | `Shell` / `Unchecked` |
+| GitHub Copilot CLI | `powershell` / `write_powershell` | `command` / `input` (asks) | `ForeignShell` / `Unchecked` |
 | GitHub Copilot CLI | `view` / `create`, `edit`, `str_replace` | `path` (`create` `file_text` for provenance) | `FsRead` / `FsWrite` |
 | GitHub Copilot CLI | `str_replace_editor` | `path`; `command` `view` reads, any other command writes | `FsRead` / `FsWrite` |
 | GitHub Copilot CLI | `apply_patch` | the patch text: `toolArgs` itself, or its `input` or `patch` | `Patch` |
 | GitHub Copilot CLI | `grep`, `rg`, `glob` | every path in `paths` and `path`, the directory of an absolute `glob` `pattern`, else the working directory | `FsRead`, `ReadFiles` |
 | GitHub Copilot CLI | `web_fetch` / `web_search` | `url` / `query` | `Fetch` / `WebSearch` |
 | GitHub Copilot CLI | `ask_user`, `report_intent`, `task`, `think`, `update_todo`, `read_bash`/`stop_bash`/`list_bash` and their PowerShell forms | — | none: `ungoverned` |
-| GitHub Copilot CLI | any other tool, MCP tools included (`<server>-<tool>`; the payload does not mark them) | tool name and arguments, as an MCP call's | `McpTool` |
+| GitHub Copilot CLI | any other tool, MCP tools included (`<server>-<tool>`; the payload does not mark them) | tool name and arguments, read as an unknown tool's (paths and URLs by key and by look, commands) | `McpTool` |
 | pi | `bash` / `powershell` | `command` | `Shell` / `ForeignShell` |
 | pi | `read` / `write`, `edit` | `path` as pi resolves it: Unicode spaces as spaces, a leading `@` dropped, a `file:` URL as its path, on Windows `/c/…`, `/mnt/c/…`, `/cygdrive/c/…` as `C:/…`; a relative path with no `cwd` is an adapter error (`write` `content` for provenance) | `FsRead` / `FsWrite` |
 | pi | `grep`, `ls` / `find` | `path`, else the working directory / the same, the directory of an absolute `pattern`, and where a `..` in it climbs to | `FsRead` / `FsRead`, `ReadFiles` |
 | pi | `mcp__<server>__<tool>`; `read_mcp_resource` | tool name and `input`; `server`, `uri` as for Claude Code's `ReadMcpResourceTool` | `McpTool` |
 | pi | `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates` | — | none: `ungoverned` |
-| pi | any other tool (an extension's) | tool name | `UnknownTool` (`tool.unknown`) |
-| Gemini CLI | `run_shell_command` | `command`; `dir_path` (relative to `cwd`) as the working directory; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
+| pi | any other tool (an extension's) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| Gemini CLI | `run_shell_command` | `command`, after a `cd` to `dir_path` (quoted whole: Gemini CLI expands no `~`); the project stays the session's; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
 | Gemini CLI | `read_file`, `list_directory` / `write_file`, `replace` | `file_path`, `dir_path` / `file_path` (`write_file` `content` for provenance) | `FsRead` / `FsWrite` |
-| Gemini CLI | `glob`, `grep_search` (`search_file_content`) | `dir_path`, else `cwd`; for `glob` also the directory `pattern` names before its first wildcard | `FsRead`, `ReadFiles` |
-| Gemini CLI | `read_many_files` | each `include`, up to its first wildcard | `ReadFiles` |
+| Gemini CLI | `glob`, `grep_search` (`search_file_content`) | `dir_path`, else `cwd` and an ask, since Gemini CLI then searches every workspace directory; for `glob` also the directory `pattern` names before its first wildcard, for `grep_search` where `include_pattern` (`include` before 0.65) climbs to | `FsRead`, `ReadFiles`; `Unchecked` |
+| Gemini CLI | `read_many_files` | each `include`, up to its first wildcard, and an ask: it reads every workspace directory | `Unchecked` |
 | Gemini CLI | `web_fetch` / `google_web_search` | the one URL in `prompt` (a `github.com` `blob` page as the `raw.githubusercontent.com` file Gemini CLI fetches; none or several is an adapter error) / `query` | `Fetch` / `WebSearch` |
 | Gemini CLI | `read_mcp_resource` | `uri`: a `file:` URI as its path; any other URI | `FsRead`; `UnknownTool` |
 | Gemini CLI | MCP tool (`mcp_<server>_<tool>`) | `mcp_context.server_name`, `mcp_context.tool_name` and `tool_input`; without `mcp_context` the name cannot be split | `McpTool` as `mcp__<server>__<tool>`; `UnknownTool` |
 | Gemini CLI | `write_todos`, `ask_user`, `tracker_*`, `update_topic`, plan-mode, `complete_task`, `activate_skill`, `get_internal_docs`, `list_mcp_resources`, `invoke_agent` and the built-in subagents | — | none: `ungoverned` |
-| Gemini CLI | any other tool (a custom subagent, a discovered tool) | tool name | `UnknownTool` (`tool.unknown`) |
+| Gemini CLI | any other tool (a custom subagent's, a browser subagent's, a discovered tool) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 <!-- /generated -->
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`,

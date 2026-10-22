@@ -41,7 +41,7 @@ const TOOLS: &[ToolRow] = &[
     ),
     ToolRow::new(
         "any other tool (an extension's)",
-        "tool name",
+        "tool name and arguments",
         "`UnknownTool` (`tool.unknown`)",
     ),
 ];
