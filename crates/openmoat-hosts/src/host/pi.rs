@@ -25,12 +25,13 @@ use serde_json::Value;
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
     Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec,
-    McpFile, McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, SettingsFormat, wrong_event,
+    McpFile, McpSpec, McpServersJson, ProjectSettingsSpec, SettingsFormat, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
 mod doc;
+mod mcp;
 mod tools;
 
 /// Seconds OpenMoat's extension waits for `moat guard` before it blocks the
@@ -84,9 +85,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // with every character but letters, digits and `_` as `_` (`docs/mcp.md`).
     mcp: Some(McpSpec {
         user_file: McpFile::InConfigDir("mcp.json"),
-        user_layout: McpLayout::Json,
-        project_files: &[(".pi/mcp.json", McpLayout::Json)],
-        tool_names: McpToolNames::Underscored,
+        user_reader: &McpServersJson,
+        project_files: &[(".pi/mcp.json", &McpServersJson)],
+        tool_names: &mcp::Underscored,
     }),
     // A trusted project's `.pi/settings.json` can turn the user's extensions
     // off and add packages, and its `.pi/extensions/` load with the agent's

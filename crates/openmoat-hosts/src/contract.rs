@@ -9,8 +9,11 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod base;
 mod docs;
+mod mcp;
 
 pub use docs::{HostDocs, ToolRow};
+pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
+pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -318,7 +321,7 @@ impl HookSpec {
 }
 
 /// How a host's hook file is laid out. The CLI writes and reads each layout;
-/// like [`McpLayout`] and [`SandboxFormat`] the enum is exhaustive, so a new
+/// like [`SandboxFormat`] the enum is exhaustive, so a new
 /// layout fails to compile at every CLI `match` until it has its arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookFormat {
@@ -348,76 +351,6 @@ pub enum HookFormat {
     /// (`GEMINI_CLI_HOME`) names the home directory `dir_name` is in, not that
     /// directory.
     Gemini,
-}
-
-/// Where a host reads its MCP server definitions. A file that does not exist
-/// lists no servers.
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct McpSpec {
-    /// The user-level file, in or beside the host's configuration.
-    pub user_file: McpFile,
-    /// How that file lays out its servers.
-    pub user_layout: McpLayout,
-    /// A project's files, relative to the working directory and each
-    /// directory above it up to the project root, and their layout; empty
-    /// when the host documents none.
-    pub project_files: &'static [(&'static str, McpLayout)],
-    /// How the host names a server's tools in its hook payloads.
-    pub tool_names: McpToolNames,
-}
-
-/// How a host names an MCP server's tools in the hook payload, so a tool call
-/// can be traced to the server definition it came from. Every form also
-/// matches `mcp__<server>__…`: matching too much only holds back another
-/// server's tools while one is unaccepted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum McpToolNames {
-    /// `mcp__<server>__<tool>`, the server's name as written or with every
-    /// character but letters, digits, `_` and `-` as `_` (Claude Code).
-    Prefixed,
-    /// `mcp__<server>__<tool>` with every character but letters, digits and
-    /// `_` as `_`, `-` included (pi 1.3.0 `docs/mcp.md`, "Configuration rules").
-    Underscored,
-    /// `<server>-<tool>` (GitHub Copilot CLI: the hook sees only the name the
-    /// model calls, its built-in GitHub server's tools are `github-mcp-server-…`).
-    Dashed,
-    /// OpenClaw's `<prefix>__<tool>`, its prefix derived from the server name.
-    OpenClaw,
-}
-
-/// Where a host's user-level MCP server file is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum McpFile {
-    /// The file the hook goes into, wherever the host's configuration puts it.
-    HookFile,
-    /// The file of this name beside the hook file.
-    BesideHookFile(&'static str),
-    /// The file of this name in the configuration directory, whose hook file
-    /// is in a subdirectory of it (GitHub Copilot CLI's `mcp-config.json`
-    /// beside `hooks/`, pi's `mcp.json` beside `extensions/`).
-    InConfigDir(&'static str),
-    /// The file of this name in the home directory while the configuration
-    /// directory is the default `~/<dir_name>`, inside the configuration
-    /// directory otherwise (Claude Code's `~/.claude.json`).
-    BesideDefaultDir(&'static str),
-}
-
-/// How a file lays out its MCP servers. The CLI has one reader per layout.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum McpLayout {
-    /// `{"mcpServers": {"<name>": {...}}}`: `.mcp.json`, Cursor's `mcp.json`.
-    Json,
-    /// `~/.claude.json`: `mcpServers`, and `projects.<path>.mcpServers`.
-    ClaudeJson,
-    /// Codex `config.toml`: `[mcp_servers.<name>]`.
-    Toml,
-    /// OpenClaw `openclaw.json`, JSON5: `{mcp: {servers: {"<name>": {...}}}}`.
-    OpenClaw,
-    /// GitHub Copilot CLI's project files, which may hold the servers under
-    /// `mcpServers` or bare, each top-level key a server
-    /// (<https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers>).
-    JsonOrBare,
 }
 
 /// The OS sandbox OpenMoat writes into a host's own settings.

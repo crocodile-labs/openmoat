@@ -24,22 +24,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
-use openmoat_hosts::{Host, McpFile};
+use openmoat_hosts::{Host, McpFile, McpReader, McpSyntax};
 use serde_json::{Map, Value};
 use toml_edit::{DocumentMut, Item};
 
 use crate::home::{Home, user_home};
 use crate::install::HostConfig;
 
-/// How a file lays out its servers.
-pub use openmoat_hosts::McpLayout as Layout;
-
 /// A file one host reads MCP servers from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Source {
     pub host: Host,
     pub path: PathBuf,
-    pub layout: Layout,
+    /// How the file lays out its servers.
+    pub reader: &'static dyn McpReader,
     /// A user-level file (in the host's configuration), not a project's.
     pub user: bool,
 }
@@ -79,7 +77,7 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
         .map(|path| Source {
             host,
             path,
-            layout: mcp.user_layout,
+            reader: mcp.user_reader,
             user: true,
         })
         .collect();
@@ -87,11 +85,11 @@ pub fn sources(home: &Home, host: Host, cwd: Option<&Path>) -> Result<Vec<Source
         && !mcp.project_files.is_empty()
     {
         for dir in project_dirs(cwd)? {
-            for (relative, layout) in mcp.project_files {
+            for (relative, reader) in mcp.project_files {
                 out.push(Source {
                     host,
                     path: dir.join(relative),
-                    layout: *layout,
+                    reader: *reader,
                     user: false,
                 });
             }
@@ -179,116 +177,31 @@ pub fn scan(sources: &[Source]) -> Scan {
 
 /// The servers `text`, the contents of `source`, defines.
 pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
-    let mut out = Vec::new();
-    let mut add = |pointer: String, name: &str, entry: &Value| {
-        out.push(Server {
-            id: format!("{}#{pointer}", source.path.display()),
+    let doc = match source.reader.syntax() {
+        McpSyntax::Json if text.trim().is_empty() => Value::Object(Map::new()),
+        McpSyntax::Json => serde_json::from_str(text).context("parsing JSON")?,
+        McpSyntax::Toml => {
+            let doc: DocumentMut = text.parse().context("parsing TOML")?;
+            toml_to_json(doc.as_item())
+        }
+        McpSyntax::Json5 => {
+            crate::install::openclaw::parse(text)
+                .context("parsing JSON5")?
+                .value
+        }
+    };
+    let servers = source.reader.servers(&doc).map_err(anyhow::Error::msg)?;
+    Ok(servers
+        .into_iter()
+        .map(|server| Server {
+            id: format!("{}#{}", source.path.display(), server.pointer),
             host: source.host,
             file: source.path.clone(),
-            pointer,
-            name: name.to_owned(),
-            entry: entry.clone(),
-        });
-    };
-    match source.layout {
-        Layout::Json | Layout::ClaudeJson => {
-            if text.trim().is_empty() {
-                return Ok(Vec::new());
-            }
-            let root: Value = serde_json::from_str(text).context("parsing JSON")?;
-            for (name, entry) in servers_in(&root, "mcpServers") {
-                add(format!("/mcpServers/{}", escape(name)), name, entry);
-            }
-            if source.layout == Layout::ClaudeJson
-                && let Some(projects) = root.get("projects").and_then(Value::as_object)
-            {
-                for (project, settings) in projects {
-                    for (name, entry) in servers_in(settings, "mcpServers") {
-                        let pointer =
-                            format!("/projects/{}/mcpServers/{}", escape(project), escape(name));
-                        add(pointer, name, entry);
-                    }
-                }
-            }
-        }
-        Layout::JsonOrBare => {
-            if text.trim().is_empty() {
-                return Ok(Vec::new());
-            }
-            let root: Value = serde_json::from_str(text).context("parsing JSON")?;
-            for (name, entry) in servers_in(&root, "mcpServers") {
-                add(format!("/mcpServers/{}", escape(name)), name, entry);
-            }
-            // Read whichever way the file is laid out: a top-level entry
-            // that looks like a server is pinned too, so a bare file cannot
-            // start a server OpenMoat did not see.
-            for (name, entry) in root.as_object().into_iter().flatten() {
-                if name != "mcpServers" && looks_like_server(entry) {
-                    add(format!("/{}", escape(name)), name, entry);
-                }
-            }
-        }
-        Layout::Toml => {
-            let doc: DocumentMut = text.parse().context("parsing TOML")?;
-            if let Some(Value::Object(servers)) = doc.get("mcp_servers").map(toml_to_json) {
-                for (name, entry) in &servers {
-                    add(format!("/mcp_servers/{}", escape(name)), name, entry);
-                }
-            }
-        }
-        Layout::OpenClaw => {
-            let root = crate::install::openclaw::parse(text)
-                .context("parsing JSON5")?
-                .value;
-            refuse_include(&root)?;
-            if let Some(servers) = root.pointer("/mcp/servers").and_then(Value::as_object) {
-                for (name, entry) in servers {
-                    add(format!("/mcp/servers/{}", escape(name)), name, entry);
-                }
-            }
-        }
-    }
-    Ok(out)
-}
-
-/// OpenClaw merges in the files an `$include` key names; one where MCP
-/// servers may come from hides which servers OpenClaw starts.
-fn refuse_include(root: &Value) -> Result<()> {
-    for at in ["", "/mcp", "/mcp/servers"] {
-        if root
-            .pointer(at)
-            .and_then(Value::as_object)
-            .is_some_and(|o| o.contains_key("$include"))
-        {
-            let place = if at.is_empty() { "the top level" } else { at };
-            anyhow::bail!(
-                "`$include` at {place} may bring MCP servers from another file, which OpenMoat \
-                 does not read; move `mcp.servers` into this file"
-            );
-        }
-    }
-    Ok(())
-}
-
-/// An object naming how a server starts or is reached.
-fn looks_like_server(entry: &Value) -> bool {
-    ["command", "url", "type"]
-        .iter()
-        .any(|key| entry.get(key).is_some())
-}
-
-/// The `(name, entry)` pairs of the object at `key` in `value`.
-fn servers_in<'a>(value: &'a Value, key: &str) -> impl Iterator<Item = (&'a String, &'a Value)> {
-    value
-        .get(key)
-        .and_then(Value::as_object)
-        .into_iter()
-        .flat_map(Map::iter)
-}
-
-/// A JSON pointer token (RFC 6901): `~` and `/` escaped.
-pub fn escape(token: &str) -> String {
-    token.replace('~', "~0").replace('/', "~1")
+            pointer: server.pointer,
+            name: server.name,
+            entry: server.entry,
+        })
+        .collect())
 }
 
 /// A TOML item as JSON, so TOML and JSON definitions pin alike.
@@ -334,11 +247,36 @@ fn toml_value(value: &toml_edit::Value) -> Value {
 mod tests {
     use super::*;
 
-    fn source(layout: Layout) -> Source {
+    /// The readers the hosts' specs name, by the layout each reads (hosts by
+    /// id: only host modules name a host).
+    mod layout {
+        use openmoat_hosts::{Host, McpReader};
+
+        fn mcp(id: &str) -> &'static openmoat_hosts::McpSpec {
+            id.parse::<Host>().unwrap().spec().mcp.as_ref().unwrap()
+        }
+        pub fn json() -> &'static dyn McpReader {
+            mcp("cursor").user_reader
+        }
+        pub fn claude_json() -> &'static dyn McpReader {
+            mcp("claude-code").user_reader
+        }
+        pub fn toml() -> &'static dyn McpReader {
+            mcp("codex").user_reader
+        }
+        pub fn openclaw() -> &'static dyn McpReader {
+            mcp("openclaw").user_reader
+        }
+        pub fn json_or_bare() -> &'static dyn McpReader {
+            mcp("copilot-cli").project_files[0].1
+        }
+    }
+
+    fn source(reader: &'static dyn McpReader) -> Source {
         Source {
             host: Host::ClaudeCode,
             path: PathBuf::from("/h/.claude.json"),
-            layout,
+            reader,
             user: true,
         }
     }
@@ -348,7 +286,7 @@ mod tests {
         let text = r#"{"mcpServers": {"gh": {"command": "npx", "args": ["-y", "gh"]}},
             "projects": {"/p/a": {"mcpServers": {"db/x": {"command": "db"}}}, "/p/b": {}},
             "numStartups": 4}"#;
-        let servers = parse(&source(Layout::ClaudeJson), text).unwrap();
+        let servers = parse(&source(layout::claude_json()), text).unwrap();
         let ids: Vec<&str> = servers.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(
             ids,
@@ -364,16 +302,16 @@ mod tests {
     #[test]
     fn a_plain_json_file_has_no_project_servers() {
         let text = r#"{"mcpServers": {"a": {"url": "https://x"}}, "projects": {"/p": {"mcpServers": {"b": {}}}}}"#;
-        let servers = parse(&source(Layout::Json), text).unwrap();
+        let servers = parse(&source(layout::json()), text).unwrap();
         assert_eq!(servers.len(), 1);
-        assert!(parse(&source(Layout::Json), "  ").unwrap().is_empty());
-        assert!(parse(&source(Layout::Json), "{").is_err());
+        assert!(parse(&source(layout::json()), "  ").unwrap().is_empty());
+        assert!(parse(&source(layout::json()), "{").is_err());
     }
 
     #[test]
     fn codex_toml_servers_read_as_json() {
         let text = "model = \"x\"\n[mcp_servers.docs]\ncommand = \"docs-server\"\nargs = [\"--port\", \"4000\"]\nenv = { TOKEN = \"t\" }\nstartup_timeout_sec = 20\n";
-        let servers = parse(&source(Layout::Toml), text).unwrap();
+        let servers = parse(&source(layout::toml()), text).unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].pointer, "/mcp_servers/docs");
         assert_eq!(
@@ -388,7 +326,7 @@ mod tests {
         let openclaw = Source {
             host: Host::OpenClaw,
             path: PathBuf::from("/h/.openclaw/openclaw.json"),
-            ..source(Layout::OpenClaw)
+            ..source(layout::openclaw())
         };
         let text = "// mine\n{ mcp: { servers: { 'my/docs': { url: 'https://x/mcp', \
                     transport: 'streamable-http', }, }, }, gateway: { port: 1 } }";
@@ -417,7 +355,7 @@ mod tests {
     fn copilot_project_files_are_read_wrapped_or_bare() {
         let copilot = Source {
             path: PathBuf::from("/p/.mcp.json"),
-            ..source(Layout::JsonOrBare)
+            ..source(layout::json_or_bare())
         };
         let wrapped = r#"{"mcpServers": {"gh": {"type": "local", "command": "npx"}}}"#;
         let bare = r#"{"gh": {"type": "local", "command": "npx"}, "web": {"url": "https://x"},
@@ -445,7 +383,7 @@ mod tests {
             .into_iter()
             .map(|p| Source {
                 path: p.clone(),
-                ..source(Layout::Json)
+                ..source(layout::json())
             })
             .collect();
         let found = scan(&sources);

@@ -23,7 +23,7 @@ use serde_json::Value;
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
     Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpLayout, McpSpec, McpToolNames, wrong_event,
+    McpSpec, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -50,6 +50,7 @@ pub const CONFIG_FILE: &str = "openclaw.json";
 
 mod bench;
 mod doc;
+mod mcp;
 mod tools;
 
 /// OpenClaw puts an `ask` to the person itself (`requireApproval`).
@@ -83,9 +84,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // `mcp.servers`"; the documentation names no project file of them.
     mcp: Some(McpSpec {
         user_file: McpFile::HookFile,
-        user_layout: McpLayout::OpenClaw,
+        user_reader: &mcp::OpenClawJson,
         project_files: &[],
-        tool_names: McpToolNames::OpenClaw,
+        tool_names: &mcp::OpenClawNames,
     }),
     docs: doc::DOCS,
     ..HostSpec::BASE
