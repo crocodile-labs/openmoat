@@ -228,7 +228,7 @@ impl dyn HookFile {
                 .any(|entry| !has_block(entry))
     }
 
-    /// The inverse of [`Self::upsert`]: remove every entry of ours, then the
+    /// The inverse of `upsert`: remove every entry of ours, then the
     /// events and `hooks` object that leaves empty, and the `version` when
     /// nothing else remains. Returns whether anything was removed.
     pub fn remove(&self, root: &mut Value, id: &str) -> bool {
