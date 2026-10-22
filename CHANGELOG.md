@@ -8,6 +8,12 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Security
+- A session grant for a file holds only while the file resolves where it did when approved: a granted file replaced by a symlink to another file is asked about again ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- An open proxy tunnel is checked against a session taint that includes every event recorded since it was last looked up, so it closes at the next recheck after the session reads a secret, not up to one interval later ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- pi's `read` names each spelling pi may open when the path does not exist (` AM.`/` PM.` with a narrow no-break space, `'` as `’`), so a rule on any of them decides ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- Claude Code's `Artifact` read of a page is a fetch of its URL, so it taints the session with untrusted content like `WebFetch`; a relative `file_path` with `root` is read both from the working directory and below `root` ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+
 ### Fixed
 - A mail address or login in the option that takes it (`git -c user.email=…`, `curl -u`, `--mail-from`, `--mail-rcpt`, and a `curl -d`, `-F` or `-H` value ending in an address) is no longer read as a host the command connects to, so a `net` default no longer denies an ordinary push or API call over it. A mail address in a string of interpreter code (`python3 -c`, a here-document) only looks like a host: `net` rules naming its domain still match, the `net` default does not. `ssh me@host`, `curl me@host` and a `git -c` proxy or remote URL are still hosts ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
 - `openmoat sandbox sync` lists Codex's nested-`.git` allowance once when several allowed directories need it ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
