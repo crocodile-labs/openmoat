@@ -247,27 +247,28 @@ fn toml_value(value: &toml_edit::Value) -> Value {
 mod tests {
     use super::*;
 
-    /// The readers the hosts' specs name, by the layout each reads.
+    /// The readers the hosts' specs name, by the layout each reads (hosts by
+    /// id: only host modules name a host).
     mod layout {
         use openmoat_hosts::{Host, McpReader};
 
-        fn mcp(host: Host) -> &'static openmoat_hosts::McpSpec {
-            host.spec().mcp.as_ref().unwrap()
+        fn mcp(id: &str) -> &'static openmoat_hosts::McpSpec {
+            id.parse::<Host>().unwrap().spec().mcp.as_ref().unwrap()
         }
         pub fn json() -> &'static dyn McpReader {
-            mcp(Host::Cursor).user_reader
+            mcp("cursor").user_reader
         }
         pub fn claude_json() -> &'static dyn McpReader {
-            mcp(Host::ClaudeCode).user_reader
+            mcp("claude-code").user_reader
         }
         pub fn toml() -> &'static dyn McpReader {
-            mcp(Host::Codex).user_reader
+            mcp("codex").user_reader
         }
         pub fn openclaw() -> &'static dyn McpReader {
-            mcp(Host::OpenClaw).user_reader
+            mcp("openclaw").user_reader
         }
         pub fn json_or_bare() -> &'static dyn McpReader {
-            mcp(Host::CopilotCli).project_files[0].1
+            mcp("copilot-cli").project_files[0].1
         }
     }
 
