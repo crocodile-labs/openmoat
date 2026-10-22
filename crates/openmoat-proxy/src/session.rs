@@ -99,6 +99,13 @@ pub trait TaintLookup: Send + Sync {
     /// The taint of `session`. An error refuses the request: without the
     /// session's history the proxy cannot tell whether it read a secret.
     fn taint(&self, session: &str) -> Result<Taint, String>;
+
+    /// A mark that changes whenever a taint may have (the audit log's newest
+    /// event id), so a taint looked up before it changed is not used again.
+    /// `None` when there is none: a recent taint is then used for its age.
+    fn version(&self) -> Option<i64> {
+        None
+    }
 }
 
 /// Why a request's credential is refused. The reply does not say whether the
@@ -117,13 +124,17 @@ pub enum AuthError {
     Invalid,
 }
 
+/// A taint as looked up: when, at which [`TaintLookup::version`], and what.
+type Looked = (Instant, Option<i64>, Taint);
+
 /// Session mode: the credentials the proxy accepts and where their taint is read.
 pub struct Sessions<'a> {
     credentials: Vec<Credential>,
     taint: &'a dyn TaintLookup,
-    /// The last taint looked up per session, and when: what the open
-    /// connections are checked against again ([`Sessions::taint_within`]).
-    recent: Mutex<HashMap<String, (Instant, Taint)>>,
+    /// The last taint looked up per session, when, and at which
+    /// [`TaintLookup::version`]: what the open connections are checked against
+    /// again ([`Sessions::taint_within`]).
+    recent: Mutex<HashMap<String, Looked>>,
 }
 
 impl fmt::Debug for Sessions<'_> {
@@ -173,21 +184,26 @@ impl<'a> Sessions<'a> {
 
     /// The taint of `session`, from the lookup.
     pub fn taint(&self, session: &str) -> Result<Taint, String> {
+        // the mark before the lookup: an event recorded during it changes it
+        let version = self.taint.version();
         let taint = self.taint.taint(session)?;
         let mut recent = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
-        recent.insert(session.to_owned(), (Instant::now(), taint.clone()));
+        recent.insert(session.to_owned(), (Instant::now(), version, taint.clone()));
         Ok(taint)
     }
 
-    /// The taint of `session` as looked up at most `max_age` ago, looked up
-    /// again when it is older. Each open connection of a session is checked
-    /// against its taint every so often; this keeps that to one lookup per
-    /// `max_age` for the whole session. A new connection uses [`Self::taint`].
+    /// The taint of `session` as looked up at most `max_age` ago and with no
+    /// event recorded since ([`TaintLookup::version`]), else looked up again.
+    /// Each open connection of a session is checked against its taint every so
+    /// often; this keeps that to one lookup per new event, at most one per
+    /// `max_age`, for the whole session. A new connection uses [`Self::taint`].
     pub fn taint_within(&self, session: &str, max_age: Duration) -> Result<Taint, String> {
+        let version = self.taint.version();
         {
             let recent = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
-            if let Some((at, taint)) = recent.get(session)
+            if let Some((at, seen, taint)) = recent.get(session)
                 && at.elapsed() < max_age
+                && *seen == version
             {
                 return Ok(taint.clone());
             }

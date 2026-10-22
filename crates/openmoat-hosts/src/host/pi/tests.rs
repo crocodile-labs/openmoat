@@ -107,6 +107,27 @@ fn search_tools_read_their_path_or_the_working_directory() {
     assert!(matches!(no_cwd, Err(HostError::MalformedArguments { .. })));
 }
 
+/// pi's `read` falls back to a screenshot's ` AM.` with a narrow no-break space
+/// and to `’` for `'`; the hook reads each spelling.
+#[test]
+fn a_read_names_every_spelling_pi_may_open() {
+    assert_eq!(
+        action("read", json!({"path": "~/Shot 9.41.02 pm.png"})),
+        Some(Action::ReadFiles {
+            paths: vec!["~/Shot 9.41.02 pm.png".into(), "~/Shot 9.41.02\u{202F}pm.png".into()],
+        })
+    );
+    assert_eq!(
+        action("read", json!({"path": "~/d'x/k"})),
+        Some(Action::ReadFiles {
+            paths: vec!["~/d'x/k".into(), "~/d\u{2019}x/k".into()],
+        })
+    );
+    // a plain name, and a space before something else, stay one read
+    assert_eq!(action("read", json!({"path": "~/.ssh/id_rsa"})), read("~/.ssh/id_rsa"));
+    assert_eq!(action("read", json!({"path": "~/a am/b é.x"})), read("~/a am/b é.x"));
+}
+
 /// pi drops a leading `@`, turns Unicode spaces into spaces, reads `file:`
 /// URLs as paths and, on Windows, Git Bash drive paths as drives.
 #[test]

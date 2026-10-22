@@ -59,6 +59,10 @@ pub struct Grant {
     /// nowhere ([`Grant::unbound`]) until a person approves it again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+    /// Where its files resolved when approved (empty: each was itself); it holds
+    /// only while they still do, so a file swapped for a symlink is asked again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub real: Vec<String>,
 }
 
 /// The project a call in `cwd` belongs to, as grants record it: the
@@ -167,6 +171,7 @@ impl Grants {
                     audit_row: None,
                     covers_taint: false,
                     project: None,
+                    real: Vec::new(),
                 });
                 Ok(Self {
                     version: GRANTS_VERSION,
@@ -218,6 +223,7 @@ impl Grants {
             audit_row,
             covers_taint: false,
             project: Some(scope.project.to_owned()),
+            real: asked::real_files(action),
         });
     }
 
@@ -237,7 +243,7 @@ impl Grants {
         self.newest(scope, action, now_ms).map(|g| g.granted_at_ms)
     }
 
-    /// The newest grant [`Grants::matches`] finds, if there is one.
+    /// The newest grant [`Grants::matches`] finds whose files resolve as approved.
     #[must_use]
     pub fn newest(&self, scope: Scope<'_>, action: &Action, now_ms: i64) -> Option<&Grant> {
         if openmoat_hosts::is_unknown_session(scope.session_id) {
@@ -245,6 +251,7 @@ impl Grants {
         }
         self.active(now_ms)
             .filter(|g| scope.owns(g) && g.action == *action && g.applies_in(scope.project))
+            .filter(|g| g.real == asked::real_files(action))
             .max_by_key(|g| g.granted_at_ms)
     }
 

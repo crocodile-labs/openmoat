@@ -42,9 +42,7 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
             shell: "PowerShell".to_owned(),
             command: field("command")?,
         },
-        "read" => Action::FsRead {
-            path: path(call, &field("path")?)?,
-        },
+        "read" => read(&path(call, &field("path")?)?),
         // `write` replaces the file; `edit` replaces text in it.
         "write" | "edit" => Action::FsWrite {
             path: path(call, &field("path")?)?,
@@ -74,6 +72,41 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
         _ => crate::wire::unknown::action(crate::Host::Pi, tool, call.input)?,
     };
     Ok(Some(action))
+}
+
+/// pi's `read` opens another spelling of `path` when `path` does not exist
+/// (`resolveReadPath`): ` AM.`/` PM.` with a narrow no-break space, as macOS
+/// names screenshots, and `'` as `’`. Each spelling is read, so a rule on any
+/// of them decides. Its NFD spelling is left out: it differs only for non-ASCII
+/// names, and macOS opens either spelling of the same file anyway.
+fn read(path: &str) -> Action {
+    let mut paths = vec![path.to_owned()];
+    for variant in [am_pm(path), path.replace('\'', "\u{2019}")] {
+        if !paths.contains(&variant) {
+            paths.push(variant);
+        }
+    }
+    match paths.len() {
+        1 => Action::FsRead { path: paths.remove(0) },
+        _ => Action::ReadFiles { paths },
+    }
+}
+
+/// ` AM.` and ` PM.`, in any case, with a narrow no-break space before them.
+fn am_pm(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut rest = path;
+    while let Some(at) = rest.find(' ') {
+        let tail = &rest[at + 1..];
+        let marker = tail.get(..2).is_some_and(|m| {
+            m.eq_ignore_ascii_case("am") || m.eq_ignore_ascii_case("pm")
+        }) && tail.get(2..3) == Some(".");
+        out.push_str(&rest[..at]);
+        out.push(if marker { '\u{202F}' } else { ' ' });
+        rest = tail;
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The directory a search tool reads: its `path`, else (none, or empty, which

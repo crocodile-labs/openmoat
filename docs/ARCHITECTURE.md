@@ -209,7 +209,7 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Claude Code | `LSP` | `filePath` | `FsRead` |
 | Claude Code | `Glob`, `Grep` | `path`, else the working directory; an absolute or `~` Glob `pattern` also reads its directory part (Claude Code searches that instead of `path`), and a relative one where its `..` climbs to | `FsRead`, `ReadFiles` |
 | Claude Code | `SendFile` | every path in `files` (the contents go to another session; an empty or non-string list is an adapter error, so `deny`) | `ReadFiles` |
-| Claude Code | `Artifact`; `ArtifactData` | every local file it uploads to a claude.ai page (`file_path`, `file_paths`, each source of `files`, a relative one below `root`); with `action: "read"` and `out_dir`, each file it saves there; `ArtifactData`'s `file_path` | `ReadFiles`, `Patch`; `FsRead` |
+| Claude Code | `Artifact`; `ArtifactData` | every local file it uploads to a claude.ai page (`file_path`, `file_paths`, each source of `files`, a relative one also below `root`); with `action: "read"` and `out_dir`, each file it saves there, and without, the page it reads (`url`, as `fetch`: untrusted content); `ArtifactData`'s `file_path` | `ReadFiles`, `Patch`, `Fetch`; `FsRead` |
 | Claude Code | `Edit`, `Write`, `MultiEdit`; `NotebookEdit` | `file_path` (`Write` `content` for provenance); `notebook_path` | `FsWrite` |
 | Claude Code | `WebFetch` | `url` | `Fetch` |
 | Claude Code | `WebSearch` | `query` (`allowed_domains` and `blocked_domains` only filter results) | `WebSearch` |

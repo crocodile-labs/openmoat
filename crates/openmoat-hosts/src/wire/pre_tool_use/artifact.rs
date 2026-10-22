@@ -4,7 +4,9 @@
 //! `Artifact` uploads its `file_path`, each of `file_paths`, and every source
 //! of `files` (a map from the published path to a source path or `{from}`, or
 //! a list of `{path}`), a relative source taken from `root` when given; with
-//! `action: "read"` it saves `path` or each of `paths` under `out_dir`.
+//! `action: "read"` it saves `path` or each of `paths` under `out_dir`, and
+//! otherwise brings the page into the session like a fetch: a page someone
+//! else wrote is untrusted content, so it taints the session as `WebFetch` does.
 //! `ArtifactData` reads a local JSON `file_path`. A file sent off the machine
 //! is read like `SendFile`'s, so a deny on reading it holds.
 
@@ -19,13 +21,32 @@ const ARTIFACT: &str = "Artifact";
 /// local file (`list`, `open`, `delete`, a server-side copy).
 pub(super) fn artifact(input: &Value) -> Result<Option<Action>, HostError> {
     let root = optional(input, "root")?;
+    if input.get("action").and_then(Value::as_str) == Some("read")
+        && optional(input, "out_dir")?.is_none()
+        && let Some(url) = optional(input, "url")?
+    {
+        return Ok(Some(Action::Fetch { url }));
+    }
     let mut reads = Vec::new();
-    reads.extend(optional(input, "file_path")?);
+    // A relative `file_path` or `file_paths` is read from the working
+    // directory, or, for an Artifact made from a type, may be one below `root`:
+    // both are read.
+    let mut either = |path: String| {
+        let below = under(root.as_deref(), &path)?;
+        reads.push(path.clone());
+        if below != path {
+            reads.push(below);
+        }
+        Ok::<_, HostError>(())
+    };
+    if let Some(path) = optional(input, "file_path")? {
+        either(path)?;
+    }
     match input.get("file_paths") {
         None | Some(Value::Null) => {}
         Some(Value::Array(list)) => {
             for path in list {
-                reads.push(path_str(path)?);
+                either(path_str(path)?)?;
             }
         }
         Some(_) => return Err(malformed("`file_paths` is not a list of paths")),
@@ -143,6 +164,7 @@ mod tests {
             Some(Action::ReadFiles {
                 paths: vec![
                     "page.html".into(),
+                    "/Users/me/.ssh/page.html".into(),
                     "/Users/me/.ssh/id_rsa".into(),
                     "/p/s.css".into()
                 ]
@@ -171,8 +193,15 @@ mod tests {
             })
         );
         assert_eq!(artifact(&json!({"action": "list"})).unwrap(), None);
+        // a page read into the session is fetched content
         assert_eq!(
-            artifact(&json!({"action": "read", "url": "u"})).unwrap(),
+            artifact(&json!({"action": "read", "url": "https://claude.ai/artifact/x"})).unwrap(),
+            Some(Action::Fetch {
+                url: "https://claude.ai/artifact/x".into()
+            })
+        );
+        assert_eq!(
+            artifact(&json!({"action": "read", "type_url": "t"})).unwrap(),
             None
         );
         assert_eq!(
