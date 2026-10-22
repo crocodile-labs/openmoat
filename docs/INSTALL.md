@@ -162,6 +162,13 @@ The Homebrew formula was renamed from `moat` to `openmoat`; `brew upgrade` follo
 rename. With the installers, run the installer again: its URL always fetches the latest release.
 From a clone, pull and run `cargo install --locked --path crates/openmoat-cli` again.
 
+Keep one OpenMoat installed. If an older binary is left elsewhere (a Homebrew install
+beside a `cargo install`), point every agent at the new one with `openmoat init`, run by
+that binary's full path, and restart the agents: an agent keeps the hook command it read
+when it started, and an older binary denies every call over a lock written by a newer
+release (from 0.9.0 the lock also records state files that do not exist yet, which an
+older binary reads as files gone missing).
+
 Then, in a terminal of your own:
 
 1. **`openmoat doctor`.** After an upgrade in the same place the hooks keep working, because
