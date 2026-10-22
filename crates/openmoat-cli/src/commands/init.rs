@@ -33,7 +33,10 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     // Whether a lock existed before this run; `repin` below always leaves one.
     let lock_existed = !dry_run && refuse_repin(&home, &mut out)?;
     // No person over an existing lock: what the lock trusts stays (`unattended.rs`).
-    let unattended = unattended::applies(lock_existed, crate::terminal::person());
+    // A person may run a binary the lock does not record yet: moving the hooks
+    // to it is what `init` is for.
+    let unattended =
+        unattended::applies(lock_existed, crate::terminal::person_for("openmoat init"));
     if unattended {
         let recorded = crate::install::self_paths::recorded_binary(&home)?;
         unattended::refuse_other_binary(&recorded, &binary)?;
