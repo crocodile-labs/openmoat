@@ -6,16 +6,17 @@
 # The timing comes from the script (DEMO_PACE between steps): the tape types the
 # command once and waits for the script's last line, so nothing here is staged.
 
+# MP4 only: a GIF of a run this long is heavy to render and too large for a README.
 Output docs/assets/install-demo.mp4
-Output docs/assets/install-demo.gif
 
 Require bash
 Require cargo
 
 Set Shell bash
-Set FontSize 24
-Set Width 1600
-Set Height 1000
+Set FontSize 22
+Set Width 1440
+Set Height 900
+Set Framerate 30
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 45ms
