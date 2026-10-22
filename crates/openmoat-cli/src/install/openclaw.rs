@@ -11,7 +11,7 @@
 //! - `openmoat` to `plugins.allow` when the file has that allowlist, and out
 //!   of `plugins.deny`, since either would keep the plugin from loading.
 //!
-//! `openclaw.json` is JSON5 to OpenClaw (`location.rs` says where it is). It is
+//! `openclaw.json` is JSON5 to OpenClaw (the hosts crate says where it is). It is
 //! read as JSON5 ([`read`]) and written back as plain JSON, which keeps every
 //! value; a file with comments is not written, since that would drop them.
 
@@ -23,10 +23,6 @@ use serde_json::{Map, Value, json};
 
 use super::{HookState, HostConfig, Outcome};
 use crate::home::write_private;
-
-pub mod location;
-
-pub use location::Location;
 
 /// The parsed `openclaw.json` at `path`, an empty object when there is none.
 pub fn read(path: &Path) -> Result<Value> {
@@ -75,8 +71,7 @@ pub fn read_for_edit(path: &Path) -> Result<Value> {
     Ok(parsed.value)
 }
 
-/// The plugin's id: the file name of the standalone plugin.
-pub const PLUGIN_ID: &str = "openmoat";
+use openmoat_hosts::OPENCLAW_PLUGIN_ID as PLUGIN_ID;
 const PLUGIN_DIR: &str = "openmoat";
 const PLUGIN_FILE: &str = "openmoat.mjs";
 const SOURCE: &str = include_str!("../../integrations/openclaw/openmoat.mjs");

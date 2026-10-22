@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
+use openmoat_hosts::Host;
 use sha2::{Digest as _, Sha256};
 
 /// The top-level key of a Claude Code settings file left out of its digest.
@@ -79,7 +80,7 @@ impl ReadOnce {
         if settings && let Some(canonical) = without_cosmetic_key(contents) {
             out.push(sha256_hex(&[link, &canonical].concat()));
         }
-        if !settings && let Some(canonical) = openclaw_without_servers(contents) {
+        if !settings && let Some(canonical) = pinned_form(contents) {
             out.push(sha256_hex(&[link, &canonical].concat()));
         }
         out.push(sha256_hex(&[link, contents].concat()));
@@ -87,30 +88,24 @@ impl ReadOnce {
     }
 }
 
-/// An OpenClaw configuration that loads OpenMoat's plugin
-/// (`plugins.entries.openmoat`), read as JSON5, without `mcp.servers` and
-/// serialised compactly with sorted keys. The MCP pins (ADR-026) hold each
-/// server's definition, so a changed server holds back only its own tools;
-/// every other change, and one that removes OpenMoat's entry, is drift.
-/// Comments and formatting are not part of it: they change nothing OpenClaw
-/// reads.
-fn openclaw_without_servers(contents: &[u8]) -> Option<Vec<u8>> {
-    let text = std::str::from_utf8(contents).ok()?;
-    let mut value = crate::json5::parse(text).ok()?.value;
-    let plugin = format!("/plugins/entries/{}", crate::install::openclaw::PLUGIN_ID);
-    value.pointer(&plugin)?;
-    let top = value.as_object_mut()?;
-    if let Some(mcp) = top
-        .get_mut("mcp")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        mcp.remove("servers");
-        // The first server added brings `mcp` with it.
-        if mcp.is_empty() {
-            top.remove("mcp");
-        }
+/// The form of a hook file a host's spec pins in place of its bytes
+/// ([`openmoat_hosts::InstallSpec::pinned_form`], OpenClaw's
+/// `openclaw.json` without `mcp.servers`), read as JSON5 and serialised
+/// compactly with sorted keys; the first host whose form takes the file
+/// gives it. Comments and formatting are not part of it: they change nothing
+/// the host reads.
+fn pinned_form(contents: &[u8]) -> Option<Vec<u8>> {
+    let forms: Vec<_> = Host::ALL
+        .into_iter()
+        .filter_map(|host| host.spec().install.as_ref()?.pinned_form)
+        .collect();
+    if forms.is_empty() {
+        return None;
     }
-    serde_json::to_vec(&value).ok()
+    let text = std::str::from_utf8(contents).ok()?;
+    let value = crate::json5::parse(text).ok()?.value;
+    let pinned = forms.into_iter().find_map(|form| form(value.clone()))?;
+    serde_json::to_vec(&pinned).ok()
 }
 
 /// The JSON object in `contents` without [`COSMETIC_KEY`], serialised compactly

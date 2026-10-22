@@ -17,14 +17,14 @@ mod wire;
 
 pub use contract::{
     Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostDocs, HostSpec, InstallSpec, KeyShape,
-    McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, ProjectSettingsSpec, RelaxedKey,
-    SandboxFormat, SandboxSpec, SettingsFormat, ToolRow,
+    Locate, Located, Location, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax,
+    ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec, SettingsFormat, ToolRow,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
 pub use host::openclaw::{
-    CONFIG_FILE as OPENCLAW_CONFIG_FILE, STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME,
-    STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
+    CONFIG_FILE as OPENCLAW_CONFIG_FILE, PLUGIN_ID as OPENCLAW_PLUGIN_ID,
+    STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
 };
 
 use std::fmt;
