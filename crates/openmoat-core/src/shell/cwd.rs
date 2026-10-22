@@ -96,8 +96,10 @@ fn knowable(word: &Word) -> bool {
 /// Whether `command`, run in a shell that stays open for later commands (an
 /// agent host's persistent shell session), may leave that shell in a directory
 /// that cannot be known from the command alone: a `cd` or `pushd` to a target
-/// that is not written out (`cd "$X"`, `cd -`), `popd`, or `eval`, `source` and
-/// `.`, which can run a `cd` of their own, outside a subshell. A later command
+/// that is not written out (`cd "$X"`, `cd -`), `popd`, or `eval`, outside a
+/// subshell. `source` and `.` are not counted: what a sourced file runs is
+/// unchecked anyway, as any script's commands are, and counting them would ask
+/// on every `source .venv/bin/activate`. A later command
 /// in that shell would then be checked against the wrong directory. A command
 /// line that cannot be read counts as such a move. A `cd` to a written-out
 /// target is checked by the classifier itself, as a read of that directory.
@@ -111,7 +113,13 @@ pub fn leaves_unknown_directory(command: &str) -> bool {
         home: "/",
         cwd: &cwd,
     };
-    let unknown = |words: &[Word]| targets(words, &ctx).contains(&None);
+    let unknown = |words: &[Word]| {
+        let program = words
+            .iter()
+            .find(|w| assignment_name(&w.text).is_none())
+            .map(|w| w.text.as_str());
+        !matches!(program, Some("source" | ".")) && targets(words, &ctx).contains(&None)
+    };
     let mut subshells = 0_usize;
     let mut words: Vec<Word> = Vec::new();
     for token in &tokens {
@@ -234,8 +242,6 @@ mod tests {
             "ls && cd $(dirname x)",
             "popd",
             "pushd",
-            "source env.sh",
-            ". ./env.sh",
             "true; eval \"$X\"",
             "if true; then cd \"$X\"; fi",
             "echo 'unterminated",
@@ -248,6 +254,8 @@ mod tests {
             "cd",
             "(cd \"$X\" && ls)",
             "ls; (source env.sh); pwd",
+            "source .venv/bin/activate",
+            ". ./env.sh",
             "cargo test --workspace",
             "echo cd \"$X\"",
         ] {

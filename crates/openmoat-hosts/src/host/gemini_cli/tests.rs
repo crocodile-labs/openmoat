@@ -66,20 +66,23 @@ fn a_shell_command_runs_in_its_dir_path() {
     assert_eq!(shell.call_id, None);
     let in_dir = fixture("run_shell_command-dir_path").unwrap();
     assert_eq!(in_dir.cwd.as_deref(), Some("/p"));
-    assert_eq!(in_dir.action, command("cd 'app' && cargo test"));
-    let absolute = call(
-        "run_shell_command",
-        json!({"command": "ls", "dir_path": "/srv/it's"}),
-    )
-    .unwrap();
-    assert_eq!(absolute.cwd.as_deref(), Some("/p"));
-    assert_eq!(absolute.action, command(r"cd '/srv/it'\''s' && ls"));
-    // Gemini CLI expands no `~` in `dir_path`
-    let tilde = call(
-        "run_shell_command",
-        json!({"command": "ls", "dir_path": "~/x"}),
-    );
-    assert_eq!(tilde.unwrap().action, command("cd '~/x' && ls"));
+    // On Windows the command is PowerShell (below), so the `cd` form is POSIX only.
+    if !cfg!(windows) {
+        assert_eq!(in_dir.action, command("cd 'app' && cargo test"));
+        let absolute = call(
+            "run_shell_command",
+            json!({"command": "ls", "dir_path": "/srv/it's"}),
+        )
+        .unwrap();
+        assert_eq!(absolute.cwd.as_deref(), Some("/p"));
+        assert_eq!(absolute.action, command(r"cd '/srv/it'\''s' && ls"));
+        // Gemini CLI expands no `~` in `dir_path`
+        let tilde = call(
+            "run_shell_command",
+            json!({"command": "ls", "dir_path": "~/x"}),
+        );
+        assert_eq!(tilde.unwrap().action, command("cd '~/x' && ls"));
+    }
     // Gemini CLI runs commands with PowerShell on Windows, which is never classified.
     let input = json!({"command": "Get-ChildItem"});
     let windows = map_on("run_shell_command", &input, None, Some("/p"), true).unwrap();

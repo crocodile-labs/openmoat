@@ -665,7 +665,7 @@ something OpenMoat claims to stop.
   calls is never passed piece by piece. `powershell` is `unparseable`. Copilot's
   shells also keep their working directory between calls, while the payload names
   only the session's: a command that leaves its shell in a directory OpenMoat cannot
-  know (`cd "$X"`, `cd -`, `popd`, `source`) asks (`unchecked`), and a `cd` to a
+  know (`cd "$X"`, `cd -`, `popd`, `eval`) asks (`unchecked`), and a `cd` to a
   written-out directory is checked as a read of it (`cd ~/.ssh` is denied). **A later
   relative path is still checked against the session's directory**: after a person
   approves a `cd` out of the project (`cd ~` asks, `home-sweep`), a following

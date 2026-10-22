@@ -91,7 +91,7 @@ fn shell_tools_are_commands_and_typed_input_asks() {
 /// is a plain command.
 #[test]
 fn a_shell_left_in_an_unknown_directory_asks() {
-    for command in ["cd \"$HOME/.ssh\"", "cd -", "source .envrc", "popd"] {
+    for command in ["cd \"$HOME/.ssh\"", "cd -", "eval \"$X\"", "popd"] {
         let got = action("bash", json!({"command": command}));
         assert!(
             matches!(got, Some(Action::Unchecked { .. })),
