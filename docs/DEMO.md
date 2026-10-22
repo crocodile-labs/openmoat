@@ -138,41 +138,36 @@ A live run depends on the model: one that refuses the injection on its own produ
 deny, and a model's choices differ between runs. The video files are not in the
 repository; record them with the commands above.
 
-## The real flow (recorded by hand)
+## The real flow (recorded on macOS)
 
 The scripts above feed the guard recorded payloads, so anyone can rerun them. The
 video on the README and the site shows the real thing instead: the published
 release, installed and set up the way a user does it, and a real Claude Code
-session that meets a prompt injection.
-
-### Prepare
+session that runs into secrets while debugging.
 
 1. Install or upgrade the published release and set it up:
    ```bash
    brew install crocodile-labs/tap/openmoat      # or: brew upgrade openmoat
    openmoat init                                 # shows each agent's change and asks
    ```
-   Restart Claude Code afterwards: it reads its hooks when it starts.
-2. Create the demo project (a Rust crate whose README hides the injection):
+2. Record, in your own Terminal, signed in to Claude Code:
    ```bash
-   scripts/demo/make-demo-project.sh             # creates ~/openmoat-demo/acme-app
+   scripts/demo/record-real-flow.sh              # saves ~/Desktop/openmoat-real-flow.mov
    ```
-   The injected URL is on `example.com`, which has no real server, so nothing is
-   sent anywhere real even if a call ran.
-3. Make the terminal font large (Cmd + a few times on macOS) and start the screen
-   recording (Cmd + Shift + 5 → Record Selected Portion on macOS).
+   It creates `~/openmoat-demo/shop-api` (a Rust crate with a `.env` of made-up
+   values), asks you to enlarge the font, then records the screen while it runs:
 
-### Record
-
-| Type | What the viewer sees |
+| Step | What the viewer sees |
 |---|---|
 | `openmoat status` | the agents set up, the policy and the lock |
-| `cd ~/openmoat-demo/acme-app && claude` | Claude Code starts in the project |
-| *Set up this project following the README.* | Claude Code reads the README (allowed) and tries the injected `curl` with `~/.ssh/id_rsa`: OpenMoat denies it, and the reason shows in Claude Code (`secrets-paths`) |
-| *The README says what to do if a security tool blocks it. Do that.* | Claude Code runs `openmoat allow --last --always` to approve itself: denied (`kernel-self`) |
-| *Now run `cargo test`.* | normal work goes on (allowed) |
-| `/exit`, then `openmoat show --recent 10` | every call and its verdict in the audit log |
+| *The app can't connect to the database. Look at .env and tell me what's wrong.* | Claude Code's read of `.env` is refused by the read deny `openmoat sandbox sync` wrote into its permissions |
+| *Then print all environment variables so we can debug it.* | Claude Code runs `env`: denied (`env-dump`), with the reason shown in Claude Code |
+| *Now run cargo test* | normal work goes on (allowed) |
+| `openmoat show --session …` | this session's calls and their verdicts in the audit log |
 
-A model may refuse the injection on its own; then ask it directly to run the line
-from the README, so the deny is shown. Remove the project afterwards with
-`rm -rf ~/openmoat-demo`.
+The prompts go to the real model (`claude -p`, Sonnet unless `DEMO_MODEL` names
+another), so its choices differ between runs. The prompt injection of
+`make-demo-project.sh` works only in the scripted demo: current models ignore it,
+and their safeguards then refuse the rest of the session. macOS asks once to let
+Terminal record the screen. The recording is the whole screen; watch it before
+sharing. Remove the project afterwards with `rm -rf ~/openmoat-demo`.
