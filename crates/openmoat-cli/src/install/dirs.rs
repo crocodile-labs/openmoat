@@ -93,9 +93,9 @@ impl Recorded {
     pub fn insert(&mut self, config: &super::HostConfig) {
         let id = config.host.id().to_owned();
         self.dirs.insert(id.clone(), config.dir().to_path_buf());
-        match config.openclaw_location() {
-            Some(location) if !location.config_is_default() => {
-                self.files.insert(id, location.config);
+        match config.custom_location() {
+            Some((locate, located)) if !locate.config_is_default(&located) => {
+                self.files.insert(id, located.config);
             }
             _ => {
                 self.files.remove(&id);

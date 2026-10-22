@@ -115,8 +115,11 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
     let recorded = crate::install::Recorded::load(state)?;
     let mut out = Vec::new();
     let mut dirs = vec![(home::DIR_NAME, env_dir(home::ENV), None)];
-    // OpenClaw's variables do more than name a directory (`openclaw_moved`).
-    for host in Host::ALL.into_iter().filter(|h| *h != Host::OpenClaw) {
+    // A host's own location rules do more than name a directory (`custom_moved`).
+    for host in Host::ALL
+        .into_iter()
+        .filter(|h| crate::install::location::custom(*h).is_none())
+    {
         let name = crate::install::dir_variable(host)?.1;
         dirs.push((name, crate::install::env_config_dir(host)?, Some(host)));
     }
@@ -138,8 +141,10 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
             add(&default, &dir)?;
         }
     }
-    for (default, dir) in openclaw_moved(&recorded)? {
-        add(default, &dir)?;
+    for host in Host::ALL {
+        for (default, dir) in custom_moved(&recorded, host)? {
+            add(&default, &dir)?;
+        }
     }
     Ok(out)
 }
@@ -150,24 +155,29 @@ fn env_dir(var: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// OpenClaw's state directory and configuration file where this shell's
-/// environment (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR`, `OPENCLAW_CONFIG_PATH`)
-/// or `moat init`'s record puts them, each paired with the default it replaces
-/// when it is not there.
-fn openclaw_moved(recorded: &crate::install::Recorded) -> Result<Vec<(&'static str, PathBuf)>> {
-    use crate::install::openclaw::Location;
-    let mut locations: Vec<Location> = Location::from_env()?.into_iter().collect();
-    if let Some(dir) = recorded.dir(Host::OpenClaw) {
-        locations.push(Location::at(dir, recorded.file(Host::OpenClaw)));
+/// The configuration directory and hook file of a host with its own location
+/// rules (OpenClaw's state directory and `openclaw.json`) where this shell's
+/// environment or `moat init`'s record puts them, each paired with the
+/// default it replaces when it is not there; empty for any other host.
+fn custom_moved(recorded: &crate::install::Recorded, host: Host) -> Result<Vec<(String, PathBuf)>> {
+    use crate::install::location;
+    let (Some(locate), Some(install)) = (location::custom(host), host.spec().install.as_ref())
+    else {
+        return Ok(Vec::new());
+    };
+    let mut locations: Vec<_> = location::from_env(locate)?.into_iter().collect();
+    if let Some(dir) = recorded.dir(host) {
+        locations.push(locate.at(dir, recorded.file(host)));
     }
-    let default = Location::default_for(&home::user_home()?);
+    let default = locate.default_for(&home::user_home()?);
+    let (dir_name, file) = (install.dir_name, install.config_file);
     let mut out = Vec::new();
-    for location in locations {
-        if location.state_dir != default.state_dir {
-            out.push(("~/.openclaw", location.state_dir.clone()));
+    for located in locations {
+        if located.dir != default.dir {
+            out.push((format!("~/{dir_name}"), located.dir.clone()));
         }
-        if !location.config_is_default() {
-            out.push(("~/.openclaw/openclaw.json", location.config));
+        if !locate.config_is_default(&located) {
+            out.push((format!("~/{dir_name}/{file}"), located.config));
         }
     }
     Ok(out)

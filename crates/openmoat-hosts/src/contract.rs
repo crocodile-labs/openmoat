@@ -9,11 +9,15 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod base;
 mod docs;
+mod location;
 mod mcp;
+mod relaxed;
 
 pub use docs::{HostDocs, ToolRow};
+pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
+pub use relaxed::{KeyShape, RelaxedKey};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -201,59 +205,14 @@ pub struct InstallSpec {
     /// its hook entry before the host runs it, when the host keeps a record
     /// of its own that OpenMoat cannot see; `moat doctor` repeats it.
     pub trust_step: Option<&'static str>,
-}
-
-/// A key of a host's hook file that may drift while the guard keeps deciding
-/// ([`InstallSpec::relaxed_keys`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RelaxedKey {
-    /// The key's path from the top of the file, its names joined by `.`
-    /// (`model.name` is `{"model": {"name": …}}`).
-    pub path: &'static str,
-    /// The only kind of value it may change to.
-    pub shape: KeyShape,
-}
-
-impl RelaxedKey {
-    /// A key whose value is a string.
-    #[must_use]
-    pub const fn string(path: &'static str) -> Self {
-        Self {
-            path,
-            shape: KeyShape::String,
-        }
-    }
-
-    /// A key whose value is `true` or `false`.
-    #[must_use]
-    pub const fn flag(path: &'static str) -> Self {
-        Self {
-            path,
-            shape: KeyShape::Bool,
-        }
-    }
-}
-
-/// The kind of value a [`RelaxedKey`] may hold. A value of any other kind, an
-/// object or a list among them, is drift like any other key's.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum KeyShape {
-    /// A JSON string.
-    String,
-    /// A JSON boolean.
-    Bool,
-}
-
-impl KeyShape {
-    /// Whether `value` is of this kind.
-    #[must_use]
-    pub fn holds(self, value: &serde_json::Value) -> bool {
-        match self {
-            Self::String => value.is_string(),
-            Self::Bool => value.is_boolean(),
-        }
-    }
+    /// How the CLI finds the directory and the file.
+    pub location: Location,
+    /// The form of the file, read as JSON5, the lock pins in place of its
+    /// bytes, when the file holds what this host's hook needs: `None` from
+    /// the function for any other file, and no function for a host whose
+    /// file is pinned by its bytes. OpenClaw's leaves out `mcp.servers`,
+    /// whose servers the MCP pins hold one by one.
+    pub pinned_form: Option<fn(serde_json::Value) -> Option<serde_json::Value>>,
 }
 
 impl InstallSpec {

@@ -41,5 +41,7 @@ impl InstallSpec {
         hook_format: HookFormat::Nested,
         relaxed_keys: &[],
         trust_step: None,
+        location: super::Location::OneDir,
+        pinned_form: None,
     };
 }

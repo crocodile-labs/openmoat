@@ -280,7 +280,7 @@ listed in `plugins.load.paths`, pinned in the lock) handles `before_tool_call` f
 runs `openmoat guard --host openclaw` with the event, the context's session ids, the agent's
 workspace (`cwd`), the configuration path, the state directory and the platform on stdin
 (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` resolved as OpenClaw
-does, `install/openclaw/location.rs`), and maps the answer:
+does, `openmoat-hosts/src/host/openclaw/location.rs`), and maps the answer:
 `deny` (exit 2) to `block`, `ask` to `requireApproval`, `allow` or nothing to no decision.
 Anything else (no `openmoat`, a crash, another exit code, an unreadable answer, no answer in 45 s)
 blocks the call (ADR-033). `openclaw.json` is JSON5; OpenMoat reads it with its own

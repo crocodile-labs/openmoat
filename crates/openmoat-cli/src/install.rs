@@ -4,6 +4,7 @@ mod binary;
 mod claude_version;
 mod dirs;
 mod hook_file;
+pub mod location;
 pub mod openclaw;
 pub mod pi;
 pub mod self_paths;
@@ -13,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::{Host, InstallSpec};
+use openmoat_hosts::{Host, InstallSpec, Locate, Located};
 
 pub use binary::{alias_of, hook_binary, other_name, stale_hint};
 pub use dirs::Recorded;
@@ -96,22 +97,13 @@ fn install_spec(host: Host) -> Result<&'static InstallSpec> {
     }
 }
 
-/// Whether `host`'s configuration is found by OpenClaw's location rules
-/// ([`openclaw::Location`]): its hook file has OpenClaw's layout, so its
-/// state directory and `openclaw.json` each follow their own variables.
-fn located_like_openclaw(host: Host) -> bool {
-    host.spec()
-        .install
-        .as_ref()
-        .is_some_and(|install| install.hook_format == HookFormat::OpenClaw)
-}
-
 /// `host`'s configuration directory as named by this shell's environment,
-/// when its variable is set (for OpenClaw, any of `openclaw::location::VARIABLES`;
-/// for a variable that names a home, the directory's name inside it).
+/// when its variable is set (for a host with its own location rules, any of
+/// their variables; for a variable that names a home, the directory's name
+/// inside it).
 pub fn env_config_dir(host: Host) -> Result<Option<PathBuf>> {
-    if located_like_openclaw(host) {
-        return Ok(openclaw::Location::from_env()?.map(|l| l.state_dir));
+    if let Some(locate) = location::custom(host) {
+        return Ok(location::from_env(locate)?.map(|l| l.dir));
     }
     let install = install_spec(host)?;
     let dir = env_dir(install.dir_variable);
@@ -127,15 +119,15 @@ impl HostConfig {
     /// where this shell's environment or the default puts it.
     pub fn for_host(home: &Home, host: Host) -> Result<Self> {
         let recorded = Recorded::load(home)?;
-        if located_like_openclaw(host) {
-            let location = match recorded.dir(host) {
-                Some(dir) => openclaw::Location::at(dir, recorded.file(host)),
-                None => match openclaw::Location::from_env()? {
-                    Some(location) => location,
-                    None => openclaw::Location::default_for(&user_home()?),
+        if let Some(locate) = location::custom(host) {
+            let located = match recorded.dir(host) {
+                Some(dir) => locate.at(dir, recorded.file(host)),
+                None => match location::from_env(locate)? {
+                    Some(located) => located,
+                    None => locate.default_for(&user_home()?),
                 },
             };
-            return Self::with_spec(host, location.config, location.state_dir);
+            return Self::with_spec(host, located.config, located.dir);
         }
         Self::at(host, recorded.dir(host).or(env_config_dir(host)?))
     }
@@ -143,10 +135,10 @@ impl HostConfig {
     /// For `moat init`: this shell's environment wins over the record, so a
     /// person moves an agent by running `init` with its variable set.
     pub fn for_init(home: &Home, host: Host) -> Result<Self> {
-        if located_like_openclaw(host)
-            && let Some(location) = openclaw::Location::from_env()?
+        if let Some(locate) = location::custom(host)
+            && let Some(located) = location::from_env(locate)?
         {
-            return Self::with_spec(host, location.config, location.state_dir);
+            return Self::with_spec(host, located.config, located.dir);
         }
         match env_config_dir(host)? {
             Some(dir) => Self::at(host, Some(dir)),
@@ -154,11 +146,15 @@ impl HostConfig {
         }
     }
 
-    /// OpenClaw's state directory and configuration file; `None` for any
-    /// other host.
-    pub fn openclaw_location(&self) -> Option<openclaw::Location> {
-        (self.format == HookFormat::OpenClaw)
-            .then(|| openclaw::Location::at(self.dir.clone(), Some(self.settings_path.clone())))
+    /// The configuration directory and hook file of a host with its own
+    /// location rules (OpenClaw's state directory and `openclaw.json`), with
+    /// those rules; `None` for any other host.
+    pub fn custom_location(&self) -> Option<(&'static dyn Locate, Located)> {
+        let locate = location::custom(self.host)?;
+        Some((
+            locate,
+            locate.at(self.dir.clone(), Some(self.settings_path.clone())),
+        ))
     }
 
     /// `host` with its hook file in `dir`, or in its default directory.

@@ -22,8 +22,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpSpec, wrong_event,
+    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, Location,
+    McpFile, McpSpec, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -47,9 +47,12 @@ pub const STATE_DIR_VARIABLE: &str = "OPENCLAW_STATE_DIR";
 pub const STATE_DIR_NAME: &str = ".openclaw";
 /// OpenClaw's configuration file's name in its state directory.
 pub const CONFIG_FILE: &str = "openclaw.json";
+/// The plugin's id: the file name of OpenMoat's standalone plugin.
+pub const PLUGIN_ID: &str = "openmoat";
 
 mod bench;
 mod doc;
+mod location;
 mod mcp;
 mod tools;
 
@@ -78,6 +81,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: CONFIG_FILE,
         hooks: HOOKS,
         hook_format: HookFormat::OpenClaw,
+        location: Location::Custom(&location::LOCATE),
+        pinned_form: Some(location::pinned_form),
         ..InstallSpec::BASE
     }),
     // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
