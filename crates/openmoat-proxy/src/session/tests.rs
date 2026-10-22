@@ -239,3 +239,52 @@ fn taint_comes_from_the_lookup_for_that_session() {
     assert_eq!(sessions.taint("run-b"), Ok(Taint::default()));
     assert!(sessions.taint("run-c").is_err());
 }
+
+/// A taint that changes with the lookup's version, as the audit log grows.
+struct Growing {
+    version: std::sync::atomic::AtomicI64,
+}
+
+impl TaintLookup for Growing {
+    fn taint(&self, _: &str) -> Result<Taint, String> {
+        let n = self.version.load(std::sync::atomic::Ordering::SeqCst);
+        Ok(Taint {
+            secrets: (0..n)
+                .map(|i| TaintSecret {
+                    source: format!("read {i}"),
+                    host: None,
+                })
+                .collect(),
+            untrusted: None,
+        })
+    }
+
+    fn version(&self) -> Option<i64> {
+        Some(self.version.load(std::sync::atomic::Ordering::SeqCst))
+    }
+}
+
+#[test]
+fn a_recent_taint_is_looked_up_again_once_an_event_is_recorded() {
+    let lookup = Growing { version: 0.into() };
+    let sessions = Sessions::new(
+        vec![Credential::new("run-a", token_a().as_bytes()).unwrap()],
+        &lookup,
+    );
+    let long = Duration::from_hours(1);
+    assert!(sessions.taint("run-a").unwrap().secrets.is_empty());
+    // nothing new: the recent taint stands
+    assert!(
+        sessions
+            .taint_within("run-a", long)
+            .unwrap()
+            .secrets
+            .is_empty()
+    );
+    // the session read a secret: well within `max_age`, the taint is new
+    lookup.version.store(1, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(
+        sessions.taint_within("run-a", long).unwrap().secrets.len(),
+        1
+    );
+}

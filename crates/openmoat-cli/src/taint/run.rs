@@ -169,6 +169,17 @@ impl TaintLookup for RunTaint<'_> {
         }
         self.fold().map_err(|e| format!("{e:#}"))
     }
+
+    /// The audit log's newest event id: any new event may be one of this run's.
+    fn version(&self) -> Option<i64> {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.store.is_none() {
+            state.store = self.home.open_audit().ok();
+        }
+        let id = state.store.as_ref()?.latest_id().ok()?;
+        // an empty log is a version too, so the first event changes it
+        Some(id.map_or(0, |id| id.0))
+    }
 }
 
 #[cfg(test)]
