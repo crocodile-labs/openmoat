@@ -65,6 +65,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 
 ## Supported agents
 
+<!-- generated:hosts-agents -->
 | Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |
 |---|---|---|---|
 | Claude Code | `PreToolUse` and `ConfigChange` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
@@ -74,7 +75,8 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 | GitHub Copilot CLI | `preToolUse` hook in a hook file of OpenMoat's own | hook only | `copilot-cli` |
 | pi | OpenMoat's extension on pi's `tool_call` event | hook only | `pi` |
 | Gemini CLI | `BeforeTool` hook in `settings.json` | hook only | `gemini-cli` |
-| Continue CLI (`cn`) | runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
+| Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
+<!-- /generated -->
 
 "Hook + OS sandbox" means `openmoat init` also writes the agent's own sandbox settings
 from the same policy, so the operating system confines the commands that agent runs in

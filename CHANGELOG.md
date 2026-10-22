@@ -11,6 +11,9 @@ view at the end of the file.
 ### Added
 - `openmoat-hosts` (library API): `HostSpec::BASE` and `InstallSpec::BASE`, the defaults a host spec takes for the fields it does not name, so a new optional field is added once rather than in every host; `Host::EVERY`, every host including those that speak another's format ([#631](https://github.com/crocodile-labs/openmoat/pull/631)).
 
+### Changed
+- Adding an agent is one line in the host list (`crates/openmoat-hosts/src/host.rs`), which gives the `Host` variant, `Host::ALL`, `Host::EVERY`, the `--host` id list and the spec and adapter lookups; the README "Supported agents" table and the ARCHITECTURE "Host tool mapping" table are generated from each agent's spec and checked by `cargo test -p openmoat-hosts --test docs`, which also fails when an adapter matches a tool its rows leave out; `docs/ADDING_AN_AGENT.md` starts with the smallest path that fits an agent and lists every file a new one needs. `openmoat-hosts` (library API, breaking): `HostSpec` has a new public field `docs`, of the new types `HostDocs` and `ToolRow` ([#632](https://github.com/crocodile-labs/openmoat/pull/632)).
+
 ## [0.9.0] - 2026-10-22
 
 ### Security

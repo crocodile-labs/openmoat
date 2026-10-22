@@ -20,6 +20,7 @@ use crate::contract::{
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
+mod doc;
 mod pre_tool;
 
 use pre_tool::pre_tool_action;
@@ -83,6 +84,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Cursor,
         user_file: "hooks.json",
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 

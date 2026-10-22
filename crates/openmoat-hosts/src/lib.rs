@@ -16,9 +16,9 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostSpec, InstallSpec, KeyShape, McpFile,
-    McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec,
-    SettingsFormat,
+    Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostDocs, HostSpec, InstallSpec, KeyShape,
+    McpFile, McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, RelaxedKey, SandboxFormat,
+    SandboxSpec, SettingsFormat, ToolRow,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::continue_cli::CONTINUE_ENV;
@@ -35,6 +35,8 @@ use serde_json::Value;
 use thiserror::Error;
 
 use glob::{below, glob_reach};
+
+pub use host::Host;
 
 /// Session id recorded when a host omits it.
 const UNKNOWN_SESSION: &str = "unknown";
@@ -142,55 +144,7 @@ pub fn is_unknown_session(session_id: &str) -> bool {
     session_id.is_empty() || session_id == UNKNOWN_SESSION
 }
 
-/// Agents with a supported integration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Host {
-    /// Anthropic's Claude Code (`PreToolUse`, `ConfigChange`).
-    ClaudeCode,
-    /// The Codex CLI (`PreToolUse`).
-    Codex,
-    /// Cursor (`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse`).
-    Cursor,
-    /// The Continue CLI (`cn`), which runs the Claude Code hooks. It has no hook
-    /// of its own to install, so it is not in [`Host::ALL`]; `guard` recognises
-    /// it with [`Host::sender`].
-    Continue,
-    /// OpenClaw, through OpenMoat's plugin and its `before_tool_call` hook.
-    OpenClaw,
-    /// GitHub Copilot CLI (`preToolUse`).
-    CopilotCli,
-    /// pi, through OpenMoat's extension and its `tool_call` event.
-    Pi,
-    /// Google's Gemini CLI (`BeforeTool`).
-    GeminiCli,
-}
-
 impl Host {
-    /// Every host with a hook to install, in the order commands list them.
-    pub const ALL: [Host; 7] = [
-        Host::ClaudeCode,
-        Host::Codex,
-        Host::Cursor,
-        Host::OpenClaw,
-        Host::CopilotCli,
-        Host::Pi,
-        Host::GeminiCli,
-    ];
-
-    /// Every host OpenMoat knows: [`Host::ALL`] and the hosts that only speak
-    /// another's format ([`HostSpec::speaks`]). Tests that must cover every
-    /// host iterate this, so a new host is checked without editing them.
-    pub const EVERY: [Host; 8] = [
-        Host::ClaudeCode,
-        Host::Codex,
-        Host::Cursor,
-        Host::Continue,
-        Host::OpenClaw,
-        Host::CopilotCli,
-        Host::Pi,
-        Host::GeminiCli,
-    ];
-
     /// The facts about this host.
     #[must_use]
     pub fn spec(self) -> &'static HostSpec {
@@ -351,9 +305,7 @@ pub struct HookRequest {
 #[non_exhaustive]
 pub enum HostError {
     /// `--host` named no supported host.
-    #[error(
-        "unknown host `{0}`; supported: claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli"
-    )]
+    #[error("unknown host `{0}`; supported: {supported}", supported = supported_hosts())]
     UnknownHost(String),
     /// The payload is not JSON or does not fit the host's schema.
     #[error("{problem}: {0}", problem = json_problem(.0))]
@@ -385,6 +337,11 @@ impl From<serde_json::Error> for HostError {
     }
 }
 
+/// The ids `--host` takes, in [`Host::ALL`] order.
+fn supported_hosts() -> String {
+    Host::ALL.map(Host::id).join(", ")
+}
+
 fn json_problem(error: &serde_json::Error) -> &'static str {
     if error.is_data() {
         "payload is JSON but does not fit the hook schema"
@@ -403,16 +360,7 @@ mod tests {
     /// that speaks another's format speaks a host with a format of its own.
     #[test]
     fn every_spec_names_its_host() {
-        let all = [
-            Host::ClaudeCode,
-            Host::Codex,
-            Host::Cursor,
-            Host::Continue,
-            Host::OpenClaw,
-            Host::CopilotCli,
-            Host::Pi,
-            Host::GeminiCli,
-        ];
+        let all = Host::EVERY;
         for (i, host) in all.into_iter().enumerate() {
             let spec = host.spec();
             assert_eq!(host.to_string(), spec.id);
@@ -425,6 +373,17 @@ mod tests {
                 assert_eq!(wire.spec().speaks, None, "{host:?}");
             }
         }
+    }
+
+    /// The unknown-host message lists every `--host` id, as it always has.
+    #[test]
+    fn unknown_host_lists_every_installable_host() {
+        let error = "nope".parse::<Host>().unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
+             copilot-cli, pi, gemini-cli"
+        );
     }
 
     /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI

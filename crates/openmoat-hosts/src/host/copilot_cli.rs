@@ -31,6 +31,7 @@ use crate::contract::{
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
+mod doc;
 mod tools;
 
 /// The event name in camel case, whose payload has camel-case fields.
@@ -96,6 +97,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::ClaudeCode,
         user_file: "settings.json",
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 

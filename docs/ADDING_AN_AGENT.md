@@ -5,12 +5,27 @@
 > [!NOTE]
 > **Read this when** you add support for another AI coding agent: adapter, installer, fixtures, tests and docs.
 
-**On this page:** [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
+**On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
 Cursor, OpenClaw, GitHub Copilot CLI, pi and Gemini CLI are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of
 this guide; this file explains each step.
+
+## Smallest path first
+
+Take the first step that fits the agent:
+
+1. **It sends a hook format OpenMoat already reads.** Write a spec only: one file,
+   `crates/openmoat-hosts/src/host/<module>.rs`, with `speaks: Some(Host::ClaudeCode)`
+   (or the host whose format it sends), and its line in the host list, ending in
+   `speaks ClaudeCode`. The Continue CLI is this case (`host/continue_cli.rs`).
+2. **It has a hook format of its own.** Write a spec, an adapter and, when its hook
+   file has a layout no other agent uses, that layout in the CLI: every row of the
+   [checklist](#checklist-of-files) applies.
+3. **It has no hook that runs before a tool call.** It cannot get an adapter. Point
+   its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)), which runs the whole
+   agent in an OS sandbox.
 
 ## What an adapter is
 
@@ -42,17 +57,21 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<agent>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_format`, the `HookFormat` of the file); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpToolNames`), so a call is traced to the definition it came from; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `SettingsFormat` the CLI reads them in, and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; `mod` in `host.rs` |
-| `crates/openmoat-hosts/src/registry.rs` | the agent's arm in `adapter` |
-| `crates/openmoat-hosts/src/lib.rs` | a `Host` variant, `Host::ALL`, the host list in `HostError::UnknownHost` |
-| `crates/openmoat-cli/src/install.rs` | nothing for an agent whose configuration is one directory moved by one variable: `HostConfig` takes the directory, variable, file, entries and layout from the spec's `install` |
+| `crates/openmoat-hosts/src/host/<module>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_format`, the `HookFormat` of the file); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpLayout` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpToolNames`), so a call is traced to the definition it came from; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `SettingsFormat` the CLI reads them in, and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; it ends with `..HostSpec::BASE`, so the fields it does not name take their defaults |
+| `crates/openmoat-hosts/src/host/<module>/doc.rs` | `DOCS` (`HostDocs`): how OpenMoat is hooked and what protects its calls, as the README says them (`hook only`, or `hook + OS sandbox` when the spec has a `sandbox`), and one `ToolRow` per tool or group of tools the adapter maps, with the ungoverned ones; the spec sets `docs: doc::DOCS`. A test fails when the adapter matches a tool name no row names |
+| `crates/openmoat-hosts/src/host/<module>/` | the rest of the adapter's code, one file per concern (`tools.rs`, `bench.rs`, `tests.rs`, as `host/pi/` has) |
+| `crates/openmoat-hosts/src/host.rs` | one line in the host list, `Variant => module,` (`Variant => module speaks ClaudeCode,` for a spec-only agent), with a doc comment naming the agent and its hook. It gives the `Host` variant, `Host::EVERY`, `Host::ALL` (when the spec has an `install`), the `--host` id list and the lookups of the spec and adapter |
 | `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec names a new `McpLayout` (a reader in `parse`) or `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
 | `crates/openmoat-cli/src/install/hook_file.rs` | only if the hook file has a new layout: a `HookFormat` variant in `desired_entry`, `is_ours`, `hook_binary` and `remove` |
-| `tests/fixtures/hosts/<agent>/` | captured payloads and a `README.md` naming each one's source |
-| `crates/openmoat-cli/tests/e2e/<agent>.rs` | end-to-end tests, registered in `e2e/main.rs` |
-| `docs/INSTALL.md`, `README.md` | a row in the hooks table and in "Supported agents"; the configuration directory table in INSTALL and the known gaps list in THREAT_MODEL §5 are generated from the spec (`OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`) |
-| `docs/ARCHITECTURE.md` §3, `docs/THREAT_MODEL.md` §5 | the tool mapping rows and the agent's limits |
+| `crates/openmoat-core/policies/default-v1.yaml`, `tests/conformance/attacks.yaml` | the agent's configuration directory and hook file in `kernel-self`, with an attack fixture (a policy change, see [Install, uninstall and the lock](#install-uninstall-and-the-lock)) |
+| `tests/fixtures/hosts/<id>/` | captured payloads and a `README.md` naming each one's source |
+| `crates/openmoat-cli/tests/e2e/<module>.rs` | end-to-end tests, with a `mod <module>;` line in `crates/openmoat-cli/tests/e2e/main.rs`, and the agent's payload shape in `crates/openmoat-cli/tests/e2e/host_failures.rs` |
+| `README.md`, `docs/INSTALL.md`, `docs/ARCHITECTURE.md` §3, `docs/THREAT_MODEL.md` §5 | generated, not edited: run `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` to write the "Supported agents" row, the configuration directory row, the tool mapping rows and the known gaps line from the spec; then `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance` for `docs/COVERAGE.md` |
+| `docs/THREAT_MODEL.md` §5 | by hand: the agent's column in the "When the hook fails" table and its ungoverned tools |
 | `CHANGELOG.md` | an `### Added` line under Unreleased |
+
+`<module>` is the agent's id with `-` written as `_` (`copilot-cli` is `copilot_cli`);
+the docs test reads the agent's code from `host/<module>.rs` and `host/<module>/`.
 
 The compiler points at every other `match` on `Host` that needs a new arm. Lock pinning,
 `openmoat status`, `openmoat doctor` and `openmoat uninstall` loop over `Host::ALL`, so they pick up
@@ -62,8 +81,8 @@ the new agent without further code.
 
 Copy the shape of `host/cursor.rs` (its own format) or `wire/pre_tool_use.rs` (the
 Claude Code format). If the agent sends Claude Code's `PreToolUse` document unchanged,
-set `speaks: Some(Host::ClaudeCode)` in its spec to reuse that parser, as the Continue
-CLI does (`host/continue_cli.rs`).
+set `speaks: Some(Host::ClaudeCode)` in its spec and end its host list line with
+`speaks ClaudeCode` to reuse that parser, as the Continue CLI does (`host/continue_cli.rs`).
 
 | The tool | `Action` | Example |
 |---|---|---|

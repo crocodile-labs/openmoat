@@ -8,12 +8,16 @@ use crate::bench::{Answer, Call, Exit, Place};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod base;
+mod docs;
+
+pub use docs::{HostDocs, ToolRow};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
 /// format ([`HostSpec::speaks`]) uses that host's adapter.
 pub(crate) trait HostAdapter: Sync {
     /// The facts about the host whose format this is.
+    #[cfg_attr(not(test), expect(dead_code, reason = "lookups read the host list"))]
     fn spec(&self) -> &'static HostSpec;
 
     /// The request in `payload`, sent by `host` for the hook named `event`
@@ -91,6 +95,8 @@ pub struct HostSpec {
     /// The settings files the host reads from a project and merges over the
     /// user settings OpenMoat pins; `None` for a host OpenMoat checks none of.
     pub project_settings: Option<ProjectSettingsSpec>,
+    /// What the generated host tables of the docs say (`tests/docs.rs`).
+    pub docs: HostDocs,
 }
 
 /// Where a host reads a project's own settings. They come from the repository,

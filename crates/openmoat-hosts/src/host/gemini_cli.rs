@@ -31,6 +31,7 @@ use crate::contract::{
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
+mod doc;
 mod settings;
 mod tools;
 
@@ -90,6 +91,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Gemini,
         user_file: "settings.json",
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 

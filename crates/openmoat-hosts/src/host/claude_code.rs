@@ -14,6 +14,7 @@ use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) mod config_change;
+mod doc;
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
@@ -87,6 +88,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::ClaudeCode,
         user_file: "settings.json",
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 

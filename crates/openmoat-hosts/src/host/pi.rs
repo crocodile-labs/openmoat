@@ -30,6 +30,7 @@ use crate::contract::{
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
+mod doc;
 mod tools;
 
 /// Seconds OpenMoat's extension waits for `moat guard` before it blocks the
@@ -104,6 +105,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SettingsFormat::Pi,
         user_file: "settings.json",
     }),
+    docs: doc::DOCS,
     ..HostSpec::BASE
 };
 
