@@ -15,26 +15,16 @@ use openmoat_hosts::Host;
 /// each host without the `Host::` prefix and is checked on its own below; the
 /// rest is to move.
 const ALLOWED: &[(&str, usize)] = &[
-    ("openmoat-cli/src/commands/allow.rs", 1),
-    ("openmoat-cli/src/commands/doctor.rs", 2),
     ("openmoat-cli/src/commands/doctor/sandboxes.rs", 1),
-    ("openmoat-cli/src/commands/doctor/warnings.rs", 1),
-    ("openmoat-cli/src/commands/guard.rs", 1),
-    ("openmoat-cli/src/commands/init.rs", 3),
     ("openmoat-cli/src/commands/sandbox.rs", 1),
-    ("openmoat-cli/src/commands/status.rs", 1),
     ("openmoat-cli/src/hangs.rs", 1),
-    ("openmoat-cli/src/install.rs", 1),
-    ("openmoat-cli/src/integrity.rs", 1),
     ("openmoat-cli/src/mcp/pins.rs", 1),
     ("openmoat-cli/src/mcp/servers.rs", 2),
     ("openmoat-cli/src/mcp/wrap.rs", 1),
     ("openmoat-cli/src/sandbox.rs", 2),
     ("openmoat-cli/src/sandbox/install.rs", 2),
-    ("openmoat-cli/src/taint.rs", 1),
     // An inline test of what Claude Code, Codex and the Continue CLI answer.
     ("openmoat-hosts/src/lib.rs", 1),
-    ("openmoat-hosts/src/wire/pre_tool_use.rs", 1),
 ];
 
 /// `Host::<Variant>` for every host, from the host list itself.

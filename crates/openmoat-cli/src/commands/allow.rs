@@ -227,11 +227,12 @@ fn approve(
                 "  and every protected write of this session until it reads untrusted content again"
             )?;
         }
-        let resume = if host == openmoat_hosts::Host::ClaudeCode.id() {
-            " (`claude --continue` resumes this one)"
-        } else {
-            ""
-        };
+        let resume = openmoat_hosts::Host::EVERY
+            .into_iter()
+            .find(|h| h.id() == host)
+            .and_then(|h| h.spec().resume_hint)
+            .map(|hint| format!(" ({hint})"))
+            .unwrap_or_default();
         writeln!(
             out,
             "  only in this agent session: a new session asks again{resume}"

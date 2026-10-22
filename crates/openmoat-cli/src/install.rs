@@ -14,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::{Host, InstallSpec, Locate, Located};
+use openmoat_hosts::{ExtraFile, Host, InstallSpec, Locate, Located};
 
 pub use binary::{alias_of, hook_binary, other_name, stale_hint};
 pub use dirs::Recorded;
@@ -195,6 +195,25 @@ impl HostConfig {
         &self.dir
     }
 
+    /// The host's hook files besides [`Self::settings_path`]
+    /// ([`InstallSpec::extra_files`]), such as OpenClaw's plugin.
+    pub fn extra_files(&self) -> Vec<PathBuf> {
+        let files = self
+            .host
+            .spec()
+            .install
+            .as_ref()
+            .map_or(&[][..], |i| i.extra_files);
+        files
+            .iter()
+            .map(|file| match file {
+                ExtraFile::InConfigDir(parts) => parts
+                    .iter()
+                    .fold(self.dir.clone(), |path, part| path.join(part)),
+            })
+            .collect()
+    }
+
     /// The host is considered present when its configuration directory exists.
     pub fn host_present(&self) -> bool {
         self.dir.is_dir()
@@ -242,27 +261,33 @@ impl HostConfig {
     }
 }
 
-/// What `moat doctor` and `moat status` say when the Continue CLI is present.
-pub fn continue_cli_warning() -> &'static str {
-    Host::Continue.spec().gaps
-}
-
-/// Where the Continue CLI (`cn`) shows itself: its global directory
-/// (`CONTINUE_GLOBAL_DIR`, else `~/.continue`, as `cn` resolves it), or `cn`
-/// on the search path. `cn` loads Claude Code's hooks but fires none of them
+/// Each host with no hook of its own to install that shows itself here
+/// ([`openmoat_hosts::HostSpec::detect`]), with where: its directory, or its
+/// program on the search path. `moat doctor` and `moat status` name its gaps:
+/// the Continue CLI (`cn`) loads Claude Code's hooks but fires none of them
 /// yet (released 1.5.47), so its tool calls never reach `guard`.
-pub fn continue_cli() -> Result<Option<PathBuf>> {
-    let dir = match env_dir("CONTINUE_GLOBAL_DIR") {
-        Some(dir) => dir,
-        None => user_home()?.join(".continue"),
-    };
-    if dir.is_dir() {
-        return Ok(Some(dir));
+pub fn detected() -> Result<Vec<(Host, PathBuf)>> {
+    let mut found = Vec::new();
+    for host in Host::EVERY {
+        let Some(detect) = &host.spec().detect else {
+            continue;
+        };
+        let dir = match env_dir(detect.dir_variable) {
+            Some(dir) => dir,
+            None => user_home()?.join(detect.dir_name),
+        };
+        if dir.is_dir() {
+            found.push((host, dir));
+            continue;
+        }
+        let path: Vec<PathBuf> = std::env::var_os("PATH")
+            .map(|p| std::env::split_paths(&p).collect())
+            .unwrap_or_default();
+        if let Some(binary) = crate::environment::find_in(&path, &[], detect.binary) {
+            found.push((host, binary));
+        }
     }
-    let path: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    Ok(crate::environment::find_in(&path, &[], "cn"))
+    Ok(found)
 }
 
 fn env_dir(name: &str) -> Option<PathBuf> {

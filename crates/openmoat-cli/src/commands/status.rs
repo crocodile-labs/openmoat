@@ -303,12 +303,12 @@ fn hooks(
             config.settings_path.display()
         )?;
     }
-    if let Some(found) = crate::install::continue_cli()? {
+    for (host, found) in crate::install::detected()? {
         writeln!(
             out,
             "{:<16} · {}  {}",
-            Host::Continue.display_name(),
-            crate::install::continue_cli_warning(),
+            host.display_name(),
+            host.spec().gaps,
             found.display()
         )?;
     }

@@ -13,17 +13,15 @@ impl HostSpec {
         id: "",
         display_name: "",
         speaks: None,
-        asks: Asks {
-            on_pre_tool_use: None,
-            on_no_ask: None,
-            defer_is_ask_on_no_ask: false,
-        },
+        asks: Asks::BASE,
         on_hook_failure: "",
         gaps: "",
         install: None,
         mcp: None,
         sandbox: None,
         project_settings: None,
+        detect: None,
+        resume_hint: None,
         docs: HostDocs::BASE,
     };
 }
@@ -43,5 +41,6 @@ impl InstallSpec {
         trust_step: None,
         location: super::Location::OneDir,
         pinned_form: None,
+        extra_files: &[],
     };
 }

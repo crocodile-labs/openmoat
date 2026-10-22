@@ -46,6 +46,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: None,
         on_no_ask: Some("Cursor does not prompt for this hook"),
         defer_is_ask_on_no_ask: true,
+        // Cursor's hooks have no "no decision"; the tools it sends ungoverned
+        // are checked by their own hook events or name no path (`pre_tool.rs`).
+        ungoverned: Verdict::Allow,
+        ..Asks::BASE
     },
     on_hook_failure: "runs the call when the hook is missing, crashes or times out, unless \
          the hook entry sets `failClosed: true`; then it blocks the call",
@@ -74,6 +78,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         unavailable_on_windows: Some(
             "Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy",
         ),
+        tiocsti_open_on_linux: false,
     }),
     // A project's `.cursor/hooks.json` runs its hooks beside the user's
     // (<https://cursor.com/docs/agent/hooks>, "Configuration").

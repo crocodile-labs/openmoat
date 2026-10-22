@@ -38,6 +38,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: Some("Codex hooks cannot ask"),
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
+        ..Asks::BASE
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
@@ -68,6 +69,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         format: SandboxFormat::CodexProfile,
         file: "config.toml",
         unavailable_on_windows: None,
+        // Codex's Linux sandbox does not refuse `TIOCSTI`.
+        tiocsti_open_on_linux: true,
     }),
     // A trusted project's `.codex/` layer adds its `config.toml` and
     // `hooks.json`, whose hooks run beside OpenMoat's; `[features] hooks =

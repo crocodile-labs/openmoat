@@ -8,7 +8,7 @@ use openmoat_hosts::Host;
 
 use crate::hangs;
 use crate::home::Home;
-use crate::install::{GUARD_BUDGET_S, HostConfig};
+use crate::install::{GUARD_BUDGET_S, HookState, HostConfig};
 use crate::sandbox::{self, Grants, exposure};
 use crate::time;
 
@@ -24,22 +24,40 @@ pub(super) fn legacy_tiocsti() -> Option<String> {
     cfg!(target_os = "linux").then(|| fs::read_to_string(LEGACY_TIOCSTI).unwrap_or_default())
 }
 
-/// With Codex set up, a warning when `setting` (see [`legacy_tiocsti`]) is not
-/// `0`: Codex's Linux sandbox does not refuse `TIOCSTI`, so a sandboxed script
-/// could leave a command in the terminal's input that the user's shell runs
-/// after the session. Only the kernel stops it.
-pub(super) fn tiocsti(codex: bool, setting: Option<&str>) -> Option<String> {
-    let value = setting.map(str::trim).filter(|v| codex && *v != "0")?;
-    let name = Host::Codex.display_name();
+/// The name of the first host with its hook installed whose Linux sandbox
+/// does not refuse `TIOCSTI` ([`openmoat_hosts::SandboxSpec::tiocsti_open_on_linux`]).
+pub(super) fn tiocsti_open(home: &Home, binary: &Path) -> anyhow::Result<Option<&'static str>> {
+    for host in Host::ALL {
+        if host
+            .spec()
+            .sandbox
+            .as_ref()
+            .is_some_and(|s| s.tiocsti_open_on_linux)
+            && HostConfig::for_host(home, host)?.state(binary) == HookState::Installed
+        {
+            return Ok(Some(host.display_name()));
+        }
+    }
+    Ok(None)
+}
+
+/// With such a host set up (`open` names it, see [`tiocsti_open`]), a warning
+/// when `setting` (see [`legacy_tiocsti`]) is not `0`: its Linux sandbox does
+/// not refuse `TIOCSTI`, so a sandboxed script could leave a command in the
+/// terminal's input that the user's shell runs after the session. Only the
+/// kernel stops it.
+pub(super) fn tiocsti(open: Option<&str>, setting: Option<&str>) -> Option<String> {
+    let name = open?;
+    let value = setting.map(str::trim).filter(|v| *v != "0")?;
     Some(if value.is_empty() {
         format!(
             "{name:<16} this kernel (before Linux 6.2) always lets a command type into your \
-             terminal (TIOCSTI), and Codex's sandbox cannot stop it; a 6.2+ kernel with \
+             terminal (TIOCSTI), and {name}'s sandbox cannot stop it; a 6.2+ kernel with \
              dev.tty.legacy_tiocsti=0 does"
         )
     } else {
         format!(
-            "{name:<16} dev.tty.legacy_tiocsti is {value}: Codex's sandbox cannot stop a command \
+            "{name:<16} dev.tty.legacy_tiocsti is {value}: {name}'s sandbox cannot stop a command \
              typing into your terminal (TIOCSTI); `sudo sysctl dev.tty.legacy_tiocsti=0` turns that off"
         )
     })
@@ -124,17 +142,19 @@ mod tests {
 
     #[test]
     fn tiocsti_warns_only_for_codex_on_a_kernel_that_allows_it() {
-        let warning = tiocsti(true, Some("1\n")).unwrap();
+        let codex = Some("Codex");
+        let warning = tiocsti(codex, Some("1\n")).unwrap();
         assert!(warning.contains("legacy_tiocsti is 1:"), "{warning}");
+        assert!(warning.contains("Codex's sandbox"), "{warning}");
         assert!(
             warning.contains("sysctl dev.tty.legacy_tiocsti=0"),
             "{warning}"
         );
-        assert_eq!(tiocsti(true, Some("0\n")), None);
-        assert_eq!(tiocsti(true, None), None, "not Linux");
-        let old_kernel = tiocsti(true, Some("")).unwrap();
+        assert_eq!(tiocsti(codex, Some("0\n")), None);
+        assert_eq!(tiocsti(codex, None), None, "not Linux");
+        let old_kernel = tiocsti(codex, Some("")).unwrap();
         assert!(old_kernel.contains("before Linux 6.2"), "{old_kernel}");
-        assert_eq!(tiocsti(false, Some("1\n")), None);
+        assert_eq!(tiocsti(None, Some("1\n")), None);
     }
 
     /// A state directory in the temp directory, a read root on every system.

@@ -45,7 +45,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: None,
         on_no_ask: Some("Claude Code's permission mode does not ask"),
         defer_is_ask_on_no_ask: false,
+        allow_last_hint: true,
+        // `bypassPermissions` skips its prompts and `dontAsk` denies whatever
+        // would prompt.
+        prompt_free_modes: &["bypassPermissions", "dontAsk"],
+        ..Asks::BASE
     },
+    resume_hint: Some("`claude --continue` resumes this one"),
     on_hook_failure: "before 2.1.295 runs the call when the hook is missing, cannot start, \
          exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it \
          (`openmoat init` sets `onFailure: \"block\"`)",
@@ -78,6 +84,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "sandbox not available on native Windows; the hook still applies the policy \
              (use WSL2 for OS confinement)",
         ),
+        tiocsti_open_on_linux: false,
     }),
     // Merged over the user `settings.json`, where a key set wins
     // (`disableAllHooks`, `hooks`, `env`, …).

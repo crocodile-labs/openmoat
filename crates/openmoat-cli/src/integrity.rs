@@ -172,9 +172,7 @@ pub fn installed_hook_files(home: &Home, binary: &Path) -> Result<Vec<PathBuf>> 
     for host in openmoat_hosts::Host::ALL {
         let config = HostConfig::for_host(home, host)?;
         if config.state(binary) == HookState::Installed {
-            if host == openmoat_hosts::Host::OpenClaw {
-                paths.push(crate::install::openclaw::plugin_path(&config));
-            }
+            paths.extend(config.extra_files());
             paths.push(config.settings_path);
         }
     }

@@ -32,11 +32,6 @@ struct Payload {
     permission_mode: Option<String>,
 }
 
-/// Claude Code permission modes in which no question reaches a person:
-/// `bypassPermissions` skips its prompts and `dontAsk` denies whatever would
-/// prompt. An `ask` there is answered as a deny that says how to approve it.
-const MODES_WITHOUT_PROMPT: &[&str] = &["bypassPermissions", "dontAsk"];
-
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
     let action = map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?;
@@ -49,8 +44,11 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             .map(str::to_owned),
         _ => None,
     };
+    // A permission mode in which no question reaches a person
+    // (`Asks::prompt_free_modes`): an `ask` there is answered as a deny that
+    // says how to approve it.
     let event = match p.permission_mode.as_deref() {
-        Some(mode) if host == Host::ClaudeCode && MODES_WITHOUT_PROMPT.contains(&mode) => {
+        Some(mode) if host.spec().asks.prompt_free_modes.contains(&mode) => {
             HookEvent::PreToolUseNoAsk
         }
         _ => HookEvent::PreToolUse,
