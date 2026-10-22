@@ -7,6 +7,7 @@ use openmoat_core::{Decision, Verdict};
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod asks;
 mod base;
 mod docs;
 mod location;
@@ -14,6 +15,8 @@ mod mcp;
 mod relaxed;
 mod settings;
 
+pub use asks::Asks;
+pub(crate) use asks::{answer, decided};
 pub use docs::{HostDocs, ToolRow};
 pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
@@ -66,11 +69,6 @@ pub(crate) fn wrong_event(event: Option<&str>) -> HostError {
     HostError::WrongEvent(event.unwrap_or_default().to_owned())
 }
 
-/// How a person approves a call a host could not ask about. Every host that
-/// receives an `ask` as a `deny` ends its reason with this.
-const HOW_TO_APPROVE: &str = "run `openmoat` to approve it, or `openmoat allow --last` (this session) \
-     or `openmoat allow --last --always`, then retry";
-
 /// The facts about one host. Code covers only what a fact cannot say.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -105,6 +103,12 @@ pub struct HostSpec {
     /// The settings files the host reads from a project and merges over the
     /// user settings OpenMoat pins; `None` for a host OpenMoat checks none of.
     pub project_settings: Option<ProjectSettingsSpec>,
+    /// How to tell the host is present when it has no hook of its own to
+    /// install, so `moat status` and `moat doctor` can name its [`Self::gaps`].
+    pub detect: Option<Detect>,
+    /// How the person resumes an agent session after `moat allow` granted it
+    /// something, which `moat allow` adds after "a new session asks again".
+    pub resume_hint: Option<&'static str>,
     /// What the generated host tables of the docs say (`tests/docs.rs`).
     pub docs: HostDocs,
 }
@@ -196,6 +200,9 @@ pub struct InstallSpec {
     /// file is pinned by its bytes. OpenClaw's leaves out `mcp.servers`,
     /// whose servers the MCP pins hold one by one.
     pub pinned_form: Option<fn(serde_json::Value) -> Option<serde_json::Value>>,
+    /// Files besides the hook file that `moat init` writes and the lock pins
+    /// with it (OpenClaw's plugin); the sandbox file is [`SandboxSpec::file`].
+    pub extra_files: &'static [ExtraFile],
 }
 
 impl InstallSpec {
@@ -307,6 +314,9 @@ pub struct SandboxSpec {
     /// Why the sandbox is not written on native Windows, as `init`, `sandbox`,
     /// `doctor` and `status` print it; `None` when it is written there.
     pub unavailable_on_windows: Option<&'static str>,
+    /// Whether the sandbox lets a command type into the terminal (`TIOCSTI`)
+    /// on Linux, so only the kernel stops it, as `moat doctor` warns.
+    pub tiocsti_open_on_linux: bool,
 }
 
 /// A host's sandbox settings format. The CLI has one backend per format.
@@ -322,51 +332,27 @@ pub enum SandboxFormat {
     CursorSandbox,
 }
 
-/// What a host does with an `ask` (and a `defer`, ADR-025) on a tool hook.
+/// A file besides the hook file that `moat init` writes for a host and the
+/// lock pins as one of its hook files ([`InstallSpec::extra_files`]). Like
+/// [`HookFormat`] the enum is exhaustive, so a new kind fails to compile in
+/// the CLI until it says where the file is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExtraFile {
+    /// The file at this path under the host's configuration directory, one
+    /// name per directory level (OpenClaw's plugin).
+    InConfigDir(&'static [&'static str]),
+}
+
+/// How to tell that a host with no hook of its own to install is present on
+/// this machine ([`HostSpec::detect`]): its directory, or its program on the
+/// search path.
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct Asks {
-    /// On [`HookEvent::PreToolUse`]: `None` when the host puts the question to a
-    /// person, else why it cannot, which the `deny` it receives instead says.
-    pub on_pre_tool_use: Option<&'static str>,
-    /// The same for [`HookEvent::PreToolUseNoAsk`].
-    pub on_no_ask: Option<&'static str>,
-    /// Whether a `defer` on [`HookEvent::PreToolUseNoAsk`] is an `ask`: the
-    /// host has no flow of its own there that decides.
-    pub defer_is_ask_on_no_ask: bool,
-}
-
-/// The decision to record for `event` on the host `spec` describes. A `defer`
-/// needs a host flow that decides by itself; where there is none, OpenMoat
-/// asks itself: the `ask` is recorded, and [`answer`] sends it as a deny that
-/// says how to approve it.
-pub(crate) fn decided(spec: &HostSpec, event: &HookEvent, mut decision: Decision) -> Decision {
-    if spec.asks.defer_is_ask_on_no_ask
-        && *event == HookEvent::PreToolUseNoAsk
-        && decision.verdict == Verdict::Defer
-    {
-        decision.verdict = Verdict::Ask;
-    }
-    decision
-}
-
-/// The decision as the host `spec` describes has to receive it. Where the host
-/// cannot ask, an `ask` reaches it as a `deny` that says how to approve it; the
-/// audit log keeps the `ask`, which is what `moat allow --last` looks for.
-pub(crate) fn answer(spec: &HostSpec, event: &HookEvent, decision: &Decision) -> Decision {
-    let why = match event {
-        HookEvent::PreToolUse => spec.asks.on_pre_tool_use,
-        HookEvent::PreToolUseNoAsk => spec.asks.on_no_ask,
-        HookEvent::ConfigChange { .. } => None,
-    };
-    let mut answer = decision.clone();
-    if let Some(why) = why
-        && decision.verdict == Verdict::Ask
-    {
-        answer.verdict = Verdict::Deny;
-        answer.reasons.push(format!(
-            "this needs your approval and {why}: {HOW_TO_APPROVE}"
-        ));
-    }
-    answer
+pub struct Detect {
+    /// The environment variable that moves the host's directory.
+    pub dir_variable: &'static str,
+    /// The directory's name under the home directory otherwise.
+    pub dir_name: &'static str,
+    /// The host's program, looked for on the search path.
+    pub binary: &'static str,
 }

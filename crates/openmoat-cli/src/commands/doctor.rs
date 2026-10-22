@@ -11,9 +11,7 @@ use openmoat_hosts::Host;
 use crate::cli::{DoctorArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
-use crate::install::{
-    HookState, HostConfig, Recorded, continue_cli_warning, dir_variable, env_config_dir, stale_hint,
-};
+use crate::install::{HookState, HostConfig, Recorded, dir_variable, env_config_dir, stale_hint};
 use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
@@ -137,8 +135,8 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         );
     }
     service(&mut report, &home);
-    let codex = HostConfig::for_host(&home, Host::Codex)?.state(&binary) == HookState::Installed;
-    let tiocsti = warnings::tiocsti(codex, warnings::legacy_tiocsti().as_deref());
+    let open = warnings::tiocsti_open(&home, &binary)?;
+    let tiocsti = warnings::tiocsti(open, warnings::legacy_tiocsti().as_deref());
     let hangs = warnings::hangs(&home, crate::time::now_ms());
     let linux = cfg!(target_os = "linux");
     let state = policy
@@ -453,11 +451,11 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
             }
         }
     }
-    if let Some(found) = crate::install::continue_cli()? {
-        let name = Host::Continue.display_name();
+    for (host, found) in crate::install::detected()? {
+        let name = host.display_name();
         report.note(&format!(
             "{name:<16} {}  {}",
-            continue_cli_warning(),
+            host.spec().gaps,
             found.display()
         ));
     }

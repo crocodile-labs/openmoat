@@ -10,7 +10,7 @@
 use serde::Deserialize;
 
 use crate::Host;
-use crate::contract::{Asks, HostDocs, HostSpec};
+use crate::contract::{Asks, Detect, HostDocs, HostSpec};
 
 /// `cn` sends Claude Code's hooks, ignores `ask` and runs the call.
 pub(crate) static SPEC: HostSpec = HostSpec {
@@ -21,6 +21,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: Some("the Continue CLI runs a call its hook asks about"),
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
+        ..Asks::BASE
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2, or times out (default 600 s)",
@@ -28,6 +29,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          calls; run it under `openmoat run`",
     // `cn` reads its own configuration and fires no hook.
     mcp: None,
+    // Its global directory (`CONTINUE_GLOBAL_DIR`, else `~/.continue`, as `cn`
+    // resolves it), or `cn` on the search path.
+    detect: Some(Detect {
+        dir_variable: "CONTINUE_GLOBAL_DIR",
+        dir_name: ".continue",
+        binary: "cn",
+    }),
     // Its tool calls are Claude Code's, mapped by Claude Code's rows.
     docs: HostDocs {
         hooked_by: "`cn` runs the Claude Code hook, but the released `cn` runs no hooks yet",

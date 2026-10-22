@@ -373,19 +373,18 @@ fn choose_hosts(
     Ok(chosen)
 }
 
-/// Every file `init` may change for `config`'s host: its hook file, and Codex's
-/// `config.toml` beside it ([`sandbox::codex_config_path`]).
+/// Every file `init` may change for `config`'s host: its hook file, its
+/// sandbox file beside it when that is another file (Codex's `config.toml`,
+/// Cursor's `sandbox.json`), and its other hook files (OpenClaw's plugin).
 fn host_files(config: &HostConfig) -> Vec<PathBuf> {
     let mut files = vec![config.settings_path.clone()];
-    if config.host == Host::Codex {
-        files.push(sandbox::codex_config_beside(&config.settings_path));
+    let spec = config.host.spec();
+    if let (Some(sandbox), Some(install)) = (&spec.sandbox, &spec.install)
+        && sandbox.file != install.config_file
+    {
+        files.push(config.settings_path.with_file_name(sandbox.file));
     }
-    if config.host == Host::Cursor {
-        files.push(config.settings_path.with_file_name("sandbox.json"));
-    }
-    if config.host == Host::OpenClaw {
-        files.push(crate::install::openclaw::plugin_path(config));
-    }
+    files.extend(config.extra_files());
     files
 }
 

@@ -57,6 +57,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: None,
         on_no_ask: Some("pi runs without a screen to ask on (print or JSON mode)"),
         defer_is_ask_on_no_ask: false,
+        ..Asks::BASE
     },
     on_hook_failure: "blocks the call when OpenMoat's extension throws (pi's `tool_call` \
          fails closed), and the extension blocks when `openmoat` is missing, crashes or \

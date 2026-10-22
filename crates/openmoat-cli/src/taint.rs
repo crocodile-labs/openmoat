@@ -333,7 +333,7 @@ pub fn answered(
     }
     let mut decision = tainted;
     // Hosts that cannot ask are told how already (`Host::answer`).
-    if call.host == Host::ClaudeCode {
+    if call.host.spec().asks.allow_last_hint {
         decision.reasons.push(
             "to stop asking for this in this session, run `openmoat allow --last` in a terminal"
                 .to_owned(),

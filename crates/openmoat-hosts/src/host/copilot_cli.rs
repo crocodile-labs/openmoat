@@ -52,6 +52,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: None,
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
+        ..Asks::BASE
     },
     on_hook_failure: "blocks the call when the hook cannot start, crashes or exits non-zero; \
          runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) \

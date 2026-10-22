@@ -22,8 +22,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, Location,
-    McpFile, McpSpec, wrong_event,
+    Asks, ExtraFile, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec,
+    Location, McpFile, McpSpec, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -64,6 +64,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         on_pre_tool_use: None,
         on_no_ask: None,
         defer_is_ask_on_no_ask: false,
+        ..Asks::BASE
     },
     on_hook_failure: "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
          `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, \
@@ -83,6 +84,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_format: HookFormat::OpenClaw,
         location: Location::Custom(&location::LOCATE),
         pinned_form: Some(location::pinned_form),
+        // OpenMoat's plugin, which OpenClaw loads from `plugins.load.paths`.
+        extra_files: &[ExtraFile::InConfigDir(&["openmoat", "openmoat.mjs"])],
         ..InstallSpec::BASE
     }),
     // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under
