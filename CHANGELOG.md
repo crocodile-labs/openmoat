@@ -11,6 +11,7 @@ view at the end of the file.
 ### Changed
 - `openmoat-hosts` (library API, breaking): `McpSpec` takes readers (`McpReader`) for its user and project files and `tool_names: &dyn McpNames`; `McpLayout` and `McpToolNames` are removed, and each host's MCP reader and tool naming live in its folder ([#640](https://github.com/crocodile-labs/openmoat/pull/640)).
 - `openmoat-hosts` (library API, breaking): a host spec says how to find its configuration (`InstallSpec::location`, `Location::Custom(&dyn Locate)`) and the form of its file the lock pins (`InstallSpec::pinned_form`); OpenClaw's location rules move into its folder, and `RelaxedKey`/`KeyShape` move to `contract/relaxed.rs` ([#641](https://github.com/crocodile-labs/openmoat/pull/641)).
+- `openmoat-hosts` (library API, breaking): `ProjectSettingsSpec::reader` (a `SettingsReader` over a parsed `SettingsFile`) replaces `format`/`SettingsFormat`, and each host's project-settings reader lives in its folder ([#642](https://github.com/crocodile-labs/openmoat/pull/642)).
 
 ### Security
 - A session grant for a file holds only while the file resolves where it did when approved: a granted file replaced by a symlink to another file is asked about again ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
