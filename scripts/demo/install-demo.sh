@@ -159,11 +159,24 @@ call() {
         "$session" "$project" "$tool" "$input" |
         (cd "$project" && openmoat guard --host claude-code >"$out" 2>"$err") || rc=$?
     if [ "$rc" -eq 2 ]; then
-        # Exit 2: Claude Code blocks the call and gives the model this stderr.
-        sed -e 's/^/  <- /' "$err" | clean
+        # Exit 2: Claude Code blocks the call and gives the model this stderr:
+        # the reason first, then where to look it up.
+        { grep -v '^moat: trace' "$err"; grep '^moat: trace' "$err"; } | sed -e 's/^/  <- /' | clean
     elif [ -s "$out" ]; then
         # Exit 0 with a decision: the reason is what Claude Code records.
-        sed -e 's/.*"permissionDecisionReason":"\(moat: [a-z]*[^"]*\)".*/  <- \1/' "$out" | clean
+        python3 -I -c '
+import json, sys
+def find(v):
+    if isinstance(v, dict):
+        if "permissionDecisionReason" in v:
+            return v["permissionDecisionReason"]
+        for x in v.values():
+            r = find(x)
+            if r:
+                return r
+    return None
+print("  <- " + (find(json.load(sys.stdin)) or "(an answer without a reason)"))
+' <"$out" | clean
     elif [ "$rc" -eq 0 ]; then
         echo "  <- (no answer: Claude Code's own permission prompt decides, as without OpenMoat)"
     else
