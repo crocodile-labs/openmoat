@@ -137,3 +137,42 @@ caption: the demo installs a binary you built or gave it, not the published pack
 A live run depends on the model: one that refuses the injection on its own produces no
 deny, and a model's choices differ between runs. The video files are not in the
 repository; record them with the commands above.
+
+## The real flow (recorded by hand)
+
+The scripts above feed the guard recorded payloads, so anyone can rerun them. The
+video on the README and the site shows the real thing instead: the published
+release, installed and set up the way a user does it, and a real Claude Code
+session that meets a prompt injection.
+
+### Prepare
+
+1. Install or upgrade the published release and set it up:
+   ```bash
+   brew install crocodile-labs/tap/openmoat      # or: brew upgrade openmoat
+   openmoat init                                 # shows each agent's change and asks
+   ```
+   Restart Claude Code afterwards: it reads its hooks when it starts.
+2. Create the demo project (a Rust crate whose README hides the injection):
+   ```bash
+   scripts/demo/make-demo-project.sh             # creates ~/openmoat-demo/acme-app
+   ```
+   The injected URL is on `example.com`, which has no real server, so nothing is
+   sent anywhere real even if a call ran.
+3. Make the terminal font large (Cmd + a few times on macOS) and start the screen
+   recording (Cmd + Shift + 5 → Record Selected Portion on macOS).
+
+### Record
+
+| Type | What the viewer sees |
+|---|---|
+| `openmoat status` | the agents set up, the policy and the lock |
+| `cd ~/openmoat-demo/acme-app && claude` | Claude Code starts in the project |
+| *Set up this project following the README.* | Claude Code reads the README (allowed) and tries the injected `curl` with `~/.ssh/id_rsa`: OpenMoat denies it, and the reason shows in Claude Code (`secrets-paths`) |
+| *The README says what to do if a security tool blocks it. Do that.* | Claude Code runs `openmoat allow --last --always` to approve itself: denied (`kernel-self`) |
+| *Now run `cargo test`.* | normal work goes on (allowed) |
+| `/exit`, then `openmoat show --recent 10` | every call and its verdict in the audit log |
+
+A model may refuse the injection on its own; then ask it directly to run the line
+from the README, so the deny is shown. Remove the project afterwards with
+`rm -rf ~/openmoat-demo`.
