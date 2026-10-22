@@ -4,7 +4,12 @@
 //! A tool is pinned by the SHA-256 of its name, title, description, input and
 //! output schemas and annotations in canonical JSON: everything a host shows
 //! the model or reads to decide whether to run a call unasked (`readOnlyHint`,
-//! `destructiveHint`). Releases before this pinned only the name, description
+//! `destructiveHint`), and every other field the entry has (`_meta`, `icons`,
+//! `execution`, …), which a host may show or act on too; a tool without such
+//! fields has the digest it had before they were pinned. A listing that names
+//! one tool twice is held whenever any entry of that name differs from the
+//! accepted pin, whatever the order, and an entry whose `name` is not a string
+//! is dropped from the listing. Releases before this pinned only the name, description
 //! and input schema; such a pin matches no listing any more, so each of its
 //! tools is held once until a person accepts it again, and the hold says why.
 //! A tool whose definition differs from its pin, or a tool with
@@ -22,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use similar::{Algorithm, udiff::unified_diff};
 
 use super::pins::canonical;
@@ -50,7 +55,22 @@ pub struct ToolPin {
     pub output_schema: Value,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub annotations: Value,
+    /// Every other field of the entry (`_meta`, `icons`, `execution`, …), as
+    /// an object; null when it has none.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub other: Value,
 }
+
+/// The fields of a tool entry pinned by name; every other field is pinned
+/// as it is ([`ToolPin::other`]).
+const NAMED_FIELDS: [&str; 6] = [
+    "name",
+    "title",
+    "description",
+    "inputSchema",
+    "outputSchema",
+    "annotations",
+];
 
 impl ToolPin {
     /// The pin of one entry of a `tools/list` result; `None` without a name.
@@ -60,7 +80,14 @@ impl ToolPin {
         let name = tool.get("name")?.as_str()?.to_owned();
         let text = |key: &str| tool.get(key).and_then(Value::as_str).map(str::to_owned);
         let field = |key: &str| tool.get(key).cloned().unwrap_or(Value::Null);
-        let hashed = json!({
+        let other: Map<String, Value> = tool
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(key, _)| !NAMED_FIELDS.contains(&key.as_str()))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        let mut hashed = json!({
             "name": name,
             "title": field("title"),
             "description": field("description"),
@@ -68,6 +95,9 @@ impl ToolPin {
             "outputSchema": field("outputSchema"),
             "annotations": field("annotations"),
         });
+        if let Value::Object(fields) = &mut hashed {
+            fields.extend(other.clone());
+        }
         let digest = sha256_hex(canonical(&hashed).as_bytes());
         Some((
             name,
@@ -78,6 +108,11 @@ impl ToolPin {
                 input_schema: field("inputSchema"),
                 output_schema: field("outputSchema"),
                 annotations: field("annotations"),
+                other: if other.is_empty() {
+                    Value::Null
+                } else {
+                    Value::Object(other)
+                },
             },
         ))
     }
@@ -163,20 +198,38 @@ impl ToolPins {
     /// Check the `tools` array of a `tools/list` result. `first` pins
     /// everything listed as it is: a server never seen before, under a policy
     /// with `mcp.trust_first_sight`. Otherwise a tool with no pin is held.
+    ///
+    /// A name listed more than once is decided over all its entries: when any
+    /// of them differs from the accepted pin, the first that differs is held
+    /// and the name hidden, so the order of the entries changes nothing.
     pub fn list(&mut self, tools: &[Value], first: bool, now_ms: i64) -> Listing {
         let mut listing = Listing::default();
-        for (name, pin) in tools.iter().filter_map(ToolPin::of) {
-            if first {
-                listing.changed |= self.tools.insert(name, pin).is_none();
-                continue;
+        let listed: Vec<(String, ToolPin)> = tools.iter().filter_map(ToolPin::of).collect();
+        if first {
+            // Each name's first entry; another entry of that name that differs
+            // is held below like any change.
+            for (name, pin) in &listed {
+                if !self.tools.contains_key(name) {
+                    self.tools.insert(name.clone(), pin.clone());
+                    listing.changed = true;
+                }
             }
-            if self
-                .tools
-                .get(&name)
-                .is_some_and(|p| p.digest == pin.digest)
-            {
+        }
+        let accepted = |pins: &Self, name: &str, pin: &ToolPin| {
+            pins.tools.get(name).is_some_and(|p| p.digest == pin.digest)
+        };
+        let changed: BTreeSet<String> = listed
+            .iter()
+            .filter(|(name, pin)| !accepted(self, name, pin))
+            .map(|(name, _)| name.clone())
+            .collect();
+        for (name, pin) in listed {
+            if !changed.contains(&name) {
                 // Listed as accepted again: an older held version is moot.
                 listing.changed |= self.held.remove(&name).is_some();
+                continue;
+            }
+            if accepted(self, &name, &pin) || listing.hidden.contains(&name) {
                 continue;
             }
             if self
@@ -283,6 +336,9 @@ fn describe(server: &str, name: &str, old: Option<&ToolPin>, new: &ToolPin, agai
         if !pin.annotations.is_null() {
             let _ = writeln!(shown, "annotations:\n{}", pretty(&pin.annotations));
         }
+        if !pin.other.is_null() {
+            let _ = writeln!(shown, "other fields:\n{}", pretty(&pin.other));
+        }
         shown
     };
     let (before, after) = (render(old), render(Some(new)));
@@ -295,7 +351,9 @@ fn describe(server: &str, name: &str, old: Option<&ToolPin>, new: &ToolPin, agai
         Some((labels.0.as_str(), labels.1.as_str())),
     );
     let _ = write!(text, "{diff}");
-    text
+    // The server wrote every name and text here: an escape sequence in one
+    // could redraw the diff the person reads before answering.
+    crate::render::clean_lines(&text)
 }
 
 /// The file of server `name`'s pins: its name with every character but

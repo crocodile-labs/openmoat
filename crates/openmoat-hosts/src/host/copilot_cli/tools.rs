@@ -35,10 +35,11 @@ const AGENT_STATE_TOOLS: &[&str] = &[
 ];
 
 /// The action of the `tool` call with arguments `args`, `None` for a tool that
-/// touches nothing OpenMoat governs. A tool Copilot does not document is read
-/// like an MCP tool: the hook payload does not tell an MCP tool from a built-in
-/// one, so every path and URL its arguments name is checked
-/// ([`crate::wire::mcp`]).
+/// touches nothing OpenMoat governs. A tool Copilot does not document is
+/// decided as an MCP tool of that name, since the hook payload does not tell an
+/// MCP tool from a built-in one, with its arguments read as an unknown tool's:
+/// every path and URL they name and every shell command under a command key
+/// is checked ([`crate::wire::unknown`]).
 pub(super) fn action(
     tool: &str,
     args: &Value,
@@ -46,15 +47,14 @@ pub(super) fn action(
 ) -> Result<Option<Action>, HostError> {
     let field = |name: &'static str| crate::input_str(args, tool, name);
     let action = match tool {
-        "bash" | "local_shell" => Action::Shell {
-            command: field("command")?,
-        },
-        // `write_bash` types `input` into a shell the agent started earlier.
-        "write_bash" => Action::Shell {
+        "bash" | "local_shell" => persistent(field("command")?),
+        // `write_bash` types `input` into a shell or a program the agent
+        // started earlier, which joins it to what was typed before.
+        "write_bash" => typed(Action::Shell {
             command: field("input")?,
-        },
+        }),
         "powershell" => powershell(field("command")?),
-        "write_powershell" => powershell(field("input")?),
+        "write_powershell" => typed(powershell(field("input")?)),
         "view" => Action::FsRead {
             path: field("path")?,
         },
@@ -79,9 +79,40 @@ pub(super) fn action(
             query: field("query")?,
         },
         name if AGENT_STATE_TOOLS.contains(&name) => return Ok(None),
-        other => crate::wire::mcp::action(other, args)?,
+        other => crate::wire::unknown::mcp(other, args)?,
     };
     Ok(Some(action))
+}
+
+/// Copilot's shells stay open between calls (`shellId`), and the hook payload
+/// names only the session's working directory: a command that leaves its
+/// shell where OpenMoat cannot know ([`openmoat_core::leaves_unknown_directory`])
+/// would have every later command checked against the wrong directory, so it
+/// asks. A `cd` to a written-out directory is checked as a read of it.
+fn persistent(command: String) -> Action {
+    let moves = openmoat_core::leaves_unknown_directory(&command);
+    let shell = Action::Shell { command };
+    if moves {
+        Action::unchecked(
+            shell,
+            "the command leaves Copilot's shell, which later commands reuse, in a directory \
+             OpenMoat cannot know",
+        )
+    } else {
+        shell
+    }
+}
+
+/// Keys typed into a shell or program that is already running: the shell
+/// joins them to what came before (an unfinished line, a continuation, a
+/// program reading its input), so what runs cannot be seen from one call. The
+/// typed text is still checked on its own, and the call asks at least.
+fn typed(input: Action) -> Action {
+    Action::unchecked(
+        input,
+        "input typed into a running shell joins what was typed before, which this call \
+         does not show",
+    )
 }
 
 fn powershell(command: String) -> Action {
@@ -153,11 +184,15 @@ fn search(tool: &str, args: &Value, cwd: Option<&str>) -> Result<Action, HostErr
         paths.extend(reached);
         paths.dedup();
     }
-    Ok(match paths.len() {
+    let action = match paths.len() {
         0 => crate::search_root(args, cwd),
         1 => Action::FsRead {
             path: paths.remove(0),
         },
         _ => Action::ReadFiles { paths },
+    };
+    Ok(match pattern {
+        Some(pattern) if tool == "glob" => crate::bounded(action, [pattern]),
+        _ => action,
     })
 }

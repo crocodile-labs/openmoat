@@ -34,7 +34,7 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde_json::Value;
 use thiserror::Error;
 
-use glob::{below, glob_reach};
+use glob::{below, bounded, glob_reach};
 
 pub use host::Host;
 
@@ -105,12 +105,13 @@ fn glob_roots(input: &Value, cwd: Option<&str>) -> Action {
         (None, _) => vec![root.to_owned()],
     };
     paths.extend(glob_reach(root, pattern));
-    match paths.len() {
+    let action = match paths.len() {
         1 => Action::FsRead {
             path: paths.remove(0),
         },
         _ => Action::ReadFiles { paths },
-    }
+    };
+    bounded(action, [pattern])
 }
 
 /// The static directory of an absolute or `~` glob pattern, as Claude Code

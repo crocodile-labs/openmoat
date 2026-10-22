@@ -17,7 +17,7 @@ use record::{Recorded, record};
 use crate::approvals::{self, Grants};
 use crate::cli::GuardArgs;
 use crate::context;
-use crate::environment::Snapshot;
+use crate::environment::{Snapshot, WithOwnBinary};
 use crate::exit::Code;
 use crate::guard_relay::{self, MAX_PAYLOAD_BYTES};
 use crate::hangs::{self, Phase};
@@ -300,7 +300,11 @@ fn evaluate(
     let snapshot = Snapshot::load_in(&home)?;
     hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;
-    let mut decision = compiled.decide_with(action, &snapshot, &FsPathResolver);
+    let programs = WithOwnBinary {
+        snapshot: &snapshot,
+        binary: &verified.lock.binary,
+    };
+    let mut decision = compiled.decide_with(action, &programs, &FsPathResolver);
     // A grant a person made with `moat allow` turns an `ask` or a `defer` into an
     // `allow` (Cursor's file tools ask for a defer, so they need it); a deny stays a deny.
     if matches!(decision.verdict, Verdict::Ask | Verdict::Defer)

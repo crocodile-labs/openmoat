@@ -23,7 +23,8 @@ use openmoat_core::{AtomicAction, Kind};
 
 use super::landlock::{self, INSIDE_GRANTS_ALLOWANCE, Rules, TCP_PORT_ALLOWANCE};
 use super::patterns::{
-    AGENT_CONFIG, has_glob, is_below, literal_tree, push_unique, runs_later_exclusion, split,
+    AGENT_CONFIG, folders_above, has_glob, is_below, literal_tree, push_unique,
+    runs_later_exclusion, split,
 };
 use super::{Grants, Report};
 
@@ -103,12 +104,13 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
         });
     }
     trees.sort_by_key(|m| depth(path_of(m)));
+    let real = project.first().map(String::as_str);
     let mut masks = Masks {
         checker: &checker,
+        project: real,
         mounts: Vec::new(),
         entries: 0,
     };
-    let real = project.first().map(String::as_str);
     if let Some(real) = real {
         masks.walk(real, false)?;
     }
@@ -158,25 +160,88 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<M
 }
 
 /// The masks `moat run`'s network namespace adds in the project (`project`,
-/// its resolved spelling first): each agent configuration file or directory
-/// ([`AGENT_CONFIG`]) that exists directly in it, bound read-only, so commands
-/// cannot write, remove or replace it. One created later, or one in a
-/// subdirectory, stays writable; Landlock grants the project whole.
-pub fn agent_config_masks(project: &[String]) -> Vec<Mount> {
+/// its resolved spelling first), for what exists directly in it:
+/// - each agent configuration file or directory ([`AGENT_CONFIG`]), bound
+///   read-only, so commands cannot write, remove or replace it;
+/// - each file a `**/` write deny of `ir` names below a folder (an agent's hook
+///   settings: `.claude/settings.json`, `.copilot/hooks`), read-only as under
+///   `--isolate`;
+/// - the folders above both (`.github`, `.pi`, `.claude`), each bound onto
+///   itself, so it cannot be renamed away with the file inside and back.
+///
+/// One created later, or one in a subdirectory, stays writable; Landlock
+/// grants the project whole.
+pub fn project_masks(ir: &Enforcement, project: &[String]) -> Result<Vec<Mount>> {
     let Some(real) = project.first() else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let mut masks = Vec::new();
-    for pattern in AGENT_CONFIG {
+    let checker = ir.checker()?;
+    let mut masks = Masks {
+        checker: &checker,
+        project: Some(real),
+        mounts: Vec::new(),
+        entries: 0,
+    };
+    for folder in agent_config_holders() {
+        let path = format!("{real}/{folder}");
+        if is_directory(&path) {
+            push_mount(&mut masks.mounts, Mount::ReadWrite(path));
+        }
+    }
+    for entry in AGENT_CONFIG {
+        let rest = entry.strip_prefix("**/").unwrap_or(entry);
+        let path = format!("{real}/{}", rest.strip_suffix("/**").unwrap_or(rest));
+        if std::fs::symlink_metadata(&path).is_ok() {
+            push_mount(&mut masks.mounts, Mount::ReadOnly(path));
+        }
+    }
+    for rest in nested_write_denials(ir) {
+        let mut paths = folders_above(&rest);
+        paths.push(rest);
+        for path in paths.iter().map(|p| format!("{real}/{p}")) {
+            if let Ok(meta) = std::fs::symlink_metadata(&path) {
+                masks.pin(&path, meta.is_dir());
+            }
+        }
+    }
+    let mut mounts = masks.mounts;
+    mounts.sort_by_key(|m| depth(path_of(m)));
+    Ok(respelled(&mounts, project))
+}
+
+/// The paths `**/` write denies of `ir` name below a folder, without a glob
+/// (`.claude/settings.json`, `.copilot/hooks`); not a lone name such as
+/// `.moat`, which in the project stays the hook's.
+fn nested_write_denials(ir: &Enforcement) -> Vec<String> {
+    let mut found = Vec::new();
+    for pattern in ir.fs.write.deny.iter().flat_map(|r| split(&r.patterns).0) {
         let Some(rest) = pattern.strip_prefix("**/") else {
             continue;
         };
-        let path = format!("{real}/{}", rest.strip_suffix("/**").unwrap_or(rest));
-        if std::fs::symlink_metadata(&path).is_ok() {
-            masks.push(Mount::ReadOnly(path));
+        let rest = rest.strip_suffix("/**").unwrap_or(rest);
+        if rest.contains('/') && !has_glob(rest) {
+            push_unique(&mut found, rest.to_owned());
         }
     }
-    respelled(&masks, project)
+    found
+}
+
+/// The folders above the agent configuration files, relative to where they
+/// are found (`.github`, `.pi`).
+fn agent_config_holders() -> impl Iterator<Item = String> {
+    AGENT_CONFIG.iter().flat_map(|entry| folders_above(entry))
+}
+
+/// A directory, not a link to one.
+fn is_directory(path: &str) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir())
+}
+
+/// Append `mount` unless the same path is already mounted.
+fn push_mount(mounts: &mut Vec<Mount>, mount: Mount) {
+    if !mounts.iter().any(|m| path_of(m) == path_of(&mount)) {
+        mounts.push(mount);
+    }
 }
 
 /// The masks for the absolute paths deny rules name without a glob that exist
@@ -320,6 +385,8 @@ fn denials(access: &Access) -> impl Iterator<Item = &str> {
 
 struct Masks<'a> {
     checker: &'a Checker,
+    /// The project's resolved spelling, whose own agent folders are pinned.
+    project: Option<&'a str>,
     mounts: Vec<Mount>,
     entries: usize,
 }
@@ -355,17 +422,35 @@ impl Masks<'_> {
         if read_only_above {
             return dir;
         }
-        if below(Kind::FsWrite) {
-            self.mounts.push(Mount::ReadOnly(path.to_owned()));
+        self.pin(path, dir);
+        // A folder holding an agent's configuration (`.github`, `.pi`) directly
+        // in the project: renamed away and back, a file written inside it under
+        // the other name would be loaded. Not deeper, where packages bring
+        // their own `.github` into `node_modules`.
+        let holder = dir
+            && self
+                .project
+                .is_some_and(|root| agent_config_holders().any(|f| path == format!("{root}/{f}")));
+        if holder {
+            push_mount(&mut self.mounts, Mount::ReadWrite(path.to_owned()));
+        }
+        dir
+    }
+
+    /// Mask `path` as the write rules say: a directory below which writing is
+    /// denied read-only, a denied file read-only and a denied directory node
+    /// bound onto itself, so it cannot be renamed or removed.
+    fn pin(&mut self, path: &str, dir: bool) {
+        if dir && self.denied_below(path) {
+            push_mount(&mut self.mounts, Mount::ReadOnly(path.to_owned()));
         } else if self.denied(Kind::FsWrite, path) {
             let pin = if dir {
                 Mount::ReadWrite
             } else {
                 Mount::ReadOnly
             };
-            self.mounts.push(pin(path.to_owned()));
+            push_mount(&mut self.mounts, pin(path.to_owned()));
         }
-        dir
     }
 
     /// Classify every entry below `dir`, symlinks not followed.

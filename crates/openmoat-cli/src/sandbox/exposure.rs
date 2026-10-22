@@ -181,8 +181,9 @@ pub fn kernel_self_refusal(held: &[(String, String)], why: &str) -> Option<Strin
          OpenMoat's state and the agents' hook settings). Here {why}, so nothing can hide them \
          inside the granted directory and Landlock alone cannot deny there: `openmoat run` \
          refuses to start. Install bubblewrap (`apt install bubblewrap`) and allow \
-         unprivileged user namespaces, or grant a narrower path that holds none of them \
-         (such as the agent's session or cache directory)",
+         unprivileged user namespaces, or grant only paths inside the project: outside it \
+         every directory can hold another repository's hook settings, which the policy \
+         protects at any depth",
         flags.join(" "),
         paths.join(", ")
     ))

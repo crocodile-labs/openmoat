@@ -74,13 +74,14 @@ fn the_filter_refuses_terminal_input_and_allows_other_terminal_calls() {
 }
 
 /// Asks for the session keyring's id, makes new user, network and no
-/// namespaces, calls `clone3()` without arguments, then starts a thread and
+/// namespaces, calls `clone3()` without arguments and `setns()` on no file
+/// (`EBADF` when it is not refused), then starts a thread and
 /// forks a child that exits 7. Prints each call's errno (0 when it worked);
 /// the syscall numbers come in as arguments, as they differ by architecture.
 const NAMESPACE_PROBE: &str = r#"
 import ctypes, os, sys, threading
 libc = ctypes.CDLL(None, use_errno=True)
-keyctl, unshare, clone3 = (int(a) for a in sys.argv[1:4])
+keyctl, unshare, clone3, setns = (int(a) for a in sys.argv[1:5])
 def call(name, nr, *args):
     ctypes.set_errno(0)
     r = libc.syscall(nr, *[ctypes.c_long(a) for a in args])
@@ -90,6 +91,7 @@ call("newuser", unshare, 0x10000000)
 call("newnet", unshare, 0x40000000)
 call("none", unshare, 0)
 call("clone3", clone3, 0, 0)
+call("setns", setns, -1, 0)
 t = threading.Thread(target=lambda: None)
 t.start()
 t.join()
@@ -100,14 +102,21 @@ if pid == 0:
 print("fork=%d" % os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
 "#;
 
-/// The real filters, on a thread of its own: the kernel keyrings and new
-/// namespaces are refused with `EPERM`, `clone3()` answers `ENOSYS`, and the
+/// The real filters, on a thread of its own: the kernel keyrings, new
+/// namespaces and joining one are refused with `EPERM`, `clone3()` answers
+/// `ENOSYS`, and the
 /// C library's threads and `fork()`, which fall back to `clone()`, still work,
 /// as does starting the probe itself.
 #[test]
 fn the_filters_refuse_keyrings_and_new_namespaces_and_threads_still_start() {
     let filters = seccomp_filters().expect("the filters compile");
-    let numbers = [libc::SYS_keyctl, libc::SYS_unshare, libc::SYS_clone3].map(|nr| nr.to_string());
+    let numbers = [
+        libc::SYS_keyctl,
+        libc::SYS_unshare,
+        libc::SYS_clone3,
+        libc::SYS_setns,
+    ]
+    .map(|nr| nr.to_string());
     let out = std::thread::spawn(move || {
         for filter in &filters {
             seccompiler::apply_filter(filter).expect("the filter applies");
@@ -131,6 +140,7 @@ fn the_filters_refuse_keyrings_and_new_namespaces_and_threads_still_start() {
         format!("newnet={}", libc::EPERM),
         "none=0".to_owned(),
         format!("clone3={}", libc::ENOSYS),
+        format!("setns={}", libc::EPERM),
         "thread=ok".to_owned(),
         "fork=7".to_owned(),
     ];

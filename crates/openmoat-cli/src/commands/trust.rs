@@ -217,4 +217,20 @@ mod tests {
         );
         assert!(shown.contains("could not be read"), "{shown}");
     }
+
+    /// A right-to-left override in a rule would show it in another order than
+    /// it is read: the question shows `?` in its place.
+    #[test]
+    fn the_question_shows_no_bidirectional_characters() {
+        let yaml =
+            "version: 1\nallow:\n  - id: deploy\n    shell: ['make \u{202E}yolped\u{202C} *']\n";
+        let mut out = Vec::new();
+        show(&mut out, &found(yaml), None, None).unwrap();
+        let shown = String::from_utf8(out).unwrap();
+        assert!(!shown.contains('\u{202E}'), "{shown:?}");
+        assert!(
+            shown.contains("allow repo:deploy: shell: make ?yolped? *"),
+            "{shown}"
+        );
+    }
 }

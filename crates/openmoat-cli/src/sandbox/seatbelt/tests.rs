@@ -1,20 +1,30 @@
 use openmoat_core::{DEFAULT_POLICY, EvalContext, Policy};
 
+use super::filter::regex;
 use super::*;
 use crate::sandbox::assert_golden;
 
-fn generated(yaml: &str, proxy_port: Option<u16>) -> Generated {
-    let grants = Grants {
+fn session(proxy_port: Option<u16>) -> Grants {
+    Grants {
         proxy_port,
         tmpdir: Some("/private/var/folders/xy/T".into()),
         program: Some("/Users/me/.local/share/agent/1.0/agent".into()),
         writes: vec!["/Users/me/.agent".into()],
         terminals: vec!["/dev/ttys003".into()],
-    };
-    generated_with(yaml, &grants)
+    }
+}
+
+/// On a case-sensitive disk, where every filter is written as the policy
+/// spells it.
+fn generated(yaml: &str, proxy_port: Option<u16>) -> Generated {
+    generated_on(yaml, &session(proxy_port), false)
 }
 
 fn generated_with(yaml: &str, grants: &Grants) -> Generated {
+    generated_on(yaml, grants, false)
+}
+
+fn generated_on(yaml: &str, grants: &Grants, case_insensitive_paths: bool) -> Generated {
     let policy = Policy::parse(yaml).expect("test policy lints");
     let ctx = EvalContext {
         home: "/Users/me".into(),
@@ -23,7 +33,7 @@ fn generated_with(yaml: &str, grants: &Grants) -> Generated {
         real_project: None,
         moved_dirs: Vec::new(),
         cwd: "/Users/me/proj".into(),
-        case_insensitive_paths: true,
+        case_insensitive_paths,
     };
     generate(
         &openmoat_core::ir::lower(&policy, &ctx).expect("lowers"),
@@ -31,10 +41,11 @@ fn generated_with(yaml: &str, grants: &Grants) -> Generated {
     )
 }
 
-/// The profile and report for the default policy, as a reviewer reads them.
+/// The profile and report for the default policy on macOS's usual
+/// case-insensitive disk, as a reviewer reads them.
 #[test]
 fn default_policy_matches_the_golden_profile() {
-    let out = generated(DEFAULT_POLICY, Some(18080));
+    let out = generated_on(DEFAULT_POLICY, &session(Some(18080)), true);
     let losses = out
         .report
         .losses
@@ -117,7 +128,6 @@ fn losses_and_allowances_are_listed() {
         "fs.write seatbelt.platform",
         "fs.read sandbox.read_roots",
         "fs.write seatbelt.tmpdir",
-        "fs.read seatbelt.case",
         "fs.read seatbelt.program",
         "fs.write seatbelt.write",
         "fs.write seatbelt.terminal",
@@ -171,12 +181,35 @@ fn globs_become_anchored_regexes_with_the_engine_semantics() {
         ("/x/a**b", "^/x/a[^/]*[^/]*b$"),
         (r"/x/\*", r"^/x/\*$"),
     ] {
-        assert_eq!(regex(glob), re, "{glob}");
+        assert_eq!(regex(glob, Case::Exact), re, "{glob}");
     }
-    assert_eq!(filter("/h/.ssh/**"), "(subpath \"/h/.ssh\")");
-    assert_eq!(filter("/h/.netrc"), "(literal \"/h/.netrc\")");
-    assert_eq!(filter("/h/a\"b"), r#"(literal "/h/a\"b")"#);
-    assert_eq!(filter("**/.env"), r#"(regex "^(.*/)?\\.env$")"#);
+    assert_eq!(filter("/h/.ssh/**", Case::Exact), "(subpath \"/h/.ssh\")");
+    assert_eq!(filter("/h/.netrc", Case::Exact), "(literal \"/h/.netrc\")");
+    assert_eq!(filter("/h/a\"b", Case::Exact), r#"(literal "/h/a\"b")"#);
+    assert_eq!(
+        filter("**/.env", Case::Exact),
+        r#"(regex "^(.*/)?\\.env$")"#
+    );
+}
+
+/// Folded, every letter matches in either case, literal and subtree filters
+/// included, and a character class gets its members in the other case too.
+#[test]
+fn folded_globs_match_letters_in_either_case() {
+    for (glob, re) in [
+        ("/h/.ssh/**", r"^/[hH]/\.[sS][sS][hH](/.*)?$"),
+        ("/h/.netrc", r"^/[hH]/\.[nN][eE][tT][rR][cC]$"),
+        ("**/.env*", r"^(.*/)?\.[eE][nN][vV][^/]*$"),
+        ("/x/[a-c1]", "^/[xX]/[a-c1A-C1]$"),
+        ("/x/[!a]", "^/[xX]/[^/aA]$"),
+        ("/x/[0-9]", "^/[xX]/[0-9]$"),
+    ] {
+        assert_eq!(regex(glob, Case::Folded), re, "{glob}");
+    }
+    assert_eq!(
+        filter("/h/.ssh/**", Case::Folded),
+        r#"(regex "^/[hH]/\\.[sS][sS][hH](/.*)?$")"#
+    );
 }
 
 /// `**` inside braces is recursive in the engine, so each brace alternative
@@ -219,6 +252,7 @@ fn braces_are_expanded_before_translating() {
         "deny keys",
         "deny file-read-data",
         &["/h/{.ssh/**,.aws/**}".to_owned()],
+        Case::Exact,
     );
     assert!(profile.contains("(subpath \"/h/.ssh\")"), "{profile}");
     assert!(profile.contains("(subpath \"/h/.aws\")"), "{profile}");
@@ -329,4 +363,92 @@ fn another_agents_directory_cannot_be_moved_or_replaced() {
         let node = format!("(regex \"^(.*/)?\\\\.{name}$\")");
         assert!(denied.contains(&node), "{node}: {profile}");
     }
+}
+
+/// Whether a `(regex …)` filter of the rule that `comment` starts matches
+/// `path`, as Seatbelt reads the profile.
+fn rule_matches(profile: &str, comment: &str, path: &str) -> bool {
+    let start = profile.find(comment).expect("the rule is there");
+    let body = &profile[start + comment.len()..];
+    let body = &body[..body.find("\n; ").unwrap_or(body.len())];
+    body.split("(regex \"").skip(1).any(|rest| {
+        let quoted = &rest[..rest.find("\")").expect("a closed regex")];
+        let re = regex::Regex::new(&quoted.replace("\\\\", "\\")).expect("a valid regex");
+        re.is_match(path)
+    })
+}
+
+/// The folders above an agent's configuration directly in the project cannot
+/// be created, renamed or removed: moving `.github` away and back would carry
+/// a hook written under another name past the deny. Files inside them that
+/// are not agent configuration stay as the rules say, and so does a nested
+/// `.github`, which packages bring into `node_modules`.
+#[test]
+fn the_folders_above_agent_configuration_cannot_be_moved() {
+    let profile = generated(DEFAULT_POLICY, None).profile;
+    let rule = "; deny seatbelt.agent-config (fs.write)\n";
+    for folder in [
+        ".github",
+        ".pi",
+        ".openclaw",
+        ".claude",
+        ".cursor",
+        ".codex",
+    ] {
+        let path = format!("/Users/me/proj/{folder}");
+        assert!(
+            profile.contains(&format!("(literal \"{path}\")")),
+            "{path}: {profile}"
+        );
+    }
+    let open = [
+        ".github/workflows/ci.yml",
+        ".github/workflows",
+        ".pi2",
+        "src/a.rs",
+        "node_modules/qs/.github",
+    ];
+    for open in open {
+        let path = format!("/Users/me/proj/{open}");
+        assert!(!rule_matches(&profile, rule, &path), "{path}: {profile}");
+    }
+}
+
+/// On a case-insensitive disk a file or folder created in another case than
+/// a deny names is still denied: `.MCP.JSON` is the `.mcp.json` the agent
+/// loads, `.CLAUDE` its `.claude`. The exceptions of a deny stay as written.
+#[test]
+fn denies_match_either_case_on_a_case_insensitive_disk() {
+    let profile = generated_on(DEFAULT_POLICY, &session(None), true).profile;
+    let agent = "; deny seatbelt.agent-config (fs.write)\n";
+    for path in [
+        ".MCP.JSON",
+        ".GitHub",
+        ".Claude/Hooks/x.sh",
+        "a/.PI/settings.json",
+    ] {
+        let path = format!("/Users/me/proj/{path}");
+        assert!(rule_matches(&profile, agent, &path), "{path}: {profile}");
+    }
+    let kernel = "; deny kernel-self (fs.write)\n";
+    for path in [
+        "/Users/me/proj/.CLAUDE",
+        "/Users/me/.Claude/Settings.JSON",
+        "/Users/Me/.MOAT/x",
+    ] {
+        assert!(rule_matches(&profile, kernel, path), "{path}: {profile}");
+    }
+    assert!(
+        !profile.contains("(subpath \"/Users/me/.ssh\")"),
+        "a read deny is folded too: {profile}"
+    );
+    assert!(
+        profile.contains("(require-not (require-any\n      (subpath \"/Users/me/proj/.git\")"),
+        "an allow's exceptions stay as written"
+    );
+    let exact = generated(DEFAULT_POLICY, None).profile;
+    assert!(
+        !rule_matches(&exact, agent, "/Users/me/proj/.MCP.JSON"),
+        "{exact}"
+    );
 }

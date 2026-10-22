@@ -134,7 +134,7 @@ fn signer_lines_are_limited_to_the_policy_namespace() {
     let line = signer_line("alice@example.com", "ssh-ed25519 AAAAC3Nza+/= alice\n").unwrap();
     assert_eq!(
         line,
-        "alice@example.com namespaces=\"openmoat-policy,openmoat-pack\" ssh-ed25519 AAAAC3Nza+/="
+        "alice@example.com namespaces=\"openmoat-repo-policy,openmoat-pack\" ssh-ed25519 AAAAC3Nza+/="
     );
     for bad in ["", "a b", "a\"b", "x,y"] {
         assert!(signer_line(bad, "ssh-ed25519 AAAA").is_err(), "{bad:?}");
@@ -177,15 +177,51 @@ fn a_pack_signature_is_no_repository_policy_signature_and_the_reverse() {
     assert_eq!(as_pack, None, "a repository policy's signature over a pack");
 }
 
+/// A pack signed by an earlier release, in the namespace repository policies
+/// shared then, copied into a project with its signature: no longer a signed
+/// repository policy, whichever allowed-signers line trusts its key.
 #[test]
-fn a_key_trusted_by_an_earlier_release_still_verifies_repository_policies_only() {
+fn a_signature_in_the_earlier_shared_namespace_verifies_as_nothing() {
     let Some(program) = program() else { return };
     let dir = tempfile::tempdir().unwrap();
     let alice = keypair(&program, dir.path(), "alice");
     let public = fs::read_to_string(alice.with_extension("pub")).unwrap();
     let words: Vec<&str> = public.split_whitespace().collect();
     let earlier = format!(
-        "alice@x namespaces=\"{NAMESPACE}\" {} {}\n",
+        "alice@x namespaces=\"{EARLIER_NAMESPACE}\" {} {}\n",
+        words[0], words[1]
+    );
+    let now = signer_line("alice@x", &public).unwrap();
+    let file = dir.path().join("policy.yaml");
+    fs::write(
+        &file,
+        "version: 1\nallow:\n  - id: a\n    shell: ['make *']\n",
+    )
+    .unwrap();
+    let data = fs::read(&file).unwrap();
+    let old_sig = sign(&program, &alice, EARLIER_NAMESPACE, &file);
+    let signers = dir.path().join("allowed_signers");
+    for line in [&earlier, &format!("{now}\n")] {
+        fs::write(&signers, line).unwrap();
+        for what in [Signed::RepoPolicy, Signed::Pack] {
+            assert_eq!(
+                verify(&program, &signers, &data, &old_sig, what).unwrap(),
+                None,
+                "{line}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_key_trusted_by_an_earlier_release_is_trusted_again_by_trust_key() {
+    let Some(program) = program() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let alice = keypair(&program, dir.path(), "alice");
+    let public = fs::read_to_string(alice.with_extension("pub")).unwrap();
+    let words: Vec<&str> = public.split_whitespace().collect();
+    let earlier = format!(
+        "alice@x namespaces=\"{EARLIER_NAMESPACE}\" {} {}\n",
         words[0], words[1]
     );
     let signers = dir.path().join("allowed_signers");
@@ -194,19 +230,26 @@ fn a_key_trusted_by_an_earlier_release_still_verifies_repository_policies_only()
     fs::write(&file, "version: 1\n").unwrap();
     let data = fs::read(&file).unwrap();
     let repo_sig = sign(&program, &alice, NAMESPACE, &file);
-    let found = verify(&program, &signers, &data, &repo_sig, Signed::RepoPolicy).unwrap();
-    assert_eq!(found.as_deref(), Some("alice@x"));
-    fs::remove_file(&repo_sig).unwrap();
-    let pack_sig = sign(&program, &alice, PACK_NAMESPACE, &file);
+    assert_eq!(
+        verify(&program, &signers, &data, &repo_sig, Signed::RepoPolicy).unwrap(),
+        None,
+        "the earlier line does not trust the key for the new namespace"
+    );
+    // ssh-keygen does not replace an existing signature file: sign a copy.
+    let pack = dir.path().join("pack.yaml");
+    fs::write(&pack, &data).unwrap();
+    let pack_sig = sign(&program, &alice, PACK_NAMESPACE, &pack);
     assert_eq!(
         verify(&program, &signers, &data, &pack_sig, Signed::Pack).unwrap(),
         None
     );
 
-    // `moat policy trust-key` again replaces that line, and the pack verifies.
+    // `moat policy trust-key` again replaces that line, and both verify.
     let now = signer_line("alice@x", &public).unwrap();
     assert!(same_signer(earlier.trim(), &now));
     fs::write(&signers, format!("{now}\n")).unwrap();
+    let found = verify(&program, &signers, &data, &repo_sig, Signed::RepoPolicy).unwrap();
+    assert_eq!(found.as_deref(), Some("alice@x"));
     let found = verify(&program, &signers, &data, &pack_sig, Signed::Pack).unwrap();
     assert_eq!(found.as_deref(), Some("alice@x"));
     assert!(!same_signer(

@@ -23,7 +23,9 @@ command ends; the file on disk does not change (`contained` in
 default `build-credentials` (`~/.m2/settings.xml`, `~/.gradle/gradle.properties`), is
 left out of every generated sandbox, so `mvn` and `gradle` can read their settings
 wherever the sandbox lets commands read `~/.m2` or `~/.gradle`; the hook still denies
-the agent's own access. `openmoat sandbox show` lists these groups and their paths as
+the agent's own access. The default `agent-folders` (renaming a `.github` or
+`.github/copilot` folder) is one too, so a clone or an install inside the sandbox can
+still create a `.github`. `openmoat sandbox show` lists these groups and their paths as
 decided by the hook only, not in the OS sandbox (`hook_only` in `--format json`).
 
 - **Claude Code** (`settings.json`): the `sandbox` block (`enabled`,
@@ -162,13 +164,15 @@ broker and `openmoat proxy`. A secret whose host is not in `net` allow is skippe
 loss, as is a `keychain` source (Claude Code's broker reads env and file sources only);
 both still work through `openmoat proxy`. On macOS, Claude Code denies a `file` source
 instead of masking it, so the tool that reads the file does not authenticate inside
-the sandbox; `openmoat sandbox show` lists this and the HTTPS allowance. Claude Code's
-`allowPlaintextInject` is block-scoped: setting it `true` lifts the HTTPS requirement
-for every mask entry in the `credentials` block. When a policy mixes `plain_http: true`
-and `plain_http: false` secrets, OpenMoat therefore drops the `plain_http: true` entries
-from Claude Code's mask block (lifting TLS for them would widen the others, which
-ADR-019 forbids); they still work through `openmoat proxy`, whose broker is per-secret,
-and `openmoat sandbox show` names each dropped id (#401). Its text output starts with a
+the sandbox; `openmoat sandbox show` lists this and the HTTPS allowance. A
+`plain_http: true` secret goes to plain-HTTP requests on one port only (`port`, or
+80), and Claude Code's broker cannot bind a secret to a port: its
+`allowPlaintextInject` injects on every port of the host, and it is block-scoped, so
+setting it `true` would also lift the HTTPS requirement for every other mask entry in
+the `credentials` block. OpenMoat therefore leaves every `plain_http: true` secret out
+of Claude Code's mask block and never sets `allowPlaintextInject`; those secrets still
+work through `openmoat proxy`, whose broker is per-secret and per-port, and `openmoat
+sandbox show` names each one left out with its port (#401). Its text output starts with a
 `Secrets` list: one line per secret with its host, header and source, never the value,
 and whether Claude Code masks it or why it skips it. `openmoat doctor` prints the same per
 secret from the settings file on disk: masked (the `mask` entry for its host and
@@ -180,8 +184,8 @@ proxy then terminates TLS for sandboxed commands
 ([sandboxing](https://code.claude.com/docs/en/sandboxing#mask-credentials)). Claude
 Code honours `mask` entries and `tlsTerminate` only from user, managed or `--settings`
 settings, which is where OpenMoat writes them. `openmoat doctor` also flags
-`credentials.allowPlaintextInject: true` in the file when the policy did not ask for it,
-since it lets every masked secret go to a plain-HTTP host.
+`credentials.allowPlaintextInject: true` set by hand in a block that holds the policy's
+masked secrets, since it lets every one of them go to a plain-HTTP host.
 
 Other settings and comments are kept, and each file is copied to
 `<file>.moat-sandbox-backup` before moat changes it. `openmoat sandbox show` prints what
@@ -276,9 +280,9 @@ in `~/.claude.json`, plugins in `~/.claude/plugins/`), and in this tier every co
 agent runs shares that grant. The hook asks before the agent's own tools write one
 (`runs-later`); a script it runs is not asked. Where the agent's own sandbox is
 available, the Standard tier keeps its commands out of the home altogether. On Linux
-without a network namespace (below) `openmoat run` refuses `--write ~/.claude`, which
-holds `settings.json`: grant narrower paths there (`--write ~/.claude/projects`, and so
-on) or install bubblewrap.
+without a network namespace (below) `openmoat run` refuses every `--write` path
+outside the project, `~/.claude` included, which holds `settings.json`: install
+bubblewrap.
 
 - **macOS 13 or later:** a Seatbelt profile, started with `/usr/bin/sandbox-exec`.
   On macOS 12 and earlier `sandbox-exec` cannot read the profile's `TIOCSTI` deny,
@@ -295,10 +299,11 @@ on) or install bubblewrap.
   sockets (no UDP, Unix sockets or `ptrace`), no TCP Fast Open send
   (`MSG_FASTOPEN`, which connects without the `connect()` Landlock checks), refuses
   the kernel keyrings (`keyctl`,
-  `add_key`, `request_key`) and refuses new namespaces (`unshare`, and `clone` with a
+  `add_key`, `request_key`), refuses new namespaces (`unshare`, and `clone` with a
   namespace flag; `clone3`, whose flags a filter cannot read, answers `ENOSYS`, so the
-  C library falls back to `clone`). Containers, bubblewrap and Chromium's own sandbox
-  cannot start inside. Windows refuses.
+  C library falls back to `clone`) and joining an existing one (`setns`, so `nsenter`
+  and a container runtime's `exec` fail). Containers, bubblewrap and Chromium's own
+  sandbox cannot start inside. Windows refuses.
 - **The network on Linux.** Landlock restricts TCP connections by port only, and a
   seccomp filter cannot read the address `connect()` is given (it gets a pointer), so
   those two alone would let a command reach any host on the proxy's port and go around
@@ -324,22 +329,33 @@ on) or install bubblewrap.
   stays unreadable and, with `--write ~/.claude`, `~/.claude/settings.json` unwritable.
   Without a namespace these stay open, and `openmoat run` names them on every start;
   a `--write` path that holds what `kernel-self` protects (OpenMoat's state, an
-  agent's hook settings, existing or not) refuses to start instead (exit 64), naming
-  the paths: install bubblewrap and allow unprivileged user namespaces, or grant a
-  narrower path.
+  agent's hook settings, existing or not) or lies inside a tree it protects whole
+  (`~/.codex/sessions`) refuses to start instead (exit 64), naming the paths. So does
+  every `--write` path outside the project: `kernel-self` protects hook settings at
+  any depth (`**/.claude/settings.json`), and any directory can hold another
+  repository. Install bubblewrap and allow unprivileged user namespaces, or grant
+  only paths inside the project.
 - **Agents' configuration in the project.** Commands may not write the files an agent
   loads as its own hooks, MCP servers or extensions in its next session: a project's
   `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`,
   `.github/hooks/`, `.github/mcp.json`, `.openclaw/extensions/`, `.pi/extensions/`,
   `.pi/mcp.json` and `.pi/settings.json`, at any depth. On macOS Seatbelt denies them
-  after every grant, so this holds inside a `--write` path too, and also for a write
-  the hook asked about and the person allowed: change one outside `openmoat run`. CI
-  files and commit-hook managers' files (`.github/workflows/`, `.husky/`, …) stay
-  writable, since installs write them; the hook asks before the agent's own tools write
-  one (`runs-later`). On Linux, where the agent gets a network namespace, each of
-  them that exists directly in the project when the agent starts is bound read-only
-  for the session; one created later or in a subdirectory, and all of them without a
-  namespace, stay writable, since Landlock grants the project whole.
+  after every grant, in either case on a case-insensitive disk (`.MCP.json` too), so
+  this holds inside a `--write` path too, and also for a write the hook asked about
+  and the person allowed: change one outside `openmoat run`. The folders that hold
+  them directly in the project (`.github`, `.pi`, `.openclaw`, besides `.claude`,
+  `.codex` and `.cursor`) cannot be created, renamed or removed there either, since a
+  folder renamed away and back would carry a hook written under the other name; create
+  a missing `.github` outside `openmoat run`. CI files and commit-hook managers' files
+  (`.github/workflows/`, `.husky/`, …) stay writable, since installs write them; the
+  hook asks before the agent's own tools write one (`runs-later`). On Linux, where the
+  agent gets a network namespace, each of them that exists directly in the project
+  when the agent starts is bound read-only for the session, as are the agents' hook
+  settings there (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`,
+  `.gemini/settings.json`, `.github/copilot/settings.json`, `.copilot/hooks/`), and
+  each folder holding them is bound onto itself so it cannot be renamed; `--isolate`
+  pins those folders too. One created later or in a subdirectory, and all of them
+  without a namespace, stay writable, since Landlock grants the project whole.
 - **OpenMoat's state directory.** For the same reason, `openmoat run` on Linux refuses to
   start when a tree it grants (the project, a read root, a `--write` path, the temp
   directory) holds the state directory (`MOAT_HOME`, default `~/.moat`) or lies inside

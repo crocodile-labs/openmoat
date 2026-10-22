@@ -16,8 +16,6 @@ pub(super) struct Mapped {
     pub action: Option<Action>,
     /// The name to record when it is not Gemini CLI's (`mcp__<server>__<tool>`).
     pub tool: Option<String>,
-    /// The directory a shell command runs in when it names one (`dir_path`).
-    pub cwd: Option<String>,
 }
 
 impl Mapped {
@@ -25,7 +23,6 @@ impl Mapped {
         Self {
             action: Some(action),
             tool: None,
-            cwd: None,
         }
     }
 }
@@ -85,25 +82,21 @@ pub(super) fn map_on(
         return Ok(Mapped {
             action: Some(action),
             tool: Some(name),
-            cwd: None,
         });
     }
     let action = match tool {
         "run_shell_command" => {
             let command = field("command")?;
-            let action = if powershell {
+            if powershell {
                 Action::ForeignShell {
                     shell: "PowerShell".to_owned(),
                     command,
                 }
             } else {
-                Action::Shell { command }
-            };
-            return Ok(Mapped {
-                action: Some(action),
-                tool: None,
-                cwd: dir_path(input, cwd),
-            });
+                Action::Shell {
+                    command: in_dir(input, command),
+                }
+            }
         }
         "read_file" => Action::FsRead {
             path: field("file_path")?,
@@ -116,7 +109,7 @@ pub(super) fn map_on(
         },
         "glob" => glob(input, cwd),
         // `search_file_content` is the legacy name of `grep_search`.
-        "grep_search" | "search_file_content" => search_root(input, cwd),
+        "grep_search" | "search_file_content" => grep(input, cwd),
         "read_many_files" => read_many(tool, input, cwd)?,
         "web_fetch" => fetch(tool, &field("prompt")?)?,
         "google_web_search" => Action::WebSearch {
@@ -127,17 +120,77 @@ pub(super) fn map_on(
             return Ok(Mapped {
                 action: None,
                 tool: None,
-                cwd: None,
             });
         }
-        // A custom subagent, a discovered tool or an MCP tool Gemini CLI sent
-        // no context for: what it touches is unknown.
-        _ => Action::UnknownTool {
-            host: Host::GeminiCli.id().to_owned(),
-            tool: tool.to_owned(),
-        },
+        // A custom subagent, a discovered tool, a browser subagent's tool or
+        // an MCP tool Gemini CLI sent no context for: what it touches is
+        // unknown, so what its arguments name is checked.
+        _ => crate::wire::unknown::action(Host::GeminiCli, tool, input)?,
     };
     Ok(Mapped::action(action))
+}
+
+/// `command` as it runs in `dir_path`, when the call names one: after a `cd`
+/// there, so relative paths in it resolve where Gemini CLI runs it while the
+/// project stays the session's (the guard takes it from the payload's `cwd`).
+/// A model-chosen directory never decides which directory is the project.
+/// The path is quoted whole: Gemini CLI resolves it against the working
+/// directory with Node's `path.resolve` (`packages/core/src/tools/shell.ts`),
+/// which expands no `~`.
+fn in_dir(input: &Value, command: String) -> String {
+    match input
+        .get("dir_path")
+        .and_then(Value::as_str)
+        .filter(|d| !d.is_empty())
+    {
+        Some(dir) => format!("cd '{}' && {command}", dir.replace('\'', r"'\''")),
+        None => command,
+    }
+}
+
+/// Why a search with no `dir_path` is not all checked: Gemini CLI then
+/// searches every directory of its workspace (`workspaceContext.getDirectories()`
+/// in `packages/core/src/tools/grep.ts`, `glob.ts` and, which has no
+/// `dir_path`, `read-many-files.ts`, 0.65.0), and the hook payload names only
+/// the working directory.
+const EVERY_WORKSPACE_DIRECTORY: &str = "without a `dir_path` Gemini CLI searches every \
+     workspace directory, and the hook names only the working directory";
+
+/// A search with no `dir_path`, which reads the working directory and every
+/// other workspace directory the payload does not name: at least an `ask`.
+fn workspace_wide(input: &Value, action: Action) -> Action {
+    let named = input
+        .get("dir_path")
+        .and_then(Value::as_str)
+        .is_some_and(|d| !d.is_empty());
+    if named {
+        action
+    } else {
+        Action::unchecked(action, EVERY_WORKSPACE_DIRECTORY)
+    }
+}
+
+/// `grep_search` reads `dir_path` (else the workspace) for files matching its
+/// `include_pattern` (`include` before 0.65): where that glob climbs or an
+/// absolute one points is read too.
+fn grep(input: &Value, cwd: Option<&str>) -> Action {
+    let root = search_dir(input, cwd);
+    let include = ["include_pattern", "include"]
+        .into_iter()
+        .filter_map(|key| input.get(key).and_then(Value::as_str))
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>();
+    let mut paths = vec![root.clone()];
+    for pattern in &include {
+        paths.extend(crate::pattern_dir(pattern));
+        paths.extend(crate::glob_reach(&root, pattern));
+    }
+    paths.dedup();
+    let action = match paths.len() {
+        1 => Action::FsRead { path: root },
+        _ => Action::ReadFiles { paths },
+    };
+    workspace_wide(input, crate::bounded(action, include))
 }
 
 /// `dir_path` when set, else the working directory; relative to the latter.
@@ -165,12 +218,6 @@ fn search_dir(input: &Value, cwd: Option<&str>) -> String {
         .unwrap_or_else(|| ".".to_owned())
 }
 
-fn search_root(input: &Value, cwd: Option<&str>) -> Action {
-    Action::FsRead {
-        path: search_dir(input, cwd),
-    }
-}
-
 /// `glob` searches `dir_path` for `pattern`. The pattern's own directory is
 /// read too: an absolute one names it outright, and a relative one may climb
 /// out of the searched directory (`../..`).
@@ -196,10 +243,11 @@ fn glob(input: &Value, cwd: Option<&str>) -> Action {
     {
         paths.push(climbed);
     }
-    match paths.len() {
+    let action = match paths.len() {
         1 => Action::FsRead { path: root },
         _ => Action::ReadFiles { paths },
-    }
+    };
+    workspace_wide(input, crate::bounded(action, pattern))
 }
 
 /// `read_many_files` reads every path or glob in `include`, relative to the
@@ -223,7 +271,10 @@ fn read_many(tool: &str, input: &Value, cwd: Option<&str>) -> Result<Action, Hos
         // A `..` after a wildcard climbs out of the working directory too.
         paths.extend(crate::glob_reach(cwd.unwrap_or("."), pattern));
     }
-    Ok(Action::ReadFiles { paths })
+    let patterns = list.iter().filter_map(Value::as_str);
+    let action = crate::bounded(Action::ReadFiles { paths }, patterns);
+    // `read_many_files` takes no `dir_path`: it always reads every workspace directory.
+    Ok(Action::unchecked(action, EVERY_WORKSPACE_DIRECTORY))
 }
 
 /// The part of `pattern` before its first wildcard, cut back to a whole
@@ -301,8 +352,5 @@ fn mcp_resource(tool: &str, uri: &str) -> Result<Action, HostError> {
             problem: format!("`{uri}` is a file URI without an absolute path"),
         });
     }
-    Ok(Action::UnknownTool {
-        host: Host::GeminiCli.id().to_owned(),
-        tool: tool.to_owned(),
-    })
+    Ok(Action::unknown_tool(Host::GeminiCli.id(), tool))
 }

@@ -93,6 +93,50 @@ fn knowable(word: &Word) -> bool {
         && !word.text.contains(['$', '`', '*', '?', '['])
 }
 
+/// Whether `command`, run in a shell that stays open for later commands (an
+/// agent host's persistent shell session), may leave that shell in a directory
+/// that cannot be known from the command alone: a `cd` or `pushd` to a target
+/// that is not written out (`cd "$X"`, `cd -`), `popd`, or `eval`, `source` and
+/// `.`, which can run a `cd` of their own, outside a subshell. A later command
+/// in that shell would then be checked against the wrong directory. A command
+/// line that cannot be read counts as such a move. A `cd` to a written-out
+/// target is checked by the classifier itself, as a read of that directory.
+#[must_use]
+pub fn leaves_unknown_directory(command: &str) -> bool {
+    let Ok(tokens) = crate::lexer::lex(command) else {
+        return true;
+    };
+    let cwd = [Some("/".to_owned())];
+    let ctx = ShellContext {
+        home: "/",
+        cwd: &cwd,
+    };
+    let unknown = |words: &[Word]| targets(words, &ctx).contains(&None);
+    let mut subshells = 0_usize;
+    let mut words: Vec<Word> = Vec::new();
+    for token in &tokens {
+        let crate::lexer::Token::Operator(op) = token else {
+            if let crate::lexer::Token::Word(word) = token {
+                words.push(word.clone());
+            }
+            continue;
+        };
+        if !(op.is_separator() || op.is_grouping()) {
+            continue;
+        }
+        if subshells == 0 && unknown(&words) {
+            return true;
+        }
+        words.clear();
+        match op {
+            crate::lexer::Operator::OpenParen => subshells += 1,
+            crate::lexer::Operator::CloseParen => subshells = subshells.saturating_sub(1),
+            _ => {}
+        }
+    }
+    subshells == 0 && unknown(&words)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::action::AtomicAction;
@@ -178,6 +222,37 @@ mod tests {
             );
         }
         reads("cd \"$DIR\" && cat /etc/hosts && cargo test");
+    }
+
+    /// A persistent shell keeps the directory a command leaves it in: one that
+    /// cannot be known is reported, one in a subshell or written out is not.
+    #[test]
+    fn moves_a_persistent_shell_cannot_follow_are_reported() {
+        for cmd in [
+            "cd \"$HOME/.ssh\"",
+            "cd -",
+            "ls && cd $(dirname x)",
+            "popd",
+            "pushd",
+            "source env.sh",
+            ". ./env.sh",
+            "true; eval \"$X\"",
+            "if true; then cd \"$X\"; fi",
+            "echo 'unterminated",
+        ] {
+            assert!(super::leaves_unknown_directory(cmd), "{cmd}");
+        }
+        for cmd in [
+            "cd src && cargo test",
+            "cd ~/.ssh",
+            "cd",
+            "(cd \"$X\" && ls)",
+            "ls; (source env.sh); pwd",
+            "cargo test --workspace",
+            "echo cd \"$X\"",
+        ] {
+            assert!(!super::leaves_unknown_directory(cmd), "{cmd}");
+        }
     }
 
     #[test]

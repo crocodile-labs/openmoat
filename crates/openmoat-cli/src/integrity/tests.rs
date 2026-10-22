@@ -182,3 +182,20 @@ fn a_state_file_missing_at_a_re_pin_cannot_be_planted_later() {
             .is_empty()
     );
 }
+
+/// The guidance for a hook file pinned elsewhere names every host's
+/// directory variable, not only the first hosts'.
+#[test]
+fn a_hook_pinned_elsewhere_names_every_hosts_variable() {
+    let moved = HookPinGap::moved_by();
+    for variable in [
+        "CLAUDE_CONFIG_DIR",
+        "CODEX_HOME",
+        "CURSOR_CONFIG_DIR",
+        "COPILOT_HOME",
+        "PI_CODING_AGENT_DIR",
+        "GEMINI_CLI_HOME",
+    ] {
+        assert!(moved.contains(variable), "{moved}");
+    }
+}

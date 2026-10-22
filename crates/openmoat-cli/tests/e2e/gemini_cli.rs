@@ -98,6 +98,32 @@ fn a_secret_read_or_upload_is_denied() {
     assert!(reply["reason"].to_string().contains("secrets-paths"));
 }
 
+/// `dir_path` is where Gemini CLI runs a command, chosen by the model; it never
+/// decides which directory is the project. A session in the home folder that
+/// writes a launch agent with `dir_path` there still asks (`persistence`)
+/// instead of being allowed as a write in its own "project".
+#[test]
+fn dir_path_never_makes_a_directory_the_project() {
+    if cfg!(windows) {
+        return;
+    }
+    let sb = Sandbox::installed(&[".gemini"]);
+    fs::create_dir_all(sb.home.join("Library/LaunchAgents")).unwrap();
+    let write = json!({
+        "session_id": "gem-1", "transcript_path": "", "cwd": sb.home.to_string_lossy(),
+        "hook_event_name": "BeforeTool", "timestamp": "2026-10-20T10:00:00.000Z",
+        "tool_name": "run_shell_command",
+        "tool_input": {"command": "echo x > evil.plist", "dir_path": "Library/LaunchAgents"},
+    });
+    let (code, reply) = guard(&sb, &write.to_string());
+    assert_eq!(code, Some(OK), "{reply}");
+    assert_eq!(reply["decision"], "ask", "{reply}");
+    assert!(
+        reply["reason"].to_string().contains("persistence"),
+        "{reply}"
+    );
+}
+
 #[test]
 fn allow_ask_and_no_decision_reach_gemini_as_its_own_shapes() {
     let sb = Sandbox::installed(&[".gemini"]);

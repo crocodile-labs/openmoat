@@ -284,24 +284,38 @@ fn secrets_become_claude_mask_credentials() {
     );
 }
 
-/// `plain_http: true` on any mask entry turns `allowPlaintextInject` on so the
-/// value may reach plain-HTTP destinations, and the allowance lists the
-/// affected secrets so a reviewer sees which ones a plain-HTTP request may carry.
+/// A `plain_http: true` secret without a `port` goes to plain-HTTP requests on
+/// port 80 only. Claude Code's broker would inject it on every port
+/// (`allowPlaintextInject`), so it gets no mask entry: no `credentials` block,
+/// and a loss naming the port.
 #[test]
-fn plain_http_turns_on_allow_plaintext_inject() {
+fn a_plain_http_secret_without_a_port_is_left_to_the_proxy() {
     let out = generated(
         "version: 1\n\
          allow:\n  - id: a\n    net: ['localhost']\n\
          secrets:\n  \
          - id: local\n    host: localhost\n    header: Authorization\n    source: { env: LOCAL_TOKEN }\n    plain_http: true\n",
     );
-    assert_eq!(
-        out.sandbox["credentials"]["allowPlaintextInject"],
-        json!(true)
+    assert!(
+        out.sandbox.get("credentials").is_none(),
+        "{:?}",
+        out.sandbox
     );
-    assert!(out.report.allowances.iter().any(
-        |a| a.rule == "claude-code.plain-http-inject" && a.patterns == vec!["local".to_owned()]
-    ));
+    assert!(out.sandbox["network"].get("tlsTerminate").is_none());
+    assert!(
+        out.report
+            .losses
+            .iter()
+            .any(|l| l.rule == "secrets.local" && l.message.contains("port 80 only")),
+        "{:?}",
+        out.report.losses
+    );
+    assert!(
+        !out.report
+            .allowances
+            .iter()
+            .any(|a| a.rule == "claude-code.mask-credentials")
+    );
 }
 
 /// `keychain` sources and secrets whose host is not in `allowedDomains` cannot
@@ -353,9 +367,9 @@ fn no_secrets_means_no_credentials_or_tls_terminate() {
 
 /// #401: Claude Code's `allowPlaintextInject` is block-scoped, so lifting TLS
 /// for a `plain_http: true` entry alongside an HTTPS-only entry would widen
-/// the latter (ADR-019 lowering-widens). Mixed blocks drop the `plain_http`
-/// entries from Claude Code's mask list, keep `allowPlaintextInject` out, and
-/// name each dropped secret in a loss; `moat proxy` still handles them.
+/// the latter (ADR-019 lowering-widens). The `plain_http` entries are left
+/// out of Claude Code's mask list, `allowPlaintextInject` stays out, and each
+/// dropped secret is named in a loss; `moat proxy` still handles them.
 #[test]
 fn mixed_plain_http_does_not_widen() {
     let out = generated(
@@ -381,8 +395,7 @@ fn mixed_plain_http_does_not_widen() {
     let dropped = out.report.losses.iter().find(|l| l.rule == "secrets.local");
     assert!(
         dropped.is_some_and(
-            |l| l.message.contains("block-scoped `allowPlaintextInject`")
-                && l.message.contains("`openmoat proxy`")
+            |l| l.message.contains("port 80 only") && l.message.contains("`openmoat proxy`")
         ),
         "{:?}",
         out.report.losses
@@ -403,10 +416,10 @@ fn mixed_plain_http_does_not_widen() {
     assert!(masked.is_some_and(|a| a.patterns == vec!["gh".to_owned()]));
 }
 
-/// A policy where every secret is `plain_http: true` still gets
-/// `allowPlaintextInject: true`: the happy path from #363 keeps working.
+/// A policy where every secret is `plain_http: true` gets no `credentials`
+/// block at all, so `allowPlaintextInject` never opens every port of a host.
 #[test]
-fn all_plain_http_still_lifts_tls() {
+fn all_plain_http_secrets_are_left_to_the_proxy() {
     let out = generated(
         "version: 1\n\
          allow:\n  - id: a\n    net: ['localhost', 'dev.internal']\n\
@@ -414,19 +427,14 @@ fn all_plain_http_still_lifts_tls() {
          - id: a\n    host: localhost\n    header: Authorization\n    source: { env: A_TOKEN }\n    plain_http: true\n  \
          - id: b\n    host: dev.internal\n    header: Authorization\n    source: { env: B_TOKEN }\n    plain_http: true\n",
     );
-    assert_eq!(
-        out.sandbox["credentials"]["allowPlaintextInject"],
-        json!(true)
-    );
-    let env_vars = out.sandbox["credentials"]["envVars"].as_array().unwrap();
-    assert_eq!(env_vars.len(), 2);
     assert!(
-        out.report
-            .allowances
-            .iter()
-            .any(|a| a.rule == "claude-code.plain-http-inject"
-                && a.patterns == vec!["a".to_owned(), "b".to_owned()])
+        out.sandbox.get("credentials").is_none(),
+        "{:?}",
+        out.sandbox
     );
+    for id in ["secrets.a", "secrets.b"] {
+        assert!(out.report.losses.iter().any(|l| l.rule == id), "{id}");
+    }
 }
 
 /// The settings and report for a mixed policy, paired with the golden fixture

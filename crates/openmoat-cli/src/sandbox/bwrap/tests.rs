@@ -246,36 +246,139 @@ allow:
     );
 }
 
-/// In the network namespace the agent configuration directly in the project
-/// is bound read-only where it exists, under each spelling of the project; CI
-/// and commit-hook managers' files stay writable.
+/// The default policy lowered for a session in `project`.
+fn session_ir(project: &str) -> Enforcement {
+    let ctx = EvalContext {
+        home: "/nowhere/home".into(),
+        project: Some(project.to_owned()),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: project.to_owned(),
+        case_insensitive_paths: false,
+    };
+    let policy = Policy::parse(DEFAULT_POLICY).expect("default policy");
+    openmoat_core::ir::lower(&policy, &ctx).expect("lowers")
+}
+
+/// In the network namespace the agent configuration and the agents' hook
+/// settings directly in the project are bound read-only where they exist, and
+/// the folders holding them are bound onto themselves so they cannot be
+/// renamed away and back, outermost first and under each spelling of the
+/// project; CI and commit-hook managers' files stay writable.
 #[test]
 fn the_network_namespace_keeps_the_projects_agent_configuration_read_only() {
     let dir = tempfile::tempdir().unwrap();
     let real = std::fs::canonicalize(dir.path()).unwrap();
     let p = |rel: &str| format!("{}/{rel}", real.display());
-    for d in [".github/hooks", ".github/workflows", ".pi", ".husky"] {
+    for d in [
+        ".github/hooks",
+        ".github/workflows",
+        ".github/copilot",
+        ".pi",
+        ".husky",
+        ".claude",
+        ".copilot/hooks",
+    ] {
         std::fs::create_dir_all(p(d)).unwrap();
     }
-    for f in [".mcp.json", ".pi/settings.json"] {
+    for f in [
+        ".mcp.json",
+        ".pi/settings.json",
+        ".claude/settings.json",
+        ".github/copilot/settings.json",
+    ] {
         std::fs::write(p(f), "{}").unwrap();
     }
     let project = real.display().to_string();
-    let masks = agent_config_masks(&[project, "/other/spelling".into()]);
+    let ir = session_ir(&project);
+    let masks = project_masks(&ir, &[project.clone(), "/other/spelling".into()]).unwrap();
     let expected = [
+        Mount::ReadWrite(p(".github")),
+        Mount::ReadWrite(p(".pi")),
+        Mount::ReadWrite(p(".claude")),
+        Mount::ReadWrite(p(".copilot")),
         Mount::ReadOnly(p(".mcp.json")),
         Mount::ReadOnly(p(".github/hooks")),
         Mount::ReadOnly(p(".pi/settings.json")),
+        Mount::ReadOnly(p(".claude/settings.json")),
+        Mount::ReadOnly(p(".copilot/hooks")),
+        Mount::ReadOnly(p(".github/copilot/settings.json")),
     ];
-    assert_eq!(masks[..3], expected, "{masks:?}");
+    for mount in &expected {
+        assert!(masks.contains(mount), "{mount:?}: {masks:?}");
+    }
+    let at = |m: &Mount| masks.iter().position(|x| x == m).unwrap_or(usize::MAX);
+    assert!(
+        at(&expected[0]) < at(&expected[5]),
+        "outermost first: {masks:?}"
+    );
+    assert!(
+        at(&expected[2]) < at(&expected[7]),
+        "outermost first: {masks:?}"
+    );
+    let here = masks
+        .iter()
+        .filter(|m| path_of(m).starts_with(&project))
+        .count();
+    assert_eq!(here, expected.len(), "{masks:?}");
     assert_eq!(
         masks.len(),
-        6,
+        2 * expected.len(),
         "each again under the other spelling: {masks:?}"
     );
     assert!(masks.contains(&Mount::ReadOnly("/other/spelling/.mcp.json".into())));
+    assert!(masks.contains(&Mount::ReadWrite("/other/spelling/.github".into())));
     for writable in [".github/workflows", ".husky"] {
-        assert!(!masks.contains(&Mount::ReadOnly(p(writable))), "{writable}");
+        assert!(
+            !masks.iter().any(|m| path_of(m) == p(writable)),
+            "{writable}"
+        );
     }
-    assert_eq!(agent_config_masks(&[]), Vec::new());
+    assert_eq!(project_masks(&ir, &[]).unwrap(), Vec::new());
+}
+
+/// Under `--isolate` the folders above an agent's configuration directly in
+/// the project are bound onto themselves too: renaming `.github` away and
+/// back would carry a hook written under the other name past the read-only
+/// `.github/hooks`. A package's own `.github` deeper down stays as it is.
+#[test]
+fn isolate_pins_the_folders_holding_agent_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = std::fs::canonicalize(dir.path()).unwrap();
+    tree(&home);
+    for d in [
+        "proj/.github/hooks",
+        "proj/.pi",
+        "proj/.openclaw",
+        "proj/.github2",
+        "proj/node_modules/qs/.github",
+    ] {
+        std::fs::create_dir_all(home.join(d)).unwrap();
+    }
+    let out = generated(&home);
+    let p = |rel: &str| format!("{}/{rel}", home.display());
+    for pinned in ["proj/.github", "proj/.pi", "proj/.openclaw"] {
+        assert!(
+            out.mounts.contains(&Mount::ReadWrite(p(pinned))),
+            "{pinned}: {:?}",
+            out.mounts
+        );
+    }
+    let github = out
+        .mounts
+        .iter()
+        .position(|m| m == &Mount::ReadWrite(p("proj/.github")));
+    let hooks = out
+        .mounts
+        .iter()
+        .position(|m| m == &Mount::ReadOnly(p("proj/.github/hooks")));
+    assert!(github.is_some() && github < hooks, "{:?}", out.mounts);
+    for open in ["proj/.github2", "proj/node_modules/qs/.github"] {
+        assert!(
+            !out.mounts.iter().any(|m| path_of(m) == p(open)),
+            "{open}: {:?}",
+            out.mounts
+        );
+    }
 }

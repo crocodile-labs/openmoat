@@ -31,8 +31,9 @@ const PATH_KEYS: &[&str] = &[
 /// it is one of Cursor's listing and search tools ([`READ_ONLY_TOOLS`]), else as
 /// writing it, since a name without a write verb (`search_replace`) may still
 /// edit the file and Cursor's file tools run outside its sandbox. A
-/// tool that names no such path is an [`Action::UnknownTool`], which the policy
-/// decides (`ask` by default) instead of passing it unseen.
+/// tool that names no such path is an [`Action::UnknownTool`] with whatever
+/// else its arguments name ([`crate::wire::unknown`]), which the policy
+/// decides (`ask` on this hook) instead of passing it unseen.
 pub(super) fn pre_tool_action(
     tool: &str,
     input: &Value,
@@ -66,7 +67,8 @@ pub(super) fn pre_tool_action(
             };
             match checked {
                 None if AGENT_STATE_TOOLS.contains(&tool) => None,
-                checked => Some(checked.unwrap_or_else(|| unknown(tool))),
+                Some(checked) => Some(checked),
+                None => Some(crate::wire::unknown::action(Host::Cursor, tool, input)?),
             }
         }
     })
@@ -90,13 +92,6 @@ const READ_ONLY_TOOLS: &[&str] = &[
     "file_search",
     "read_file",
 ];
-
-fn unknown(tool: &str) -> Action {
-    Action::UnknownTool {
-        host: Host::Cursor.id().to_owned(),
-        tool: tool.to_owned(),
-    }
-}
 
 fn is_write_shaped(tool: &str) -> bool {
     let tool = tool.to_ascii_lowercase();

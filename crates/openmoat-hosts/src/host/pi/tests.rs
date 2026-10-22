@@ -161,8 +161,19 @@ fn mcp_tools_and_unknown_tools() {
         fixture("unknown-tool").action,
         Some(Action::UnknownTool {
             host: "pi".into(),
-            tool: "deploy".into()
+            tool: "deploy".into(),
+            reads: vec![],
+            writes: vec!["prod".into()],
+            hosts: vec![],
+            commands: vec![],
         })
+    );
+    // pi runs a call OpenMoat makes no decision on: an extension's tool is
+    // checked for the paths, URLs and commands its input names
+    let custom = action("custom_read", json!({"path": "~/.ssh/id_rsa"}));
+    assert!(
+        matches!(custom, Some(Action::UnknownTool { ref reads, .. }) if reads == &["~/.ssh/id_rsa"]),
+        "{custom:?}"
     );
     for tool in ["codemode", "tool_search", "list_mcp_resources"] {
         assert_eq!(action(tool, json!({})), None, "{tool}");

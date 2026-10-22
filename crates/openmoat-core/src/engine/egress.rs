@@ -83,14 +83,28 @@ fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
             texts: vec![query],
             hosts: vec![WEB_SEARCH.to_owned()],
         }],
-        Action::McpTool { hosts, .. } => hosts
+        // A tool's arguments: each URL it names, and what each shell command
+        // among them sends.
+        Action::McpTool {
+            hosts, commands, ..
+        }
+        | Action::UnknownTool {
+            hosts, commands, ..
+        } => hosts
             .iter()
             .map(|url| Send {
                 texts: vec![url],
                 hosts: host::of_url(url).into_iter().collect(),
             })
+            .chain(
+                (!commands.is_empty())
+                    .then(|| atoms.iter().flat_map(command_sends))
+                    .into_iter()
+                    .flatten(),
+            )
             .collect(),
         Action::Shell { .. } => atoms.iter().flat_map(command_sends).collect(),
+        Action::Unchecked { action, .. } => sends(action, atoms),
         _ => Vec::new(),
     }
 }

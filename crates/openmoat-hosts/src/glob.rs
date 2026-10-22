@@ -1,6 +1,8 @@
 //! Where a search tool's glob pattern reaches when its `..` segments climb out
 //! of the directory it is searched from.
 
+use openmoat_core::Action;
+
 /// Where a glob `pattern` with `..` reaches: for a relative pattern, where it
 /// climbs out of the directory it is searched from, relative to that
 /// directory (`../../x`); for an absolute one, the directory it lands in.
@@ -54,6 +56,47 @@ fn glob_climb(pattern: &str) -> Option<String> {
     }
 }
 
+/// Whether how far `pattern` reaches cannot be worked out by [`glob_climb`]:
+/// a brace group (`{a,b}`) holding a separator, a `..` or another brace group,
+/// or a bracket expression (`[…]`) holding a separator. Glob libraries expand
+/// braces before they walk (Gemini CLI's npm `glob` does), so such a group may
+/// name a path that climbs further than its segment shows (`{x/../..,y}`).
+pub(crate) fn reach_unknown(pattern: &str) -> bool {
+    let mut braces = 0_usize;
+    let mut bracket = false;
+    let mut previous = '\0';
+    for c in pattern.chars() {
+        match c {
+            '/' | '\\' if braces > 0 || bracket => return true,
+            '.' if braces > 0 && previous == '.' => return true,
+            '{' if braces > 0 => return true,
+            '{' if !bracket => braces += 1,
+            '}' if !bracket => braces = braces.saturating_sub(1),
+            '[' if braces == 0 => bracket = true,
+            ']' => bracket = false,
+            _ => {}
+        }
+        previous = c;
+    }
+    false
+}
+
+/// `action`, asking at least when one of `patterns` reaches where OpenMoat
+/// cannot work out ([`reach_unknown`]): what it reads is then not all checked.
+pub(crate) fn bounded<'a>(action: Action, patterns: impl IntoIterator<Item = &'a str>) -> Action {
+    let mut patterns = patterns.into_iter();
+    match patterns.find(|p| reach_unknown(p)) {
+        Some(pattern) => Action::unchecked(
+            action,
+            format!(
+                "the glob pattern `{pattern}` holds a brace or bracket group that may reach \
+                 further than OpenMoat can work out"
+            ),
+        ),
+        None => action,
+    }
+}
+
 /// `dir` joined with the relative `rel`.
 pub(crate) fn below(dir: &str, rel: &str) -> String {
     format!("{}/{rel}", dir.trim_end_matches(['/', '\\']))
@@ -71,7 +114,33 @@ pub(crate) fn glob_reach(root: &str, pattern: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::glob_climb;
+    use super::{glob_climb, reach_unknown};
+
+    /// A brace group with a separator, a `..` or a nested group, or a bracket
+    /// expression with a separator, reaches where no segment shows.
+    #[test]
+    fn groups_that_may_climb_are_unknown() {
+        for pattern in [
+            "{x/../..,y}/.ssh/*",
+            "{..,x}/.ssh/*",
+            "src/{a,{b,c}}/*",
+            "a[/]b/*",
+            "{a\\..\\..,b}",
+            "~/{.config/../.ssh,x}/*",
+        ] {
+            assert!(reach_unknown(pattern), "{pattern}");
+        }
+        for pattern in [
+            "src/**/*.{rs,toml}",
+            "../x/*.rs",
+            "*.[ch]",
+            "{a,b}/c/*",
+            "{.github,.gitlab}/*",
+            "docs/[!.]*",
+        ] {
+            assert!(!reach_unknown(pattern), "{pattern}");
+        }
+    }
 
     /// A `..` after a wildcard undoes the directory the wildcard matched, and
     /// `**` may match none, so the highest directory reachable is checked.

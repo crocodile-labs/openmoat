@@ -69,8 +69,8 @@ fn shapes() -> [Shape; 7] {
             unknown_tool: pre_tool_use("FutureTool"),
             unknown_event: post_tool_use,
         },
-        // OpenMoat's OpenClaw plugin: an unknown tool is `tool.unknown`, which
-        // the default policy leaves to OpenClaw (no output).
+        // OpenMoat's OpenClaw plugin: an unknown tool is `tool.unknown`, checked
+        // for what its arguments name.
         Shape {
             name: "openclaw",
             hook: "openclaw",
@@ -81,8 +81,8 @@ fn shapes() -> [Shape; 7] {
             unknown_event: json!({"hook_event_name": "after_tool_call", "toolName": "exec",
                 "params": {"command": "ls"}}),
         },
-        // OpenMoat's pi extension: as OpenClaw's plugin, an unknown tool is
-        // `tool.unknown`, which the default policy leaves to pi (no output).
+        // OpenMoat's pi extension: as OpenClaw's plugin; pi runs what OpenMoat
+        // makes no decision on, so a secret path must never pass.
         Shape {
             name: "pi",
             hook: "pi",
@@ -93,7 +93,7 @@ fn shapes() -> [Shape; 7] {
             unknown_event: json!({"hook_event_name": "tool_result", "toolName": "bash",
                 "input": {"command": "ls"}}),
         },
-        // Gemini CLI: an unknown tool is `tool.unknown`, left to Gemini CLI too.
+        // Gemini CLI: an unknown tool is `tool.unknown` too.
         Shape {
             name: "gemini-cli",
             hook: "gemini-cli",
@@ -172,20 +172,22 @@ fn payloads_guard_cannot_read_are_denied_in_each_hosts_format() {
 /// A tool OpenMoat does not know is recorded with rule `ungoverned` and left
 /// to the host: no output, so the host's own prompt and permission rules
 /// decide it, as if no hook had answered. An unknown name can still reach
-/// `guard` through a matcher that also matches it. Cursor's `preToolUse` sends
-/// every tool, and there an unknown tool that names a path is checked as
-/// reading it (one that names none asks, `cursor.rs`).
+/// `guard` through a matcher that also matches it. Cursor, OpenClaw, pi and
+/// Gemini CLI send every tool, and there an unknown tool is checked for the
+/// paths, URLs and commands its arguments name: one naming a secret is denied,
+/// even where the host runs a call OpenMoat makes no decision on (pi).
 #[test]
-fn an_unknown_tool_is_left_to_the_host_unless_cursor_sees_a_path() {
+fn an_unknown_tool_naming_a_secret_is_denied_where_openmoat_sees_it() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
     for shape in shapes() {
         let out = shape.guard(&sb, &shape.unknown_tool.to_string());
-        if shape.name == "cursor" {
-            assert_eq!(out.status.code(), Some(2), "cursor: {}", text(&out));
-            assert_eq!(shape.verdict(&out), "deny", "cursor: {}", text(&out));
+        if ["cursor", "openclaw", "pi", "gemini-cli"].contains(&shape.name) {
+            let name = shape.name;
+            assert_eq!(out.status.code(), Some(2), "{name}: {}", text(&out));
+            assert_eq!(shape.verdict(&out), "deny", "{name}: {}", text(&out));
             assert!(
                 text(&out).contains("secrets-paths"),
-                "cursor: {}",
+                "{name}: {}",
                 text(&out)
             );
         } else {

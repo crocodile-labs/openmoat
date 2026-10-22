@@ -163,3 +163,35 @@ fn a_repository_deny_holds_at_the_proxy_and_its_allow_does_not() {
     // Before the merge, the user's own allow let `a.test` through.
     assert_eq!(decide(&user, "a.test", 443).0, Verdict::Allow);
 }
+
+/// `*:8443` allows port 8443 of every host; as a host glob it would also match
+/// an IPv6 address whose text ends in `:8443`, on 443 and 80, and in the hook.
+#[test]
+fn a_host_port_allow_is_no_host_glob() {
+    let policy = Policy::parse(
+        "version: 1\ndefaults: { '*': deny, fetch: ask }\n\
+         allow:\n  - id: alt\n    net: ['*:8443', '*:443']\n",
+    )
+    .unwrap();
+    for port in [443, 80] {
+        assert_eq!(
+            decide(&policy, "2001:db8::8443", port).0,
+            Verdict::Deny,
+            "{port}"
+        );
+        assert_eq!(
+            decide(&policy, "2001:db8::443", port).0,
+            Verdict::Deny,
+            "{port}"
+        );
+    }
+    assert_eq!(
+        decide(&policy, "example.com", 8443),
+        (Verdict::Allow, "alt".to_owned())
+    );
+    let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    let hook = compiled.decide(&openmoat_core::Action::Net {
+        url: "https://[2001:db8::8443]/".to_owned(),
+    });
+    assert_ne!(hook.verdict, Verdict::Allow, "{hook:?}");
+}

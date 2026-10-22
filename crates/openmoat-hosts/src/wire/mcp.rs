@@ -32,25 +32,14 @@ const PATH_KEYS: &[&str] = &[
 const URL_KEYS: &[&str] = &["url", "urls", "uri", "endpoint", "href"];
 
 /// Nesting below this is not searched; arguments are rarely more than two deep.
-const MAX_DEPTH: usize = 8;
+pub(super) const MAX_DEPTH: usize = 8;
 /// More derived resources than this is refused rather than half-checked.
-const MAX_RESOURCES: usize = 1024;
+pub(super) const MAX_RESOURCES: usize = 1024;
 
 /// Build the action for `mcp__<server>__<tool>` from the host's `tool_input`.
 /// Cursor sends the input as a JSON string, Claude Code and Codex as an object.
 pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
-    let parsed;
-    let args = match input {
-        Value::String(text) => {
-            parsed =
-                serde_json::from_str::<Value>(text).map_err(|e| HostError::MalformedArguments {
-                    tool: name.to_owned(),
-                    problem: e.to_string(),
-                })?;
-            &parsed
-        }
-        other => other,
-    };
+    let args = &arguments(name, input)?;
     let tool = name
         .rsplit("__")
         .next()
@@ -74,8 +63,22 @@ pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
         reads: found.reads,
         writes: found.writes,
         hosts: found.hosts,
+        commands: found.commands,
         unchecked: found.unchecked,
     })
+}
+
+/// `input` as the arguments of tool `name`: a JSON string (Cursor) is parsed.
+pub(super) fn arguments(name: &str, input: &Value) -> Result<Value, HostError> {
+    match input {
+        Value::String(text) => {
+            serde_json::from_str::<Value>(text).map_err(|e| HostError::MalformedArguments {
+                tool: name.to_owned(),
+                problem: e.to_string(),
+            })
+        }
+        other => Ok(other.clone()),
+    }
 }
 
 /// A host's resource-read tool (Claude Code `ReadMcpResourceTool`, pi
@@ -105,26 +108,33 @@ pub(crate) fn read_resource(tool: &str, input: &Value) -> Result<Action, HostErr
         reads,
         writes: Vec::new(),
         hosts,
+        commands: Vec::new(),
         unchecked: None,
     })
 }
 
+/// What a walk of a tool's arguments found.
 #[derive(Default)]
-struct Resources {
-    writes_by_default: bool,
-    reads: Vec<String>,
-    writes: Vec<String>,
-    hosts: Vec<String>,
+pub(super) struct Resources {
+    pub(super) writes_by_default: bool,
+    /// Also take every string that looks like a path or a URL, whatever its
+    /// key, and every shell command under a key that names one: the
+    /// arguments of a tool nobody described ([`super::unknown`]).
+    pub(super) everything: bool,
+    pub(super) reads: Vec<String>,
+    pub(super) writes: Vec<String>,
+    pub(super) hosts: Vec<String>,
+    pub(super) commands: Vec<String>,
     /// Set when nesting stopped the search.
-    unchecked: Option<String>,
+    pub(super) unchecked: Option<String>,
 }
 
 impl Resources {
-    fn count(&self) -> usize {
-        self.reads.len() + self.writes.len() + self.hosts.len()
+    pub(super) fn count(&self) -> usize {
+        self.reads.len() + self.writes.len() + self.hosts.len() + self.commands.len()
     }
 
-    fn walk(&mut self, value: &Value, depth: usize) {
+    pub(super) fn walk(&mut self, value: &Value, depth: usize) {
         if self.count() > MAX_RESOURCES {
             return;
         }
@@ -149,13 +159,16 @@ impl Resources {
                     self.walk(item, depth + 1);
                 }
             }
+            Value::String(text) if self.everything => self.value(text),
             _ => {}
         }
     }
 
     fn key(&mut self, key: &str, value: &Value) {
         let ends = |suffixes: &[&str]| suffixes.iter().any(|s| key.ends_with(&format!("_{s}")));
-        if URL_KEYS.contains(&key) || ends(&["url", "uri"]) {
+        if self.everything && super::unknown::names_a_command(key) {
+            self.commands.extend(super::unknown::command_lines(value));
+        } else if URL_KEYS.contains(&key) || ends(&["url", "uri"]) {
             self.hosts.extend(strings(value));
         } else if PATH_KEYS.contains(&key)
             || ends(&["path", "paths", "dir", "directory", "file", "filename"])
@@ -167,6 +180,19 @@ impl Resources {
                 &mut self.reads
             };
             sink.extend(strings(value));
+        }
+    }
+
+    /// A string anywhere in the arguments that is a path or a URL by its
+    /// look ([`super::unknown::looks_like`]).
+    fn value(&mut self, text: &str) {
+        match super::unknown::looks_like(text) {
+            Some(super::unknown::Looks::Path(path)) if self.writes_by_default => {
+                self.writes.push(path);
+            }
+            Some(super::unknown::Looks::Path(path)) => self.reads.push(path),
+            Some(super::unknown::Looks::Url) => self.hosts.push(text.to_owned()),
+            None => {}
         }
     }
 }
@@ -206,7 +232,7 @@ fn holds_object(value: &Value) -> bool {
 /// Every non-empty string a path or URL argument holds, through lists nested
 /// to any depth: `[["~/.ssh/id_rsa"]]` names the key as surely as a flat list.
 /// Objects in the list are searched by [`Resources::walk`] instead.
-fn strings(value: &Value) -> Vec<String> {
+pub(super) fn strings(value: &Value) -> Vec<String> {
     let mut found = Vec::new();
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {

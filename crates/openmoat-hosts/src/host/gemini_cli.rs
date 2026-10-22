@@ -184,7 +184,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         host,
         session_id: crate::session_or_unknown(p.session_id),
         call_id: None,
-        cwd: mapped.cwd.or(cwd),
+        cwd,
         tool: mapped.tool.unwrap_or(p.tool_name),
         action: mapped.action,
         content,

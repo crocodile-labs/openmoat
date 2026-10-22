@@ -212,6 +212,17 @@ impl HookPinGap {
                 .collect(),
         }
     }
+
+    /// Why a pinned hook file may not be this shell's: one of the variables
+    /// that move a host's directory differs. Every host's is named.
+    pub fn moved_by() -> String {
+        let names: Vec<&str> = openmoat_hosts::Host::ALL
+            .iter()
+            .filter_map(|host| host.spec().install.as_ref())
+            .map(|install| install.dir_variable)
+            .collect();
+        format!("one of {} differs", names.join(", "))
+    }
 }
 
 /// `Some(deny)` when the pinned policy or hook files changed since `moat init`.

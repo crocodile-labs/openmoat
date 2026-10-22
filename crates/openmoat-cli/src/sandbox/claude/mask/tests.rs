@@ -92,7 +92,7 @@ fn a_keychain_source_is_skipped_with_its_loss() {
 }
 
 #[test]
-fn a_hand_set_plaintext_inject_is_a_weakness_unless_the_policy_lifts_it() {
+fn a_hand_set_plaintext_inject_beside_our_secrets_is_a_weakness() {
     let (_, out, mut root) = synced(SECRETS);
     assert!(weaknesses(&root, &out).is_empty());
     root["sandbox"]["credentials"]["allowPlaintextInject"] = json!(true);
@@ -103,15 +103,14 @@ fn a_hand_set_plaintext_inject_is_a_weakness_unless_the_policy_lifts_it() {
          allow:\n  - id: a\n    net: ['api.example.com']\n\
          secrets:\n  \
          - id: p\n    host: api.example.com\n    header: X-Api-Key\n    source: { env: P_TOKEN }\n    plain_http: true\n";
+    // A plain-HTTP secret gets no mask entry, so OpenMoat never sets it.
     let (_, out, root) = synced(plain);
-    assert_eq!(
-        root["sandbox"]["credentials"]["allowPlaintextInject"],
-        json!(true)
-    );
     assert!(
-        weaknesses(&root, &out).is_empty(),
-        "the policy asked for it"
+        root.pointer("/sandbox/credentials/allowPlaintextInject")
+            .is_none(),
+        "{root}"
     );
+    assert!(weaknesses(&root, &out).is_empty());
 
     let none = generated("version: 1\n");
     let user = json!({ "sandbox": { "credentials": { "allowPlaintextInject": true } } });
