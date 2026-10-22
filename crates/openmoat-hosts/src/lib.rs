@@ -18,9 +18,11 @@ mod wire;
 pub use contract::{
     Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostDocs, HostSpec, InstallSpec, KeyShape,
     Locate, Located, Location, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax,
-    ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec, SettingsFormat, ToolRow,
+    ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec, SettingsFile, SettingsReader,
+    ToolRow,
 };
 pub use host::claude_code::config_change::proposal_target;
+pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
 pub use host::continue_cli::CONTINUE_ENV;
 pub use host::openclaw::{
     CONFIG_FILE as OPENCLAW_CONFIG_FILE, PLUGIN_ID as OPENCLAW_PLUGIN_ID,

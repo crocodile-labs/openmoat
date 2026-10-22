@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
-    ProjectSettingsSpec, SandboxFormat, SandboxSpec, SettingsFormat,
+    ProjectSettingsSpec, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
@@ -15,6 +15,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod doc;
 mod mcp;
+mod project_settings;
 
 /// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
 /// web search and hosted tools have no hook. Codex has no key that blocks a
@@ -77,7 +78,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         shared: "config.toml",
         local: Some("hooks.json"),
         hook_dir: None,
-        format: SettingsFormat::Codex,
+        reader: &project_settings::READER,
         user_file: "config.toml",
     }),
     docs: doc::DOCS,

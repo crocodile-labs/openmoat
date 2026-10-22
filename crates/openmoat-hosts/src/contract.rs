@@ -12,12 +12,15 @@ mod docs;
 mod location;
 mod mcp;
 mod relaxed;
+mod settings;
 
 pub use docs::{HostDocs, ToolRow};
 pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use relaxed::{KeyShape, RelaxedKey};
+pub(crate) use settings::set;
+pub use settings::{SettingsFile, SettingsReader};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -127,8 +130,8 @@ pub struct ProjectSettingsSpec {
     /// `None` when it has none.
     pub hook_dir: Option<HookDir>,
     /// Which keys of these files turn OpenMoat's hook off, run a program or
-    /// redirect the agent; the CLI has one reader per format.
-    pub format: SettingsFormat,
+    /// redirect the agent; one reader per host folder.
+    pub reader: &'static dyn SettingsReader,
     /// The person's own settings file in the configuration directory, read
     /// in the same format: what in it turns OpenMoat's hook off is reported
     /// by `moat status` and `moat doctor` as "not protected". For Claude Code
@@ -152,26 +155,6 @@ pub struct HookDir {
     pub path: &'static str,
     /// The file name extensions it loads (`json`, or `js` and `ts`).
     pub extensions: &'static [&'static str],
-}
-
-/// The layout and meaning of a host's settings files, for the checks of
-/// [`ProjectSettingsSpec`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SettingsFormat {
-    /// Claude Code's `settings.json` keys (`disableAllHooks`, `hooks`, `env`,
-    /// helper commands, plugins, sandbox), which GitHub Copilot CLI reads too.
-    ClaudeCode,
-    /// Gemini CLI's `settings.json`: `hooksConfig.enabled`,
-    /// `hooksConfig.disabled`, `hooks`, and the tool discovery commands.
-    Gemini,
-    /// pi's `settings.json`: the `extensions` entries that turn an extension
-    /// off (`-path`, `!glob`) or load more code (`extensions`, `packages`).
-    Pi,
-    /// Codex's `config.toml` (`[features] hooks`, inline `[hooks]`, `notify`,
-    /// MCP servers, sandbox and model provider keys) and `hooks.json`.
-    Codex,
-    /// Cursor's `hooks.json`, whose `hooks` run beside OpenMoat's.
-    Cursor,
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.

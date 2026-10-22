@@ -14,29 +14,49 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use super::set;
+use crate::contract::{SettingsFile, SettingsReader, set};
+
+#[derive(Debug)]
+pub(crate) struct Reader;
+
+pub(crate) static READER: Reader = Reader;
+
+impl SettingsReader for Reader {
+    fn findings(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        findings(file.root, file.base, file.hook_file, file.user_home)
+    }
+
+    fn switched_off(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        switched_off(file.root, file.base, file.hook_file, file.user_home)
+    }
+
+    fn hook_dir_effect(&self) -> &'static str {
+        "is an extension pi loads with the agent's rights"
+    }
+}
 
 /// Whether the user's `settings.json` `root`, whose relative entries resolve
-/// from `base` (the agent directory), turns off OpenMoat's extension at
-/// `extension`; the entry that does when it does.
-pub(super) fn switched_off(
+/// from `base` (the agent directory) and `~` from `home`, turns off
+/// OpenMoat's extension at `extension`; the entry that does when it does.
+fn switched_off(
     root: &Map<String, Value>,
     base: &Path,
     extension: &Path,
+    home: Option<&Path>,
 ) -> Vec<String> {
     let entries = entries(root);
     let excluded = entries
         .iter()
         .filter_map(|e| e.strip_prefix('!'))
-        .find(|glob| glob_names(glob, base, extension));
+        .find(|glob| glob_names(glob, base, extension, home));
     let put_back = entries
         .iter()
         .filter_map(|e| e.strip_prefix('+'))
-        .any(|exact| exact_names(exact, base, extension));
+        .any(|exact| exact_names(exact, base, extension, home));
     let forced = entries
         .iter()
         .filter_map(|e| e.strip_prefix('-'))
-        .find(|exact| exact_names(exact, base, extension));
+        .find(|exact| exact_names(exact, base, extension, home));
     match (forced, excluded, put_back) {
         (Some(entry), _, _) => vec![off(&format!("-{entry}"))],
         (None, Some(entry), false) => vec![off(&format!("!{entry}"))],
@@ -48,13 +68,18 @@ pub(super) fn switched_off(
 /// may turn OpenMoat's extension at `extension` off or loads code with the
 /// agent's rights. Any exclusion that names the extension is named, as the
 /// project's entries are resolved before the user's.
-pub(super) fn findings(root: &Map<String, Value>, base: &Path, extension: &Path) -> Vec<String> {
+fn findings(
+    root: &Map<String, Value>,
+    base: &Path,
+    extension: &Path,
+    home: Option<&Path>,
+) -> Vec<String> {
     let entries = entries(root);
     let mut found: Vec<String> = entries
         .iter()
         .filter(|e| match (e.strip_prefix('!'), e.strip_prefix('-')) {
-            (Some(glob), _) => glob_names(glob, base, extension),
-            (_, Some(exact)) => exact_names(exact, base, extension),
+            (Some(glob), _) => glob_names(glob, base, extension, home),
+            (_, Some(exact)) => exact_names(exact, base, extension, home),
             _ => false,
         })
         .map(|e| off(e))
@@ -89,10 +114,10 @@ fn entries(root: &Map<String, Value>) -> Vec<&str> {
 }
 
 /// `entry` as pi resolves a path: `~` is the home directory, `./` is dropped.
-fn resolved(entry: &str) -> String {
+fn resolved(entry: &str, home: Option<&Path>) -> String {
     let entry = entry.strip_prefix("./").unwrap_or(entry);
-    match (entry.strip_prefix("~/"), crate::home::user_home()) {
-        (Some(rest), Ok(home)) => posix(&home.join(rest)),
+    match (entry.strip_prefix("~/"), home) {
+        (Some(rest), Some(home)) => posix(&home.join(rest)),
         _ => entry.replace('\\', "/"),
     }
 }
@@ -114,8 +139,8 @@ fn names(base: &Path, extension: &Path) -> Vec<String> {
 }
 
 /// A `-` or `+` entry: the path relative to `base`, or absolute.
-fn exact_names(entry: &str, base: &Path, extension: &Path) -> bool {
-    let entry = resolved(entry);
+fn exact_names(entry: &str, base: &Path, extension: &Path, home: Option<&Path>) -> bool {
+    let entry = resolved(entry, home);
     let absolute = PathBuf::from(&entry);
     let full = if absolute.is_absolute() {
         absolute
@@ -127,8 +152,8 @@ fn exact_names(entry: &str, base: &Path, extension: &Path) -> bool {
 
 /// A `!` entry, a minimatch glob. Syntax beyond `*`, `?` and `**` (braces,
 /// classes, negation) is taken as matching: the warning is the safe side.
-fn glob_names(glob: &str, base: &Path, extension: &Path) -> bool {
-    let glob = resolved(glob);
+fn glob_names(glob: &str, base: &Path, extension: &Path, home: Option<&Path>) -> bool {
+    let glob = resolved(glob, home);
     if glob.contains(['{', '[', '(', '!', '+', '@']) {
         return true;
     }
@@ -175,7 +200,12 @@ mod tests {
 
     fn off(extensions: &Value) -> Vec<String> {
         let root = json!({ "extensions": extensions });
-        switched_off(root.as_object().unwrap(), Path::new(BASE), Path::new(EXT))
+        switched_off(
+            root.as_object().unwrap(),
+            Path::new(BASE),
+            Path::new(EXT),
+            None,
+        )
     }
 
     #[test]
@@ -224,7 +254,7 @@ mod tests {
     #[test]
     fn a_project_that_excludes_it_or_loads_code_is_named() {
         let project = Path::new("/p/.pi");
-        let found = |root: Value| findings(root.as_object().unwrap(), project, Path::new(EXT));
+        let found = |root: Value| findings(root.as_object().unwrap(), project, Path::new(EXT), None);
         assert_eq!(found(json!({"extensions": ["!openmoat.js"]})).len(), 1);
         assert_eq!(
             found(json!({"extensions": ["-/h/.pi/agent/extensions/openmoat.js"]})).len(),

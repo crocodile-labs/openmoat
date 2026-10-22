@@ -1,5 +1,3 @@
-use serde_json::json;
-
 use super::*;
 
 fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
@@ -227,45 +225,6 @@ fn copilot_repository_settings_and_hook_files_are_named() {
     assert!(
         warnings(&project, &user_home).is_empty(),
         "not Claude Code's"
-    );
-}
-
-fn found(value: &Value) -> Vec<String> {
-    findings(value.as_object().unwrap())
-}
-
-#[test]
-fn names_each_key_that_turns_hooks_off_or_runs_a_program() {
-    let all = found(&json!({
-        "disableAllHooks": true, "hooks": {"Stop": []}, "env": {"A": "b"},
-        "apiKeyHelper": "k", "awsAuthRefresh": "r", "awsCredentialExport": "e",
-        "otelHeadersHelper": "h", "statusLine": {"command": "s"},
-        "subagentStatusLine": {"command": "s"}, "fileSuggestion": {"command": "f"},
-        "enabledPlugins": {"p@m": true}, "sandbox": {"enabled": false},
-        "extraKnownMarketplaces": {"m": {"source": {"source": "github", "repo": "o/r"}}},
-        "enableAllProjectMcpServers": true, "enabledMcpjsonServers": ["db"],
-    }));
-    assert_eq!(all.len(), 15, "{all:?}");
-    assert!(all[0].contains("OpenMoat's included"), "{all:?}");
-    assert!(
-        all.iter()
-            .any(|f| f.contains("`enabledMcpjsonServers` starts MCP servers")),
-        "{all:?}"
-    );
-}
-
-#[test]
-fn leaves_permissions_and_empty_or_switched_off_values_alone() {
-    assert!(
-        found(&json!({
-            "permissions": {"allow": ["Bash"], "defaultMode": "acceptEdits"},
-            "disableAllHooks": false, "hooks": {}, "env": {}, "apiKeyHelper": "",
-            "statusLine": null, "enabledPlugins": {"p@m": false},
-            "sandbox": {"enabled": true}, "model": "opus",
-            "enableAllProjectMcpServers": false, "enabledMcpjsonServers": [],
-            "extraKnownMarketplaces": {}, "disabledMcpjsonServers": ["db"],
-        }))
-        .is_empty()
     );
 }
 
