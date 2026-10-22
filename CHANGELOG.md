@@ -8,6 +8,8 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
 ### Security
 - The command line `flock -c`/`--command` runs, and the commands of launchers that start their arguments (`taskset`, `chrt`, `numactl`, `unshare`, `nsenter`, `prlimit`, `setpriv`, `chpst`, `cgexec`, `firejail`, `sandbox-exec`, `arch`, `strace`, `ltrace`, `valgrind`, `catchsegv`, `gdb --args`, `faketime`, `torsocks`, `proxychains`, `systemd-inhibit`, `busybox`, `toybox`), are decided as commands of their own, so a secret read, a hook-settings write or `rm -rf ~` inside one is denied as it is on its own ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
 - The person-only `openmoat` commands are also denied when `systemd-run`, `daemonize`, `start-stop-daemon`, `launchctl submit` or an `at` or `batch` job starts them; `at` and `batch` ask like `crontab` (`persistence`), and the job they read from stdin is decided as a command line ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
@@ -35,18 +37,6 @@ view at the end of the file.
 - Gemini CLI's `grep_search` and `glob` without `dir_path`, and every `read_many_files`, ask (`unchecked`): Gemini CLI then searches every workspace directory, and the hook names only the working directory. `grep_search`'s `include_pattern` (and the older `include`) is checked for where it climbs to. This adds a Gemini CLI confirmation for such searches ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
 - A glob pattern whose brace or bracket group holds a separator, a `..` or another brace group (`{x/../..,y}`) asks (`unchecked`) in Claude Code's `Glob`, Gemini CLI's `glob` and `read_many_files`, pi's `find` and Copilot CLI's `glob`: it may climb further than OpenMoat works out ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
 - Writes to Gemini CLI's policy files (`.gemini/policies/`, `~/.gemini/policies/`), custom commands (`.gemini/commands/`) and subagents (`.gemini/agents/`), a repository's Copilot CLI agents (`.github/agents/`) and Claude Code's subagents, skills and slash commands (`.claude/agents/`, `.claude/skills/`, `.claude/commands/`) ask (`runs-later`), in a project too, and after untrusted content session taint protects `.github/agents/`. Writing a project's Claude Code skill or command, allowed before, now asks ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
-
-### Added
-- `openmoat-hosts` (library API): `HostSpec::BASE` and `InstallSpec::BASE`, the defaults a host spec takes for the fields it does not name, so a new optional field is added once rather than in every host; `Host::EVERY`, every host including those that speak another's format ([#631](https://github.com/crocodile-labs/openmoat/pull/631)).
-
-### Changed
-- Adding an agent is one line in the host list (`crates/openmoat-hosts/src/host.rs`), which gives the `Host` variant, `Host::ALL`, `Host::EVERY`, the `--host` id list and the spec and adapter lookups; the README "Supported agents" table and the ARCHITECTURE "Host tool mapping" table are generated from each agent's spec and checked by `cargo test -p openmoat-hosts --test docs`, which also fails when an adapter matches a tool its rows leave out; `docs/ADDING_AN_AGENT.md` starts with the smallest path that fits an agent and lists every file a new one needs. `openmoat-hosts` (library API, breaking): `HostSpec` has a new public field `docs`, of the new types `HostDocs` and `ToolRow` ([#632](https://github.com/crocodile-labs/openmoat/pull/632)).
-- **Breaking** for the library crates: `Action::UnknownTool` gains `reads`, `writes`, `hosts` and `commands`, `Action::McpTool` gains `commands`, and `Action::Unchecked` is new (`Action::unknown_tool` and `Action::unchecked` build them) ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
-- `openmoat status` and `openmoat doctor` name every agent's directory variable (`COPILOT_HOME`, `PI_CODING_AGENT_DIR`, `GEMINI_CLI_HOME` and OpenClaw's included) when a pinned hook file is not this shell's ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
-
-## [0.9.0] - 2026-10-22
-
-### Security
 - The person-only `openmoat` commands are also denied under `setsid` and `flock`, and `openmoat proxy install` and `openmoat proxy uninstall` are person-only like `uninstall`: a service installed or removed changes every later session ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 - The person-only commands (all but `openmoat init`) refuse to run from an executable other than the `openmoat` the policy lock records or its `moat` alias: a copy of the binary under another name, started where the agent is no longer among its parent processes, got past the guard's check by name. Run them from the installed `openmoat`, or run `openmoat init` from the new binary to point the hooks at it ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 - A search tool's glob pattern whose `..` segments climb out of the directory it searches, also after a wildcard (`*/../..`, `{..,x}`), is checked against the directory it reaches: Claude Code's `Glob`, Gemini CLI's `glob` and `read_many_files`, pi's `find` and Copilot CLI's `glob`; a deny on reading that directory holds ([#625](https://github.com/crocodile-labs/openmoat/pull/625)).
@@ -93,6 +83,7 @@ view at the end of the file.
 - A write of a repository's `.github/mcp.json`, whose servers GitHub Copilot CLI starts in a trusted folder, asks (`runs-later`) and taints like the other agent configuration files ([#623](https://github.com/crocodile-labs/openmoat/pull/623)).
 
 ### Added
+- `openmoat-hosts` (library API): `HostSpec::BASE` and `InstallSpec::BASE`, the defaults a host spec takes for the fields it does not name, so a new optional field is added once rather than in every host; `Host::EVERY`, every host including those that speak another's format ([#631](https://github.com/crocodile-labs/openmoat/pull/631)).
 - Connections the proxy refuses at accept for capacity (`503`) are recorded as `proxy-capacity` rows: the first at once, then one row per 10 seconds with the count ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
 - `openmoat policy lint` warns about a `net` or `fetch` pattern whose port is not one (`example.com:*`, `example.com:0`, `[::1]:8443`), which matches nothing ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
 - `openmoat run --netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only; the default, `--netns=auto`, is unchanged ([#618](https://github.com/crocodile-labs/openmoat/pull/618)).
@@ -106,6 +97,9 @@ view at the end of the file.
 - `--help` of `openmoat init`, `uninstall`, `guard`, `bench`, `replay` and the audit commands lists every host id `--hosts`/`--host` takes, and the shell completes them ([#623](https://github.com/crocodile-labs/openmoat/pull/623)).
 
 ### Changed
+- Adding an agent is one line in the host list (`crates/openmoat-hosts/src/host.rs`), which gives the `Host` variant, `Host::ALL`, `Host::EVERY`, the `--host` id list and the spec and adapter lookups; the README "Supported agents" table and the ARCHITECTURE "Host tool mapping" table are generated from each agent's spec and checked by `cargo test -p openmoat-hosts --test docs`, which also fails when an adapter matches a tool its rows leave out; `docs/ADDING_AN_AGENT.md` starts with the smallest path that fits an agent and lists every file a new one needs. `openmoat-hosts` (library API, breaking): `HostSpec` has a new public field `docs`, of the new types `HostDocs` and `ToolRow` ([#632](https://github.com/crocodile-labs/openmoat/pull/632)).
+- **Breaking** for the library crates: `Action::UnknownTool` gains `reads`, `writes`, `hosts` and `commands`, `Action::McpTool` gains `commands`, and `Action::Unchecked` is new (`Action::unknown_tool` and `Action::unchecked` build them) ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
+- `openmoat status` and `openmoat doctor` name every agent's directory variable (`COPILOT_HOME`, `PI_CODING_AGENT_DIR`, `GEMINI_CLI_HOME` and OpenClaw's included) when a pinned hook file is not this shell's ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
 - `openmoat init` prints, after it writes or changes Codex's hook entry, that Codex runs it only once you trust it in `/hooks`; `openmoat doctor` says so on Codex's protection line. `openmoat-hosts` (library API, breaking): `InstallSpec::trust_step` ([#626](https://github.com/crocodile-labs/openmoat/pull/626)).
 - `openmoat-hosts` (library API, breaking): `Host::CopilotCli`, `HookFormat::Copilot` and `ProjectSettingsSpec::hook_dir`; `Host::ALL` has one more host ([#615](https://github.com/crocodile-labs/openmoat/pull/615)).
 - `openmoat-hosts` (library API, breaking): `Host::Pi`, `HookFormat::Pi`; `Host::ALL` has one more host ([#616](https://github.com/crocodile-labs/openmoat/pull/616)).
