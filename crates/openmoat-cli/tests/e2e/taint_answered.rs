@@ -154,7 +154,8 @@ fn answering_s_covers_the_sessions_protected_writes_until_the_next_untrusted_rea
 
     // The asked file has its own grant; the others are covered by `s`.
     assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "allow");
-    for file in ["pom.xml", ".claude/agents/helper.md"] {
+    // `.claude/agents/` asks on its own now (`runs-later`), so `s` cannot cover it.
+    for file in ["pom.xml", "Makefile"] {
         let (verdict, reason) = tainted_write(&sb, "s1", file);
         assert_eq!(verdict, "allow", "{file}: {reason}");
         assert!(

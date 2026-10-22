@@ -102,17 +102,13 @@ fn has_entry(root: &Value, secret: &Secret) -> bool {
 /// A weakened mask setting in `root`, worded for `moat doctor`: Claude Code's
 /// `credentials.allowPlaintextInject` lifts the HTTPS requirement for every
 /// mask entry in the block (the settings reference,
-/// `sandbox.credentials.allowPlaintextInject`), so it is a weakness when the
-/// policy's masked secrets do not all set `plain_http`.
+/// `sandbox.credentials.allowPlaintextInject`), so it is a weakness in a block
+/// that holds the policy's masked secrets: OpenMoat masks only secrets that go
+/// over HTTPS alone, and never sets it.
 pub fn weaknesses(root: &Value, generated: &Generated) -> Vec<String> {
     let ours = generated.sandbox.contains_key("credentials");
-    let lifted = generated
-        .sandbox
-        .get("credentials")
-        .and_then(|c| c.get("allowPlaintextInject"))
-        == Some(&json!(true));
     let set = root.pointer("/sandbox/credentials/allowPlaintextInject") == Some(&json!(true));
-    if ours && set && !lifted {
+    if ours && set {
         vec![
             "sandbox.credentials.allowPlaintextInject is true: masked secrets may go to \
              plain-HTTP hosts in clear text"

@@ -197,19 +197,27 @@ pub fn netns_masks(
     Ok(bwrap::grant_masks(&ir, rules, &project_spellings(ctx)))
 }
 
-/// The read-only binds `moat run`'s network namespace on Linux adds over the
-/// agent configuration in the project of `ctx` ([`bwrap::agent_config_masks`]).
+/// The binds `moat run`'s network namespace on Linux adds over the agent
+/// configuration and hook settings in the project of `ctx`, and the folders
+/// that hold them ([`bwrap::project_masks`]).
 #[cfg(target_os = "linux")]
-pub fn netns_agent_config_masks(ctx: &EvalContext) -> Vec<bwrap::Mount> {
-    bwrap::agent_config_masks(&project_spellings(ctx))
+pub fn netns_project_masks(
+    policy: &Policy,
+    ctx: &EvalContext,
+) -> anyhow::Result<Vec<bwrap::Mount>> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    bwrap::project_masks(&ir, &project_spellings(ctx))
 }
 
 /// The paths `kernel-self` keeps from commands (OpenMoat's state, an agent's
 /// hook settings) that lie in one of `writes`, the `moat run --write` paths,
 /// each with the path that holds it. Landlock cannot deny inside a grant, so
 /// without a network namespace on Linux these would be open to commands
-/// ([`exposure::kernel_self_refusal`]). Only absolute rules count: a `**/`
-/// rule is everywhere, the project included, and stays the hook's there.
+/// ([`exposure::kernel_self_refusal`]). A write path counts when it holds an
+/// absolute rule's path or lies inside a tree one denies (`~/.codex/**` holds
+/// `--write ~/.codex/sessions`). A `**/` rule matches at any depth, so every
+/// write path outside the project holds it (another repository's hook
+/// settings); inside the project it stays the hook's.
 #[cfg(any(target_os = "linux", all(test, unix)))]
 pub fn kernel_self_in_writes(
     policy: &Policy,
@@ -218,10 +226,23 @@ pub fn kernel_self_in_writes(
 ) -> anyhow::Result<Vec<(String, String)>> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
     let ci = crate::context::CASE_INSENSITIVE_PATHS;
-    let mut held = Vec::new();
+    let projects: Vec<&String> = ctx.project.iter().chain(&ctx.real_project).collect();
+    let in_project = |w: &str| projects.iter().any(|p| exposure::within(w, p, ci));
+    let mut held: Vec<(String, String)> = Vec::new();
+    let mut record = |holder: &str, path: String| {
+        if !held.iter().any(|(_, p)| *p == path) {
+            held.push((holder.to_owned(), path));
+        }
+    };
     let rules = ir.fs.write.deny.iter().chain(&ir.fs.read.deny);
     for rule in rules.filter(|r| r.id == KERNEL_SELF_RULE) {
         for pattern in patterns::split(&rule.patterns).0 {
+            if let Some(rest) = pattern.strip_prefix("**/") {
+                for write in writes.iter().filter(|w| !in_project(w)) {
+                    record(write, format!("{}/**/{rest}", write.trim_end_matches('/')));
+                }
+                continue;
+            }
             let base = pattern
                 .split(['*', '?', '[', '{'])
                 .next()
@@ -230,11 +251,13 @@ pub fn kernel_self_in_writes(
             if !base.starts_with('/') {
                 continue;
             }
-            let holder = writes.iter().find(|w| exposure::within(base, w, ci));
-            if let Some(holder) = holder
-                && !held.iter().any(|(_, p)| p == pattern)
-            {
-                held.push((holder.clone(), pattern.to_owned()));
+            // `dir/**` denies the whole tree, so a write path inside it is held too.
+            let tree = pattern.strip_suffix("/**") == Some(base);
+            let holder = writes
+                .iter()
+                .find(|w| exposure::within(base, w, ci) || (tree && exposure::within(w, base, ci)));
+            if let Some(holder) = holder {
+                record(holder, pattern.to_owned());
             }
         }
     }

@@ -84,6 +84,10 @@ struct FixtureContext {
     real_home: Option<String>,
     #[serde(default)]
     moved_dirs: BTreeMap<String, String>,
+    /// File names compare ignoring case, as on the default macOS and Windows
+    /// file systems.
+    #[serde(default)]
+    case_insensitive_paths: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +108,9 @@ struct FixtureAction {
     patch: Option<Vec<String>>,
     /// A command for a shell OpenMoat does not parse: `{ shell, command }`.
     foreign_shell: Option<ForeignShellFixture>,
+    /// What the payload does not show of the action, which makes it at least
+    /// an `ask` (`Action::Unchecked`).
+    unchecked: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +118,14 @@ struct FixtureAction {
 struct UnknownToolFixture {
     host: String,
     tool: String,
+    #[serde(default)]
+    reads: Vec<String>,
+    #[serde(default)]
+    writes: Vec<String>,
+    #[serde(default)]
+    hosts: Vec<String>,
+    #[serde(default)]
+    commands: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +148,8 @@ enum McpFixture {
         writes: Vec<String>,
         #[serde(default)]
         hosts: Vec<String>,
+        #[serde(default)]
+        commands: Vec<String>,
         unchecked: Option<String>,
     },
 }
@@ -158,6 +175,10 @@ impl FixtureAction {
             self.unknown_tool.map(|u| Action::UnknownTool {
                 host: u.host,
                 tool: u.tool,
+                reads: u.reads,
+                writes: u.writes,
+                hosts: u.hosts,
+                commands: u.commands,
             }),
             self.foreign_shell.map(|f| Action::ForeignShell {
                 shell: f.shell,
@@ -170,12 +191,14 @@ impl FixtureAction {
                     reads,
                     writes,
                     hosts,
+                    commands,
                     unchecked,
                 } => Action::McpTool {
                     name,
                     reads,
                     writes,
                     hosts,
+                    commands,
                     unchecked,
                 },
             }),
@@ -186,7 +209,11 @@ impl FixtureAction {
             1,
             "fixture `{id}` must declare exactly one action"
         );
-        present.remove(0)
+        let action = present.remove(0);
+        match self.unchecked {
+            Some(reason) => Action::unchecked(action, reason),
+            None => action,
+        }
     }
 }
 
@@ -267,6 +294,7 @@ fn default_policy_conformance() {
                     real_project: c.real_project.clone(),
                     real_home: c.real_home.clone(),
                     moved_dirs: c.moved_dirs.clone().into_iter().collect(),
+                    case_insensitive_paths: c.case_insensitive_paths,
                     ..ctx.clone()
                 },
             );

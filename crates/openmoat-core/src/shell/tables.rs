@@ -74,7 +74,18 @@ pub const WRAPPER_OPTIONS_WITH_VALUE: &[(&str, &[&str])] = &[
     ("watch", &["-n", "-d"]),
     ("stdbuf", &["-i", "-o", "-e"]),
     ("exec", &["-a"]),
-    ("flock", &["-w", "--timeout", "-E", "--conflict-exit-code"]),
+    // `-c`/`--command` hold a command line (`shell/embedded.rs`), not the lock file
+    (
+        "flock",
+        &[
+            "-w",
+            "--timeout",
+            "-E",
+            "--conflict-exit-code",
+            "-c",
+            "--command",
+        ],
+    ),
 ];
 
 pub const ENV_BUILTINS: &[&str] = &["export", "declare", "typeset", "local", "readonly", "set"];
@@ -145,11 +156,22 @@ pub const WRITE_ALL_PATHS: &[&str] = &[
     "prename",
     "perl-rename",
     "file-rename",
+    // `cpio -p DIR` copies the files named on stdin into DIR; in its other modes
+    // the operands are patterns, whose writes only cost a project-local atom
+    "cpio",
 ];
 
 /// Programs for which the last operand is a write and the others are reads.
-/// `link FILE NEW` makes the hard link `NEW`.
-pub const WRITE_LAST_PATH: &[&str] = &["cp", "ln", "link", "rsync", "scp"];
+/// `link FILE NEW` makes the hard link `NEW`; macOS `ditto SRC… DST` and
+/// `pax -rw SRC… DIR` copy (`shell/copy.rs`).
+pub const WRITE_LAST_PATH: &[&str] = &["cp", "ln", "link", "rsync", "scp", "ditto", "pax"];
+
+/// The tools of the two tables above that GNU coreutils also installs with a
+/// `g` in front (Homebrew's `gcp`, `gln`, `grm`): `gcp` is read as `cp`.
+pub const GNU_PREFIXED: &[&str] = &[
+    "cp", "mv", "ln", "link", "rm", "rmdir", "touch", "mkdir", "chmod", "chown", "chgrp",
+    "truncate", "unlink", "shred", "tee", "install", "mkfifo", "mknod",
+];
 
 /// Programs whose operands are files they read, so a plain name (`cat s`) is a
 /// file read (`operands.rs`). Pattern operands (`grep foo .`) become reads of

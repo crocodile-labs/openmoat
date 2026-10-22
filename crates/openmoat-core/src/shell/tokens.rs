@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use super::tables::{IGNORED_VARS, SPECIAL_PARAMS};
+use super::tables::{GNU_PREFIXED, IGNORED_VARS, SPECIAL_PARAMS};
 use crate::lexer::Word;
 
 /// `NAME=value` or `NAME+=value` → `NAME`.
@@ -73,6 +73,16 @@ pub fn flag_payload<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
 
 pub fn basename(program: &str) -> &str {
     program.rsplit(['/', '\\']).next().unwrap_or(program)
+}
+
+/// The program `word` runs, as the classifier's tables name it: its
+/// [`basename`], with the `g` of a GNU tool installed under a prefix dropped
+/// (`/opt/homebrew/bin/gcp` is `cp`, [`GNU_PREFIXED`]).
+pub fn program_name(word: &str) -> &str {
+    let name = basename(word);
+    name.strip_prefix('g')
+        .filter(|tool| GNU_PREFIXED.contains(tool))
+        .unwrap_or(name)
 }
 
 /// `NAME` of `for NAME in WORDS`, when the words are a plain `for` header.

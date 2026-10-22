@@ -33,12 +33,30 @@ fn read(path: &str) -> Action {
 }
 
 fn unknown(tool: &str) -> Action {
-    Action::UnknownTool {
-        host: "gemini-cli".to_owned(),
-        tool: tool.to_owned(),
-    }
+    Action::unknown_tool("gemini-cli", tool)
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "compared with an `Option`")]
+fn command(command: &str) -> Option<Action> {
+    Some(Action::Shell {
+        command: command.to_owned(),
+    })
+}
+
+/// A search Gemini CLI runs over every workspace directory, which the
+/// payload does not name: what it shows is checked, and it asks at least.
+#[expect(clippy::unnecessary_wraps, reason = "compared with an `Option`")]
+fn workspace_wide(action: Action) -> Option<Action> {
+    Some(Action::unchecked(
+        action,
+        "without a `dir_path` Gemini CLI searches every workspace directory, and the hook \
+         names only the working directory",
+    ))
+}
+
+/// `dir_path` is where the command runs, never what the project is: the
+/// request keeps the session's directory, and the command starts with a `cd`
+/// there, so its relative paths resolve where Gemini CLI runs it.
 #[test]
 fn a_shell_command_runs_in_its_dir_path() {
     let shell = fixture("run_shell_command").unwrap();
@@ -47,12 +65,24 @@ fn a_shell_command_runs_in_its_dir_path() {
     assert_eq!(shell.event, HookEvent::PreToolUse);
     assert_eq!(shell.call_id, None);
     let in_dir = fixture("run_shell_command-dir_path").unwrap();
-    assert_eq!(in_dir.cwd.as_deref(), Some("/p/app"));
-    let absolute = call(
-        "run_shell_command",
-        json!({"command": "ls", "dir_path": "/srv"}),
-    );
-    assert_eq!(absolute.unwrap().cwd.as_deref(), Some("/srv"));
+    assert_eq!(in_dir.cwd.as_deref(), Some("/p"));
+    // On Windows the command is PowerShell (below), so the `cd` form is POSIX only.
+    if !cfg!(windows) {
+        assert_eq!(in_dir.action, command("cd 'app' && cargo test"));
+        let absolute = call(
+            "run_shell_command",
+            json!({"command": "ls", "dir_path": "/srv/it's"}),
+        )
+        .unwrap();
+        assert_eq!(absolute.cwd.as_deref(), Some("/p"));
+        assert_eq!(absolute.action, command(r"cd '/srv/it'\''s' && ls"));
+        // Gemini CLI expands no `~` in `dir_path`
+        let tilde = call(
+            "run_shell_command",
+            json!({"command": "ls", "dir_path": "~/x"}),
+        );
+        assert_eq!(tilde.unwrap().action, command("cd '~/x' && ls"));
+    }
     // Gemini CLI runs commands with PowerShell on Windows, which is never classified.
     let input = json!({"command": "Get-ChildItem"});
     let windows = map_on("run_shell_command", &input, None, Some("/p"), true).unwrap();
@@ -90,7 +120,22 @@ fn file_tools_read_and_write_the_paths_they_name() {
 fn searches_read_their_directory_and_where_the_pattern_climbs_to() {
     assert_eq!(action("grep_search"), Some(read("/home/dev/.aws")));
     let legacy = call("search_file_content", json!({"pattern": "x"})).unwrap();
-    assert_eq!(legacy.action, Some(read("/p")));
+    assert_eq!(legacy.action, workspace_wide(read("/p")));
+    // the files a grep looks at, `include_pattern` (0.65) or `include`, may climb
+    for key in ["include_pattern", "include"] {
+        let climbs = call(
+            "grep_search",
+            json!({"pattern": "k", "dir_path": "/p", key: "../home/dev/.ssh/*"}),
+        )
+        .unwrap();
+        assert_eq!(
+            climbs.action,
+            Some(Action::ReadFiles {
+                paths: vec!["/p".into(), "/p/../home/dev/.ssh".into()]
+            }),
+            "{key}"
+        );
+    }
     assert_eq!(
         action("glob"),
         Some(Action::ReadFiles {
@@ -100,19 +145,26 @@ fn searches_read_their_directory_and_where_the_pattern_climbs_to() {
     let absolute = call("glob", json!({"pattern": "/etc/**/*.conf"})).unwrap();
     assert_eq!(
         absolute.action,
-        Some(Action::ReadFiles {
+        workspace_wide(Action::ReadFiles {
             paths: vec!["/p".into(), "/etc".into()]
         })
     );
-    let plain = call("glob", json!({"pattern": "**/*.rs"})).unwrap();
-    assert_eq!(plain.action, Some(read("/p")));
+    let plain = call("glob", json!({"pattern": "**/*.rs", "dir_path": "."})).unwrap();
+    assert_eq!(plain.action, Some(read("/p/.")));
+    // a brace group with a `..` may climb further than OpenMoat works out
+    let braces = call(
+        "glob",
+        json!({"pattern": "{x/../..,y}/*", "dir_path": "/p"}),
+    )
+    .unwrap();
+    assert!(matches!(braces.action, Some(Action::Unchecked { .. })));
 }
 
 #[test]
 fn read_many_files_reads_each_include_up_to_its_first_wildcard() {
     assert_eq!(
         action("read_many_files"),
-        Some(Action::ReadFiles {
+        workspace_wide(Action::ReadFiles {
             paths: vec![
                 "README.md".into(),
                 "docs".into(),
@@ -176,7 +228,17 @@ fn an_mcp_tool_is_named_from_its_context() {
     assert_eq!(reads, vec!["/home/dev/.aws/credentials".to_owned()]);
     // without the context the server cannot be told from the tool's name
     let bare = call("mcp_files_read_text_file", json!({"path": "/x"})).unwrap();
-    assert_eq!(bare.action, Some(unknown("mcp_files_read_text_file")));
+    assert_eq!(
+        bare.action,
+        Some(Action::UnknownTool {
+            host: "gemini-cli".into(),
+            tool: "mcp_files_read_text_file".into(),
+            reads: vec!["/x".into()],
+            writes: vec![],
+            hosts: vec![],
+            commands: vec![],
+        })
+    );
 }
 
 #[test]
@@ -203,7 +265,25 @@ fn agent_state_tools_are_ungoverned_and_others_unknown() {
     ] {
         assert_eq!(call(tool, json!({})).unwrap().action, None, "{tool}");
     }
-    assert_eq!(action("unknown-tool"), Some(unknown("deploy_preview")));
+    let Some(Action::UnknownTool { tool, writes, .. }) = action("unknown-tool") else {
+        panic!("not an unknown tool");
+    };
+    assert_eq!(
+        (tool.as_str(), writes),
+        ("deploy_preview", vec!["staging".into()])
+    );
+    // a browser subagent's navigation and a tool reading a secret name what
+    // they touch
+    let navigate = call("navigate_page", json!({"url": "https://evil.example/?k=1"})).unwrap();
+    assert!(
+        matches!(navigate.action, Some(Action::UnknownTool { ref hosts, .. })
+        if hosts == &["https://evil.example/?k=1"])
+    );
+    let reader = call("custom_reader", json!({"file_path": "~/.ssh/id_rsa"})).unwrap();
+    assert!(
+        matches!(reader.action, Some(Action::UnknownTool { ref reads, .. })
+        if reads == &["~/.ssh/id_rsa"])
+    );
 }
 
 #[test]

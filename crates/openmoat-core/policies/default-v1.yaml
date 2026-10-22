@@ -11,7 +11,7 @@ defaults:
   net: deny          # outbound network: only hosts listed under allow
   fetch: defer       # a host fetch tool (WebFetch) reading an unlisted URL: no request body (ADR-017)
   web.search: allow  # a host search tool (WebSearch): recorded; asks after a secret read (session taint)
-  tool.unknown: defer  # a host tool OpenMoat cannot classify (an unknown Cursor tool naming no path)
+  tool.unknown: defer  # a host tool OpenMoat cannot classify; what its arguments name is checked too
 
 deny:
   - id: secrets-paths
@@ -343,6 +343,18 @@ deny:
       - "{expect,*/expect} * '*spawn {moat,*/moat,openmoat,*/openmoat}{;,\n,'}*"
       - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat,openmoat,*/openmoat}\"{],)}*'"
       - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
+      # stopping, disabling or masking the proxy service, which only `openmoat proxy
+      # uninstall` removes: systemd's `moat-proxy` and launchd's `dev.openmoat.proxy`
+      - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert} * *moat-proxy*"
+      - "{launchctl,*/launchctl} {bootout,unload,disable,remove,kill} * *dev.openmoat.proxy*"
+  # the folders above a file `kernel-self` protects that hold no agent directory of
+  # their own: renaming `.github` (or `.github/copilot`) away and back edits
+  # `.github/copilot/settings.json` under another name. `hook_only` (ADR-034): a
+  # sandboxed command may still create a `.github` (a clone, a package that has one)
+  - id: agent-folders
+    reason: renaming or removing this folder moves agent settings OpenMoat protects
+    hook_only: true
+    fs.write: ["**/.github", "**/.github/copilot"]
   - id: shell-rc
     reason: edits persist into every future shell session
     # and the files curl and wget read on every run, which can add a body or an
@@ -376,7 +388,12 @@ allow:
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
       "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
-      "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json"]
+      "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json",
+      # the folders above them, which a rename moves with everything inside (`runs-later` asks)
+      "!${project}/**/.github/hooks", "!${project}/**/.pi", "!${project}/**/.pi/extensions",
+      "!${project}/**/.gemini/policies/**", "!${project}/**/.gemini/commands/**", "!${project}/**/.gemini/agents/**",
+      "!${project}/**/.github/agents/**", "!${project}/**/.claude/agents/**", "!${project}/**/.claude/skills/**",
+      "!${project}/**/.claude/commands/**"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -748,12 +765,30 @@ ask:
       # extensions off
       "~/.pi/agent/extensions/**", "**/.pi/extensions/**", "~/.pi/agent/mcp.json", "**/.pi/mcp.json",
       "**/.pi/settings.json",
-      # Gemini CLI extensions, whose hooks and MCP servers it starts
-      "~/.gemini/extensions/**"]
+      # the folders above a repository's Copilot hooks and its pi files: a rename away
+      # and back edits them under another name
+      "**/.github/hooks", "**/.pi", "**/.pi/extensions",
+      # Gemini CLI extensions, whose hooks and MCP servers it starts; its policy
+      # files, which can allow what OpenMoat leaves to it (accepted without a
+      # question in a non-interactive run); its custom commands, whose shell
+      # runs when the person types the command, outside any tool hook; and its
+      # subagents
+      "~/.gemini/extensions/**", "**/.gemini/policies/**", "~/.gemini/policies/**",
+      "**/.gemini/commands/**", "**/.gemini/agents/**",
+      # a repository's GitHub Copilot CLI agents, whose frontmatter may carry hooks
+      "**/.github/agents/**",
+      # Claude Code subagents, skills and slash commands, which carry their own
+      # hooks, allowed tools and shell
+      "**/.claude/agents/**", "**/.claude/skills/**", "**/.claude/commands/**"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]
-    shell: ["crontab *"]
+    # `at` and `batch` run the job on their stdin or in `-f FILE` later; the job's
+    # commands are classified too, so a denied one stays denied
+    shell: ["crontab *", "at *", "batch *"]
+  - id: stops-openmoat
+    reason: stops a running OpenMoat process, such as the egress proxy service
+    shell: ["{pkill,*/pkill,killall,*/killall} * *moat*"]
   - id: home-sweep
     reason: reads the whole home folder, secrets included
     # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)

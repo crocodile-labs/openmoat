@@ -23,9 +23,14 @@ use crate::integrity::Lock;
 
 /// The namespace a repository policy's signature is made and checked in, so a
 /// key's signature over something else (a git commit, a file, a pack) is no
-/// repository policy signature. Releases before [`PACK_NAMESPACE`] signed
-/// packs in it too; repository signatures made then stay valid.
-pub const NAMESPACE: &str = "openmoat-policy";
+/// repository policy signature (ADR-037).
+pub const NAMESPACE: &str = "openmoat-repo-policy";
+
+/// The namespace earlier releases signed repository policies and packs in
+/// alike. Nothing verifies in it any more: a pack signed in it, copied into a
+/// project as `.moat/policy.yaml`, would verify as a signed repository policy.
+#[cfg(test)]
+pub const EARLIER_NAMESPACE: &str = "openmoat-policy";
 
 /// The namespace a policy pack's signature is made and checked in.
 pub const PACK_NAMESPACE: &str = "openmoat-pack";
@@ -136,7 +141,7 @@ pub fn signer_line(principal: &str, key: &str) -> Result<String> {
 
 /// Whether two allowed-signers lines trust the same key under the same
 /// principal, whatever namespaces they allow: `moat policy trust-key` replaces
-/// a line an earlier release wrote for [`NAMESPACE`] alone.
+/// a line an earlier release wrote for other namespaces (`openmoat-policy`).
 #[must_use]
 pub fn same_signer(a: &str, b: &str) -> bool {
     signer_key(a).is_some_and(|k| signer_key(b) == Some(k))

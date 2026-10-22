@@ -129,6 +129,7 @@ fn an_unparseable_part_never_softens_a_deny() {
         reads: reads.iter().map(|r| (*r).to_owned()).collect(),
         writes: Vec::new(),
         hosts: vec!["https://".into(), "example.org".into()],
+        commands: Vec::new(),
         unchecked: None,
     };
     let verdict = |action: &Action| {

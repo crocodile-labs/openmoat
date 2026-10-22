@@ -18,6 +18,7 @@ extend-ignore-re = [
     "`-oout`",     # curl's `-o` with its value attached
     "bash-authorize",  # the npm package compared in docs/MOATBENCH.md, spelt as its author spells it
     "\\./ba\\b",   # its install directory in the MoatBench comparison
+    "--inh-caps",  # setpriv's option for the inheritable capabilities
 ]
 
 [default.extend-identifiers]

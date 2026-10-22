@@ -223,10 +223,12 @@ impl Relay {
             state.broken = Some(format!("{e:#}"));
         }
         let before = tools.len();
+        // An entry without a string name has no pin to check it against, and
+        // a host may still read one: it is dropped.
         tools.retain(|t| {
             t.get("name")
                 .and_then(Value::as_str)
-                .is_none_or(|n| !listing.hidden.contains(n))
+                .is_some_and(|n| !listing.hidden.contains(n))
         });
         tools.len() != before
     }

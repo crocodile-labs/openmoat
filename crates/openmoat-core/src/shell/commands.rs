@@ -13,7 +13,7 @@ use super::tables::{
     SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
-    assignment_name, basename, flag_payload, for_variable, strip_at, word_env_refs,
+    assignment_name, flag_payload, for_variable, program_name, strip_at, word_env_refs,
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
@@ -266,7 +266,7 @@ fn classify_as_written(
         return Ok(());
     }
     let argv: Vec<String> = words.iter().map(|w| w.text.clone()).collect();
-    let program = basename(&argv[0]);
+    let program = program_name(&argv[0]);
     sink.refuse_dot_dirs(program);
     super::push::note(&argv, program, ctx, sink);
     super::installs::note(&argv, program, sink)?;

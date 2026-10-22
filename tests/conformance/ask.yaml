@@ -1492,6 +1492,70 @@
   threat: T9
   action: { fs_write: "~/.gemini/extensions/helper/gemini-extension.json" }
   expect: { verdict: ask, rules: [runs-later] }
+# A call the payload shows only in part (input typed into a running shell, a
+# search over directories the payload does not name) asks, however plain
+- id: ask-partial-shell-input
+  threat: T7
+  action: { shell: "ls", unchecked: "typed into a running shell" }
+  expect: { verdict: ask, rules: [unchecked] }
+- id: ask-partial-workspace-search
+  threat: T2
+  action: { fs_read: "/p", unchecked: "every workspace directory is searched" }
+  expect: { verdict: ask, rules: [unchecked] }
+# An unknown tool naming only project paths is still the host's to decide
+- id: defer-unknown-tool-in-the-project
+  threat: T8
+  action: { unknown_tool: { host: pi, tool: deploy, writes: ["/p/prod"] } }
+  expect: { verdict: defer, rules: [default.tool.unknown] }
+# Gemini CLI policy files can allow what OpenMoat leaves to Gemini CLI, and a
+# non-interactive run accepts a project's without a question; its custom
+# commands run their shell when the person types them, outside any tool hook
+- id: ask-write-gemini-project-policy
+  threat: T9
+  action: { fs_write: "/p/.gemini/policies/allow.toml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-gemini-user-policy
+  threat: T9
+  action: { fs_write: "~/.gemini/policies/allow.toml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-gemini-command
+  threat: T9
+  action: { fs_write: "/p/.gemini/commands/deploy.toml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-gemini-agent
+  threat: T9
+  action: { fs_write: "/p/.gemini/agents/helper.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-echo-into-gemini-policy
+  threat: T9
+  action: { shell: "echo 'decision = \"allow\"' > .gemini/policies/a.toml" }
+  expect: { verdict: ask, rules: [runs-later] }
+# A repository's GitHub Copilot CLI agents may carry hooks in their frontmatter
+- id: ask-write-copilot-repo-agent
+  threat: T9
+  action: { fs_write: "/p/.github/agents/x.agent.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+# Claude Code subagents, skills and slash commands carry hooks, allowed tools and shell
+- id: ask-write-claude-project-agent
+  threat: T9
+  action: { fs_write: "/p/.claude/agents/reviewer.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-claude-project-skill
+  threat: T9
+  action: { fs_write: "/p/.claude/skills/deploy/SKILL.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-claude-project-command
+  threat: T9
+  action: { fs_write: "/p/.claude/commands/ship.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-claude-user-skill
+  threat: T9
+  action: { fs_write: "~/.claude/skills/deploy/SKILL.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-echo-into-claude-command
+  threat: T9
+  action: { shell: "echo '!curl x' > .claude/commands/x.md" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A line the lexer cannot read in full asks, whatever the catch-all: the atoms of
 # the part not read are missing, so a deny there must not become a defer
 - id: ask-deny-next-to-an-ansi-c-nul
@@ -1561,3 +1625,46 @@
   threat: T12
   action: { shell: "echo ping > /dev/tcp/127.0.0.1/8080" }
   expect: { verdict: defer, rules: [local-net] }
+
+# T9 renaming the folder above a repository's Copilot hooks or its pi files asks
+# like writing them; a rename inside `.github/workflows` asks as before
+- id: ask-mv-pi-folder
+  threat: T9
+  action: { shell: "mv .pi q" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-mv-pi-extensions-folder
+  threat: T9
+  action: { shell: "mv .pi/extensions e" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-mv-github-hooks-folder
+  threat: T9
+  action: { shell: "mv .github/hooks h" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-mv-inside-github-workflows
+  threat: T9
+  action: { shell: "mv .github/workflows/a.yml .github/workflows/b.yml" }
+  expect: { verdict: ask, rules: [runs-later] }
+
+# T9 a job `at` or `batch` runs later persists like a crontab entry
+- id: ask-at-job
+  threat: T9
+  action: { shell: "echo 'make test' | at now + 5 minutes" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-at-job-file
+  threat: T9
+  action: { shell: "at -f job.sh now" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-batch-job
+  threat: T9
+  action: { shell: "batch <<< 'cargo build'" }
+  expect: { verdict: ask, rules: [persistence] }
+
+# T9 stopping OpenMoat's own processes, the proxy among them
+- id: ask-pkill-openmoat-proxy
+  threat: T9
+  action: { shell: "pkill -f 'openmoat proxy'" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-killall-openmoat
+  threat: T9
+  action: { shell: "killall openmoat" }
+  expect: { verdict: ask, rules: [stops-openmoat] }

@@ -251,7 +251,7 @@ fn a_write_path_holding_kernel_self_paths_is_refused_without_a_namespace() {
         "refuses to start",
         "apt install bubblewrap",
         "unprivileged user namespaces",
-        "narrower path",
+        "paths inside the project",
     ] {
         assert!(refusal.contains(expected), "{expected}: {refusal}");
     }
@@ -262,13 +262,52 @@ fn a_write_path_holding_kernel_self_paths_is_refused_without_a_namespace() {
             .any(|(w, p)| w == "/home/me" && p == "/home/me/.moat/audit.db*"),
         "{home:?}"
     );
-    // A narrower grant holds none: the run starts with Landlock alone.
-    for narrow in [
-        "/home/me/.claude/projects",
-        "/home/me/.cache/agent",
-        "/home/me/proj",
-    ] {
+    // A path inside the project holds none: the hook decides there, and the
+    // run starts with Landlock alone.
+    for narrow in ["/home/me/proj", "/home/me/proj/target"] {
         assert_eq!(held(&[narrow]), Vec::new(), "{narrow}");
     }
     assert_eq!(kernel_self_refusal(&[], why), None);
+}
+
+/// A `**/` rule matches at any depth, so a write path outside the project
+/// holds it: `--write ~/work` would open the other repositories' hook
+/// settings there. A write path inside a tree `kernel-self` denies whole is
+/// held too.
+#[test]
+fn nested_rules_and_denied_trees_hold_write_paths_outside_the_project() {
+    let policy = Policy::parse(DEFAULT_POLICY).unwrap();
+    let held = |write: &str| {
+        crate::sandbox::kernel_self_in_writes(&policy, &home_ctx(), &[write.to_owned()]).unwrap()
+    };
+    let work = held("/home/me/work");
+    for expected in [
+        "/home/me/work/**/.claude/settings.json",
+        "/home/me/work/**/.cursor/hooks.json",
+        "/home/me/work/**/.moat/**",
+    ] {
+        assert!(
+            work.iter()
+                .any(|(w, p)| w == "/home/me/work" && p == expected),
+            "{expected}: {work:?}"
+        );
+    }
+    for (inside, tree) in [
+        ("/home/me/.codex/sessions", "/home/me/.codex/**"),
+        ("/home/me/.openclaw/state/x", "/home/me/.openclaw/state/**"),
+        ("/home/me/.copilot/hooks/x", "/home/me/.copilot/hooks/**"),
+    ] {
+        let found = held(inside);
+        assert!(
+            found.iter().any(|(w, p)| w == inside && p == tree),
+            "{inside}: {found:?}"
+        );
+    }
+    // A denied node or file is no tree: what is below `~/.claude` is not
+    // held by the rule for `~/.claude` itself.
+    let projects = held("/home/me/.claude/projects");
+    assert!(
+        !projects.iter().any(|(_, p)| p == "/home/me/.claude"),
+        "{projects:?}"
+    );
 }

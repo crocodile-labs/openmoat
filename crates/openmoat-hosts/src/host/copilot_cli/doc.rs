@@ -13,14 +13,14 @@ pub(super) const DOCS: HostDocs = HostDocs {
 const TOOLS: &[ToolRow] = &[
     ToolRow::new(
         "`bash`, `local_shell` / `write_bash`",
-        "`command` / `input` (typed into a running shell); `toolArgs` is parsed when it is a \
-         JSON string",
-        "`Shell`",
+        "`command` (asks when it leaves the shell in a directory OpenMoat cannot know) / `input` \
+         (typed into a running shell: asks); `toolArgs` is parsed when it is a JSON string",
+        "`Shell` / `Unchecked`",
     ),
     ToolRow::new(
         "`powershell` / `write_powershell`",
-        "`command` / `input`",
-        "`ForeignShell`",
+        "`command` / `input` (asks)",
+        "`ForeignShell` / `Unchecked`",
     ),
     ToolRow::new(
         "`view` / `create`, `edit`, `str_replace`",
@@ -56,7 +56,8 @@ const TOOLS: &[ToolRow] = &[
     ),
     ToolRow::new(
         "any other tool, MCP tools included (`<server>-<tool>`; the payload does not mark them)",
-        "tool name and arguments, as an MCP call's",
+        "tool name and arguments, read as an unknown tool's (paths and URLs by key and by look, \
+         commands)",
         "`McpTool`",
     ),
 ];

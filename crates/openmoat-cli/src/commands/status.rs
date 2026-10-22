@@ -218,8 +218,9 @@ fn lock(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
     for path in gap.elsewhere {
         writeln!(
             out,
-            "lock             · {} is pinned but not this shell's hook file (CLAUDE_CONFIG_DIR, CODEX_HOME or CURSOR_CONFIG_DIR differ)",
-            path.display()
+            "lock             · {} is pinned but not this shell's hook file ({})",
+            path.display(),
+            HookPinGap::moved_by()
         )?;
     }
     Ok(healthy)

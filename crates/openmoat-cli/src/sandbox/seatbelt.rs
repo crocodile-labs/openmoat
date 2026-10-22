@@ -8,7 +8,9 @@
 //!   `stat` working, so `git status` does not fail on `.env`;
 //! - `require-all`/`require-not` express a rule's `!` exceptions exactly;
 //! - paths are compared resolved (`/tmp` is `/private/tmp`) and in their
-//!   on-disk spelling, even when a program names them in another case;
+//!   on-disk spelling, even when a program names them in another case; a
+//!   path that does not exist yet has the spelling it is created with, so on a
+//!   case-insensitive disk deny rules match in either case ([`mod@filter`]);
 //! - a program cannot start from a file it cannot read, and the dynamic loader
 //!   needs to read `/` itself;
 //! - a network address can only be `*` or `localhost`, so egress goes to the
@@ -20,13 +22,15 @@ use openmoat_core::Kind;
 use openmoat_core::ir::{Access, Effect, Enforcement, Rule};
 
 use super::patterns::{
-    AGENT_CONFIG, RUNS_LATER, agent_config_exclusion, literal_tree, push_unique,
+    AGENT_CONFIG, RUNS_LATER, agent_config_exclusion, agent_config_folders, push_unique,
     runs_later_exclusion, split,
 };
 use super::{Grants, Report};
 use braces::alternatives;
+use filter::{Case, filter};
 
 mod braces;
+mod filter;
 
 /// Paths every process reads: `/` (the dynamic loader), the controlling
 /// terminal (`/dev/tty`) and random devices, and `/private/var/select` (where
@@ -157,6 +161,7 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
             &allowance.rule,
             "allow file-read*",
             &allowance.patterns,
+            Case::Exact,
         );
         p.report.allowances.push(allowance.clone());
     }
@@ -178,22 +183,25 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
             "`openmoat run --write`: commands may read and write these; deny rules still win";
         p.grant(write, "seatbelt.write", both, trees, message);
     }
+    // A path created in another case (`.MCP.json`) is spelled so on disk: on a
+    // case-insensitive disk the denies match either case. Allows stay as
+    // written, which can only narrow them.
+    let deny = if ir.fs.case_insensitive {
+        Case::Folded
+    } else {
+        Case::Exact
+    };
     rules(
         &mut p.profile,
         &ir.fs.read.deny,
         "deny file-read-data file-read-xattr",
+        deny,
     );
-    rules(&mut p.profile, &ir.fs.write.deny, "deny file-write*");
-    agent_config(&mut p, &ir.fs.write);
+    rules(&mut p.profile, &ir.fs.write.deny, "deny file-write*", deny);
+    agent_config(&mut p, &ir.fs.write, deny);
     p.profile.push_str(KEYCHAIN);
     p.profile.push_str(TERMINAL_INPUT);
     network(&mut p, &ir.egress.net, grants.proxy_port);
-    if ir.fs.case_insensitive {
-        let message = "Seatbelt compares paths in their on-disk spelling, so a pattern spelled in \
-                       another case than the file on disk does not match it";
-        p.report
-            .allowance(read, "seatbelt.case", Vec::new(), message);
-    }
     p
 }
 
@@ -205,6 +213,7 @@ impl Generated {
             id,
             &format!("allow {operation}"),
             &patterns,
+            Case::Exact,
         );
         self.report.allowance(kind, id, patterns, why);
     }
@@ -214,7 +223,7 @@ impl Generated {
         if access.default == Effect::Allow {
             let _ = writeln!(self.profile, "; default\n({operation})");
         }
-        rules(&mut self.profile, &access.allow, operation);
+        rules(&mut self.profile, &access.allow, operation, Case::Exact);
         let runs_later = access
             .allow
             .iter()
@@ -233,12 +242,19 @@ impl Generated {
     }
 }
 
-/// One `(<operation> …)` per IR rule, named in a comment.
-fn rules(out: &mut String, rules: &[Rule], operation: &str) {
+/// One `(<operation> …)` per IR rule, named in a comment; `case` for their
+/// positive patterns.
+fn rules(out: &mut String, rules: &[Rule], operation: &str, case: Case) {
     let verb = operation.split(' ').next().unwrap_or_default();
     for r in rules {
         let comment = format!("{verb} {} ({})", r.id, r.list);
-        rule(out, &comment, operation, &with_real_paths(&r.patterns));
+        rule(
+            out,
+            &comment,
+            operation,
+            &with_real_paths(&r.patterns),
+            case,
+        );
     }
 }
 
@@ -258,8 +274,9 @@ fn with_real_paths(patterns: &[String]) -> Vec<String> {
 }
 
 /// `(<operation> …)` matching what `patterns` match: at least one positive
-/// pattern and none of the `!` exceptions.
-fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
+/// pattern, compared as `case` says, and none of the `!` exceptions, compared
+/// as written: a folded exception would take more out of a deny.
+fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String], case: Case) {
     // `~/{.ssh/**,.aws/**}`: each alternative on its own, so `/**` inside braces
     // is recursive here as it is in the engine
     let patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
@@ -273,19 +290,19 @@ fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
     if positive.is_empty() {
         return;
     }
-    let lines = |list: &[&str], indent: &str| {
-        let filters: Vec<String> = list.iter().map(|p| filter(p)).collect();
+    let lines = |list: &[&str], indent: &str, case: Case| {
+        let filters: Vec<String> = list.iter().map(|p| filter(p, case)).collect();
         format!("\n{indent}{}", filters.join(&format!("\n{indent}")))
     };
     let _ = write!(out, "; {comment}\n({operation}");
     if excluded.is_empty() {
-        out.push_str(&lines(&positive, "  "));
+        out.push_str(&lines(&positive, "  ", case));
     } else {
         let _ = write!(
             out,
             "\n  (require-all\n    (require-any{})\n    (require-not (require-any{})))",
-            lines(&positive, "      "),
-            lines(&excluded, "      ")
+            lines(&positive, "      ", case),
+            lines(&excluded, "      ", Case::Exact)
         );
     }
     out.push_str(")\n");
@@ -294,8 +311,10 @@ fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String]) {
 /// Commands may not write the agent configuration files ([`AGENT_CONFIG`])
 /// the write allow rules leave out, even where another grant (`--write`, the
 /// temp directory) covers them: the agent host loads them later, outside every
-/// sandbox, so the person changes one outside `openmoat run`.
-fn agent_config(p: &mut Generated, write: &Access) {
+/// sandbox, so the person changes one outside `openmoat run`. Nor the folders
+/// above them (`.github`, `.pi`): renamed away, a file inside them would no
+/// longer match, and renamed back it would be loaded.
+fn agent_config(p: &mut Generated, write: &Access, case: Case) {
     let mut patterns = Vec::new();
     for r in &write.allow {
         let (_, excluded) = split(&r.patterns);
@@ -306,18 +325,27 @@ fn agent_config(p: &mut Generated, write: &Access) {
     if patterns.is_empty() {
         return;
     }
+    for folder in patterns
+        .clone()
+        .iter()
+        .flat_map(|p| agent_config_folders(p))
+    {
+        push_unique(&mut patterns, folder);
+    }
     let comment = "deny seatbelt.agent-config (fs.write)";
     rule(
         &mut p.profile,
         comment,
         "deny file-write*",
         &with_real_paths(&patterns),
+        case,
     );
     let message = "commands may not write an agent's hooks, MCP servers or extensions in the \
                    project (`.claude/hooks`, `.mcp.json`, `.cursor/mcp.json`, \
                    `.codex/config.toml`, `.github/hooks`, `.pi/…`, `.openclaw/extensions`), \
                    which the agent loads later outside the sandbox, even when the hook allowed \
-                   it: change one outside `openmoat run`";
+                   it, nor create, rename or remove the folders that hold them (`.github`, \
+                   `.pi`, `.openclaw`): change one outside `openmoat run`";
     p.report
         .loss(Kind::FsWrite, "seatbelt.agent-config", message.into());
 }
@@ -367,91 +395,6 @@ fn through_links(pattern: &str) -> Option<String> {
             return Some(format!("{bang}{real}{}", &body[dir.len()..]));
         }
         dir = dir.parent()?;
-    }
-}
-
-/// One IR glob as a Seatbelt path filter.
-fn filter(pattern: &str) -> String {
-    match literal_tree(pattern) {
-        Some(dir) if pattern.ends_with("/**") => format!("(subpath {})", quote(dir)),
-        Some(path) => format!("(literal {})", quote(path)),
-        None => format!("(regex {})", quote(&regex(pattern))),
-    }
-}
-
-/// An SBPL string literal.
-fn quote(text: &str) -> String {
-    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
-/// A path glob as an anchored regular expression with the engine's semantics
-/// (`docs/POLICY.md` §3): `*` and `?` stop at `/`, `**` as a whole component
-/// crosses it, and `dir/**` also matches `dir`.
-fn regex(glob: &str) -> String {
-    let mut re = String::from("^");
-    let mut depth = 0usize;
-    let mut i = 0;
-    while let Some(c) = glob[i..].chars().next() {
-        let rest = &glob[i..];
-        let (piece, used) = if rest == "/**" {
-            ("(/.*)?".to_owned(), 3)
-        } else if rest.starts_with("/**/") {
-            ("/(.*/)?".to_owned(), 4)
-        } else if i == 0 && rest == "**" {
-            (".*".to_owned(), 2)
-        } else if i == 0 && rest.starts_with("**/") {
-            ("(.*/)?".to_owned(), 3)
-        } else {
-            match c {
-                '*' => ("[^/]*".to_owned(), 1),
-                '?' => ("[^/]".to_owned(), 1),
-                '{' => {
-                    depth += 1;
-                    ("(".to_owned(), 1)
-                }
-                '}' if depth > 0 => {
-                    depth -= 1;
-                    (")".to_owned(), 1)
-                }
-                ',' if depth > 0 => ("|".to_owned(), 1),
-                '[' => class(rest).unwrap_or_else(|| (escape('['), 1)),
-                '\\' => match rest[1..].chars().next() {
-                    Some(next) => (escape(next), 1 + next.len_utf8()),
-                    None => (escape('\\'), 1),
-                },
-                other => (escape(other), other.len_utf8()),
-            }
-        };
-        re.push_str(&piece);
-        i += used;
-    }
-    re.push('$');
-    re
-}
-
-/// A glob character class at the start of `rest` (`[ab]`, `[!ab]`) and its
-/// length, or `None` when it is not closed.
-fn class(rest: &str) -> Option<(String, usize)> {
-    let body = &rest[1..];
-    let (negated, body) = match body.strip_prefix(['!', '^']) {
-        Some(b) => (true, b),
-        None => (false, body),
-    };
-    // A `]` right after the opening bracket is a member, not the end.
-    let end = body.char_indices().skip(1).find(|(_, c)| *c == ']')?.0;
-    let members = body[..end].replace('\\', "\\\\");
-    let negation = if negated { "^/" } else { "" };
-    Some((
-        format!("[{negation}{members}]"),
-        rest.len() - body.len() + end + 1,
-    ))
-}
-
-fn escape(c: char) -> String {
-    if ".^$|()+[]{}\\*?".contains(c) {
-        format!("\\{c}")
-    } else {
-        c.to_string()
     }
 }
 

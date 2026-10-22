@@ -1,7 +1,9 @@
 //! OpenClaw's tools mapped to actions. Tool ids and parameters are those of
 //! OpenClaw 2026.10.5 (<https://docs.openclaw.ai/tools>, its `dist` tool schemas).
-//! The hook sees every tool, so a tool not named here is an `UnknownTool`:
-//! `defaults.tool.unknown` decides it.
+//! The hook sees every tool, so a tool not named here is an `UnknownTool`
+//! with what its arguments name ([`crate::wire::unknown`]), and an action of a
+//! known tool that is not mapped is a bare one: `defaults.tool.unknown`
+//! decides it.
 
 use openmoat_core::Action;
 use serde_json::Value;
@@ -142,16 +144,13 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
         name if name.contains("__") => {
             crate::wire::mcp::action(&format!("mcp__{name}"), call.params)?
         }
-        _ => unknown(call),
+        _ => crate::wire::unknown::action(crate::Host::OpenClaw, tool, call.params)?,
     };
     Ok(Some(action))
 }
 
 fn unknown(call: &Call<'_>) -> Action {
-    Action::UnknownTool {
-        host: crate::Host::OpenClaw.id().to_owned(),
-        tool: call.tool.to_owned(),
-    }
+    Action::unknown_tool(crate::Host::OpenClaw.id(), call.tool)
 }
 
 /// `exec` runs `command` in the user's `SHELL` (PowerShell on Windows), with
@@ -185,41 +184,26 @@ fn exec(call: &Call<'_>) -> Result<Action, HostError> {
         Some(_) => return Err(malformed(call, "`env` is not an object".to_owned())),
     }
     line.push_str(&command);
-    if let Some(dir) = home_workdir(call.params.get("workdir")) {
+    if let Some(dir) = workdir_cd(call.params.get("workdir")) {
         line = format!("{dir} && {line}");
     }
     Ok(Action::Shell { command: line })
 }
 
-/// A `workdir` under the home directory (`~`, `~/x`), which OpenClaw expands
-/// itself, as a `cd` to put before the command: the guard takes a working
-/// directory literally, so `~/.ssh` would be a directory named `~` in its own.
-/// The rest of the path is quoted, so only the `~` is expanded.
-fn home_workdir(workdir: Option<&Value>) -> Option<String> {
-    let dir = workdir.and_then(Value::as_str)?;
-    let rest = match dir.strip_prefix('~')? {
-        "" => return Some("cd ~".to_owned()),
-        rest if rest.starts_with(['/', '\\']) => &rest[1..],
-        _ => return None,
-    };
-    Some(format!("cd ~/'{}'", rest.replace('\'', r"'\''")))
-}
-
-/// The directory `exec` runs in: `workdir`, taken from the workspace when
-/// relative, else the workspace. A `workdir` under `~` is the workspace here
-/// and a `cd` in the command ([`home_workdir`]).
-pub(super) fn workdir(workdir: Option<&Value>, cwd: Option<String>) -> Option<String> {
-    if home_workdir(workdir).is_some() {
-        return cwd;
-    }
-    match (
-        workdir.and_then(Value::as_str).filter(|w| !w.is_empty()),
-        cwd,
-    ) {
-        (Some(dir), _) if !is_relative(dir) => Some(dir.to_owned()),
-        (Some(dir), Some(cwd)) => Some(format!("{}/{dir}", cwd.trim_end_matches(['/', '\\']))),
-        (_, cwd) => cwd,
-    }
+/// The `cd` to put before an `exec` command that names a `workdir`, so its
+/// relative paths resolve where OpenClaw runs it while the project stays the
+/// session's workspace (the guard takes it from the payload's `cwd`): a
+/// model-chosen directory never decides which directory is the project. A
+/// relative `workdir` is below the workspace, as for the `cd`. OpenClaw
+/// expands a `~` itself, so `~` and `~/x` keep it; the rest is quoted.
+fn workdir_cd(workdir: Option<&Value>) -> Option<String> {
+    let dir = workdir.and_then(Value::as_str).filter(|d| !d.is_empty())?;
+    let quote = |s: &str| format!("'{}'", s.replace('\'', r"'\''"));
+    Some(match dir.strip_prefix('~') {
+        Some("") => "cd ~".to_owned(),
+        Some(rest) if rest.starts_with(['/', '\\']) => format!("cd ~/{}", quote(&rest[1..])),
+        _ => format!("cd {}", quote(dir)),
+    })
 }
 
 /// The browser opens or navigates to `url` (or `targetUrl`), and `upload`

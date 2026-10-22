@@ -309,9 +309,9 @@ fn hook_pins(report: &mut Report, lock: &Lock, home: &Home, hook_files: &[PathBu
         );
     }
     for path in gap.elsewhere {
+        let (path, moved) = (path.display(), HookPinGap::moved_by());
         report.note(&format!(
-            "hook file        {} is pinned but not this shell's (CLAUDE_CONFIG_DIR, CODEX_HOME or CURSOR_CONFIG_DIR differ); re-pinning keeps it",
-            path.display()
+            "hook file        {path} is pinned but not this shell's ({moved}); re-pinning keeps it"
         ));
     }
 }

@@ -97,6 +97,29 @@
   threat: T9
   action: { fs_write: "/p/.github/copilot-instructions.md" }
   expect: { verdict: allow, rules: [project-fs] }
+# Files named like the agent configuration `runs-later` asks for stay project work:
+# a policies, commands, agents or skills folder outside a host's own directory,
+# and other files in it
+- id: benign-write-project-policies-folder
+  threat: T9
+  action: { fs_write: "/p/docs/policies/retention.toml" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-project-agents-source
+  threat: T9
+  action: { fs_write: "/p/src/agents/reviewer.ts" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-project-skills-and-commands
+  threat: T9
+  action: { fs_write: "/p/app/commands/skills.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-gemini-styleguide
+  threat: T9
+  action: { fs_write: "/p/.gemini/styleguide.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-github-agents-file
+  threat: T9
+  action: { fs_write: "/p/.github/agents.md" }
+  expect: { verdict: allow, rules: [project-fs] }
 # pi: `kernel-self` guards OpenMoat's extension, the settings and trust decisions,
 # not reading them, and a project's prompt templates stay project work
 - id: benign-read-pi-settings
@@ -1457,3 +1480,55 @@
 - id: benign-openmoat-proxy-status
   action: { shell: "openmoat proxy status" }
   expect: { verdict: defer, rules: [default] }
+- id: benign-taskset-build
+  action: { shell: "taskset -c 0 cargo build" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-flock-command-string-build
+  action: { shell: "flock /tmp/build.lock -c 'cargo build'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-strace-project-binary
+  action: { shell: "strace -f -o trace.txt ./target/debug/app" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-copy-into-github-folder
+  action: { shell: "cp README.md .github/" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-systemctl-status-proxy
+  action: { shell: "systemctl --user status moat-proxy" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-systemctl-stop-other-service
+  action: { shell: "systemctl --user stop my-app" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ln-symbolic
+  action: { shell: "ln -s ~/.claude/settings.json s.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ln-symbolic-end-of-options
+  action: { shell: "ln -s -- ~/.claude/settings.json s.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-gnu-gcp-in-project
+  action: { shell: "gcp a.txt b.txt" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ditto-archive
+  action: { shell: "ditto -c -k --sequesterRsrc dist out.zip" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pax-write-archive
+  action: { shell: "pax -w -f out.pax src" }
+  expect: { verdict: defer, rules: [default] }
+# a command OpenMoat's binary runs under another name or case is decided as
+# `openmoat` only for its deny and ask rules: what is not person-only stays
+- id: benign-openmoat-status-in-another-case
+  action: { shell: "OpenMoat proxy status" }
+  context: { cwd: /p, project: /p, case_insensitive_paths: true }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-openmoat-link-status
+  action: { shell: "/tmp/x proxy status" }
+  links: { /tmp/x: /usr/local/bin/openmoat }
+  pins: { openmoat: /usr/local/bin/openmoat }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-file-named-openmoat-in-another-case
+  action: { shell: "cat docs/OpenMoat.md" }
+  context: { cwd: /p, project: /p, case_insensitive_paths: true }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-port-allow-still-opens-nothing-at-the-hook-for-a-name
+  action: { net: "https://example.com/" }
+  repo: { policy: "version: 1\nallow:\n  - id: web\n    net: ['example.com']\n  - id: alt\n    net: ['*:8443']\n", trusted: true }
+  expect: { verdict: allow, rules: [repo:web] }

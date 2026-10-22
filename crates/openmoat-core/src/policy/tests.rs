@@ -181,8 +181,10 @@ fn hook_only_is_for_deny_groups_that_name_files() {
     let files = problem("deny", "    shell: ['x']\n");
     assert!(files.contains("needs `fs.read` or `fs.write`"), "{files}");
     // Written out only when set, so other policies serialise as before.
-    let yaml = serde_json::to_string(&Policy::parse(crate::DEFAULT_POLICY).unwrap()).unwrap();
-    assert_eq!(yaml.matches("hook_only").count(), 1, "{yaml}");
+    let default = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+    let set = default.deny.iter().filter(|g| g.hook_only).count();
+    let yaml = serde_json::to_string(&default).unwrap();
+    assert_eq!(yaml.matches("hook_only").count(), set, "{yaml}");
 }
 
 #[test]

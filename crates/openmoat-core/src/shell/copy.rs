@@ -1,4 +1,5 @@
-//! Where a copy or a move writes (`cp`, `mv`, `ln`, `rsync`, `scp`).
+//! Where a copy or a move writes (`cp`, `mv`, `ln`, `rsync`, `scp`, `ditto`,
+//! `pax -rw`).
 //!
 //! Into a directory, the command writes the entry named after each source, not
 //! the directory: `cp f ~/` writes `~/f`. A destination is a directory when it
@@ -13,6 +14,8 @@
 //! `{a,b}`) or a remote spec (`scp host:f ~/`). Every operand that is not the
 //! destination counts as a source, option values included: a spurious source
 //! only adds a write.
+
+mod links;
 
 use super::tables::WRITE_LAST_PATH;
 use crate::paths;
@@ -41,7 +44,9 @@ pub(super) struct Destination<'a> {
 
 /// The destination of `argv` when `program` copies or moves, if any.
 pub(super) fn destination<'a>(argv: &'a [String], program: &str) -> Option<Destination<'a>> {
-    if !(WRITE_LAST_PATH.contains(&program) || program == "mv") {
+    if !(WRITE_LAST_PATH.contains(&program) || program == "mv")
+        || (program == "pax" && !pax_copies(argv))
+    {
         return None;
     }
     let gnu = TARGET_DIRECTORY_PROGRAMS.contains(&program);
@@ -93,7 +98,10 @@ pub(super) fn writes(
     sources: &[&str],
 ) -> Vec<String> {
     let mut out = written(dest, sources);
-    if hard_links(argv, program) {
+    if matches!(program, "ditto" | "pax") {
+        out.extend(merged(dest, program, sources));
+    }
+    if links::hard_links(argv, program) {
         out.extend(sources.iter().map(|s| (*s).to_owned()));
     }
     if program == "rsync" {
@@ -102,36 +110,31 @@ pub(super) fn writes(
     out
 }
 
-/// Whether `argv` makes hard links to its sources.
-fn hard_links(argv: &[String], program: &str) -> bool {
-    // Long options of each, and the short letters that take a value: the
-    // letters after one are its value (`-t/tmp/sx`), not options.
-    let flag = |long_name: &str, short: char| {
-        options(argv).any(|arg| match arg.strip_prefix("--") {
-            // an unambiguous prefix, as GNU reads it (`--sym`)
-            Some(long) => long.len() >= 2 && long_name.starts_with(long),
-            None => arg
-                .chars()
-                .skip(1)
-                .take_while(|c| !matches!(c, 'S' | 't'))
-                .any(|c| c == short),
-        })
-    };
-    match program {
-        "link" => true,
-        "ln" => !flag("symbolic", 's'),
-        "cp" => flag("link", 'l'),
-        _ => false,
+/// What `ditto` and `pax -rw` write besides [`written`]: `ditto SRC DST`
+/// merges the contents of a source directory into `DST`, and `pax -rw SRC DIR`
+/// writes each source under its path as given (`DIR/SRC`), so the destination
+/// itself is written and, for `pax`, each source's path below it.
+fn merged(dest: &Destination<'_>, program: &str, sources: &[&str]) -> Vec<String> {
+    let mut out = vec![dest.word.to_owned()];
+    if program == "pax" {
+        let dir = dest.word.trim_end_matches('/');
+        out.extend(sources.iter().map(|source| {
+            let relative = source.trim_start_matches("./").trim_start_matches('/');
+            format!("{dir}/{relative}")
+        }));
     }
+    out
 }
 
-/// The options of `argv`, up to `--`.
-fn options(argv: &[String]) -> impl Iterator<Item = &str> {
-    argv.iter()
-        .skip(1)
-        .take_while(|a| *a != "--")
-        .map(String::as_str)
-        .filter(|a| a.starts_with('-') && a.len() > 1)
+/// `pax` copies only with both `-r` and `-w` (`pax -rw SRC DIR`); otherwise it
+/// reads or writes an archive and its operands are patterns or files it reads.
+fn pax_copies(argv: &[String]) -> bool {
+    let options = || {
+        argv.iter()
+            .skip(1)
+            .filter(|a| a.starts_with('-') && !a.starts_with("--"))
+    };
+    options().any(|a| a.contains('r')) && options().any(|a| a.contains('w'))
 }
 
 /// Each `DIR` of rsync's `--link-dest=DIR` or `--link-dest DIR` (or a prefix

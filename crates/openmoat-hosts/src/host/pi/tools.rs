@@ -1,7 +1,9 @@
 //! pi's tools mapped to actions. Tool names and inputs are those of pi 1.3.0
 //! (`dist/core/tools/*.d.ts`; `docs/settings.md`, "defaultTools"; `docs/mcp.md`).
 //! The extension sees every tool, so a tool not named here is an
-//! `UnknownTool`: `defaults.tool.unknown` decides it.
+//! `UnknownTool` with what its arguments name ([`crate::wire::unknown`]):
+//! pi runs a call OpenMoat makes no decision on, so those arguments are
+//! checked too.
 
 use openmoat_core::Action;
 use serde_json::Value;
@@ -59,19 +61,17 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
             paths.extend(crate::pattern_dir(&pattern));
             paths.extend(crate::glob_reach(&root, &pattern));
             paths.dedup();
-            match paths.len() {
+            let action = match paths.len() {
                 1 => Action::FsRead { path: root },
                 _ => Action::ReadFiles { paths },
-            }
+            };
+            crate::bounded(action, [pattern.as_str()])
         }
         "read_mcp_resource" => crate::wire::mcp::read_resource(tool, call.input)?,
         name if UNGOVERNED.contains(&name) => return Ok(None),
         // `mcp__<server>__<tool>` (`docs/mcp.md`, "Tools").
         name if name.starts_with("mcp__") => crate::wire::mcp::action(name, call.input)?,
-        _ => Action::UnknownTool {
-            host: crate::Host::Pi.id().to_owned(),
-            tool: tool.to_owned(),
-        },
+        _ => crate::wire::unknown::action(crate::Host::Pi, tool, call.input)?,
     };
     Ok(Some(action))
 }

@@ -16,11 +16,11 @@
 //! | `$( … )`, backticks, `sh -c` (any option spelling, `invocation.rs`), `eval`, `xargs`, `sudo`, `env`, … | nested classification |
 //! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload |
 //! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
-//! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e` (`embedded.rs`) | nested classification |
+//! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e`, `flock -c` (`embedded.rs`) | nested classification |
 //! | `file:` URLs (`curl file:///etc/passwd`) | `FsRead` |
 //! | files `curl -F`/`-T`/`-d @` and `wget --post-file` send (`upload.rs`) | `FsRead` |
 //! | `perl -i`/`ruby -i` operands, `patch` targets and `-o` (`in_place.rs`) | `FsWrite` |
-//! | `xargs` input on the command line, `env -S 'cmd'` (`commands/wrappers.rs`) | nested classification |
+//! | `xargs` input on the command line, `env -S 'cmd'`, `at`/`batch` jobs (`commands/wrappers.rs`), launchers (`taskset`, `systemd-run`, … in `commands/wrappers/launchers.rs`) | nested classification |
 //! | local git remotes, `git clone` destinations, `--upload-pack` (`git.rs`, `embedded.rs`) | `FsRead`, `FsWrite`, nested classification |
 //! | `make --eval`, `-e`, `SHELL=`, `X!=cmd`, `$(shell …)` (`make.rs`) | `make <arg>` `Shell` atom + nested classification |
 //! | text tool options (`text.rs`): `sort -o FILE`, `uniq in out`; an unknown option | `FsWrite`; `<program> @<option>` `Shell` atom |
@@ -52,7 +52,7 @@
 mod awk;
 mod commands;
 mod copy;
-mod cwd;
+pub(crate) mod cwd;
 mod database;
 mod decoders;
 mod embedded;

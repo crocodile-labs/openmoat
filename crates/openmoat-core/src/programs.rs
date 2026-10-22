@@ -22,6 +22,18 @@ pub trait ProgramResolver {
     fn pinned(&self, _program: &str) -> Option<String> {
         None
     }
+
+    /// Where OpenMoat's own binary and its alias are installed. A command
+    /// whose program word reaches one of these files, through a link under
+    /// another name or on the search path, is decided as `openmoat` too, so
+    /// the rules that keep OpenMoat's person-only commands from an agent see
+    /// it. By default the pins of `openmoat` and `moat`.
+    fn own_binaries(&self) -> Vec<String> {
+        ["openmoat", "moat"]
+            .iter()
+            .filter_map(|name| self.pinned(name))
+            .collect()
+    }
 }
 
 /// Resolver for callers without a search path (tests, `policy check` without state).

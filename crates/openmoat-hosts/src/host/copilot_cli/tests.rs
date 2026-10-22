@@ -43,8 +43,19 @@ fn write(path: &str) -> Option<Action> {
     Some(Action::FsWrite { path: path.into() })
 }
 
+/// Keys typed into a running shell are checked on their own and ask at
+/// least: the shell joins them to what came before.
+#[expect(clippy::unnecessary_wraps, reason = "compared with an `Option`")]
+fn typed(input: Action) -> Option<Action> {
+    Some(Action::unchecked(
+        input,
+        "input typed into a running shell joins what was typed before, which this call \
+         does not show",
+    ))
+}
+
 #[test]
-fn shell_tools_are_commands_and_typed_input_is_one_too() {
+fn shell_tools_are_commands_and_typed_input_asks() {
     let bash = fixture("bash");
     assert_eq!(bash.session_id, "sess-1");
     assert_eq!(bash.cwd.as_deref(), Some("/p"));
@@ -57,7 +68,7 @@ fn shell_tools_are_commands_and_typed_input_is_one_too() {
     );
     assert_eq!(
         fixture("write_bash").action,
-        Some(Action::Shell {
+        typed(Action::Shell {
             command: "cat ~/.ssh/id_rsa".into()
         })
     );
@@ -65,10 +76,38 @@ fn shell_tools_are_commands_and_typed_input_is_one_too() {
         fixture("powershell").action,
         Some(Action::ForeignShell { shell, command }) if shell == "PowerShell" && command == "Get-ChildItem"
     ));
-    assert!(matches!(
+    assert_eq!(
         action("write_powershell", json!({"shellId": "s", "input": "dir"})),
-        Some(Action::ForeignShell { .. })
-    ));
+        typed(Action::ForeignShell {
+            shell: "PowerShell".into(),
+            command: "dir".into()
+        })
+    );
+}
+
+/// Copilot's shells outlive the call and the payload names only the
+/// session's directory: a command that leaves its shell somewhere OpenMoat
+/// cannot know asks, one that moves to a written-out directory or not at all
+/// is a plain command.
+#[test]
+fn a_shell_left_in_an_unknown_directory_asks() {
+    for command in ["cd \"$HOME/.ssh\"", "cd -", "eval \"$X\"", "popd"] {
+        let got = action("bash", json!({"command": command}));
+        assert!(
+            matches!(got, Some(Action::Unchecked { .. })),
+            "{command}: {got:?}"
+        );
+    }
+    for command in ["cd ~/.ssh", "cd src && cargo test", "(cd \"$X\" && ls)"] {
+        let got = action("bash", json!({"command": command}));
+        assert_eq!(
+            got,
+            Some(Action::Shell {
+                command: command.into()
+            }),
+            "{command}"
+        );
+    }
 }
 
 #[test]

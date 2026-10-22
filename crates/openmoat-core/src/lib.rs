@@ -42,7 +42,7 @@ pub mod token;
 mod verdict;
 pub mod yaml;
 
-pub use action::{Action, AtomicAction};
+pub use action::{Action, AtomicAction, UNCHECKED_RULE};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart
 // from the policy's brokered `Secret`.
 pub use engine::{CompiledPolicy, EvalContext, Secret as TaintSecret, TAINT_RULE, Taint, evaluate};
@@ -58,6 +58,7 @@ pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
 pub use repo::{REPO_RULE_PREFIX, RepoPolicy};
 pub use secret::{SECRET_RULE_PREFIX, Secret, Source as SecretSource};
+pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
 pub use taint::TaintSettings;

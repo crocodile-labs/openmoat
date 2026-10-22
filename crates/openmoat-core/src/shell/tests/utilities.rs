@@ -136,3 +136,50 @@ fn interpreter_scripts_are_reads() {
     assert!(has_read(&parsed("cd /tmp && python3 x.py"), "/tmp/x.py"));
     assert!(has_read(&parsed("node build.js"), "/p/build.js"));
 }
+
+#[test]
+fn launchers_classify_the_command_they_run() {
+    for (cmd, inner) in [
+        ("taskset -c 0 cargo build", "cargo build"),
+        ("chrt -T 5 10 make", "make"),
+        ("systemd-run --user --unit x make", "make"),
+        ("strace -f -o t.txt ./app", "./app"),
+        ("sandbox-exec -f p.sb make", "make"),
+        ("arch -arch arm64 make", "make"),
+        ("busybox cp a b", "cp a b"),
+        ("gdb --args ./app -v", "./app -v"),
+        ("daemonize -c /tmp ./app", "./app"),
+    ] {
+        assert!(has_shell(&parsed(cmd), inner), "{cmd}");
+    }
+    // `at` and `batch` run their stdin later
+    assert!(has_shell(
+        &parsed("echo 'cargo build' | at now"),
+        "cargo build"
+    ));
+    assert!(has_read(&parsed("at -f job.sh now"), "/p/job.sh"));
+}
+
+#[test]
+fn gnu_prefixed_tools_write_like_their_plain_names() {
+    for cmd in [
+        "gcp a ~/x",
+        "gmv a ~/x",
+        "/opt/homebrew/bin/grm ~/x",
+        "gtouch ~/x",
+        "busybox rm ~/x",
+        "ditto a ~/x",
+        "cpio -pd ~/x",
+    ] {
+        assert!(has_write(&parsed(cmd), "/Users/me/x"), "{cmd}");
+    }
+    // the destination of a `pax` copy, and each source's path below it
+    let atoms = parsed("pax -rw src/a ~/x");
+    assert!(has_write(&atoms, "/Users/me/x"));
+    assert!(has_write(&atoms, "/Users/me/x/src/a"));
+    // without `-r` and `-w` pax makes or reads an archive
+    assert!(!has_write(&parsed("pax -w -f out.pax ~/x"), "/Users/me/x"));
+    // `grep`, `gzip` and `git` are no prefixed tools
+    assert!(has_shell(&parsed("gzip ~/x"), "gzip ~/x"));
+    assert!(!has_write(&parsed("gzip ~/x"), "/Users/me/x"));
+}

@@ -144,6 +144,33 @@ impl ProgramResolver for Snapshot {
     }
 }
 
+/// A [`Snapshot`] that also knows OpenMoat's own binary: the one the policy
+/// lock records (`binary`) and its `moat` alias beside it, so the guard decides
+/// a command that runs that file under another name as `openmoat`
+/// ([`ProgramResolver::own_binaries`]).
+pub struct WithOwnBinary<'a> {
+    pub snapshot: &'a Snapshot,
+    pub binary: &'a str,
+}
+
+impl ProgramResolver for WithOwnBinary<'_> {
+    fn resolve(&self, program: &str) -> Option<String> {
+        self.snapshot.resolve(program)
+    }
+
+    fn pinned(&self, program: &str) -> Option<String> {
+        self.snapshot.pinned(program)
+    }
+
+    fn own_binaries(&self) -> Vec<String> {
+        let binary = Path::new(self.binary);
+        std::iter::once(binary.to_path_buf())
+            .chain(crate::install::other_name(binary))
+            .map(|p| path_string(&p))
+            .collect()
+    }
+}
+
 /// Where `program` is, as the snapshot `moat init` recorded resolves it: the
 /// pinned location, else the first on the recorded search path. `None`
 /// without a snapshot, so a poisoned `PATH` never picks the program.

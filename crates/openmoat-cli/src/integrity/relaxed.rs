@@ -38,9 +38,9 @@ const RELAXED_KEYS: &[&str] = &[
     // The text Claude Code adds to commits and pull requests.
     "attribution",
     "includeCoAuthoredBy",
-    // Notes for Claude Code's auto mode, which decides only Claude Code's own
-    // prompts; a hook deny stands in every mode.
-    "autoMode",
+    // Not `autoMode`: its rules tell Claude Code's auto-mode classifier which
+    // calls to run unasked, and a call the hook defers is then run on their
+    // word, as under a `defaultMode` that does not ask (`PROMPTING_MODES`).
     // How long Claude Code keeps its transcripts; OpenMoat's audit log is its own.
     "cleanupPeriodDays",
     // The language and style of replies: wording only.

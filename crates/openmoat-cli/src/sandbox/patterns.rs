@@ -66,6 +66,17 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.pi/extensions/**",
     "**/.pi/mcp.json",
     "**/.pi/settings.json",
+    // the folders above them, which a rename moves with everything inside
+    "**/.github/hooks",
+    "**/.pi",
+    "**/.pi/extensions",
+    "**/.gemini/policies/**",
+    "**/.gemini/commands/**",
+    "**/.gemini/agents/**",
+    "**/.github/agents/**",
+    "**/.claude/agents/**",
+    "**/.claude/skills/**",
+    "**/.claude/commands/**",
 ];
 
 /// The [`RUNS_LATER`] files an agent host loads as its own configuration when
@@ -95,6 +106,42 @@ pub fn runs_later_exclusion(pattern: &str) -> bool {
 /// A write exclusion of one of [`AGENT_CONFIG`], as [`runs_later_exclusion`].
 pub fn agent_config_exclusion(pattern: &str) -> bool {
     exclusion_of(pattern, AGENT_CONFIG)
+}
+
+/// The folders above the file or folder an [`AGENT_CONFIG`] entry names, as
+/// paths relative to where it is found, outermost first: `.github` for
+/// `**/.github/hooks/**`, `.cursor` for `**/.cursor/mcp.json`, none for
+/// `**/.mcp.json`. Renaming one moves the file out from under its pattern.
+pub fn folders_above(entry: &str) -> Vec<String> {
+    let name = entry.strip_prefix("**/").unwrap_or(entry);
+    let name = name.strip_suffix("/**").unwrap_or(name);
+    let mut folders = Vec::new();
+    let mut at = 0;
+    while let Some(slash) = name[at..].find('/') {
+        at += slash;
+        folders.push(name[..at].to_owned());
+        at += 1;
+    }
+    folders
+}
+
+/// For an [`agent_config_exclusion`] (`/p/**/.github/hooks/**`), each folder
+/// above the file it names directly in the directory it is below
+/// (`/p/.github`). Not at any depth: packages bring their own `.github` into
+/// `node_modules`, and installing or removing one would fail.
+pub fn agent_config_folders(pattern: &str) -> Vec<String> {
+    for file in AGENT_CONFIG {
+        let Some(head) = pattern.strip_suffix(file) else {
+            continue;
+        };
+        if head.ends_with('/') {
+            return folders_above(file)
+                .into_iter()
+                .map(|folder| format!("{head}{folder}"))
+                .collect();
+        }
+    }
+    Vec::new()
 }
 
 /// Whether `pattern` names one of `files` below the project or below a
@@ -243,5 +290,28 @@ mod tests {
         assert!(!agent_config_exclusion("/__moat_project__/**/.husky/**"));
         assert!(runs_later_exclusion("/__moat_project__/**/.husky/**"));
         assert!(!agent_config_exclusion("**/.mcp.json"));
+    }
+
+    /// The folders above an agent's configuration are named too, so that
+    /// renaming one cannot move a protected file out from under its pattern.
+    #[test]
+    fn the_folders_above_agent_configuration_are_named() {
+        assert_eq!(folders_above("**/.github/hooks/**"), [".github"]);
+        assert_eq!(folders_above("**/.cursor/mcp.json"), [".cursor"]);
+        assert_eq!(
+            folders_above("**/.github/copilot/settings.json"),
+            [".github", ".github/copilot"]
+        );
+        assert!(folders_above("**/.mcp.json").is_empty());
+        assert_eq!(
+            agent_config_folders("/__moat_project__/**/.pi/extensions/**"),
+            ["/__moat_project__/.pi"]
+        );
+        assert_eq!(
+            agent_config_folders("/w/lib/**/.openclaw/extensions/**"),
+            ["/w/lib/.openclaw"]
+        );
+        assert!(agent_config_folders("/__moat_project__/**/.mcp.json").is_empty());
+        assert!(agent_config_folders("/__moat_project__/**/.husky/**").is_empty());
     }
 }

@@ -327,3 +327,18 @@ fn a_request_line_the_relay_cannot_read_never_reaches_the_server() {
     }
     assert!(relay.host_line("").is_empty(), "a blank line is dropped");
 }
+
+#[test]
+fn a_listed_tool_whose_name_is_not_a_string_is_dropped() {
+    let pins = first_session(&[("search", "Search.")]);
+    let (relay, _) = relay(Some(pins), &Log::default());
+    relay.host_line(&list_request(2));
+    let response = json!({"jsonrpc": "2.0", "id": 2, "result": {"tools": [
+        {"name": "search", "description": "Search.", "inputSchema": {"type": "object"}},
+        {"name": ["search"], "description": "Run anything.", "inputSchema": {"type": "object"}},
+        {"name": 7, "description": "x", "inputSchema": {"type": "object"}},
+        {"description": "no name", "inputSchema": {"type": "object"}}
+    ]}})
+    .to_string();
+    assert_eq!(names(&relay.server_line(&response)), ["search"]);
+}

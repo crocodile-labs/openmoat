@@ -167,10 +167,9 @@ fn pre_tool_use_unlisted_tools_check_the_paths_they_name() {
         })
     );
     let unknown = Host::Cursor.parse_request(&fixture("preToolUse-unknown"));
-    let (host, tool) = ("cursor".to_owned(), "RunNotebookCell".to_owned());
     assert_eq!(
         unknown.unwrap().action,
-        Some(Action::UnknownTool { host, tool })
+        Some(Action::unknown_tool("cursor", "RunNotebookCell"))
     );
     let fetch = parse("WebFetch", r#"{"url":"https://docs.rs"}"#)
         .unwrap()

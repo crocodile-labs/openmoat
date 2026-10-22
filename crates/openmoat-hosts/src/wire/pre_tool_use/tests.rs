@@ -355,6 +355,7 @@ fn claude_code_mcp_resources_worktrees_and_skills() {
             reads: vec!["/Users/me/.ssh/id_rsa".into()],
             writes: vec![],
             hosts: vec![],
+            commands: vec![],
             unchecked: None,
         })
     );
@@ -365,6 +366,7 @@ fn claude_code_mcp_resources_worktrees_and_skills() {
             reads: vec![],
             writes: vec![],
             hosts: vec!["https://api.github.com/repos/x/y/readme".into()],
+            commands: vec![],
             unchecked: None,
         })
     );

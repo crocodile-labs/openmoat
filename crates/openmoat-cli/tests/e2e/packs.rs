@@ -145,7 +145,7 @@ fn a_signed_repository_policy_is_trusted_only_when_the_policy_asks() {
         "version: 1\nallow:\n  - id: bundle\n    shell: ['make bundle']\n",
     )
     .unwrap();
-    sign(&alice, "openmoat-policy", &repo_policy);
+    sign(&alice, "openmoat-repo-policy", &repo_policy);
     assert_eq!(sb.guard_bash("s1", &project, "make bundle").0, "defer");
 
     require_signed(&sb);
@@ -211,11 +211,11 @@ fn requiring_signatures_ignores_moat_trust_without_one() {
     assert_eq!(sb.guard_bash("s1", &project, "make bundle").0, "defer");
 
     let mallory = keypair(&sb.home.join("keys"), "mallory").unwrap();
-    sign(&mallory, "openmoat-policy", &repo_policy);
+    sign(&mallory, "openmoat-repo-policy", &repo_policy);
     assert_eq!(sb.guard_bash("s1", &project, "make bundle").0, "defer");
 
     std::fs::remove_file(project.join(".moat/policy.yaml.sig")).unwrap();
-    sign(&alice, "openmoat-policy", &repo_policy);
+    sign(&alice, "openmoat-repo-policy", &repo_policy);
     assert_eq!(sb.guard_bash("s1", &project, "make bundle").0, "allow");
 }
 
@@ -237,9 +237,16 @@ fn a_pack_signature_never_signs_a_repository_policy_and_the_reverse() {
     let (verdict, reason) = sb.guard_bash("s1", &project, "make bundle");
     assert_eq!(verdict, "defer", "a pack's signature: {reason}");
 
+    // A pack signed by an earlier release, in the namespace repository
+    // policies shared then, copied in with its signature: not signed either.
+    std::fs::remove_file(project.join(".moat/policy.yaml.sig")).unwrap();
+    sign(&alice, "openmoat-policy", &repo_policy);
+    let (verdict, reason) = sb.guard_bash("s1", &project, "make bundle");
+    assert_eq!(verdict, "defer", "an earlier pack's signature: {reason}");
+
     let pack = sb.home.join("team.yaml");
     std::fs::write(&pack, PACK).unwrap();
-    sign(&alice, "openmoat-policy", &pack);
+    sign(&alice, "openmoat-repo-policy", &pack);
     let out = install(&sb, &pack);
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(text(&out).contains("openmoat-pack"), "{}", text(&out));

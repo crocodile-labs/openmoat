@@ -74,40 +74,110 @@ fn classify_action(
         Action::WebSearch { query } => ParseOutcome::Parsed(vec![AtomicAction::WebSearch {
             query: query.clone(),
         }]),
-        Action::UnknownTool { host, tool } => {
-            ParseOutcome::Parsed(vec![AtomicAction::UnknownTool {
+        Action::UnknownTool {
+            host,
+            tool,
+            reads,
+            writes,
+            hosts,
+            commands,
+        } => {
+            let first = AtomicAction::UnknownTool {
                 host: host.clone(),
                 tool: tool.clone(),
-            }])
+            };
+            let named = Named {
+                reads,
+                writes,
+                hosts,
+                commands,
+            };
+            return named.atoms(first, "tool", ctx);
         }
         Action::McpTool {
             name,
             reads,
             writes,
             hosts,
+            commands,
             ..
         } => {
-            let mut atoms = vec![AtomicAction::McpTool { name: name.clone() }];
-            atoms.extend(reads.iter().flat_map(|p| file_atoms(p, ctx, read)));
-            atoms.extend(writes.iter().flat_map(|p| file_atoms(p, ctx, write)));
-            let mut bad_host = None;
-            for host in hosts {
-                match host::of_url(host) {
-                    Some(host) => atoms.push(AtomicAction::Net { host }),
-                    None => bad_host = bad_host.or(Some(host)),
-                }
-            }
-            match bad_host {
-                Some(host) => ParseOutcome::Unparseable {
-                    reason: format!("no host in mcp argument `{host}`"),
-                    atoms,
-                    asks: false,
-                },
-                None => ParseOutcome::Parsed(atoms),
-            }
+            let first = AtomicAction::McpTool { name: name.clone() };
+            let named = Named {
+                reads,
+                writes,
+                hosts,
+                commands,
+            };
+            return named.atoms(first, "mcp", ctx);
         }
+        Action::Unchecked { action, .. } => return classify_action(action, ctx),
     };
     (outcome, Vec::new())
+}
+
+/// What a tool's arguments name: the paths, hosts and shell commands an
+/// adapter found in them (MCP and unknown tools).
+struct Named<'a> {
+    reads: &'a [String],
+    writes: &'a [String],
+    hosts: &'a [String],
+    commands: &'a [String],
+}
+
+impl Named<'_> {
+    /// `first` (the tool's own atom) and the atoms of everything named, with
+    /// the globs the commands' shell expands. `what` names the arguments in a
+    /// reason (`mcp argument`).
+    fn atoms(
+        &self,
+        first: AtomicAction,
+        what: &str,
+        ctx: &EvalContext,
+    ) -> (ParseOutcome, Vec<(AtomicAction, bool)>) {
+        let mut atoms = vec![first];
+        atoms.extend(self.reads.iter().flat_map(|p| file_atoms(p, ctx, read)));
+        atoms.extend(self.writes.iter().flat_map(|p| file_atoms(p, ctx, write)));
+        let mut unparsed: Option<Unparsed> = None;
+        for host in self.hosts {
+            match host::of_url(host) {
+                Some(host) => atoms.push(AtomicAction::Net { host }),
+                None => {
+                    unparsed.get_or_insert_with(|| Unparsed {
+                        reason: format!("no host in {what} argument `{host}`"),
+                        asks: false,
+                    });
+                }
+            }
+        }
+        let mut globs = Vec::new();
+        let cwd = [Some(ctx.cwd.clone())];
+        let shell = ShellContext {
+            home: &ctx.home,
+            cwd: &cwd,
+        };
+        for command in self.commands {
+            let (outcome, expanded) = classify_globs(command, &shell);
+            globs.extend(expanded);
+            let (found, why) = outcome.into_parts();
+            atoms.extend(found);
+            if let Some(why) = why {
+                // a line not read in full asks, whichever part said so
+                let asks = why.asks || unparsed.as_ref().is_some_and(|u| u.asks);
+                let reason = unparsed.take().map_or(why.reason, |u| u.reason);
+                unparsed = Some(Unparsed { reason, asks });
+            }
+        }
+        let outcome = match unparsed {
+            Some(Unparsed { reason, asks }) => ParseOutcome::Unparseable {
+                reason,
+                atoms,
+                asks,
+            },
+            None => ParseOutcome::Parsed(atoms),
+        };
+        (outcome, globs)
+    }
 }
 
 /// The atoms of `action` in `ctx` with an extra atom for every path a glob

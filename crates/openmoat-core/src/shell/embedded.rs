@@ -6,7 +6,8 @@
 //! `ssh -o ProxyCommand='cmd'` (and `LocalCommand`, `KnownHostsCommand`),
 //! `rsync -e 'cmd'`, GNU tar's `--to-command`, `-I`/`--use-compress-program`,
 //! `--checkpoint-action=exec=`, `-F`/`--info-script`/`--new-volume-script` and
-//! remote-tape `--rsh-command`/`--rmt-command`, and `su`/`runuser -c 'cmd'`.
+//! remote-tape `--rsh-command`/`--rmt-command`, `su`/`runuser -c 'cmd'` and
+//! `flock FILE -c 'cmd'`.
 //! Each one is classified as a command line of its own.
 
 use super::git;
@@ -68,6 +69,7 @@ pub(super) fn commands(argv: &[String], program: &str) -> Vec<String> {
         "rsync" => option_values(argv, "-e", "--rsh", "--rsh"),
         "tar" | "gtar" => tar(argv),
         "su" | "runuser" => all_values(argv, SU_COMMAND_OPTIONS),
+        "flock" => option_values(argv, "-c", "--command", "--c"),
         p if SSH_PROGRAMS.contains(&p) => ssh(argv),
         _ => Vec::new(),
     }
@@ -311,6 +313,11 @@ mod tests {
             ("runuser - me -c cmd", &["cmd"]),
             ("su - me", &[]),
             ("su -s /bin/zsh me", &[]),
+            ("flock /tmp/l -c cmd", &["cmd"]),
+            ("flock -c cmd /tmp/l", &["cmd"]),
+            ("flock -n /tmp/l --command=cmd", &["cmd"]),
+            ("flock /tmp/l --command cmd", &["cmd"]),
+            ("flock /tmp/l make", &[]),
         ] {
             assert_eq!(run(line), found, "{line}");
         }

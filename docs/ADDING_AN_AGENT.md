@@ -96,7 +96,8 @@ set `speaks: Some(Host::ClaudeCode)` in its spec and end its host list line with
 | fetches a URL with no request body | `Fetch { url }` | `WebFetch` (ADR-017) |
 | opens a connection that can send data | `Net { url }` | `Monitor` WebSocket |
 | calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `wire/mcp.rs` finds path and URL arguments |
-| a tool the hook receives for every tool and cannot classify | `UnknownTool { host, tool }`: `defaults.tool.unknown` decides, `defer` in the default policy | Cursor `preToolUse` |
+| a tool the hook receives for every tool and cannot classify | `wire::unknown::action(host, tool, input)`: `UnknownTool` with every path, URL and command its arguments name; `defaults.tool.unknown` decides the tool itself, `defer` in the default policy | pi, OpenClaw, Gemini CLI, Cursor `preToolUse` |
+| a call the payload shows only in part | `Action::unchecked(action, reason)`: `action` is decided and the call asks (`unchecked`) | GitHub Copilot CLI `write_bash`, Gemini CLI `grep_search` without `dir_path` |
 | anything else | `None`: recorded with rule `ungoverned` and deferred to the host (no output) | `TodoWrite`, `Task` |
 
 Rules the existing adapters follow:

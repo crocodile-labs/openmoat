@@ -297,7 +297,7 @@ fn verdict_glyph(verdict: Verdict) -> &'static str {
 }
 
 fn kind_of(action: &Action) -> &'static str {
-    match action {
+    match action.shown() {
         Action::Shell { .. } | Action::ForeignShell { .. } => "shell",
         Action::FsRead { .. } | Action::ReadFiles { .. } => "fs.read",
         Action::FsWrite { .. } | Action::Patch { .. } => "fs.write",
@@ -348,7 +348,7 @@ pub fn describe(event: &Event) -> String {
         return format!("{} (action unreadable)", event.tool);
     }
     let tool = &event.tool;
-    match event.action.as_ref() {
+    match event.action.as_ref().map(Action::shown) {
         Some(Action::Shell { command }) => command.clone(),
         Some(Action::ForeignShell { shell, command }) => format!("{shell}: {command}"),
         Some(Action::FsRead { path }) => format!("read {path}"),
@@ -363,22 +363,53 @@ pub fn describe(event: &Event) -> String {
     }
 }
 
-/// `text` with every control character (C0, DEL and C1) shown as `?`.
+/// `text` with every control character (C0, DEL and C1) and every invisible
+/// bidirectional or format character ([`hidden`]) shown as `?`.
 ///
 /// Commands, paths, reasons and ids come from what an agent sent; written raw,
 /// an escape sequence in one could set the terminal title or write the
-/// clipboard (OSC 52) when a person reads it. One character stays one, so
-/// column widths hold.
+/// clipboard (OSC 52) when a person reads it, and a right-to-left override
+/// could show a rule's text in another order than it is read. One character
+/// stays one, so column widths hold.
 pub fn clean(text: &str) -> Cow<'_, str> {
-    if text.chars().any(char::is_control) {
+    if text.chars().any(unsafe_to_show) {
         Cow::Owned(
             text.chars()
-                .map(|c| if c.is_control() { '?' } else { c })
+                .map(|c| if unsafe_to_show(c) { '?' } else { c })
                 .collect(),
         )
     } else {
         Cow::Borrowed(text)
     }
+}
+
+/// [`clean`] for each line of `text`: the line breaks stay, every other
+/// character [`clean`] replaces is `?`.
+pub fn clean_lines(text: &str) -> String {
+    text.split('\n').map(clean).collect::<Vec<_>>().join("\n")
+}
+
+fn unsafe_to_show(c: char) -> bool {
+    c.is_control() || hidden(c)
+}
+
+/// Characters that are not drawn but change how the text around them is shown:
+/// bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E,
+/// U+200F, U+202A to U+202E, U+2066 to U+2069), zero-width characters (U+200B
+/// to U+200D, U+2060, U+FEFF) and the Unicode line and paragraph separators
+/// (U+2028, U+2029).
+fn hidden(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061C}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{2060}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
 }
 
 /// One line of human output that may hold agent text, cleaned whole: a
@@ -411,6 +442,23 @@ mod tests {
         assert_eq!(
             clean("ls\x1b]0;title\x07\r\n\t\x7f\u{9b}2J"),
             "ls?]0;title??????2J"
+        );
+    }
+
+    #[test]
+    fn bidirectional_and_invisible_characters_become_question_marks() {
+        assert_eq!(
+            clean("make \u{202E}yolped\u{202C} \u{2066}x\u{2069}\u{200B}\u{FEFF}\u{2028}"),
+            "make ?yolped? ?x????"
+        );
+        assert!(matches!(clean("café ✔ 日本"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn clean_lines_keeps_line_breaks_only() {
+        assert_eq!(
+            clean_lines("a\x1b[2J\nb\u{202E}\r\n\x1b]52;c;eA==\x07"),
+            "a?[2J\nb??\n?]52;c;eA==?"
         );
     }
 }

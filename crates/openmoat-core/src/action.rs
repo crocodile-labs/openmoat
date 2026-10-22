@@ -64,14 +64,38 @@ pub enum Action {
         /// The query as the tool gave it.
         query: String,
     },
-    /// A host tool the adapter cannot classify: it names no path or URL the
-    /// adapter knows to read, so what it touches is unknown. Judged by
-    /// `defaults.tool.unknown`, which the default policy sets to `ask`.
+    /// A host tool the adapter cannot classify, judged by `defaults.tool.unknown`.
+    /// What its arguments name is checked as well: every path and URL the
+    /// adapter finds in them, and every shell command under a key such as
+    /// `command`, so a tool OpenMoat does not know never runs unchecked.
     UnknownTool {
         /// The host's id (`cursor`).
         host: String,
         /// The tool name as the host sent it.
         tool: String,
+        /// Paths the call may read, found in its arguments.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        reads: Vec<String>,
+        /// Paths the call may write, found in its arguments.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        writes: Vec<String>,
+        /// URLs or hosts the call may contact, found in its arguments.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        hosts: Vec<String>,
+        /// Shell commands the call may run, found in its arguments.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        commands: Vec<String>,
+    },
+    /// A call the hook payload shows only in part: input typed into a shell
+    /// that is already running, or a search over directories the payload does
+    /// not name. `action` is decided as usual and the call is at least an
+    /// `ask` (rule [`UNCHECKED_RULE`]), since `reason` names what OpenMoat
+    /// cannot see.
+    Unchecked {
+        /// What the payload shows of the call.
+        action: Box<Action>,
+        /// What it does not show.
+        reason: String,
     },
     /// A patch that edits several files in one call (Codex `apply_patch`):
     /// every path it adds, updates, deletes or moves to is written.
@@ -101,6 +125,10 @@ pub enum Action {
         /// URLs or hosts the call contacts, derived from its arguments.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hosts: Vec<String>,
+        /// Shell commands the call may run, derived from its arguments where
+        /// the host cannot tell an MCP tool from one of its own.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        commands: Vec<String>,
         /// The limit that stopped the adapter searching the arguments (nesting
         /// depth, number of paths and URLs). What was not searched may name a
         /// file or host, so the engine decides the call at least `ask`.
@@ -122,6 +150,7 @@ impl Action {
             Self::WebSearch { .. } => Kind::WebSearch,
             Self::UnknownTool { .. } => Kind::UnknownTool,
             Self::McpTool { .. } => Kind::Mcp,
+            Self::Unchecked { action, .. } => action.kind(),
         }
     }
 
@@ -133,10 +162,47 @@ impl Action {
             reads: Vec::new(),
             writes: Vec::new(),
             hosts: Vec::new(),
+            commands: Vec::new(),
             unchecked: None,
         }
     }
+
+    /// An unknown tool of `host` whose arguments name nothing to check.
+    #[must_use]
+    pub fn unknown_tool(host: impl Into<String>, tool: impl Into<String>) -> Self {
+        Self::UnknownTool {
+            host: host.into(),
+            tool: tool.into(),
+            reads: Vec::new(),
+            writes: Vec::new(),
+            hosts: Vec::new(),
+            commands: Vec::new(),
+        }
+    }
+
+    /// `action`, decided at least `ask` because `reason` names what the
+    /// payload does not show ([`Action::Unchecked`]).
+    #[must_use]
+    pub fn unchecked(action: Self, reason: impl Into<String>) -> Self {
+        Self::Unchecked {
+            action: Box::new(action),
+            reason: reason.into(),
+        }
+    }
+
+    /// The action itself, without the [`Action::Unchecked`] wrapping around it.
+    #[must_use]
+    pub fn shown(&self) -> &Self {
+        match self {
+            Self::Unchecked { action, .. } => action.shown(),
+            other => other,
+        }
+    }
 }
+
+/// The rule id of a call the hook payload shows only in part
+/// ([`Action::Unchecked`]): it asks whatever else it is decided.
+pub const UNCHECKED_RULE: &str = "unchecked";
 
 /// The primitive operations an [`Action`] decomposes into.
 ///

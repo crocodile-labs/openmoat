@@ -110,7 +110,7 @@ fn the_read_block_toggle_alone_is_relaxed() {
 
 #[test]
 fn claude_codes_own_lists_modes_and_toggles_are_relaxed() {
-    let changes: [fn(&mut Value); 10] = [
+    let changes: [fn(&mut Value); 9] = [
         |s| s["permissions"]["allow"] = json!(["Bash(*)"]),
         |s| s["permissions"]["ask"] = json!(["Bash(git push:*)"]),
         |s| s["permissions"]["deny"] = json!([OWNED, "Bash(rm:*)"]),
@@ -119,7 +119,6 @@ fn claude_codes_own_lists_modes_and_toggles_are_relaxed() {
         |s| s["permissions"]["defaultMode"] = json!("dontAsk"),
         |s| s["language"] = json!("french"),
         |s| s["spinnerVerbs"] = json!({"mode": "append", "verbs": ["x"]}),
-        |s| s["autoMode"] = json!({"environment": ["a note"]}),
         |s| {
             s["$schema"] = json!("https://json.schemastore.org/claude-code-settings.json");
             s["alwaysThinkingEnabled"] = json!(true);
@@ -133,7 +132,10 @@ fn claude_codes_own_lists_modes_and_toggles_are_relaxed() {
 
 #[test]
 fn a_mode_that_runs_calls_unasked_or_more_directories_denies() {
-    let changes: [fn(&mut Value); 7] = [
+    let changes: [fn(&mut Value); 9] = [
+        // The auto-mode classifier's rules decide which calls run unasked.
+        |s| s["autoMode"] = json!({"allow": ["Any command is fine to run"]}),
+        |s| s["autoMode"] = json!({"environment": ["a note"]}),
         |s| s["permissions"]["defaultMode"] = json!("bypassPermissions"),
         |s| s["permissions"]["defaultMode"] = json!("acceptEdits"),
         |s| s["permissions"]["defaultMode"] = json!("auto"),

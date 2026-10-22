@@ -195,11 +195,6 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             .map(str::to_owned),
         _ => None,
     };
-    // `exec` runs in `workdir` when it names one.
-    let cwd = match p.tool_name.as_str() {
-        "exec" => tools::workdir(p.params.get("workdir"), cwd),
-        _ => cwd,
-    };
     Ok(HookRequest {
         host,
         session_id: crate::session_or_unknown(p.session_id.or(p.session_key)),

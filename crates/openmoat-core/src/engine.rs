@@ -13,6 +13,7 @@ use crate::programs::{self, NoResolver, ProgramResolver};
 use crate::realpath::PathResolver;
 use crate::verdict::{Decision, Verdict};
 
+mod aliases;
 mod atoms;
 mod context;
 mod egress;
@@ -77,6 +78,18 @@ struct CompiledGroup<'p> {
     shell: Vec<ShellPattern>,
     /// Glob patterns per kind, indexed by `Kind as usize`; the shell slot is empty.
     globs: [Vec<GlobPattern>; Kind::ALL.len()],
+    /// For an allow group, its `net` and `fetch` patterns without the
+    /// `host:port` ones ([`crate::host::port_pattern`]), which a host without a
+    /// port is matched against: `*:8443` allows port 8443 of every host to the
+    /// proxy, and must not also match an IPv6 address whose text ends in
+    /// `:8443`. Deny and ask rules keep them: there they only refuse more.
+    bare_hosts: Option<[Vec<GlobPattern>; Kind::ALL.len()]>,
+}
+
+/// Whether `pattern` is a `net` or `fetch` pattern written `host:port`, not an
+/// exclusion.
+fn names_port(pattern: &str) -> bool {
+    !pattern.starts_with('!') && crate::host::port_pattern(pattern).is_some()
 }
 
 impl<'p> CompiledPolicy<'p> {
@@ -85,20 +98,20 @@ impl<'p> CompiledPolicy<'p> {
     /// pattern (empty, bare `/`, or not an absolute or `~/`-rooted directory).
     pub fn compile(policy: &'p Policy, ctx: &EvalContext) -> Result<Self, PolicyError> {
         ctx.validate_moved_dirs()?;
-        let compile_list = |groups: &'p [RuleGroup]| {
+        let compile_list = |groups: &'p [RuleGroup], allow: bool| {
             groups
                 .iter()
-                .map(|g| CompiledGroup::compile(g, ctx))
+                .map(|g| CompiledGroup::compile(g, ctx, allow))
                 .collect::<Result<Vec<_>, _>>()
         };
         Ok(Self {
             policy,
             ctx: ctx.clone(),
-            deny: compile_list(&policy.deny)?,
-            repo_ask: compile_list(&policy.repo_ask)?,
-            allow: compile_list(&policy.allow)?,
-            ask: compile_list(&policy.ask)?,
-            defer: compile_list(&policy.defer)?,
+            deny: compile_list(&policy.deny, false)?,
+            repo_ask: compile_list(&policy.repo_ask, false)?,
+            allow: compile_list(&policy.allow, true)?,
+            ask: compile_list(&policy.ask, false)?,
+            defer: compile_list(&policy.defer, false)?,
             protected: taint::compile_protected(policy, ctx)?,
         })
     }
@@ -123,6 +136,23 @@ impl<'p> CompiledPolicy<'p> {
     /// per-sub-command atoms carry the default verdict.
     #[must_use]
     pub fn evaluate_atomic(&self, action: &AtomicAction) -> Option<Decision> {
+        if let Some(hit) = self.matched_rules(action) {
+            return Some(hit);
+        }
+        if matches!(action, AtomicAction::Pipeline { .. }) {
+            return None;
+        }
+        let (verdict, rule_id) = self.policy.defaults.for_atom(action);
+        Some(Decision::single(
+            verdict,
+            &rule_id,
+            format!("no rule matched {}", action.describe()),
+        ))
+    }
+
+    /// The first of deny, repository ask, allow, ask and defer whose rules
+    /// match `action`, with every matching rule; `None` when no rule does.
+    fn matched_rules(&self, action: &AtomicAction) -> Option<Decision> {
         for (groups, verdict) in [
             (&self.deny, Verdict::Deny),
             (&self.repo_ask, Verdict::Ask),
@@ -144,43 +174,43 @@ impl<'p> CompiledPolicy<'p> {
                 return Some(hit);
             }
         }
-        if matches!(action, AtomicAction::Pipeline { .. }) {
-            return None;
-        }
-        let (verdict, rule_id) = self.policy.defaults.for_atom(action);
-        Some(Decision::single(
-            verdict,
-            &rule_id,
-            format!("no rule matched {}", action.describe()),
-        ))
+        None
     }
 }
 
 impl<'p> CompiledGroup<'p> {
-    fn compile(group: &'p RuleGroup, ctx: &EvalContext) -> Result<Self, PolicyError> {
+    /// `allow` says whether the group is an allow rule ([`Self::bare_hosts`]).
+    fn compile(group: &'p RuleGroup, ctx: &EvalContext, allow: bool) -> Result<Self, PolicyError> {
         let shell = group
             .shell
             .iter()
             .map(|p| ShellPattern::compile(p))
             .collect::<Result<_, _>>()?;
         let mut globs: [Vec<GlobPattern>; Kind::ALL.len()] = Default::default();
+        let mut bare: [Vec<GlobPattern>; Kind::ALL.len()] = Default::default();
         for kind in Kind::ALL.into_iter().filter(|k| *k != Kind::Shell) {
             let case_insensitive = match kind {
                 Kind::FsRead | Kind::FsWrite => ctx.case_insensitive_paths,
                 Kind::Net | Kind::Fetch => true,
                 _ => false,
             };
-            globs[kind as usize] = group
-                .patterns(kind)
-                .iter()
-                .flat_map(|p| ctx.spellings(p))
-                .map(|p| GlobPattern::compile(&p, case_insensitive))
-                .collect::<Result<_, _>>()?;
+            let compile = |patterns: &mut dyn Iterator<Item = &String>| {
+                patterns
+                    .flat_map(|p| ctx.spellings(p))
+                    .map(|p| GlobPattern::compile(&p, case_insensitive))
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            let patterns = group.patterns(kind);
+            globs[kind as usize] = compile(&mut patterns.iter())?;
+            if matches!(kind, Kind::Net | Kind::Fetch) {
+                bare[kind as usize] = compile(&mut patterns.iter().filter(|p| !names_port(p)))?;
+            }
         }
         Ok(Self {
             group,
             shell,
             globs,
+            bare_hosts: allow.then_some(bare),
         })
     }
 
@@ -189,11 +219,24 @@ impl<'p> CompiledGroup<'p> {
             (AtomicAction::Shell { argv } | AtomicAction::Pipeline { argv }, _) => {
                 any_match(&self.shell, argv.as_slice())
             }
-            (_, Some(subject)) => action
-                .kind()
-                .rule_kinds()
-                .iter()
-                .any(|k| any_match(&self.globs[*k as usize], subject)),
+            (_, Some(subject)) => {
+                let globs = match &self.bare_hosts {
+                    Some(bare)
+                        if matches!(
+                            action,
+                            AtomicAction::Net { .. } | AtomicAction::Fetch { .. }
+                        ) && crate::host::port_pattern(subject).is_none() =>
+                    {
+                        bare
+                    }
+                    _ => &self.globs,
+                };
+                action
+                    .kind()
+                    .rule_kinds()
+                    .iter()
+                    .any(|k| any_match(&globs[*k as usize], subject))
+            }
             (_, None) => false,
         }
     }
@@ -242,7 +285,7 @@ impl CompiledPolicy<'_> {
     /// has any.
     #[must_use]
     pub fn pushes(&self, action: &Action) -> Vec<crate::shell::push::Push> {
-        let Action::Shell { command } = action else {
+        let Action::Shell { command } = action.shown() else {
             return Vec::new();
         };
         crate::shell::push::pushes(
@@ -271,6 +314,12 @@ impl CompiledPolicy<'_> {
             }
             _ => None,
         });
+        // Another spelling of a command (OpenMoat's binary under another name
+        // or case) adds the deny or ask its rules give, and nothing else.
+        let aliased = aliases::aliases(&atoms, &self.ctx, resolver, paths)
+            .into_iter()
+            .filter_map(|atom| self.matched_rules(&atom))
+            .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Ask));
         // A part that could not be parsed, or arguments the adapter did not
         // search, may name anything: never allow (defer or ask, ADR-025), and let
         // a deny on the rest still win. A line not read in full, or one past a
@@ -283,7 +332,7 @@ impl CompiledPolicy<'_> {
                 format!("could not parse action safely: {}", u.reason),
             )
         });
-        let unchecked = match action {
+        let unchecked = match action.shown() {
             Action::McpTool {
                 unchecked: Some(limit),
                 ..
@@ -293,12 +342,23 @@ impl CompiledPolicy<'_> {
             )),
             _ => None,
         };
+        // What the payload does not show may be anything: at least `ask`.
+        let partial = match action {
+            Action::Unchecked { reason, .. } => Some(Decision::single(
+                Verdict::Ask,
+                crate::action::UNCHECKED_RULE,
+                reason.clone(),
+            )),
+            _ => None,
+        };
         atoms
             .iter()
             .filter_map(|atom| self.evaluate_atomic(atom))
+            .chain(aliased)
             .chain(pins)
             .chain(unparsed)
             .chain(unchecked)
+            .chain(partial)
             .reduce(|mut acc, next| {
                 acc.merge(next);
                 acc

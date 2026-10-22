@@ -13,8 +13,8 @@ pub(super) const DOCS: HostDocs = HostDocs {
 const TOOLS: &[ToolRow] = &[
     ToolRow::new(
         "`exec`",
-        "`command`, with each `env` entry written as `NAME='value'` before it; `workdir` as the \
-         working directory (one under `~` as a `cd` before the command); PowerShell on Windows",
+        "`command`, with each `env` entry written as `NAME='value'` before it; `workdir` as a \
+         `cd` before the command, the project staying the session's; PowerShell on Windows",
         "`Shell`; `ForeignShell` on Windows",
     ),
     ToolRow::new(
@@ -91,7 +91,7 @@ const TOOLS: &[ToolRow] = &[
     ),
     ToolRow::new(
         "any other tool (`message`, `sessions_*`, a plugin's tool)",
-        "tool name",
+        "tool name and arguments",
         "`UnknownTool` (`tool.unknown`)",
     ),
 ];
