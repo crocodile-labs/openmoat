@@ -8,6 +8,9 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Changed
+- `openmoat-hosts` (library API, breaking): `McpSpec` takes readers (`McpReader`) for its user and project files and `tool_names: &dyn McpNames`; `McpLayout` and `McpToolNames` are removed, and each host's MCP reader and tool naming live in its folder ([#640](https://github.com/crocodile-labs/openmoat/pull/640)).
+
 ### Security
 - A session grant for a file holds only while the file resolves where it did when approved: a granted file replaced by a symlink to another file is asked about again ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
 - An open proxy tunnel is checked against a session taint that includes every event recorded since it was last looked up, so it closes at the next recheck after the session reads a secret, not up to one interval later ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
