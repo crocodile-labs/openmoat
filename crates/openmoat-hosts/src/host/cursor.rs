@@ -13,8 +13,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    McpToolNames, ProjectSettingsSpec, SandboxFormat, SandboxSpec, SettingsFormat,
+    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    ProjectSettingsSpec, SandboxFormat, SandboxSpec, SettingsFormat,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -62,9 +62,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideHookFile("mcp.json"),
-        user_layout: McpLayout::Json,
-        project_files: &[(".cursor/mcp.json", McpLayout::Json)],
-        tool_names: McpToolNames::Prefixed,
+        user_reader: &McpServersJson,
+        project_files: &[(".cursor/mcp.json", &McpServersJson)],
+        tool_names: &Prefixed,
     }),
     // Cursor documents its sandbox for macOS and Linux only.
     sandbox: Some(SandboxSpec {

@@ -25,8 +25,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout, McpSpec,
-    McpToolNames, ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
@@ -75,9 +75,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // and the project `settings.json`.
     mcp: Some(McpSpec {
         user_file: McpFile::HookFile,
-        user_layout: McpLayout::Json,
-        project_files: &[(".gemini/settings.json", McpLayout::Json)],
-        tool_names: McpToolNames::Prefixed,
+        user_reader: &McpServersJson,
+        project_files: &[(".gemini/settings.json", &McpServersJson)],
+        tool_names: &Prefixed,
     }),
     // A trusted folder's `.gemini/settings.json` is merged over the user's:
     // `hooksConfig.disabled` lists are joined, and its `BeforeTool` hooks run

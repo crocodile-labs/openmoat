@@ -25,13 +25,14 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpLayout,
-    McpSpec, McpToolNames, ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    Asks, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
+    McpSpec, McpServersJson, ProjectSettingsSpec, SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
 mod doc;
+mod mcp;
 mod tools;
 
 /// The event name in camel case, whose payload has camel-case fields.
@@ -74,12 +75,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // (<https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers>).
     mcp: Some(McpSpec {
         user_file: McpFile::InConfigDir("mcp-config.json"),
-        user_layout: McpLayout::Json,
+        user_reader: &McpServersJson,
         project_files: &[
-            (".mcp.json", McpLayout::JsonOrBare),
-            (".github/mcp.json", McpLayout::JsonOrBare),
+            (".mcp.json", &mcp::JsonOrBare),
+            (".github/mcp.json", &mcp::JsonOrBare),
         ],
-        tool_names: McpToolNames::Dashed,
+        tool_names: &mcp::Dashed,
     }),
     // A repository's settings are merged over the user's, and
     // `disableAllHooks: true` there skips the user hook files too. Its

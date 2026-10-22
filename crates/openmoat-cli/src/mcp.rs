@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use openmoat_core::{Decision, Verdict};
-use openmoat_hosts::{Host, McpToolNames};
+use openmoat_hosts::Host;
 
 use crate::home::Home;
 use crate::install::HostConfig;
@@ -121,88 +121,16 @@ pub fn violation(
 }
 
 /// Whether `tool` (the name the adapter recorded) is one of server `name`'s
-/// tools as `host` names them ([`McpToolNames`]). Matching too much holds back
-/// another server's tools while this one is unaccepted; matching too little
-/// would let a changed server run, so every spelling is tried.
+/// tools as `host` names them (its spec's `McpNames`). Matching too much holds
+/// back another server's tools while this one is unaccepted; matching too
+/// little would let a changed server run, so every spelling is tried.
 pub fn tool_of(host: Host, tool: &str, name: &str) -> bool {
-    if pins::tool_of(tool, name) {
-        return true;
-    }
-    match host.spec().mcp.as_ref().map(|mcp| mcp.tool_names) {
-        Some(McpToolNames::OpenClaw) => openclaw_tool_of(tool, name),
-        Some(McpToolNames::Underscored) => {
-            tool.starts_with(&format!("mcp__{}__", spelled(name, |c| c == '_', '_')))
-        }
-        Some(McpToolNames::Dashed) => [
-            name.to_owned(),
-            spelled(name, |c| c == '_' || c == '-', '-'),
-            spelled(name, |c| c == '_' || c == '-', '_'),
-        ]
-        .iter()
-        .any(|n| tool.starts_with(&format!("{n}-"))),
-        Some(McpToolNames::Prefixed) | None => false,
-    }
-}
-
-/// `name` with every character but ASCII letters, digits and those `keep`
-/// allows as `with`.
-fn spelled(name: &str, keep: impl Fn(char) -> bool, with: char) -> String {
-    name.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || keep(c) {
-                c
-            } else {
-                with
-            }
-        })
-        .collect()
-}
-
-/// OpenClaw names a server's tools `<prefix>__<tool>`
-/// (<https://docs.openclaw.ai/plugins/bundles>, "Tool naming"; its
-/// `agent-bundle-mcp-names` module): the prefix is the server's name with
-/// every character but letters, digits, `_` and `-` as `-`, `mcp` in front of
-/// one that does not start with a letter, at most 30 characters, and `-2`,
-/// `-3`, … on a shortened base when another server's prefix is the same
-/// without regard to case.
-fn openclaw_tool_of(tool: &str, name: &str) -> bool {
-    const MAX_PREFIX: usize = 30;
-    let Some(rest) = tool.strip_prefix("mcp__") else {
-        return false;
-    };
-    let spelled: String = name
-        .trim()
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
-                c.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let mut bases = vec![spelled.clone()];
-    if !spelled.starts_with(|c: char| c.is_ascii_alphabetic()) {
-        bases.extend(["mcp", "mcp-", "mcp_"].map(|fallback| format!("{fallback}{spelled}")));
-    }
-    let bases: Vec<String> = bases
-        .into_iter()
-        .map(|b| b.chars().take(MAX_PREFIX).collect())
-        .collect();
-    // Every `__` in the tool may end the prefix: a prefix may hold `__` too.
-    let lower = rest.to_ascii_lowercase();
-    lower.match_indices("__").any(|(end, _)| {
-        let prefix = &lower[..end];
-        bases.iter().any(|base| {
-            prefix == base
-                || prefix.rsplit_once('-').is_some_and(|(stem, n)| {
-                    !stem.is_empty()
-                        && prefix.len() <= MAX_PREFIX
-                        && n.parse::<u32>().is_ok_and(|n| n >= 2)
-                        && base.starts_with(stem)
-                })
-        })
-    })
+    pins::tool_of(tool, name)
+        || host
+            .spec()
+            .mcp
+            .as_ref()
+            .is_some_and(|mcp| mcp.tool_names.tool_of(tool, name))
 }
 
 /// Store `changes` as accepted in the lock at `home`. A lock without MCP pins

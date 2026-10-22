@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, CONFIG_HOOK_TIMEOUT_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpLayout, McpSpec, McpToolNames, ProjectSettingsSpec, SandboxFormat, SandboxSpec,
+    McpSpec, McpServersJson, Prefixed, ProjectSettingsSpec, SandboxFormat, SandboxSpec,
     SettingsFormat, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
@@ -15,6 +15,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) mod config_change;
 mod doc;
+mod mcp;
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
@@ -63,9 +64,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     mcp: Some(McpSpec {
         user_file: McpFile::BesideDefaultDir(".claude.json"),
-        user_layout: McpLayout::ClaudeJson,
-        project_files: &[(".mcp.json", McpLayout::Json)],
-        tool_names: McpToolNames::Prefixed,
+        user_reader: &mcp::ClaudeJson,
+        project_files: &[(".mcp.json", &McpServersJson)],
+        tool_names: &Prefixed,
     }),
     // Claude Code's sandbox runs on macOS, Linux and WSL2 only, and with
     // `failIfUnavailable` Claude Code exits at startup where it cannot run:

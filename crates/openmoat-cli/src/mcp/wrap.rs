@@ -18,11 +18,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
+use openmoat_hosts::McpSyntax;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use toml_edit::{Array, DocumentMut, value};
 
-use super::servers::{self, Layout, Server, Source};
+use super::servers::{self, Server, Source};
 use crate::home::{Home, write_private};
 use crate::install::Recorded;
 
@@ -134,21 +135,21 @@ pub fn user_servers(home: &Home, hosts: &[openmoat_hosts::Host]) -> Result<Vec<(
 /// Write `edits` (server, new entry) into their files, backing each up first
 /// unless `dry_run`.
 pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()> {
-    let mut by_file: BTreeMap<PathBuf, (Layout, Vec<&Done>)> = BTreeMap::new();
+    let mut by_file: BTreeMap<PathBuf, (McpSyntax, Vec<&Done>)> = BTreeMap::new();
     for (source, done) in edits {
         by_file
             .entry(source.path.clone())
-            .or_insert_with(|| (source.layout, Vec::new()))
+            .or_insert_with(|| (source.reader.syntax(), Vec::new()))
             .1
             .push(done);
     }
-    for (path, (layout, dones)) in by_file {
+    for (path, (syntax, dones)) in by_file {
         let text =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let new = match layout {
-            Layout::Json | Layout::ClaudeJson | Layout::JsonOrBare => edit_json(&text, &dones)?,
-            Layout::Toml => edit_toml(&text, &dones)?,
-            Layout::OpenClaw => {
+        let new = match syntax {
+            McpSyntax::Json => edit_json(&text, &dones)?,
+            McpSyntax::Toml => edit_toml(&text, &dones)?,
+            McpSyntax::Json5 => {
                 // JSON5 is written back as JSON, so a file with comments is not.
                 let parsed = crate::install::openclaw::parse(&text)
                     .with_context(|| format!("parsing {}", path.display()))?;
