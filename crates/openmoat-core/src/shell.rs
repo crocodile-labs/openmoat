@@ -61,6 +61,7 @@ pub(crate) mod git;
 mod in_place;
 pub(crate) mod installs;
 mod invocation;
+pub(crate) mod mailbox;
 mod make;
 mod operands;
 mod options;

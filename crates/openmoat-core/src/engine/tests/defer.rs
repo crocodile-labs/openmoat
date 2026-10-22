@@ -57,3 +57,33 @@ fn defer_rules_sit_between_ask_and_the_defaults() {
     // the strictest atom still wins: a defer never softens a deny
     assert_eq!(decided(&p, "make test && rm x").0, Verdict::Deny);
 }
+
+#[test]
+fn a_mail_address_in_its_option_is_no_host_the_command_connects_to() {
+    let p = policy(
+        "version: 1\ndefaults: { '*': allow, net: deny }\nallow:\n  - id: gh\n    \
+         net: ['github.com']\n",
+    );
+    for command in [
+        "git -c user.email=1+a@users.noreply.github.com push https://github.com/a/b main",
+        "curl -u me@example.org:token https://github.com/x",
+        "curl -d email=me@example.org https://github.com/x",
+        "curl -H 'From: me@example.org' https://github.com/x",
+    ] {
+        assert_eq!(decided(&p, command).0, Verdict::Allow, "{command}");
+    }
+    // the same words where the command connects to them
+    for command in [
+        "ssh me@example.org",
+        "curl me@example.org",
+        "curl a=me@example.org",
+        "git -c http.proxy=me@example.org push https://github.com/a/b main",
+        "curl -d u=me@example.org:443 https://github.com/x",
+    ] {
+        assert_eq!(
+            decided(&p, command),
+            (Verdict::Deny, vec!["default.net".to_owned()]),
+            "{command}"
+        );
+    }
+}
