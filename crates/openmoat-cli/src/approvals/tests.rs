@@ -365,3 +365,29 @@ fn an_approved_near_miss_install_also_allows_its_near_miss_atom() {
         command: "cd app && npm i lodahs".into()
     }));
 }
+
+/// A file grant holds only while its file resolves where it did when approved:
+/// a granted file replaced by a symlink to another file is asked about again.
+#[cfg(unix)]
+#[test]
+fn a_granted_file_swapped_for_a_symlink_is_asked_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = crate::context::path_string(&fs::canonicalize(dir.path()).unwrap());
+    let (file, elsewhere) = (format!("{root}/notes.txt"), format!("{root}/bashrc"));
+    fs::write(&file, "x").unwrap();
+    fs::write(&elsewhere, "y").unwrap();
+    let write = Action::FsWrite { path: file.clone() };
+    let mut g = Grants::default();
+    g.grant(at("claude-code", "s1"), &write, NOW, None);
+    assert!(g.matches(at("claude-code", "s1"), &write, NOW));
+    fs::remove_file(&file).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
+    assert!(
+        !g.matches(at("claude-code", "s1"), &write, NOW),
+        "now a link"
+    );
+    // approved again as the link, it holds while the link points there
+    g.grant(at("claude-code", "s1"), &write, NOW, None);
+    assert!(g.matches(at("claude-code", "s1"), &write, NOW));
+    assert_eq!(g.entries.len(), 1);
+}

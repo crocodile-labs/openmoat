@@ -1,6 +1,6 @@
 //! What `moat allow` approves of an asked action, and how it is shown.
 
-use openmoat_core::Action;
+use openmoat_core::{Action, PathResolver as _};
 
 /// An asked action as a grant or `--always` rule names it: a shell command
 /// trimmed, or files with each path made absolute against `cwd` (`~` expanded,
@@ -43,6 +43,23 @@ pub fn files(action: &Action) -> (&[String], &[String]) {
         Action::Patch { writes } => (&[], writes),
         _ => (&[], &[]),
     }
+}
+
+/// Where each file of `action` ([`files`], reads then writes) resolves now,
+/// following symlinks; empty when each is itself.
+pub(super) fn real_files(action: &Action) -> Vec<String> {
+    let (reads, writes) = files(action);
+    let real: Vec<String> = reads
+        .iter()
+        .chain(writes)
+        .map(|p| {
+            crate::realpath::FsPathResolver
+                .resolve(p)
+                .unwrap_or_else(|| p.clone())
+        })
+        .collect();
+    let same = real.iter().eq(reads.iter().chain(writes));
+    if same { Vec::new() } else { real }
 }
 
 /// What an approvable action does, for a person: `run "…"`, `read …`, `write …`.
