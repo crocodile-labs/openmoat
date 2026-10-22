@@ -8,6 +8,11 @@ view at the end of the file.
 
 ## [Unreleased]
 
+### Fixed
+- A mail address or login in the option that takes it (`git -c user.email=…`, `curl -u`, `--mail-from`, `--mail-rcpt`, and a `curl -d`, `-F` or `-H` value ending in an address) is no longer read as a host the command connects to, so a `net` default no longer denies an ordinary push or API call over it. A mail address in a string of interpreter code (`python3 -c`, a here-document) only looks like a host: `net` rules naming its domain still match, the `net` default does not. `ssh me@host`, `curl me@host` and a `git -c` proxy or remote URL are still hosts ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
+- `openmoat sandbox sync` lists Codex's nested-`.git` allowance once when several allowed directories need it ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
+- docs/INSTALL.md: on macOS 12 and earlier, where Homebrew may ask for a newer Xcode, install with the shell installer or `cargo install` ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
+
 ## [0.9.0] - 2026-10-22
 
 **Upgrading:** run `openmoat init` once after upgrading and restart your agents. An agent keeps the hook command it read when it started, and an OpenMoat binary older than 0.9.0 denies every call over a lock 0.9.0 has written. Keep one OpenMoat installed (docs/INSTALL.md, Upgrading). Several changes below are marked **breaking**: MCP tools are held once, session grants from earlier releases need approving again, repository policies and packs must be signed again in their new namespaces, and a host allowed without a port is reached on 443 and 80 only.

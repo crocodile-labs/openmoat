@@ -151,11 +151,15 @@ fn pipeline_send(words: &[String]) -> Option<Send<'_>> {
 /// Every host the arguments of `argv` name: each argument as the classifier
 /// reads it, the value of `--option=value`, and each `:`-separated part of an
 /// argument that is no URL (`--connect-to a.com:443:b.com:443`, `--resolve`,
-/// a `Host:` header), so a request redirected elsewhere is judged by both.
+/// a `Host:` header), so a request redirected elsewhere is judged by both. A
+/// mail address or login in its option (`curl -u me@example.com:token`) is none.
 fn argument_hosts(argv: &[String]) -> Vec<String> {
     let program = shell::program_name(argv);
     let mut hosts = Vec::new();
-    for arg in argv.iter().skip(1) {
+    for (i, arg) in argv.iter().enumerate().skip(1) {
+        if shell::mailbox::names_no_host(argv, i) {
+            continue;
+        }
         let value = match arg.split_once('=') {
             Some((option, value)) if option.starts_with('-') => value,
             _ => arg.as_str(),
@@ -241,6 +245,19 @@ mod tests {
             "https://api.github.com/user",
         ]));
         assert_eq!(hosts, ["api.github.com", "evil.com", "example.com"]);
+    }
+
+    #[test]
+    fn a_login_or_mail_address_in_its_option_is_no_host() {
+        let hosts = argument_hosts(&argv(&[
+            "curl",
+            "-u",
+            "me@users.noreply.github.com:token",
+            "-d",
+            "email=me@example.org",
+            "https://api.github.com/user",
+        ]));
+        assert_eq!(hosts, ["api.github.com"]);
     }
 
     #[test]

@@ -8,7 +8,7 @@ use crate::action::AtomicAction;
 use crate::host;
 use crate::paths;
 use crate::shell::tokens::env_refs;
-use crate::shell::{ClassifyError, ShellContext, Sink};
+use crate::shell::{ClassifyError, ShellContext, Sink, mailbox};
 
 /// Mine inline interpreter code for the resources it names. The payload is
 /// not shell, so it is scanned rather than parsed.
@@ -38,12 +38,15 @@ pub(super) fn scan_payload(
             sink.read(ctx, raw)?;
         } else if let Some(host) = host::of_word(raw).filter(|_| !called) {
             // Code names a host it contacts as a URL or a string; a bare dotted word
-            // is more often an attribute (`config.dev`), so it only looks like one.
-            sink.push(if raw.contains("://") || in_string {
-                AtomicAction::Net { host }
-            } else {
-                AtomicAction::NetWord { host }
-            })?;
+            // is more often an attribute (`config.dev`), and a string that is a mail
+            // address (`"me@example.com"`) more often data, so they only look like one.
+            sink.push(
+                if raw.contains("://") || (in_string && !mailbox::is_mailbox(raw)) {
+                    AtomicAction::Net { host }
+                } else {
+                    AtomicAction::NetWord { host }
+                },
+            )?;
         }
         for name in env_refs(raw) {
             sink.push(AtomicAction::EnvRead { name })?;

@@ -63,6 +63,13 @@ Then run `openmoat init` ([below](#set-up-with-openmoat-init)).
 > Actions no longer offers a `macos-13` runner, so macOS 13 is not tested. The
 > hooks, `openmoat init`, `openmoat status` and `openmoat doctor` work on earlier macOS and
 > still apply the policy to each tool call; only `openmoat run` has this floor.
+>
+> Homebrew itself no longer supports macOS 12 and earlier: `brew install` or
+> `brew upgrade` may stop and ask for a newer Xcode or Command Line Tools than the
+> system can run. Install with the shell installer or `cargo install` above
+> instead; both put `openmoat` in `~/.cargo/bin`. Keep only one install (see
+> [Upgrading](#upgrading)): after `brew uninstall openmoat`, run `openmoat init`
+> once so the hooks point to the new binary.
 
 To build from a clone instead (Rust 1.95, pinned by `rust-toolchain.toml`):
 

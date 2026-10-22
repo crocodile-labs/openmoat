@@ -17,7 +17,8 @@ use super::tokens::{
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
-    copy, cwd, database, decoders, embedded, git, invocation, make, operands, options, text,
+    copy, cwd, database, decoders, embedded, git, invocation, mailbox, make, operands, options,
+    text,
 };
 use crate::action::AtomicAction;
 use crate::host;
@@ -438,8 +439,8 @@ fn classify_arguments(
                 name: name.to_owned(),
             })?;
         }
-        let is_destination = copy.as_ref().is_some_and(|d| d.index == i);
-        if i == 0 || text_operands.data.contains(&i) || is_destination {
+        let skip = copy.as_ref().is_some_and(|d| d.index == i) || mailbox::names_no_host(argv, i);
+        if i == 0 || text_operands.data.contains(&i) || skip {
             continue;
         }
         let options_ended = options_end.is_some_and(|end| i > end);

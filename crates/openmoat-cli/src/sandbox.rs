@@ -414,6 +414,12 @@ impl Report {
         patterns: Vec<String>,
         message: &str,
     ) {
+        // two policy rules may need the same allowance; it is reported once
+        if self.allowances.iter().any(|a| {
+            a.kind == kind && a.rule == rule && a.patterns == patterns && a.message == message
+        }) {
+            return;
+        }
         self.allowances.push(Allowance {
             kind,
             rule: rule.to_owned(),
