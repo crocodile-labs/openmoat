@@ -87,3 +87,29 @@ fn a_mail_address_in_its_option_is_no_host_the_command_connects_to() {
         );
     }
 }
+
+#[test]
+fn a_mail_address_in_interpreter_code_only_looks_like_a_host() {
+    let p = policy(
+        "version: 1\ndefaults: { '*': defer, net: deny }\ndeny:\n  - id: evil\n    \
+         net: ['evil.example.com']\n",
+    );
+    let code = |s: &str| format!("python3 -c 'import json; json.dump({{\"email\": \"{s}\"}}, f)'");
+    assert_eq!(
+        decided(&p, &code("1+a@users.noreply.github.com")),
+        (Verdict::Defer, vec!["default".to_owned()])
+    );
+    // a net rule that names the domain still matches
+    assert_eq!(
+        decided(&p, &code("me@evil.example.com")),
+        (Verdict::Deny, vec!["evil".to_owned()])
+    );
+    // a URL, a host with a port and a plain host in a string are still hosts
+    for s in ["https://me@other.com/x", "me@other.com:22", "other.com"] {
+        assert_eq!(
+            decided(&p, &code(s)),
+            (Verdict::Deny, vec!["default.net".to_owned()]),
+            "{s}"
+        );
+    }
+}

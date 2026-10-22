@@ -52,7 +52,7 @@ pub(crate) fn names_no_host(argv: &[String], i: usize) -> bool {
 }
 
 /// `local@domain` and nothing else: no scheme, port or path after the domain.
-fn is_mailbox(text: &str) -> bool {
+pub(crate) fn is_mailbox(text: &str) -> bool {
     text.rsplit_once('@').is_some_and(|(local, domain)| {
         !local.is_empty() && local.chars().all(is_local_char) && is_domain(domain)
     })
