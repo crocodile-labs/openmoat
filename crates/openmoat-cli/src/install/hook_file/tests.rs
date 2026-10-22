@@ -1,5 +1,7 @@
 use super::*;
+use crate::install::HookSpec;
 use openmoat_hosts::Host;
+use serde_json::json;
 
 /// [`super::install`] with the state directory next to the hook file.
 fn install(config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
@@ -388,3 +390,6 @@ fn malformed_files_are_reported_not_overwritten() {
         "{ not json"
     );
 }
+
+mod copilot;
+mod gemini;

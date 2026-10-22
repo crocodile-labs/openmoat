@@ -28,6 +28,7 @@ pub use host::openclaw::{
     CONFIG_FILE as OPENCLAW_CONFIG_FILE, PLUGIN_ID as OPENCLAW_PLUGIN_ID,
     STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
 };
+pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
 
 use std::fmt;
 use std::str::FromStr;

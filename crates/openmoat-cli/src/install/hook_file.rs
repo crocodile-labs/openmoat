@@ -1,28 +1,22 @@
 //! Idempotent edits to a host's JSON hook file.
 //!
-//! Claude Code (`settings.json`) and Codex (`hooks.json`) share the shape
-//! `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{type, command, args, timeout}]}]}}`.
-//! Gemini CLI's `settings.json` has the same nesting with one shell string as
-//! the `command` ([`gemini`]). Our entries are recognised by their `args`
-//! (`guard --host <id>`), or the end of that command string, so re-running
-//! `init` updates the binary path and matcher in place and never duplicates.
-//! Unrelated settings are preserved byte-for-byte as JSON values.
+//! The layouts whose entries sit among the person's own (Claude Code, Codex,
+//! Cursor, GitHub Copilot CLI, Gemini CLI) are pure code in the hosts crate
+//! ([`openmoat_hosts::HookFile`]); this module reads, backs up and writes the
+//! file. OpenClaw's `openclaw.json` and pi's extension are edited by
+//! [`openclaw`] and [`pi`].
 
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
-use serde_json::{Map, Value, json};
+use openmoat_hosts::{HookFile, HookFileState};
+use serde_json::{Map, Value};
 
-use super::{HOOK_BACKUP, HookFormat, HookSpec, HostConfig, openclaw, pi};
+use super::{HOOK_BACKUP, HookFormat, HostConfig, openclaw, pi};
 use crate::home::{Home, write_private};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Outcome {
-    Unchanged,
-    Updated,
-    Installed,
-}
+pub use openmoat_hosts::HookOutcome as Outcome;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HookState {
@@ -95,16 +89,29 @@ fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Ou
     if config.format == HookFormat::OpenClaw {
         return openclaw::upsert(root, config);
     }
-    let mut outcome = Outcome::Unchanged;
-    for spec in config.hooks {
-        outcome = outcome.max(upsert(root, config, spec, binary)?);
-    }
-    Ok(outcome)
+    let Some(layout) = layout(config) else {
+        bail!("{} is not a JSON hook file", config.settings_path.display());
+    };
+    layout
+        .upsert(
+            root,
+            &config.settings_path.display().to_string(),
+            config.host.id(),
+            config.hooks,
+            &binary.to_string_lossy(),
+            config.blocks_on_failure,
+        )
+        .map_err(anyhow::Error::new)
+}
+
+/// The code for `config`'s layout; `None` for the files OpenMoat owns whole.
+fn layout(config: &HostConfig) -> Option<&'static dyn HookFile> {
+    config.format.hook_file()
 }
 
 /// The hook's state for `binary`. A hook that runs `binary`'s `moat` alias
 /// counts as installed: hooks written before the rename keep working through
-/// it, and `init` rewrites them to `binary` ([`upsert`] compares exactly).
+/// it, and `init` rewrites them to `binary` (an edit compares exactly).
 pub fn state(config: &HostConfig, binary: &Path) -> HookState {
     let exact = state_for(config, binary);
     if exact == HookState::Installed {
@@ -138,215 +145,25 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     if config.format == HookFormat::OpenClaw {
         return openclaw::state(config, binary, &root);
     }
-    let mut found = 0;
-    let mut stale_command = None;
-    for spec in config.hooks {
-        let ours = root
-            .pointer(&format!("/hooks/{}", spec.event))
-            .and_then(Value::as_array)
-            .and_then(|entries| entries.iter().find(|e| is_ours(e, config)));
-        match ours {
-            Some(entry)
-                if *entry == desired_entry(config, spec, binary, block(config, spec, entry)) =>
-            {
-                found += 1;
-            }
-            Some(entry) => {
-                stale_command.get_or_insert_with(|| {
-                    hook_binary(entry, config).unwrap_or_else(|| "?".into())
-                });
-            }
-            None => {}
-        }
-    }
-    match (found, stale_command) {
-        (n, None) if n == config.hooks.len() => HookState::Installed,
-        (0, None) => HookState::Missing,
-        (_, Some(command)) => HookState::Stale { command },
-        (_, None) => HookState::Stale {
-            command: binary.to_string_lossy().into_owned(),
-        },
-    }
-}
-
-/// Whether our entry for `spec` carries `"onFailure": "block"`: it does when it
-/// already has the key, so a shell without `claude` on `PATH` never takes the
-/// key away, and otherwise when the host's version knows it.
-fn block(config: &HostConfig, spec: &HookSpec, existing: &Value) -> bool {
-    config.format == HookFormat::Nested
-        && (has_block(existing) || (spec.block_on_failure && (config.blocks_on_failure)()))
-}
-
-/// [`block`] for an event with no entry of ours yet.
-fn block_new(config: &HostConfig, spec: &HookSpec) -> bool {
-    config.format == HookFormat::Nested && spec.block_on_failure && (config.blocks_on_failure)()
-}
-
-fn has_block(entry: &Value) -> bool {
-    entry.pointer("/hooks/0/onFailure") == Some(&json!("block"))
-}
-
-fn desired_entry(config: &HostConfig, spec: &HookSpec, binary: &Path, block: bool) -> Value {
-    match config.format {
-        HookFormat::Nested => {
-            let mut hook = json!({
-                "type": "command",
-                "command": binary.to_string_lossy(),
-                "args": ["guard", "--host", config.host.id()],
-                "timeout": spec.timeout,
-            });
-            if block {
-                // Claude Code v2.1.295+: a hook that fails to start, crashes,
-                // exits other than 0 or 2, or times out blocks the call as exit 2
-                // does (<https://code.claude.com/docs/en/hooks>, "Block the
-                // action when a hook fails"); without it the call runs.
-                hook["onFailure"] = json!("block");
-            }
-            json!({ "matcher": spec.matcher, "hooks": [hook] })
-        }
-        HookFormat::Copilot => copilot::entry(config, spec, binary),
-        HookFormat::Gemini => json!({
-            "matcher": spec.matcher,
-            "hooks": [{
-                "name": gemini::NAME,
-                "type": "command",
-                "command": gemini::command(binary, config.host.id()),
-                "timeout": spec.timeout * 1000,
-            }],
-        }),
-        // OpenClaw's file is edited by `openclaw` and pi's written by `pi`,
-        // before any entry is built here.
-        HookFormat::Cursor | HookFormat::OpenClaw | HookFormat::Pi => json!({
-            "command": cursor_command(config, binary),
-            "timeout": spec.timeout,
-            "failClosed": true,
-        }),
-    }
-}
-
-/// Cursor takes one shell string; the binary path is quoted so spaces survive.
-fn cursor_command(config: &HostConfig, binary: &Path) -> String {
-    let path = binary.to_string_lossy().replace('"', "\\\"");
-    format!("\"{path}\" guard --host {}", config.host.id())
-}
-
-/// The binary one of our entries runs, unquoted from Cursor's shell string.
-fn hook_binary(entry: &Value, config: &HostConfig) -> Option<String> {
-    if config.format == HookFormat::Copilot {
-        return copilot::binary(entry, config);
-    }
-    if config.format == HookFormat::Cursor {
-        let suffix = format!(" guard --host {}", config.host.id());
-        let quoted = entry
-            .get("command")?
-            .as_str()?
-            .trim_end()
-            .strip_suffix(&suffix)?;
-        return Some(quoted.trim().trim_matches('"').replace("\\\"", "\""));
-    }
-    let command = entry.pointer("/hooks/0/command").and_then(Value::as_str)?;
-    if config.format == HookFormat::Gemini {
-        return gemini::binary_of(command, config.host.id());
-    }
-    Some(command.to_owned())
-}
-
-fn is_ours(entry: &Value, config: &HostConfig) -> bool {
-    if config.format == HookFormat::Copilot {
-        return copilot::is_ours(entry, config);
-    }
-    if config.format == HookFormat::Gemini {
-        return entry
-            .get("hooks")
-            .and_then(Value::as_array)
-            .is_some_and(|hooks| {
-                hooks.iter().any(|h| {
-                    h.get("command")
-                        .and_then(Value::as_str)
-                        .is_some_and(|c| gemini::binary_of(c, config.host.id()).is_some())
-                })
-            });
-    }
-    if config.format == HookFormat::Cursor {
-        let suffix = format!(" guard --host {}", config.host.id());
-        return entry
-            .get("command")
-            .and_then(Value::as_str)
-            .is_some_and(|c| c.trim_end().ends_with(&suffix));
-    }
-    entry
-        .get("hooks")
-        .and_then(Value::as_array)
-        .is_some_and(|hooks| {
-            hooks.iter().any(|h| {
-                h.get("args").and_then(Value::as_array).is_some_and(|args| {
-                    let args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
-                    args == ["guard", "--host", config.host.id()]
-                })
-            })
-        })
-}
-
-fn upsert(
-    root: &mut Value,
-    config: &HostConfig,
-    spec: &HookSpec,
-    binary: &Path,
-) -> Result<Outcome> {
-    let Value::Object(top) = root else {
-        bail!("{} is not a JSON object", config.settings_path.display());
+    let Some(layout) = layout(config) else {
+        return HookState::Missing;
     };
-    if has_version(config) {
-        top.entry("version").or_insert_with(|| json!(1));
+    let id = config.host.id();
+    let binary = binary.to_string_lossy();
+    match layout.state(&root, id, config.hooks, &binary, config.blocks_on_failure) {
+        HookFileState::Missing => HookState::Missing,
+        HookFileState::Installed => HookState::Installed,
+        HookFileState::Stale { command } => HookState::Stale { command },
     }
-    let hooks = top
-        .entry("hooks")
-        .or_insert_with(|| Value::Object(Map::new()));
-    let Value::Object(hooks) = hooks else {
-        bail!(
-            "`hooks` in {} is not an object",
-            config.settings_path.display()
-        );
-    };
-    let entries = hooks
-        .entry(spec.event)
-        .or_insert_with(|| Value::Array(Vec::new()));
-    let Value::Array(entries) = entries else {
-        bail!(
-            "`hooks.{}` in {} is not an array",
-            spec.event,
-            config.settings_path.display()
-        );
-    };
-    let Some(existing) = entries.iter_mut().find(|e| is_ours(e, config)) else {
-        entries.push(desired_entry(config, spec, binary, block_new(config, spec)));
-        return Ok(Outcome::Installed);
-    };
-    let desired = desired_entry(config, spec, binary, block(config, spec, existing));
-    if *existing == desired {
-        return Ok(Outcome::Unchanged);
-    }
-    *existing = desired;
-    Ok(Outcome::Updated)
 }
 
 /// Whether one of our entries that should block a call when `moat guard`
-/// fails ([`HookSpec::block_on_failure`]) has no `onFailure`.
+/// fails ([`super::HookSpec::block_on_failure`]) has no `onFailure`.
 pub fn lacks_on_failure(config: &HostConfig) -> bool {
     let Ok(root) = read_or_empty(&config.settings_path) else {
         return false;
     };
-    config.format == HookFormat::Nested
-        && config
-            .hooks
-            .iter()
-            .filter(|spec| spec.block_on_failure)
-            .filter_map(|spec| {
-                root.pointer(&format!("/hooks/{}", spec.event))
-                    .and_then(Value::as_array)
-                    .and_then(|entries| entries.iter().find(|e| is_ours(e, config)))
-            })
-            .any(|entry| !has_block(entry))
+    layout(config).is_some_and(|l| l.lacks_on_failure(&root, config.host.id(), config.hooks))
 }
 
 /// The inverse of [`install`] on a parsed file: remove every entry of ours, then
@@ -356,34 +173,7 @@ pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
     if config.format == HookFormat::OpenClaw {
         return openclaw::remove(root);
     }
-    let Value::Object(top) = root else {
-        return false;
-    };
-    let Some(Value::Object(hooks)) = top.get_mut("hooks") else {
-        return false;
-    };
-    let mut removed = false;
-    hooks.retain(|_, entries| {
-        let Value::Array(list) = entries else {
-            return true;
-        };
-        let before = list.len();
-        list.retain(|e| !is_ours(e, config));
-        removed |= list.len() != before;
-        list.len() == before || !list.is_empty()
-    });
-    if removed && hooks.is_empty() {
-        top.remove("hooks");
-    }
-    if removed && has_version(config) && top.len() == 1 {
-        top.retain(|key, value| key != "version" || *value != json!(1));
-    }
-    removed
-}
-
-/// Whether the layout carries `"version": 1` beside `hooks` (Cursor, Copilot).
-fn has_version(config: &HostConfig) -> bool {
-    matches!(config.format, HookFormat::Cursor | HookFormat::Copilot)
+    layout(config).is_some_and(|l| l.remove(root, config.host.id()))
 }
 
 /// `config`'s hook file parsed, an empty object when there is none; OpenClaw's
@@ -406,7 +196,5 @@ pub fn read_or_empty(path: &Path) -> Result<Value> {
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
-mod copilot;
-mod gemini;
 #[cfg(test)]
 mod tests;

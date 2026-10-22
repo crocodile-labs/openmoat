@@ -21,6 +21,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
 mod doc;
+pub(crate) mod hook_file;
 mod project_settings;
 mod pre_tool;
 
