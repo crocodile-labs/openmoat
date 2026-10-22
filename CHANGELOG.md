@@ -10,6 +10,8 @@ view at the end of the file.
 
 ## [0.9.0] - 2026-10-22
 
+**Upgrading:** run `openmoat init` once after upgrading and restart your agents. An agent keeps the hook command it read when it started, and an OpenMoat binary older than 0.9.0 denies every call over a lock 0.9.0 has written. Keep one OpenMoat installed (docs/INSTALL.md, Upgrading). Several changes below are marked **breaking**: MCP tools are held once, session grants from earlier releases need approving again, repository policies and packs must be signed again in their new namespaces, and a host allowed without a port is reached on 443 and 80 only.
+
 ### Security
 - The command line `flock -c`/`--command` runs, and the commands of launchers that start their arguments (`taskset`, `chrt`, `numactl`, `unshare`, `nsenter`, `prlimit`, `setpriv`, `chpst`, `cgexec`, `firejail`, `sandbox-exec`, `arch`, `strace`, `ltrace`, `valgrind`, `catchsegv`, `gdb --args`, `faketime`, `torsocks`, `proxychains`, `systemd-inhibit`, `busybox`, `toybox`), are decided as commands of their own, so a secret read, a hook-settings write or `rm -rf ~` inside one is denied as it is on its own ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
 - The person-only `openmoat` commands are also denied when `systemd-run`, `daemonize`, `start-stop-daemon`, `launchctl submit` or an `at` or `batch` job starts them; `at` and `batch` ask like `crontab` (`persistence`), and the job they read from stdin is decided as a command line ([#633](https://github.com/crocodile-labs/openmoat/pull/633)).
