@@ -28,7 +28,7 @@ body:
     id: host
     attributes:
       label: Host
-      options: [Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, policy check only, other]
+      options: [Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, Continue CLI, policy check only, other]
     validations:
       required: true
   - type: input

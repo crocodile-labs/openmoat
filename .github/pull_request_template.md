@@ -27,4 +27,4 @@ Labels (`type: …`, `area: …`, `size: …`, `risk: …`) are applied automati
 
 ## Release note
 
-<!-- One line for CHANGELOG.md, written for users; or "none" for internal changes. -->
+<!-- One line for a changelog.d/<pr>-<slug>.md fragment (CONTRIBUTING "Changelog"), written for users; or "none" for internal changes. -->
