@@ -1,0 +1,99 @@
+name: Support a new agent
+description: Ask for, or offer to write, OpenMoat support for another AI coding agent.
+title: "host(<id>): support <agent>"
+labels: ["type: feat", "area: hosts"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        This form collects what docs/ADDING_AN_AGENT.md "Before you write code" asks for,
+        so the research happens before the pull request. Link sources for every answer.
+        Read the HOST.md of the agent closest to yours (crates/openmoat-hosts/src/host/<module>/HOST.md) first.
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version checked
+      placeholder: "Example CLI 1.4.2 (npm @example/cli)"
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: Which path fits (ADDING_AN_AGENT "Smallest path first")
+      options:
+        - It sends a hook format OpenMoat already reads (spec only)
+        - It has a hook format of its own (spec + adapter)
+        - It has no hook that runs before a tool call (openmoat run only)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Hook documentation
+      description: Links to the agent's hook or plugin docs, and the source files you checked.
+    validations:
+      required: true
+  - type: textarea
+    id: events
+    attributes:
+      label: Events that run before a tool call
+      description: Event names, matchers, and whether one event covers every tool.
+    validations:
+      required: true
+  - type: textarea
+    id: payload
+    attributes:
+      label: Payload fields
+      description: What arrives on stdin (session id, working directory, tool name, arguments). Paste a sample with personal paths and tokens removed.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: response
+    attributes:
+      label: Response format
+      description: How a hook allows, denies, asks or leaves the call to the agent (stdout document, exit codes). Can the agent ask the person?
+    validations:
+      required: true
+  - type: textarea
+    id: failure
+    attributes:
+      label: When the hook fails
+      description: What the agent does when the hook is missing, cannot start, crashes, exits non-zero or times out, and whether a setting makes it block instead.
+    validations:
+      required: true
+  - type: input
+    id: config_dir
+    attributes:
+      label: Configuration directory and the variable that moves it
+      placeholder: "~/.example, EXAMPLE_HOME"
+    validations:
+      required: true
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tools
+      description: Every tool the agent has, and for each whether its hooks report it. The ones they do not report become the ungoverned list.
+    validations:
+      required: true
+  - type: textarea
+    id: mcp
+    attributes:
+      label: MCP and project settings
+      description: Where it reads MCP server definitions (user and project files), how it names a server's tools, and which repository files it merges over the user's settings or loads hooks from.
+    validations:
+      required: false
+  - type: textarea
+    id: sandbox
+    attributes:
+      label: OS sandbox
+      description: Does the agent have an OS sandbox OpenMoat could configure? On which systems?
+    validations:
+      required: false
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I plan to open the pull request myself (docs/ADDING_AN_AGENT.md)
