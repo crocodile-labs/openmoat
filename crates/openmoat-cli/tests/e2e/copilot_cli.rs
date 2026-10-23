@@ -35,10 +35,6 @@ fn guard(sb: &Sandbox, payload: &str) -> (Option<i32>, String) {
     )
 }
 
-fn decision(stdout: &str) -> Value {
-    serde_json::from_str(stdout.trim()).unwrap_or(Value::Null)
-}
-
 #[test]
 fn init_writes_one_hook_entry_for_every_tool() {
     let sb = sandbox();
@@ -59,44 +55,6 @@ fn init_writes_one_hook_entry_for_every_tool() {
             "{entry}"
         );
     }
-}
-
-#[test]
-fn a_secret_read_is_denied_and_project_work_is_allowed() {
-    let sb = sandbox();
-    let project = sb.project();
-    let secret = sb.home.join(".aws").join("credentials");
-    let (code, out) = guard(
-        &sb,
-        &payload(
-            &project,
-            "view",
-            &json!({ "path": secret.to_string_lossy() }),
-        ),
-    );
-    assert_eq!(code, Some(DENY), "{out}");
-    let doc = decision(&out);
-    assert_eq!(doc["permissionDecision"], "deny", "{out}");
-    assert!(
-        doc["permissionDecisionReason"]
-            .to_string()
-            .contains("secrets-paths"),
-        "{out}"
-    );
-
-    let (code, out) = guard(
-        &sb,
-        &payload(&project, "bash", &json!({ "command": "cargo test" })),
-    );
-    assert_eq!(code, Some(OK), "{out}");
-    assert_eq!(decision(&out)["permissionDecision"], "allow", "{out}");
-
-    // A tool OpenMoat does not govern is left to Copilot: no output, exit 0.
-    let (code, out) = guard(
-        &sb,
-        &payload(&project, "report_intent", &json!({ "intent": "x" })),
-    );
-    assert_eq!((code, out.trim()), (Some(OK), ""), "{out}");
 }
 
 /// Copilot's hook file and its settings, which `disableAllHooks` would turn
@@ -120,20 +78,6 @@ fn writes_that_would_switch_the_hook_off_are_denied() {
     let (code, out) = guard(&sb, &payload(&project, "filesystem-read_file", &args));
     assert_eq!(code, Some(DENY), "{out}");
     assert!(out.contains("secrets-paths"), "{out}");
-}
-
-#[test]
-fn arguments_that_do_not_parse_fail_closed() {
-    let sb = sandbox();
-    let broken = json!({
-        "sessionId": "cp-1", "cwd": sb.project().to_string_lossy(),
-        "toolName": "bash", "toolArgs": "{\"command\": ",
-    })
-    .to_string();
-    let (code, out) = guard(&sb, &broken);
-    assert_eq!(code, Some(DENY), "{out}");
-    assert_eq!(decision(&out)["permissionDecision"], "deny", "{out}");
-    assert!(out.contains("kernel-error"), "{out}");
 }
 
 /// The servers in `~/.copilot/mcp-config.json` are pinned at `init`; a changed

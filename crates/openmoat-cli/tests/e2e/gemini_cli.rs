@@ -71,28 +71,19 @@ fn init_adds_one_named_before_tool_entry() {
 }
 
 #[test]
-fn a_secret_read_or_upload_is_denied() {
-    let sb = Sandbox::installed(&[".gemini"]);
+fn a_secret_upload_is_denied() {
     // On Windows Gemini CLI runs commands in PowerShell, which OpenMoat leaves
     // unparsed (`unparseable`, a defer), as for Claude Code's PowerShell tool.
-    if !cfg!(windows) {
-        let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
-        assert_eq!(code, Some(DENY), "{reply}");
-        assert_eq!(reply["decision"], "deny");
-        let reason = reply["reason"].as_str().unwrap();
-        assert!(reason.contains("secrets-paths"), "{reason}");
-        assert_eq!(reply["systemMessage"], reply["reason"]);
+    if cfg!(windows) {
+        return;
     }
-
-    let secret = sb.home.join(".aws").join("credentials");
-    let read = payload(
-        &sb,
-        "read_file",
-        &json!({ "file_path": secret.to_string_lossy() }),
-    );
-    let (code, reply) = guard(&sb, &read);
+    let sb = Sandbox::installed(&[".gemini"]);
+    let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
     assert_eq!(code, Some(DENY), "{reply}");
-    assert!(reply["reason"].to_string().contains("secrets-paths"));
+    assert_eq!(reply["decision"], "deny");
+    let reason = reply["reason"].as_str().unwrap();
+    assert!(reason.contains("secrets-paths"), "{reason}");
+    assert_eq!(reply["systemMessage"], reply["reason"]);
 }
 
 /// `dir_path` is where Gemini CLI runs a command, chosen by the model; it never
@@ -159,15 +150,6 @@ fn allow_ask_and_no_decision_reach_gemini_as_its_own_shapes() {
     assert_eq!(guard(&sb, &defer), (Some(OK), Value::Null));
     let todos = guard(&sb, &fixture("gemini-cli/write_todos.json"));
     assert_eq!(todos, (Some(OK), Value::Null));
-}
-
-#[test]
-fn a_payload_that_cannot_be_checked_is_denied() {
-    let sb = Sandbox::installed(&[".gemini"]);
-    let (code, reply) = guard(&sb, &fixture("gemini-cli/read_file-malformed.json"));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(reply["reason"].to_string().contains("file_path"), "{reply}");
 }
 
 /// Apply `change` to the installed settings file, as Gemini CLI or an agent would.

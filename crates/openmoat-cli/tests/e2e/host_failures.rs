@@ -8,152 +8,44 @@ use std::fs;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::common::{DENY, Sandbox, USAGE, fixture, json, stderr, text};
+use crate::hosts::rows::{Row, rows};
+use crate::hosts::{assert_reason, guard, verdict};
 
-/// One host payload shape: how `guard` is run for it and where its verdict is.
-struct Shape {
-    name: &'static str,
-    /// `--host` of the hook that receives it.
-    hook: &'static str,
-    /// Set by the host for its hooks (`cn` sets `CONTINUE_PROJECT_DIR`).
-    env: Option<&'static str>,
-    /// A payload this host sends for a governed tool.
-    governed: &'static str,
-    /// The same payload for a tool OpenMoat does not know, naming a secret path.
-    unknown_tool: Value,
-    /// A valid payload for an event the adapter does not handle.
-    unknown_event: Value,
+/// `moat guard` for `row`'s hook, its input not yet written.
+fn command(row: &Row, sb: &Sandbox) -> Command {
+    let mut cmd = sb.command();
+    cmd.args(["guard", "--host", row.hook]);
+    if let Some(var) = row.env {
+        cmd.env(var, &sb.home);
+    }
+    cmd
 }
 
-fn shapes() -> [Shape; 7] {
-    let pre_tool_use = |tool: &str| {
-        json!({"session_id": "s", "cwd": "/p", "hook_event_name": "PreToolUse",
-               "tool_name": tool, "tool_input": {"file_path": "~/.ssh/id_rsa"}})
-    };
-    let post_tool_use = json!({"session_id": "s", "hook_event_name": "PostToolUse",
-                               "tool_name": "Bash", "tool_input": {"command": "ls"}});
-    [
-        Shape {
-            name: "claude-code",
-            hook: "claude-code",
-            env: None,
-            governed: "claude-code/bash.json",
-            unknown_tool: pre_tool_use("FutureTool"),
-            unknown_event: post_tool_use.clone(),
-        },
-        Shape {
-            name: "codex",
-            hook: "codex",
-            env: None,
-            governed: "codex/pretooluse-shell.json",
-            unknown_tool: pre_tool_use("future_tool"),
-            unknown_event: post_tool_use.clone(),
-        },
-        Shape {
-            name: "cursor",
-            hook: "cursor",
-            env: None,
-            governed: "cursor/preToolUse-write.json",
-            unknown_tool: json!({"conversation_id": "s", "hook_event_name": "preToolUse",
-                "workspace_roots": ["/p"], "tool_name": "FutureTool",
-                "tool_input": {"file_path": "~/.ssh/id_rsa"}}),
-            unknown_event: json!({"hook_event_name": "afterFileEdit", "file_path": "/p/x"}),
-        },
-        Shape {
-            name: "continue",
-            hook: "claude-code",
-            env: Some("CONTINUE_PROJECT_DIR"),
-            governed: "continue/pretooluse-bash.json",
-            unknown_tool: pre_tool_use("FutureTool"),
-            unknown_event: post_tool_use,
-        },
-        // OpenMoat's OpenClaw plugin: an unknown tool is `tool.unknown`, checked
-        // for what its arguments name.
-        Shape {
-            name: "openclaw",
-            hook: "openclaw",
-            env: None,
-            governed: "openclaw/exec.json",
-            unknown_tool: json!({"hook_event_name": "before_tool_call", "toolName": "future_tool",
-                "params": {"path": "~/.ssh/id_rsa"}, "sessionId": "s", "cwd": "/p"}),
-            unknown_event: json!({"hook_event_name": "after_tool_call", "toolName": "exec",
-                "params": {"command": "ls"}}),
-        },
-        // OpenMoat's pi extension: as OpenClaw's plugin; pi runs what OpenMoat
-        // makes no decision on, so a secret path must never pass.
-        Shape {
-            name: "pi",
-            hook: "pi",
-            env: None,
-            governed: "pi/bash.json",
-            unknown_tool: json!({"hook_event_name": "tool_call", "toolName": "future_tool",
-                "input": {"path": "~/.ssh/id_rsa"}, "sessionId": "s", "cwd": "/p"}),
-            unknown_event: json!({"hook_event_name": "tool_result", "toolName": "bash",
-                "input": {"command": "ls"}}),
-        },
-        // Gemini CLI: an unknown tool is `tool.unknown` too.
-        Shape {
-            name: "gemini-cli",
-            hook: "gemini-cli",
-            env: None,
-            governed: "gemini-cli/write_file.json",
-            unknown_tool: json!({"session_id": "s", "cwd": "/p", "hook_event_name": "BeforeTool",
-                "tool_name": "future_tool", "tool_input": {"path": "~/.ssh/id_rsa"}}),
-            unknown_event: json!({"session_id": "s", "cwd": "/p", "hook_event_name": "AfterTool",
-                "tool_name": "read_file", "tool_input": {"file_path": "/p/x"}}),
-        },
-    ]
-}
-
-impl Shape {
-    fn command(&self, sb: &Sandbox) -> Command {
-        let mut cmd = sb.command();
-        cmd.args(["guard", "--host", self.hook]);
-        if let Some(var) = self.env {
-            cmd.env(var, &sb.home);
-        }
-        cmd
-    }
-
-    fn guard(&self, sb: &Sandbox, payload: &str) -> Output {
-        crate::common::output(&mut self.command(sb), Some(payload))
-    }
-
-    /// The verdict in the host's response document.
-    fn verdict(&self, out: &Output) -> String {
-        let doc = json(out);
-        let verdict = match self.hook {
-            "cursor" => &doc["permission"],
-            "openclaw" | "pi" | "gemini-cli" => &doc["decision"],
-            _ => &doc["hookSpecificOutput"]["permissionDecision"],
-        };
-        verdict.as_str().unwrap_or_default().to_owned()
-    }
-}
-
-fn assert_denied(shape: &Shape, out: &Output, what: &str) {
-    let name = shape.name;
+fn assert_denied(row: &Row, out: &Output, what: &str) {
+    let name = row.id;
     assert_eq!(
         out.status.code(),
         Some(DENY),
         "{name} {what}: {}",
         text(out)
     );
-    assert_eq!(shape.verdict(out), "deny", "{name} {what}: {}", text(out));
+    assert_eq!(verdict(row, out), "deny", "{name} {what}: {}", text(out));
     assert!(
         stderr(out).contains("kernel-error"),
         "{name} {what}: {}",
         text(out)
     );
+    assert_reason(row, out, "kernel-error", what);
 }
 
 #[test]
 fn payloads_guard_cannot_read_are_denied_in_each_hosts_format() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
-    for shape in shapes() {
-        let governed = fixture(shape.governed);
+    for row in rows() {
+        let governed = fixture(row.governed);
         let truncated = &governed[..governed.len() / 2];
         for (what, payload) in [
             ("empty", ""),
@@ -162,46 +54,47 @@ fn payloads_guard_cannot_read_are_denied_in_each_hosts_format() {
             ("an array", "[1]"),
             ("an empty object", "{}"),
         ] {
-            assert_denied(&shape, &shape.guard(&sb, payload), what);
+            assert_denied(&row, &guard(&row, &sb, payload), what);
         }
-        let event = shape.unknown_event.to_string();
-        assert_denied(&shape, &shape.guard(&sb, &event), "unknown event");
+        let event = (row.unknown_event)().to_string();
+        assert_denied(&row, &guard(&row, &sb, &event), "unknown event");
     }
 }
 
 /// A tool OpenMoat does not know is recorded with rule `ungoverned` and left
 /// to the host: no output, so the host's own prompt and permission rules
 /// decide it, as if no hook had answered. An unknown name can still reach
-/// `guard` through a matcher that also matches it. Cursor, OpenClaw, pi and
-/// Gemini CLI send every tool, and there an unknown tool is checked for the
+/// `guard` through a matcher that also matches it. The hosts whose row says
+/// `checks_unknown_tools` send every tool, and there an unknown tool is checked for the
 /// paths, URLs and commands its arguments name: one naming a secret is denied,
 /// even where the host runs a call OpenMoat makes no decision on (pi).
 #[test]
 fn an_unknown_tool_naming_a_secret_is_denied_where_openmoat_sees_it() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
-    for shape in shapes() {
-        let out = shape.guard(&sb, &shape.unknown_tool.to_string());
-        if ["cursor", "openclaw", "pi", "gemini-cli"].contains(&shape.name) {
-            let name = shape.name;
+    for row in rows() {
+        let out = guard(&row, &sb, &(row.unknown_tool)().to_string());
+        if row.checks_unknown_tools {
+            let name = row.id;
             assert_eq!(out.status.code(), Some(2), "{name}: {}", text(&out));
-            assert_eq!(shape.verdict(&out), "deny", "{name}: {}", text(&out));
+            assert_eq!(verdict(&row, &out), "deny", "{name}: {}", text(&out));
             assert!(
                 text(&out).contains("secrets-paths"),
                 "{name}: {}",
                 text(&out)
             );
         } else {
-            assert_eq!(out.status.code(), Some(0), "{}: {}", shape.name, text(&out));
-            assert!(out.stdout.is_empty(), "{}: {}", shape.name, text(&out));
+            assert_eq!(out.status.code(), Some(0), "{}: {}", row.id, text(&out));
+            assert!(out.stdout.is_empty(), "{}: {}", row.id, text(&out));
         }
     }
-    // OpenClaw's, pi's and Gemini CLI's unknown tool is `default.tool.unknown`,
-    // not `ungoverned`. One row per host: older rows would fall off a shorter list.
-    let recent = shapes().len().to_string();
+    // Where OpenMoat checks an unknown tool it is not `ungoverned`. One row
+    // per host: older rows would fall off a shorter list.
+    let recent = rows().len().to_string();
+    let left = rows().iter().filter(|r| !r.checks_unknown_tools).count();
     let shown = sb.moat(&["show", "--recent", &recent]);
     assert_eq!(
         text(&shown).matches("(ungoverned)").count(),
-        3,
+        left,
         "{}",
         text(&shown)
     );
@@ -214,35 +107,30 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
     let budget = Duration::from_secs(30);
     let started = Instant::now();
-    let running: Vec<_> = shapes()
+    let running: Vec<_> = rows()
         .into_iter()
-        .map(|shape| {
-            let mut child = shape
-                .command(&sb)
+        .map(|row| {
+            let mut child = command(&row, &sb)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
                 .unwrap();
             let open_stdin = child.stdin.take();
-            (shape, child, open_stdin)
+            (row, child, open_stdin)
         })
         .collect();
-    for (shape, child, open_stdin) in running {
+    for (row, child, open_stdin) in running {
         let out = child.wait_with_output().unwrap();
         drop(open_stdin);
         let elapsed = started.elapsed();
-        assert!(
-            elapsed >= budget,
-            "{}: answered after {elapsed:?}",
-            shape.name
-        );
+        assert!(elapsed >= budget, "{}: answered after {elapsed:?}", row.id);
         assert!(
             elapsed < budget * 3,
             "{}: answered after {elapsed:?}",
-            shape.name
+            row.id
         );
-        assert_denied(&shape, &out, "stuck");
+        assert_denied(&row, &out, "stuck");
         assert!(
             stderr(&out).contains("no decision within 30 s"),
             "{}",
@@ -253,7 +141,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     // file, owner-only, which `moat doctor` reports without failing.
     let log = sb.home.join(".moat/guard-hangs.log");
     let lines = fs::read_to_string(&log).unwrap();
-    assert_eq!(lines.lines().count(), shapes().len(), "{lines}");
+    assert_eq!(lines.lines().count(), rows().len(), "{lines}");
     // Each line names the phase the guard was stuck in, and how long it ran.
     for line in lines.lines() {
         let fields: Vec<&str> = line.split(' ').collect();
@@ -270,7 +158,7 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     let doctor = sb.moat(&["doctor"]);
     let denied = format!(
         "! guard            {} call(s) denied with no decision within 30 s",
-        shapes().len()
+        rows().len()
     );
     assert!(text(&doctor).contains(&denied), "{}", text(&doctor));
     assert!(

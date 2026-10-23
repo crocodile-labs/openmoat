@@ -9,7 +9,7 @@ use std::fs;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, json as parse, output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, json as parse, output, stdout, text};
 
 const AGENT_DIR: &str = ".pi/agent";
 
@@ -61,14 +61,8 @@ fn init_writes_the_extension_once() {
 }
 
 #[test]
-fn a_secret_read_and_writes_to_pis_own_files_are_denied() {
+fn writes_to_pis_own_files_are_denied() {
     let sb = sandbox();
-    let read = json!({"path": "@~/.ssh/id_ed25519"});
-    let (code, reply) = guard(&sb, &payload(&sb, "read", &read));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(reason(&reply).contains("secrets-paths"), "{reply}");
-
     let agent = sb.home.join(AGENT_DIR);
     for (tool, input) in [
         (
@@ -89,47 +83,16 @@ fn a_secret_read_and_writes_to_pis_own_files_are_denied() {
     }
 }
 
+/// In pi's terminal UI an `ask` is a dialog (the shared suite); without
+/// one it is a deny that says how to approve.
 #[test]
-fn a_safe_command_is_allowed_and_an_unknown_tool_is_left_to_pi() {
-    let sb = sandbox();
-    let (code, reply) = guard(
-        &sb,
-        &payload(&sb, "bash", &json!({"command": "git status"})),
-    );
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "allow", "{reply}");
-
-    let (code, reply) = guard(&sb, &payload(&sb, "codemode", &json!({"code": "1"})));
-    assert_eq!((code, reply), (Some(OK), Value::Null));
-}
-
-#[test]
-fn an_ask_is_a_dialog_in_the_ui_and_a_deny_without_one() {
+fn an_ask_without_the_ui_is_a_deny() {
     let sb = Sandbox::installed_asking(&[AGENT_DIR]);
     let outside = json!({"path": sb.home.join("notes/todo.txt")});
-    let (code, reply) = guard(&sb, &payload(&sb, "read", &outside));
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "ask", "{reply}");
-
     let (code, reply) = guard(&sb, &payload_ui(&sb, "read", &outside, false));
     assert_eq!(code, Some(DENY), "{reply}");
     assert_eq!(reply["decision"], "deny", "{reply}");
     assert!(reason(&reply).contains("openmoat allow --last"), "{reply}");
-}
-
-#[test]
-fn malformed_input_and_other_events_are_denied() {
-    let sb = sandbox();
-    let (code, reply) = guard(&sb, &fixture("pi/read-malformed.json"));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-
-    let (code, reply) = guard(
-        &sb,
-        r#"{"hook_event_name":"tool_result","toolName":"bash"}"#,
-    );
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
 }
 
 #[test]

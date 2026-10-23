@@ -9,7 +9,7 @@ use std::fs;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, json as parse, output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, json as parse, output, stdout, text};
 
 fn sandbox() -> Sandbox {
     Sandbox::installed(&[".openclaw"])
@@ -69,17 +69,8 @@ fn init_writes_the_plugin_and_its_entries_once() {
 }
 
 #[test]
-fn a_secret_read_and_an_edit_of_openclaws_configuration_are_denied() {
+fn an_edit_of_openclaws_configuration_is_denied() {
     let sb = sandbox();
-    let secret = sb.home.join(".ssh/id_ed25519");
-    let (code, reply) = guard(&sb, &payload(&sb, "read", &json!({"path": secret})));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(
-        reply["reason"].to_string().contains("secrets-paths"),
-        "{reply}"
-    );
-
     let config = sb.home.join(".openclaw/openclaw.json");
     let edit = json!({"path": config, "edits": [{"oldText": "true", "newText": "false"}]});
     let (code, reply) = guard(&sb, &payload(&sb, "edit", &edit));
@@ -105,54 +96,6 @@ fn a_secret_read_and_an_edit_of_openclaws_configuration_are_denied() {
         reply["reason"].to_string().contains("env-poison"),
         "{reply}"
     );
-}
-
-#[test]
-fn a_safe_command_is_allowed_and_an_unknown_tool_is_left_to_openclaw() {
-    let sb = sandbox();
-    let (code, reply) = guard(
-        &sb,
-        &payload(&sb, "exec", &json!({"command": "git status"})),
-    );
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "allow", "{reply}");
-
-    for (tool, params) in [
-        ("message", json!({"action": "reply", "text": "done"})),
-        ("session_status", json!({})),
-    ] {
-        let (code, reply) = guard(&sb, &payload(&sb, tool, &params));
-        assert_eq!(code, Some(OK), "{tool}: {reply}");
-        assert_eq!(reply, Value::Null, "{tool}: defer prints nothing");
-    }
-}
-
-#[test]
-fn an_ask_reaches_openclaw_as_an_ask() {
-    let sb = Sandbox::installed_asking(&[".openclaw"]);
-    let outside = sb.home.join("notes/todo.txt");
-    let (code, reply) = guard(&sb, &payload(&sb, "read", &json!({"path": outside})));
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "ask", "{reply}");
-}
-
-#[test]
-fn malformed_arguments_and_payloads_are_denied() {
-    let sb = sandbox();
-    let (code, reply) = guard(&sb, &fixture("openclaw/read-malformed.json"));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(
-        reply["reason"].to_string().contains("cannot be checked"),
-        "{reply}"
-    );
-
-    let (code, reply) = guard(
-        &sb,
-        r#"{"hook_event_name":"after_tool_call","toolName":"exec"}"#,
-    );
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
 }
 
 #[test]
