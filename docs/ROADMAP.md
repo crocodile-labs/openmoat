@@ -13,7 +13,7 @@ carries dates. Release stages and their exit criteria come from ADR-013.
 
 ## Where it is today
 
-The latest release is `0.9.0`, from GitHub Releases, the Homebrew tap and crates.io
+The latest release is `0.10.0`, from GitHub Releases, the Homebrew tap and crates.io
 ([INSTALL.md](INSTALL.md)). What exists:
 
 - **Agents.** One policy for Claude Code, Codex, Cursor, OpenClaw (a `before_tool_call`
