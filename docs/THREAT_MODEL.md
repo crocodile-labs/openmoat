@@ -120,6 +120,8 @@ something OpenMoat claims to stop.
   Linux they land in an in-memory home that is discarded), and no network except
   allowlisted domains. A classifier mistake inside those bounds is
   still a bypass, and in scope as a vulnerability ([SECURITY.md](../SECURITY.md)).
+  OpenClaw, GitHub Copilot CLI, pi and Gemini CLI get no such sandbox: the hook alone
+  decides each of their calls.
   The Maven and Gradle settings `build-credentials` names are denied by the hook only
   (ADR-034): where a policy makes them readable to sandboxed commands (a read root or
   allow rule over `~/.m2` or `~/.gradle`), any program such a command runs can read
@@ -699,7 +701,7 @@ something OpenMoat claims to stop.
   is `tool.unknown`, which the default policy defers; Cursor's `preToolUse` cannot
   prompt, so there OpenMoat asks (POLICY.md §5). Claude Code and Cursor `WebSearch` are
   governed: `web.search` in `defaults` decides them, and a search after a secret read asks.
-- **No settings veto outside Claude Code.** Codex and Cursor have no `ConfigChange`
+- **No settings veto outside Claude Code.** Codex, Cursor and the other agents have no `ConfigChange`
   event, so a tampered hook file there is caught on the next tool call, not when it
   is written.
 - **Claude Code project settings come from the repository.** OpenMoat pins only the

@@ -669,7 +669,7 @@ pinned file changed or disappeared, every call is denied with rule `kernel-integ
 until a person re-pins with `openmoat doctor --accept` (refused outside an interactive terminal) or
 by re-running `openmoat init` (over an existing lock it refuses when an agent is among its parent
 processes, and over drift when it has no terminal; a first install has no lock and is not
-checked). Edit the policy, then run `openmoat doctor --accept`. Which hook files are pinned is decided only by `openmoat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CURSOR_CONFIG_DIR`, else the recorded or default ones). `openmoat doctor --accept`, `openmoat allow` and `openmoat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `openmoat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `openmoat doctor` and `openmoat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
+checked). Edit the policy, then run `openmoat doctor --accept`. Which hook files are pinned is decided only by `openmoat init`: it keeps the ones already in the lock and adds those installed in the directories it records (its own `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CURSOR_CONFIG_DIR`, `OPENCLAW_STATE_DIR`, `COPILOT_HOME`, `PI_CODING_AGENT_DIR` and `GEMINI_CLI_HOME`, else the recorded or default ones). `openmoat doctor --accept`, `openmoat allow` and `openmoat trust` re-pin exactly the files already in the lock, plus OpenMoat's own state files (`trust.json` once `openmoat trust` writes it), so running them from a shell where those variables differ from the agent's never drops the agent's hook file; `openmoat doctor` and `openmoat status` name a hook file installed under the current environment that the lock does not pin, and a pinned one outside it. A pinned file is identified by its location, so replacing it with a symlink, or re-pointing an existing link, counts as a modification even when the bytes read through it are unchanged. The same holds for a directory on its path: if `~/.claude` is moved and replaced by a link to a copy, `settings.json` resolves somewhere else and is reported as modified.
 
 <a id="what-the-lock-is-not"></a>**What the lock is not.** The lock is a list of
 SHA-256 digests in a file, with no key and no signature. It catches a change the agent
@@ -677,7 +677,7 @@ makes through its tools, and the agents' OS sandboxes stop the commands inside t
 from changing `~/.moat` and the hook files at all (§9, [SANDBOX.md](SANDBOX.md)). It
 does not stop a program that runs as the same user outside any sandbox: such a program
 can change the policy and write new digests into the lock, and `openmoat guard` then finds
-nothing wrong. In hook-only mode (OpenClaw, Claude Code and Cursor on native Windows,
+nothing wrong. In hook-only mode (OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, Claude Code and Cursor on native Windows,
 or a sandbox that is off) every program an allowed command starts is such a program.
 There the OS sandboxes (the agents' own sandboxes in the Standard tier, `openmoat run` and
 `openmoat run --isolate`) are the protection; `openmoat status` shows which agents have one. A root user or a replaced `openmoat` binary is out of scope as well
@@ -749,7 +749,10 @@ The lock also pins each MCP server definition the agents read (ADR-026): Claude 
 its `settings.json` and a project's `.gemini/settings.json`. Each entry is pinned by
 itself, by the SHA-256 of its canonical JSON, not by its file, so the rest of
 `~/.claude.json` may change freely (Gemini CLI's user `settings.json` is also pinned
-whole as its hook file, so a server added there is drift like any other change). A
+whole as its hook file, so a server added there is drift like any other change).
+OpenClaw's `openclaw.json`, its hook file, is pinned without `mcp.servers`; the lock
+records that form per file (`pinned_forms`), so any other file is pinned by its bytes,
+whatever it holds. A
 definition that differs from its pin, or one added since, does not deny every
 call. It denies that server's tool calls (`mcp__<server>__…` as each agent spells it;
 `<server>-…` for Copilot, whose payload names only the tool) with rule

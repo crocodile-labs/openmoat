@@ -34,7 +34,8 @@ The latest release is `0.9.0`, from GitHub Releases, the Homebrew tap and crates
   ask (ADR-020), also across the files a tainted session writes (ADR-029).
 - **Package installs.** A name one typo away from a popular package asks (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
-- **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy` pins
+- **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
+  per server with `openmoat mcp wrap` or `openmoat init --mcp-proxy`, pins
   each tool's description and holds a new server's tools until `openmoat mcp accept`
   (ADR-032).
 - **Signed policy packs.** `openmoat policy trust-key`, `install` and `remove`, verified
@@ -76,7 +77,9 @@ Planned for 1.0 or after, not yet scheduled:
 - A user service for `openmoat proxy` on Windows (#272).
 - A stable policy schema and `openmoat policy migrate` (#136).
 - The Isolated tier on macOS: `openmoat run --isolate` in an Apple Virtualization guest (#175, ADR-023).
-- HTTPS injection of brokered secrets in `openmoat proxy` (#247).
+- HTTPS injection of brokered secrets, and per-host method and path rules, in `openmoat proxy` (#247).
+- Per-session credentials and session taint in the standalone `openmoat proxy` the host
+  sandboxes use; `openmoat run`'s proxy has them (#558, ADR-027).
 - `openmoat serve` (#320).
 - A conservative PowerShell tokenizer; until then PowerShell is `unparseable` and defers.
 - A scrubbed environment for agent commands (THREAT_MODEL T3).
