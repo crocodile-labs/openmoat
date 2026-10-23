@@ -10,6 +10,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 mod asks;
 mod base;
 mod docs;
+mod hook_file;
 mod location;
 mod mcp;
 mod relaxed;
