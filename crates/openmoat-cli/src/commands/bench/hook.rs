@@ -11,10 +11,18 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use anyhow::{Context as _, Result};
 use openmoat_hosts::Host;
 
-use crate::install::dir_variable;
+use crate::install::{GUARD_BUDGET_S, dir_variable};
+use crate::render;
 
-/// How long the hook may take for one call before it counts as failed.
-pub const TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the hook may take for one call before it counts as failed: past
+/// `openmoat guard`'s own budget, as every host's hook timeout is, so a guard
+/// that is slow on a loaded machine (a busy Windows runner can take more than
+/// 10 s to start it and wait for the audit log) answers with its own deny
+/// instead of being killed half way. The margin matches OpenClaw's plugin (45 s).
+pub const TIMEOUT: Duration = Duration::from_secs(GUARD_BUDGET_S + 15);
+
+/// How much of a failed hook's stdout and stderr the bench repeats.
+const CAUSE_CHARS: usize = 300;
 
 /// A hook reply larger than this is cut off; no real decision needs more.
 const MAX_REPLY_BYTES: u64 = 1024 * 1024;
@@ -47,6 +55,30 @@ impl Reply {
             Self::TimedOut => format!("no exit within {} s", TIMEOUT.as_secs()),
             Self::NotStarted(error) => format!("could not start: {error}"),
         }
+    }
+
+    /// Why a host reads this reply as an error, in one line for a mismatch:
+    /// the exit code with the start of stdout and stderr, a timeout, or the
+    /// start failure.
+    pub fn cause(&self) -> String {
+        let Self::Exited {
+            code,
+            stdout,
+            stderr,
+        } = self
+        else {
+            return self.describe();
+        };
+        let code = code.map_or_else(|| "killed".to_owned(), |c| c.to_string());
+        let shown = |text: &str| {
+            let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            render::truncate(&render::clean(&text), CAUSE_CHARS)
+        };
+        format!(
+            "exit {code}, stdout {:?}, stderr {:?}",
+            shown(stdout),
+            shown(stderr)
+        )
     }
 }
 

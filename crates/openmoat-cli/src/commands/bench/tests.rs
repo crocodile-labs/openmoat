@@ -150,3 +150,26 @@ fn every_scenario_file_is_bundled_valid_and_runs_on_some_host() {
         assert!(runs, "{}: no host can run it", scenario.id);
     }
 }
+
+#[test]
+fn an_error_reply_names_its_cause() {
+    let reply = exited(
+        1,
+        "{\"decision\":\n\"allow\"}",
+        "moat: audit log unavailable\r\n",
+    );
+    assert_eq!(
+        reply.cause(),
+        r#"exit 1, stdout "{\"decision\": \"allow\"}", stderr "moat: audit log unavailable""#
+    );
+    assert!(Reply::TimedOut.cause().starts_with("no exit within"));
+    assert_eq!(
+        Reply::NotStarted("gone".into()).cause(),
+        "could not start: gone"
+    );
+}
+
+#[test]
+fn the_time_limit_is_past_the_guards_own_budget() {
+    assert!(super::hook::TIMEOUT.as_secs() > crate::install::GUARD_BUDGET_S);
+}
