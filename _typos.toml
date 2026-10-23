@@ -4,7 +4,8 @@
 
 [files]
 extend-exclude = [
-    "LICENSE-*",               # licence texts are quoted verbatim
+    "LICENSE",                 # licence texts are quoted verbatim
+    "LICENSE-*",
     "crates/openmoat-core/data/top-packages/*.txt",  # package names as their authors spell them
 ]
 

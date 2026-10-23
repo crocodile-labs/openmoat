@@ -362,5 +362,6 @@ policy and CI require maintainer approval.
 
 ## License
 
-By contributing you agree your work is licensed under MIT or Apache-2.0, at the
-user's option, like the rest of the project. No CLA.
+When you contribute, your work is shared under the same two licenses as the rest of
+the project: the [MIT License](LICENSE) and the [Apache License 2.0](LICENSE-APACHE).
+Anyone who uses OpenMoat can pick either one. There's no separate agreement (CLA) to sign.
