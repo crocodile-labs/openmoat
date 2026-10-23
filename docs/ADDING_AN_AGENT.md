@@ -27,6 +27,18 @@ Take the first step that fits the agent:
    its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)), which runs the whole
    agent in an OS sandbox.
 
+Each supported agent has a short `HOST.md` in its folder: what the agent is, the hook
+events and tools OpenMoat sees, where its configuration and MCP files live, its known
+gaps and the sandbox it gets. Start from the one closest to your agent:
+[Claude Code](../crates/openmoat-hosts/src/host/claude_code/HOST.md) ·
+[Codex](../crates/openmoat-hosts/src/host/codex/HOST.md) ·
+[Cursor](../crates/openmoat-hosts/src/host/cursor/HOST.md) ·
+[OpenClaw](../crates/openmoat-hosts/src/host/openclaw/HOST.md) ·
+[GitHub Copilot CLI](../crates/openmoat-hosts/src/host/copilot_cli/HOST.md) ·
+[pi](../crates/openmoat-hosts/src/host/pi/HOST.md) ·
+[Gemini CLI](../crates/openmoat-hosts/src/host/gemini_cli/HOST.md) ·
+[Continue CLI](../crates/openmoat-hosts/src/host/continue_cli/HOST.md).
+
 ## What an adapter is
 
 An agent that supports hooks runs a command before each tool call, passes the call as
@@ -59,6 +71,7 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 |---|---|
 | `crates/openmoat-hosts/src/host/<module>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_file`, the `HookLayout` of the file: `Entries` with a `HookFile` layout, or `Owned`/`Plugin` with an `OwnedFile` from `host/<module>/integration/` for an agent without a command hook); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpReader` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpNames`), so a call is traced to the definition it came from; a reader or a naming of its own goes in `host/<module>/mcp.rs`; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `reader` (a `SettingsReader`, in `host/<module>/project_settings.rs`, that names what a parsed file sets that turns OpenMoat's hook off or runs a program), and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; it ends with `..HostSpec::BASE`, so the fields it does not name take their defaults |
 | `crates/openmoat-hosts/src/host/<module>/doc.rs` | `DOCS` (`HostDocs`): how OpenMoat is hooked and what protects its calls, as the README says them (`hook only`, or `hook + OS sandbox` when the spec has a `sandbox`), and one `ToolRow` per tool or group of tools the adapter maps, with the ungoverned ones; the spec sets `docs: doc::DOCS`. A test fails when the adapter matches a tool name no row names |
+| `crates/openmoat-hosts/src/host/<module>/HOST.md` | a page for people: what the agent is, its hook events and the tools OpenMoat sees, its configuration and MCP files, what it does when the hook fails, its known gaps and its sandbox, every fact taken from the spec and `doc.rs` |
 | `crates/openmoat-hosts/src/host/<module>/` | the rest of the adapter's code, one file per concern (`tools.rs`, `bench.rs`, `tests.rs`, as `host/pi/` has) |
 | `crates/openmoat-hosts/src/host.rs` | one line in the host list, `Variant => module,` (`Variant => module speaks ClaudeCode,` for a spec-only agent), with a doc comment naming the agent and its hook. It gives the `Host` variant, `Host::EVERY`, `Host::ALL` (when the spec has an `install`), the `--host` id list and the lookups of the spec and adapter |
 | `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec's `McpReader` has a new `McpSyntax` (a parser in `parse` and an editor in `wrap.rs`) or names a new `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
