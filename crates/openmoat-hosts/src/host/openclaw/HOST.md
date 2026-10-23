@@ -1,7 +1,7 @@
 # OpenClaw (`openclaw`)
 
-OpenClaw has no command hook. OpenMoat's plugin (`integrations/openclaw/openmoat.mjs` in
-the CLI crate) handles OpenClaw's `before_tool_call` plugin hook and runs
+OpenClaw has no command hook. OpenMoat's plugin ([`integration/openmoat.mjs`](integration/openmoat.mjs))
+handles OpenClaw's `before_tool_call` plugin hook and runs
 `moat guard --host openclaw`. Every fact here comes from [`openclaw.rs`](../openclaw.rs)
 and [`doc.rs`](doc.rs); if they disagree, the code wins.
 

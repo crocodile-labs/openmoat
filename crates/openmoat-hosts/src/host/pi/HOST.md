@@ -1,8 +1,8 @@
 # pi (`pi`)
 
 pi, the coding agent, through its `tool_call` extension event, checked against pi 1.3.0.
-pi has no command hook: OpenMoat's extension (`integrations/pi/openmoat.js` in the CLI
-crate) runs `moat guard --host pi`. Every fact here comes from [`pi.rs`](../pi.rs) and
+pi has no command hook: OpenMoat's extension ([`integration/openmoat.js`](integration/openmoat.js))
+runs `moat guard --host pi`. Every fact here comes from [`pi.rs`](../pi.rs) and
 [`doc.rs`](doc.rs); if they disagree, the code wins.
 
 ## Hooks OpenMoat installs

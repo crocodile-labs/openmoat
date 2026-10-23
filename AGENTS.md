@@ -14,7 +14,7 @@ If a change makes you choose, choose `ask` over `allow` and `deny` over a crash.
 
 Specs: `docs/ARCHITECTURE.md` (crates, data flow, hooks, self-protection),
 `docs/POLICY.md` (policy semantics), `docs/THREAT_MODEL.md` (threats, known limitations),
-`docs/ROADMAP.md` (stages; live order in issue #144), `docs/adr/README.md` (decisions).
+`docs/ROADMAP.md` (stages; live order in issue #562), `docs/adr/README.md` (decisions).
 
 ## 2. Layout
 
@@ -31,7 +31,7 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 | `crates/openmoat-cli` | the `openmoat` binary: grammar, commands, files, sandboxes, integrity | the only crate that touches files, env, terminal; `anyhow` allowed; all user output goes through `render.rs` or the command module |
 | `crates/openmoat-core/policies/default-v1.yaml` | shipped default policy | every change needs a conformance fixture and a CHANGELOG line |
 | `tests/conformance/{attacks,benign,ask}.yaml` | executable security claims | ids unique, one action each, `rules` must appear in the decision; attacks and asks carry `threat: T1…T12`; `docs/COVERAGE.md` is generated from them (`OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`) and every threat needs an attack |
-| `tests/fixtures/hosts/<host>/*.json` | real host payloads | golden inputs; never include real tokens or personal paths |
+| `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads | golden inputs; never include real tokens or personal paths |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy | golden outputs; `OPENMOAT_TEST_UPDATE_GOLDEN=1` rewrites them, review the diff |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_files`, `anchor`, `edit`, `escapes`, `home_screen`, `human_only`, `listings`, `mcp`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `repo_policy`, `secret`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants | isolated `HOME`/`MOAT_HOME`; no network |
 | `docs/` | INSTALL, USAGE, SANDBOX, POLICY, ARCHITECTURE, THREAT_MODEL, ROADMAP, ADDING_AN_AGENT, COVERAGE and EVIDENCE (generated), `adr/` | describe what the code does today; ADRs are immutable, superseded by new ADRs |
@@ -53,7 +53,7 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 ## 4. Engineering rules
 
 - **Errors:** `thiserror` enums in library crates; `anyhow` with `bail!`/`ensure!`/`.context()` in the CLI. `anyhow!` is banned by clippy. No `unwrap`, `expect`, `panic!` or `unreachable!` outside tests: the gate's second clippy run (`--lib --bins`) denies them. Restructure so the case cannot happen (a typed input, a total constructor) rather than asserting it.
-- **Size:** files ≤ 500 lines (architecture test), functions ≤ 200 lines, cognitive complexity ≤ 30 (clippy). Split by concern: `foo.rs` + a `foo/` directory with one file per responsibility + `tests.rs`; never `mod.rs`, never `#[path]` (architecture test).
+- **Size:** files ≤ 500 lines of code (architecture test; blank and comment lines, fixtures, goldens and generated files not counted; the cap only goes down), functions ≤ 200 lines, cognitive complexity ≤ 30 (clippy). Split by concern: `foo.rs` + a `foo/` directory with one file per responsibility + `tests.rs`; never `mod.rs`, never `#[path]` (architecture test).
 - **Comments** explain *why* and *what the host/OS does*; names and types explain *what the code does*. No commented-out code, no TODO/FIXME on `main` (open an issue).
 - **Platform code** lives in dedicated files/modules selected by `cfg` in one place (`#[cfg(unix)]` helpers in `home.rs`, `commands/run/{macos,linux,unsupported}.rs` chosen in `run.rs`); never scatter `cfg` through business logic. Paths are handled in slash-separated canonical form everywhere (`paths.rs`).
 - **Dependencies:** adding one needs a sentence in the PR on why std or an existing dep does not cover it; `cargo-deny` must stay green; `openmoat-core` additions need an ADR.
@@ -78,7 +78,7 @@ Claim "done" only after it passes locally. CI runs the same script on macOS (arm
 1. Edit `crates/openmoat-core/policies/default-v1.yaml` (keep rule ids stable; they appear in audit logs and user output).
 2. Add fixtures: at least one attack that must be denied/asked and one benign action that must still be allowed, in `tests/conformance/`.
 3. If the semantics change (not just a pattern), update `docs/POLICY.md`, and add an ADR if an invariant moves.
-4. Add a `### Security` or `### Changed` line to `CHANGELOG.md`.
+4. Add a `changelog.d/<pr>-<slug>.md` fragment under `### Security` or `### Changed` (CONTRIBUTING "Changelog").
 
 A change to the popular-package lists (`crates/openmoat-core/data/top-packages/*.txt`, refreshed with `scripts/refresh-top-packages.py`) needs a CHANGELOG line and a review of the diff.
 
@@ -100,8 +100,8 @@ allowed command ask. Put the saved time into enforcement (`docs/SANDBOX.md`).
 ### Add a host adapter
 The full guide is `docs/ADDING_AN_AGENT.md`.
 1. New module in `crates/openmoat-hosts/src/host/<module>.rs` with its `SPEC` and `ADAPTER` (`HostAdapter`: `parse`, `render`), and `host/<module>/doc.rs` with its README row and tool mapping rows; add one line `Variant => module,` to the host list in `crates/openmoat-hosts/src/host.rs`.
-2. Golden payloads in `tests/fixtures/hosts/<host>/`; tests cover every tool kind the host exposes, a malformed payload, and an ungoverned tool.
-3. Hook entries (`InstallSpec.hooks`, `hook_format`), the config directory and its variable in the host's `SPEC`; `crates/openmoat-cli/src/install.rs` needs code only for a new hook-file layout. If the host is fail-open by default, its entries must set its fail-closed flag. A host without a command hook gets a plugin that runs `openmoat guard --host <id>` and blocks on every failure (OpenClaw, ADR-033; pi, whose hook file is the extension itself).
+2. Golden payloads in `crates/openmoat-hosts/src/host/<module>/fixtures/`; tests cover every tool kind the host exposes, a malformed payload, and an ungoverned tool.
+3. Hook entries (`InstallSpec.hooks`, `hook_file`: a `HookLayout`), the config directory and its variable in the host's `SPEC`; `crates/openmoat-cli/src/install.rs` needs code only for a new hook-file layout. If the host is fail-open by default, its entries must set its fail-closed flag. A host without a command hook gets a plugin that runs `openmoat guard --host <id>` and blocks on every failure (OpenClaw, ADR-033; pi, whose hook file is the extension itself); the script goes in `host/<module>/integration/` as an `OwnedFile`.
 4. End-to-end tests in a module per agent (`crates/openmoat-cli/tests/e2e/cursor.rs` is the model, registered in `e2e/main.rs`) running the real binary against the fixture.
 5. Document the coverage honestly: the hosts table in `docs/INSTALL.md` and the supported agents table in `README.md`, `docs/ARCHITECTURE.md` §2–3, and ungoverned tools in `docs/THREAT_MODEL.md` §5.
 

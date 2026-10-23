@@ -78,7 +78,7 @@ pub struct Row {
     pub extra_dir: Option<&'static str>,
     /// An edit of the hook file the lock catches.
     pub edited: Option<Edit>,
-    /// A golden payload for a governed tool, under `tests/fixtures/hosts/`.
+    /// A golden payload for a governed tool, under its host's `fixtures/` folder.
     pub governed: &'static str,
     /// A payload for a tool OpenMoat does not know, naming a secret path.
     pub unknown_tool: fn() -> Value,
