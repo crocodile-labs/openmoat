@@ -78,6 +78,11 @@ your own terminal: `openmoat`, which shows the call and allows it for the sessio
 good, or `openmoat allow --last`. A deny rule changes only in the policy (`openmoat edit`);
 see [If OpenMoat gets in your way](docs/USAGE.md#if-openmoat-gets-in-your-way).
 
+Nothing is set up per project. One policy (`~/.moat/policy.yaml`) applies in every
+repository you open; the project is the git repository the session starts in. A
+repository can add its own rules in a committed `.moat/policy.yaml`
+([Share rules with your team](docs/USAGE.md#share-rules-with-your-team)).
+
 Other ways to install (the shell and PowerShell installers, `cargo install openmoat
 --locked`, a build from source, checking a release's attestation) and how to upgrade
 are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the command
@@ -120,7 +125,9 @@ payloads. What each hook sees, tool by tool: [docs/INSTALL.md](docs/INSTALL.md#s
   token into requests to one host only.
 - **MCP.** MCP tool calls are checked by tool name and by the paths and URLs in their
   arguments. Each MCP server definition the agents read is pinned, and a changed or new
-  server's calls are held until you run `openmoat mcp accept`.
+  server's calls are held until you run `openmoat mcp accept`. `openmoat mcp wrap` (or
+  `openmoat init --mcp-proxy`) runs stdio servers through `openmoat mcp proxy`, which
+  also pins each tool's description and schemas and hides a changed tool until you accept it.
 - **Self-protection.** The agent cannot edit the policy, approve its own blocked call or
   uninstall OpenMoat through its tools. A changed policy or hook file blocks every call
   until you review it ([what the lock is not](docs/POLICY.md#what-the-lock-is-not)).
@@ -129,7 +136,11 @@ payloads. What each hook sees, tool by tool: [docs/INSTALL.md](docs/INSTALL.md#s
   agent instructions ask.
 - **Audit.** Every decision goes into a local, hash-chained log (tamper-evident, not
   tamper-proof) that you read with `openmoat show`, `openmoat replay` and
-  `openmoat report`, and export and verify with `openmoat audit`.
+  `openmoat report`, and export and verify with `openmoat audit`. `openmoat audit anchor`
+  records the log's head in a git repository or file you keep, so cut events show later.
+- **Team rules.** A committed `.moat/policy.yaml` adds `deny` and `ask` rules for
+  everyone in that repository, and its `allow` rules after `openmoat trust`. A policy pack
+  signed with an SSH key you trusted applies a team's rules in every project.
 
 If its own check errors or hangs, OpenMoat blocks the call. The agents that still run a
 call when the hook fails are listed under [Limits](#limits).
@@ -210,6 +221,8 @@ Run these in your own terminal. Agents are denied all of them.
 | You want to | Run |
 |---|---|
 | See protection, today's decisions and anything that needs you | `openmoat` |
+| Check each agent's protection, or what drifted | `openmoat status` · `openmoat doctor` |
+| Check a command's verdict without running it | `openmoat policy check "<command>"` · `openmoat demo` |
 | Allow the command an agent was just stopped on, for this session or for good | `openmoat allow --last` · `openmoat allow --last --always` |
 | Allow a site or a whole directory | `openmoat allow --site docs.rs` · `openmoat allow --dir ~/work/shared` |
 | See what the agents did | `openmoat show` · `openmoat report --since today` |
@@ -217,6 +230,7 @@ Run these in your own terminal. Agents are denied all of them.
 | Change any rule (checked, and the diff shown before it applies) | `openmoat edit` |
 | Get new default rules after an upgrade | `openmoat policy upgrade` |
 | Share rules with your team | commit `.moat/policy.yaml`, then `openmoat trust` |
+| Install a team's signed policy pack | `openmoat policy trust-key <key.pub> --name <who>` · `openmoat policy install <pack.yaml>` |
 | Turn OpenMoat off | `openmoat uninstall` |
 
 Every command, and what to do when OpenMoat gets in your way:
@@ -302,6 +316,11 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 **Usable daily.** The latest release is `0.10.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What exists and what
 comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
+
+To upgrade, update the binary the way you installed it, then run `openmoat doctor` and
+`openmoat policy upgrade` in your own terminal ([docs/INSTALL.md](docs/INSTALL.md#upgrading)).
+From 0.9.0, a default install needs nothing more for 0.10.0; each release's upgrading note
+is in the [CHANGELOG](CHANGELOG.md).
 
 ## Contributing
 
