@@ -186,6 +186,51 @@ fn connections_that_never_authenticate_hold_at_most_half_the_slots() {
     assert!(reply.contains("waiting to authenticate"), "{reply}");
 }
 
+/// One session holding its half of the slots gets 503 for the next
+/// connection, and another session is still served (#555).
+#[test]
+fn a_session_over_its_share_gets_503_while_another_is_served() {
+    let limits = Limits {
+        max_connections: 4,
+        handshake_timeout: Duration::from_secs(3),
+        ..Limits::default()
+    };
+    let h = sessions_harness(false, limits);
+    let host = format!("allowed.test:{}", h.port());
+    let connect = |session: &str, token: &str| {
+        format!(
+            "CONNECT {host} HTTP/1.1\r\nProxy-Authorization: {}\r\n\r\n",
+            basic(session, token)
+        )
+    };
+    // Two tunnels of run-a that send no ClientHello: each holds run-a's share
+    // until the handshake timeout.
+    let _held: Vec<TcpStream> = (0..2)
+        .map(|_| {
+            let mut s = h.connect();
+            s.write_all(connect("run-a", token_a()).as_bytes()).unwrap();
+            let mut established = [0u8; 39];
+            s.read_exact(&mut established).unwrap();
+            assert_eq!(&established, b"HTTP/1.1 200 Connection Established\r\n\r\n");
+            s
+        })
+        .collect();
+    let reply = h.exchange(&connect("run-a", token_a()));
+    assert!(reply.starts_with("HTTP/1.1 503"), "{reply}");
+    assert!(reply.contains("half of the proxy's"), "{reply}");
+    let reply = h.exchange(&format!(
+        "GET http://{host}/ HTTP/1.1\r\nProxy-Authorization: {}\r\n\r\n",
+        basic("run-b", token_b())
+    ));
+    assert!(reply.ends_with("ok"), "{reply}");
+    assert!(
+        h.rows()
+            .iter()
+            .any(|r| r.rules == ["proxy-session"] && r.dest.is_some()),
+        "the refusal is recorded with its destination"
+    );
+}
+
 /// A session's taint that a test can change while a connection is open.
 struct Growing(Mutex<Taint>);
 
