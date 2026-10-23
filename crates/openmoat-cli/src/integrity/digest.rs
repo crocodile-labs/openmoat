@@ -4,8 +4,9 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
-use openmoat_hosts::Host;
 use sha2::{Digest as _, Sha256};
+
+use super::forms::Form;
 
 /// The top-level key of a Claude Code settings file left out of its digest.
 /// Claude Code writes it on first run and whenever the person picks a theme, and
@@ -18,8 +19,8 @@ pub(super) fn is_claude_settings(path: &Path) -> bool {
 }
 
 /// The digest to pin for the file at `path`: the first of [`digests`].
-pub(super) fn digest(path: &Path, settings: bool) -> Result<String> {
-    Ok(digests(path, settings)?.swap_remove(0))
+pub(super) fn digest(path: &Path, settings: bool, form: Option<Form>) -> Result<String> {
+    Ok(digests(path, settings, form)?.swap_remove(0))
 }
 
 /// Every digest the file at `path` verifies against, the one to pin first.
@@ -31,11 +32,14 @@ pub(super) fn digest(path: &Path, settings: bool) -> Result<String> {
 /// so accepting it hides nothing. A settings file that no longer parses has only
 /// the whole-file digest and so no longer matches a canonical pin.
 ///
+/// With `form`, the pinned form of the host that owns the file (`forms.rs`),
+/// the first is the digest of that form when the file takes it.
+///
 /// A symlink hashes its target path together with the contents, so swapping a
 /// regular file for a link (or re-pointing a link) changes every digest even
 /// when the bytes read through it are identical.
-pub(super) fn digests(path: &Path, settings: bool) -> Result<Vec<String>> {
-    Ok(ReadOnce::from(path)?.digests(settings))
+pub(super) fn digests(path: &Path, settings: bool, form: Option<Form>) -> Result<Vec<String>> {
+    Ok(ReadOnce::from(path)?.digests(settings, form))
 }
 
 /// A pinned file as read once: the symlink target it names, if any, and the
@@ -73,14 +77,17 @@ impl ReadOnce {
     }
 
     /// [`digests`] of these bytes.
-    pub fn digests(&self, settings: bool) -> Vec<String> {
+    pub fn digests(&self, settings: bool, form: Option<Form>) -> Vec<String> {
         let link = self.link.as_slice();
         let contents = self.contents.as_slice();
         let mut out = Vec::new();
         if settings && let Some(canonical) = without_cosmetic_key(contents) {
             out.push(sha256_hex(&[link, &canonical].concat()));
         }
-        if !settings && let Some(canonical) = pinned_form(contents) {
+        if !settings
+            && let Some(form) = form
+            && let Some(canonical) = pinned_form(contents, form)
+        {
             out.push(sha256_hex(&[link, &canonical].concat()));
         }
         out.push(sha256_hex(&[link, contents].concat()));
@@ -88,24 +95,16 @@ impl ReadOnce {
     }
 }
 
-/// The form of a hook file a host's spec pins in place of its bytes
-/// ([`openmoat_hosts::InstallSpec::pinned_form`], OpenClaw's
+/// `form` of a hook file, the form its owning host's spec pins in place of
+/// its bytes ([`openmoat_hosts::InstallSpec::pinned_form`], OpenClaw's
 /// `openclaw.json` without `mcp.servers`), read as JSON5 and serialised
-/// compactly with sorted keys; the first host whose form takes the file
-/// gives it. Comments and formatting are not part of it: they change nothing
-/// the host reads.
-fn pinned_form(contents: &[u8]) -> Option<Vec<u8>> {
-    let forms: Vec<_> = Host::ALL
-        .into_iter()
-        .filter_map(|host| host.spec().install.as_ref()?.pinned_form)
-        .collect();
-    if forms.is_empty() {
-        return None;
-    }
+/// compactly with sorted keys; `None` when the file does not take it.
+/// Comments and formatting are not part of it: they change nothing the host
+/// reads.
+fn pinned_form(contents: &[u8], form: Form) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(contents).ok()?;
     let value = crate::json5::parse(text).ok()?.value;
-    let pinned = forms.into_iter().find_map(|form| form(value.clone()))?;
-    serde_json::to_vec(&pinned).ok()
+    serde_json::to_vec(&form(value)?).ok()
 }
 
 /// The JSON object in `contents` without [`COSMETIC_KEY`], serialised compactly
@@ -183,7 +182,7 @@ mod tests {
     #[test]
     fn a_whole_file_pin_from_an_older_lock_still_verifies() {
         let (_dir, path, mut lock) = pinned("{ \"hooks\": {} }\n");
-        let whole = digests(&path, false).unwrap().swap_remove(0);
+        let whole = digests(&path, false, None).unwrap().swap_remove(0);
         lock.entries.values_mut().for_each(|d| d.clone_from(&whole));
         assert_eq!(lock.verify_one(&path), None);
         fs::write(&path, "{ \"hooks\": {}, \"theme\": \"light\" }\n").unwrap();
@@ -191,35 +190,6 @@ mod tests {
             lock.verify_one(&path).is_some(),
             "an old pin is whole-file until re-pinned"
         );
-    }
-
-    #[test]
-    fn an_openclaw_configuration_is_pinned_without_its_mcp_servers() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("openclaw.json");
-        let ours = r#""plugins":{"entries":{"openmoat":{"enabled":true}}}"#;
-        fs::write(&path, format!("{{{ours}}}")).unwrap();
-        let lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&path)).unwrap();
-        // A server added, then changed, and comments: not drift (the MCP pins
-        // decide servers).
-        for text in [
-            format!(r#"{{{ours},"mcp":{{"servers":{{"a":{{"command":"x"}}}}}}}}"#),
-            format!(
-                r#"// note{}{{{ours},"mcp":{{"servers":{{"a":{{"command":"y"}}}}}}}}"#,
-                "\n"
-            ),
-        ] {
-            fs::write(&path, text).unwrap();
-            assert_eq!(lock.verify_one(&path), None);
-        }
-        // Anything else is.
-        let other_mcp = format!(r#"{{{ours},"mcp":{{"servers":{{}},"x":1}}}}"#);
-        let plugins_off = r#"{"plugins":{"entries":{"openmoat":{"enabled":false}}}}"#.to_owned();
-        let entry_gone = r#"{"mcp":{"servers":{}}}"#.to_owned();
-        for text in [other_mcp, plugins_off, entry_gone, "{".to_owned()] {
-            fs::write(&path, &text).unwrap();
-            assert!(lock.verify_one(&path).is_some(), "{text}");
-        }
     }
 
     #[test]

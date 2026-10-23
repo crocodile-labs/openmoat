@@ -1,7 +1,9 @@
 # Gemini CLI (`gemini-cli`)
 
 Gemini CLI (`gemini`, npm `@google/gemini-cli`), through its `BeforeTool` command hook,
-checked against the source of 0.65.0. Every fact here comes from
+checked against the source of 0.65.0. Since 2026-06-18 Gemini CLI signs individual
+accounts in only with an API key or Vertex AI; Google's own sign-in for them moved to the
+Antigravity CLI, which OpenMoat does not support yet. Every fact here comes from
 [`gemini_cli.rs`](../gemini_cli.rs) and [`doc.rs`](doc.rs); if they disagree, the code wins.
 
 ## Hooks OpenMoat installs

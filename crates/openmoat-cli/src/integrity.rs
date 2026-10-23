@@ -16,12 +16,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{Decision, Verdict};
+use openmoat_hosts::Host;
 use serde::{Deserialize, Serialize};
 
 use crate::home::{Home, write_private};
 use crate::install::{HookState, HostConfig};
 
 mod digest;
+mod forms;
 mod kept;
 mod keys;
 mod relaxed;
@@ -66,6 +68,12 @@ pub struct Lock {
     /// lock from before MCP pinning; their drift holds back only that server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<crate::mcp::Pins>,
+    /// Pinned hook file → id of the host that owns it, for each file the lock
+    /// pins in that host's pinned form rather than by its bytes (OpenClaw's
+    /// `openclaw.json` without `mcp.servers`; `forms.rs`). `None` in a lock
+    /// from before #653, which `forms.rs` reads by file name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_forms: Option<BTreeMap<String, String>>,
 }
 
 /// Which hook files a re-pin covers, besides OpenMoat's own state files.
@@ -103,9 +111,11 @@ pub fn repin_with(
     let lock_path = home.lock_path();
     let had_lock = lock_path.exists();
     let mut mcp_servers = None;
+    let mut owners = Vec::new();
     if had_lock {
         match (Lock::load(&lock_path), hooks) {
             (Ok(old), _) => {
+                owners = old.owners();
                 // Only `moat mcp accept` and `moat doctor --accept` change these.
                 mcp_servers = old.mcp_servers;
                 paths.extend(old.entries.into_keys().map(PathBuf::from));
@@ -122,11 +132,13 @@ pub fn repin_with(
     }
     // Without a lock there is nothing to keep, so this environment's hooks it is.
     if hooks == HookPins::Adopt || !had_lock {
-        paths.extend(installed_hook_files(home, binary)?);
+        let installed = installed_hooks(home, binary)?;
+        owners.extend(installed.iter().map(|c| (c.settings_path.clone(), c.host)));
+        paths.extend(installed.iter().flat_map(pinned_with));
         profiles.extend(crate::sandbox::install::codex_profile_files(home)?);
         paths.extend(crate::sandbox::install::cursor_sandbox_files(home)?);
     }
-    let mut lock = Lock::pin(binary, &paths)?;
+    let mut lock = Lock::pin_owned(binary, &paths, &owners)?;
     // A state file that is missing (one a person accepted as deleted) is
     // pinned as missing: the guard would otherwise read one planted there
     // later from disk, unpinned.
@@ -168,15 +180,29 @@ pub fn signing_files(home: &Home) -> Vec<PathBuf> {
 
 /// Hook files with a current `moat` hook under this shell's environment.
 pub fn installed_hook_files(home: &Home, binary: &Path) -> Result<Vec<PathBuf>> {
-    let mut paths = Vec::new();
-    for host in openmoat_hosts::Host::ALL {
+    Ok(installed_hooks(home, binary)?
+        .iter()
+        .flat_map(pinned_with)
+        .collect())
+}
+
+/// The files the lock pins for `config`'s hook: its extra files, then the hook file.
+fn pinned_with(config: &HostConfig) -> Vec<PathBuf> {
+    let mut files = config.extra_files();
+    files.push(config.settings_path.clone());
+    files
+}
+
+/// Each host with a current `moat` hook under this shell's environment.
+fn installed_hooks(home: &Home, binary: &Path) -> Result<Vec<HostConfig>> {
+    let mut installed = Vec::new();
+    for host in Host::ALL {
         let config = HostConfig::for_host(home, host)?;
         if config.state(binary) == HookState::Installed {
-            paths.extend(config.extra_files());
-            paths.push(config.settings_path);
+            installed.push(config);
         }
     }
-    Ok(paths)
+    Ok(installed)
 }
 
 /// How this shell's hook files differ from the ones the lock pins.
@@ -274,6 +300,13 @@ pub fn unpin(home: &Home, paths: &[PathBuf], rewritten: &[PathBuf]) -> Result<()
         return Ok(());
     }
     let mut lock = Lock::load(&lock_path)?;
+    // A rewritten file keeps the host it is pinned for.
+    let owners: Vec<(PathBuf, Host)> = lock
+        .owners()
+        .into_iter()
+        .filter(|(stored, _)| rewritten.iter().any(|p| key(p) == key(stored)))
+        .collect();
+    let mut forms = lock.owner_ids();
     for path in paths.iter().map(|p| key(p)) {
         lock.codex_profiles.remove(&path);
     }
@@ -282,8 +315,11 @@ pub fn unpin(home: &Home, paths: &[PathBuf], rewritten: &[PathBuf]) -> Result<()
         lock.keys.remove(&path);
         lock.permission_keys.remove(&path);
         lock.relaxed_rest.remove(&path);
+        forms.remove(&path);
     }
-    let fresh = Lock::pin(Path::new(&lock.binary), rewritten)?;
+    let fresh = Lock::pin_owned(Path::new(&lock.binary), rewritten, &owners)?;
+    forms.extend(fresh.pinned_forms.unwrap_or_default());
+    lock.pinned_forms = Some(forms);
     lock.entries.extend(fresh.entries);
     lock.keys.extend(fresh.keys);
     lock.permission_keys.extend(fresh.permission_keys);
@@ -324,10 +360,24 @@ impl fmt::Display for Drift {
 }
 
 impl Lock {
-    /// Pin the current contents of `paths`. Files that do not exist are skipped;
-    /// callers pass only files they just wrote or verified.
+    /// [`Self::pin_owned`] with no file in a host's pinned form.
+    #[cfg(test)]
     pub fn pin(binary: &Path, paths: &[PathBuf]) -> Result<Self> {
-        let (mut entries, mut keys, mut permission_keys, mut relaxed_rest) = (
+        Self::pin_owned(binary, paths, &[])
+    }
+
+    /// Pin the current contents of `paths`. Files that do not exist are skipped;
+    /// callers pass only files they just wrote or verified. Each hook file in
+    /// `owners` is pinned in its host's pinned form (`forms.rs`) with that host
+    /// recorded; every other file by its bytes.
+    pub fn pin_owned(binary: &Path, paths: &[PathBuf], owners: &[(PathBuf, Host)]) -> Result<Self> {
+        let owners: BTreeMap<String, Host> = owners
+            .iter()
+            .filter(|(_, host)| forms::form_of(*host).is_some())
+            .map(|(path, host)| (key(path), *host))
+            .collect();
+        let (mut entries, mut keys, mut permission_keys, mut relaxed_rest, mut pinned_forms) = (
+            BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
@@ -335,7 +385,12 @@ impl Lock {
         );
         for path in paths {
             if path.is_file() {
-                entries.insert(key(path), digest(path, is_claude_settings(path))?);
+                let owner = owners.get(&key(path)).copied();
+                if let Some(host) = owner {
+                    pinned_forms.insert(key(path), host.id().to_owned());
+                }
+                let form = owner.and_then(forms::form_of);
+                entries.insert(key(path), digest(path, is_claude_settings(path), form)?);
                 if let Some(digests) = keys::key_digests(path) {
                     keys.insert(key(path), digests);
                 }
@@ -357,6 +412,7 @@ impl Lock {
             permission_keys,
             relaxed_rest,
             mcp_servers: None,
+            pinned_forms: Some(pinned_forms),
         })
     }
 
@@ -410,7 +466,11 @@ impl Lock {
         if let Some(drift) = self.verify_one(target) {
             return Some(drift);
         }
-        match digests(proposal, is_claude_settings(target)) {
+        match digests(
+            proposal,
+            is_claude_settings(target),
+            self.form(&key(target)),
+        ) {
             Ok(actual) if actual.contains(expected) => None,
             Ok(_) => Some(Drift::Proposed {
                 proposal: proposal.to_path_buf(),

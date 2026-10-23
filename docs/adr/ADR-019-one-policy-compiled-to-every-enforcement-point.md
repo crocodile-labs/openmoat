@@ -1,6 +1,6 @@
 # ADR-019: One policy, compiled to every enforcement point, proven by differential tests
 
-Status: accepted · Date: 2026-10-06 · Decided by the owner
+Status: accepted · Date: 2026-10-06 · Decided by the maintainer
 
 ## Context
 

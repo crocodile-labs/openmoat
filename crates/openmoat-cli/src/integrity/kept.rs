@@ -143,7 +143,7 @@ impl Lock {
             )
         })?;
         if read
-            .digests(is_claude_settings(path))
+            .digests(is_claude_settings(path), self.form(&key(path)))
             .iter()
             .any(|d| d == expected)
         {
