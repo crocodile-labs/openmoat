@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** an agent was stopped or asked, you want to review what it did, change the policy or share rules with a team. Every command and exit code is here.
 
-**On this page:** [What the default policy does](#what-the-default-policy-does) · [Run openmoat when something needs you](#run-openmoat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call asks](#a-call-asks) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
+**On this page:** [What the default policy does](#what-the-default-policy-does) · [Run openmoat when something needs you](#run-openmoat-when-something-needs-you) · [How each agent is protected](#how-each-agent-is-protected) · [A call is denied](#a-call-is-denied) · [A call asks](#a-call-asks) · [Session taint](#session-taint) · [Review what the agent did](#review-what-the-agent-did) · [Change the policy](#change-the-policy) · [Share rules with your team](#share-rules-with-your-team) · [If OpenMoat gets in your way](#if-openmoat-gets-in-your-way) · [Report a bug](#report-a-bug) · [Commands](#commands)
 
 ## What the default policy does
 
@@ -121,9 +121,11 @@ id     time (UTC) host         verdict rules          action
 
 `ask` shows the agent's own permission prompt, tagged with the rule
 (`moat: ask [git-internals] — git runs what its config, hooks and refs name …`). Approve
-it there. Codex, and Cursor for
-file tools, cannot prompt: there the call is denied with a message that says to run
-`openmoat` or `openmoat allow --last`. To stop being asked for the same command or file, run
+it there. Codex, Cursor for file tools, pi in print and JSON mode, Claude Code in
+`bypassPermissions` and `dontAsk` modes, and Continue CLI cannot prompt: there the call is
+denied with a message that says to run `openmoat` or `openmoat allow --last`. GitHub
+Copilot CLI in autopilot turns an `ask` into a deny itself; `openmoat allow --last`
+approves that call too. To stop being asked for the same command or file, run
 `openmoat` and answer `o` or `a`, or:
 
 ```bash
@@ -158,6 +160,19 @@ rules still win`), a file rule only the exact paths. For a whole directory use
 `openmoat allow --dir <path>`; for a pattern, `openmoat edit`. Deny rules still win.
 
 Both refuse to run without a terminal, and the default policy denies them to agents.
+
+### Session taint
+
+Earlier calls of a session can make later ones stricter (ADR-020), never looser: an
+`allow` becomes an `ask` with rule `session-taint`. After the session reads a secret
+(`secrets-paths`, which the default policy denies), its network calls and fetches to any
+other host, MCP calls, web searches and unmapped tools ask. After it reads untrusted
+content (a fetch, a web search, an MCP result), its writes to files that run code or steer
+the agent later (CI files, git hooks, build files, `CLAUDE.md`, `.claude/`) ask. A file a
+tainted session wrote taints the session that later reads or runs it. Answer the ask in
+the agent or with `openmoat allow --last`. Under `openmoat run` the proxy cannot ask, so
+after a secret read it refuses the run's connections; a new run starts clean.
+[POLICY.md](POLICY.md) §4.1 has the full rules and the list of protected files.
 
 ## Review what the agent did
 
@@ -297,9 +312,9 @@ these takes one command in your own terminal (agents are denied all of them):
   agent's settings) changed behind OpenMoat's back. Run `openmoat`; it shows the change and
   asks whether to accept it (`openmoat doctor --accept` does the same).
 - **An MCP server's tools are denied** with rule `mcp-server-changed`: its definition (in
-  `~/.claude.json`, a project's `.mcp.json`, Cursor's `mcp.json` or Codex's `config.toml`)
-  changed or was added since you last accepted the agents' MCP servers, so it starts a
-  command nobody reviewed. Run `openmoat mcp accept <server>`: it shows what changed and asks.
+  `~/.claude.json`, a project's `.mcp.json`, Cursor's `mcp.json`, Codex's `config.toml`;
+  every agent's files are in [POLICY.md](POLICY.md) §8) changed or was added since you
+  last accepted the agents' MCP servers, so it starts a command nobody reviewed. Run `openmoat mcp accept <server>`: it shows what changed and asks.
   Other servers and tools keep working meanwhile.
 - **A wrapped MCP server shows no tools**, or its calls fail with error -32602 naming
   `openmoat mcp accept`: `openmoat mcp proxy` holds every tool of a server until you have read
@@ -335,9 +350,17 @@ these takes one command in your own terminal (agents are denied all of them):
   same file: those changes are reported by `openmoat doctor` and calls are still
   checked. Any other change there, such as a hook, an MCP server or a tool setting,
   denies every call until you run `openmoat doctor --accept` in your terminal.
-- **The `openmoat` binary is missing or broken**: Claude Code and Codex then run tool calls
-  without the hook ("When the hook fails" in [THREAT_MODEL.md](THREAT_MODEL.md)), and Cursor,
-  OpenClaw, pi and Gemini CLI block them. Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
+- **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
+  file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). An
+  `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
+  `openmoat allow --last` approves.
+- **Codex runs no checks**: Codex runs a new or changed hook only once you trust it. After
+  `openmoat init`, and after an upgrade that rewrites the entry, open `/hooks` in Codex and
+  trust OpenMoat's.
+- **The `openmoat` binary is missing or broken**: Codex, Continue CLI and Claude Code before
+  2.1.295 then run tool calls without the hook ("When the hook fails" in
+  [THREAT_MODEL.md](THREAT_MODEL.md)), and Claude Code from 2.1.295, Cursor, OpenClaw,
+  GitHub Copilot CLI, pi and Gemini CLI block them. Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `openmoat uninstall` if you want it off.
 
 ## Report a bug
@@ -364,23 +387,25 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |
 | `openmoat show [id] [--session …] [--since …] [--recent N]` | see events |
 | `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary |
-| `openmoat audit export [--since …] [--host …] [--session …]` | write events as JSON Lines with their chain hashes |
+| `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
 | `openmoat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
 | `openmoat audit report <file>…` | one report over verified exports from several machines |
 | `openmoat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h; a command's only in the project it was asked in) or a permanent rule for exactly that command or those paths |
+| `openmoat allow "<command>" --host <id> --session <id> [--project <dir>]` | approve one exact command for one agent session, in the project of the current directory or `--project` |
 | `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |
 | `openmoat allowed [--format json]` | list what you allowed: permanent rules, session grants still in force, trusted repositories, each with how to take it back |
 | `openmoat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
-| `openmoat secret add gh` · `openmoat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only |
+| `openmoat secret add gh` · `openmoat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only (`--file <path>` reads it from a file, `--header <name>` names the request header) |
 | `openmoat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included (`--sandbox` also starts the server under `openmoat run`) · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
-| `openmoat policy lint` · `openmoat policy check "<cmd>"` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
+| `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not |
+| `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
-| `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them) |
+| `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them); signatures are made with `ssh-keygen -Y sign -n openmoat-pack` for a pack and `-n openmoat-repo-policy` for a repository policy |
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
 | `openmoat sandbox show` · `openmoat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |
 | `openmoat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-openmoat-bench)) |

@@ -68,7 +68,7 @@ exits. There is no daemon.
    only the Claude Code settings keys `integrity/relaxed.rs` allowlists (§6): then the
    call is decided as usual and the first call of the session records the drift with
    rule `settings-drift`. The check reads each pinned file once: the rest of the call
-   parses OpenMoat's own state files (policy, `moat allow` overlay, policy packs,
+   parses OpenMoat's own state files (policy, `openmoat allow` overlay, policy packs,
    `hosts.json`, `environment.json`, `approvals.json`, `trust.json`) from the bytes
    that matched their pins, and sorts settings drift by the bytes found to differ
    (`integrity/kept.rs`). Otherwise a tool
@@ -829,7 +829,7 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_files`, `anchor`, `edit`, `escapes`, `home_screen`, `human_only`, `listings`, `mcp`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `repo_policy`, `secret`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants |
-| `docs/` | INSTALL, USAGE, SANDBOX, POLICY, ARCHITECTURE, THREAT_MODEL, ROADMAP, ADDING_AN_AGENT, COVERAGE and EVIDENCE (generated), `adr/` |
+| `docs/` | INSTALL, USAGE, DEMO, SANDBOX, POLICY, ARCHITECTURE, THREAT_MODEL, ROADMAP, ADDING_AN_AGENT, MOATBENCH, COVERAGE and EVIDENCE (generated), `adr/` |
 | `scripts/ci/quality-gate.sh` | the one gate |
 | `scripts/smoke-real-agents.sh` | a person's check of the protections with their own Claude Code, Codex, Gemini CLI, pi and GitHub Copilot CLI in a throwaway home (CONTRIBUTING "Testing with real agents") |
 

@@ -12,6 +12,7 @@
   <a href="https://github.com/crocodile-labs/openmoat/releases"><img src="https://img.shields.io/github/v/release/crocodile-labs/openmoat?style=flat-square&label=release" alt="Latest release"></a>
   <a href="https://crates.io/crates/openmoat"><img src="https://img.shields.io/crates/v/openmoat?style=flat-square&label=crates.io" alt="crates.io"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue?style=flat-square" alt="License: Apache-2.0 or MIT"></a>
+  <a href="https://www.bestpractices.dev/projects/15817"><img src="https://www.bestpractices.dev/projects/15817/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://www.reddit.com/r/openmoat/"><img src="https://img.shields.io/badge/reddit-r%2Fopenmoat-FF4500?style=flat-square&logo=reddit&logoColor=white" alt="r/openmoat"></a>
 </p>
 
@@ -57,6 +58,10 @@ Start your agent in a new session and work as usual. `openmoat status` shows, fo
 agent, whether it has the hook and an OS sandbox, the hook only, or nothing. When
 OpenMoat blocks a call, the agent gets the rule and the reason:
 `moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa`.
+An `ask` the agent cannot show (Codex, for one) arrives as a deny that says what to run in
+your own terminal: `openmoat`, which shows the call and allows it for the session or for
+good, or `openmoat allow --last`. A deny rule changes only in the policy (`openmoat edit`);
+see [If OpenMoat gets in your way](docs/USAGE.md#if-openmoat-gets-in-your-way).
 
 Other ways to install (the shell and PowerShell installers, `cargo install openmoat
 --locked`, a build from source, checking a release's attestation) and how to upgrade

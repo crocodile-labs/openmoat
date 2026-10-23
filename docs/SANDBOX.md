@@ -132,7 +132,7 @@ decided by the hook only, not in the OS sandbox (`hook_only` in `--format json`)
 
 Claude Code's sandbox runs on macOS, Linux and WSL2 only, and with `failIfUnavailable`
 Claude Code exits at startup where it cannot run. On native Windows, OpenMoat therefore
-writes neither the `sandbox` block nor `blockReadsOutsideWorkingDirectories`; `moat
+writes neither the `sandbox` block nor `blockReadsOutsideWorkingDirectories`; `openmoat
 init`, `sandbox sync`, `sandbox show`, `doctor` and `status` print `sandbox not
 available on native Windows; the hook still applies the policy (use WSL2 for OS
 confinement)` for Claude Code instead. `openmoat init` and `openmoat sandbox sync` remove those
@@ -188,7 +188,7 @@ settings, which is where OpenMoat writes them. `openmoat doctor` also flags
 masked secrets, since it lets every one of them go to a plain-HTTP host.
 
 Other settings and comments are kept, and each file is copied to
-`<file>.moat-sandbox-backup` before moat changes it. `openmoat sandbox show` prints what
+`<file>.moat-sandbox-backup` before OpenMoat changes it. `openmoat sandbox show` prints what
 the policy compiles to, with every place a host is stricter or wider than the policy;
 `openmoat sandbox sync` rewrites them after you edit the policy and re-pins them; it
 writes only the agents whose OpenMoat hook is installed and leaves the files of any
