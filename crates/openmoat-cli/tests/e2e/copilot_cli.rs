@@ -19,7 +19,7 @@ fn hook_file(sb: &Sandbox) -> std::path::PathBuf {
 }
 
 /// A camelCase `preToolUse` payload, `toolArgs` as the JSON string Copilot sends.
-fn payload(cwd: &Path, tool: &str, args: &Value) -> String {
+pub(crate) fn payload(cwd: &Path, tool: &str, args: &Value) -> String {
     json!({
         "sessionId": "cp-1", "timestamp": 1_792_540_800_000_u64,
         "cwd": cwd.to_string_lossy(), "toolName": tool, "toolArgs": args.to_string(),
@@ -40,7 +40,7 @@ fn decision(stdout: &str) -> Value {
 }
 
 #[test]
-fn init_writes_one_hook_entry_for_every_tool_and_is_idempotent() {
+fn init_writes_one_hook_entry_for_every_tool() {
     let sb = sandbox();
     let first = fs::read_to_string(hook_file(&sb)).unwrap();
     let root: Value = serde_json::from_str(&first).unwrap();
@@ -59,14 +59,6 @@ fn init_writes_one_hook_entry_for_every_tool_and_is_idempotent() {
             "{entry}"
         );
     }
-    let again = sb.moat(&["init", "--yes"]);
-    assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
-    assert_eq!(fs::read_to_string(hook_file(&sb)).unwrap(), first);
-    let status = text(&sb.moat(&["status"]));
-    assert!(status.contains("GitHub Copilot CLI"), "{status}");
-    let doctor = text(&sb.moat(&["doctor"]));
-    assert!(doctor.contains("GitHub Copilot CLI"), "{doctor}");
-    assert!(doctor.contains("hook only"), "{doctor}");
 }
 
 #[test]
@@ -142,32 +134,6 @@ fn arguments_that_do_not_parse_fail_closed() {
     assert_eq!(code, Some(DENY), "{out}");
     assert_eq!(decision(&out)["permissionDecision"], "deny", "{out}");
     assert!(out.contains("kernel-error"), "{out}");
-}
-
-/// The lock pins the hook file: once it is edited on disk, every call is
-/// denied until a person re-pins.
-#[test]
-fn an_edited_hook_file_is_kernel_integrity() {
-    let sb = sandbox();
-    let path = hook_file(&sb);
-    let edited = fs::read_to_string(&path)
-        .unwrap()
-        .replace("\"timeoutSec\": 600", "\"timeoutSec\": 1");
-    fs::write(&path, edited).unwrap();
-    let project = sb.project();
-    let (code, out) = guard(&sb, &payload(&project, "bash", &json!({ "command": "ls" })));
-    assert_eq!(code, Some(DENY), "{out}");
-    assert!(out.contains("kernel-integrity"), "{out}");
-}
-
-#[test]
-fn uninstall_deletes_the_hook_file_init_created() {
-    let sb = sandbox();
-    assert!(hook_file(&sb).is_file());
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(!hook_file(&sb).exists(), "{}", text(&out));
-    assert!(sb.home.join(".copilot").is_dir(), "the directory stays");
 }
 
 /// The servers in `~/.copilot/mcp-config.json` are pinned at `init`; a changed

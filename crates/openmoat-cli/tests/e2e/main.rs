@@ -31,6 +31,7 @@ mod gemini_cli;
 mod guard;
 mod home_screen;
 mod host_failures;
+mod hosts;
 #[cfg(unix)]
 mod human_only;
 #[cfg(unix)]

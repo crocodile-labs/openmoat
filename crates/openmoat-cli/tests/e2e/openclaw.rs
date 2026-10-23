@@ -16,7 +16,7 @@ fn sandbox() -> Sandbox {
 }
 
 /// A `before_tool_call` payload for `tool` with `params`, in the project.
-fn payload(sb: &Sandbox, tool: &str, params: &Value) -> String {
+pub(crate) fn payload(sb: &Sandbox, tool: &str, params: &Value) -> String {
     let project = sb.project();
     json!({
         "hook_event_name": "before_tool_call",
@@ -66,12 +66,6 @@ fn init_writes_the_plugin_and_its_entries_once() {
         source.contains(&format!("const MOAT = {binary};")),
         "{source}"
     );
-
-    let again = text(&sb.moat(&["init", "--yes"]));
-    assert!(again.contains("unchanged: before_tool_call"), "{again}");
-    let doctor = text(&sb.moat(&["doctor"]));
-    assert!(doctor.contains("OpenClaw"), "{doctor}");
-    assert!(doctor.contains("protection: hook only"), "{doctor}");
 }
 
 #[test]
@@ -259,24 +253,4 @@ fn a_configuration_with_comments_is_not_rewritten() {
     assert!(text(&out).contains("comments"), "{}", text(&out));
     assert_eq!(fs::read_to_string(&config).unwrap(), original);
     assert!(!sb.home.join(".openclaw/openmoat").exists());
-}
-
-#[test]
-fn uninstall_gives_back_openclaws_file_and_deletes_the_plugin() {
-    let sb = Sandbox::bare(&[".openclaw"]);
-    let config = sb.home.join(".openclaw/openclaw.json");
-    let original = "{\n  \"gateway\": { \"port\": 18789 }\n}\n";
-    fs::write(&config, original).unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_ne!(fs::read_to_string(&config).unwrap(), original);
-
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_eq!(fs::read_to_string(&config).unwrap(), original);
-    assert!(
-        !sb.home.join(".openclaw/openmoat").exists(),
-        "{}",
-        text(&out)
-    );
 }

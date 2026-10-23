@@ -3,6 +3,7 @@
 
 use std::fs;
 
+use openmoat_hosts::Host;
 use serde_json::Value;
 
 use crate::common::{OK, Sandbox, json, output, stdout, text};
@@ -175,29 +176,40 @@ fn claude_code_on_native_windows_is_hook_only() {
     );
 }
 
+/// Each host's label in the sections of `moat status` and `moat doctor`: its
+/// name, cut to the 16-character label column.
+fn host_labels() -> Vec<String> {
+    Host::ALL
+        .iter()
+        .map(|host| host.display_name().chars().take(16).collect())
+        .collect()
+}
+
+/// `before`, every host's label in `Host::ALL` order, then the audit log.
+fn with_hosts(before: &[&str]) -> Vec<String> {
+    let before = before.iter().map(|label| (*label).to_owned());
+    before
+        .chain(host_labels())
+        .chain(["audit log".to_owned()])
+        .collect()
+}
+
 /// The first line of each section of `moat status` and `moat doctor`, in the
 /// order they print: the label column after `skip` leading characters (the
 /// check mark in `doctor`).
 fn sections(out: &str, skip: usize) -> Vec<String> {
-    const KNOWN: [&str; 12] = [
+    let known = with_hosts(&[
         "state directory",
         "policy",
         "lock",
         "approvals",
         "environment",
-        "Claude Code",
-        "Codex",
-        "Cursor",
-        "OpenClaw",
-        "pi",
-        "Gemini CLI",
-        "audit log",
-    ];
+    ]);
     let mut seen: Vec<String> = Vec::new();
     for line in out.lines() {
         let label = line.chars().skip(skip).take(16).collect::<String>();
         let label = label.trim_end();
-        if KNOWN.contains(&label) && !seen.iter().any(|s| s == label) {
+        if known.iter().any(|k| k == label) && !seen.iter().any(|s| s == label) {
             seen.push(label.to_owned());
         }
     }
@@ -210,37 +222,13 @@ fn status_and_doctor_print_their_sections_in_order() {
     let status = stdout(&sb.moat(&["status"]));
     assert_eq!(
         sections(&status, 0),
-        [
-            "state directory",
-            "policy",
-            "lock",
-            "approvals",
-            "Claude Code",
-            "Codex",
-            "Cursor",
-            "OpenClaw",
-            "pi",
-            "Gemini CLI",
-            "audit log"
-        ],
+        with_hosts(&["state directory", "policy", "lock", "approvals"]),
         "{status}"
     );
     let doctor = stdout(&sb.moat(&["doctor"]));
     assert_eq!(
         sections(&doctor, 2),
-        [
-            "state directory",
-            "policy",
-            "lock",
-            "environment",
-            "Claude Code",
-            "Codex",
-            "Cursor",
-            "OpenClaw",
-            "pi",
-            "Gemini CLI",
-            "audit log"
-        ],
+        with_hosts(&["state directory", "policy", "lock", "environment"]),
         "{doctor}"
     );
     assert_eq!(doctor.lines().last(), Some("healthy"), "{doctor}");

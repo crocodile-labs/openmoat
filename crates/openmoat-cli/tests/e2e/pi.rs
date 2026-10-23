@@ -29,7 +29,7 @@ fn payload_ui(sb: &Sandbox, tool: &str, input: &Value, ui: bool) -> String {
     .to_string()
 }
 
-fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
+pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
     payload_ui(sb, tool, input, true)
 }
 
@@ -58,11 +58,6 @@ fn init_writes_the_extension_once() {
         source.contains(&format!("const MOAT = {binary};")),
         "{source}"
     );
-    let again = text(&sb.moat(&["init", "--yes"]));
-    assert!(again.contains("unchanged: tool_call"), "{again}");
-    let doctor = text(&sb.moat(&["doctor"]));
-    assert!(doctor.contains("pi"), "{doctor}");
-    assert!(doctor.contains("protection: hook only"), "{doctor}");
 }
 
 #[test]
@@ -138,24 +133,6 @@ fn malformed_input_and_other_events_are_denied() {
 }
 
 #[test]
-fn an_edited_extension_stops_every_call() {
-    let sb = sandbox();
-    let extension = sb.home.join(AGENT_DIR).join("extensions/openmoat.js");
-    let source = fs::read_to_string(&extension).unwrap();
-    fs::write(
-        &extension,
-        source.replace("return await answer(", "return; await answer("),
-    )
-    .unwrap();
-    let (code, reply) = guard(
-        &sb,
-        &payload(&sb, "bash", &json!({"command": "git status"})),
-    );
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert!(reason(&reply).contains("kernel-integrity"), "{reply}");
-}
-
-#[test]
 fn a_moved_agent_directory_is_followed_and_protected() {
     let sb = Sandbox::bare(&[]);
     let moved = sb.home.join("pi-home");
@@ -176,34 +153,6 @@ fn a_moved_agent_directory_is_followed_and_protected() {
     let (code, reply) = guard(&sb, &payload(&sb, "write", &write));
     assert_eq!(code, Some(DENY), "{reply}");
     assert!(reason(&reply).contains("kernel-self"), "{reply}");
-}
-
-#[test]
-fn uninstall_deletes_the_extension_and_gives_back_a_file_of_the_persons() {
-    let sb = Sandbox::bare(&[AGENT_DIR]);
-    let extension = sb.home.join(AGENT_DIR).join("extensions/openmoat.js");
-    fs::create_dir_all(extension.parent().unwrap()).unwrap();
-    let mine = "export default function (pi) {}\n";
-    fs::write(&extension, mine).unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "pi"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_ne!(fs::read_to_string(&extension).unwrap(), mine);
-
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_eq!(
-        fs::read_to_string(&extension).unwrap(),
-        mine,
-        "{}",
-        text(&out)
-    );
-
-    let sb = Sandbox::installed(&[AGENT_DIR]);
-    let extension = sb.home.join(AGENT_DIR).join("extensions/openmoat.js");
-    assert!(extension.is_file());
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(!extension.exists(), "{}", text(&out));
 }
 
 /// The protection entry `status --format json` prints for `host`, run in `cwd`.

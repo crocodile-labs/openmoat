@@ -13,14 +13,14 @@ use serde_json::{Value, json};
 use crate::common::{DENY, OK, Sandbox, fixture, json as parse, stdout, text};
 
 /// A settings file as Gemini CLI writes it, two-space indented.
-const ORIGINAL: &str = "{\n  \"ui\": { \"theme\": \"GitHub\" },\n  \"general\": {}\n}\n";
+pub(crate) const ORIGINAL: &str = "{\n  \"ui\": { \"theme\": \"GitHub\" },\n  \"general\": {}\n}\n";
 
 fn settings(sb: &Sandbox) -> std::path::PathBuf {
     sb.home.join(".gemini/settings.json")
 }
 
 /// A `BeforeTool` payload for `tool` with `input`, in the project.
-fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
+pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
     json!({
         "session_id": "gem-1", "transcript_path": "",
         "cwd": sb.project().to_string_lossy(),
@@ -68,9 +68,6 @@ fn init_adds_one_named_before_tool_entry() {
     let again = sb.moat(&["init", "--yes"]);
     assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
     assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), before);
-    let doctor = text(&sb.moat(&["doctor"]));
-    assert!(doctor.contains("Gemini CLI"), "{doctor}");
-    assert!(doctor.contains("protection: hook only"), "{doctor}");
 }
 
 #[test]
@@ -171,26 +168,6 @@ fn a_payload_that_cannot_be_checked_is_denied() {
     assert_eq!(code, Some(DENY), "{reply}");
     assert_eq!(reply["decision"], "deny");
     assert!(reply["reason"].to_string().contains("file_path"), "{reply}");
-}
-
-#[test]
-fn an_edited_settings_file_denies_every_call() {
-    let sb = Sandbox::installed(&[".gemini"]);
-    let mut root: Value =
-        serde_json::from_str(&fs::read_to_string(settings(&sb)).unwrap()).unwrap();
-    root["hooksConfig"] = json!({ "disabled": ["openmoat"] });
-    fs::write(settings(&sb), root.to_string()).unwrap();
-    let write = payload(
-        &sb,
-        "write_file",
-        &json!({ "file_path": sb.project().join("a.txt").to_string_lossy(), "content": "" }),
-    );
-    let (code, reply) = guard(&sb, &write);
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert!(
-        reply["reason"].to_string().contains("kernel-integrity"),
-        "{reply}"
-    );
 }
 
 /// Apply `change` to the installed settings file, as Gemini CLI or an agent would.
@@ -318,19 +295,6 @@ fn settings_that_no_longer_parse_deny_every_call() {
     let sb = Sandbox::installed(&[".gemini"]);
     fs::write(settings(&sb), r#"{"model": {"name": "#).unwrap();
     assert_frozen(&sb, "broken file");
-}
-
-#[test]
-fn uninstall_gives_the_settings_back() {
-    let sb = Sandbox::bare(&[".gemini"]);
-    let original = ORIGINAL;
-    fs::write(settings(&sb), original).unwrap();
-    let out = sb.moat(&["init", "--yes"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_ne!(fs::read_to_string(settings(&sb)).unwrap(), original);
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), original);
 }
 
 /// The protection entry and the report `status --format json` prints, in `cwd`.
