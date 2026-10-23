@@ -1,0 +1,83 @@
+name: review-threads
+
+# Fails while a moat-reviewer red or orange inline thread is unresolved and has
+# no reply naming the fixing commit (a 7 to 40 character hex SHA) or a reason
+# (a reply starting "reason:", "won't fix:" or "not a bug:"). Yellow and idea
+# threads never block. Resolving a thread fires no event here: re-run or push.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
+permissions: {}
+
+concurrency:
+  group: review-threads-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  threads:
+    name: review threads answered
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: check moat-reviewer blocker threads
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The GraphQL variables and the jq filter are meant for gh and jq,
+          # not the shell, so they stay in single quotes.
+          # shellcheck disable=SC2016
+          query='query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $pr) {
+                reviewThreads(first: 100, after: $endCursor) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes {
+                    isResolved
+                    path
+                    line
+                    comments(first: 50) { nodes { author { login } body url } }
+                  }
+                }
+              }
+            }
+          }'
+          # shellcheck disable=SC2016
+          open=$(gh api graphql --paginate \
+            -F owner="${REPO%/*}" -F name="${REPO#*/}" -F pr="$PR" -f query="$query" \
+            --jq '
+              .data.repository.pullRequest.reviewThreads.nodes[]
+              | select(.isResolved | not)
+              | select(.comments.nodes[0].author.login // "" | test("^moat-reviewer(\\[bot\\])?$"))
+              | select(.comments.nodes[0].body | split("\n")[0] | test("🔴|🟠"))
+              | select(
+                  [ .comments.nodes[1:][]
+                    | select(.author.login // "" | test("^moat-reviewer") | not)
+                    | .body
+                    | (test("\\b[0-9a-f]{7,40}\\b") or test("^\\s*(reason|won.t fix|not a bug)\\s*:"; "i"))
+                  ] | any | not)
+              | "\(.path):\(.line // "?") \(.comments.nodes[0].url)"')
+          if [[ -n "$open" ]]; then
+            {
+              echo "### Unanswered moat-reviewer red/orange threads"
+              echo
+              echo "Reply with the fixing commit SHA or \"reason: …\", or resolve the thread and re-run this check."
+              echo
+              while IFS= read -r thread; do printf -- '- %s\n' "$thread"; done <<< "$open"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "unanswered red/orange threads:"
+            echo "$open"
+            exit 1
+          fi
+          echo "every moat-reviewer red/orange thread is resolved or answered"
