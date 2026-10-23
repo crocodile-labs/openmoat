@@ -3,7 +3,7 @@
 //! format, and `uninstall` gives the file back.
 //!
 //! The payloads follow the documented `before_tool_call` event and context
-//! (`tests/fixtures/hosts/openclaw/README.md`); none is captured from a Gateway.
+//! (`crates/openmoat-hosts/src/host/openclaw/fixtures/README.md`); none is captured from a Gateway.
 
 use std::fs;
 

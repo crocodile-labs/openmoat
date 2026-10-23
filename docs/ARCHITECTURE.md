@@ -311,7 +311,7 @@ names.
 Cursor's hook matcher is empty, so every tool reaches `preToolUse`. Cursor's hook
 documentation names `Grep` but not `Glob` and gives no file tool's arguments. A
 third-party capture shows `Grep` and `Read` send `file_path`; the rest is unverified
-(`tests/fixtures/hosts/cursor/README.md`, #138).
+(`crates/openmoat-hosts/src/host/cursor/fixtures/README.md`, #138).
 
 ## 4. Decision
 
@@ -429,7 +429,7 @@ Claude Code always sends a path). Either sign is enough, because a Claude Code c
 mistaken for `cn` only turns an ask into a deny. For `continue` an `ask` is sent as a
 `deny` with the same `openmoat allow --last` instruction as for Codex, and the audit log
 records host `continue` with the `ask`. Everything else is decided as for Claude Code
-(`Host::sender`, `tests/fixtures/hosts/continue/`, built from `cn`'s hook source).
+(`Host::sender`, `crates/openmoat-hosts/src/host/continue_cli/fixtures/`, built from `cn`'s hook source).
 `continue` is not in `Host::ALL`: it has no hook file of its own to install.
 
 Cursor prompts on `ask` for `beforeShellExecution` and `beforeMCPExecution` only
@@ -467,7 +467,7 @@ nothing shows Codex's prompt. No hook can send a call into that path, so a `PreT
 `ask` that let the call through would run unprompted whenever Codex itself does not
 prompt. `openmoat init` therefore does not install `PermissionRequest`. `guard` refuses that
 event as a wrong event (deny, exit 2, reason on stderr), which Codex reads as a deny
-(`tests/fixtures/hosts/codex/permission-request-shell.json`, built from Codex's
+(`crates/openmoat-hosts/src/host/codex/fixtures/permission-request-shell.json`, built from Codex's
 `permission-request.command.input.schema.json`). Exit codes follow
 ADR-004 and ADR-015: 0 allow, defer or ask, 2 deny, 3 unresolved ask from `openmoat policy
 check`, 64 usage or configuration error. `openmoat run` exits 1 when the agent it started
@@ -791,15 +791,14 @@ hook; the lock is checked before any decision.
 
 ```
 crates/openmoat-core/          decision core; policies/default-v1.yaml is the shipped policy
-crates/openmoat-hosts/         host adapters
+crates/openmoat-hosts/         host adapters; src/host/<module>/fixtures/ holds each host's
+                               real payloads
 crates/openmoat-audit/         audit store
 crates/openmoat-proxy/         egress proxy; tests/proxy/ runs it on loopback
 crates/openmoat-cli/           the openmoat binary; tests/e2e/ runs it in isolated homes;
                                moatbench/ holds the MoatBench scenarios `openmoat bench` bundles
 tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool call each,
                                with the verdict the default policy must give
-tests/fixtures/hosts/          real host payloads (claude-code, codex, continue, copilot-cli, cursor, openclaw,
-                               gemini-cli)
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
                                host_payload, literal_pattern, proxy_parse,
@@ -827,7 +826,7 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | `crates/openmoat-cli` | the `openmoat` binary: `cli.rs` grammar (`cli/{mcp,policy,audit}.rs` for those command groups), `commands/{overview,init,uninstall,guard,show,status,doctor,allow,edit,secret,trust,mcp,replay,report,audit,team,policy,proxy,sandbox,run}.rs`, `commands/guard/{config_change,drift}.rs` (the ConfigChange decision; settings drift the guard decides through), `commands/audit/anchor.rs` and `commands/policy/pack.rs` (`openmoat audit anchor`; `openmoat policy trust-key`, `install`, `remove`), `protection.rs` (each agent's protection level for `status`, `doctor` and the home screen), `commands/run/{macos,linux,unsupported}.rs` (`openmoat run` per OS), `commands/run/release_age.rs` (the npm and uv release-age variables `openmoat run` sets), `commands/run/linux/isolate.rs` (`openmoat run --isolate`, the Isolated tier on Linux), `commands/run/linux/netns.rs` (`openmoat run`'s network namespace on Linux: loopback and a relay to the proxy), `commands/demo.rs` (`openmoat demo`: verdicts for example calls, nothing runs), `commands/service/` (`openmoat proxy install`: `macos.rs` launchd agent from `plist.rs`, `linux.rs` systemd user unit from `unit.rs`, `unsupported.rs`), `commands/bench/` (`openmoat bench`: `hosts.rs` host payloads and how each host reads a hook reply, `hook.rs` the throwaway home and time limit, `scenario.rs` reads the bundled scenarios, `score.rs` the scorecard; scenarios in `moatbench/<category>.yaml`), `install.rs` with `install/{hook_file,binary,dirs,claude_version,openclaw,owned}.rs` (`dirs.rs`: the recorded agent config directories; `claude_version.rs`: whether the Claude Code on PATH knows `onFailure`; `openclaw.rs`: OpenClaw's plugin file and `openclaw.json` entries; `owned.rs`: a hook file OpenMoat owns whole, pi's extension), `sandbox/` (backends from the IR: Standard tier `claude`, `codex`, `cursor` and `install.rs` file I/O, `claude/mask.rs` whether Claude Code's own broker masks each policy secret, `claude/nodes.rs` the directory nodes left out of `denyWrite` and the `Edit(./…)` rules that keep them in place, `claude/state_dir.rs` the state directory hidden whole on Linux; Lightweight tier `seatbelt` (`seatbelt/braces.rs` brace expansion, `seatbelt/filter.rs` globs as path filters, case-folded for denies on a case-insensitive disk), `landlock`, `seccomp`; Isolated tier `bwrap`; `patterns.rs` classifies IR patterns for hosts without a project of their own; `differential.rs` checks every backend against the IR's reference semantics; `exposure.rs` whether `openmoat run`'s grants hold or lie inside the state directory, which makes `openmoat run` on Linux refuse), `home.rs`, `context.rs`, `project.rs`, `repo.rs` (repository policy file and whether it is trusted), `project_settings.rs` (what a project's `.claude/settings*.json` turns off or runs: the ConfigChange veto and the doctor/status warning), `time.rs`, `os_version.rs` (the macOS version: `openmoat run`'s macOS 13 floor, `doctor`, the bug-report bundle), `environment.rs` (search-path snapshot), `realpath.rs` (symlink resolution), `integrity/` (policy lock; `digest.rs` what a file is pinned by, `kept.rs` the bytes the lock check read, which the rest of the call parses, `keys.rs` the top-level keys drift names, `relaxed.rs` the Claude Code settings drift the guard decides through), `mcp.rs` with `mcp/{servers,pins,tools,relay,wrap}.rs` (ADR-026: MCP server definitions pinned in the lock, the `openmoat mcp proxy` JSON-RPC relay and its tool pins, `openmoat mcp wrap`; ADR-032: a new server's tools are held until accepted), `guard_relay.rs` with `guard_relay/{wire,client,service}.rs` (hook decisions inside `openmoat run`, ADR-028: framing, the sandboxed guard, the decision outside), `anchor.rs` with `anchor/git.rs` (audit anchors, ADR-031: the record, the file and `refs/moat/anchors` git plumbing, `verify --against`), `signing.rs` (OpenSSH signatures through the pinned `ssh-keygen`, namespace `openmoat-repo-policy` for repository policies and `openmoat-pack` for packs, ADR-037), `packs.rs` (signed policy packs: `packs.json`, `policy.d/packs/`, merged under `pack:<name>:`), `approvals.rs` (grants and overlay), `secrets/` (brokered secret sources), `taint.rs` (session taint from the audit log; `taint/run.rs` links an `openmoat run`'s agent sessions to the run so its proxy applies their taint, ADR-027; `taint/provenance.rs` taint that follows written files, ADR-029), `push.rs` with `push/{git,range,scan}.rs` (the push check: git run read-only, which commits a push sends, what they add), `trust.rs` (trusted repository policies), `upgrade.rs` (`openmoat policy upgrade`: the default a policy started from, `merge.rs` the three-way merge), `terminal.rs` (terminal check; `terminal/ancestry.rs` whether an agent is among the parent processes, `terminal/own_binary.rs` whether the running executable is the one the lock in `MOAT_HOME` and in `~/.moat` records, started as `openmoat` or `moat`), `install/trust_note.rs` (a host's trust step after `init` writes its hook), `hangs.rs` (the guard-hangs side file and the phase a slow call reached), `render.rs`, `exit.rs` |
 | `crates/openmoat-core/policies/default-v1.yaml` | shipped default policy |
 | `tests/conformance/{attacks,benign,ask}.yaml` | executable security claims |
-| `tests/fixtures/hosts/<host>/*.json` | real host payloads |
+| `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_files`, `anchor`, `edit`, `escapes`, `home_screen`, `human_only`, `listings`, `mcp`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `repo_policy`, `secret`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants |
 | `docs/` | INSTALL, USAGE, SANDBOX, POLICY, ARCHITECTURE, THREAT_MODEL, ROADMAP, ADDING_AN_AGENT, COVERAGE and EVIDENCE (generated), `adr/` |
@@ -842,7 +841,7 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | Architecture invariants | `crates/openmoat-core/tests/architecture.rs` | every PR |
 | Conformance (decide) | `tests/conformance/` through `crates/openmoat-core/tests/conformance.rs`; generates `docs/COVERAGE.md` and fails on a threat class without an attack fixture | every PR, all OS |
 | Policy compiler | `crates/openmoat-core/tests/ir_consistency.rs` (IR against the engine on the conformance fixtures), `ir_never_widens.rs` (generated policies) | every PR, all OS |
-| Golden host payloads | `tests/fixtures/hosts/` | every PR |
+| Golden host payloads | `crates/openmoat-hosts/src/host/<module>/fixtures` | every PR |
 | End to end | `crates/openmoat-cli/tests/e2e/` (real binary, isolated `HOME`/`MOAT_HOME`) | every PR, all OS |
 | Differential (ADR-019) | `crates/openmoat-cli/tests/e2e/differential/` runs `tests/differential/scenarios.yaml` (attacks, benign work, CVE replays) against every enforcement point: the hook decision, and each host sandbox whose binary is present. A layer that disagrees with a scenario's recorded verdict fails the suite; a missing host binary skips that layer visibly. `scripts/ci/differential.sh` points it at the host binaries for the full run. Its `scripts` list runs hostile project scripts as `npm test` under `openmoat run`, Claude Code's sandbox and `codex sandbox -P moat` and asserts the OS outcome; `docs/EVIDENCE.md` is generated from it (`OPENMOAT_TEST_UPDATE_EVIDENCE=1`) | every PR: hook layer and `openmoat run` (macOS, Linux) in the gate, where the host layers skip visibly; in the `standard tier` job, every scenario under the host sandboxes plus `sandbox_exec` on macOS and Linux, with Claude Code and Codex pinned by `scripts/ci/host-binaries.sh`, where a missing host binary fails the test (`MOAT_REQUIRE_HOST_BINARIES`) |
 | Proxy | `crates/openmoat-proxy/tests/proxy/`: a real listener and a local upstream on loopback, names mapped by a test resolver, no external network | every PR, all OS |

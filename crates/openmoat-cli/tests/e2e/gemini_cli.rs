@@ -3,7 +3,7 @@
 //! `decision`, and `uninstall` gives the file back.
 //!
 //! The payloads follow the hooks reference and the source of
-//! `@google/gemini-cli` 0.65.0 (`tests/fixtures/hosts/gemini-cli/README.md`);
+//! `@google/gemini-cli` 0.65.0 (`crates/openmoat-hosts/src/host/gemini_cli/fixtures/README.md`);
 //! none is captured from a signed-in session.
 
 use std::fs;

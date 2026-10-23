@@ -1,6 +1,6 @@
 //! What `moat bench` needs from a host: the payload it sends for one tool
 //! call, and how it reads the hook's reply. Payload shapes follow the golden
-//! payloads in `tests/fixtures/hosts/`; reply rules follow
+//! payloads in `crates/openmoat-hosts/src/host/<module>/fixtures`; reply rules follow
 //! `docs/ARCHITECTURE.md` §5 and `docs/THREAT_MODEL.md` §5.
 
 use std::path::Path;

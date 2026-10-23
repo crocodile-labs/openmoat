@@ -96,7 +96,7 @@ mod tests {
     fn fixture(name: &str) -> String {
         let dir = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/hosts/claude-code"
+            "/src/host/claude_code/fixtures"
         );
         std::fs::read_to_string(format!("{dir}/{name}.json")).unwrap()
     }

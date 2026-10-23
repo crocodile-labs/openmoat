@@ -89,9 +89,12 @@ mod tests {
     use super::*;
     use crate::{HookEvent, HostError};
 
+    /// The payload `<id>/<file>` from the folder of the host with that id.
     fn fixture(path: &str) -> String {
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/hosts");
-        std::fs::read_to_string(format!("{root}/{path}")).unwrap()
+        let (id, name) = path.split_once('/').unwrap();
+        let host = Host::EVERY.into_iter().find(|h| h.id() == id).unwrap();
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host");
+        std::fs::read_to_string(format!("{root}/{}/fixtures/{name}", host.module())).unwrap()
     }
 
     #[test]

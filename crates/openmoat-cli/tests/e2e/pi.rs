@@ -3,7 +3,7 @@
 //! format, and `uninstall` takes the extension away.
 //!
 //! The payloads follow the documented `tool_call` event and context
-//! (`tests/fixtures/hosts/pi/README.md`); none is captured from pi.
+//! (`crates/openmoat-hosts/src/host/pi/fixtures/README.md`); none is captured from pi.
 
 use std::fs;
 

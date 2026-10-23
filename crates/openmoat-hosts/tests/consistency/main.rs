@@ -3,7 +3,7 @@
 //!
 //! Each row names a fixture of `tests/conformance/*.yaml`. Its action is written
 //! as the payload of every host route that has a tool for it (the shapes of
-//! `tests/fixtures/hosts/<host>/`), parsed by that host's adapter, decided by the
+//! `crates/openmoat-hosts/src/host/<module>/fixtures/`), parsed by that host's adapter, decided by the
 //! default policy as `moat guard` does (`decide_with`, `with_taint`,
 //! `Host::decided`, `Host::answer`), and the verdict the host receives must be the
 //! fixture's, translated only where the docs say a host cannot receive it
@@ -299,7 +299,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
     }
 }
 
-/// Claude Code and Codex `PreToolUse` (`tests/fixtures/hosts/{claude-code,codex}`).
+/// Claude Code and Codex `PreToolUse` (`crates/openmoat-hosts/src/host/{claude_code,codex}/fixtures`).
 fn pre_tool_use(route: Route, tool: &str, input: &Value) -> Value {
     match route {
         Route::Codex => json!({

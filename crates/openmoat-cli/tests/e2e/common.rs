@@ -243,11 +243,19 @@ pub fn output(cmd: &mut Command, stdin: Option<&str>) -> Output {
     child.wait_with_output().unwrap()
 }
 
-/// A golden payload under `tests/fixtures/hosts/`, e.g. `cursor/beforeReadFile.json`.
+/// A golden payload, `<host id>/<file>` (e.g. `cursor/beforeReadFile.json`),
+/// from `openmoat-hosts/src/host/<module>/fixtures/`.
 pub fn fixture(relative: &str) -> String {
+    let (id, name) = relative.split_once('/').unwrap();
+    let host = openmoat_hosts::Host::EVERY
+        .into_iter()
+        .find(|h| h.id() == id)
+        .unwrap_or_else(|| panic!("no host `{id}`"));
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/hosts")
-        .join(relative);
+        .join("../openmoat-hosts/src/host")
+        .join(host.module())
+        .join("fixtures")
+        .join(name);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 

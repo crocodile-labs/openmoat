@@ -5,7 +5,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/hosts/openclaw"
+    "/src/host/openclaw/fixtures"
 );
 
 fn fixture(name: &str) -> HookRequest {

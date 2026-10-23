@@ -6,7 +6,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/hosts/gemini-cli"
+    "/src/host/gemini_cli/fixtures"
 );
 
 fn fixture(name: &str) -> Result<HookRequest, HostError> {

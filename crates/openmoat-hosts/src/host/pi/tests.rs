@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::{HookEvent, HookRequest, Host, HostError};
 
-const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/hosts/pi");
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host/pi/fixtures");
 
 fn fixture(name: &str) -> HookRequest {
     let text = std::fs::read_to_string(format!("{FIXTURES}/{name}.json")).unwrap();
