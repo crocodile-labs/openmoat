@@ -14,6 +14,7 @@
   <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue?style=flat-square" alt="License: Apache-2.0 or MIT"></a>
   <a href="https://www.bestpractices.dev/projects/15817"><img src="https://www.bestpractices.dev/projects/15817/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://www.reddit.com/r/openmoat/"><img src="https://img.shields.io/badge/reddit-r%2Fopenmoat-FF4500?style=flat-square&logo=reddit&logoColor=white" alt="r/openmoat"></a>
+  <a href="https://github.com/crocodile-labs/openmoat/stargazers"><img src="https://img.shields.io/github/stars/crocodile-labs/openmoat?style=flat-square&logo=github" alt="GitHub stars"></a>
 </p>
 
 OpenMoat checks every tool call your AI coding agent makes, before it runs, against one
@@ -307,8 +308,7 @@ Rust 1.95, pinned in `rust-toolchain.toml`. No other tooling is required.
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first pull request, and
 [AGENTS.md](AGENTS.md) for the working contract for people and coding agents.
 AI-assisted pull requests are welcome; each gets an automated first-pass review, and a
-maintainer makes the call. Questions and ideas: [r/openmoat](https://www.reddit.com/r/openmoat/).
-Bugs and false positives: [issues](https://github.com/crocodile-labs/openmoat/issues/new/choose).
+maintainer makes the call.
 
 ## Security
 
@@ -316,13 +316,14 @@ Found a way past OpenMoat, or another vulnerability? Report it privately, as des
 in [SECURITY.md](SECURITY.md), not in a public issue. A valid bypass becomes a
 conformance fixture before the fix is published.
 
+## Community
+
+- [r/openmoat](https://www.reddit.com/r/openmoat/): questions, ideas and release news
+- [Issues](https://github.com/crocodile-labs/openmoat/issues/new/choose): bugs and false positives
+- [SECURITY.md](SECURITY.md): bypasses and other vulnerabilities, reported privately
+
 ## License
 
-OpenMoat is free and open source. You can use it, change it and share it, at
-work or at home, under either of two common licenses. Pick whichever suits you:
-
-- the [MIT License](LICENSE), short and simple;
-- the [Apache License 2.0](LICENSE-APACHE), which also gives you an explicit patent
-  grant.
-
-You don't need to ask us or tell us which one you chose.
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE), at
+your option. Unless you state otherwise, a contribution you submit is dual-licensed the
+same way, without additional terms.
