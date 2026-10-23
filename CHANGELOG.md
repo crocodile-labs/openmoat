@@ -8,6 +8,17 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-23
+
+**Upgrading:** nothing to run for a default install; the policy lock keeps verifying. An OpenClaw configuration at another path (`OPENCLAW_CONFIG_PATH`) shows drift once: run `openmoat init`. `openmoat-hosts` changes its library API (marked **breaking** below); the `openmoat` command, the policy format and the hook payloads do not change.
+
+### Security
+- A session grant for a file holds only while the file resolves where it did when approved: a granted file replaced by a symlink to another file is asked about again ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- An open proxy tunnel is checked against a session taint that includes every event recorded since it was last looked up, so it closes at the next recheck after the session reads a secret, not up to one interval later ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- pi's `read` names each spelling pi may open when the path does not exist (` AM.`/` PM.` with a narrow no-break space, `'` as `’`), so a rule on any of them decides ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- Claude Code's `Artifact` read of a page is a fetch of its URL, so it taints the session with untrusted content like `WebFetch`; a relative `file_path` with `root` is read both from the working directory and below `root` ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- The policy lock pins a file without its `mcp.servers` (whose servers the MCP pins hold one by one) only when the file is OpenClaw's own `openclaw.json`, recorded per file in the lock (`pinned_forms`), no longer for any pinned file whose contents look like an OpenClaw configuration: another host's file that held OpenMoat's plugin entry and `mcp.servers` changed its servers without drift. A lock written before this has no `pinned_forms` and keeps verifying: a pinned file named `openclaw.json` is read as OpenClaw's, every other file by its bytes, so an OpenClaw configuration at another name (`OPENCLAW_CONFIG_PATH`) shows drift once until `openmoat init` or `openmoat doctor --accept` re-pins it; the digests themselves are unchanged ([#653](https://github.com/crocodile-labs/openmoat/pull/653)).
+
 ### Changed
 - `openmoat-hosts` (library API, breaking): `McpSpec` takes readers (`McpReader`) for its user and project files and `tool_names: &dyn McpNames`; `McpLayout` and `McpToolNames` are removed, and each host's MCP reader and tool naming live in its folder ([#640](https://github.com/crocodile-labs/openmoat/pull/640)).
 - `openmoat-hosts` (library API, breaking): a host spec says how to find its configuration (`InstallSpec::location`, `Location::Custom(&dyn Locate)`) and the form of its file the lock pins (`InstallSpec::pinned_form`); OpenClaw's location rules move into its folder, and `RelaxedKey`/`KeyShape` move to `contract/relaxed.rs` ([#641](https://github.com/crocodile-labs/openmoat/pull/641)).
@@ -18,18 +29,15 @@ view at the end of the file.
 - `openmoat-hosts` (library API, breaking): `InstallSpec::hook_file` (a `HookLayout`: `Entries` with a `HookFile`, `Owned` or `Plugin` with an `OwnedFile`) and `InstallSpec::dir_variable_is_home` replace `hook_format`/`HookFormat`; pi's extension and OpenClaw's plugin move into their host folders (`host/<id>/integration/`), unchanged ([#646](https://github.com/crocodile-labs/openmoat/pull/646)).
 - Each host's golden payloads move from `tests/fixtures/hosts/<id>/` to its folder, `crates/openmoat-hosts/src/host/<module>/fixtures/`, unchanged; `Host::module` names that folder ([#646](https://github.com/crocodile-labs/openmoat/pull/646)).
 - Contributor docs: a `HOST.md` per agent in its host folder, an `AGENTS.md` per crate, changelog fragments in `changelog.d/` folded into this file at release time (`scripts/changelog-assemble.py`, checked by `scripts/changelog-check.py`), and the 500-line cap counting code lines only ([#646](https://github.com/crocodile-labs/openmoat/pull/646)).
-
-### Security
-- A session grant for a file holds only while the file resolves where it did when approved: a granted file replaced by a symlink to another file is asked about again ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
-- An open proxy tunnel is checked against a session taint that includes every event recorded since it was last looked up, so it closes at the next recheck after the session reads a secret, not up to one interval later ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
-- pi's `read` names each spelling pi may open when the path does not exist (` AM.`/` PM.` with a narrow no-break space, `'` as `’`), so a rule on any of them decides ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
-- Claude Code's `Artifact` read of a page is a fetch of its URL, so it taints the session with untrusted content like `WebFetch`; a relative `file_path` with `root` is read both from the working directory and below `root` ([#639](https://github.com/crocodile-labs/openmoat/pull/639)).
+- The MIT license text is now `LICENSE` (it was `LICENSE-MIT`), beside `LICENSE-APACHE`; the project is still dual-licensed `MIT OR Apache-2.0`, and the file name is the one license scanners look for ([#651](https://github.com/crocodile-labs/openmoat/pull/651)).
 
 ### Fixed
 - `openmoat doctor` no longer says OpenClaw's plugin file "is pinned but not this shell's": it counts the files the lock pins with a host's hook file, as `openmoat status` does ([#646](https://github.com/crocodile-labs/openmoat/pull/646)).
 - A mail address or login in the option that takes it (`git -c user.email=…`, `curl -u`, `--mail-from`, `--mail-rcpt`, and a `curl -d`, `-F` or `-H` value ending in an address) is no longer read as a host the command connects to, so a `net` default no longer denies an ordinary push or API call over it. A mail address in a string of interpreter code (`python3 -c`, a here-document) only looks like a host: `net` rules naming its domain still match, the `net` default does not. `ssh me@host`, `curl me@host` and a `git -c` proxy or remote URL are still hosts ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
 - `openmoat sandbox sync` lists Codex's nested-`.git` allowance once when several allowed directories need it ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
 - docs/INSTALL.md: on macOS 12 and earlier, where Homebrew may ask for a newer Xcode, install with the shell installer or `cargo install` ([#638](https://github.com/crocodile-labs/openmoat/pull/638)).
+- The README, INSTALL, USAGE, SANDBOX and ARCHITECTURE docs are corrected and completed for 0.9.0 ([#652](https://github.com/crocodile-labs/openmoat/pull/652)).
+- `openmoat bench` waits 45 s for a hook call, past `openmoat guard`'s own 30 s budget, instead of 10 s, so a guard that is only slow on a loaded machine is no longer killed and scored `error`; a step scored `error` now says why (exit code, start of stdout and stderr, time-out or start failure) ([#655](https://github.com/crocodile-labs/openmoat/pull/655)).
 
 ## [0.9.0] - 2026-10-22
 
@@ -832,7 +840,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/crocodile-labs/openmoat/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/crocodile-labs/openmoat/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/crocodile-labs/openmoat/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/crocodile-labs/openmoat/compare/v0.6.0...v0.7.0

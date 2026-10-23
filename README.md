@@ -299,7 +299,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 
 ## Status
 
-**Usable daily.** The latest release is `0.9.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.10.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What exists and what
 comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
