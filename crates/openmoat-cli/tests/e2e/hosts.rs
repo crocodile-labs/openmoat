@@ -15,6 +15,7 @@ use serde_json::Value;
 use crate::common::{DENY, OK, Sandbox, output, stdout, text};
 
 pub mod rows;
+mod settings;
 mod verdicts;
 
 use rows::Row;

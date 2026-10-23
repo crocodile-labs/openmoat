@@ -99,44 +99,6 @@ fn an_edit_of_openclaws_configuration_is_denied() {
 }
 
 #[test]
-fn a_changed_openclaw_mcp_server_holds_back_only_its_own_tools() {
-    let sb = Sandbox::bare(&[".openclaw"]);
-    let config = sb.home.join(".openclaw/openclaw.json");
-    // JSON5 without comments: read, and written back as JSON.
-    fs::write(
-        &config,
-        "{\n  mcp: { servers: { docs: { command: 'docs-server' }, db: { command: 'db' }, }, },\n}\n",
-    )
-    .unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(
-        text(&out).contains("2 definitions pinned"),
-        "{}",
-        text(&out)
-    );
-    let (code, reply) = guard(&sb, &payload(&sb, "docs__search", &json!({})));
-    assert_eq!(code, Some(OK), "{reply}");
-
-    let now = fs::read_to_string(&config).unwrap();
-    assert!(now.contains("\"docs-server\""), "{now}");
-    fs::write(&config, now.replacen("\"docs-server\"", "\"sh\"", 1)).unwrap();
-    let (code, reply) = guard(&sb, &payload(&sb, "docs__search", &json!({})));
-    assert_eq!(code, Some(DENY), "{reply}");
-    let reason = reply["reason"].to_string();
-    assert!(reason.contains("mcp-server-changed"), "{reply}");
-    assert!(reason.contains("openmoat mcp accept docs"), "{reply}");
-    // Only that server: not drift of the whole file.
-    let (code, reply) = guard(&sb, &payload(&sb, "db__query", &json!({})));
-    assert_eq!(code, Some(OK), "{reply}");
-    let (code, reply) = guard(
-        &sb,
-        &payload(&sb, "exec", &json!({"command": "git status"})),
-    );
-    assert_eq!(code, Some(OK), "{reply}");
-}
-
-#[test]
 fn a_cron_job_is_denied_and_listing_jobs_is_left_to_openclaw() {
     let sb = sandbox();
     let add = json!({"action": "add", "job": {"schedule": {"kind": "cron", "expr": "0 3 * * *"},

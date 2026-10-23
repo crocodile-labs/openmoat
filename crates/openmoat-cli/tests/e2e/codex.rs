@@ -69,32 +69,3 @@ fn a_codex_permission_request_is_refused_never_approved() {
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     assert!(stderr(&out).contains("moat: deny"), "{}", stderr(&out));
 }
-
-/// `[features] hooks = false` in Codex's `config.toml` turns every hook off,
-/// OpenMoat's included, without touching the part of the file the lock pins.
-#[test]
-fn hooks_turned_off_in_config_toml_is_not_protected() {
-    let sb = Sandbox::installed(&[".codex"]);
-    let level = |sb: &Sandbox| {
-        let doc = crate::common::json(&sb.moat(&["status", "--format", "json"]));
-        doc["agents"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|a| a["host"] == "codex")
-            .unwrap()
-            .clone()
-    };
-    assert_ne!(level(&sb)["level"], "not-protected", "{}", level(&sb));
-    let config = sb.home.join(".codex/config.toml");
-    let text = std::fs::read_to_string(&config).unwrap_or_default();
-    let mut doc: toml_edit::DocumentMut = text.parse().unwrap();
-    doc["features"]["hooks"] = toml_edit::value(false);
-    std::fs::write(&config, doc.to_string()).unwrap();
-    let codex = level(&sb);
-    assert_eq!(codex["level"], "not-protected", "{codex}");
-    assert!(
-        codex["reason"].to_string().contains("features.hooks"),
-        "{codex}"
-    );
-}

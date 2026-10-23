@@ -294,26 +294,6 @@ fn status_in(sb: &Sandbox, cwd: &std::path::Path) -> (Value, Value) {
     (agent, doc)
 }
 
-/// `init` pins the settings file as it finds it: a `hooksConfig` that turns
-/// hooks off stays, and the agent is reported as not protected.
-#[test]
-fn hooks_turned_off_in_the_user_settings_is_not_protected() {
-    let sb = Sandbox::bare(&[".gemini"]);
-    fs::write(
-        settings(&sb),
-        json!({ "hooksConfig": { "enabled": false } }).to_string(),
-    )
-    .unwrap();
-    let out = sb.moat(&["init", "--yes"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let (agent, _) = status_in(&sb, &sb.home);
-    assert_eq!(agent["level"], "not-protected", "{agent}");
-    assert!(
-        agent["reason"].to_string().contains("hooksConfig.enabled"),
-        "{agent}"
-    );
-}
-
 /// A trusted folder's `.gemini/settings.json` loads at start: `status` names
 /// what in it turns OpenMoat off or adds a hook.
 #[test]
