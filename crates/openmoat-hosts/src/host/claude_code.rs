@@ -96,6 +96,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "settings.json",
     }),
+    // `claude`, or `node` running a versioned file (`claude/versions/2.1.0`)
+    // or the npm package's `cli.js`.
+    process: crate::contract::ProcessSpec {
+        names: &["claude"],
+        package_dirs: &[&["claude", "versions"], &["claude-code"]],
+        helper: None,
+    },
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

@@ -113,6 +113,7 @@ const PROTECTED_WRITES: [&str; 108] = [
     "**/.cursor/**",
     "**/.cursorrules",
     "**/.mcp.json",
+    // generated:taint from each host spec's `protect.taint` (openmoat-hosts `tests/protect.rs`)
     // OpenClaw: its configuration, OpenMoat's plugin and the plugin directories the
     // Gateway loads; not the whole state directory, whose workspace is ordinary work
     "**/.openclaw",
@@ -147,6 +148,7 @@ const PROTECTED_WRITES: [&str; 108] = [
     "**/GEMINI.md",
     "**/.gemini",
     "**/.gemini/**",
+    // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",
 ];

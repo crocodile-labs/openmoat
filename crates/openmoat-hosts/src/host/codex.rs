@@ -84,6 +84,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "config.toml",
     }),
+    process: crate::contract::ProcessSpec {
+        names: &["codex"],
+        ..crate::contract::ProcessSpec::BASE
+    },
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

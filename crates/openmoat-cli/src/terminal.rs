@@ -54,7 +54,7 @@ fn checks_binary(command: &str) -> bool {
     command != "openmoat init"
 }
 
-/// Refuse `command` when an agent host (`ancestry::AGENTS`, a Cursor editor
+/// Refuse `command` when an agent host (each spec's `HostSpec::process`, a Cursor editor
 /// helper on macOS) or `moat run` is among the processes that started this one, or when they
 /// cannot be read. Windows is not checked yet: there only the terminal check
 /// applies. Every command but `openmoat init` also refuses to run from an

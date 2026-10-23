@@ -34,6 +34,7 @@ mod bench;
 mod doc;
 pub(crate) mod hook_file;
 mod project_settings;
+mod protect;
 mod settings;
 mod tools;
 
@@ -94,6 +95,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "settings.json",
     }),
+    protect: protect::PROTECT,
+    process: protect::PROCESS,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

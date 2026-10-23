@@ -34,6 +34,7 @@ mod bench;
 mod doc;
 pub(crate) mod hook_file;
 mod mcp;
+mod protect;
 mod tools;
 
 /// The event name in camel case, whose payload has camel-case fields.
@@ -100,6 +101,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &super::claude_code::project_settings::READER,
         user_file: "settings.json",
     }),
+    protect: protect::PROTECT,
+    process: protect::PROCESS,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

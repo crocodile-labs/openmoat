@@ -22,6 +22,8 @@ use unsupported as platform;
 
 use std::io;
 
+use openmoat_hosts::{Host, ProcessSpec};
+
 /// One process: its parent's id and its command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Process {
@@ -29,45 +31,15 @@ pub(super) struct Process {
     pub argv: Vec<String>,
 }
 
-/// Executable names of the agent hosts, and `openmoat` itself under either
-/// name: `openmoat run` is the parent of the agent it starts.
-/// `cn` is the Continue CLI.
-const AGENTS: &[&str] = &[
-    "claude",
-    "codex",
-    "cursor-agent",
-    "cn",
-    "copilot",
-    "gemini",
-    "openclaw",
-    "pi",
-    "openmoat",
-    "moat",
-];
+/// `openmoat` itself under either name: `openmoat run` is the parent of the
+/// agent it starts. The agent hosts' own names come from their specs
+/// (`HostSpec::process`).
+const OPENMOAT: &[&str] = &["openmoat", "moat"];
 
-/// The macOS helper processes of the Cursor editor, whose agent runs
-/// commands in terminals they start: `Cursor Helper`, `Cursor Helper
-/// (Plugin)` and the others, each `<name>.app/Contents/MacOS/<name>`. The
-/// editor's own process (`Cursor.app/Contents/MacOS/Cursor`) is not matched.
-/// A person's terminal inside the editor descends from a helper too, so the
-/// human-only commands are refused there: they need a terminal of one's own.
-const CURSOR_HELPER: &str = ".app/contents/macos/cursor helper";
-
-/// Directories the agents install their code under, for an agent that runs
-/// as `node <dir>/…/cli.js` or from a versioned file (`claude/versions/2.1.0`).
-/// OpenClaw's command is `openclaw.mjs` (its package `bin`); `openclaw/dist`
-/// covers a Gateway started from the package's built files. pi runs as
-/// `node <…>/pi-coding-agent/dist/bundle/cli.js` (its package `bin`).
-const AGENT_DIRS: &[&[&str]] = &[
-    &["claude", "versions"],
-    &["claude-code"],
-    &["cursor-agent"],
-    &["openclaw", "dist"],
-    &["pi-coding-agent"],
-    &["@continuedev", "cli"],
-    &["@github", "copilot"],
-    &["@google", "gemini-cli"],
-];
+/// Each host's process facts, in the host list's order.
+fn processes() -> impl Iterator<Item = &'static ProcessSpec> {
+    Host::EVERY.iter().map(|host| &host.spec().process)
+}
 
 /// More ancestors than any real process tree has; a longer chain is a loop.
 const MAX_DEPTH: usize = 256;
@@ -117,12 +89,12 @@ fn agent_name(argv: &[String]) -> Option<String> {
         .map(String::as_str)
         .take_while(|word| !word.starts_with('-'))
         .collect();
-    if program
-        .join(" ")
-        .to_ascii_lowercase()
-        .contains(CURSOR_HELPER)
+    let program = program.join(" ").to_ascii_lowercase();
+    if let Some(helper) = processes()
+        .filter_map(|process| process.helper.as_ref())
+        .find(|helper| program.contains(helper.path))
     {
-        return Some("Cursor Helper".to_owned());
+        return Some(helper.name.to_owned());
     }
     argv.iter().take(2).find_map(|word| {
         let lower = word.trim_start_matches('-').to_ascii_lowercase();
@@ -132,12 +104,15 @@ fn agent_name(argv: &[String]) -> Option<String> {
             .iter()
             .find_map(|ext| base.strip_suffix(ext))
             .unwrap_or(base);
-        if let Some(name) = AGENTS.iter().find(|a| **a == stem) {
+        let mut names = processes()
+            .flat_map(|process| process.names)
+            .chain(OPENMOAT);
+        if let Some(name) = names.find(|a| **a == stem) {
             return Some((*name).to_owned());
         }
         let dirs = &segments[..segments.len() - 1];
-        AGENT_DIRS
-            .iter()
+        processes()
+            .flat_map(|process| process.package_dirs)
             .find(|pattern| dirs.windows(pattern.len()).any(|w| w == **pattern))
             .map(|pattern| pattern[0].to_owned())
     })

@@ -13,6 +13,7 @@ mod docs;
 mod hook_file;
 mod location;
 mod mcp;
+mod protect;
 mod relaxed;
 mod settings;
 
@@ -22,6 +23,7 @@ pub use docs::{HostDocs, ToolRow};
 pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
+pub use protect::{Helper, Paths, ProcessSpec, Protect};
 pub use relaxed::{KeyShape, RelaxedKey};
 pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
@@ -110,6 +112,11 @@ pub struct HostSpec {
     /// How the person resumes an agent session after `moat allow` granted it
     /// something, which `moat allow` adds after "a new session asks again".
     pub resume_hint: Option<&'static str>,
+    /// The host's own files the default policy's `kernel-self` rule and the
+    /// taint list protect, in their generated blocks (`tests/protect.rs`).
+    pub protect: Protect,
+    /// How to tell the host's process among a command's ancestors.
+    pub process: ProcessSpec,
     /// What the generated host tables of the docs say (`tests/docs.rs`).
     pub docs: HostDocs,
 }

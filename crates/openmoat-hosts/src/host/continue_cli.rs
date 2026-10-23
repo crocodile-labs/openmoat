@@ -36,6 +36,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".continue",
         binary: "cn",
     }),
+    process: crate::contract::ProcessSpec {
+        names: &["cn"],
+        package_dirs: &[&["@continuedev", "cli"]],
+        helper: None,
+    },
     // Its tool calls are Claude Code's, mapped by Claude Code's rows.
     docs: HostDocs {
         hooked_by: "`cn` runs the Claude Code hook, but the released `cn` runs no hooks yet",

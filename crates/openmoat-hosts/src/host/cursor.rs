@@ -91,6 +91,21 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "hooks.json",
     }),
+    // The CLI agent, and the macOS helper processes of the Cursor editor,
+    // whose agent runs commands in terminals they start: `Cursor Helper`,
+    // `Cursor Helper (Plugin)` and the others, each
+    // `<name>.app/Contents/MacOS/<name>`. The editor's own process
+    // (`Cursor.app/Contents/MacOS/Cursor`) is not matched. A person's terminal
+    // inside the editor descends from a helper too, so the human-only commands
+    // are refused there: they need a terminal of one's own.
+    process: crate::contract::ProcessSpec {
+        names: &["cursor-agent"],
+        package_dirs: &[&["cursor-agent"]],
+        helper: Some(crate::contract::Helper {
+            path: ".app/contents/macos/cursor helper",
+            name: "Cursor Helper",
+        }),
+    },
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

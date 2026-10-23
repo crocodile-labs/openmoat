@@ -33,6 +33,7 @@ mod bench;
 mod doc;
 mod mcp;
 mod project_settings;
+mod protect;
 mod tools;
 
 /// Seconds OpenMoat's extension waits for `moat guard` before it blocks the
@@ -108,6 +109,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "settings.json",
     }),
+    protect: protect::PROTECT,
+    process: protect::PROCESS,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

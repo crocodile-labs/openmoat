@@ -54,6 +54,7 @@ mod bench;
 mod doc;
 mod location;
 mod mcp;
+mod protect;
 mod tools;
 
 /// OpenClaw puts an `ask` to the person itself (`requireApproval`).
@@ -96,6 +97,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         project_files: &[],
         tool_names: &mcp::OpenClawNames,
     }),
+    protect: protect::PROTECT,
+    process: protect::PROCESS,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

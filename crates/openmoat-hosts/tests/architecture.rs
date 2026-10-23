@@ -143,3 +143,103 @@ fn the_host_list_names_every_host_once_with_its_module() {
     files.sort();
     assert_eq!(modules, files, "a file under host/ is not on the list");
 }
+
+/// Lines of CLI and core source (relative to `crates/`, outside test files and
+/// generated blocks) that name a host's id or configuration directory as a
+/// string (`"copilot-cli"`, `".copilot"`). The list only shrinks, as
+/// [`ALLOWED`] does.
+const ALLOWED_NAMES: &[(&str, usize)] = &[
+    // A test record's host.
+    ("openmoat-cli/src/approvals/asked.rs", 1),
+    // Inline tests of each host's MCP reader.
+    ("openmoat-cli/src/mcp/servers.rs", 5),
+    // A test record's host.
+    ("openmoat-cli/src/protection.rs", 1),
+    // The sandbox backends, which stay in the CLI, and their inline tests.
+    ("openmoat-cli/src/sandbox/claude.rs", 1),
+    ("openmoat-cli/src/sandbox/codex/names.rs", 1),
+    ("openmoat-cli/src/sandbox/codex/own_binary.rs", 1),
+    ("openmoat-cli/src/sandbox/hook_only.rs", 2),
+    ("openmoat-cli/src/sandbox/patterns.rs", 1),
+    // The download tools' `--continue` option, not the host.
+    ("openmoat-core/src/shell/commands/fetch.rs", 1),
+    ("openmoat-core/src/shell/options/transfer.rs", 1),
+];
+
+/// Each host's id and configuration directory names, quoted as in source.
+fn quoted_names() -> Vec<String> {
+    let mut names = Vec::new();
+    for host in Host::EVERY {
+        let spec = host.spec();
+        names.push(spec.id);
+        let dirs = spec.install.as_ref().map(|i| i.dir_name);
+        for dir in dirs
+            .into_iter()
+            .chain(spec.detect.as_ref().map(|d| d.dir_name))
+        {
+            names.push(dir);
+            // `.pi` for `.pi/agent`
+            names.extend(dir.split_once('/').map(|(first, _)| first));
+        }
+    }
+    names.sort_unstable();
+    names.dedup();
+    names.into_iter().map(|n| format!("\"{n}\"")).collect()
+}
+
+#[test]
+fn only_host_modules_name_a_hosts_id_or_directory() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    for root in ["openmoat-cli/src", "openmoat-core/src"] {
+        rust_files(&crates.join(root), &mut files);
+    }
+    let names = quoted_names();
+    assert!(names.contains(&"\".copilot\"".to_owned()), "{names:?}");
+    let mut found = BTreeMap::new();
+    for file in files {
+        let relative = file
+            .strip_prefix(&crates)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative.ends_with("/tests.rs") || relative.contains("/tests/") {
+            continue;
+        }
+        let mut generated = false;
+        let mut lines = 0;
+        for line in fs::read_to_string(&file).unwrap().lines() {
+            let comment = line.trim_start();
+            if comment.starts_with("// generated:") {
+                generated = true;
+            } else if comment.starts_with("// /generated") {
+                generated = false;
+            } else if !generated && names.iter().any(|name| line.contains(name.as_str())) {
+                lines += 1;
+            }
+        }
+        if lines > 0 {
+            found.insert(relative, lines);
+        }
+    }
+    let allowed: BTreeMap<String, usize> = ALLOWED_NAMES
+        .iter()
+        .map(|(file, lines)| ((*file).to_owned(), *lines))
+        .collect();
+    for (file, lines) in &found {
+        let limit = allowed.get(file).copied().unwrap_or(0);
+        assert!(
+            *lines <= limit,
+            "{file} names a host's id or directory on {lines} lines (allowed {limit}): \
+             take it from the host's spec"
+        );
+    }
+    for (file, limit) in &allowed {
+        let lines = found.get(file).copied().unwrap_or(0);
+        assert_eq!(
+            lines, *limit,
+            "{file} now names a host's id or directory on {lines} lines: lower its entry \
+             in ALLOWED_NAMES"
+        );
+    }
+}
