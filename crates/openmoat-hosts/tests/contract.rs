@@ -6,7 +6,7 @@ use std::path::Path;
 
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
-use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, Host, HostError, reason_line};
+use openmoat_hosts::{GUARD_BUDGET_S, Host, HostError, reason_line};
 use serde_json::json;
 
 /// Every host, the installable ones and those that run another's hook.
@@ -123,17 +123,17 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 /// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, HookFormat, &[&str]); 7] = [
-        (Host::ClaudeCode, HookFormat::Nested, &["PreToolUse"]),
-        (Host::Codex, HookFormat::Nested, &[]),
-        (Host::Cursor, HookFormat::Cursor, &[]),
-        (Host::OpenClaw, HookFormat::OpenClaw, &[]),
-        (Host::CopilotCli, HookFormat::Copilot, &[]),
-        (Host::Pi, HookFormat::Pi, &[]),
-        (Host::GeminiCli, HookFormat::Gemini, &[]),
+    let expected: [(Host, &str, &[&str]); 7] = [
+        (Host::ClaudeCode, "Entries(Nested)", &["PreToolUse"]),
+        (Host::Codex, "Entries(Nested)", &[]),
+        (Host::Cursor, "Entries(Cursor)", &[]),
+        (Host::OpenClaw, "Plugin(OwnedFile(OpenClaw plugin))", &[]),
+        (Host::CopilotCli, "Entries(Copilot)", &[]),
+        (Host::Pi, "Owned(OwnedFile(pi extension))", &[]),
+        (Host::GeminiCli, "Entries(Gemini)", &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
-    for (host, format, blocking) in expected {
+    for (host, layout, blocking) in expected {
         let install = host.spec().install.as_ref().unwrap();
         assert!(!install.hooks.is_empty(), "{host:?}");
         for (i, hook) in install.hooks.iter().enumerate() {
@@ -150,7 +150,7 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
                 hook.timeout
             );
         }
-        assert_eq!(install.hook_format, format, "{host:?}");
+        assert_eq!(format!("{:?}", install.hook_file), layout, "{host:?}");
         let blocks: Vec<&str> = install
             .hooks
             .iter()

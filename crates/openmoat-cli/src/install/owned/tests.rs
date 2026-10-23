@@ -1,13 +1,22 @@
 use std::fs;
 use std::path::Path;
 
-use openmoat_hosts::Host;
+use openmoat_hosts::{HookLayout, Host, OwnedFile};
 
 use super::*;
 use crate::home::Home;
-use crate::install::{HookFormat, HookSpec, backup_path, hook_file};
+use crate::install::{HookSpec, backup_path, hook_file};
 
 const SPECS: &[HookSpec] = &[HookSpec::new("tool_call", "", 45, false)];
+const BINARY_LINE: &str = "const MOAT = __MOAT_BINARY__;";
+
+/// pi's extension, from its spec.
+fn extension() -> &'static OwnedFile {
+    match Host::Pi.spec().install.as_ref().unwrap().hook_file {
+        HookLayout::Owned(file) => file,
+        other => panic!("pi's hook file is {other:?}"),
+    }
+}
 
 fn config(dir: &Path) -> HostConfig {
     HostConfig {
@@ -15,7 +24,7 @@ fn config(dir: &Path) -> HostConfig {
         settings_path: dir.join("extensions/openmoat.js"),
         dir: dir.to_path_buf(),
         hooks: SPECS,
-        format: HookFormat::Pi,
+        layout: HookLayout::Owned(extension()),
         blocks_on_failure: || false,
     }
 }
@@ -27,10 +36,10 @@ fn install(config: &HostConfig, binary: &Path) -> Outcome {
 
 #[test]
 fn the_extension_names_the_binary_once_and_waits_as_the_spec_says() {
-    let text = text(Path::new(r#"/opt/my "tools"/openmoat"#)).unwrap();
+    let text = text(extension(), Path::new(r#"/opt/my "tools"/openmoat"#)).unwrap();
     assert!(text.contains(r#"const MOAT = "/opt/my \"tools\"/openmoat";"#));
     assert!(!text.contains(BINARY_LINE));
-    assert!(is_ours(&text));
+    assert!(extension().is_ours(&text));
     // The extension's own wait for `openmoat guard` is the hook timeout the
     // spec states, which outlasts the guard's budget.
     let installed = Host::Pi.spec().install.as_ref().unwrap();
@@ -38,8 +47,12 @@ fn the_extension_names_the_binary_once_and_waits_as_the_spec_says() {
     let timeout = installed.hooks[0].timeout;
     assert!(crate::install::GUARD_BUDGET_S < timeout);
     let wait = format!("const GUARD_TIMEOUT_MS = {timeout}_000;");
-    assert!(SOURCE.contains(&wait), "{wait}");
-    assert!(SOURCE.contains(r#"spawn(MOAT, ["guard", "--host", "pi"]"#));
+    assert!(extension().source.contains(&wait), "{wait}");
+    assert!(
+        extension()
+            .source
+            .contains(r#"spawn(MOAT, ["guard", "--host", "pi"]"#)
+    );
 }
 
 #[test]
@@ -59,7 +72,7 @@ fn init_writes_the_extension_once_and_rewrites_it_for_another_binary() {
     assert_eq!(hook_file::state(&cfg, binary), HookState::Installed);
     assert_eq!(
         fs::read_to_string(&cfg.settings_path).unwrap(),
-        text(binary).unwrap()
+        text(extension(), binary).unwrap()
     );
 
     let other = Path::new("/opt/openmoat/bin/openmoat");
@@ -80,7 +93,7 @@ fn an_edited_extension_is_stale_and_a_file_of_the_persons_is_backed_up() {
     let cfg = config(dir.path());
     let binary = Path::new("/usr/local/bin/openmoat");
     install(&cfg, binary);
-    let edited = text(binary)
+    let edited = text(extension(), binary)
         .unwrap()
         .replace("return await answer(", "return undefined; await answer(");
     fs::write(&cfg.settings_path, &edited).unwrap();
@@ -89,10 +102,13 @@ fn an_edited_extension_is_stale_and_a_file_of_the_persons_is_backed_up() {
         HookState::Stale { .. }
     ));
     assert_eq!(
-        render(binary, &edited).unwrap(),
-        Some(text(binary).unwrap())
+        render(extension(), binary, &edited).unwrap(),
+        Some(text(extension(), binary).unwrap())
     );
-    assert_eq!(render(binary, &text(binary).unwrap()).unwrap(), None);
+    assert_eq!(
+        render(extension(), binary, &text(extension(), binary).unwrap()).unwrap(),
+        None
+    );
 
     let mine = "export default function (pi) {}\n";
     fs::write(&cfg.settings_path, mine).unwrap();

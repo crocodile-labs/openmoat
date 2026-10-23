@@ -25,7 +25,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
     ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -43,7 +43,7 @@ pub(crate) const EVENT: &str = "BeforeTool";
 
 /// `*` matches every tool name, MCP tools included (`hookPlanner.js`
 /// `matchesContext`). Gemini CLI takes the timeout in milliseconds; the
-/// installer converts ([`HookFormat::Gemini`]).
+/// installer converts ([`hook_file::Gemini`]).
 const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "*", TOOL_HOOK_TIMEOUT_S, false)];
 
 /// Gemini CLI puts an `ask` to the person itself.
@@ -71,7 +71,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".gemini",
         config_file: "settings.json",
         hooks: HOOKS,
-        hook_format: HookFormat::Gemini,
+        dir_variable_is_home: true,
+        hook_file: HookLayout::Entries(&hook_file::Gemini),
         relaxed_keys: settings::RELAXED_KEYS,
         ..InstallSpec::BASE
     }),

@@ -25,7 +25,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
+    Asks, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
     McpSpec, McpServersJson, ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -69,7 +69,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".copilot",
         config_file: "hooks/openmoat.json",
         hooks: HOOKS,
-        hook_format: HookFormat::Copilot,
+        hook_file: HookLayout::Entries(&hook_file::Copilot),
         ..InstallSpec::BASE
     }),
     // `mcp-config.json` in the configuration directory, and a project's

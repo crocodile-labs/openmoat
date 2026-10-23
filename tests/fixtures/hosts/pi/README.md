@@ -9,7 +9,7 @@ was checked against what the extension sent from a pi 1.3.0 SDK session
 same fields, a UUID `sessionId`, and `hasUI: false`, since the SDK has no screen.
 
 pi has no command hook. OpenMoat's extension
-(`crates/openmoat-cli/integrations/pi/openmoat.js`) builds the JSON that
+(`crates/openmoat-hosts/src/host/pi/integration/openmoat.js`) builds the JSON that
 `moat guard --host pi` reads, so the envelope is OpenMoat's own:
 
 | Field | Source |

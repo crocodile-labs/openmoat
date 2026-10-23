@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
+    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
     ProjectSettingsSpec, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
@@ -51,7 +51,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".codex",
         config_file: "hooks.json",
         hooks: HOOKS,
-        hook_format: HookFormat::Nested,
+        hook_file: HookLayout::Entries(&crate::wire::hook_file::nested::Nested),
         // Codex runs a new or changed user hook only once the person trusts it
         // in `/hooks` (Codex's hooks documentation).
         trust_step: Some(

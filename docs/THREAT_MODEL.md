@@ -451,7 +451,7 @@ something OpenMoat claims to stop.
   [Codex hooks][codex-hooks] and [`pre_tool_use.rs`][codex-pre],
   [`command_runner.rs`][codex-runner], [Cursor hooks][cursor-hooks], the OpenClaw
   [hook reference][openclaw-hooks] (2026.10.5) and OpenMoat's own OpenClaw plugin
-  (`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`), Continue
+  (`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`), Continue
   [`hookRunner.ts`][cn-runner], and for Gemini CLI its [hooks reference][gemini-hooks]
   and `packages/core/src/hooks/hookRunner.ts` of `@google/gemini-cli` 0.65.0, checked
   2026-10-20); *unverified* marks what the source does not state,
@@ -561,7 +561,7 @@ something OpenMoat claims to stop.
   servers may come from holds back every OpenClaw MCP call. There is no OS sandbox
   from OpenMoat for OpenClaw; run the Gateway under `openmoat run` for one.
 - **pi, when its hook fails.** pi has no command hook either: its "hook" is
-  OpenMoat's extension (`crates/openmoat-cli/integrations/pi/openmoat.js`, written to
+  OpenMoat's extension (`crates/openmoat-hosts/src/host/pi/integration/openmoat.js`, written to
   `<agent dir>/extensions/openmoat.js`), which runs `openmoat guard` from pi's
   `tool_call` event. From pi 1.3.0's documentation and source (`docs/extensions.md`,
   "Errors and cleanup"; `dist/core/agent-session.js`), *unverified* against a running

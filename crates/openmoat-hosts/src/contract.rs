@@ -20,6 +20,7 @@ mod settings;
 pub use asks::Asks;
 pub(crate) use asks::{answer, decided};
 pub use docs::{HostDocs, ToolRow};
+pub use hook_file::HookLayout;
 pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
@@ -174,17 +175,20 @@ pub struct HookDir {
 #[non_exhaustive]
 pub struct InstallSpec {
     /// The environment variable that moves the configuration directory (for
-    /// [`HookFormat::Gemini`], the home directory it is in:
+    /// Gemini CLI, the home directory it is in:
     /// [`InstallSpec::variable_names_home`]).
     pub dir_variable: &'static str,
+    /// Whether [`Self::dir_variable`] names a home directory that holds
+    /// [`Self::dir_name`] rather than the configuration directory itself.
+    pub dir_variable_is_home: bool,
     /// The directory's name under the home directory otherwise.
     pub dir_name: &'static str,
     /// The file in that directory the hook goes into.
     pub config_file: &'static str,
     /// The hook entries `moat init` writes into that file, one per event.
     pub hooks: &'static [HookSpec],
-    /// How that file lays out the entries.
-    pub hook_format: HookFormat,
+    /// How that file lays out the entries, as the code that edits it.
+    pub hook_file: HookLayout,
     /// Keys of that file the host rewrites itself for a person's choice (a
     /// model, a theme, a sign-in method) and that change no OpenMoat decision.
     /// When the pinned file drifted in these keys only, each holding a value
@@ -219,7 +223,7 @@ impl InstallSpec {
     /// Gemini CLI's `GEMINI_CLI_HOME` does.
     #[must_use]
     pub fn variable_names_home(&self) -> bool {
-        self.hook_format == HookFormat::Gemini
+        self.dir_variable_is_home
     }
 }
 
@@ -277,39 +281,6 @@ impl HookSpec {
     }
 }
 
-/// How a host's hook file is laid out. The CLI writes and reads each layout;
-/// like [`SandboxFormat`] the enum is exhaustive, so a new
-/// layout fails to compile at every CLI `match` until it has its arm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HookFormat {
-    /// `{"hooks": {"<Event>": [{"matcher", "hooks": [{type, command, args, timeout}]}]}}`
-    /// (Claude Code `settings.json`, Codex `hooks.json`).
-    Nested,
-    /// `{"version": 1, "hooks": {"<event>": [{"command": "<shell string>", "timeout", "failClosed"}]}}`
-    /// (Cursor `hooks.json`). Cursor is fail-open unless `failClosed` is set,
-    /// so every entry of this layout sets it.
-    Cursor,
-    /// OpenClaw `openclaw.json`: OpenMoat's plugin file in `plugins.load.paths`
-    /// and its `plugins.entries.openmoat`, at the location OpenClaw's own
-    /// variables give.
-    OpenClaw,
-    /// GitHub Copilot CLI: a hook file of OpenMoat's own in its hooks
-    /// directory, `{"version": 1, "hooks": {"<event>": [{"type": "command",
-    /// "bash", "powershell", "timeoutSec"}]}}`, with no `matcher` (the CLI
-    /// skips an entry whose matcher is empty).
-    Copilot,
-    /// pi: the hook file is OpenMoat's extension itself, which pi loads from
-    /// its agent directory's `extensions/`; the whole file is OpenMoat's.
-    Pi,
-    /// Gemini CLI `settings.json`: `{"hooks": {"<Event>": [{"matcher", "hooks":
-    /// [{name, type, command, timeout}]}]}}`, with `command` one shell string
-    /// (bash, PowerShell on Windows) and `timeout` in milliseconds. Gemini CLI
-    /// has no fail-closed key. Its [`InstallSpec::dir_variable`]
-    /// (`GEMINI_CLI_HOME`) names the home directory `dir_name` is in, not that
-    /// directory.
-    Gemini,
-}
-
 /// The OS sandbox OpenMoat writes into a host's own settings.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -342,7 +313,7 @@ pub enum SandboxFormat {
 
 /// A file besides the hook file that `moat init` writes for a host and the
 /// lock pins as one of its hook files ([`InstallSpec::extra_files`]). Like
-/// [`HookFormat`] the enum is exhaustive, so a new kind fails to compile in
+/// [`SandboxFormat`] the enum is exhaustive, so a new kind fails to compile in
 /// the CLI until it says where the file is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtraFile {

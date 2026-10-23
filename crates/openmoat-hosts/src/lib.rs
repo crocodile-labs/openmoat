@@ -16,7 +16,7 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Asks, Detect, ExtraFile, GUARD_BUDGET_S, Helper, HookDir, HookFormat, HookSpec, HostDocs,
+    Asks, Detect, ExtraFile, GUARD_BUDGET_S, Helper, HookDir, HookLayout, HookSpec, HostDocs,
     HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames, McpReader,
     McpServer, McpSpec, McpSyntax, Paths, ProcessSpec, ProjectSettingsSpec, Protect, RelaxedKey,
     SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow,
@@ -29,6 +29,7 @@ pub use host::openclaw::{
     STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
 };
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
+pub use wire::owned_file::{OwnedFile, OwnedFileError};
 
 use std::fmt;
 use std::str::FromStr;

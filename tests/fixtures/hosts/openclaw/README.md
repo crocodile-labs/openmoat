@@ -6,7 +6,7 @@ schemas in the OpenClaw 2026.10.5 npm package, so a guess is never mistaken for
 a capture.
 
 OpenClaw has no command hook. OpenMoat's plugin
-(`crates/openmoat-cli/integrations/openclaw/openmoat.mjs`) builds the JSON that
+(`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`) builds the JSON that
 `moat guard --host openclaw` reads, so the envelope is OpenMoat's own:
 
 | Field | Source |

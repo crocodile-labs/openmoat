@@ -2,7 +2,7 @@
 //!
 //! OpenClaw has no command hook; a plugin's `before_tool_call` handler sees each
 //! tool call before it runs (<https://docs.openclaw.ai/plugins/hooks/tool-policy>).
-//! OpenMoat's plugin (`integrations/openclaw/openmoat.mjs` in the CLI crate) runs
+//! OpenMoat's plugin (`host/openclaw/integration/openmoat.mjs`) runs
 //! `moat guard --host openclaw` with this JSON on stdin:
 //! `hook_event_name` (`before_tool_call`), OpenClaw's own `toolName`, `params`,
 //! `toolCallId`, `runId`, `toolKind`, `sessionId`, `sessionKey` and `agentId`,
@@ -22,16 +22,25 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, ExtraFile, GUARD_BUDGET_S, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec,
+    Asks, ExtraFile, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
     Location, McpFile, McpSpec, wrong_event,
 };
+use crate::wire::owned_file::OwnedFile;
 use crate::{HookEvent, HookRequest, Host, HostError};
+
+/// OpenMoat's plugin, which `moat init` writes to
+/// `<state dir>/openmoat/openmoat.mjs` with the binary's path filled in.
+static PLUGIN: OwnedFile = OwnedFile {
+    name: "OpenClaw plugin",
+    source: include_str!("openclaw/integration/openmoat.mjs"),
+    first_line: "// OpenMoat for OpenClaw.",
+};
 
 /// Seconds OpenClaw waits for OpenMoat's `before_tool_call` handler
 /// before it blocks the call (`plugins.entries.openmoat.hooks.timeouts`; its
 /// own default is 15 s). OpenClaw asks the person after the handler returns,
 /// so this only has to outlast the plugin's wait for `moat guard` (45 s,
-/// `integrations/openclaw/openmoat.mjs` in the CLI crate), which outlasts
+/// `host/openclaw/integration/openmoat.mjs`), which outlasts
 /// [`GUARD_BUDGET_S`].
 const HOOK_TIMEOUT_S: u64 = 60;
 const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
@@ -82,7 +91,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: STATE_DIR_NAME,
         config_file: CONFIG_FILE,
         hooks: HOOKS,
-        hook_format: HookFormat::OpenClaw,
+        hook_file: HookLayout::Plugin(&PLUGIN),
         location: Location::Custom(&location::LOCATE),
         pinned_form: Some(location::pinned_form),
         // OpenMoat's plugin, which OpenClaw loads from `plugins.load.paths`.

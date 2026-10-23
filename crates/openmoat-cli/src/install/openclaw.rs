@@ -1,7 +1,7 @@
 //! OpenClaw: OpenMoat's plugin file and its entries in `openclaw.json`.
 //!
 //! OpenClaw has no command hook, so `moat init` writes a standalone plugin
-//! (`integrations/openclaw/openmoat.mjs`, the `moat` path filled in) to
+//! (the host's [`HookLayout::Plugin`], the `moat` path filled in) to
 //! `<state dir>/openmoat/openmoat.mjs` and adds to `openclaw.json`:
 //!
 //! - the file to `plugins.load.paths`; a standalone file's plugin id is its
@@ -14,6 +14,8 @@
 //! `openclaw.json` is JSON5 to OpenClaw (the hosts crate says where it is). It is
 //! read as JSON5 ([`read`]) and written back as plain JSON, which keeps every
 //! value; a file with comments is not written, since that would drop them.
+//!
+//! [`HookLayout::Plugin`]: openmoat_hosts::HookLayout::Plugin
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,7 +23,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, bail};
 use serde_json::{Map, Value, json};
 
-use super::{HookState, HostConfig, Outcome};
+use openmoat_hosts::OwnedFile;
+
+use super::{HookState, HostConfig, Outcome, owned};
 use crate::home::write_private;
 
 /// The parsed `openclaw.json` at `path`, an empty object when there is none.
@@ -74,40 +78,28 @@ pub fn read_for_edit(path: &Path) -> Result<Value> {
 use openmoat_hosts::OPENCLAW_PLUGIN_ID as PLUGIN_ID;
 const PLUGIN_DIR: &str = "openmoat";
 const PLUGIN_FILE: &str = "openmoat.mjs";
-const SOURCE: &str = include_str!("../../integrations/openclaw/openmoat.mjs");
-/// The line `init` fills in with the binary's path.
-const BINARY_LINE: &str = "const MOAT = __MOAT_BINARY__;";
 
 /// Where `init` writes the plugin for `config`'s OpenClaw.
 pub fn plugin_path(config: &HostConfig) -> PathBuf {
     config.dir().join(PLUGIN_DIR).join(PLUGIN_FILE)
 }
 
-/// The plugin as `init` writes it for `binary`.
-pub fn plugin_text(binary: &Path) -> Result<String> {
-    let quoted = serde_json::to_string(&binary.to_string_lossy())?;
-    if SOURCE.matches(BINARY_LINE).count() != 1 {
-        bail!("the OpenClaw plugin source has no single `{BINARY_LINE}` line");
-    }
-    Ok(SOURCE.replacen(BINARY_LINE, &format!("const MOAT = {quoted};"), 1))
-}
-
-/// Whether the plugin file holds what `init` writes for `binary`.
-pub fn plugin_current(config: &HostConfig, binary: &Path) -> bool {
-    let wanted = plugin_text(binary).ok();
+/// Whether the plugin file holds `plugin` as `init` writes it for `binary`.
+pub fn plugin_current(config: &HostConfig, plugin: &OwnedFile, binary: &Path) -> bool {
+    let wanted = owned::text(plugin, binary).ok();
     fs::read_to_string(plugin_path(config)).ok() == wanted
 }
 
-pub fn write_plugin(config: &HostConfig, binary: &Path) -> Result<()> {
-    write_private(&plugin_path(config), plugin_text(binary)?.as_bytes())
+pub fn write_plugin(config: &HostConfig, plugin: &OwnedFile, binary: &Path) -> Result<()> {
+    write_private(
+        &plugin_path(config),
+        owned::text(plugin, binary)?.as_bytes(),
+    )
 }
 
 /// The binary an installed plugin file runs, for "points at another binary".
-fn plugin_binary(config: &HostConfig) -> Option<String> {
-    let text = fs::read_to_string(plugin_path(config)).ok()?;
-    let line = text.lines().find(|l| l.starts_with("const MOAT = "))?;
-    let literal = line.strip_prefix("const MOAT = ")?.strip_suffix(';')?;
-    serde_json::from_str(literal).ok()
+fn plugin_binary(config: &HostConfig, plugin: &OwnedFile) -> Option<String> {
+    plugin.binary(&fs::read_to_string(plugin_path(config)).ok()?)
 }
 
 fn desired_entry(config: &HostConfig) -> Value {
@@ -187,7 +179,7 @@ pub fn upsert(root: &mut Value, config: &HostConfig) -> Result<Outcome> {
 
 /// Whether OpenMoat's plugin for `binary` is in the parsed `openclaw.json`
 /// `root` and on disk as `init` writes it.
-pub fn state(config: &HostConfig, binary: &Path, root: &Value) -> HookState {
+pub fn state(config: &HostConfig, plugin: &OwnedFile, binary: &Path, root: &Value) -> HookState {
     let plugins = root.get("plugins");
     let entry = plugins.and_then(|p| p.pointer(&format!("/entries/{PLUGIN_ID}")));
     let paths = plugins
@@ -199,11 +191,11 @@ pub fn state(config: &HostConfig, binary: &Path, root: &Value) -> HookState {
     }
     let mut desired = root.clone();
     let current = matches!(upsert(&mut desired, config), Ok(Outcome::Unchanged));
-    if current && plugin_current(config, binary) {
+    if current && plugin_current(config, plugin, binary) {
         return HookState::Installed;
     }
     HookState::Stale {
-        command: plugin_binary(config).unwrap_or_else(|| "?".to_owned()),
+        command: plugin_binary(config, plugin).unwrap_or_else(|| "?".to_owned()),
     }
 }
 

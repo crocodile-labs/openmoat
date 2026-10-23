@@ -1,4 +1,4 @@
-//! Gemini CLI's `settings.json` entries (`HookFormat::Gemini`): the nested
+//! Gemini CLI's `settings.json` entries: the nested
 //! layout with one named hook whose `command` is a shell string and whose
 //! `timeout` is in milliseconds.
 //!
@@ -19,7 +19,8 @@ use serde_json::{Value, json};
 use crate::HookSpec;
 use crate::wire::hook_file::HookFile;
 
-/// [`crate::HookFormat::Gemini`].
+/// Gemini CLI's `settings.json` entries.
+#[derive(Debug)]
 pub(crate) struct Gemini;
 
 /// The entry's `name`: what Gemini CLI's `/hooks` panel lists.

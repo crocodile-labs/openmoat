@@ -1,5 +1,5 @@
 //! `moat bench` for OpenClaw: what OpenMoat's plugin sends, and how it reads
-//! the reply (`integrations/openclaw/openmoat.mjs` in the CLI crate).
+//! the reply (`host/openclaw/integration/openmoat.mjs`).
 
 use openmoat_core::Verdict;
 use serde_json::json;
