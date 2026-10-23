@@ -27,7 +27,7 @@ openmoat-hosts = { path = "crates/openmoat-hosts", version = "0.9.0" }
 openmoat-audit = { path = "crates/openmoat-audit", version = "0.9.0" }
 openmoat-proxy = { path = "crates/openmoat-proxy", version = "0.9.0" }
 serde = { version = "1", features = ["derive"] }
-serde-saphyr = { version = "1.3", default-features = false, features = ["deserialize", "serialize"] }
+serde-saphyr = { version = "2.0", default-features = false, features = ["deserialize", "serialize"] }
 # `float_roundtrip`: a number OpenMoat reads from a host's config file and
 # writes back keeps its exact value.
 serde_json = { version = "1", features = ["float_roundtrip"] }
