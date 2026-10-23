@@ -313,4 +313,11 @@ conformance fixture before the fix is published.
 
 ## License
 
-MIT or Apache-2.0, at your option.
+OpenMoat is free and open source. You can use it, change it and share it, at
+work or at home, under either of two common licenses. Pick whichever suits you:
+
+- the [MIT License](LICENSE), short and simple;
+- the [Apache License 2.0](LICENSE-APACHE), which also gives you an explicit patent
+  grant.
+
+You don't need to ask us or tell us which one you chose.
