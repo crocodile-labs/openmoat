@@ -26,7 +26,9 @@
 # you did not set is asked for at the terminal without echo (Enter skips the
 # step); it is given only to that agent's process, never on a command line or in
 # a file. Gemini CLI uses GEMINI_API_KEY (SMOKE_GEMINI_MODEL picks the model the
-# drift step writes, default gemini-2.5-flash). Copilot uses COPILOT_GITHUB_TOKEN,
+# drift step writes, default gemini-2.5-flash): Google ended Gemini CLI's "Sign in
+# with Google" for individual accounts on 2026-06-18 (Antigravity CLI replaces it
+# there), so a key from Google AI Studio, or Vertex AI, is the way to sign in. Copilot uses COPILOT_GITHUB_TOKEN,
 # a fine-grained token with the "Copilot Requests" permission. pi uses
 # SMOKE_PI_PROVIDER (and SMOKE_PI_MODEL) when set, else the first of anthropic,
 # openai and google whose key (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY)
@@ -567,7 +569,7 @@ gemini_ready() {
     gemini_state="Gemini CLI was not set up (see above)"
     ask_secret gemini_key "Gemini API key, from aistudio.google.com/apikey"
     if [ -z "$gemini_key" ]; then
-        gemini_state="set GEMINI_API_KEY or type it when asked: Gemini CLI's Google sign-in is kept in your own ~/.gemini, which this script does not copy"
+        gemini_state="set GEMINI_API_KEY (a Google AI Studio key) or type it when asked: Gemini CLI no longer signs individual accounts in with Google, and a sign-in in your own ~/.gemini is not copied here"
         echo "  SKIP  $gemini_state"
         return 1
     fi

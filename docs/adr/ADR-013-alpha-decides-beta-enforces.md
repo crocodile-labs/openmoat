@@ -22,7 +22,7 @@ months, while the risk ADR-003 named (overclaiming) can be handled by labelling.
   - **Alpha** (`0.1.0-alpha.N`): decide-only. Installers for macOS (arm64, x64), Linux
     (x64, arm64, static musl) and Windows (x64); repo-level policy with `moat trust`; a
     conservative PowerShell tokenizer. Exit: installs from a tag on every target, the
-    conformance suite green on all CI platforms, and a week of the owner's daily use with
+    conformance suite green on all CI platforms, and a week of the maintainer's daily use with
     every false positive turned into a fixture.
   - **Beta** (`0.1.0-beta.N`): enforcement. `moat exec` (Seatbelt, Landlock + seccomp),
     the egress proxy, session taint, the MCP stdio proxy with description pinning. Exit:

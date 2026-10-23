@@ -8,7 +8,7 @@
 //! tools are not affected.
 //!
 //! `moat mcp proxy` (`relay.rs`, `tools.rs`) sits between the host and one stdio
-//! server, pins each tool's name, description and input schema on first sight, and
+//! server, pins each tool's whole definition on first sight (`tools.rs`), and
 //! hides a tool whose definition changed until a person accepts it. `wrap.rs`
 //! points a server's definition at the proxy and back.
 

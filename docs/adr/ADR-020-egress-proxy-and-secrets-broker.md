@@ -1,6 +1,6 @@
 # ADR-020: One egress proxy, and secrets the agent never holds
 
-Status: accepted · Date: 2026-10-06 · Decided by the owner
+Status: accepted · Date: 2026-10-06 · Decided by the maintainer
 
 ## Context
 

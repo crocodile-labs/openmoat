@@ -1,6 +1,6 @@
 # ADR-018: Enforcement tiers: the host's sandbox by default, isolation for strict
 
-Status: accepted · Date: 2026-10-06 · Decided by the owner · Refines the `moat exec` part of ADR-003 and the beta scope of ADR-013
+Status: accepted · Date: 2026-10-06 · Decided by the maintainer · Refines the `moat exec` part of ADR-003 and the beta scope of ADR-013
 
 ## Context
 

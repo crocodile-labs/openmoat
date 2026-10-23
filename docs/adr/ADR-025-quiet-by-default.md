@@ -1,6 +1,6 @@
 # ADR-025: Quiet by default: OpenMoat blocks what must never happen and leaves every other decision to the agent
 
-Status: accepted · Date: 2026-10-12 · Decided by the owner (0.5.0-rc.1 dogfood week)
+Status: accepted · Date: 2026-10-12 · Decided by the maintainer (0.5.0-rc.1 dogfood week)
 
 ## Context
 
@@ -21,7 +21,7 @@ None of the 191 asks stopped an attack. The four denies that stopped something r
 from deny rules: `kernel-self`, `env-dump` and `env-secrets`. Each ask repeated a question
 the agent itself would put to the person, through Claude Code's permission prompt, auto
 mode, or Codex's approval policy. Hosts that cannot ask (Codex, the Continue CLI, Cursor's
-file tools) received every ask as a deny. In the owner's words, users would uninstall.
+file tools) received every ask as a deny. In the maintainer's words, users would uninstall.
 
 The protection does not depend on those asks:
 

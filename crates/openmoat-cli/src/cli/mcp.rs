@@ -12,9 +12,10 @@ pub enum McpCommand {
     /// interactive terminal, and over a drifted lock.
     Accept(McpAcceptArgs),
     /// Run one stdio MCP server through OpenMoat (started by the agent from its
-    /// configuration, not by people): pin each tool's description and input schema,
-    /// hide a tool whose definition changed until `openmoat mcp accept`, and record every
-    /// tool call in the audit log.
+    /// configuration, not by people): pin each tool's whole definition (title,
+    /// description, input and output schemas, annotations and every other field), hide a
+    /// tool whose definition changed until `openmoat mcp accept`, and record every tool
+    /// call in the audit log.
     Proxy(McpProxyArgs),
     /// Point stdio MCP servers in the agents' user configuration at `openmoat mcp proxy`,
     /// backing the files up first. Refused unless run from an interactive terminal.

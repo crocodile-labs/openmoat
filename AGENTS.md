@@ -5,7 +5,7 @@ purpose; each section links to the detail. `CLAUDE.md` points here.
 
 ## 1. What this is
 
-OpenMoat (command `openmoat`; `moat` still runs it for a few releases) is a security kernel for AI agents. It sits between an agent (Claude Code,
+OpenMoat (command `openmoat`; `moat` still runs it for a few releases) is a security layer for AI coding agents. It sits between an agent (Claude Code,
 Codex, …) and the machine, decides whether each tool call may run, and records it.
 The operating system enforces the policy only where a host sandbox or `openmoat run`
 applies (ADR-018, `docs/SANDBOX.md`); elsewhere the hook's decision is the only check.

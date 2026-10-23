@@ -46,7 +46,7 @@ tier (ADR-018) showed where that cannot hold:
 
 ## Amendment 2026-10-06 (#203)
 
-Decided by the owner. The policy keeps the project's `.git` from writes
+Decided by the maintainer. The policy keeps the project's `.git` from writes
 (`!${project}/.git/**`), and Claude Code user settings cannot name the project, so
 the generator denied every `.git` and `git commit` failed in Claude Code's sandbox.
 Commits are a core Claude Code workflow, so the Claude Code backend now denies only

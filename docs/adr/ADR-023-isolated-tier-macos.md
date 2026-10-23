@@ -1,6 +1,6 @@
 # ADR-023: Isolated tier on macOS: an Apple Virtualization guest, built on Apple's `containerization`
 
-Status: accepted · Date: 2026-10-09 · Decided by the owner · Refines ADR-018 for macOS; implementation of #175
+Status: accepted · Date: 2026-10-09 · Decided by the maintainer · Refines ADR-018 for macOS; implementation of #175
 
 ## Context
 
@@ -92,7 +92,7 @@ Top three reasons:
    Lima's 5–8 s would push users to the Lightweight tier, where the ADR-018
    claims are weaker.
 
-What the owner must accept:
+What the maintainer must accept:
 
 - **Minimum macOS version: 26.0** (`containerization` is 26.0+). On macOS 25
   and earlier, `moat run --isolate` keeps refusing with the stub this PR
@@ -106,7 +106,7 @@ What the owner must accept:
   `container` binary's SHA-256 in `policy.lock`; drift denies for the session
   (ADR-006), as a drifted policy does.
 - **Update story:** a new `container` release is picked up by `moat doctor`,
-  which re-pins after an owner-approved `--accept` in a terminal. Never
+  which re-pins after a person-approved `--accept` in a terminal. Never
   silently.
 - **Binary size:** OpenMoat gains a thin FFI wrapper (one file, feature-gated
   under `#[cfg(target_os = "macos")]`), no new Rust dependency crate at
@@ -178,7 +178,7 @@ Drift denies for the session, as a drifted policy does.
 
 - The Isolated tier reaches macOS 26.0+. Older macOS stays on Standard
   (host-sandbox + hook) or Lightweight (generated Seatbelt).
-- Owner accepts one new user-side dependency (`container`), one new minimum
+- The maintainer accepts one new user-side dependency (`container`), one new minimum
   macOS version, and a slower cold start than Linux (~0.8 s versus ~0.1 s).
 - The threat model gains one row: "VM escape in Virtualization.framework",
   listed as residual risk shared with every other VM-based sandbox on macOS.
@@ -204,7 +204,7 @@ spec, and prove the executing differential fixtures still agree.
 ## Note (2026-10-12): what Apple's `container` runs and where its kernel comes from
 
 This note corrects facts the decision above relies on. It does not change the
-decision; the questions at the end are for the owner. The facts were checked on
+decision; the questions at the end are for the maintainer. The facts were checked on
 2026-10-12 against [`apple/container`](https://github.com/apple/container) release
 1.5.0 and its `main` branch, and [`apple/containerization`](https://github.com/apple/containerization)
 `main`.
@@ -271,7 +271,7 @@ The trust assumptions the implementation must state instead:
 - The `vminit` image is pinned by digest.
 - Kata Containers' kernel build and release process is part of the trusted base.
 
-Open questions for the owner (not decided here):
+Open questions for the maintainer (not decided here):
 
 - With reasons 1 and 2 weakened, does option (c) still beat option (a)? Under both,
   OpenMoat now pins the kernel itself; (a) has no apiserver.
@@ -282,4 +282,4 @@ Open questions for the owner (not decided here):
 - Use the default Kata kernel pinned by digest, or build one from
   `Containerization`'s kernel configuration and host it next to the release?
 - Cold start needs measuring again, with the method and results recorded where the
-  owner decides.
+  maintainer decides.

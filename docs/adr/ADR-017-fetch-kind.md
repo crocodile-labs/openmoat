@@ -1,6 +1,6 @@
 # ADR-017: `fetch`, a narrower kind of `net` for a host's own fetch tool
 
-Status: accepted · Date: 2026-10-05 · Decided by the owner
+Status: accepted · Date: 2026-10-05 · Decided by the maintainer
 
 ## Context
 
