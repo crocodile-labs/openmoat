@@ -83,7 +83,8 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 | `docs/THREAT_MODEL.md` §5 | by hand: the agent's column in the "When the hook fails" table and its ungoverned tools |
 | `changelog.d/<pr>-<slug>.md` | a fragment whose first line is `### Added`, then the entry ([CONTRIBUTING.md](../CONTRIBUTING.md#changelog)) |
 
-`<module>` is the agent's id with `-` written as `_` (`copilot-cli` is `copilot_cli`);
+`<module>` is the agent's id with `-` written as `_` (`copilot-cli` is `copilot_cli`;
+the Continue CLI's id `continue` is the exception, `continue_cli`; `Host::module` names it);
 the docs test reads the agent's code from `host/<module>.rs` and `host/<module>/`.
 
 The compiler points at every other `match` on `Host` that needs a new arm. Lock pinning,

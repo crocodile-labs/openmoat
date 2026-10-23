@@ -93,12 +93,12 @@ These are known limits, documented in `docs/THREAT_MODEL.md` §4–5 and
 
 | Not yet covered | Status |
 |---|---|
-| OS enforcement where no sandbox applies (Claude Code's and Cursor's file tools, `WebFetch` and MCP calls; commands Cursor runs outside its sandbox; native Windows): a report that an allowed call could do harm because nothing below the decision stops it (a misjudged call is a policy bypass, in scope) | `openmoat run`; Windows enforcement (#135), Isolated tier (#174, #175) |
+| OS enforcement where no sandbox applies (Claude Code's and Cursor's file tools, `WebFetch` and MCP calls; commands Cursor runs outside its sandbox; every call of the hook-only agents OpenClaw, GitHub Copilot CLI, pi and Gemini CLI; native Windows): a report that an allowed call could do harm because nothing below the decision stops it (a misjudged call is a policy bypass, in scope) | `openmoat run`; Windows enforcement (#135), Isolated tier (#174, #175) |
 | Sandbox gaps listed as gaps in `docs/EVIDENCE.md` or as losses by `openmoat sandbox show` (for example, on Linux `openmoat run` cannot deny `.env` inside the project) | tracked in the issue each one names |
 | HTTPS secret injection, and per-host method and path rules, in `openmoat proxy` | #247 |
 | Data sent to a host the policy allows (`api.github.com`, registries) by an allowed or approved command, including project scripts such as `npm test` | known limit; session taint asks for network after a secret read |
 | PowerShell / cmd tokenisation | Claude Code `PowerShell` is always `unparseable`, which the default policy defers to the agent's own prompt (ADR-025); other PowerShell lines are lexed as POSIX and fall through to the catch-all default |
-| Hosts that proceed when the hook binary is missing or killed | host limitation; `openmoat status` reports a missing hook |
+| Hosts that proceed when the hook binary is missing or killed, or when the hook times out (GitHub Copilot CLI, Gemini CLI) | host limitation; `openmoat status` reports a missing hook |
 | Tools no hook reports (Codex web search and other hosted tools) | host limitation: the hook never sees them |
 | An attacker with root or the user's own shell, a compromised release pipeline, prompt-injection detection in text | not a target (THREAT_MODEL §4) |
 | Agents running in a vendor's cloud rather than on the host | not a target |

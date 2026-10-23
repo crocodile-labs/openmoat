@@ -16,7 +16,7 @@ The `openmoat` binary (and `moat`, `src/bin/moat.rs`): grammar (`cli.rs`), comma
 ## Test
 - `cargo test -p openmoat --all-features`: unit tests and one e2e target, `tests/e2e/` (one module per area, registered in `e2e/main.rs`; `common` is the shared helper; `hosts/` is the suite every host runs, one row per host in `hosts/rows/`).
 - E2e tests run the real binary with an isolated `HOME` and `MOAT_HOME`, no network. Run with `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `COPILOT_HOME`, `PI_CODING_AGENT_DIR`, `MOAT_HOME` unset.
-- `OPENMOAT_TEST_UPDATE_GOLDEN=1` rewrites `tests/fixtures/sandbox/`; review the diff.
+- `OPENMOAT_TEST_UPDATE_GOLDEN=1` rewrites the repository's `tests/fixtures/sandbox/` (not under this crate); review the diff.
 
 ## Do not
 - Run `openmoat init` against a real `~/.claude` (or any real agent directory) where a session is active.

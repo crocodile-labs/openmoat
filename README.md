@@ -27,6 +27,20 @@ pi or Gemini CLI run commands on their own machine and want one set of rules acr
 them. It is one Rust binary (`openmoat`) for macOS, Linux and Windows. No AI model
 decides, and nothing leaves your machine unless you export it.
 
+<p align="center">
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/Claude_Code-D97757?style=flat-square&logo=claude&logoColor=white" alt="Claude Code"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/Codex-412991?style=flat-square&logo=openai&logoColor=white" alt="Codex"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/Cursor-000000?style=flat-square&logo=cursor&logoColor=white" alt="Cursor"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/OpenClaw-E5484D?style=flat-square" alt="OpenClaw"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/GitHub_Copilot_CLI-000000?style=flat-square&logo=githubcopilot&logoColor=white" alt="GitHub Copilot CLI"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/pi-6E56CF?style=flat-square" alt="pi"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini CLI"></a>
+  <br>
+  <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS"></a>
+  <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux"></a>
+  <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/Windows-0078D4?style=flat-square" alt="Windows"></a>
+</p>
+
 [Website](https://openmoat.dev) · [Docs](https://openmoat.dev/docs/) · [Quick start](https://openmoat.dev/docs/quickstart/) · [How it decides](https://openmoat.dev/docs/how-it-decides/) · [Limits](https://openmoat.dev/docs/limits/) · [Blog](https://openmoat.dev/blog/) · [Changelog](CHANGELOG.md)
 
 ![Normal work is allowed; a prompt injection asking Claude Code and Codex to upload the SSH key is blocked, also in base64 and through a shell variable; a package install goes to the agent's own prompt; switching OpenMoat off is blocked; every decision is in the log](docs/assets/demo.gif)

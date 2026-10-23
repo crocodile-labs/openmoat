@@ -187,18 +187,26 @@ fn run_scenario(
         return Ok(None);
     };
     let mut answers = Vec::new();
+    let mut causes = Vec::new();
     for (i, (call, payload)) in calls.iter().zip(&payloads).enumerate() {
         let reply = hook::send(&mut target.command(scratch, host), payload);
         if verbose {
             eprintln!("> {session}#{i}\n{payload}\n< {}", reply.describe());
         }
-        answers.push(hosts::classify(host, call, &reply));
+        let answer = hosts::classify(host, call, &reply);
+        causes.push((answer == Answer::Error).then(|| reply.cause()));
+        answers.push(answer);
     }
     let mut problems = Vec::new();
     let verdicts = match target {
-        Target::OpenMoat { audit, .. } => {
-            recorded(audit, &session, &calls, &answers, host, &mut problems)?
-        }
+        Target::OpenMoat { audit, .. } => recorded(
+            audit,
+            &session,
+            &calls,
+            (&answers, &causes),
+            host,
+            &mut problems,
+        )?,
         Target::Hook(_) => answers.iter().map(|&a| (a, None)).collect(),
     };
     Ok(Some(compare(
@@ -206,9 +214,19 @@ fn run_scenario(
         host,
         &calls,
         &verdicts,
+        &causes,
         problems,
         matches!(target, Target::OpenMoat { .. }),
     )))
+}
+
+/// The answer's word, with why the host reads it as an error when it does
+/// (`cause`), so a mismatch says what the hook did.
+fn read_as(answer: Answer, cause: Option<&String>) -> String {
+    match cause {
+        Some(cause) => format!("{} ({cause})", answer.word()),
+        None => answer.word().to_owned(),
+    }
 }
 
 /// OpenMoat's verdict and rules for each step, from the audit log; a reply the
@@ -217,7 +235,7 @@ fn recorded(
     audit: &Store,
     session: &str,
     calls: &[Call],
-    answers: &[Answer],
+    (answers, causes): (&[Answer], &[Option<String>]),
     host: Host,
     problems: &mut Vec<String>,
 ) -> Result<Vec<(Answer, Option<Vec<String>>)>> {
@@ -236,7 +254,7 @@ fn recorded(
             problems.push(format!(
                 "step {i}: kernel said {}, host reads {}",
                 event.verdict.as_str(),
-                answer.word()
+                read_as(*answer, causes.get(i).and_then(Option::as_ref))
             ));
         }
     }
@@ -253,6 +271,7 @@ fn compare(
     host: Host,
     calls: &[Call],
     verdicts: &[(Answer, Option<Vec<String>>)],
+    causes: &[Option<String>],
     mut problems: Vec<String>,
     markers: bool,
 ) -> Run {
@@ -270,19 +289,18 @@ fn compare(
         let ok = got.meets(want);
         let gap = step.gap.as_ref().filter(|_| markers);
         let rules = rules.as_ref();
+        let got_word = read_as(*got, causes.get(i).and_then(Option::as_ref));
         match (gap, ok) {
             (Some(issue), false) => known.push(format!(
-                "step {i} {issue}: expected {}, got {} {rules:?}",
+                "step {i} {issue}: expected {}, got {got_word} {rules:?}",
                 want.word(),
-                got.word()
             )),
             (Some(issue), true) => problems.push(format!(
                 "step {i}: marked as gap {issue} but passes; remove the marker"
             )),
             (None, false) => problems.push(format!(
-                "step {i}: expected {}, got {}",
+                "step {i}: expected {}, got {got_word}",
                 want.word(),
-                got.word()
             )),
             (None, true) => {
                 if let (Some(rule), Some(rules)) = (&step.rule, rules)

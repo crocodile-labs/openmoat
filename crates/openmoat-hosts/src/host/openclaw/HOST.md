@@ -46,7 +46,9 @@ answer.
   unless `OPENCLAW_CONFIG_PATH` puts it elsewhere ([`location.rs`](location.rs)).
 - OpenMoat's plugin, `openmoat/openmoat.mjs` in that directory, loaded from
   `plugins.load.paths`; the lock pins it with `openclaw.json`.
-- MCP servers: `mcp.servers` in `openclaw.json`; no project file.
+- MCP servers: `mcp.servers` in `openclaw.json`; no project file. The lock pins
+  `openclaw.json` without them (its `pinned_form`, recorded per file as `pinned_forms`)
+  and each server by itself.
 - No project settings are read.
 
 ## When the hook fails

@@ -51,7 +51,7 @@ Windows), and reads each reply by that host's hook protocol
 | `ask` | exit 0, `permissionDecision: ask` | none: Codex runs the call (`passthrough`) | exit 0, `permission: ask` on a shell or MCP call; on `preToolUse` Cursor runs the call (`passthrough`) | exit 0, `decision: ask` (OpenClaw's approval request) |
 | `deny` | exit 2, or `permissionDecision: deny` (or `decision: block`) | same; exit 2 only with a reason on stderr | exit 2, or `permission: deny` | exit 2 with `decision: deny` |
 | `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none | exit 0 with no output, or `decision: allow`: OpenClaw's own checks decide |
-| `error` | any other exit, a timeout (10 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) | the same, or exit 0 with any other output (the plugin blocks the call) |
+| `error` | any other exit, a timeout (45 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) | the same, or exit 0 with any other output (the plugin blocks the call) |
 
 | Answer | GitHub Copilot CLI | pi (OpenMoat's extension) | Gemini CLI |
 |---|---|---|---|
@@ -74,7 +74,10 @@ Every hook run (OpenMoat's too) gets the payload on stdin, the throwaway project
 its working directory, and an environment of only `PATH`, `HOME` and `USERPROFILE`
 (both the throwaway home) and, on Windows, `SYSTEMROOT`: no agent configuration
 variable (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `MOAT_HOME`) and no secret of yours.
-A hook that does not exit within 10 s is killed. `--verbose` prints that environment
+A hook that does not exit within 45 s is killed: past `openmoat guard`'s own 30 s
+budget, after which it denies by itself, as every host's hook timeout is. A step
+scored `error` names why: the exit code with the start of stdout and stderr, the
+time-out or the start failure. `--verbose` prints that environment
 and every payload with the reply on stderr; `--format json` prints the report for
 scripts. `openmoat bench` exits 0 whenever it ran, whatever the scores; 64 on a usage
 error (`--hook` without `--host`).

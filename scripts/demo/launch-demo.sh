@@ -3,8 +3,8 @@
 # SSH key. OpenMoat blocks it under one policy and the audit trail shows what happened.
 #
 # Everything runs in a throwaway HOME that is deleted on exit. The agent-config
-# variables are unset for every moat call, so your own ~/.moat, ~/.claude, ~/.codex
-# and ~/.cursor are never read or written. Nothing is sent over the network; the
+# variables are unset for every moat call, so your own ~/.moat and agent directories
+# (~/.claude, ~/.codex, ~/.cursor and the others) are never read or written. Nothing is sent over the network; the
 # tool calls are fed to `openmoat guard` exactly as Claude Code and Codex send them.
 #
 # Usage: scripts/demo/launch-demo.sh [path/to/openmoat]
@@ -44,6 +44,7 @@ EOF
 # moat with the sandbox as home and no inherited agent configuration.
 moat() {
     env -u CLAUDE_CONFIG_DIR -u CODEX_HOME -u CURSOR_CONFIG_DIR -u MOAT_HOME \
+        -u OPENCLAW_STATE_DIR -u COPILOT_HOME -u PI_CODING_AGENT_DIR -u GEMINI_CLI_HOME \
         HOME="$home" USERPROFILE="$home" "$bin" "$@"
 }
 
