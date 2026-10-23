@@ -12,6 +12,7 @@
   <a href="https://github.com/crocodile-labs/openmoat/releases"><img src="https://img.shields.io/github/v/release/crocodile-labs/openmoat?style=flat-square&label=release" alt="Latest release"></a>
   <a href="https://crates.io/crates/openmoat"><img src="https://img.shields.io/crates/v/openmoat?style=flat-square&label=crates.io" alt="crates.io"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue?style=flat-square" alt="License: Apache-2.0 or MIT"></a>
+  <a href="https://www.bestpractices.dev/projects/15817"><img src="https://www.bestpractices.dev/projects/15817/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://www.reddit.com/r/openmoat/"><img src="https://img.shields.io/badge/reddit-r%2Fopenmoat-FF4500?style=flat-square&logo=reddit&logoColor=white" alt="r/openmoat"></a>
 </p>
 
