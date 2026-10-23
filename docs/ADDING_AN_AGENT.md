@@ -81,7 +81,7 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 | `crates/openmoat-cli/tests/e2e/<module>.rs` | end-to-end tests, with a `mod <module>;` line in `crates/openmoat-cli/tests/e2e/main.rs`, and the agent's payload shape in `crates/openmoat-cli/tests/e2e/host_failures.rs` |
 | `README.md`, `docs/INSTALL.md`, `docs/ARCHITECTURE.md` §3, `docs/THREAT_MODEL.md` §5 | generated, not edited: run `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` to write the "Supported agents" row, the configuration directory row, the tool mapping rows and the known gaps line from the spec; then `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance` for `docs/COVERAGE.md` |
 | `docs/THREAT_MODEL.md` §5 | by hand: the agent's column in the "When the hook fails" table and its ungoverned tools |
-| `CHANGELOG.md` | an `### Added` line under Unreleased |
+| `changelog.d/<pr>-<slug>.md` | a fragment whose first line is `### Added`, then the entry ([CONTRIBUTING.md](../CONTRIBUTING.md#changelog)) |
 
 `<module>` is the agent's id with `-` written as `_` (`copilot-cli` is `copilot_cli`);
 the docs test reads the agent's code from `host/<module>.rs` and `host/<module>/`.

@@ -68,7 +68,7 @@ is pushed to `main` directly.
 5. **Open the PR with the template.** The title follows Conventional Commits
    (`fix(cli): …`); **Testing** and **Security impact** are required sections, and the
    **Release note** line feeds `CHANGELOG.md`. Labels are set for you (below).
-   A user-visible change adds its line under `## [Unreleased]` (see "Changelog").
+   A user-visible change adds a fragment in `changelog.d/` (see "Changelog").
 6. **Answer the review.** `moat-reviewer` posts a first pass; address or answer its
    🔴 and 🟠 items. A maintainer makes the call.
 
@@ -144,13 +144,23 @@ reviewer can read; a generated wall of text is a reason to ask for a rewrite, no
 
 ## Changelog
 
-`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Pull requests do not edit it: each user-visible change adds one file to
+[`changelog.d/`](changelog.d/README.md), so parallel PRs never conflict on the same
+block, and the release folds the files in.
 
-- One line per change, under `### Added`, `### Changed`, `### Fixed`, `### Removed` or
-  `### Security`, each heading once per version. Say what changed for the user, not how;
-  the detail belongs in the PR and the docs.
-- End the line with its pull request: `([#123](https://github.com/crocodile-labs/openmoat/pull/123))`.
-- Internal changes (CI, refactors, tests) get no line; write "none" as their Release note.
+- Name the file `<pr>-<slug>.md` (`712-pi-dialog-timeout.md`): open the PR first, then
+  add the fragment with its number.
+- Its first line is the heading the entry goes under: `### Security`, `### Added`,
+  `### Changed`, `### Removed` or `### Fixed`. Then one line per change, `- …`. Say what
+  changed for the user, not how; the detail belongs in the PR and the docs.
+- End each line with its pull request: `([#123](https://github.com/crocodile-labs/openmoat/pull/123))`.
+- `python3 scripts/changelog-check.py` fails on a fragment that breaks these rules.
+- At release time `python3 scripts/changelog-assemble.py` appends every fragment's lines
+  to its heading under `## [Unreleased]` (adding the heading if it is missing, each
+  heading once per version) and deletes the fragments; `--dry-run` prints the result
+  instead. Entries already in `CHANGELOG.md` stay where they are.
+- Internal changes (CI, refactors, tests) get no fragment; write "none" as their Release note.
 - The version headings are links; the compare links at the end of the file name each
   version's range (`[0.2.0]: …/compare/v0.1.1...v0.2.0`, `[Unreleased]: …/compare/v0.2.0...HEAD`).
 
@@ -267,7 +277,8 @@ touch the manifests or the workflow run `dist plan` only. Running the workflow b
 1. Dry-run the workflow on `main` if the build changed since the last release.
 2. In a PR (`build: release vX.Y.Z`): bump `version` in `[workspace.package]` and
    the four `openmoat-*` entries of `[workspace.dependencies]` in `Cargo.toml`, run
-   `cargo check` to update `Cargo.lock` (and `fuzz/Cargo.lock`), move the `[Unreleased]`
+   `cargo check` to update `Cargo.lock` (and `fuzz/Cargo.lock`), fold the fragments with
+   `python3 scripts/changelog-assemble.py`, move the `[Unreleased]`
    entries of `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD` (add its compare
    link at the end of the file and point `[Unreleased]` at the new tag), and update the
    version in the README status line and in `docs/ROADMAP.md` "Where it is today"
@@ -324,8 +335,8 @@ CI job runs [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-che
 - **against the PR's base commit**, blocking: a PR that breaks the API fails. If the
   break is intended, say so in the PR's **Release note** (what breaks and what to use
   instead), ask a maintainer to add the `breaking` label, and re-run the job; it then
-  passes with a warning. Under `[Unreleased]` in `CHANGELOG.md` the entry goes in
-  `### Changed` or `### Removed` and starts with **Breaking** and the crate.
+  passes with a warning. Its changelog fragment goes under `### Changed` or
+  `### Removed` and the entry starts with **Breaking** and the crate.
 - **against the latest crates.io release**, reporting only, except on a release PR
   (`build: release …`), where it blocks until the version bump covers every break
   since that release.
