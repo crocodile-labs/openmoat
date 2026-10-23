@@ -130,7 +130,11 @@ reviewer can read; a generated wall of text is a reason to ask for a rewrite, no
   `openmoat-cli`.
 - `openmoat-core` has no I/O, no `unsafe`, and no internal dependencies; CI builds it
   for `wasm32` to prove it.
-- Files stay under 500 lines; functions under 200 (clippy enforces the latter).
+- Rust files stay at or under 500 lines of code; functions under 200 (clippy enforces
+  the latter). `crates/openmoat-core/tests/architecture.rs` counts the code lines of
+  every `.rs` file in each crate's `src/` and `tests/`: blank and comment lines, files
+  under `fixtures/`, `golden/`, `goldens/` or `snapshots/`, and files marked
+  `@generated` in their first lines are not counted. The cap only goes down.
 - Comments explain *why*. Code says *what*.
 - A new dependency needs a sentence in the PR on why the standard library or an
   existing dependency does not cover it. `cargo-deny` checks licences and advisories.
