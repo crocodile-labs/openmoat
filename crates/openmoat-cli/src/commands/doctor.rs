@@ -412,6 +412,8 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
         }
         match state {
             HookState::Installed => {
+                // the files the lock pins with it (OpenClaw's plugin), as integrity lists them
+                hook_files.extend(config.extra_files());
                 hook_files.push(config.settings_path.clone());
                 report.line(
                     Area::Hook,
