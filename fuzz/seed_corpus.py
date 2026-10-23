@@ -33,7 +33,8 @@ for path in glob.glob(os.path.join(ROOT, "tests", "conformance", "*.yaml")):
 for command in commands:
     write("decide_shell", command)
     write("literal_pattern", command)
-for path in glob.glob(os.path.join(ROOT, "tests", "fixtures", "hosts", "*", "*.json")):
+HOSTS = os.path.join(ROOT, "crates", "openmoat-hosts", "src", "host")
+for path in glob.glob(os.path.join(HOSTS, "*", "fixtures", "*.json")):
     with open(path, "rb") as f:
         write("host_payload", f.read())
 with open(os.path.join(ROOT, "crates", "openmoat-core", "policies", "default-v1.yaml"), "rb") as f:
@@ -67,7 +68,7 @@ for doc in [
     b"[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
 ]:
     write("openclaw_json5", doc)
-for path in glob.glob(os.path.join(ROOT, "tests", "fixtures", "hosts", "openclaw", "*.json")):
+for path in glob.glob(os.path.join(HOSTS, "openclaw", "fixtures", "*.json")):
     with open(path, "rb") as f:
         write("openclaw_json5", f.read())
 print(f"seeded {len(commands)} commands")

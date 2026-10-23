@@ -2,10 +2,13 @@ use openmoat_core::Verdict;
 
 use super::*;
 
-const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/hosts");
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host");
 
+/// The payload `name` of the host with id `host`, from its folder.
 fn fixture(host: &str, name: &str) -> String {
-    std::fs::read_to_string(format!("{FIXTURES}/{host}/{name}.json")).unwrap()
+    let host = Host::EVERY.into_iter().find(|h| h.id() == host).unwrap();
+    let module = host.module();
+    std::fs::read_to_string(format!("{FIXTURES}/{module}/fixtures/{name}.json")).unwrap()
 }
 
 #[test]

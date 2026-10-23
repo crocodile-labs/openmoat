@@ -4,7 +4,7 @@ use super::*;
 
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/hosts/cursor"
+    "/src/host/cursor/fixtures"
 );
 
 fn fixture(name: &str) -> String {

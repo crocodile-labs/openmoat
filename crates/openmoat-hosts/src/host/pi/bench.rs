@@ -1,5 +1,5 @@
 //! `moat bench` for pi: what OpenMoat's extension sends, and how it reads the
-//! reply (`integrations/pi/openmoat.js` in the CLI crate).
+//! reply (`host/pi/integration/openmoat.js`).
 
 use serde_json::json;
 

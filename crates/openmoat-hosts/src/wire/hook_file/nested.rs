@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 use super::HookFile;
 use crate::HookSpec;
 
-/// [`crate::HookFormat::Nested`].
+/// Claude Code's `settings.json` and Codex's `hooks.json` entries.
+#[derive(Debug)]
 pub(crate) struct Nested;
 
 impl HookFile for Nested {

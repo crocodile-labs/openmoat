@@ -42,6 +42,17 @@ macro_rules! hosts {
             }
         }
 
+        impl Host {
+            /// The host's module under `openmoat-hosts/src/host/`, whose
+            /// folder holds its fixtures (`host/<module>/fixtures/`).
+            #[must_use]
+            pub const fn module(self) -> &'static str {
+                match self {
+                    $(Host::$variant => stringify!($module),)*
+                }
+            }
+        }
+
         /// The adapter for the format `host` sends: its own, or the one of
         /// the host it speaks.
         pub(crate) fn adapter(host: Host) -> &'static dyn $crate::contract::HostAdapter {

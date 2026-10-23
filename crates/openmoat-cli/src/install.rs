@@ -6,7 +6,7 @@ mod dirs;
 mod hook_file;
 pub mod location;
 pub mod openclaw;
-pub mod pi;
+pub mod owned;
 pub mod self_paths;
 pub mod trust_note;
 
@@ -19,7 +19,7 @@ use openmoat_hosts::{ExtraFile, Host, InstallSpec, Locate, Located};
 pub use binary::{alias_of, hook_binary, other_name, stale_hint};
 pub use dirs::Recorded;
 pub use hook_file::{HookState, Outcome, read_or_empty};
-pub use openmoat_hosts::{GUARD_BUDGET_S, HookFormat, HookSpec};
+pub use openmoat_hosts::{GUARD_BUDGET_S, HookLayout, HookSpec};
 
 use crate::home::{Home, user_home};
 
@@ -72,7 +72,8 @@ pub struct HostConfig {
     /// `openclaw.json` unless `OPENCLAW_CONFIG_PATH` puts it elsewhere.
     pub dir: PathBuf,
     pub hooks: &'static [HookSpec],
-    pub format: HookFormat,
+    /// How the hook file is laid out, as the code that edits it.
+    pub layout: HookLayout,
     /// Whether the host's version knows `onFailure`; asked only when an
     /// entry with [`HookSpec::block_on_failure`] lacks the key, so commands
     /// that never compare entries (`uninstall`) never ask.
@@ -185,7 +186,7 @@ impl HostConfig {
             settings_path,
             dir,
             hooks: install.hooks,
-            format: install.hook_format,
+            layout: install.hook_file,
             blocks_on_failure,
         })
     }

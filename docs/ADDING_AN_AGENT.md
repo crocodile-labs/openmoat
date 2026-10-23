@@ -27,6 +27,18 @@ Take the first step that fits the agent:
    its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)), which runs the whole
    agent in an OS sandbox.
 
+Each supported agent has a short `HOST.md` in its folder: what the agent is, the hook
+events and tools OpenMoat sees, where its configuration and MCP files live, its known
+gaps and the sandbox it gets. Start from the one closest to your agent:
+[Claude Code](../crates/openmoat-hosts/src/host/claude_code/HOST.md) ·
+[Codex](../crates/openmoat-hosts/src/host/codex/HOST.md) ·
+[Cursor](../crates/openmoat-hosts/src/host/cursor/HOST.md) ·
+[OpenClaw](../crates/openmoat-hosts/src/host/openclaw/HOST.md) ·
+[GitHub Copilot CLI](../crates/openmoat-hosts/src/host/copilot_cli/HOST.md) ·
+[pi](../crates/openmoat-hosts/src/host/pi/HOST.md) ·
+[Gemini CLI](../crates/openmoat-hosts/src/host/gemini_cli/HOST.md) ·
+[Continue CLI](../crates/openmoat-hosts/src/host/continue_cli/HOST.md).
+
 ## What an adapter is
 
 An agent that supports hooks runs a command before each tool call, passes the call as
@@ -57,18 +69,19 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<module>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_format`, the `HookFormat` of the file); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpReader` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpNames`), so a call is traced to the definition it came from; a reader or a naming of its own goes in `host/<module>/mcp.rs`; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `reader` (a `SettingsReader`, in `host/<module>/project_settings.rs`, that names what a parsed file sets that turns OpenMoat's hook off or runs a program), and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; it ends with `..HostSpec::BASE`, so the fields it does not name take their defaults |
+| `crates/openmoat-hosts/src/host/<module>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_file`, the `HookLayout` of the file: `Entries` with a `HookFile` layout, or `Owned`/`Plugin` with an `OwnedFile` from `host/<module>/integration/` for an agent without a command hook); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpReader` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpNames`), so a call is traced to the definition it came from; a reader or a naming of its own goes in `host/<module>/mcp.rs`; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `reader` (a `SettingsReader`, in `host/<module>/project_settings.rs`, that names what a parsed file sets that turns OpenMoat's hook off or runs a program), and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; it ends with `..HostSpec::BASE`, so the fields it does not name take their defaults |
 | `crates/openmoat-hosts/src/host/<module>/doc.rs` | `DOCS` (`HostDocs`): how OpenMoat is hooked and what protects its calls, as the README says them (`hook only`, or `hook + OS sandbox` when the spec has a `sandbox`), and one `ToolRow` per tool or group of tools the adapter maps, with the ungoverned ones; the spec sets `docs: doc::DOCS`. A test fails when the adapter matches a tool name no row names |
+| `crates/openmoat-hosts/src/host/<module>/HOST.md` | a page for people: what the agent is, its hook events and the tools OpenMoat sees, its configuration and MCP files, what it does when the hook fails, its known gaps and its sandbox, every fact taken from the spec and `doc.rs` |
 | `crates/openmoat-hosts/src/host/<module>/` | the rest of the adapter's code, one file per concern (`tools.rs`, `bench.rs`, `tests.rs`, as `host/pi/` has) |
 | `crates/openmoat-hosts/src/host.rs` | one line in the host list, `Variant => module,` (`Variant => module speaks ClaudeCode,` for a spec-only agent), with a doc comment naming the agent and its hook. It gives the `Host` variant, `Host::EVERY`, `Host::ALL` (when the spec has an `install`), the `--host` id list and the lookups of the spec and adapter |
 | `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec's `McpReader` has a new `McpSyntax` (a parser in `parse` and an editor in `wrap.rs`) or names a new `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
-| `crates/openmoat-hosts/src/host/<module>/hook_file.rs` | only if the hook file has a new layout: a `HookFile` impl (`entry`, `is_ours`, `binary`), a `HookFormat` variant and its arm in `contract/hook_file.rs`; the CLI's `install/hook_file.rs` reads, backs up and writes the file |
-| `crates/openmoat-core/policies/default-v1.yaml`, `tests/conformance/attacks.yaml` | the agent's configuration directory and hook file in `kernel-self`, with an attack fixture (a policy change, see [Install, uninstall and the lock](#install-uninstall-and-the-lock)) |
-| `tests/fixtures/hosts/<id>/` | captured payloads and a `README.md` naming each one's source |
+| `crates/openmoat-hosts/src/host/<module>/hook_file.rs` | only if the hook file has a new layout: a `HookFile` impl (`entry`, `is_ours`, `binary`) that the spec names as `HookLayout::Entries`; the CLI's `install/hook_file.rs` reads, backs up and writes the file |
+| `crates/openmoat-hosts/src/host/<module>/protect.rs`, `tests/conformance/attacks.yaml` | `PROTECT` (`Protect`): the agent's configuration directory and hook file for `kernel-self` and the files a tainted session's writes ask about, each list with its comment, and `PROCESS` (`ProcessSpec`): its program names and package directories, by which the person-only commands tell they run under it; the spec sets `protect: protect::PROTECT, process: protect::PROCESS`. Then `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` writes the paths into `crates/openmoat-core/policies/default-v1.yaml` and `crates/openmoat-core/src/taint.rs`. Add an attack fixture: it is a policy change (see [Install, uninstall and the lock](#install-uninstall-and-the-lock)). `runs-later` (and the matching `project-fs` exclusions and `RUNS_LATER` in `crates/openmoat-cli/src/sandbox/patterns.rs`) are still edited by hand |
+| `crates/openmoat-hosts/src/host/<module>/fixtures/` | captured payloads and a `README.md` naming each one's source |
 | `crates/openmoat-cli/tests/e2e/<module>.rs` | end-to-end tests, with a `mod <module>;` line in `crates/openmoat-cli/tests/e2e/main.rs`, and the agent's payload shape in `crates/openmoat-cli/tests/e2e/host_failures.rs` |
 | `README.md`, `docs/INSTALL.md`, `docs/ARCHITECTURE.md` §3, `docs/THREAT_MODEL.md` §5 | generated, not edited: run `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` to write the "Supported agents" row, the configuration directory row, the tool mapping rows and the known gaps line from the spec; then `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance` for `docs/COVERAGE.md` |
 | `docs/THREAT_MODEL.md` §5 | by hand: the agent's column in the "When the hook fails" table and its ungoverned tools |
-| `CHANGELOG.md` | an `### Added` line under Unreleased |
+| `changelog.d/<pr>-<slug>.md` | a fragment whose first line is `### Added`, then the entry ([CONTRIBUTING.md](../CONTRIBUTING.md#changelog)) |
 
 `<module>` is the agent's id with `-` written as `_` (`copilot-cli` is `copilot_cli`);
 the docs test reads the agent's code from `host/<module>.rs` and `host/<module>/`.
@@ -146,7 +159,7 @@ checked in the fixtures `README.md`.
 
 `openmoat init` calls `HostConfig::install`, which adds one entry per `HookSpec` (event,
 matcher, timeout) of the spec's `install.hooks` to the agent's hook file, in the
-layout `install.hook_format` names. It must stay idempotent (invariant 8):
+layout `install.hook_file` names. It must stay idempotent (invariant 8):
 
 - Our entries are recognised by their command, `guard --host <id>`; re-running `init`
   updates them in place and never adds a second one.
@@ -188,10 +201,10 @@ points at a missing directory instead of skipping it silently.
 
 ## Fixtures
 
-Golden payloads go in `tests/fixtures/hosts/<agent>/*.json`. They must be real payloads
+Golden payloads go in `crates/openmoat-hosts/src/host/<module>/fixtures/*.json`. They must be real payloads
 captured from the agent, not built from the documentation. When only documented field
 names are available, say so in the folder's `README.md`, as
-`tests/fixtures/hosts/cursor/README.md` does.
+`crates/openmoat-hosts/src/host/cursor/fixtures/README.md` does.
 
 To capture one safely:
 

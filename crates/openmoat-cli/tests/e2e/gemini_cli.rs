@@ -3,7 +3,7 @@
 //! `decision`, and `uninstall` gives the file back.
 //!
 //! The payloads follow the hooks reference and the source of
-//! `@google/gemini-cli` 0.65.0 (`tests/fixtures/hosts/gemini-cli/README.md`);
+//! `@google/gemini-cli` 0.65.0 (`crates/openmoat-hosts/src/host/gemini_cli/fixtures/README.md`);
 //! none is captured from a signed-in session.
 
 use std::fs;
@@ -13,14 +13,14 @@ use serde_json::{Value, json};
 use crate::common::{DENY, OK, Sandbox, fixture, json as parse, stdout, text};
 
 /// A settings file as Gemini CLI writes it, two-space indented.
-const ORIGINAL: &str = "{\n  \"ui\": { \"theme\": \"GitHub\" },\n  \"general\": {}\n}\n";
+pub(crate) const ORIGINAL: &str = "{\n  \"ui\": { \"theme\": \"GitHub\" },\n  \"general\": {}\n}\n";
 
 fn settings(sb: &Sandbox) -> std::path::PathBuf {
     sb.home.join(".gemini/settings.json")
 }
 
 /// A `BeforeTool` payload for `tool` with `input`, in the project.
-fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
+pub(crate) fn payload(sb: &Sandbox, tool: &str, input: &Value) -> String {
     json!({
         "session_id": "gem-1", "transcript_path": "",
         "cwd": sb.project().to_string_lossy(),
@@ -68,34 +68,22 @@ fn init_adds_one_named_before_tool_entry() {
     let again = sb.moat(&["init", "--yes"]);
     assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
     assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), before);
-    let doctor = text(&sb.moat(&["doctor"]));
-    assert!(doctor.contains("Gemini CLI"), "{doctor}");
-    assert!(doctor.contains("protection: hook only"), "{doctor}");
 }
 
 #[test]
-fn a_secret_read_or_upload_is_denied() {
-    let sb = Sandbox::installed(&[".gemini"]);
+fn a_secret_upload_is_denied() {
     // On Windows Gemini CLI runs commands in PowerShell, which OpenMoat leaves
     // unparsed (`unparseable`, a defer), as for Claude Code's PowerShell tool.
-    if !cfg!(windows) {
-        let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
-        assert_eq!(code, Some(DENY), "{reply}");
-        assert_eq!(reply["decision"], "deny");
-        let reason = reply["reason"].as_str().unwrap();
-        assert!(reason.contains("secrets-paths"), "{reason}");
-        assert_eq!(reply["systemMessage"], reply["reason"]);
+    if cfg!(windows) {
+        return;
     }
-
-    let secret = sb.home.join(".aws").join("credentials");
-    let read = payload(
-        &sb,
-        "read_file",
-        &json!({ "file_path": secret.to_string_lossy() }),
-    );
-    let (code, reply) = guard(&sb, &read);
+    let sb = Sandbox::installed(&[".gemini"]);
+    let (code, reply) = guard(&sb, &fixture("gemini-cli/run_shell_command.json"));
     assert_eq!(code, Some(DENY), "{reply}");
-    assert!(reply["reason"].to_string().contains("secrets-paths"));
+    assert_eq!(reply["decision"], "deny");
+    let reason = reply["reason"].as_str().unwrap();
+    assert!(reason.contains("secrets-paths"), "{reason}");
+    assert_eq!(reply["systemMessage"], reply["reason"]);
 }
 
 /// `dir_path` is where Gemini CLI runs a command, chosen by the model; it never
@@ -162,35 +150,6 @@ fn allow_ask_and_no_decision_reach_gemini_as_its_own_shapes() {
     assert_eq!(guard(&sb, &defer), (Some(OK), Value::Null));
     let todos = guard(&sb, &fixture("gemini-cli/write_todos.json"));
     assert_eq!(todos, (Some(OK), Value::Null));
-}
-
-#[test]
-fn a_payload_that_cannot_be_checked_is_denied() {
-    let sb = Sandbox::installed(&[".gemini"]);
-    let (code, reply) = guard(&sb, &fixture("gemini-cli/read_file-malformed.json"));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(reply["reason"].to_string().contains("file_path"), "{reply}");
-}
-
-#[test]
-fn an_edited_settings_file_denies_every_call() {
-    let sb = Sandbox::installed(&[".gemini"]);
-    let mut root: Value =
-        serde_json::from_str(&fs::read_to_string(settings(&sb)).unwrap()).unwrap();
-    root["hooksConfig"] = json!({ "disabled": ["openmoat"] });
-    fs::write(settings(&sb), root.to_string()).unwrap();
-    let write = payload(
-        &sb,
-        "write_file",
-        &json!({ "file_path": sb.project().join("a.txt").to_string_lossy(), "content": "" }),
-    );
-    let (code, reply) = guard(&sb, &write);
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert!(
-        reply["reason"].to_string().contains("kernel-integrity"),
-        "{reply}"
-    );
 }
 
 /// Apply `change` to the installed settings file, as Gemini CLI or an agent would.
@@ -320,19 +279,6 @@ fn settings_that_no_longer_parse_deny_every_call() {
     assert_frozen(&sb, "broken file");
 }
 
-#[test]
-fn uninstall_gives_the_settings_back() {
-    let sb = Sandbox::bare(&[".gemini"]);
-    let original = ORIGINAL;
-    fs::write(settings(&sb), original).unwrap();
-    let out = sb.moat(&["init", "--yes"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_ne!(fs::read_to_string(settings(&sb)).unwrap(), original);
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_eq!(fs::read_to_string(settings(&sb)).unwrap(), original);
-}
-
 /// The protection entry and the report `status --format json` prints, in `cwd`.
 fn status_in(sb: &Sandbox, cwd: &std::path::Path) -> (Value, Value) {
     let mut cmd = sb.command();
@@ -346,26 +292,6 @@ fn status_in(sb: &Sandbox, cwd: &std::path::Path) -> (Value, Value) {
         .unwrap()
         .clone();
     (agent, doc)
-}
-
-/// `init` pins the settings file as it finds it: a `hooksConfig` that turns
-/// hooks off stays, and the agent is reported as not protected.
-#[test]
-fn hooks_turned_off_in_the_user_settings_is_not_protected() {
-    let sb = Sandbox::bare(&[".gemini"]);
-    fs::write(
-        settings(&sb),
-        json!({ "hooksConfig": { "enabled": false } }).to_string(),
-    )
-    .unwrap();
-    let out = sb.moat(&["init", "--yes"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let (agent, _) = status_in(&sb, &sb.home);
-    assert_eq!(agent["level"], "not-protected", "{agent}");
-    assert!(
-        agent["reason"].to_string().contains("hooksConfig.enabled"),
-        "{agent}"
-    );
 }
 
 /// A trusted folder's `.gemini/settings.json` loads at start: `status` names

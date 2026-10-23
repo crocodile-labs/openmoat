@@ -3,17 +3,18 @@
 //! The layouts whose entries sit among the person's own (Claude Code, Codex,
 //! Cursor, GitHub Copilot CLI, Gemini CLI) are pure code in the hosts crate
 //! ([`openmoat_hosts::HookFile`]); this module reads, backs up and writes the
-//! file. OpenClaw's `openclaw.json` and pi's extension are edited by
-//! [`openclaw`] and [`pi`].
+//! file. A file OpenMoat owns whole (pi's extension) is written by [`owned`],
+//! a plugin configuration (OpenClaw's `openclaw.json`) by [`openclaw`]; the
+//! host's spec says which ([`HookLayout`]).
 
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::{HookFile, HookFileState};
+use openmoat_hosts::HookFileState;
 use serde_json::{Map, Value};
 
-use super::{HOOK_BACKUP, HookFormat, HostConfig, openclaw, pi};
+use super::{HOOK_BACKUP, HookLayout, HostConfig, openclaw, owned};
 use crate::home::{Home, write_private};
 
 pub use openmoat_hosts::HookOutcome as Outcome;
@@ -30,19 +31,23 @@ pub enum HookState {
 }
 
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
-    // pi's hook file is OpenMoat's extension itself, not JSON.
-    if config.format == HookFormat::Pi {
-        return pi::install(home, config, binary, dry_run);
+    // A file OpenMoat owns whole is not JSON.
+    if let HookLayout::Owned(file) = config.layout {
+        return owned::install(home, config, file, binary, dry_run);
     }
     let path = &config.settings_path;
     let mut root = read_host(config)?;
     let edited = upsert_all(&mut root, config, binary)?;
-    if edited != Outcome::Unchanged && config.format == HookFormat::OpenClaw {
+    let plugin = match config.layout {
+        HookLayout::Plugin(plugin) => Some(plugin),
+        HookLayout::Entries(_) | HookLayout::Owned(_) => None,
+    };
+    if edited != Outcome::Unchanged && plugin.is_some() {
         openclaw::read_for_edit(path)?;
     }
-    // OpenClaw's hook is a plugin file in its state directory.
-    let plugin = config.format == HookFormat::OpenClaw && !openclaw::plugin_current(config, binary);
-    let outcome = if plugin {
+    // The plugin is a file of its own in the configuration directory.
+    let plugin = plugin.filter(|plugin| !openclaw::plugin_current(config, plugin, binary));
+    let outcome = if plugin.is_some() {
         edited.max(Outcome::Updated)
     } else {
         edited
@@ -50,8 +55,8 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
     if outcome == Outcome::Unchanged || dry_run {
         return Ok(outcome);
     }
-    if plugin {
-        openclaw::write_plugin(config, binary)?;
+    if let Some(plugin) = plugin {
+        openclaw::write_plugin(config, plugin, binary)?;
     }
     if edited != Outcome::Unchanged {
         super::back_up(home, path, HOOK_BACKUP)?;
@@ -65,10 +70,10 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
 /// with OpenMoat's hooks in it, as [`install`] would write it; `None` when it
 /// would not change. Writes nothing.
 pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Option<String>> {
-    if config.format == HookFormat::Pi {
-        return pi::render(binary, current);
+    if let HookLayout::Owned(file) = config.layout {
+        return owned::render(file, binary, current);
     }
-    if config.format == HookFormat::OpenClaw {
+    if let HookLayout::Plugin(_) = config.layout {
         let parsed = openclaw::parse(current)
             .with_context(|| format!("parsing {}", config.settings_path.display()))?;
         let mut root = parsed.value.clone();
@@ -86,10 +91,10 @@ pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Optio
 }
 
 fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Outcome> {
-    if config.format == HookFormat::OpenClaw {
+    if let HookLayout::Plugin(_) = config.layout {
         return openclaw::upsert(root, config);
     }
-    let Some(layout) = layout(config) else {
+    let Some(layout) = config.layout.entries() else {
         bail!("{} is not a JSON hook file", config.settings_path.display());
     };
     layout
@@ -102,11 +107,6 @@ fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Ou
             config.blocks_on_failure,
         )
         .map_err(anyhow::Error::new)
-}
-
-/// The code for `config`'s layout; `None` for the files OpenMoat owns whole.
-fn layout(config: &HostConfig) -> Option<&'static dyn HookFile> {
-    config.format.hook_file()
 }
 
 /// The hook's state for `binary`. A hook that runs `binary`'s `moat` alias
@@ -135,18 +135,17 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     if !path.exists() {
         return HookState::Missing;
     }
-    if config.format == HookFormat::Pi {
-        return pi::state(config, binary);
+    if let HookLayout::Owned(file) = config.layout {
+        return owned::state(config, file, binary);
     }
     let root = match read_host(config) {
         Ok(v) => v,
         Err(e) => return HookState::Unreadable(format!("{e:#}")),
     };
-    if config.format == HookFormat::OpenClaw {
-        return openclaw::state(config, binary, &root);
-    }
-    let Some(layout) = layout(config) else {
-        return HookState::Missing;
+    let layout = match config.layout {
+        HookLayout::Plugin(plugin) => return openclaw::state(config, plugin, binary, &root),
+        HookLayout::Owned(_) => return HookState::Missing,
+        HookLayout::Entries(layout) => layout,
     };
     let id = config.host.id();
     let binary = binary.to_string_lossy();
@@ -163,23 +162,27 @@ pub fn lacks_on_failure(config: &HostConfig) -> bool {
     let Ok(root) = read_or_empty(&config.settings_path) else {
         return false;
     };
-    layout(config).is_some_and(|l| l.lacks_on_failure(&root, config.host.id(), config.hooks))
+    config
+        .layout
+        .entries()
+        .is_some_and(|l| l.lacks_on_failure(&root, config.host.id(), config.hooks))
 }
 
 /// The inverse of [`install`] on a parsed file: remove every entry of ours, then
 /// the events and `hooks` object that leaves empty, and Cursor's `version` when
 /// nothing else remains. Returns whether anything was removed.
 pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
-    if config.format == HookFormat::OpenClaw {
-        return openclaw::remove(root);
+    match config.layout {
+        HookLayout::Plugin(_) => openclaw::remove(root),
+        HookLayout::Entries(layout) => layout.remove(root, config.host.id()),
+        HookLayout::Owned(_) => false,
     }
-    layout(config).is_some_and(|l| l.remove(root, config.host.id()))
 }
 
 /// `config`'s hook file parsed, an empty object when there is none; OpenClaw's
 /// as JSON5.
 pub fn read_host(config: &HostConfig) -> Result<Value> {
-    if config.format == HookFormat::OpenClaw {
+    if let HookLayout::Plugin(_) = config.layout {
         return openclaw::read(&config.settings_path);
     }
     read_or_empty(&config.settings_path)

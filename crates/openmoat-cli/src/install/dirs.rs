@@ -1,7 +1,7 @@
 //! `hosts.json`: the configuration directory of each agent `moat init` set up.
 //!
 //! Every later command reads the agent's files there, whatever this shell's
-//! `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR` say, so nobody has to
+//! agents' directory variables (each spec's `InstallSpec::dir_variable`) say, so nobody has to
 //! export them again (#298); `moat doctor` reports a variable that disagrees.
 //! The lock pins the file like the policy.
 

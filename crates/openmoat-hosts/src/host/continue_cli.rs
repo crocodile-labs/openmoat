@@ -36,6 +36,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".continue",
         binary: "cn",
     }),
+    process: crate::contract::ProcessSpec {
+        names: &["cn"],
+        package_dirs: &[&["@continuedev", "cli"]],
+        helper: None,
+    },
     // Its tool calls are Claude Code's, mapped by Claude Code's rows.
     docs: HostDocs {
         hooked_by: "`cn` runs the Claude Code hook, but the released `cn` runs no hooks yet",
@@ -84,9 +89,12 @@ mod tests {
     use super::*;
     use crate::{HookEvent, HostError};
 
+    /// The payload `<id>/<file>` from the folder of the host with that id.
     fn fixture(path: &str) -> String {
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/hosts");
-        std::fs::read_to_string(format!("{root}/{path}")).unwrap()
+        let (id, name) = path.split_once('/').unwrap();
+        let host = Host::EVERY.into_iter().find(|h| h.id() == id).unwrap();
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host");
+        std::fs::read_to_string(format!("{root}/{}/fixtures/{name}", host.module())).unwrap()
     }
 
     #[test]

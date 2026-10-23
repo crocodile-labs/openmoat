@@ -76,8 +76,8 @@ pub enum HookPins {
     Adopt,
     /// `moat allow`, `moat doctor --accept`: the hook files already pinned. The
     /// hook file an agent reads depends on the agent's environment
-    /// (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CURSOR_CONFIG_DIR`), which need not be
-    /// this shell's, so a re-pin must not decide again which files those are.
+    /// (its spec's `InstallSpec::dir_variable`: `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+    /// …), which need not be this shell's, so a re-pin must not decide again which files those are.
     Keep,
 }
 

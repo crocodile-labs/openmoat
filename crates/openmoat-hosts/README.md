@@ -10,7 +10,7 @@ decide; `openmoat-core` does.
 Supported today: Claude Code and Codex (shared `PreToolUse` contract,
 `hookSpecificOutput.permissionDecision`), Claude Code `ConfigChange`, and Cursor
 (`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse`;
-`{"permission": …}` responses). Golden payloads live in `tests/fixtures/hosts/`.
+`{"permission": …}` responses). Golden payloads live in `crates/openmoat-hosts/src/host/<module>/fixtures`.
 
 Adding a host: see
 [docs/ADDING_AN_AGENT.md](https://github.com/crocodile-labs/openmoat/blob/main/docs/ADDING_AN_AGENT.md).

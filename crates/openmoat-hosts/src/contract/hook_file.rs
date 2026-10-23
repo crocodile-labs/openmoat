@@ -1,30 +1,31 @@
-//! Each [`HookFormat`] whose entries sit among the person's own, to the
-//! [`HookFile`] code that edits it. The files OpenMoat owns whole (OpenClaw's
-//! plugin, pi's extension) are still edited by the CLI.
+//! How a host's hook file is laid out ([`super::InstallSpec::hook_file`]), as the
+//! code that edits it: the CLI picks what to do from this, never from the host.
 
-use super::{HookFormat, InstallSpec};
-use crate::host::{copilot_cli, cursor, gemini_cli};
-use crate::wire::hook_file::{HookFile, nested};
+use crate::wire::hook_file::HookFile;
+use crate::wire::owned_file::OwnedFile;
 
-impl HookFormat {
-    /// The layout code for this format's entries; `None` for OpenClaw and pi,
-    /// whose hook files the CLI writes whole.
-    #[must_use]
-    pub fn hook_file(self) -> Option<&'static dyn HookFile> {
-        match self {
-            Self::Nested => Some(&nested::Nested),
-            Self::Cursor => Some(&cursor::hook_file::Cursor),
-            Self::Copilot => Some(&copilot_cli::hook_file::Copilot),
-            Self::Gemini => Some(&gemini_cli::hook_file::Gemini),
-            Self::OpenClaw | Self::Pi => None,
-        }
-    }
+/// The layout of a host's hook file.
+#[derive(Debug, Clone, Copy)]
+pub enum HookLayout {
+    /// OpenMoat's entries among the person's own in a `hooks` object (Claude
+    /// Code, Codex, Cursor, GitHub Copilot CLI, Gemini CLI).
+    Entries(&'static dyn HookFile),
+    /// The hook file is OpenMoat's whole (pi's extension).
+    Owned(&'static OwnedFile),
+    /// A JSON5 configuration that loads a plugin OpenMoat owns whole, the
+    /// host's first [`super::InstallSpec::extra_files`] (OpenClaw's
+    /// `openclaw.json` and plugin).
+    Plugin(&'static OwnedFile),
 }
 
-impl InstallSpec {
-    /// The layout code for this host's hook file ([`HookFormat::hook_file`]).
+impl HookLayout {
+    /// The code for the entries among the person's own; `None` for a file
+    /// OpenMoat owns whole or a plugin configuration.
     #[must_use]
-    pub fn hook_file(&self) -> Option<&'static dyn HookFile> {
-        self.hook_format.hook_file()
+    pub fn entries(self) -> Option<&'static dyn HookFile> {
+        match self {
+            Self::Entries(layout) => Some(layout),
+            Self::Owned(_) | Self::Plugin(_) => None,
+        }
     }
 }

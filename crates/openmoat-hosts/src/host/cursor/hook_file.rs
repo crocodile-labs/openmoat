@@ -1,4 +1,4 @@
-//! Cursor's `hooks.json` entries (`HookFormat::Cursor`):
+//! Cursor's `hooks.json` entries:
 //! `{"version": 1, "hooks": {"<event>": [{"command": "<shell string>",
 //! "timeout", "failClosed"}]}}`. Cursor is fail-open unless `failClosed` is
 //! set, so every entry sets it.
@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 use crate::HookSpec;
 use crate::wire::hook_file::{HookFile, guard_args};
 
-/// [`crate::HookFormat::Cursor`].
+/// Cursor's `hooks.json` entries.
+#[derive(Debug)]
 pub(crate) struct Cursor;
 
 impl HookFile for Cursor {

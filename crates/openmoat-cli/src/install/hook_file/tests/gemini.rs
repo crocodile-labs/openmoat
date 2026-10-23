@@ -19,7 +19,7 @@ fn the_entry_is_installed_once_and_removed_alone() {
         settings_path: dir.path().join("settings.json"),
         dir: dir.path().to_path_buf(),
         hooks: spec.hooks,
-        format: spec.hook_format,
+        layout: spec.hook_file,
         blocks_on_failure: || false,
     };
     let theirs = json!({

@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use crate::cli::UninstallArgs;
 use crate::exit::Code;
 use crate::home::{Home, user_home, write_private};
-use crate::install::{self, HookFormat, HostConfig, Recorded, read_or_empty};
+use crate::install::{self, HookLayout, HostConfig, Recorded, read_or_empty};
 use crate::integrity;
 use crate::render::Deferred;
 use crate::sandbox::install as host_sandbox;
@@ -61,12 +61,13 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         let strip =
             |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root, owned));
         let path = &config.settings_path;
-        let openclaw = config.format == HookFormat::OpenClaw;
-        // pi's hook file is OpenMoat's extension itself.
-        let hook = if config.format == HookFormat::Pi {
-            undo_whole(path, ours, install::pi::is_ours)?
-        } else {
-            undo_host_json(path, ours, strip, openclaw)?
+        let plugin = matches!(config.layout, HookLayout::Plugin(_));
+        // A hook file OpenMoat owns whole (pi's extension) is not JSON.
+        let hook = match config.layout {
+            HookLayout::Owned(file) => undo_whole(path, ours, |text| file.is_ours(text))?,
+            HookLayout::Entries(_) | HookLayout::Plugin(_) => {
+                undo_host_json(path, ours, strip, plugin)?
+            }
         };
         let mut files = vec![(path.clone(), hook)];
         // A sandbox in a file of its own.
@@ -82,7 +83,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             Some(SandboxFormat::ClaudeSettings) | None => {}
         }
         // OpenClaw's hook is the plugin file `init` wrote, which nothing else owns.
-        if openclaw && let Some(plugin) = install::openclaw::remove_plugin(&config)? {
+        if plugin && let Some(plugin) = install::openclaw::remove_plugin(&config)? {
             files.push((plugin, Some(Undone::Deleted)));
         }
         if files.iter().all(|(_, done)| done.is_none()) {
@@ -186,19 +187,20 @@ fn undo_json(
     undo_host_json(path, ours, strip, false)
 }
 
-/// [`undo_json`]; `openclaw` reads the file and its backups as JSON5 and
-/// refuses to write back a file whose comments that would drop.
+/// [`undo_json`]; `plugin` (OpenClaw's `openclaw.json`) reads the file and its
+/// backups as JSON5 and refuses to write back a file whose comments that would
+/// drop.
 fn undo_host_json(
     path: &Path,
     ours: &[PathBuf],
     strip: impl Fn(&mut Value) -> bool,
-    openclaw: bool,
+    plugin: bool,
 ) -> Result<Option<Undone>> {
     if !path.is_file() {
         return Ok(None);
     }
     let read = |p: &Path| {
-        if openclaw {
+        if plugin {
             install::openclaw::read(p)
         } else {
             read_or_empty(p)
@@ -216,7 +218,7 @@ fn undo_host_json(
         .collect();
     let original = originals.iter().find(|(_, v)| *v == root).map(|(b, _)| *b);
     let created = originals.is_empty() && root == json!({});
-    if openclaw && original.is_none() && !created {
+    if plugin && original.is_none() && !created {
         install::openclaw::read_for_edit(path)?;
     }
     let text = serde_json::to_string_pretty(&root)? + "\n";

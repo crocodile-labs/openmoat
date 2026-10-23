@@ -1,4 +1,4 @@
-//! GitHub Copilot CLI hook entries (`HookFormat::Copilot`): one command per
+//! GitHub Copilot CLI hook entries: one command per
 //! shell, since the CLI runs `bash` on macOS and Linux and `powershell` on
 //! Windows (<https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference>,
 //! "Command hooks"). Both name the binary by its absolute path, quoted.
@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 use crate::HookSpec;
 use crate::wire::hook_file::{HookFile, guard_args};
 
-/// [`crate::HookFormat::Copilot`].
+/// GitHub Copilot CLI's hook file entries.
+#[derive(Debug)]
 pub(crate) struct Copilot;
 
 impl HookFile for Copilot {

@@ -3,20 +3,20 @@
 //! format, and `uninstall` gives the file back.
 //!
 //! The payloads follow the documented `before_tool_call` event and context
-//! (`tests/fixtures/hosts/openclaw/README.md`); none is captured from a Gateway.
+//! (`crates/openmoat-hosts/src/host/openclaw/fixtures/README.md`); none is captured from a Gateway.
 
 use std::fs;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, json as parse, output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, json as parse, output, stdout, text};
 
 fn sandbox() -> Sandbox {
     Sandbox::installed(&[".openclaw"])
 }
 
 /// A `before_tool_call` payload for `tool` with `params`, in the project.
-fn payload(sb: &Sandbox, tool: &str, params: &Value) -> String {
+pub(crate) fn payload(sb: &Sandbox, tool: &str, params: &Value) -> String {
     let project = sb.project();
     json!({
         "hook_event_name": "before_tool_call",
@@ -66,26 +66,11 @@ fn init_writes_the_plugin_and_its_entries_once() {
         source.contains(&format!("const MOAT = {binary};")),
         "{source}"
     );
-
-    let again = text(&sb.moat(&["init", "--yes"]));
-    assert!(again.contains("unchanged: before_tool_call"), "{again}");
-    let doctor = text(&sb.moat(&["doctor"]));
-    assert!(doctor.contains("OpenClaw"), "{doctor}");
-    assert!(doctor.contains("protection: hook only"), "{doctor}");
 }
 
 #[test]
-fn a_secret_read_and_an_edit_of_openclaws_configuration_are_denied() {
+fn an_edit_of_openclaws_configuration_is_denied() {
     let sb = sandbox();
-    let secret = sb.home.join(".ssh/id_ed25519");
-    let (code, reply) = guard(&sb, &payload(&sb, "read", &json!({"path": secret})));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(
-        reply["reason"].to_string().contains("secrets-paths"),
-        "{reply}"
-    );
-
     let config = sb.home.join(".openclaw/openclaw.json");
     let edit = json!({"path": config, "edits": [{"oldText": "true", "newText": "false"}]});
     let (code, reply) = guard(&sb, &payload(&sb, "edit", &edit));
@@ -111,92 +96,6 @@ fn a_secret_read_and_an_edit_of_openclaws_configuration_are_denied() {
         reply["reason"].to_string().contains("env-poison"),
         "{reply}"
     );
-}
-
-#[test]
-fn a_safe_command_is_allowed_and_an_unknown_tool_is_left_to_openclaw() {
-    let sb = sandbox();
-    let (code, reply) = guard(
-        &sb,
-        &payload(&sb, "exec", &json!({"command": "git status"})),
-    );
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "allow", "{reply}");
-
-    for (tool, params) in [
-        ("message", json!({"action": "reply", "text": "done"})),
-        ("session_status", json!({})),
-    ] {
-        let (code, reply) = guard(&sb, &payload(&sb, tool, &params));
-        assert_eq!(code, Some(OK), "{tool}: {reply}");
-        assert_eq!(reply, Value::Null, "{tool}: defer prints nothing");
-    }
-}
-
-#[test]
-fn an_ask_reaches_openclaw_as_an_ask() {
-    let sb = Sandbox::installed_asking(&[".openclaw"]);
-    let outside = sb.home.join("notes/todo.txt");
-    let (code, reply) = guard(&sb, &payload(&sb, "read", &json!({"path": outside})));
-    assert_eq!(code, Some(OK), "{reply}");
-    assert_eq!(reply["decision"], "ask", "{reply}");
-}
-
-#[test]
-fn malformed_arguments_and_payloads_are_denied() {
-    let sb = sandbox();
-    let (code, reply) = guard(&sb, &fixture("openclaw/read-malformed.json"));
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-    assert!(
-        reply["reason"].to_string().contains("cannot be checked"),
-        "{reply}"
-    );
-
-    let (code, reply) = guard(
-        &sb,
-        r#"{"hook_event_name":"after_tool_call","toolName":"exec"}"#,
-    );
-    assert_eq!(code, Some(DENY), "{reply}");
-    assert_eq!(reply["decision"], "deny");
-}
-
-#[test]
-fn a_changed_openclaw_mcp_server_holds_back_only_its_own_tools() {
-    let sb = Sandbox::bare(&[".openclaw"]);
-    let config = sb.home.join(".openclaw/openclaw.json");
-    // JSON5 without comments: read, and written back as JSON.
-    fs::write(
-        &config,
-        "{\n  mcp: { servers: { docs: { command: 'docs-server' }, db: { command: 'db' }, }, },\n}\n",
-    )
-    .unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(
-        text(&out).contains("2 definitions pinned"),
-        "{}",
-        text(&out)
-    );
-    let (code, reply) = guard(&sb, &payload(&sb, "docs__search", &json!({})));
-    assert_eq!(code, Some(OK), "{reply}");
-
-    let now = fs::read_to_string(&config).unwrap();
-    assert!(now.contains("\"docs-server\""), "{now}");
-    fs::write(&config, now.replacen("\"docs-server\"", "\"sh\"", 1)).unwrap();
-    let (code, reply) = guard(&sb, &payload(&sb, "docs__search", &json!({})));
-    assert_eq!(code, Some(DENY), "{reply}");
-    let reason = reply["reason"].to_string();
-    assert!(reason.contains("mcp-server-changed"), "{reply}");
-    assert!(reason.contains("openmoat mcp accept docs"), "{reply}");
-    // Only that server: not drift of the whole file.
-    let (code, reply) = guard(&sb, &payload(&sb, "db__query", &json!({})));
-    assert_eq!(code, Some(OK), "{reply}");
-    let (code, reply) = guard(
-        &sb,
-        &payload(&sb, "exec", &json!({"command": "git status"})),
-    );
-    assert_eq!(code, Some(OK), "{reply}");
 }
 
 #[test]
@@ -259,24 +158,4 @@ fn a_configuration_with_comments_is_not_rewritten() {
     assert!(text(&out).contains("comments"), "{}", text(&out));
     assert_eq!(fs::read_to_string(&config).unwrap(), original);
     assert!(!sb.home.join(".openclaw/openmoat").exists());
-}
-
-#[test]
-fn uninstall_gives_back_openclaws_file_and_deletes_the_plugin() {
-    let sb = Sandbox::bare(&[".openclaw"]);
-    let config = sb.home.join(".openclaw/openclaw.json");
-    let original = "{\n  \"gateway\": { \"port\": 18789 }\n}\n";
-    fs::write(&config, original).unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "openclaw"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_ne!(fs::read_to_string(&config).unwrap(), original);
-
-    let out = sb.moat_as_person(&["uninstall"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert_eq!(fs::read_to_string(&config).unwrap(), original);
-    assert!(
-        !sb.home.join(".openclaw/openmoat").exists(),
-        "{}",
-        text(&out)
-    );
 }

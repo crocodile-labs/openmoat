@@ -12,6 +12,12 @@ fn state_home(config: &HostConfig) -> Home {
     Home::at(config.dir().join(".moat"))
 }
 
+/// The layout the spec of the host with this id names.
+fn layout_of(id: &str) -> HookLayout {
+    let host: Host = id.parse().unwrap();
+    host.spec().install.as_ref().unwrap().hook_file
+}
+
 const SPECS: &[HookSpec] = &[
     HookSpec::new("PreToolUse", "Bash|Edit", 600, true),
     HookSpec::new("ConfigChange", "user_settings", 60, false),
@@ -24,7 +30,7 @@ fn config(dir: &Path) -> HostConfig {
         settings_path: dir.join("settings.json"),
         dir: dir.to_path_buf(),
         hooks: SPECS,
-        format: HookFormat::Nested,
+        layout: layout_of("claude-code"),
         blocks_on_failure: || false,
     }
 }
@@ -126,13 +132,13 @@ fn codex_and_cursor_never_get_on_failure() {
         settings_path: dir.path().join("hooks.json"),
         dir: dir.path().to_path_buf(),
         hooks: &SPECS[..1],
-        format: HookFormat::Nested,
+        layout: layout_of("codex"),
         blocks_on_failure: || false,
     };
     install(&codex, Path::new("/x/moat"), false).unwrap();
     assert_eq!(on_failure(&codex, "PreToolUse"), Value::Null);
     let cursor = HostConfig {
-        format: HookFormat::Cursor,
+        layout: layout_of("cursor"),
         blocks_on_failure: || true,
         settings_path: dir.path().join("cursor-hooks.json"),
         ..codex
@@ -153,7 +159,7 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
         settings_path: dir.path().join("hooks.json"),
         dir: dir.path().to_path_buf(),
         hooks: SHELL,
-        format: HookFormat::Cursor,
+        layout: layout_of("cursor"),
         blocks_on_failure: || false,
     };
     let binary = Path::new("/Applications/My Tools/moat");
@@ -321,7 +327,7 @@ fn remove_undoes_install_and_keeps_foreign_entries() {
         settings_path: created.path().join("hooks.json"),
         dir: created.path().to_path_buf(),
         hooks: &SPECS[..1],
-        format: HookFormat::Cursor,
+        layout: layout_of("cursor"),
         blocks_on_failure: || true,
     };
     install(&cursor, Path::new("/x/moat"), false).unwrap();

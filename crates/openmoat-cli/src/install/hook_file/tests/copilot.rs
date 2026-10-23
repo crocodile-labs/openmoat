@@ -5,8 +5,8 @@ use openmoat_hosts::Host;
 use serde_json::{Value, json};
 
 use crate::home::Home;
+use crate::install::HostConfig;
 use crate::install::hook_file::{HookState, Outcome, install, remove, state};
-use crate::install::{HookFormat, HostConfig};
 
 /// GitHub Copilot CLI as its spec installs it, in a scratch `COPILOT_HOME`.
 fn config(dir: &Path) -> HostConfig {
@@ -16,7 +16,7 @@ fn config(dir: &Path) -> HostConfig {
         settings_path: dir.join(install.config_file),
         dir: dir.to_path_buf(),
         hooks: install.hooks,
-        format: install.hook_format,
+        layout: install.hook_file,
         blocks_on_failure: || false,
     }
 }
@@ -29,7 +29,7 @@ fn root(cfg: &HostConfig) -> Value {
 fn writes_a_hook_file_of_its_own_with_a_command_per_shell() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = config(dir.path());
-    assert_eq!(cfg.format, HookFormat::Copilot);
+    assert_eq!(format!("{:?}", cfg.layout), "Entries(Copilot)");
     let home = Home::at(dir.path().join("state"));
     let binary = Path::new("/Users/o'neil/bin/openmoat");
     assert_eq!(

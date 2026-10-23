@@ -1,14 +1,23 @@
 use std::fs;
 use std::path::Path;
 
-use openmoat_hosts::Host;
+use openmoat_hosts::{HookLayout, Host, OwnedFile};
 use serde_json::{Value, json};
 
 use super::*;
 use crate::home::Home;
-use crate::install::{HookFormat, HookSpec, hook_file};
+use crate::install::{HookSpec, hook_file, owned};
 
 const SPECS: &[HookSpec] = &[HookSpec::new("before_tool_call", "", 60, false)];
+const BINARY_LINE: &str = "const MOAT = __MOAT_BINARY__;";
+
+/// OpenMoat's plugin, from OpenClaw's spec.
+fn plugin() -> &'static OwnedFile {
+    match Host::OpenClaw.spec().install.as_ref().unwrap().hook_file {
+        HookLayout::Plugin(file) => file,
+        other => panic!("OpenClaw's hook file is {other:?}"),
+    }
+}
 
 fn config(dir: &Path) -> HostConfig {
     HostConfig {
@@ -16,7 +25,7 @@ fn config(dir: &Path) -> HostConfig {
         settings_path: dir.join("openclaw.json"),
         dir: dir.to_path_buf(),
         hooks: SPECS,
-        format: HookFormat::OpenClaw,
+        layout: HookLayout::Plugin(plugin()),
         blocks_on_failure: || false,
     }
 }
@@ -35,11 +44,11 @@ fn the_plugin_source_names_the_binary_once_and_waits_less_than_openclaw() {
     const _: () = assert!(crate::install::GUARD_BUDGET_S < 45);
     let installed = Host::OpenClaw.spec().install.as_ref().unwrap().hooks;
     assert!(installed.iter().all(|spec| 45 < spec.timeout));
-    let text = plugin_text(Path::new(r#"/opt/my "tools"/moat"#)).unwrap();
+    let text = owned::text(plugin(), Path::new(r#"/opt/my "tools"/moat"#)).unwrap();
     assert!(text.contains(r#"const MOAT = "/opt/my \"tools\"/moat";"#));
     assert!(!text.contains(BINARY_LINE));
     // The plugin gives up on `moat guard` before OpenClaw gives up on the plugin.
-    assert!(SOURCE.contains("const GUARD_TIMEOUT_MS = 45_000;"));
+    assert!(plugin().source.contains("const GUARD_TIMEOUT_MS = 45_000;"));
 }
 
 #[test]

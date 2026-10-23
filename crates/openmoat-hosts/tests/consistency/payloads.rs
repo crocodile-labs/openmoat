@@ -1,11 +1,11 @@
 //! The payload each host sends for one tool call, in the shapes of
-//! `tests/fixtures/hosts/<host>/`, for the consistency suite.
+//! `crates/openmoat-hosts/src/host/<module>/fixtures/`, for the consistency suite.
 
 use serde_json::{Value, json};
 
 use super::{CWD, HOME};
 
-/// Gemini CLI `BeforeTool` (`tests/fixtures/hosts/gemini-cli`).
+/// Gemini CLI `BeforeTool` (`crates/openmoat-hosts/src/host/gemini_cli/fixtures`).
 pub(super) fn gemini(tool: &str, input: &Value) -> Value {
     json!({
         "session_id": "gemini-1", "transcript_path": "", "cwd": CWD,
@@ -14,7 +14,7 @@ pub(super) fn gemini(tool: &str, input: &Value) -> Value {
     })
 }
 
-/// Cursor's common fields with one event's (`tests/fixtures/hosts/cursor`).
+/// Cursor's common fields with one event's (`crates/openmoat-hosts/src/host/cursor/fixtures`).
 pub(super) fn cursor(event: &Value) -> Value {
     let mut payload = json!({
         "conversation_id": "conv-1", "generation_id": "gen-1",
@@ -34,7 +34,7 @@ pub(super) fn cursor_tool(tool: &str, input: &Value) -> Value {
     }))
 }
 
-/// OpenMoat's OpenClaw plugin (`tests/fixtures/hosts/openclaw`).
+/// OpenMoat's OpenClaw plugin (`crates/openmoat-hosts/src/host/openclaw/fixtures`).
 pub(super) fn openclaw(tool: &str, params: &Value) -> Value {
     json!({
         "hook_event_name": "before_tool_call", "toolName": tool, "params": params,
@@ -45,7 +45,7 @@ pub(super) fn openclaw(tool: &str, params: &Value) -> Value {
 }
 
 /// GitHub Copilot CLI's camelCase `preToolUse`, `toolArgs` as a JSON string
-/// (`tests/fixtures/hosts/copilot-cli`).
+/// (`crates/openmoat-hosts/src/host/copilot_cli/fixtures`).
 pub(super) fn copilot(tool: &str, args: &Value) -> Value {
     json!({
         "sessionId": "sess-1", "timestamp": 1_792_540_800_000_u64, "cwd": CWD,
@@ -53,7 +53,7 @@ pub(super) fn copilot(tool: &str, args: &Value) -> Value {
     })
 }
 
-/// OpenMoat's pi extension (`tests/fixtures/hosts/pi`).
+/// OpenMoat's pi extension (`crates/openmoat-hosts/src/host/pi/fixtures`).
 pub(super) fn pi(tool: &str, input: &Value) -> Value {
     json!({
         "hook_event_name": "tool_call", "toolName": tool, "input": input,

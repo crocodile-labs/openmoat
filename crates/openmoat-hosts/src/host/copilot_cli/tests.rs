@@ -5,7 +5,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/hosts/copilot-cli"
+    "/src/host/copilot_cli/fixtures"
 );
 
 fn fixture(name: &str) -> HookRequest {

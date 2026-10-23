@@ -16,10 +16,10 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Asks, Detect, ExtraFile, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostDocs, HostSpec,
-    InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames, McpReader, McpServer,
-    McpSpec, McpSyntax, ProjectSettingsSpec, RelaxedKey, SandboxFormat, SandboxSpec, SettingsFile,
-    SettingsReader, ToolRow,
+    Asks, Detect, ExtraFile, GUARD_BUDGET_S, Helper, HookDir, HookLayout, HookSpec, HostDocs,
+    HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames, McpReader,
+    McpServer, McpSpec, McpSyntax, Paths, ProcessSpec, ProjectSettingsSpec, Protect, RelaxedKey,
+    SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
@@ -29,6 +29,7 @@ pub use host::openclaw::{
     STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
 };
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
+pub use wire::owned_file::{OwnedFile, OwnedFileError};
 
 use std::fmt;
 use std::str::FromStr;

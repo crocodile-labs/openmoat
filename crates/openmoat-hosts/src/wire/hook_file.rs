@@ -17,7 +17,7 @@ use crate::HookSpec;
 pub(crate) mod nested;
 
 /// How one host's hook file lays out an entry of OpenMoat's.
-pub trait HookFile: Sync {
+pub trait HookFile: Sync + std::fmt::Debug {
     /// The entry for `spec` that runs `binary` as `guard --host <id>`; with
     /// `block`, one that asks the host to block the call when the guard fails
     /// (only where [`Self::knows_on_failure`]).

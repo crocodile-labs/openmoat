@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
     ProjectSettingsSpec, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
@@ -28,7 +28,7 @@ mod pre_tool;
 use pre_tool::pre_tool_action;
 
 /// Cursor blocks a failed hook through `failClosed` on every entry
-/// ([`HookFormat::Cursor`]), not through `block_on_failure`.
+/// ([`hook_file::Cursor`]), not through `block_on_failure`.
 const HOOKS: &[HookSpec] = &[
     HookSpec::new("beforeShellExecution", "", TOOL_HOOK_TIMEOUT_S, false),
     HookSpec::new("beforeMCPExecution", "", TOOL_HOOK_TIMEOUT_S, false),
@@ -63,7 +63,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".cursor",
         config_file: "hooks.json",
         hooks: HOOKS,
-        hook_format: HookFormat::Cursor,
+        hook_file: HookLayout::Entries(&hook_file::Cursor),
         ..InstallSpec::BASE
     }),
     mcp: Some(McpSpec {
@@ -91,6 +91,21 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "hooks.json",
     }),
+    // The CLI agent, and the macOS helper processes of the Cursor editor,
+    // whose agent runs commands in terminals they start: `Cursor Helper`,
+    // `Cursor Helper (Plugin)` and the others, each
+    // `<name>.app/Contents/MacOS/<name>`. The editor's own process
+    // (`Cursor.app/Contents/MacOS/Cursor`) is not matched. A person's terminal
+    // inside the editor descends from a helper too, so the human-only commands
+    // are refused there: they need a terminal of one's own.
+    process: crate::contract::ProcessSpec {
+        names: &["cursor-agent"],
+        package_dirs: &[&["cursor-agent"]],
+        helper: Some(crate::contract::Helper {
+            path: ".app/contents/macos/cursor helper",
+            name: "Cursor Helper",
+        }),
+    },
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

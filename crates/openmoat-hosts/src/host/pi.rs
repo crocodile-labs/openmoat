@@ -5,7 +5,7 @@
 //! call before it runs and blocks it by returning `{ block: true, reason }`, and
 //! a handler that throws blocks the call too (pi 1.3.0 `docs/extensions.md`,
 //! "Errors and cleanup"; `dist/core/agent-session.js` `_beforeToolCall`).
-//! OpenMoat's extension (`integrations/pi/openmoat.js` in the CLI crate) runs
+//! OpenMoat's extension (`host/pi/integration/openmoat.js`) runs
 //! `moat guard --host pi` with this JSON on stdin: `hook_event_name`
 //! (`tool_call`), pi's own `toolName`, `input`, `toolCallId` and
 //! `parentToolCallId`, and four fields the extension adds: `sessionId` (from
@@ -24,19 +24,21 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookDir, HookFormat, HookSpec, HostAdapter, HostSpec, InstallSpec,
+    Asks, GUARD_BUDGET_S, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
     McpFile, McpSpec, McpServersJson, ProjectSettingsSpec, wrong_event,
 };
+use crate::wire::owned_file::OwnedFile;
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod bench;
 mod doc;
 mod mcp;
 mod project_settings;
+mod protect;
 mod tools;
 
 /// Seconds OpenMoat's extension waits for `moat guard` before it blocks the
-/// call (`GUARD_TIMEOUT_MS` in `integrations/pi/openmoat.js`, which the CLI's
+/// call (`GUARD_TIMEOUT_MS` in `pi/integration/openmoat.js`, which the CLI's
 /// tests compare with this). pi itself waits for a `tool_call` handler without
 /// a limit, and a person's answer to an `ask` comes after this wait.
 pub(crate) const HOOK_TIMEOUT_S: u64 = 45;
@@ -47,6 +49,14 @@ const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", HOOK_TIMEOUT_S, false)];
 
 pub(crate) const EVENT: &str = "tool_call";
+
+/// OpenMoat's extension, which is pi's hook file: `moat init` writes it to
+/// `<agent dir>/extensions/openmoat.js` with the binary's path filled in.
+static EXTENSION: OwnedFile = OwnedFile {
+    name: "pi extension",
+    source: include_str!("pi/integration/openmoat.js"),
+    first_line: "// OpenMoat for pi.",
+};
 
 /// pi asks through the extension's dialog where it has a screen (`ctx.hasUI`:
 /// the terminal UI and RPC mode); print and JSON modes have none.
@@ -79,7 +89,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".pi/agent",
         config_file: "extensions/openmoat.js",
         hooks: HOOKS,
-        hook_format: HookFormat::Pi,
+        hook_file: HookLayout::Owned(&EXTENSION),
         ..InstallSpec::BASE
     }),
     // pi reads `<agent dir>/mcp.json` and a trusted project's `.pi/mcp.json`,
@@ -108,6 +118,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         reader: &project_settings::READER,
         user_file: "settings.json",
     }),
+    protect: protect::PROTECT,
+    process: protect::PROCESS,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

@@ -25,7 +25,7 @@ const PATH_KEYS: &[&str] = &[
 /// web search and a fetch, as in Claude Code.
 ///
 /// Cursor documents tool names but no file tool's arguments
-/// (`tests/fixtures/hosts/cursor/README.md`, #138). A search reads every path
+/// (`crates/openmoat-hosts/src/host/cursor/fixtures/README.md`, #138). A search reads every path
 /// key it carries (a captured `Grep` sends `file_path`, not `path`). Any other
 /// tool that names a path is checked instead of passed: as reading it only when
 /// it is one of Cursor's listing and search tools ([`READ_ONLY_TOOLS`]), else as
