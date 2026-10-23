@@ -9,8 +9,9 @@ use openmoat_hosts::Host;
 use super::{Area, Report};
 use crate::commands::sandbox::write_report;
 use crate::home::Home;
-use crate::install::HostConfig;
+use crate::install::{HostConfig, read_or_empty};
 use crate::integrity::Lock;
+use crate::sandbox::backend::SandboxBackend;
 use crate::sandbox::claude::mask::{self, Mask};
 use crate::sandbox::{Plan, install as host_sandbox};
 
@@ -72,8 +73,8 @@ pub(super) fn sandboxes(
             }
             Err(e) => report.line(Area::Sandbox, false, format!("{name:<16} sandbox: {e:#}")),
         }
-        if host == Host::ClaudeCode {
-            masks(report, home, policy, &plan);
+        if host_sandbox::backend(host).is_some_and(SandboxBackend::masks_secrets) {
+            masks(report, home, host, policy, &plan);
         }
         if verbose {
             let _ = write_report(&mut report.out, translation);
@@ -95,11 +96,12 @@ pub(super) fn sandboxes(
 /// the settings on disk (#363). A secret it does not mask keeps the hook's
 /// and `moat proxy`'s handling, so none of these is a problem: a missing
 /// entry is already the "differs from the policy" problem above.
-fn masks(report: &mut Report, home: &Home, policy: &Policy, plan: &Plan) {
+fn masks(report: &mut Report, home: &Home, host: Host, policy: &Policy, plan: &Plan) {
     if policy.secrets.is_empty() {
         return;
     }
-    let root = match host_sandbox::claude_settings(home) {
+    let settings = host_sandbox::settings_path(home, host).and_then(|p| read_or_empty(&p));
+    let root = match settings {
         Ok(root) => root,
         Err(e) => {
             report.warn(&format!("Claude Code      secrets: {e:#}"));

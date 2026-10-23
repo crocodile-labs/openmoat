@@ -15,6 +15,7 @@
 //! leaves open. The Isolated tier's bubblewrap mounts (`bwrap`, Linux) are built on
 //! the same Landlock rules.
 
+pub mod backend;
 // Its tests walk real Unix paths, so they run on macOS too, not on Windows.
 #[cfg(any(target_os = "linux", all(test, unix)))]
 pub mod bwrap;
@@ -281,8 +282,8 @@ fn project_spellings(ctx: &EvalContext) -> Vec<String> {
 
 /// Codex's `config.toml`, next to the hook file (`$CODEX_HOME` or `~/.codex`).
 pub fn codex_config_path(home: &crate::home::Home) -> anyhow::Result<std::path::PathBuf> {
-    let hooks =
-        crate::install::HostConfig::for_host(home, openmoat_hosts::Host::Codex)?.settings_path;
+    let codex = install::host_with(openmoat_hosts::SandboxFormat::CodexProfile)?;
+    let hooks = crate::install::HostConfig::for_host(home, codex)?.settings_path;
     Ok(codex_config_beside(&hooks))
 }
 
@@ -323,7 +324,8 @@ impl Plan {
         )?;
         let proxy_port = proxy_port(&policy);
         let mut claude = claude::generate(&ir, proxy_port, cfg!(target_os = "linux"))?;
-        let claude_settings = install::settings_path(state, openmoat_hosts::Host::ClaudeCode)?;
+        let claude_host = install::host_with(openmoat_hosts::SandboxFormat::ClaudeSettings)?;
+        let claude_settings = install::settings_path(state, claude_host)?;
         claude::protect(&mut claude, &claude_settings);
         claude::deny_write(&mut claude, &binary_paths);
         claude::deny_edit(&mut claude, &binary_paths);

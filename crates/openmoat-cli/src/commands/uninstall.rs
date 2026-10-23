@@ -13,8 +13,9 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use openmoat_hosts::{Host, SandboxFormat};
+use openmoat_hosts::Host;
 use serde_json::{Value, json};
+use toml_edit::DocumentMut;
 
 use crate::cli::UninstallArgs;
 use crate::exit::Code;
@@ -22,8 +23,8 @@ use crate::home::{Home, user_home, write_private};
 use crate::install::{self, HookLayout, HostConfig, Recorded, read_or_empty};
 use crate::integrity;
 use crate::render::Deferred;
+use crate::sandbox::backend::{SandboxBackend, Undo};
 use crate::sandbox::install as host_sandbox;
-use crate::sandbox::{claude, codex, cursor};
 
 pub fn run(args: &UninstallArgs) -> Result<Code> {
     crate::terminal::refuse_agent("openmoat uninstall")?;
@@ -53,13 +54,17 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
     let mut recorded = Recorded::load(&home)?;
     for host in hosts.iter().copied() {
         let config = HostConfig::for_host(&home, host)?;
-        let sandbox = host_sandbox::format(host);
-        // Claude Code keeps its sandbox block in the same file as its hooks.
-        let sandbox_too = sandbox == Some(SandboxFormat::ClaudeSettings);
+        let sandbox = host_sandbox::backend(host).map(SandboxBackend::undo);
+        // A sandbox kept in the same file as the hooks goes with them.
+        let with_hooks = match sandbox {
+            Some(Undo::WithHooks(remove)) => Some(remove),
+            _ => None,
+        };
         let owned = &recorded.claude_rules;
         let ours = &recorded.backups;
-        let strip =
-            |root: &mut Value| config.remove(root) | (sandbox_too && claude::remove(root, owned));
+        let strip = |root: &mut Value| {
+            config.remove(root) | with_hooks.is_some_and(|remove| remove(root, owned))
+        };
         let path = &config.settings_path;
         let plugin = matches!(config.layout, HookLayout::Plugin(_));
         // A hook file OpenMoat owns whole (pi's extension) is not JSON.
@@ -72,15 +77,15 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         let mut files = vec![(path.clone(), hook)];
         // A sandbox in a file of its own.
         match sandbox {
-            Some(SandboxFormat::CodexProfile) => {
+            Some(Undo::Toml(remove)) => {
                 let path = host_sandbox::settings_path(&home, host)?;
-                files.push((path.clone(), undo_toml(&path, ours)?));
+                files.push((path.clone(), undo_toml(&path, ours, remove)?));
             }
-            Some(SandboxFormat::CursorSandbox) => {
+            Some(Undo::Json(remove)) => {
                 let path = host_sandbox::settings_path(&home, host)?;
-                files.push((path.clone(), undo_json(&path, ours, cursor::remove)?));
+                files.push((path.clone(), undo_json(&path, ours, remove)?));
             }
-            Some(SandboxFormat::ClaudeSettings) | None => {}
+            Some(Undo::WithHooks(_)) | None => {}
         }
         // OpenClaw's hook is the plugin file `init` wrote, which nothing else owns.
         if plugin && let Some(plugin) = install::openclaw::remove_plugin(&config)? {
@@ -111,7 +116,8 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         .retain(|id, _| !hosts.iter().any(|h| h.id() == id));
     let forgot_rules = hosts
         .iter()
-        .any(|h| host_sandbox::format(*h) == Some(SandboxFormat::ClaudeSettings))
+        .filter_map(|h| host_sandbox::backend(*h))
+        .any(|b| matches!(b.undo(), Undo::WithHooks(_)))
         && !recorded.claude_rules.is_empty();
     if forgot_rules {
         recorded.claude_rules.clear();
@@ -254,20 +260,25 @@ fn undo_whole(
     .map(Some)
 }
 
-fn undo_toml(path: &Path, ours: &[PathBuf]) -> Result<Option<Undone>> {
+/// [`undo_json`] for a TOML file, `strip` removing OpenMoat's part.
+fn undo_toml(
+    path: &Path,
+    ours: &[PathBuf],
+    strip: fn(&mut DocumentMut) -> bool,
+) -> Result<Option<Undone>> {
     if !path.is_file() {
         return Ok(None);
     }
     let read = crate::sandbox::install::read_toml;
     let mut doc = read(path)?;
-    if !codex::remove(&mut doc) {
+    if !strip(&mut doc) {
         return Ok(None);
     }
     let text = doc.to_string();
     let backups = install::backups(path);
     let originals: Vec<&PathBuf> = backups
         .iter()
-        .filter(|b| read(b).is_ok_and(|mut d| !codex::remove(&mut d)))
+        .filter(|b| read(b).is_ok_and(|mut d| !strip(&mut d)))
         .collect();
     let original = originals
         .iter()

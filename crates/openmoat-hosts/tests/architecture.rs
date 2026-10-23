@@ -15,14 +15,10 @@ use openmoat_hosts::Host;
 /// each host without the `Host::` prefix and is checked on its own below; the
 /// rest is to move.
 const ALLOWED: &[(&str, usize)] = &[
-    ("openmoat-cli/src/commands/doctor/sandboxes.rs", 1),
-    ("openmoat-cli/src/commands/sandbox.rs", 1),
     ("openmoat-cli/src/hangs.rs", 1),
     ("openmoat-cli/src/mcp/pins.rs", 1),
     ("openmoat-cli/src/mcp/servers.rs", 2),
     ("openmoat-cli/src/mcp/wrap.rs", 1),
-    ("openmoat-cli/src/sandbox.rs", 2),
-    ("openmoat-cli/src/sandbox/install.rs", 2),
     // An inline test of what Claude Code, Codex and the Continue CLI answer.
     ("openmoat-hosts/src/lib.rs", 1),
 ];
@@ -93,7 +89,7 @@ fn only_host_modules_name_a_host() {
         .iter()
         .map(|(file, lines)| ((*file).to_owned(), *lines))
         .collect();
-    assert!(found.len() > 5, "the scan found too little: {found:?}");
+    assert!(found.len() > 3, "the scan found too little: {found:?}");
     for (file, lines) in &found {
         let limit = allowed.get(file).copied().unwrap_or(0);
         assert!(

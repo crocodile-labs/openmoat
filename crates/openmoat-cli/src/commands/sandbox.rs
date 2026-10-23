@@ -4,9 +4,8 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
-use openmoat_hosts::{Host, SandboxFormat};
+use openmoat_hosts::Host;
 use serde_json::{Value, json};
-use toml_edit::DocumentMut;
 
 use crate::cli::{Format, SandboxShowArgs};
 use crate::exit::Code;
@@ -14,9 +13,8 @@ use crate::home::Home;
 use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
-use crate::sandbox::{
-    Grants, Plan, Report, claude, codex, install, landlock_rules, seatbelt_profile,
-};
+use crate::sandbox::backend::SandboxBackend;
+use crate::sandbox::{Grants, Plan, Report, claude, install, landlock_rules, seatbelt_profile};
 
 /// One host's generated settings, ready to print.
 struct Shown<'a> {
@@ -41,26 +39,18 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
         ("Seatbelt (macOS)", &seatbelt.profile, &seatbelt.report),
         ("Landlock (Linux)", &landlock_text, &landlock.report),
     ];
-    let mut codex_doc = DocumentMut::new();
-    codex::apply(&mut codex_doc, &plan.codex)?;
     let mut claude_doc = json!({});
     claude::apply(&mut claude_doc, &plan.claude, &mut Vec::new())?;
     let mut hosts = Vec::new();
     for host in install::hosts() {
-        let text = match install::format(host) {
-            Some(SandboxFormat::CodexProfile) => codex_doc.to_string(),
-            Some(SandboxFormat::CursorSandbox) => {
-                serde_json::to_string_pretty(&plan.cursor.settings)?
-            }
-            Some(SandboxFormat::ClaudeSettings) | None => {
-                serde_json::to_string_pretty(&claude_doc)?
-            }
+        let Some(backend) = install::backend(host) else {
+            continue;
         };
         hosts.push(Shown {
             host,
             path: install::settings_path(&home, host)?,
-            text,
-            report: install::report(host, &plan),
+            text: backend.shown(&plan)?,
+            report: backend.report(&plan),
         });
     }
     if args.format == Format::Json {
@@ -176,9 +166,10 @@ pub fn sync() -> Result<Code> {
         write_report(&mut out, install::report(host, &plan))?;
         // The lock pins a Codex profile by the part OpenMoat owns, any other
         // sandbox file whole.
-        match install::format(host) {
-            Some(SandboxFormat::CodexProfile) => codex_configs.push(path),
-            _ => files.push(path),
+        if install::backend(host).is_some_and(SandboxBackend::pinned_by_part) {
+            codex_configs.push(path);
+        } else {
+            files.push(path);
         }
     }
     let lock = integrity::repin_with(&home, &binary, HookPins::Keep, &files, &codex_configs)?;
@@ -223,7 +214,7 @@ fn write_secrets(
             openmoat_core::SecretSource::File(path) => format!("file {path}"),
             openmoat_core::SecretSource::Keychain { service, .. } => format!("keychain {service}"),
         };
-        let claude = if install::unavailable(Host::ClaudeCode).is_some() {
+        let claude = if install::masks_unavailable() {
             "Claude Code's sandbox is not available here, so it masks nothing".to_owned()
         } else {
             state.describe()
