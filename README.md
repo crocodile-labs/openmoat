@@ -57,6 +57,10 @@ Start your agent in a new session and work as usual. `openmoat status` shows, fo
 agent, whether it has the hook and an OS sandbox, the hook only, or nothing. When
 OpenMoat blocks a call, the agent gets the rule and the reason:
 `moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa`.
+An `ask` the agent cannot show (Codex, for one) arrives as a deny that says what to run in
+your own terminal: `openmoat`, which shows the call and allows it for the session or for
+good, or `openmoat allow --last`. A deny rule changes only in the policy (`openmoat edit`);
+see [If OpenMoat gets in your way](docs/USAGE.md#if-openmoat-gets-in-your-way).
 
 Other ways to install (the shell and PowerShell installers, `cargo install openmoat
 --locked`, a build from source, checking a release's attestation) and how to upgrade

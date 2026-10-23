@@ -118,6 +118,12 @@ To choose without questions, name the agents: `openmoat init --hosts claude-code
 `codex`, `cursor`, `openclaw`, `copilot-cli`, `pi`, `gemini-cli`; comma-separated). `openmoat init --yes` sets up every agent found, for
 scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
 files and says how to go on. `openmoat init --dry-run` prints what would change first.
+`openmoat init --mcp-proxy` also runs every stdio MCP server in the agents' user
+configuration through `openmoat mcp proxy`, which pins each tool's description, schemas and annotations
+(`openmoat mcp wrap` in [USAGE.md](USAGE.md#commands)).
+
+`init` also pins every MCP server definition the agents load; the tool calls of a server
+that changes later, or of a new one, are refused until you run `openmoat mcp accept`.
 
 Hooks run the `openmoat` you ran `openmoat init` with, by its stable path (ADR-016). After
 moving or reinstalling the binary somewhere else, run `openmoat init` again; `openmoat doctor`
@@ -152,7 +158,9 @@ openmoat uninstall --purge            # also delete ~/.moat (policy, lock, audit
 prints what it did per file. When the file is otherwise unchanged since `openmoat init`,
 the backup `init` took is written back byte for byte; a file `init` created is
 deleted; a file you changed since keeps your changes and only loses OpenMoat's
-entries (its backup stays next to it). The lock stops pinning those files. `~/.moat`
+entries (its backup stays next to it). The lock stops pinning those files, the proxy
+service is removed if you installed it, and wrapped MCP servers are pointed back at their
+own commands. `~/.moat`
 stays unless you pass `--purge`. Like `openmoat allow`, it runs only from a terminal, and
 the default policy denies it to agents (`kernel-self`).
 
@@ -175,6 +183,11 @@ that binary's full path, and restart the agents: an agent keeps the hook command
 when it started, and an older binary denies every call over a lock written by a newer
 release (from 0.9.0 the lock also records state files that do not exist yet, which an
 older binary reads as files gone missing).
+
+From a release before 0.9.0, run `openmoat init` once and restart your agents. The
+[CHANGELOG](../CHANGELOG.md) lists what 0.9.0 breaks: MCP tools are held once, session
+grants need approving again, repository policies and packs must be signed again in their
+new namespaces, and a host allowed without a port is reached on 443 and 80 only.
 
 Then, in a terminal of your own:
 
