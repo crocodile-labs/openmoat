@@ -138,3 +138,51 @@ fn an_openclaw_configuration_is_pinned_without_its_mcp_servers() {
         assert!(lock.verify_one(&path).is_some(), "{text}");
     }
 }
+
+/// `openmoat mcp wrap` and `openmoat uninstall` re-pin the files they rewrote
+/// through `unpin`: OpenClaw's configuration keeps its owner, so it is pinned
+/// in its form again (its servers stay the MCP pins' to decide), while the
+/// undone host file is forgotten.
+#[test]
+fn a_rewritten_openclaw_configuration_keeps_its_pinned_form() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = crate::home::Home::at(dir.path().join("state"));
+    fs::create_dir_all(dir.path().join("state")).unwrap();
+    let openclaw = file(dir.path(), "gateway.json5", &with_server("x"));
+    let undone = file(dir.path(), "hooks.json", "{}");
+    let owner = [(openclaw.clone(), host("openclaw"))];
+    Lock::pin_owned(
+        Path::new("/x/moat"),
+        &[openclaw.clone(), undone.clone()],
+        &owner,
+    )
+    .unwrap()
+    .save(&home.lock_path())
+    .unwrap();
+    // `mcp wrap` rewrote the server's command.
+    fs::write(&openclaw, with_server("openmoat mcp proxy -- x")).unwrap();
+    super::super::unpin(
+        &home,
+        std::slice::from_ref(&undone),
+        std::slice::from_ref(&openclaw),
+    )
+    .unwrap();
+    let lock = Lock::load(&home.lock_path()).unwrap();
+    let stored = super::super::key(&openclaw);
+    assert_eq!(lock.owners(), [(PathBuf::from(&stored), host("openclaw"))]);
+    assert_eq!(
+        lock.pinned_forms
+            .as_ref()
+            .unwrap()
+            .get(&stored)
+            .map(String::as_str),
+        Some("openclaw")
+    );
+    assert!(!lock.entries.contains_key(&super::super::key(&undone)));
+    assert_eq!(lock.verify_one(&openclaw), None);
+    // still its form: a server change is not drift, anything else is
+    fs::write(&openclaw, with_server("y")).unwrap();
+    assert_eq!(lock.verify_one(&openclaw), None);
+    fs::write(&openclaw, format!("{{{OURS},\"x\":1}}")).unwrap();
+    assert!(lock.verify_one(&openclaw).is_some());
+}

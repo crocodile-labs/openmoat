@@ -414,7 +414,7 @@ scripts:
   - id: script-symlink-into-ssh
     threat: T11
     why: a test script links ~/.ssh into the project and reads the key through the link
-    payload: 'ln -s "$HOME/.ssh" keys && cat keys/id_rsa'
+    payload: 'rm -f keys; ln -s "$HOME/.ssh" keys && cat keys/id_rsa'
     seatbelt: eperm
     landlock: eacces
     isolate-linux: enoent

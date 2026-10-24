@@ -288,3 +288,40 @@ fn a_recent_taint_is_looked_up_again_once_an_event_is_recorded() {
         1
     );
 }
+
+/// A lookup whose version cannot be read (the audit log will not open), with a
+/// taint a test can change or make fail.
+struct Unversioned(std::sync::Mutex<Result<Taint, String>>);
+
+impl TaintLookup for Unversioned {
+    fn taint(&self, _: &str) -> Result<Taint, String> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+/// Without a version, a new event cannot be seen, so a recent taint is never
+/// used again: the session's secret read is seen at once, and a history that
+/// cannot be read then is an error (the proxy refuses), not the old taint.
+#[test]
+fn without_a_version_a_recent_taint_is_looked_up_again() {
+    let lookup = Unversioned(std::sync::Mutex::new(Ok(Taint::default())));
+    let sessions = Sessions::new(
+        vec![Credential::new("run-a", token_a().as_bytes()).unwrap()],
+        &lookup,
+    );
+    let long = Duration::from_hours(1);
+    assert!(sessions.taint("run-a").unwrap().secrets.is_empty());
+    *lookup.0.lock().unwrap() = Ok(Taint {
+        secrets: vec![TaintSecret {
+            source: "read ~/.ssh/id_rsa".to_owned(),
+            host: None,
+        }],
+        untrusted: None,
+    });
+    assert_eq!(
+        sessions.taint_within("run-a", long).unwrap().secrets.len(),
+        1
+    );
+    *lookup.0.lock().unwrap() = Err("audit log unreadable".to_owned());
+    assert!(sessions.taint_within("run-a", long).is_err());
+}

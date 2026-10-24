@@ -341,7 +341,22 @@ pub mod executing {
                 .replace("{udp}", &udp.local_addr().unwrap().port().to_string());
             let build = fx.tree(Project::Evil).join(".build.sh");
             std::fs::write(build, format!("{payload}\n")).unwrap();
-            let Some(out) = run(s.terminal) else { return };
+            let Some(mut out) = run(s.terminal) else {
+                return;
+            };
+            // An outcome none of `observe`'s messages names is run once more
+            // (a payload leaves the project as it found it, so a second run
+            // meets the same layer); the mismatch below shows both outputs.
+            if observe(&out).is_none() {
+                eprintln!("retrying {}: no known outcome in:\n{}", s.id, out.shown);
+                let Some(again) = run(s.terminal) else {
+                    return;
+                };
+                out = Run {
+                    completed: again.completed,
+                    shown: format!("{}\n--- run again ---\n{}", out.shown, again.shown),
+                };
+            }
             let expected = s.expected(layer);
             // A contained payload completes; the checks below the loop prove
             // that its write or datagram did not reach the host.

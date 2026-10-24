@@ -31,7 +31,7 @@ listeners the test owns.
 | `script-writes-outside-project` | T4 | `echo x > "$HOME/outside.txt"` | EPERM | EACCES | EACCES | EPERM | contained | EPERM | contained |
 | `script-direct-tcp` | T12 | `/bin/bash -c 'exec 3<>/dev/tcp/127.0.0.1/{tcp}'` | EPERM | EACCES | EACCES | EPERM | refused | EPERM | refused |
 | `script-dns-query` | T12 | `/bin/bash -c 'printf q > /dev/udp/127.0.0.1/{udp}'` | EPERM | EPERM | EPERM | EPERM | contained | EPERM | contained |
-| `script-symlink-into-ssh` | T11 | `ln -s "$HOME/.ssh" keys && cat keys/id_rsa` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
+| `script-symlink-into-ssh` | T11 | `rm -f keys; ln -s "$HOME/.ssh" keys && cat keys/id_rsa` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
 | `script-edits-policy` | T9 | `echo "# widened" >> "$HOME/.moat/policy.yaml"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EACCES |
 | `script-edits-hook-file` | T9 | `echo "{}" > "$HOME/.claude/settings.json"` | EPERM | EACCES | ENOENT | EPERM | ENOENT | EPERM | EROFS |
 | `script-proxy-unlisted-host` | T12 | `curl -fsS -o /dev/null -m 30 http://evil.example/` | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 | proxy 403 |

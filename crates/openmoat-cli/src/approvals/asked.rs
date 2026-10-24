@@ -1,6 +1,8 @@
 //! What `moat allow` approves of an asked action, and how it is shown.
 
-use openmoat_core::{Action, PathResolver as _};
+use openmoat_core::Action;
+
+use crate::realpath::{FsPathResolver, Resolution};
 
 /// An asked action as a grant or `--always` rule names it: a shell command
 /// trimmed, or files with each path made absolute against `cwd` (`~` expanded,
@@ -46,20 +48,22 @@ pub fn files(action: &Action) -> (&[String], &[String]) {
 }
 
 /// Where each file of `action` ([`files`], reads then writes) resolves now,
-/// following symlinks; empty when each is itself.
-pub(super) fn real_files(action: &Action) -> Vec<String> {
+/// following symlinks; empty when each is itself. `None` when one cannot be
+/// resolved (a link loop, a chain too long): where it points is unknown, so
+/// no grant can hold for it.
+pub(super) fn real_files(action: &Action) -> Option<Vec<String>> {
     let (reads, writes) = files(action);
     let real: Vec<String> = reads
         .iter()
         .chain(writes)
-        .map(|p| {
-            crate::realpath::FsPathResolver
-                .resolve(p)
-                .unwrap_or_else(|| p.clone())
+        .map(|p| match FsPathResolver::resolution(p) {
+            Resolution::Itself => Some(p.clone()),
+            Resolution::Elsewhere(real) => Some(real),
+            Resolution::Unresolvable => None,
         })
-        .collect();
+        .collect::<Option<_>>()?;
     let same = real.iter().eq(reads.iter().chain(writes));
-    if same { Vec::new() } else { real }
+    Some(if same { Vec::new() } else { real })
 }
 
 /// What an approvable action does, for a person: `run "…"`, `read …`, `write …`.

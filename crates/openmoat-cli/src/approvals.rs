@@ -223,7 +223,9 @@ impl Grants {
             audit_row,
             covers_taint: false,
             project: Some(scope.project.to_owned()),
-            real: asked::real_files(action),
+            // Unresolvable now: recorded as itself, but no lookup matches
+            // while it stays unresolvable ([`Grants::newest`]).
+            real: asked::real_files(action).unwrap_or_default(),
         });
     }
 
@@ -249,9 +251,10 @@ impl Grants {
         if openmoat_hosts::is_unknown_session(scope.session_id) {
             return None;
         }
+        let real = asked::real_files(action)?;
         self.active(now_ms)
             .filter(|g| scope.owns(g) && g.action == *action && g.applies_in(scope.project))
-            .filter(|g| g.real == asked::real_files(action))
+            .filter(|g| g.real == real)
             .max_by_key(|g| g.granted_at_ms)
     }
 
