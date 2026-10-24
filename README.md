@@ -27,6 +27,19 @@ pi or Gemini CLI run commands on their own machine and want one set of rules acr
 them. It is one Rust binary (`openmoat`) for macOS, Linux and Windows. No AI model
 decides, and nothing leaves your machine unless you export it.
 
+**Why not just the agent's own prompt and sandbox?** OpenMoat does not replace them; it
+covers what they leave out:
+
+- **One policy and one audit log for every agent** you or your team run, instead of a
+  different settings format in each.
+- **The agent cannot edit its own guardrails.** The policy and hook files are locked and
+  checked before every decision; the agent cannot change them, approve its own blocked
+  call or uninstall OpenMoat.
+- **A deny still holds when nobody is asked:** auto-approve modes, CI and background agents.
+- **The same policy writes the agents' own OS sandboxes** (Claude Code, Codex, Cursor), so
+  code inside an allowed command is confined too; `openmoat run` does this for any agent
+  on macOS and Linux.
+
 <p align="center">
   <a href="#supported-agents"><img src="https://img.shields.io/badge/Claude_Code-D97757?style=flat-square&logo=claude&logoColor=white" alt="Claude Code"></a>
   <a href="#supported-agents"><img src="https://img.shields.io/badge/Codex-412991?style=flat-square&logo=openai&logoColor=white" alt="Codex"></a>
