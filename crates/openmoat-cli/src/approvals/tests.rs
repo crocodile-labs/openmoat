@@ -391,3 +391,64 @@ fn a_granted_file_swapped_for_a_symlink_is_asked_again() {
     assert!(g.matches(at("claude-code", "s1"), &write, NOW));
     assert_eq!(g.entries.len(), 1);
 }
+
+/// A directory on the way to a granted file swapped for a symlink
+/// (`proj/sub` → `~/.ssh`) is asked about again too.
+#[cfg(unix)]
+#[test]
+fn a_granted_file_whose_directory_is_swapped_for_a_symlink_is_asked_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = crate::context::path_string(&fs::canonicalize(dir.path()).unwrap());
+    let (sub, ssh) = (format!("{root}/proj/sub"), format!("{root}/.ssh"));
+    fs::create_dir_all(&sub).unwrap();
+    fs::create_dir_all(&ssh).unwrap();
+    let write = Action::FsWrite {
+        path: format!("{sub}/authorized_keys"),
+    };
+    let mut g = Grants::default();
+    g.grant(at("claude-code", "s1"), &write, NOW, None);
+    assert!(g.matches(at("claude-code", "s1"), &write, NOW));
+    fs::remove_dir(&sub).unwrap();
+    std::os::unix::fs::symlink(&ssh, &sub).unwrap();
+    assert!(
+        !g.matches(at("claude-code", "s1"), &write, NOW),
+        "the directory is now a link"
+    );
+}
+
+/// A granted file swapped for a link loop or a dangling chain longer than the
+/// resolver follows matches no grant: where it points is unknown, which is not
+/// "the file itself".
+#[cfg(unix)]
+#[test]
+fn a_granted_file_that_no_longer_resolves_is_asked_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = crate::context::path_string(&fs::canonicalize(dir.path()).unwrap());
+    let file = format!("{root}/notes.txt");
+    fs::write(&file, "x").unwrap();
+    let write = Action::FsWrite { path: file.clone() };
+    let mut g = Grants::default();
+    g.grant(at("claude-code", "s1"), &write, NOW, None);
+    assert!(g.matches(at("claude-code", "s1"), &write, NOW));
+    fs::remove_file(&file).unwrap();
+    let links = 70;
+    for i in 1..links {
+        let to = if i + 1 == links {
+            format!("{root}/.ssh/authorized_keys")
+        } else {
+            format!("{root}/l{}", i + 1)
+        };
+        std::os::unix::fs::symlink(to, format!("{root}/l{i}")).unwrap();
+    }
+    std::os::unix::fs::symlink(format!("{root}/l1"), &file).unwrap();
+    assert!(
+        !g.matches(at("claude-code", "s1"), &write, NOW),
+        "a chain too long to follow"
+    );
+    // approving it while it cannot be resolved does not make it match either
+    g.grant(at("claude-code", "s1"), &write, NOW, None);
+    assert!(!g.matches(at("claude-code", "s1"), &write, NOW));
+    fs::remove_file(&file).unwrap();
+    std::os::unix::fs::symlink(&file, &file).unwrap();
+    assert!(!g.matches(at("claude-code", "s1"), &write, NOW), "a loop");
+}

@@ -102,7 +102,9 @@ pub trait TaintLookup: Send + Sync {
 
     /// A mark that changes whenever a taint may have (the audit log's newest
     /// event id), so a taint looked up before it changed is not used again.
-    /// `None` when there is none: a recent taint is then used for its age.
+    /// `None` when there is none or it cannot be read (the audit log will not
+    /// open): the taint is then looked up again every time, since a new event
+    /// could not be seen.
     fn version(&self) -> Option<i64> {
         None
     }
@@ -193,7 +195,8 @@ impl<'a> Sessions<'a> {
     }
 
     /// The taint of `session` as looked up at most `max_age` ago and with no
-    /// event recorded since ([`TaintLookup::version`]), else looked up again.
+    /// event recorded since ([`TaintLookup::version`]), else looked up again;
+    /// always looked up again while there is no version to compare.
     /// Each open connection of a session is checked against its taint every so
     /// often; this keeps that to one lookup per new event, at most one per
     /// `max_age`, for the whole session. A new connection uses [`Self::taint`].
@@ -203,6 +206,7 @@ impl<'a> Sessions<'a> {
             let recent = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some((at, seen, taint)) = recent.get(session)
                 && at.elapsed() < max_age
+                && version.is_some()
                 && *seen == version
             {
                 return Ok(taint.clone());

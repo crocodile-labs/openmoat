@@ -15,10 +15,23 @@ use openmoat_core::PathResolver;
 
 use crate::context::path_string;
 
-/// Dangling links followed before giving up; the OS limit is about 40, but a
-/// chain this long in an agent's working tree is already suspicious and the
-/// literal path is still checked.
-const MAX_LINK_HOPS: u8 = 8;
+/// Dangling links followed before giving up. It is above every OS's own limit
+/// (macOS 32, Linux 40, Windows 63): a write through a dangling link creates
+/// the link's target, so a chain the OS still follows must be resolved to its
+/// end. A chain longer than this one the OS refuses too (`ELOOP`).
+const MAX_LINK_HOPS: u8 = 64;
+
+/// Where a path really points ([`FsPathResolver::resolution`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Resolution {
+    /// The path is itself: no symlink on the way.
+    Itself,
+    /// The path reaches this other path through a symlink.
+    Elsewhere(String),
+    /// Where it points is unknown: a link loop, or a chain past
+    /// `MAX_LINK_HOPS`. Never to be taken as the path itself.
+    Unresolvable,
+}
 
 /// Resolves through the real filesystem. The policy is compiled for the
 /// resolved spellings of the project and home roots too (`context.rs`), so a
@@ -27,10 +40,33 @@ const MAX_LINK_HOPS: u8 = 8;
 #[derive(Debug)]
 pub struct FsPathResolver;
 
+impl FsPathResolver {
+    /// Where `path` really points, telling a path that is itself apart from
+    /// one that cannot be resolved, which [`PathResolver::resolve`] reports
+    /// alike (`None`): the engine still checks the literal path then, but a
+    /// check that a path still resolves where it did must not pass.
+    #[must_use]
+    pub fn resolution(path: &str) -> Resolution {
+        match real_path(Path::new(path), MAX_LINK_HOPS) {
+            None => Resolution::Unresolvable,
+            Some(real) => {
+                let real = path_string(&real);
+                if real == path {
+                    Resolution::Itself
+                } else {
+                    Resolution::Elsewhere(real)
+                }
+            }
+        }
+    }
+}
+
 impl PathResolver for FsPathResolver {
     fn resolve(&self, path: &str) -> Option<String> {
-        let real = path_string(&real_path(Path::new(path), MAX_LINK_HOPS)?);
-        (real != path).then_some(real)
+        match Self::resolution(path) {
+            Resolution::Elsewhere(real) => Some(real),
+            Resolution::Itself | Resolution::Unresolvable => None,
+        }
     }
 
     /// Follows links, as the shell's glob does; a name that is not UTF-8 is
@@ -151,5 +187,81 @@ mod tests {
         symlink(format!("{p}/b"), format!("{p}/a")).unwrap();
         symlink(format!("{p}/a"), format!("{p}/b")).unwrap();
         assert_eq!(r.resolve(&format!("{p}/a")), None);
+        assert_eq!(
+            FsPathResolver::resolution(&format!("{p}/a")),
+            Resolution::Unresolvable
+        );
+        assert_eq!(
+            FsPathResolver::resolution(&format!("{p}/src")),
+            Resolution::Itself
+        );
+    }
+
+    /// A chain of dangling links `{p}/l0` → `{p}/l1` → … → `{p}/l{n-1}` → `target`.
+    #[cfg(unix)]
+    fn chain(p: &str, n: usize, target: &str) -> String {
+        for i in 0..n {
+            let to = if i + 1 == n {
+                target.to_owned()
+            } else {
+                format!("{p}/l{}", i + 1)
+            };
+            symlink(to, format!("{p}/l{i}")).unwrap();
+        }
+        format!("{p}/l0")
+    }
+
+    /// The OS follows a dangling chain of up to 32 (macOS) or 40 (Linux) links
+    /// and a write creates its target, so a chain that long resolves to it.
+    #[cfg(unix)]
+    #[test]
+    fn long_dangling_chains_resolve_to_their_end() {
+        let (_dir, h, p) = setup();
+        let keys = format!("{h}/.ssh/authorized_keys");
+        let start = chain(&p, 40, &keys);
+        assert_eq!(FsPathResolver.resolve(&start), Some(keys.clone()));
+        assert_eq!(
+            FsPathResolver::resolution(&start),
+            Resolution::Elsewhere(keys)
+        );
+    }
+
+    /// The default policy, through this resolver, denies a write through a
+    /// 12-link dangling chain from the project into `~/.ssh`.
+    #[cfg(unix)]
+    #[test]
+    fn the_default_policy_denies_a_write_through_a_long_chain() {
+        use openmoat_core::{Action, CompiledPolicy, EvalContext, NoResolver, Policy, Verdict};
+        let (_dir, h, p) = setup();
+        let start = chain(&p, 12, &format!("{h}/.ssh/authorized_keys"));
+        let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+        let ctx = EvalContext {
+            home: h.clone(),
+            project: Some(p.clone()),
+            real_home: None,
+            real_project: None,
+            moved_dirs: Vec::new(),
+            cwd: p.clone(),
+            case_insensitive_paths: false,
+        };
+        let compiled = CompiledPolicy::compile(&policy, &ctx).unwrap();
+        let write = Action::FsWrite { path: start };
+        let decision = compiled.decide_with(&write, &NoResolver, &FsPathResolver);
+        assert_eq!(decision.verdict, Verdict::Deny, "{decision:?}");
+        let plain = Action::FsWrite {
+            path: format!("{p}/src/lib.rs"),
+        };
+        let decision = compiled.decide_with(&plain, &NoResolver, &FsPathResolver);
+        assert_ne!(decision.verdict, Verdict::Deny, "{decision:?}");
+    }
+
+    /// A chain past the limit is unresolvable, never the path itself.
+    #[cfg(unix)]
+    #[test]
+    fn a_chain_past_the_limit_is_unresolvable() {
+        let (_dir, h, p) = setup();
+        let start = chain(&p, usize::from(MAX_LINK_HOPS) + 2, &format!("{h}/.ssh/x"));
+        assert_eq!(FsPathResolver::resolution(&start), Resolution::Unresolvable);
+        assert_eq!(FsPathResolver.resolve(&start), None);
     }
 }

@@ -168,6 +168,29 @@ fn relative_operands_are_resolved_through_symlinks() {
     assert_verdict(&sb, &project, "npm install left-pad", "defer", "default");
 }
 
+/// A chain of dangling links the OS still follows (here 12, under macOS's 32
+/// and Linux's 40) is followed to its end: a write through it creates
+/// `~/.ssh/authorized_keys`, so it meets the deny there.
+#[cfg(unix)]
+#[test]
+fn a_long_chain_of_dangling_links_is_followed_to_its_end() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let project = sb.project();
+    std::fs::create_dir_all(sb.home.join(".ssh")).unwrap();
+    let links = 12;
+    for i in 0..links {
+        let to = if i + 1 == links {
+            sb.home.join(".ssh/authorized_keys")
+        } else {
+            project.join(format!("l{}", i + 1))
+        };
+        std::os::unix::fs::symlink(to, project.join(format!("l{i}"))).unwrap();
+    }
+    for command in ["echo k >> l0", "cat l0", "cp /dev/null l3"] {
+        assert_verdict(&sb, &project, command, "deny", "secrets-paths");
+    }
+}
+
 /// `path` with its links resolved, in slash form: on macOS the sandbox sits
 /// under `/var` → `/private/var`, on Windows under a `RUNNER~1` short name.
 fn real(path: &Path) -> String {
