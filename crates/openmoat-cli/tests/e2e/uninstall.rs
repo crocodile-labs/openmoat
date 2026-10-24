@@ -79,7 +79,8 @@ fn init_sums_up_each_agents_changes_before_asking() {
         claude.contains("sets ") && claude.contains("hooks"),
         "{shown}"
     );
-    assert!(claude.contains("sandbox"), "{shown}");
+    // native Windows has no OS sandbox for Claude Code, so no `sandbox` key there
+    assert_eq!(claude.contains("sandbox"), !cfg!(windows), "{shown}");
     assert!(
         shown.find(claude).unwrap() < shown.find("Protect Claude Code (").unwrap(),
         "{shown}"
