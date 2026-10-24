@@ -337,7 +337,7 @@ fn choose_hosts(
         out,
         "OpenMoat adds its hook and sandbox settings to each agent you accept, backing \
          up every file first; `openmoat uninstall` undoes it. Each agent's changes are \
-         summarized before you are asked; answer d to see the full diff."
+         summed up before you are asked; answer d to see the full diff."
     )?;
     // The sandbox settings the policy `init` keeps or installs gives each agent.
     let plan = sandbox_plan(home, binary).ok();

@@ -63,10 +63,10 @@ fn init_asks_per_agent_and_changes_only_the_accepted_ones() {
     assert!(!declined.home.join(".claude/settings.json").exists());
 }
 
-/// Before asking about an agent, `init` summarizes every file it would change
+/// Before asking about an agent, `init` sums up every file it would change
 /// there (new or edited, lines, the settings it sets), not the whole diff.
 #[test]
-fn init_summarizes_each_agents_changes_before_asking() {
+fn init_sums_up_each_agents_changes_before_asking() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
     let out = init_answering(&sb, "\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
