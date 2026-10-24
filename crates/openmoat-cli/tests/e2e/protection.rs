@@ -208,6 +208,7 @@ fn sections(out: &str, skip: usize) -> Vec<String> {
         "lock",
         "approvals",
         "environment",
+        "not found",
     ]);
     let mut seen: Vec<String> = Vec::new();
     for line in out.lines() {
@@ -224,9 +225,19 @@ fn sections(out: &str, skip: usize) -> Vec<String> {
 fn status_and_doctor_print_their_sections_in_order() {
     let sb = Sandbox::installed(&[".codex"]);
     let status = stdout(&sb.moat(&["status"]));
+    // `status` names the agents found (here Codex) one per line, then the
+    // agents with no folder on one `not found` line
     assert_eq!(
         sections(&status, 0),
-        with_hosts(&["state directory", "policy", "lock", "approvals"]),
+        [
+            "state directory",
+            "policy",
+            "lock",
+            "approvals",
+            "Codex",
+            "not found",
+            "audit log"
+        ],
         "{status}"
     );
     let doctor = stdout(&sb.moat(&["doctor"]));
