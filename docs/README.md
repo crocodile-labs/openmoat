@@ -42,6 +42,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Setup, the quality gate, pull request standards, releasing |
 | [AGENTS.md](../AGENTS.md) | The working contract for people and coding agents |
 | [SECURITY.md](../SECURITY.md) | How to report a bypass or vulnerability privately |
+| [CHALLENGE.md](CHALLENGE.md) | Break OpenMoat: the public bypass challenge, what counts, how you are credited |
 | [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | Community standards |
 | [CHANGELOG.md](../CHANGELOG.md) | Every user-visible change, per release |
 

@@ -358,6 +358,10 @@ Found a way past OpenMoat, or another vulnerability? Report it privately, as des
 in [SECURITY.md](SECURITY.md), not in a public issue. A valid bypass becomes a
 conformance fixture before the fix is published.
 
+Want to try? [Break OpenMoat](docs/CHALLENGE.md): a canary secret, six ways to win, and
+your name in the hall of fame, the CHANGELOG and a security advisory for every valid
+bypass.
+
 ## Community
 
 - [r/openmoat](https://www.reddit.com/r/openmoat/): questions, ideas and release news

@@ -42,7 +42,9 @@ Use GitHub's private advisory form:
 [report a vulnerability](https://github.com/crocodile-labs/openmoat/security/advisories/new).
 Only the maintainers see it.
 
-Do not open public issues or pull requests for bypasses. A useful report contains:
+Do not open public issues or pull requests for bypasses. Looking for one on purpose? The
+[Break OpenMoat](docs/CHALLENGE.md) challenge gives a ready target and says how valid
+reports are credited. A useful report contains:
 
 - the `openmoat --version` or commit, the host and the operating system
   (`openmoat doctor --bundle moat-bundle.json` writes these, and the agents' hook state, to
