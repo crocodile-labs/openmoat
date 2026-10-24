@@ -183,22 +183,12 @@ full table: [docs/USAGE.md](docs/USAGE.md#what-the-default-policy-does).
 
 ## How it works
 
-```
-agent wants to run a tool call
-  │
-  ▼
-the agent's hook ──► openmoat guard ──► policy lock check ──► policy
-                                                                │
-          ┌─────────────────┬──────────────────┬────────────────┤
-          ▼                 ▼                  ▼                ▼
-        allow             defer               ask              deny
-     the call runs   the agent's own    you decide, with   blocked, with the
-                     prompt decides     the reason shown   rule and the reason
-          │                 │                  │                │
-          └─────────────────┴────────┬─────────┴────────────────┘
-                                     ▼
-                       audit log (local, hash-chained)
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg">
+    <img src="docs/assets/how-it-works-light.svg" width="760" alt="An AI coding agent wants to run a tool call. Through the agent's own hook, OpenMoat checks it against one local policy before it runs: npm test is allowed, a call with no rule is left to the agent's own prompt, a git hook write asks you, and reading ~/.ssh/id_rsa is denied. Allowed code still runs inside the OS sandbox and the egress proxy, and every decision goes into a local hash-chained audit log.">
+  </picture>
+</p>
 
 **Allow** is normal development work. **Defer** is anything the policy has no rule for:
 the agent's own permission prompt decides, as it would without OpenMoat. **Ask** is for
