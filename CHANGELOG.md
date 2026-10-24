@@ -8,7 +8,7 @@ view at the end of the file.
 
 ## [Unreleased]
 
-## [0.10.1] - 2026-10-26
+## [0.10.1] - 2026-10-24
 
 **Upgrading:** nothing to run; the policy format, the commands and the lock are unchanged.
 
