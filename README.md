@@ -321,13 +321,13 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 
 ## Status
 
-**Usable daily.** The latest release is `0.10.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.10.1`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What exists and what
 comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 To upgrade, update the binary the way you installed it, then run `openmoat doctor` and
 `openmoat policy upgrade` in your own terminal ([docs/INSTALL.md](docs/INSTALL.md#upgrading)).
-From 0.9.0, a default install needs nothing more for 0.10.0; each release's upgrading note
+From 0.9.0, a default install needs nothing more for 0.10.1; each release's upgrading note
 is in the [CHANGELOG](CHANGELOG.md).
 
 ## Contributing

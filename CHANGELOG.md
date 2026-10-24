@@ -8,6 +8,14 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-26
+
+**Upgrading:** nothing to run; the policy format, the commands and the lock are unchanged.
+
+### Security
+- The hook follows a chain of dangling symlinks to its end up to 64 links, past every operating system's own limit, so a write through a 9-link chain into `~/.ssh` is checked where it lands; a session grant for a file that no longer resolves (a link loop, a longer chain) no longer holds and the call is asked again ([#658](https://github.com/crocodile-labs/openmoat/pull/658)).
+- The egress proxy looks a session's taint up again on every recheck while it cannot read the audit log's newest event, instead of reusing the taint it last saw for up to the recheck age; a lookup that then fails still refuses the connection ([#658](https://github.com/crocodile-labs/openmoat/pull/658)).
+
 ## [0.10.0] - 2026-10-23
 
 **Upgrading:** nothing to run for a default install; the policy lock keeps verifying. An OpenClaw configuration at another path (`OPENCLAW_CONFIG_PATH`) shows drift once: run `openmoat init`. `openmoat-hosts` changes its library API (marked **breaking** below); the `openmoat` command, the policy format and the hook payloads do not change.
@@ -840,7 +848,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/crocodile-labs/openmoat/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/crocodile-labs/openmoat/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/crocodile-labs/openmoat/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/crocodile-labs/openmoat/compare/v0.7.0...v0.8.0
