@@ -236,6 +236,11 @@ Run these in your own terminal. Agents are denied all of them.
 Every command, and what to do when OpenMoat gets in your way:
 [docs/USAGE.md](docs/USAGE.md).
 
+**Companion app:** [OpenMoat Bar](https://github.com/crocodile-labs/openmoat-bar) shows the same
+in your menu bar (macOS) or tray (Linux, Windows): which agents are protected, what was blocked and
+why, and what needs you. It is read-only. On macOS:
+`brew install --cask crocodile-labs/tap/openmoat-bar`.
+
 ## How it compares (MoatBench)
 
 Run on 2026-10-21 on macOS with OpenMoat 0.9.0, cc-safety-net 2.6.16, bash-authorize 0.9.9
