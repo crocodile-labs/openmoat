@@ -403,3 +403,30 @@ fn demo_decides_the_examples_and_writes_nothing() {
         "the demo touched the agent's settings"
     );
 }
+
+/// A home directory spelled with a doubled slash (`TMPDIR` ending in `/`, say)
+/// names `~/.ssh` the way the checked paths are spelled, so a key read is still
+/// denied by `secrets-paths`, also where the demo resolves no symlinks.
+#[cfg(unix)]
+#[test]
+fn demo_denies_a_key_read_under_a_home_spelled_with_a_double_slash() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let parent = sb.home.parent().unwrap().display().to_string();
+    let name = sb.home.file_name().unwrap().to_string_lossy().into_owned();
+    let out = sb
+        .command()
+        .arg("demo")
+        .env("HOME", format!("{parent}//{name}"))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    let text = stdout(&out);
+    let key_read = text
+        .lines()
+        .find(|l| l.starts_with("cat ~/.ssh/id_rsa"))
+        .unwrap_or_default();
+    assert!(
+        key_read.contains("deny") && key_read.contains("secrets-paths"),
+        "{text}"
+    );
+}

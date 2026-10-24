@@ -336,32 +336,37 @@ fn choose_hosts(
     writeln!(
         out,
         "OpenMoat adds its hook and sandbox settings to each agent you accept, backing \
-         up every file first; `openmoat uninstall` undoes it. Each agent's changes are shown \
-         before you are asked."
+         up every file first; `openmoat uninstall` undoes it. Each agent's changes are \
+         summarized before you are asked; answer d to see the full diff."
     )?;
     // The sandbox settings the policy `init` keeps or installs gives each agent.
     let plan = sandbox_plan(home, binary).ok();
     let mut chosen = Vec::new();
     for config in &found {
-        preview::show(home, config, binary, plan.as_ref(), out)?;
-        write!(
-            out,
-            "Protect {} ({})? [Y/n] ",
-            config.host.display_name(),
-            config.dir().display()
-        )?;
-        out.flush()?;
-        // End of input is a no: nothing is changed that a person did not accept.
-        let answer = crate::terminal::read_answer()?;
-        if answer.is_empty() {
-            writeln!(out)?;
-            continue;
-        }
-        if matches!(
-            answer.trim().to_ascii_lowercase().as_str(),
-            "" | "y" | "yes"
-        ) {
-            chosen.push(config.host);
+        let changes = preview::changes(home, config, binary, plan.as_ref())?;
+        preview::summary(config, &changes, out)?;
+        loop {
+            write!(
+                out,
+                "Protect {} ({})? [Y/n/d] ",
+                config.host.display_name(),
+                config.dir().display()
+            )?;
+            out.flush()?;
+            // End of input is a no: nothing is changed that a person did not accept.
+            let answer = crate::terminal::read_answer()?;
+            if answer.is_empty() {
+                writeln!(out)?;
+                break;
+            }
+            match answer.trim().to_ascii_lowercase().as_str() {
+                "d" | "diff" => preview::diff(&changes, out)?,
+                "" | "y" | "yes" => {
+                    chosen.push(config.host);
+                    break;
+                }
+                _ => break,
+            }
         }
     }
     if chosen.is_empty() {

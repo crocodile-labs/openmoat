@@ -102,10 +102,14 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
         status.contains("Claude Code      ✗ protection: not protected: hook missing"),
         "{status}"
     );
-    assert!(
-        status.contains("Codex            · host not found"),
-        "{status}"
-    );
+    // agents with no folder share one line
+    let not_found = status
+        .lines()
+        .find(|l| l.starts_with("not found        · "))
+        .expect(&status);
+    assert!(not_found.contains("Codex"), "{status}");
+    assert!(!not_found.contains("Claude Code"), "{status}");
+    assert!(!status.contains("host not found"), "{status}");
     assert!(!status.contains("Codex            ✗"), "{status}");
     assert!(
         !status.contains("Codex            · known gaps"),
