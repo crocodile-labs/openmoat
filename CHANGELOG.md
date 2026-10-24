@@ -116,6 +116,7 @@ view at the end of the file.
 - A write of a repository's `.github/mcp.json`, whose servers GitHub Copilot CLI starts in a trusted folder, asks (`runs-later`) and taints like the other agent configuration files ([#623](https://github.com/crocodile-labs/openmoat/pull/623)).
 
 ### Added
+- `scripts/demo/install-demo.sh` and two VHS tapes record a demo from installation to a blocked attack in a throwaway home: install, `openmoat init` for Claude Code, a README prompt injection denied in plain and base64 form, a package install left to Claude Code's prompt, attempts to switch OpenMoat off denied, then the audit log and the session replay; `--live` runs the real Claude Code instead of scripted payloads (docs/DEMO.md) ([#634](https://github.com/crocodile-labs/openmoat/pull/634)).
 - `openmoat-hosts` (library API): `HostSpec::BASE` and `InstallSpec::BASE`, the defaults a host spec takes for the fields it does not name, so a new optional field is added once rather than in every host; `Host::EVERY`, every host including those that speak another's format ([#631](https://github.com/crocodile-labs/openmoat/pull/631)).
 - Connections the proxy refuses at accept for capacity (`503`) are recorded as `proxy-capacity` rows: the first at once, then one row per 10 seconds with the count ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
 - `openmoat policy lint` warns about a `net` or `fetch` pattern whose port is not one (`example.com:*`, `example.com:0`, `[::1]:8443`), which matches nothing ([#627](https://github.com/crocodile-labs/openmoat/pull/627)).
