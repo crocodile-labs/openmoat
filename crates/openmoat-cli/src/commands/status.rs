@@ -272,6 +272,8 @@ fn hooks(
     recorded: &Recorded,
 ) -> Result<bool> {
     let mut healthy = true;
+    // Agents with no folder on this machine share one line at the end.
+    let mut not_found = Vec::new();
     for host in Host::ALL {
         let config = HostConfig::for_host(home, host)?;
         let line = match config.state(binary) {
@@ -282,7 +284,10 @@ fn hooks(
                     host.id()
                 )
             }
-            HookState::Missing if !config.host_present() => "· host not found".to_owned(),
+            HookState::Missing if !config.host_present() => {
+                not_found.push(host.display_name());
+                continue;
+            }
             HookState::Missing => {
                 healthy = false;
                 "✗ hook missing (run `openmoat init`)".to_owned()
@@ -302,6 +307,9 @@ fn hooks(
             host.display_name(),
             config.settings_path.display()
         )?;
+    }
+    if !not_found.is_empty() {
+        writeln!(out, "{:<16} · {}", "not found", not_found.join(", "))?;
     }
     for (host, found) in crate::install::detected()? {
         writeln!(

@@ -102,10 +102,14 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
         status.contains("Claude Code      ✗ protection: not protected: hook missing"),
         "{status}"
     );
-    assert!(
-        status.contains("Codex            · host not found"),
-        "{status}"
-    );
+    // agents with no folder share one line
+    let not_found = status
+        .lines()
+        .find(|l| l.starts_with("not found        · "))
+        .expect(&status);
+    assert!(not_found.contains("Codex"), "{status}");
+    assert!(!not_found.contains("Claude Code"), "{status}");
+    assert!(!status.contains("host not found"), "{status}");
     assert!(!status.contains("Codex            ✗"), "{status}");
     assert!(
         !status.contains("Codex            · known gaps"),
@@ -204,6 +208,7 @@ fn sections(out: &str, skip: usize) -> Vec<String> {
         "lock",
         "approvals",
         "environment",
+        "not found",
     ]);
     let mut seen: Vec<String> = Vec::new();
     for line in out.lines() {
@@ -220,9 +225,19 @@ fn sections(out: &str, skip: usize) -> Vec<String> {
 fn status_and_doctor_print_their_sections_in_order() {
     let sb = Sandbox::installed(&[".codex"]);
     let status = stdout(&sb.moat(&["status"]));
+    // `status` names the agents found (here Codex) one per line, then the
+    // agents with no folder on one `not found` line
     assert_eq!(
         sections(&status, 0),
-        with_hosts(&["state directory", "policy", "lock", "approvals"]),
+        [
+            "state directory",
+            "policy",
+            "lock",
+            "approvals",
+            "Codex",
+            "not found",
+            "audit log"
+        ],
         "{status}"
     );
     let doctor = stdout(&sb.moat(&["doctor"]));

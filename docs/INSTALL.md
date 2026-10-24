@@ -96,14 +96,20 @@ openmoat status    # policy, lock, hooks and protection level per agent, recent 
 `openmoat init` writes `~/.moat/policy.yaml` (the default policy), pins it and the hook
 files in `~/.moat/policy.lock` and creates the audit log. Then it lists each agent
 whose configuration directory exists, with the files it would change, and asks once
-per agent:
+per agent. Before each question it sums up every file that agent would get: new or
+edited, lines added and removed, and the top-level settings it sets. Answer `d` to see
+the full diff, then answer again (the line counts below are an example; yours depend on
+your settings and home directory):
 
 ```
 Found these agents:
   Claude Code  /Users/you/.claude (changes settings.json)
   Codex        /Users/you/.codex (changes hooks.json, config.toml)
-Protect Claude Code (/Users/you/.claude)? [Y/n]
-Protect Codex (/Users/you/.codex)? [Y/n]
+  /Users/you/.claude/settings.json: edited, +310 -0 lines; sets env, hooks, permissions, sandbox
+Protect Claude Code (/Users/you/.claude)? [Y/n/d]
+  /Users/you/.codex/hooks.json: new file, +23 -0 lines; sets hooks
+  /Users/you/.codex/config.toml: edited, +12 -0 lines; sets sandbox_workspace_write
+Protect Codex (/Users/you/.codex)? [Y/n/d]
 ```
 
 Only the agents you accept get the hook and sandbox settings. The last lines name the

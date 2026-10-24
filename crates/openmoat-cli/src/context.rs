@@ -70,7 +70,9 @@ pub fn eval_context(
         Some(dir) => absolute(dir)?,
         None => std::env::current_dir().context("determining the current directory")?,
     };
-    let home = home::user_home()?;
+    // One spelling for rules: `HOME=/Users//me/` names `~/.ssh` as `/Users/me/.ssh`,
+    // the form the checked action's paths are normalised to.
+    let home = absolute(&home::user_home()?)?;
     let project = match project {
         Some(dir) => {
             let dir = absolute(dir)?;
@@ -254,6 +256,20 @@ mod tests {
         );
         let root = base.ancestors().last().unwrap();
         assert_eq!(absolute(&root.join("..")).unwrap(), root);
+    }
+
+    /// A home directory spelled with a doubled or trailing slash gets the one
+    /// spelling the checked paths are normalised to, so `~/.ssh` still matches.
+    #[cfg(unix)]
+    #[test]
+    fn a_home_with_extra_slashes_gets_one_spelling() {
+        for raw in ["/Users//me", "/Users/me/", "/Users/./me//"] {
+            assert_eq!(
+                absolute(Path::new(raw)).unwrap(),
+                Path::new("/Users/me"),
+                "{raw}"
+            );
+        }
     }
 
     #[test]

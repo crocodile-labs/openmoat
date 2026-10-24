@@ -16,6 +16,13 @@ view at the end of the file.
 - The hook follows a chain of dangling symlinks to its end up to 64 links, past every operating system's own limit, so a write through a 9-link chain into `~/.ssh` is checked where it lands; a session grant for a file that no longer resolves (a link loop, a longer chain) no longer holds and the call is asked again ([#658](https://github.com/crocodile-labs/openmoat/pull/658)).
 - The egress proxy looks a session's taint up again on every recheck while it cannot read the audit log's newest event, instead of reusing the taint it last saw for up to the recheck age; a lookup that then fails still refuses the connection ([#658](https://github.com/crocodile-labs/openmoat/pull/658)).
 
+### Changed
+- `openmoat init` sums up each file it would change for an agent (new or edited, lines added and removed, the top-level settings it sets) instead of printing the whole diff before asking; answer `d` at `Protect …? [Y/n/d]` to see the full diff ([#663](https://github.com/crocodile-labs/openmoat/pull/663)).
+- `openmoat status` lists the agents it finds no folder for on one `not found` line instead of one line each; `openmoat doctor` keeps one line per agent ([#663](https://github.com/crocodile-labs/openmoat/pull/663)).
+
+### Fixed
+- Rules naming `~` match when the home directory is spelled with a doubled or trailing slash (`HOME=/Users//me/`): `openmoat demo`, which resolves no symlinks, showed a key read under such a home as `defer` instead of `deny` ([#663](https://github.com/crocodile-labs/openmoat/pull/663)).
+
 ## [0.10.0] - 2026-10-23
 
 **Upgrading:** nothing to run for a default install; the policy lock keeps verifying. An OpenClaw configuration at another path (`OPENCLAW_CONFIG_PATH`) shows drift once: run `openmoat init`. `openmoat-hosts` changes its library API (marked **breaking** below); the `openmoat` command, the policy format and the hook payloads do not change.

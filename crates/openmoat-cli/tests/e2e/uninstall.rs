@@ -63,26 +63,64 @@ fn init_asks_per_agent_and_changes_only_the_accepted_ones() {
     assert!(!declined.home.join(".claude/settings.json").exists());
 }
 
-/// Before asking about an agent, `init` shows the diff of every file it would
-/// change there, hooks and sandbox settings alike, and a declined agent's files
-/// stay as they were.
+/// Before asking about an agent, `init` sums up every file it would change
+/// there (new or edited, lines, the settings it sets), not the whole diff.
 #[test]
-fn init_shows_each_agents_changes_before_asking() {
+fn init_sums_up_each_agents_changes_before_asking() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
     let out = init_answering(&sb, "\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = stdout(&out);
+    let claude = shown
+        .lines()
+        .find(|l| l.contains("settings.json: new file, +"))
+        .expect(&shown);
+    assert!(
+        claude.contains("sets ") && claude.contains("hooks"),
+        "{shown}"
+    );
+    // native Windows has no OS sandbox for Claude Code, so no `sandbox` key there
+    assert_eq!(claude.contains("sandbox"), !cfg!(windows), "{shown}");
+    assert!(
+        shown.find(claude).unwrap() < shown.find("Protect Claude Code (").unwrap(),
+        "{shown}"
+    );
+    assert!(shown.contains("hooks.json: new file, +"), "{shown}");
+    assert!(shown.contains("config.toml: new file, +"), "{shown}");
+    assert!(shown.contains("[Y/n/d]"), "{shown}");
+    assert!(!shown.contains("(after openmoat init)"), "{shown}");
+    assert!(sb.home.join(".claude/settings.json").is_file());
+    assert!(!sb.home.join(".codex/hooks.json").exists());
+}
+
+/// Answering `d` shows the full diff of every file the agent would get, hooks
+/// and sandbox settings alike, then asks again; a declined agent's files stay
+/// as they were.
+#[test]
+fn init_shows_the_full_diff_on_d_and_asks_again() {
+    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let out = init_answering(&sb, "d\n\nd\nn\n");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = stdout(&out);
+    assert_eq!(shown.matches("Protect Claude Code (").count(), 2, "{shown}");
+    assert_eq!(shown.matches("Protect Codex (").count(), 2, "{shown}");
     let claude = shown
         .find("settings.json (after openmoat init)")
         .expect(&shown);
     let codex = shown
         .find("hooks.json (after openmoat init)")
         .expect(&shown);
+    // each diff comes after the first question and before the question again
     assert!(
-        claude < shown.find("Protect Claude Code (").unwrap(),
+        shown.find("Protect Claude Code (").unwrap() < claude,
         "{shown}"
     );
-    assert!(codex < shown.find("Protect Codex (").unwrap(), "{shown}");
+    assert!(
+        claude < shown.rfind("Protect Claude Code (").unwrap(),
+        "{shown}"
+    );
+    assert!(shown.find("Protect Codex (").unwrap() < codex, "{shown}");
+    assert!(codex < shown.rfind("Protect Codex (").unwrap(), "{shown}");
     assert!(
         shown.contains("config.toml (after openmoat init)"),
         "{shown}"
@@ -99,6 +137,7 @@ fn init_shows_each_agents_changes_before_asking() {
             .any(|l| l.starts_with('+') && l.contains("\"onFailure\": \"block\"")),
         "{shown}"
     );
+    assert!(sb.home.join(".claude/settings.json").is_file());
     assert!(!sb.home.join(".codex/hooks.json").exists());
 }
 

@@ -66,8 +66,9 @@ openmoat init                                # asks before it sets up each agent
 ```
 
 `openmoat init` writes the default policy to `~/.moat/policy.yaml`, lists the agents it
-finds and asks `Protect Claude Code (~/.claude)? [Y/n]` for each one. It backs up every
-file before it changes it, and `openmoat uninstall` puts them back.
+finds and asks `Protect Claude Code (~/.claude)? [Y/n/d]` for each one, after a one-line
+summary of each file it would change (`d` shows the full diff). It backs up every file
+before it changes it, and `openmoat uninstall` puts them back.
 
 Then check a verdict without running anything:
 
