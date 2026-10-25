@@ -49,6 +49,7 @@ covers what they leave out:
   <a href="#supported-agents"><img src="https://img.shields.io/badge/pi-6E56CF?style=flat-square" alt="pi"></a>
   <a href="#supported-agents"><img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini CLI"></a>
   <a href="#supported-agents"><img src="https://img.shields.io/badge/OpenCode-211E1E?style=flat-square" alt="OpenCode"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/Hermes_Agent-3D2B6B?style=flat-square" alt="Hermes Agent"></a>
   <br>
   <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS"></a>
   <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux"></a>
