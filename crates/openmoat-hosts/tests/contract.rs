@@ -236,6 +236,7 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // Claude Code 6 calls, Codex 4 (no read or fetch tool), Cursor 5 (no
     // fetch), OpenClaw 6, GitHub Copilot CLI 5 (its payload names no MCP
     // server), pi 5 (no fetch), Gemini CLI 6 (5 on Windows, whose PowerShell
-    // commands OpenMoat leaves to Gemini CLI), OpenCode 6, Hermes Agent 6
-    assert_eq!(checked, 49 - usize::from(cfg!(windows)));
+    // commands OpenMoat leaves to Gemini CLI), OpenCode 6 (5 on Windows, whose
+    // shell OpenMoat leaves to OpenCode), Hermes Agent 6
+    assert_eq!(checked, 49 - 2 * usize::from(cfg!(windows)));
 }

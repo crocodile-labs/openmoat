@@ -28,7 +28,11 @@ pub fn row() -> Row {
             let key = sb.home.join(".ssh/id_ed25519");
             crate::opencode::payload(sb, "read", &json!({"filePath": key}))
         }),
-        benign: Some(|sb| crate::opencode::payload(sb, "bash", &json!({"command": "git status"}))),
+        // A file in the project: OpenCode's shell on Windows is left to it.
+        benign: Some(|sb| {
+            let file = sb.project().join("src/main.rs");
+            crate::opencode::payload(sb, "read", &json!({"filePath": file}))
+        }),
         ungoverned: &[|sb| {
             crate::opencode::payload(
                 sb,

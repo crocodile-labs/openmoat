@@ -57,6 +57,16 @@ fn bash_is_a_shell_command_in_its_workdir() {
     assert_eq!(bash.call_id.as_deref(), Some("toolu_bash_1"));
     assert_eq!(bash.cwd.as_deref(), Some("/p"));
     assert_eq!(bash.event, HookEvent::PreToolUse);
+    // On Windows the shell may be Git Bash, PowerShell or `cmd`, and a guard
+    // built for Windows reads every call as Windows' whatever `platform` says.
+    assert!(matches!(
+        fixture("bash-windows").action,
+        Some(Action::ForeignShell { command, .. }) if command == "Get-ChildItem"
+    ));
+    if cfg!(windows) {
+        assert!(matches!(bash.action, Some(Action::ForeignShell { .. })));
+        return;
+    }
     assert_eq!(
         bash.action,
         Some(Action::Shell {
@@ -75,11 +85,6 @@ fn bash_is_a_shell_command_in_its_workdir() {
             command: r"cd 'it'\''s' && ls".into()
         })
     );
-    // On Windows the shell may be Git Bash, PowerShell or `cmd`.
-    assert!(matches!(
-        fixture("bash-windows").action,
-        Some(Action::ForeignShell { command, .. }) if command == "Get-ChildItem"
-    ));
 }
 
 #[test]

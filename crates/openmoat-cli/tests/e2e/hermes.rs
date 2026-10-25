@@ -87,8 +87,23 @@ fn init_adds_one_fail_closed_entry_and_approves_it() {
     let sb = bare(Some(ORIGINAL));
     init(&sb);
     let text_after = fs::read_to_string(config(&sb)).unwrap();
-    assert!(text_after.starts_with(ORIGINAL), "{text_after}");
-    assert!(text_after.contains("# the main model"), "{text_after}");
+    // The entry goes into the `hooks` mapping already there; without its
+    // lines the file is the person's, comments and order included.
+    let theirs: String = text_after
+        .lines()
+        .filter(|l| {
+            ![
+                "pre_tool_call:",
+                "guard --host hermes",
+                "fail_closed: true",
+                "timeout: 60",
+            ]
+            .iter()
+            .any(|ours| l.contains(ours))
+        })
+        .map(|l| format!("{l}\n"))
+        .collect();
+    assert_eq!(theirs, ORIGINAL, "{text_after}");
     let entries = ours(&sb);
     let entries = entries.as_array().unwrap();
     assert_eq!(entries.len(), 1, "{text_after}");

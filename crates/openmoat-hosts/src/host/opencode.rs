@@ -176,7 +176,7 @@ impl HostAdapter for Adapter {
     }
 
     fn bench_payload(&self, call: &BenchCall, at: &Place<'_>) -> Option<String> {
-        Some(bench::payload(call, at))
+        bench::payload(call, at)
     }
 
     fn read_reply(&self, _call: &BenchCall, exit: &Exit<'_>) -> Answer {
@@ -229,7 +229,11 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         args: &p.args,
         cwd: cwd.as_deref(),
         mcp_servers: &p.mcp_servers,
-        windows: p.platform.as_deref() == Some("win32"),
+        // OpenCode runs on the machine `openmoat guard` runs on, so a guard
+        // built for Windows reads every call as Windows'; the plugin's
+        // `platform` also says so, which lets tests read Windows payloads
+        // elsewhere. A payload's word never makes a Windows path relative.
+        windows: cfg!(windows) || p.platform.as_deref() == Some("win32"),
     };
     let action = tools::map(&call)?;
     // `write` replaces the whole file with `content`.

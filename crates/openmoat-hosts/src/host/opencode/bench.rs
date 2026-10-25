@@ -6,11 +6,15 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 
-/// OpenCode on a POSIX platform, its MCP tools named `<server>_<tool>` with
-/// the server among the configured ones the plugin sends.
-pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
+/// OpenCode on the platform the bench runs on, its MCP tools named
+/// `<server>_<tool>` with the server among the configured ones the plugin
+/// sends. `None` for a shell command on Windows, where OpenCode's shell may be
+/// Git Bash, PowerShell or `cmd` and OpenMoat leaves it to OpenCode
+/// (`unparseable`): the bench scores the shell it reads.
+pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
     let mut servers: Vec<String> = Vec::new();
     let (tool, args) = match call {
+        Call::Shell(_) if cfg!(windows) => return None,
         Call::Shell(command) => ("bash".to_owned(), json!({ "command": command })),
         Call::Read(path) => ("read".to_owned(), json!({ "filePath": at.file(path) })),
         Call::Write(path) => (
@@ -30,13 +34,16 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
             (format!("{server}_{tool}"), args.clone())
         }
     };
-    json!({
-        "hook_event_name": super::EVENT, "tool": tool, "args": args,
-        "sessionID": at.session, "callID": at.call_id,
-        "directory": at.cwd(), "worktree": at.cwd(), "mcpServers": servers,
-        "platform": "linux",
-    })
-    .to_string()
+    let platform = if cfg!(windows) { "win32" } else { "linux" };
+    Some(
+        json!({
+            "hook_event_name": super::EVENT, "tool": tool, "args": args,
+            "sessionID": at.session, "callID": at.call_id,
+            "directory": at.cwd(), "worktree": at.cwd(), "mcpServers": servers,
+            "platform": platform,
+        })
+        .to_string(),
+    )
 }
 
 /// Nothing on exit 0 is no decision, an allow lets the call run, exit 2 with

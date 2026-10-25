@@ -25,8 +25,9 @@ openmoat bench --hook '<command>' --host claude-code    # against any hook comma
 every step (Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode,
 Hermes Agent;
 Copilot's payload does not name an MCP tool's server and pi has no fetch tool, so
-scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell,
-which OpenMoat leaves to it, so its shell steps are skipped there)
+scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell
+and OpenCode's may be Git Bash, PowerShell or `cmd`, which OpenMoat leaves to them,
+so their shell steps are skipped there)
 sends the steps to `openmoat guard --host <host>`
 as that host's hook payload. The scenarios' commands are never executed: only the
 hook runs. It reads the kernel verdict of each step back from the throwaway audit

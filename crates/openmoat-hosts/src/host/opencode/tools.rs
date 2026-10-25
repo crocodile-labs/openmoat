@@ -38,10 +38,14 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
     let tool = call.tool;
     let field = |name: &'static str| crate::input_str(call.args, tool, name);
     let action = match tool {
-        "bash" if call.windows => Action::ForeignShell {
-            shell: WINDOWS_SHELL.to_owned(),
-            command: field("command")?,
-        },
+        "bash" if call.windows => {
+            // A `workdir` that is not a string is malformed on every platform.
+            optional(call, "workdir")?;
+            Action::ForeignShell {
+                shell: WINDOWS_SHELL.to_owned(),
+                command: field("command")?,
+            }
+        }
         "bash" => Action::Shell {
             command: in_dir(call, field("command")?)?,
         },

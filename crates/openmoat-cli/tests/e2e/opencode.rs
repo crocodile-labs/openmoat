@@ -21,14 +21,16 @@ fn sandbox() -> Sandbox {
 }
 
 /// A `tool.execute.before` payload for `tool` with `args`, in the project,
-/// with one configured MCP server.
+/// with one configured MCP server, from the platform the test runs on, as
+/// the plugin sends `process.platform`.
 pub(crate) fn payload(sb: &Sandbox, tool: &str, args: &Value) -> String {
     let project = sb.project().to_string_lossy().into_owned();
+    let platform = if cfg!(windows) { "win32" } else { "linux" };
     json!({
         "hook_event_name": "tool.execute.before",
         "tool": tool, "args": args, "sessionID": "ses_1", "callID": "call-1",
         "directory": project, "worktree": project,
-        "mcpServers": ["internal-tools"], "platform": "linux",
+        "mcpServers": ["internal-tools"], "platform": platform,
     })
     .to_string()
 }
@@ -88,6 +90,11 @@ fn writes_to_opencodes_own_files_are_denied() {
         ),
         ("bash", json!({"command": "OPENCODE_PURE=1 opencode run x"})),
     ] {
+        // On Windows OpenCode's shell may be PowerShell or `cmd`, which
+        // OpenMoat leaves to OpenCode (`unparseable`, documented there).
+        if tool == "bash" && cfg!(windows) {
+            continue;
+        }
         let (code, reply) = guard(&sb, &payload(&sb, tool, &args));
         assert_eq!(code, Some(DENY), "{tool} {args}: {reply}");
         assert!(reason(&reply).contains("kernel-self"), "{tool}: {reply}");

@@ -156,6 +156,10 @@ impl HostAdapter for Adapter {
     fn read_reply(&self, _call: &Call, exit: &Exit<'_>) -> Answer {
         bench::read_reply(exit)
     }
+
+    fn seen(&self, _call: &Call, verdict: Verdict) -> Answer {
+        bench::seen(verdict)
+    }
 }
 
 #[derive(Deserialize)]

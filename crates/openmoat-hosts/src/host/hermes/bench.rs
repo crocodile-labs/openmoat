@@ -2,6 +2,7 @@
 //! and how Hermes reads the hook's reply (`_evaluate_result` and
 //! `_parse_pre_tool_call` in `agent/shell_hooks.py`, v0.22.5).
 
+use openmoat_core::Verdict;
 use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
@@ -57,5 +58,14 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
         Answer::Passthrough
     } else {
         Answer::Error
+    }
+}
+
+/// Hermes has no allow that skips its own checks: OpenMoat's `{}` for an
+/// `allow` is no decision there, so an allow arrives as a passthrough.
+pub(super) fn seen(verdict: Verdict) -> Answer {
+    match verdict {
+        Verdict::Allow => Answer::Passthrough,
+        other => other.into(),
     }
 }
