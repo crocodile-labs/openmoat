@@ -89,7 +89,7 @@ fn init_adds_one_fail_closed_entry_and_approves_it() {
     let text_after = fs::read_to_string(config(&sb)).unwrap();
     // The entry goes into the `hooks` mapping already there; without its
     // lines the file is the person's, comments and order included.
-    let theirs: String = text_after
+    let theirs: Vec<&str> = text_after
         .lines()
         .filter(|l| {
             ![
@@ -101,9 +101,8 @@ fn init_adds_one_fail_closed_entry_and_approves_it() {
             .iter()
             .any(|ours| l.contains(ours))
         })
-        .map(|l| format!("{l}\n"))
         .collect();
-    assert_eq!(theirs, ORIGINAL, "{text_after}");
+    assert_eq!(theirs.join("\n") + "\n", ORIGINAL, "{text_after}");
     let entries = ours(&sb);
     let entries = entries.as_array().unwrap();
     assert_eq!(entries.len(), 1, "{text_after}");
