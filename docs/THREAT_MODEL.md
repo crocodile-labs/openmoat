@@ -661,7 +661,9 @@ something OpenMoat claims to stop.
   `opencode.json` and `opencode.jsonc` and a project's `opencode.json[c]` and
   `.opencode/opencode.json[c]` are pinned like every host's (ADR-026); servers from
   `~/.opencode/`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`,
-  a remote `.well-known/opencode` or managed configuration are not. There is no OS
+  a remote `.well-known/opencode` or managed configuration are not. Plugins and tools
+  in the directory `OPENCODE_CONFIG_DIR` names are neither denied nor asked for: the
+  default policy knows only the default directories. There is no OS
   sandbox from OpenMoat for OpenCode; run it under `openmoat run` for one.
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and

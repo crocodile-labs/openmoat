@@ -60,7 +60,7 @@ left to OpenCode's own `permission` rules, which allow most tools by default.
   (`%USERPROFILE%\.config\opencode` on Windows). The hook file is OpenMoat's plugin itself,
   `plugins/openmoat.js`; OpenCode loads every `.js` and `.ts` in `plugins/` and `plugin/`
   on start. `OPENCODE_CONFIG_DIR` names a further directory OpenCode reads; it does not
-  move this one.
+  move this one, and the default policy does not protect the plugins and tools there.
 - MCP servers: `mcp.<name>` in the global `config.json`, `opencode.json` and
   `opencode.jsonc`, and in a project's `opencode.json[c]` and `.opencode/opencode.json[c]`
   (JSON with comments, read as JSON5); each is pinned. Servers from `~/.opencode`,
