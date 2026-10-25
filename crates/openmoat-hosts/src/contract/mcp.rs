@@ -34,6 +34,10 @@ pub enum McpFile {
     /// is in a subdirectory of it (GitHub Copilot CLI's `mcp-config.json`
     /// beside `hooks/`, pi's `mcp.json` beside `extensions/`).
     InConfigDir(&'static str),
+    /// Each file of these names in the configuration directory, all of which
+    /// the host reads and merges (OpenCode's `config.json`, `opencode.json`
+    /// and `opencode.jsonc`).
+    EachInConfigDir(&'static [&'static str]),
     /// The file of this name in the home directory while the configuration
     /// directory is the default `~/<dir_name>`, inside the configuration
     /// directory otherwise (Claude Code's `~/.claude.json`).
@@ -49,6 +53,8 @@ pub enum McpSyntax {
     /// TOML, read as JSON.
     Toml,
     /// JSON5 (OpenClaw), written back as JSON; an empty file lists no servers.
+    /// Also JSON with comments and trailing commas (OpenCode's JSONC), which
+    /// JSON5 reads.
     Json5,
 }
 

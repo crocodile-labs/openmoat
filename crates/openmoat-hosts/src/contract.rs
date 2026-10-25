@@ -215,6 +215,25 @@ pub struct InstallSpec {
     /// Files besides the hook file that `moat init` writes and the lock pins
     /// with it (OpenClaw's plugin); the sandbox file is [`SandboxSpec::file`].
     pub extra_files: &'static [ExtraFile],
+    /// The host's versions OpenMoat's hook does not work with, told by the
+    /// version its program reports: `moat init` does not set such a host up,
+    /// and `moat status` and `moat doctor` report it as not protected. `None`
+    /// when every version takes the hook.
+    pub unsupported: Option<Unsupported>,
+}
+
+/// Versions of a host whose hook API OpenMoat does not support yet
+/// ([`InstallSpec::unsupported`]).
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Unsupported {
+    /// The host's program, looked for on the search path and run with
+    /// `--version`.
+    pub program: &'static str,
+    /// The first major version OpenMoat does not support.
+    pub from_major: u64,
+    /// Why, as `init`, `status` and `doctor` print it after the version.
+    pub why: &'static str,
 }
 
 impl InstallSpec {

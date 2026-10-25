@@ -42,6 +42,7 @@ mod lock_settings;
 mod mcp;
 mod moatbench;
 mod openclaw;
+mod opencode;
 #[cfg(unix)]
 mod packs;
 mod paths;

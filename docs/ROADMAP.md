@@ -17,8 +17,9 @@ The latest release is `0.10.1`, from GitHub Releases, the Homebrew tap and crate
 ([INSTALL.md](INSTALL.md)). What exists:
 
 - **Agents.** One policy for Claude Code, Codex, Cursor, OpenClaw (a `before_tool_call`
-  plugin, ADR-033), GitHub Copilot CLI, pi (an extension) and Gemini CLI, each through
-  its own hooks; the Continue CLI adapter waits for a `cn` release that runs hooks.
+  plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI and OpenCode 1 (a
+  `tool.execute.before` plugin), each through its own hooks; the Continue CLI adapter
+  waits for a `cn` release that runs hooks.
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
   `mcp`, `web.search` and `tool.unknown`; verdicts `allow`, `defer` (the default for
   anything no rule names, ADR-025), `ask` and `deny`.
@@ -97,7 +98,8 @@ agent has an adapter, `openmoat run` can still sandbox it.
 | #261 | Kiro | `PreToolUse` command hook |
 | #262 | Amp | plugin `tool.call` event |
 | #263 | goose | `PreToolUse` |
-| #265 | OpenCode | plugin `tool.execute.before` and `permission.ask` |
+| #265 | OpenCode 2 (`@opencode/cli`; OpenCode 1 is supported) | V2 plugin `tool.hook("execute.before")` and `permission.hook("evaluate")`, which could put an `ask` to the person |
+
 | #266 | Junie (CLI) | `PreToolUse` |
 
 Aider and the Zed agent have no pre-execution hook, and Roo Code has shut down; use

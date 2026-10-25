@@ -192,7 +192,8 @@ mod tests {
                 "openclaw",
                 "copilot-cli",
                 "pi",
-                "gemini-cli"
+                "gemini-cli",
+                "opencode"
             ]
         );
         let installs: Vec<Host> = Host::EVERY

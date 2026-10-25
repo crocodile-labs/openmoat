@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 108] = [
+const PROTECTED_WRITES: [&str; 115] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -148,6 +148,16 @@ const PROTECTED_WRITES: [&str; 108] = [
     "**/GEMINI.md",
     "**/.gemini",
     "**/.gemini/**",
+    // OpenCode: its configuration directory, a project's `.opencode` and
+    // `opencode.json[c]` (plugins, custom tools, commands, MCP servers, permission
+    // rules) and the npm plugins it caches
+    "**/.config/opencode",
+    "**/.config/opencode/**",
+    "**/.opencode",
+    "**/.opencode/**",
+    "**/opencode.json",
+    "**/opencode.jsonc",
+    "**/.cache/opencode/node_modules/**",
     // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",

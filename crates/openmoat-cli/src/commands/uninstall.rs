@@ -67,7 +67,7 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         };
         let path = &config.settings_path;
         let plugin = matches!(config.layout, HookLayout::Plugin(_));
-        // A hook file OpenMoat owns whole (pi's extension) is not JSON.
+        // A hook file OpenMoat owns whole (pi's extension, OpenCode's plugin) is not JSON.
         let hook = match config.layout {
             HookLayout::Owned(file) => undo_whole(path, ours, |text| file.is_ours(text))?,
             HookLayout::Entries(_) | HookLayout::Plugin(_) => {
@@ -231,8 +231,9 @@ fn undo_host_json(
     finish(path, &owned(&backups, ours), original, created, &text).map(Some)
 }
 
-/// A hook file that is OpenMoat's whole (pi's extension): deleted, or the
-/// person's file `init` backed up before writing it given back. A file there
+/// A hook file that is OpenMoat's whole (pi's extension, OpenCode's plugin):
+/// deleted, or the person's file `init` backed up before writing it given
+/// back. A file there
 /// that `is_ours` does not recognise is the person's and stays.
 fn undo_whole(
     path: &Path,

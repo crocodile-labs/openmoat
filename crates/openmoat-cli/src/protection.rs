@@ -86,13 +86,27 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
         .into_iter()
         .map(|host| {
             let config = HostConfig::for_host(home, host)?;
-            let (level, reason) = level(
-                &config.state(binary),
-                config.host_present(),
-                recorded.skipped(host),
-                || crate::project_settings::switched_off(host, config.dir(), &config.settings_path),
-                || sandbox(home, host, plan.as_ref(), lock.as_ref()),
-            );
+            // A version that does not load OpenMoat's hook (OpenCode 2).
+            let unsupported = config
+                .host_present()
+                .then(|| crate::install::host_version::unsupported(host))
+                .flatten();
+            let (level, reason) = match unsupported {
+                Some(why) => (Level::NotProtected, Some(why)),
+                None => level(
+                    &config.state(binary),
+                    config.host_present(),
+                    recorded.skipped(host),
+                    || {
+                        crate::project_settings::switched_off(
+                            host,
+                            config.dir(),
+                            &config.settings_path,
+                        )
+                    },
+                    || sandbox(home, host, plan.as_ref(), lock.as_ref()),
+                ),
+            };
             Ok(Protection {
                 host: host.id(),
                 name: host.display_name(),

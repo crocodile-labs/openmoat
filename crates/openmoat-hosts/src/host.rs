@@ -28,4 +28,6 @@ crate::registry::hosts! {
     Pi => pi,
     /// Google's Gemini CLI (`BeforeTool`).
     GeminiCli => gemini_cli,
+    /// OpenCode 1, through OpenMoat's plugin and its `tool.execute.before` hook.
+    OpenCode => opencode,
 }

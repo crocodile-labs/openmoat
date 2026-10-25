@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "websearch", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_websearch_1",
+  "args": { "query": "serde json flatten" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

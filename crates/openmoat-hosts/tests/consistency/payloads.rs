@@ -61,3 +61,23 @@ pub(super) fn pi(tool: &str, input: &Value) -> Value {
         "hasUI": true, "platform": "darwin",
     })
 }
+
+/// OpenMoat's OpenCode plugin (`crates/openmoat-hosts/src/host/opencode/fixtures`).
+pub(super) fn opencode(tool: &str, args: &Value) -> Value {
+    json!({
+        "hook_event_name": "tool.execute.before", "tool": tool, "args": args,
+        "sessionID": "ses_1", "callID": "call-1", "directory": CWD, "worktree": CWD,
+        "mcpServers": [], "platform": "darwin",
+    })
+}
+
+/// A file path as OpenCode's model sends it: OpenCode expands no `~`, so a
+/// path in the home is written out, and a relative one is joined to the
+/// directory, as OpenCode's tools join it.
+pub(super) fn opencode_path(path: &str) -> String {
+    match path.strip_prefix("~/") {
+        Some(rest) => format!("{HOME}/{rest}"),
+        None if path.starts_with('/') => path.to_owned(),
+        None => format!("{CWD}/{path}"),
+    }
+}

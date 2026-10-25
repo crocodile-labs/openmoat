@@ -277,7 +277,7 @@ fn choose_hosts(
     out: &mut Deferred,
 ) -> Result<Vec<Host>> {
     if let Some(explicit) = &args.hosts {
-        return Ok(explicit.clone());
+        return supported(explicit.iter().copied(), out);
     }
     let mut found = Vec::new();
     for config in Host::ALL
@@ -286,7 +286,10 @@ fn choose_hosts(
     {
         if config.host_present() {
             found.push(config);
-        } else if env_config_dir(config.host)?.is_some() {
+        } else if env_config_dir(config.host)?.is_some()
+            && crate::install::location::custom(config.host)
+                .is_none_or(openmoat_hosts::Locate::variables_are_the_hosts)
+        {
             // The agent creates its directory on first start; say so instead of
             // leaving it out silently. The directory is not created here.
             let name = config.host.display_name();
@@ -299,6 +302,8 @@ fn choose_hosts(
             )?;
         }
     }
+    let takes_hook = supported(found.iter().map(|c| c.host), out)?;
+    found.retain(|c| takes_hook.contains(&c.host));
     let names: Vec<&str> = found.iter().map(|c| c.host.display_name()).collect();
     if found.is_empty() {
         writeln!(
@@ -376,6 +381,20 @@ fn choose_hosts(
         )?;
     }
     Ok(chosen)
+}
+
+/// `hosts` but those whose version on the search path does not take OpenMoat's
+/// hook (OpenCode 2), each named with why it is not set up: a hook it does not
+/// load would be pinned and reported as protecting nothing.
+fn supported(hosts: impl Iterator<Item = Host>, out: &mut Deferred) -> Result<Vec<Host>> {
+    let mut kept = Vec::new();
+    for host in hosts {
+        match crate::install::host_version::unsupported(host) {
+            Some(why) => writeln!(out, "· {:<16} not set up: {why}", host.display_name())?,
+            None => kept.push(host),
+        }
+    }
+    Ok(kept)
 }
 
 /// Every file `init` may change for `config`'s host: its hook file, its

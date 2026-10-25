@@ -3,7 +3,7 @@
 //! The layouts whose entries sit among the person's own (Claude Code, Codex,
 //! Cursor, GitHub Copilot CLI, Gemini CLI) are pure code in the hosts crate
 //! ([`openmoat_hosts::HookFile`]); this module reads, backs up and writes the
-//! file. A file OpenMoat owns whole (pi's extension) is written by [`owned`],
+//! file. A file OpenMoat owns whole (pi's extension, OpenCode's plugin) is written by [`owned`],
 //! a plugin configuration (OpenClaw's `openclaw.json`) by [`openclaw`]; the
 //! host's spec says which ([`HookLayout`]).
 

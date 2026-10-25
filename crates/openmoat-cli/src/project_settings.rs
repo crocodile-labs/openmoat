@@ -1,8 +1,9 @@
 //! Agent settings a repository carries: Claude Code's `.claude/settings.json`
 //! (shared with the project) and `.claude/settings.local.json` (the person's
 //! own), GitHub Copilot CLI's `.github/copilot/settings*.json` and the hook
-//! files in its `.github/hooks`, Gemini CLI's `.gemini/settings.json`, and pi's
-//! `.pi/settings.json` and `.pi/extensions`, as each host's spec names them
+//! files in its `.github/hooks`, Gemini CLI's `.gemini/settings.json`, pi's
+//! `.pi/settings.json` and `.pi/extensions`, and OpenCode's `opencode.json`,
+//! `.opencode/opencode.json` and `.opencode/plugins`, as each host's spec names them
 //! (`HostSpec::project_settings`); and what the person's own settings file of
 //! each of those hosts sets that turns OpenMoat's hook off ([`switched_off`]).
 //!
@@ -89,7 +90,7 @@ pub fn switched_off(host: Host, config_dir: &Path, hook_file: &Path) -> Option<S
     };
     let found = match read_bytes(&path) {
         Ok(None) => return None,
-        Ok(Some(bytes)) => match parse(&path, &bytes) {
+        Ok(Some(bytes)) => match parse(&path, &bytes, spec.reader.reads_comments()) {
             Ok(root) => reading.switched_off(&root),
             Err(e) => vec![format!("cannot be checked: {e:#}")],
         },
@@ -118,8 +119,19 @@ fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>> {
 }
 
 /// The settings object `bytes` (read from `path`) hold; an error for text that
-/// is not one JSON object.
-fn parse(path: &Path, bytes: &[u8]) -> Result<Map<String, Value>> {
+/// is not one JSON object. With `comments`, the host reads its files as JSON
+/// with comments and trailing commas (OpenCode), read here as JSON5.
+fn parse(path: &Path, bytes: &[u8], comments: bool) -> Result<Map<String, Value>> {
+    if comments {
+        let text = std::str::from_utf8(bytes)
+            .with_context(|| format!("{} is not UTF-8", path.display()))?;
+        let parsed = crate::install::openclaw::parse(text)
+            .with_context(|| format!("{} is not valid JSON with comments", path.display()))?;
+        return match parsed.value {
+            Value::Object(root) => Ok(root),
+            _ => bail!("{} is not a JSON object", path.display()),
+        };
+    }
     if path.extension().is_some_and(|e| e == "toml") {
         let text = std::str::from_utf8(bytes)
             .with_context(|| format!("{} is not UTF-8", path.display()))?;
@@ -141,16 +153,18 @@ fn parse(path: &Path, bytes: &[u8]) -> Result<Map<String, Value>> {
 /// What the bytes of one Claude Code file set that [`findings`] names, or why
 /// they could not be read; `None` when the file is absent or sets nothing risky.
 fn judge(path: &Path, bytes: Option<&[u8]>) -> Option<String> {
-    judge_with(path, bytes, findings)
+    judge_with(path, bytes, false, findings)
 }
 
-/// [`judge`] with `found` naming what is risky.
+/// [`judge`] with `found` naming what is risky, in JSON with comments when
+/// `comments` ([`parse`]).
 fn judge_with(
     path: &Path,
     bytes: Option<&[u8]>,
+    comments: bool,
     found: impl Fn(&Map<String, Value>) -> Vec<String>,
 ) -> Option<String> {
-    match bytes.map(|bytes| parse(path, bytes)) {
+    match bytes.map(|bytes| parse(path, bytes, comments)) {
         None => None,
         Some(Ok(root)) => {
             let found = found(&root);
@@ -164,15 +178,19 @@ fn judge_with(
 /// could not be read. `None` when the file is absent or sets nothing risky.
 #[cfg(test)]
 fn check(path: &Path) -> Option<String> {
-    check_as(path, findings)
+    check_as(path, false, findings)
 }
 
-/// What reading one file found, `found` naming what is risky in its format:
-/// what it sets, or why it could not be read; `None` when the file is absent
-/// or sets nothing risky.
-fn check_as(path: &Path, found: impl Fn(&Map<String, Value>) -> Vec<String>) -> Option<String> {
+/// What reading one file found, `found` naming what is risky in its format
+/// (JSON with comments when `comments`): what it sets, or why it could not be
+/// read; `None` when the file is absent or sets nothing risky.
+fn check_as(
+    path: &Path,
+    comments: bool,
+    found: impl Fn(&Map<String, Value>) -> Vec<String>,
+) -> Option<String> {
     match read_bytes(path) {
-        Ok(bytes) => judge_with(path, bytes.as_deref(), found),
+        Ok(bytes) => judge_with(path, bytes.as_deref(), comments, found),
         Err(e) => Some(format!("cannot be checked: {e:#}")),
     }
 }
@@ -285,7 +303,9 @@ pub fn warnings(cwd: &Path, user_home: &Path, host: Host, hook_file: &Path) -> V
                 base: &base,
                 hook_file,
             };
-            if let Some(found) = check_as(&path, |root| reading.findings(root)) {
+            if let Some(found) = check_as(&path, spec.reader.reads_comments(), |root| {
+                reading.findings(root)
+            }) {
                 rows.push(row(&path, &found));
             }
         }

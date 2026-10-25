@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "grep", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_grep_1",
+  "args": { "pattern": "fn main", "path": "src", "include": "*.rs" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

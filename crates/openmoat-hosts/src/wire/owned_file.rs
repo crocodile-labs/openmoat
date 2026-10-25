@@ -1,4 +1,4 @@
-//! Files OpenMoat owns whole: pi's extension, OpenClaw's plugin. Each is a
+//! Files OpenMoat owns whole: pi's extension, OpenClaw's and OpenCode's plugins. Each is a
 //! script in the host's `integration/` folder with one line,
 //! `const MOAT = __MOAT_BINARY__;`, that `moat init` fills in with the
 //! binary's path as a JSON string; the CLI writes the result whole, pins it

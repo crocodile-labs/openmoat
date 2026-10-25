@@ -120,7 +120,7 @@ something OpenMoat claims to stop.
   Linux they land in an in-memory home that is discarded), and no network except
   allowlisted domains. A classifier mistake inside those bounds is
   still a bypass, and in scope as a vulnerability ([SECURITY.md](../SECURITY.md)).
-  OpenClaw, GitHub Copilot CLI, pi and Gemini CLI get no such sandbox: the hook alone
+  OpenClaw, GitHub Copilot CLI, pi, Gemini CLI and OpenCode get no such sandbox: the hook alone
   decides each of their calls.
   The Maven and Gradle settings `build-credentials` names are denied by the hook only
   (ADR-034): where a policy makes them readable to sandboxed commands (a read root or
@@ -224,11 +224,13 @@ something OpenMoat claims to stop.
     nothing could keep those paths from commands.
   - An agent's own configuration in the project (`.claude/hooks/`, `.mcp.json`,
     `.cursor/mcp.json`, `.codex/config.toml`, `.github/hooks/`, `.github/mcp.json`,
-    `.openclaw/extensions/`, `.pi/…`) is unwritable for commands on macOS, a write
+    `.openclaw/extensions/`, `.pi/…`, OpenCode's `opencode.json[c]` and `.opencode/…`)
+    is unwritable for commands on macOS, a write
     the person allowed included; on Linux only the files existing directly in the
     project are, where the agent gets a network namespace, and the rest stays
     writable inside the project, which Landlock grants whole. The folders holding them
-    directly in the project (`.github`, `.pi`, `.openclaw`) cannot be renamed away and
+    directly in the project (`.github`, `.pi`, `.openclaw`, `.opencode`) cannot be renamed away and
+
     back on either (on macOS not created or removed either); a nested one, such as a
     package's `.github` in `node_modules`, can. On Linux, an agent's hook settings
     existing directly in the project (`.claude/settings.json` and the like) are
@@ -490,6 +492,7 @@ something OpenMoat claims to stop.
   - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it); MCP tools are told apart from built-in ones only by name, so a changed server is traced by its `<server>-` prefix; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
   - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension (`openmoat status` and `doctor` report a settings entry that turns it off, not `--no-extensions`); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
   - **Gemini CLI.** Known gaps: no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings hooks at all and asks the person before every tool instead; a project's `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments (`openmoat status` and `doctor` warn about one); extension hooks run beside OpenMoat's; a hook that times out lets the call run. When the hook fails: runs the call when the hook times out, is killed by a signal or exits 1 (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits with any other code and prints something, as a missing `openmoat` does.
+  - **OpenCode.** Known gaps: no OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says how to approve it; OpenCode 2 is not supported yet; other plugins and custom tools run in OpenCode's process with the agent's rights, and a project's load at start with no prompt; the person's `!` shell commands are not checked; calls run unchecked if OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws (OpenCode's `tool.execute.before` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, or an error loading it).
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
 
@@ -604,6 +607,62 @@ something OpenMoat claims to stop.
   extension in its `.pi/extensions/`, is warned about; `pi --no-extensions` cannot be
   seen. There is no OS sandbox from OpenMoat for pi;
   run pi under `openmoat run` for one.
+- **OpenCode, when its hook fails.** OpenCode 1 has no command hook either: its "hook"
+  is OpenMoat's plugin (`crates/openmoat-hosts/src/host/opencode/integration/openmoat.js`,
+  written to `plugins/openmoat.js` in `~/.config/opencode`, or
+  `$XDG_CONFIG_HOME/opencode`), which runs `openmoat guard` from OpenCode's
+  `tool.execute.before` hook. From the OpenCode 1.19.4 source (`plugin/index.ts`
+  `trigger`, `session/tools.ts`, `session/processor.ts`), *unverified* against a running
+  OpenCode: a handler that throws blocks the call and the model sees the error, and
+  OpenCode waits for a handler without a limit or an abort signal. The plugin blocks
+  when `openmoat` is missing or cannot start, crashes, exits other than 0 or 2, answers
+  what it cannot read, or gives no answer within 45 s; no output on exit 0 is no
+  decision (a `defer`), and OpenCode's own `permission` rules decide, which allow most
+  tools by default. OpenCode 1 gives a plugin no way to ask the person (its
+  `permission.ask` hook is declared but not called since 1.3.0), so an `ask` reaches it
+  as a deny that says how to approve it. **OpenCode runs every call unchecked when it
+  does not load the plugin**: `opencode --pure` or `OPENCODE_PURE=1` (no external
+  plugins), an error while the plugin loads (OpenCode logs it and goes on), an OpenCode
+  started with another `XDG_CONFIG_HOME` or `HOME` than the one `openmoat init` set up,
+  and OpenCode 2, which loads plugins through another API. `kernel-self` denies the
+  agent writes to the plugin, its folders, the directory, the global configuration
+  files (whose `plugin` list loads plugins before OpenMoat's) and `~/.opencode`, and
+  denies `opencode … --pure`, setting `OPENCODE_PURE`, `opencode upgrade --major`
+  (which replaces OpenCode 1 with OpenCode 2) and `opencode plugin --global`; the lock
+  pins the plugin, so an edit of it stops every call. `openmoat init`, `status` and
+  `doctor` ask the `opencode` on `PATH` for its version and do not set up, or report as
+  not protected, an OpenCode 2. Setting `XDG_CONFIG_HOME` or `HOME` for a nested
+  `opencode` is not denied.
+- **OpenCode tools OpenMoat does not check.** OpenCode hands every plugin's
+  `tool.execute.before` the same arguments object, and the tool receives it after the
+  last plugin; plugins in the global configuration's `plugin` list load before
+  OpenMoat's, a project's after it. OpenMoat's plugin freezes the arguments it checked,
+  so a later plugin that changes them in place throws and the call is blocked; a
+  plugin tool that changes its own arguments fails the same way. Plugins and custom
+  tools (`tools/*.{js,ts}`) run in OpenCode's process with the agent's rights and can
+  change what any code there does, OpenMoat's plugin included; a project's
+  `.opencode/plugins/` and the plugins its `opencode.json` lists load at start with no
+  prompt. `openmoat doctor` and `openmoat status` warn about the files in a project's
+  `.opencode/plugins/` and about what its `opencode.json` and `.opencode/opencode.json`
+  set (plugins, MCP servers, permission rules, a model endpoint, formatter and language
+  server commands, `{file:…}` values), not yet about `.opencode/plugin/` or the `.jsonc`
+  spellings; writes to all of them ask (`runs-later`). A plugin can register a tool
+  under a built-in's name (`bash`), which OpenMoat then checks as the built-in. The
+  person's `!` shell commands and the `` !`…` `` shell of a command template run
+  outside the hook; writes to commands ask (`runs-later`). `task` (a subagent, whose calls are hooks of their own with its own
+  session id, so taint and grants do not follow the parent session), `todowrite`,
+  `skill`, `question` and Code Mode's `execute` (each MCP call it makes is checked on
+  its own) are `ungoverned`. On Windows `bash` may run Git Bash, PowerShell or `cmd`,
+  so it is `unparseable` and left to OpenCode. A tool OpenMoat does not know (a
+  plugin's or custom tool's) is decided as an MCP tool of its name with what its
+  arguments name, as Copilot CLI's are; MCP tools are `<server>_<tool>`, traced to the
+  server names in OpenCode's configuration the plugin sends, the longest when several
+  begin the name. The MCP servers under `mcp` in OpenCode's global `config.json`,
+  `opencode.json` and `opencode.jsonc` and a project's `opencode.json[c]` and
+  `.opencode/opencode.json[c]` are pinned like every host's (ADR-026); servers from
+  `~/.opencode/`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`,
+  a remote `.well-known/opencode` or managed configuration are not. There is no OS
+  sandbox from OpenMoat for OpenCode; run it under `openmoat run` for one.
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and
   turns its own panics into a deny. A crash that bypasses that (killed, aborted, out of
@@ -802,7 +861,7 @@ something OpenMoat claims to stop.
   `openmoat sandbox sync`, `openmoat mcp accept`/`wrap`/`unwrap` and `openmoat doctor --accept` check
   for a TTY, and refuse when an
   agent (`claude`, `codex`, `cursor-agent`, the Continue CLI's `cn`, `copilot`, `gemini`,
-  `openclaw`, `pi`, the Cursor editor's helper processes on macOS, or `openmoat run`) is
+  `openclaw`, `pi`, `opencode`, the Cursor editor's helper processes on macOS, or `openmoat run`) is
   among their parent processes; answers are read from `/dev/tty`. Cursor's editor agent
   runs its commands in the same process tree as the person's own terminals in the
   editor, so on macOS these commands refuse in a Cursor terminal too: run them in a

@@ -7,7 +7,7 @@ use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 use serde_json::{Value, json};
 
-use super::payloads::{copilot, cursor_tool, gemini, openclaw, pi};
+use super::payloads::{copilot, cursor_tool, gemini, openclaw, opencode, pi};
 use super::{Route, decide, pre_tool_use};
 
 /// The payload `host` sends for its tool `tool` with arguments `input`, and
@@ -23,6 +23,7 @@ fn unknown_tool(host: Host, tool: &str, input: &Value) -> (Value, bool) {
         Host::CopilotCli => (copilot(tool, input), true),
         Host::Pi => (pi(tool, input), true),
         Host::GeminiCli => (gemini(tool, input), true),
+        Host::OpenCode => (opencode(tool, input), true),
         Host::Continue => panic!("the Continue CLI sends Claude Code's payload"),
     }
 }
@@ -168,6 +169,10 @@ fn a_glob_whose_reach_is_unknown_asks() {
             copilot("glob", &json!({"pattern": pattern})),
         ),
         (Host::Pi, pi("find", &json!({"pattern": pattern}))),
+        (
+            Host::OpenCode,
+            opencode("glob", &json!({"pattern": pattern})),
+        ),
     ] {
         let (verdict, rules) = received(host, &payload);
         assert!(

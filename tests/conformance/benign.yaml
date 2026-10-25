@@ -131,6 +131,30 @@
   context: { cwd: /p, project: /p }
   action: { fs_write: "/p/.pi/prompts/review.md" }
   expect: { verdict: allow, rules: [project-fs] }
+# OpenCode: `kernel-self` guards OpenMoat's plugin and the configuration files,
+# not reading them; a project's agents stay project work; running OpenCode with
+# its plugins, or with `--pure` only as text in a prompt, is left to the agent
+- id: benign-read-opencode-config
+  threat: T9
+  action: { fs_read: "~/.config/opencode/opencode.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-project-opencode-agent
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.opencode/agent/review.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-opencode-run
+  threat: T9
+  action: { shell: "opencode run 'fix the failing test'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-opencode-run-mentions-pure
+  threat: T9
+  action: { shell: "opencode run 'explain what --pure does'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-opencode-other-variable
+  threat: T9
+  action: { shell: "OPENCODE_DISABLE_AUTOUPDATE=1 opencode run 'list files'" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-read-repository-policy
   threat: T9
   action: { fs_read: "/p/.moat/policy.yaml" }

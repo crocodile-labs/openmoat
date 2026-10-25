@@ -77,6 +77,21 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.claude/agents/**",
     "**/.claude/skills/**",
     "**/.claude/commands/**",
+    "**/.opencode/plugins/**",
+    "**/.opencode/plugin/**",
+    "**/.opencode/tools/**",
+    "**/.opencode/tool/**",
+    "**/.opencode/commands/**",
+    "**/.opencode/command/**",
+    "**/.opencode/opencode.json",
+    "**/.opencode/opencode.jsonc",
+    "**/.opencode/package.json",
+    "**/opencode.json",
+    "**/opencode.jsonc",
+    // the folders above a project's OpenCode plugins
+    "**/.opencode",
+    "**/.opencode/plugins",
+    "**/.opencode/plugin",
 ];
 
 /// The [`RUNS_LATER`] files an agent host loads as its own configuration when
@@ -95,6 +110,14 @@ pub const AGENT_CONFIG: &[&str] = &[
     "**/.pi/extensions/**",
     "**/.pi/mcp.json",
     "**/.pi/settings.json",
+    "**/.opencode/plugins/**",
+    "**/.opencode/plugin/**",
+    "**/.opencode/tools/**",
+    "**/.opencode/tool/**",
+    "**/.opencode/opencode.json",
+    "**/.opencode/opencode.jsonc",
+    "**/opencode.json",
+    "**/opencode.jsonc",
 ];
 
 /// A write exclusion of one of [`RUNS_LATER`], below the project or below a

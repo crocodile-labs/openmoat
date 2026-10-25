@@ -4,6 +4,7 @@ mod binary;
 mod claude_version;
 mod dirs;
 mod hook_file;
+pub mod host_version;
 pub mod location;
 pub mod openclaw;
 pub mod owned;

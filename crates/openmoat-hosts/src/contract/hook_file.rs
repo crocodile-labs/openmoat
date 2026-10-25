@@ -10,7 +10,7 @@ pub enum HookLayout {
     /// OpenMoat's entries among the person's own in a `hooks` object (Claude
     /// Code, Codex, Cursor, GitHub Copilot CLI, Gemini CLI).
     Entries(&'static dyn HookFile),
-    /// The hook file is OpenMoat's whole (pi's extension).
+    /// The hook file is OpenMoat's whole (pi's extension, OpenCode's plugin).
     Owned(&'static OwnedFile),
     /// A JSON5 configuration that loads a plugin OpenMoat owns whole, the
     /// host's first [`super::InstallSpec::extra_files`] (OpenClaw's

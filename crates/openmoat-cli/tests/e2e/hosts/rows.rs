@@ -14,6 +14,7 @@ mod copilot_cli;
 mod cursor;
 mod gemini_cli;
 mod openclaw;
+mod opencode;
 mod pi;
 
 /// A hook payload `moat guard` reads, built in a sandbox.
@@ -134,8 +135,8 @@ const PRE_TOOL_USE: Row = Row {
     ..BASE
 };
 
-/// The `{decision, reason}` reply of OpenClaw's plugin, pi's extension and
-/// Gemini CLI.
+/// The `{decision, reason}` reply of OpenClaw's plugin, pi's extension,
+/// Gemini CLI and OpenCode's plugin.
 const DECISION: Row = Row {
     verdict_at: "/decision",
     reason_at: &["/reason"],
@@ -152,6 +153,7 @@ pub fn rows() -> Vec<Row> {
         copilot_cli::row(),
         pi::row(),
         gemini_cli::row(),
+        opencode::row(),
     ]
 }
 

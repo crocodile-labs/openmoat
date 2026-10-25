@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "edit", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_edit_1",
+  "args": { "filePath": "src/lib.rs", "oldString": "old", "newString": "new" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

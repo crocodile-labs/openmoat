@@ -16,6 +16,9 @@
 //!   project's `.mcp.json` and `.github/mcp.json`, wrapped in `mcpServers` or bare.
 //! - pi: `mcp.json` in its agent directory, and a project's `.pi/mcp.json`.
 //! - Gemini CLI: `mcpServers` in its `settings.json`, the user's and a project's.
+//! - OpenCode: `mcp.<name>` in its `config.json`, `opencode.json` and
+//!   `opencode.jsonc` (JSON with comments, read as JSON5), and a project's
+//!   `opencode.json[c]` and `.opencode/opencode.json[c]`.
 //!
 //! Project files are looked for in the working directory and each directory above
 //! it up to the project root. A file that does not exist lists no servers.
@@ -110,6 +113,7 @@ fn user_files(home: &Home, host: Host, file: McpFile) -> Result<Vec<PathBuf>> {
         McpFile::HookFile => vec![config.settings_path],
         McpFile::BesideHookFile(name) => vec![config.settings_path.with_file_name(name)],
         McpFile::InConfigDir(name) => vec![config.dir().join(name)],
+        McpFile::EachInConfigDir(names) => names.iter().map(|n| config.dir().join(n)).collect(),
         McpFile::BesideDefaultDir(name) => {
             let user = user_home()?;
             let default = host.spec().install.as_ref().map(|i| user.join(i.dir_name));

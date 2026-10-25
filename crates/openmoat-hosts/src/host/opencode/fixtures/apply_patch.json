@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "apply_patch", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_apply_patch_1",
+  "args": { "patchText": "*** Begin Patch\n*** Update File: src/a.rs\n@@\n-old\n+new\n*** Add File: docs/b.md\n+hello\n*** End Patch" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

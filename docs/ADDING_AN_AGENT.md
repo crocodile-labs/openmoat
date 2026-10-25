@@ -8,7 +8,7 @@
 **On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
-Cursor, OpenClaw, GitHub Copilot CLI, pi and Gemini CLI are maintained by the project; other agents come from contributors and are
+Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI and OpenCode are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of
 this guide; this file explains each step.
 
@@ -37,6 +37,7 @@ gaps and the sandbox it gets. Start from the one closest to your agent:
 [GitHub Copilot CLI](../crates/openmoat-hosts/src/host/copilot_cli/HOST.md) ·
 [pi](../crates/openmoat-hosts/src/host/pi/HOST.md) ·
 [Gemini CLI](../crates/openmoat-hosts/src/host/gemini_cli/HOST.md) ·
+[OpenCode](../crates/openmoat-hosts/src/host/opencode/HOST.md) ·
 [Continue CLI](../crates/openmoat-hosts/src/host/continue_cli/HOST.md).
 
 ## What an adapter is

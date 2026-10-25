@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "task", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_task_1",
+  "args": { "description": "review", "prompt": "Review the diff", "subagent_type": "general" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

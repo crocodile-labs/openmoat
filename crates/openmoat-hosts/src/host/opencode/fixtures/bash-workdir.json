@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "bash", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_bash_workdir_1",
+  "args": { "command": "cat ../notes.txt", "workdir": "crates/core" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

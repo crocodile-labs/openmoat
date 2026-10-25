@@ -19,7 +19,7 @@ pub use contract::{
     Asks, Detect, ExtraFile, GUARD_BUDGET_S, Helper, HookDir, HookLayout, HookSpec, HostDocs,
     HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames, McpReader,
     McpServer, McpSpec, McpSyntax, Paths, ProcessSpec, ProjectSettingsSpec, Protect, RelaxedKey,
-    SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow,
+    SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow, Unsupported,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
-             copilot-cli, pi, gemini-cli"
+             copilot-cli, pi, gemini-cli, opencode"
         );
     }
 
