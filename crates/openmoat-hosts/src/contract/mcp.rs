@@ -45,7 +45,7 @@ pub enum McpFile {
 }
 
 /// The syntax of a file of MCP servers. The CLI parses each into JSON (and
-/// writes each back), so TOML and JSON definitions pin alike.
+/// writes each back but YAML), so TOML, YAML and JSON definitions pin alike.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpSyntax {
     /// JSON; an empty file lists no servers.
@@ -56,6 +56,9 @@ pub enum McpSyntax {
     /// Also JSON with comments and trailing commas (OpenCode's JSONC), which
     /// JSON5 reads.
     Json5,
+    /// YAML (Hermes Agent), read with OpenMoat's strict YAML; an empty file
+    /// lists no servers. `moat mcp wrap` does not rewrite it.
+    Yaml,
 }
 
 /// One server definition as a file lays it out.

@@ -94,8 +94,8 @@ exit code as the text:
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
-| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI and OpenCode, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
-| `not protected` | the hook is missing, out of date or unreadable (run `openmoat init`), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode 2) |
+| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
+| `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode 2) |
 
 Agents that are not set up or not found keep their `·` line. `openmoat status --format
 json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `level` is
@@ -358,6 +358,15 @@ these takes one command in your own terminal (agents are denied all of them):
   same file: those changes are reported by `openmoat doctor` and calls are still
   checked. Any other change there, such as a hook, an MCP server or a tool setting,
   denies every call until you run `openmoat doctor --accept` in your terminal.
+- **Hermes Agent**: `openmoat init --hosts hermes` adds one `pre_tool_call` hook to
+  `~/.hermes/config.yaml` (`$HERMES_HOME/config.yaml` when that is set; a profile is
+  `HERMES_HOME=~/.hermes/profiles/<name>`) and approves its command in
+  `shell-hooks-allowlist.json` beside it; restart `hermes` and the gateway so they load
+  it (a running gateway picks it up within about 30 s). An `ask` is Hermes's own approval
+  prompt; in YOLO mode or with `approvals.mode: off` it is a deny you approve with
+  `openmoat allow --last`. Hermes saves `hermes model` and display choices in the same
+  file without affecting OpenMoat; any other change there, or a hook you approve in
+  Hermes's own prompt, denies every call until you run `openmoat doctor --accept`.
 - **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
   file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). An
   `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
@@ -368,7 +377,7 @@ these takes one command in your own terminal (agents are denied all of them):
 - **The `openmoat` binary is missing or broken**: Codex, Continue CLI and Claude Code before
   2.1.295 then run tool calls without the hook ("When the hook fails" in
   [THREAT_MODEL.md](THREAT_MODEL.md)), and Claude Code from 2.1.295, Cursor, OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI and OpenCode block them.
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent block them.
  Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `openmoat uninstall` if you want it off.
 

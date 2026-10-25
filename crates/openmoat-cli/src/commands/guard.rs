@@ -30,6 +30,7 @@ use crate::{push, render, secrets, taint, time};
 mod config_change;
 mod drift;
 mod record;
+mod unseen;
 
 const UNGOVERNED_RULE: &str = "ungoverned";
 const KERNEL_ERROR_RULE: &str = "kernel-error";
@@ -136,7 +137,7 @@ fn decide_and_respond(installed_for: Host) -> Code {
     let mut event = HookEvent::default();
     let mut out = Evaluated::default();
     hangs::enter(Phase::Stdin);
-    let (request, mut decision) = match read_stdin() {
+    let (mut request, mut decision) = match read_stdin() {
         Ok(payload) => {
             // The Continue CLI runs the Claude Code hook but cannot ask.
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
@@ -148,6 +149,12 @@ fn decide_and_respond(installed_for: Host) -> Code {
         Err(error) => (None, kernel_error(&error)),
     };
 
+    // Where the host would approve an `ask` no person sees, it is a deny.
+    if let Some(r) = &mut request
+        && decision.verdict == Verdict::Ask
+    {
+        unseen::mark(host, r);
+    }
     // Where the host has no flow of its own for `defer`, OpenMoat asks (ADR-025).
     if let Some(r) = &request {
         decision = host.decided(&r.event, decision);

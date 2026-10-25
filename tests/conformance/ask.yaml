@@ -1538,6 +1538,33 @@
   threat: T9
   action: { shell: "opencode plugin --force opencode-gitlab-auth" }
   expect: { verdict: ask, rules: [runs-later] }
+# Hermes Agent runs its cron jobs later, unattended, loads its skills into later
+# sessions and, with `HERMES_ENABLE_PROJECT_PLUGINS`, a project's plugins
+- id: ask-write-hermes-cron-job
+  threat: T9
+  action: { fs_write: "~/.hermes/cron/jobs.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-hermes-skill
+  threat: T9
+  action: { fs_write: "~/.hermes/skills/deploy/SKILL.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-hermes-plugin
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.hermes/plugins/helper/__init__.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-hermes-profile-config
+  threat: T9
+  action: { fs_write: "~/.hermes/profiles/work/config.yaml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-plant-hermes-profile-plugin
+  threat: T9
+  action: { fs_write: "~/.hermes/profiles/work/plugins/helper/__init__.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-rename-project-hermes-dir
+  threat: T9
+  action: { shell: "mv .hermes hermes-old" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A call the payload shows only in part (input typed into a running shell, a
 # search over directories the payload does not name) asks, however plain
 - id: ask-partial-shell-input

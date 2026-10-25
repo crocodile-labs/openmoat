@@ -126,6 +126,32 @@
   threat: T9
   action: { fs_read: "~/.pi/agent/settings.json" }
   expect: { verdict: defer, rules: [default] }
+# Hermes Agent: reading its configuration, its own session files, a project's
+# context file, and its commands that change no hook, approval or profile
+- id: benign-read-hermes-config
+  threat: T9
+  action: { fs_read: "~/.hermes/config.yaml" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-hermes-session-file
+  threat: T9
+  action: { fs_write: "~/.hermes/sessions/20261025_101500_a1b2c3.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-project-hermes-context
+  threat: T9
+  action: { fs_write: "/p/.hermes.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-hermes-config-set-model
+  threat: T9
+  action: { shell: "hermes config set model.default hermes-4" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-hermes-hooks-list
+  threat: T9
+  action: { shell: "hermes hooks list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-env-named-like-hermes-safe-mode
+  threat: T9
+  action: { shell: "HERMES_SAFE_MODE_DOCS=1 make docs" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-write-project-pi-prompt
   threat: T9
   context: { cwd: /p, project: /p }

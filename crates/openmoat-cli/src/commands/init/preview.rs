@@ -39,6 +39,17 @@ pub(super) fn changes(
         before,
         after,
     }];
+    // The host's record of consent to the hook (Hermes Agent's allowlist).
+    if let Some((path, consent)) = crate::install::consent::of(config) {
+        let before = sandbox::install::read_text(&path)?;
+        let after = crate::install::consent::render(config, consent, &path, binary, &before)?
+            .unwrap_or_else(|| before.clone());
+        changes.push(Change {
+            path,
+            before,
+            after,
+        });
+    }
     let host = config.host;
     if let Some(plan) = plan
         && sandbox::install::format(host).is_some()
@@ -132,9 +143,27 @@ fn changed_keys(path: &Path, before: &str, after: &str) -> BTreeSet<String> {
         .unwrap_or_default();
     match extension {
         "json" => json_keys(before, after).unwrap_or_default(),
+        "yaml" => yaml_keys(before, after).unwrap_or_default(),
         "toml" => toml_keys(before, after).unwrap_or_default(),
         _ => BTreeSet::new(),
     }
+}
+
+/// The top-level keys whose values differ between two YAML texts.
+fn yaml_keys(before: &str, after: &str) -> Option<BTreeSet<String>> {
+    let parse = |text: &str| match openmoat_hosts::yaml_hooks::parse(text).ok()? {
+        serde_json::Value::Object(map) => Some(map),
+        _ => None,
+    };
+    let (before, after) = (parse(before)?, parse(after)?);
+    Some(
+        before
+            .keys()
+            .chain(after.keys())
+            .filter(|k| before.get(*k) != after.get(*k))
+            .cloned()
+            .collect(),
+    )
 }
 
 fn json_keys(before: &str, after: &str) -> Option<BTreeSet<String>> {

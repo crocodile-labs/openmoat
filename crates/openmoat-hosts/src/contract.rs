@@ -9,6 +9,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod asks;
 mod base;
+mod consent;
 mod docs;
 mod hook_file;
 mod location;
@@ -17,8 +18,9 @@ mod protect;
 mod relaxed;
 mod settings;
 
-pub use asks::Asks;
+pub use asks::{Asks, Unseen};
 pub(crate) use asks::{answer, decided};
+pub use consent::ConsentFile;
 pub use docs::{HostDocs, ToolRow};
 pub use hook_file::HookLayout;
 pub use location::{Locate, Located, Location};
@@ -206,11 +208,12 @@ pub struct InstallSpec {
     pub trust_step: Option<&'static str>,
     /// How the CLI finds the directory and the file.
     pub location: Location,
-    /// The form of the file, read as JSON5, the lock pins in place of its
-    /// bytes, when the file holds what this host's hook needs: `None` from
-    /// the function for any other file, and no function for a host whose
-    /// file is pinned by its bytes. OpenClaw's leaves out `mcp.servers`,
-    /// whose servers the MCP pins hold one by one.
+    /// The form of the file, read as JSON5 (as YAML for a
+    /// [`HookLayout::Yaml`] file), the lock pins in place of its bytes, when
+    /// the file holds what this host's hook needs: `None` from the function
+    /// for any other file, and no function for a host whose file is pinned by
+    /// its bytes. OpenClaw's and Hermes Agent's leave out the MCP servers,
+    /// which the MCP pins hold one by one.
     pub pinned_form: Option<fn(serde_json::Value) -> Option<serde_json::Value>>,
     /// Files besides the hook file that `moat init` writes and the lock pins
     /// with it (OpenClaw's plugin); the sandbox file is [`SandboxSpec::file`].
@@ -220,6 +223,11 @@ pub struct InstallSpec {
     /// and `moat status` and `moat doctor` report it as not protected. `None`
     /// when every version takes the hook.
     pub unsupported: Option<Unsupported>,
+    /// The file in the configuration directory where the host records the
+    /// person's consent to run a hook command, which `moat init` writes for
+    /// OpenMoat's and the lock pins with the hook file; `None` for a host that
+    /// keeps no such record, or one OpenMoat cannot write ([`Self::trust_step`]).
+    pub consent: Option<&'static dyn ConsentFile>,
 }
 
 /// Versions of a host whose hook API OpenMoat does not support yet

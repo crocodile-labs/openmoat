@@ -145,6 +145,7 @@ fn level(
         HookState::Missing => not_protected("hook missing"),
         HookState::Stale { .. } => not_protected("hook out of date"),
         HookState::Unreadable(_) => not_protected("hook file unreadable"),
+        HookState::Unapproved(_) => not_protected("hook not approved by the agent"),
     }
 }
 

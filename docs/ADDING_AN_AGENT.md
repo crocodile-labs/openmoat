@@ -8,7 +8,7 @@
 **On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
-Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI and OpenCode are maintained by the project; other agents come from contributors and are
+Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of
 this guide; this file explains each step.
 
@@ -38,6 +38,7 @@ gaps and the sandbox it gets. Start from the one closest to your agent:
 [pi](../crates/openmoat-hosts/src/host/pi/HOST.md) ·
 [Gemini CLI](../crates/openmoat-hosts/src/host/gemini_cli/HOST.md) ·
 [OpenCode](../crates/openmoat-hosts/src/host/opencode/HOST.md) ·
+[Hermes Agent](../crates/openmoat-hosts/src/host/hermes/HOST.md) ·
 [Continue CLI](../crates/openmoat-hosts/src/host/continue_cli/HOST.md).
 
 ## What an adapter is
@@ -76,7 +77,7 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 | `crates/openmoat-hosts/src/host/<module>/` | the rest of the adapter's code, one file per concern (`tools.rs`, `bench.rs`, `tests.rs`, as `host/pi/` has) |
 | `crates/openmoat-hosts/src/host.rs` | one line in the host list, `Variant => module,` (`Variant => module speaks ClaudeCode,` for a spec-only agent), with a doc comment naming the agent and its hook. It gives the `Host` variant, `Host::EVERY`, `Host::ALL` (when the spec has an `install`), the `--host` id list and the lookups of the spec and adapter |
 | `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec's `McpReader` has a new `McpSyntax` (a parser in `parse` and an editor in `wrap.rs`) or names a new `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
-| `crates/openmoat-hosts/src/host/<module>/hook_file.rs` | only if the hook file has a new layout: a `HookFile` impl (`entry`, `is_ours`, `binary`) that the spec names as `HookLayout::Entries`; the CLI's `install/hook_file.rs` reads, backs up and writes the file |
+| `crates/openmoat-hosts/src/host/<module>/hook_file.rs` | only if the hook file has a new layout: a `HookFile` impl (`entry`, `is_ours`, `binary`) that the spec names as `HookLayout::Entries`, or as `HookLayout::Yaml` for a YAML file the host rewrites itself (Hermes Agent's `config.yaml`: edited as text, `wire/hook_file/yaml.rs`); the CLI's `install/hook_file.rs` reads, backs up and writes the file. A host that runs a hook only once a file of its own approves the exact command (Hermes Agent's `shell-hooks-allowlist.json`) names a `ConsentFile` as `InstallSpec::consent`: `init` writes the approval, the lock pins it, `status` and `doctor` report a hook it does not approve and `uninstall` takes it out. A host that approves an `ask` without a person where the hook process can tell (an environment variable, a setting in the hook file) names that as `Asks::unseen`, and `guard` sends such an ask as a deny |
 | `crates/openmoat-hosts/src/host/<module>/protect.rs`, `tests/conformance/attacks.yaml` | `PROTECT` (`Protect`): the agent's configuration directory and hook file for `kernel-self` and the files a tainted session's writes ask about, each list with its comment, and `PROCESS` (`ProcessSpec`): its program names and package directories, by which the person-only commands tell they run under it; the spec sets `protect: protect::PROTECT, process: protect::PROCESS`. Then `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` writes the paths into `crates/openmoat-core/policies/default-v1.yaml` and `crates/openmoat-core/src/taint.rs`. Add an attack fixture: it is a policy change (see [Install, uninstall and the lock](#install-uninstall-and-the-lock)). `runs-later` (and the matching `project-fs` exclusions and `RUNS_LATER` in `crates/openmoat-cli/src/sandbox/patterns.rs`) are still edited by hand |
 | `crates/openmoat-hosts/src/host/<module>/fixtures/` | captured payloads and a `README.md` naming each one's source |
 | `crates/openmoat-cli/tests/e2e/<module>.rs` | end-to-end tests, with a `mod <module>;` line in `crates/openmoat-cli/tests/e2e/main.rs`, and the agent's payload shape in `crates/openmoat-cli/tests/e2e/host_failures.rs` |

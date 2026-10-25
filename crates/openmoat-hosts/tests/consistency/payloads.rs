@@ -53,6 +53,24 @@ pub(super) fn copilot(tool: &str, args: &Value) -> Value {
     })
 }
 
+/// Hermes Agent `pre_tool_call` (`crates/openmoat-hosts/src/host/hermes/fixtures`).
+pub(super) fn hermes(tool: &str, input: &Value) -> Value {
+    json!({
+        "hook_event_name": "pre_tool_call", "tool_name": tool, "tool_input": input,
+        "session_id": "hermes-1", "cwd": CWD, "profile": "default",
+        "extra": { "task_id": "hermes-1", "tool_call_id": "call-1", "turn_id": "t-1" },
+    })
+}
+
+/// `path` with a relative one placed in the working directory.
+pub(super) fn under_cwd(path: &str) -> String {
+    if path.starts_with(['/', '~']) {
+        path.to_owned()
+    } else {
+        format!("{CWD}/{path}")
+    }
+}
+
 /// OpenMoat's pi extension (`crates/openmoat-hosts/src/host/pi/fixtures`).
 pub(super) fn pi(tool: &str, input: &Value) -> Value {
     json!({

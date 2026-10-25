@@ -156,6 +156,19 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
                 crate::install::openclaw::refuse_comments(&parsed, &path)?;
                 edit_value(parsed.value, &dones)?
             }
+            // The host rewrites it and people keep comments in it; OpenMoat
+            // edits only its own hook lines there.
+            McpSyntax::Yaml => bail!(
+                "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
+                 then run `openmoat mcp accept`:\n{}",
+                path.display(),
+                if dones.iter().any(|d| original_of(&d.entry).is_some()) {
+                    "wrap"
+                } else {
+                    "unwrap"
+                },
+                by_hand(&dones)
+            ),
         };
         if dry_run {
             continue;
@@ -164,6 +177,29 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
         write_private(&path, new.as_bytes())?;
     }
     Ok(())
+}
+
+/// Whether `entry` (a definition as it is to be written) runs through the
+/// proxy: what it ran before, when it does.
+fn original_of(entry: &Value) -> Option<(String, Vec<String>)> {
+    let (command, args) = stdio(entry)?;
+    original(&command, &args)
+}
+
+/// Each server's `command` and `args` as they are to be written, one line each.
+fn by_hand(dones: &[&Done]) -> String {
+    dones
+        .iter()
+        .map(|done| {
+            format!(
+                "  {}: command: {}, args: {}",
+                done.server.name,
+                done.entry["command"],
+                done.entry.get("args").unwrap_or(&Value::Null)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn edit_json(text: &str, dones: &[&Done]) -> Result<String> {

@@ -460,7 +460,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                     format!("{name:<16} {}", stale_hint(&command)),
                 );
             }
-            HookState::Unreadable(e) => {
+            HookState::Unreadable(e) | HookState::Unapproved(e) => {
                 report.line(Area::Hook, false, format!("{name:<16} {e}"));
             }
         }

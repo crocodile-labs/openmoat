@@ -118,12 +118,13 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 /// Every hook a host installs waits longer than `moat guard` may take, so the
 /// host receives the guard's own deny rather than a timeout; and a failed hook
 /// blocks the call wherever the host has a key for it: Claude Code's
-/// `onFailure` on its tool hook, Cursor's `failClosed` (set on every entry of
-/// its layout), OpenClaw's plugin, pi's extension, OpenCode's plugin. Codex and Gemini CLI have no
+/// `onFailure` on its tool hook, Cursor's `failClosed` and Hermes Agent's
+/// `fail_closed` (set on every entry of their layouts), OpenClaw's plugin, pi's
+/// extension, OpenCode's plugin. Codex and Gemini CLI have no
 /// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, &str, &[&str]); 8] = [
+    let expected: [(Host, &str, &[&str]); 9] = [
         (Host::ClaudeCode, "Entries(Nested)", &["PreToolUse"]),
         (Host::Codex, "Entries(Nested)", &[]),
         (Host::Cursor, "Entries(Cursor)", &[]),
@@ -132,6 +133,7 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
         (Host::Pi, "Owned(OwnedFile(pi extension))", &[]),
         (Host::GeminiCli, "Entries(Gemini)", &[]),
         (Host::OpenCode, "Owned(OwnedFile(OpenCode plugin))", &[]),
+        (Host::Hermes, "Yaml(Hermes)", &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, layout, blocking) in expected {
@@ -234,6 +236,6 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // Claude Code 6 calls, Codex 4 (no read or fetch tool), Cursor 5 (no
     // fetch), OpenClaw 6, GitHub Copilot CLI 5 (its payload names no MCP
     // server), pi 5 (no fetch), Gemini CLI 6 (5 on Windows, whose PowerShell
-    // commands OpenMoat leaves to Gemini CLI), OpenCode 6
-    assert_eq!(checked, 43 - usize::from(cfg!(windows)));
+    // commands OpenMoat leaves to Gemini CLI), OpenCode 6, Hermes Agent 6
+    assert_eq!(checked, 49 - usize::from(cfg!(windows)));
 }

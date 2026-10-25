@@ -7,8 +7,7 @@ The trusted core: the policy model and lint, the POSIX lexer (`lexer/`), the she
 - Dependencies are only `serde`, `serde-saphyr`, `globset`, `thiserror`; a new one needs an ADR. No `unsafe`. Builds for `wasm32-unknown-unknown`.
 - Invariants 1–3 live here: deny is absolute, strictest wins, unparseable is never `allow` (ADR-002, ADR-025).
 - The classifier is triage, not the boundary (ADR-013). A bypass gets an attack fixture and the smallest change that makes it `ask`: emit an atom a default `ask`/`deny` rule names, never an atom no rule names for a common command.
-- Rule ids in `default-v1.yaml` are stable: they appear in audit logs and user output. The agents' lines in `kernel-self` and the taint list for OpenClaw, GitHub Copilot CLI, pi, Gemini CLI and OpenCode are generated
- from their specs (`crates/openmoat-hosts/tests/protect.rs`).
+- Rule ids in `default-v1.yaml` are stable: they appear in audit logs and user output. The agents' lines in `kernel-self` and the taint list for OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent are generated from their specs (`crates/openmoat-hosts/tests/protect.rs`).
 - `thiserror` errors; no `unwrap`/`expect`/`panic!` outside tests.
 
 ## Test

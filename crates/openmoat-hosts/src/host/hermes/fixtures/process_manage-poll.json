@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "process_manage",
+  "tool_input": {"action": "poll", "session_id": "proc_4dae56ca81f6"},
+  "session_id": "20261025_101500_a1b2c3",
+  "cwd": "/p",
+  "profile": "default",
+  "extra": {
+    "task_id": "20261025_101500_a1b2c3",
+    "tool_call_id": "call_0001",
+    "turn_id": "turn_0001",
+    "api_request_id": "req_0001",
+    "middleware_trace": []
+  }
+}

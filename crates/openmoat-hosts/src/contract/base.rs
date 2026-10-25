@@ -47,5 +47,6 @@ impl InstallSpec {
         pinned_form: None,
         extra_files: &[],
         unsupported: None,
+        consent: None,
     };
 }

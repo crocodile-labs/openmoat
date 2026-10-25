@@ -16,10 +16,11 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Asks, Detect, ExtraFile, GUARD_BUDGET_S, Helper, HookDir, HookLayout, HookSpec, HostDocs,
-    HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames, McpReader,
-    McpServer, McpSpec, McpSyntax, Paths, ProcessSpec, ProjectSettingsSpec, Protect, RelaxedKey,
-    SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow, Unsupported,
+    Asks, ConsentFile, Detect, ExtraFile, GUARD_BUDGET_S, Helper, HookDir, HookLayout, HookSpec,
+    HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames,
+    McpReader, McpServer, McpSpec, McpSyntax, Paths, ProcessSpec, ProjectSettingsSpec, Protect,
+    RelaxedKey, SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow, Unseen,
+    Unsupported,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
@@ -28,6 +29,7 @@ pub use host::openclaw::{
     CONFIG_FILE as OPENCLAW_CONFIG_FILE, PLUGIN_ID as OPENCLAW_PLUGIN_ID,
     STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
 };
+pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
 pub use wire::owned_file::{OwnedFile, OwnedFileError};
 
@@ -387,7 +389,7 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
-             copilot-cli, pi, gemini-cli, opencode"
+             copilot-cli, pi, gemini-cli, opencode, hermes"
         );
     }
 

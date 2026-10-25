@@ -25,7 +25,9 @@ mod attacks;
 mod payloads;
 mod unknown;
 
-use payloads::{copilot, cursor, cursor_tool, gemini, openclaw, opencode, opencode_path, pi};
+use payloads::{
+    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, pi, under_cwd,
+};
 
 /// The part of a conformance fixture this suite reads. A fixture with its own
 /// context, session, repository policy, links or resolver is not a plain
@@ -91,9 +93,11 @@ enum Route {
     GeminiCli,
     /// OpenCode 1 `tool.execute.before`, through OpenMoat's plugin.
     OpenCode,
+    /// Hermes Agent `pre_tool_call`.
+    Hermes,
 }
 
-const ROUTES: [Route; 11] = [
+const ROUTES: [Route; 12] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -105,6 +109,7 @@ const ROUTES: [Route; 11] = [
     Route::Pi,
     Route::GeminiCli,
     Route::OpenCode,
+    Route::Hermes,
 ];
 
 impl Route {
@@ -118,6 +123,7 @@ impl Route {
             Self::Pi => Host::Pi,
             Self::GeminiCli => Host::GeminiCli,
             Self::OpenCode => Host::OpenCode,
+            Self::Hermes => Host::Hermes,
         }
     }
 }
@@ -326,6 +332,27 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             opencode("webfetch", &json!({ "url": u, "format": "markdown" })),
             Action::Fetch { url: u.clone() },
         )),
+        (Route::Hermes, Intent::Shell(c)) => {
+            Ok((hermes("terminal", &json!({ "command": c })), shell(c)))
+        }
+        // Hermes resolves a relative path against the session's directory,
+        // which its payload does not send, so a relative one asks; its file
+        // tools are sent the path the intent names, below the project.
+        (Route::Hermes, Intent::Read(p)) => Ok((
+            hermes("read_file", &json!({ "path": under_cwd(p) })),
+            Action::FsRead { path: under_cwd(p) },
+        )),
+        (Route::Hermes, Intent::Write(p)) => Ok((
+            hermes(
+                "patch",
+                &json!({ "path": under_cwd(p), "old_string": "old", "new_string": "new" }),
+            ),
+            Action::FsWrite { path: under_cwd(p) },
+        )),
+        (Route::Hermes, Intent::Fetch(u)) => Ok((
+            hermes("web_extract", &json!({ "urls": [u] })),
+            Action::Fetch { url: u.clone() },
+        )),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -474,6 +501,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::Pi, &shell, HookEvent::PreToolUse),
         (Route::GeminiCli, &read, HookEvent::PreToolUse),
         (Route::OpenCode, &read, HookEvent::PreToolUse),
+        (Route::Hermes, &shell, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

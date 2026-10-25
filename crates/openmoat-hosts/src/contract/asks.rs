@@ -33,12 +33,41 @@ pub struct Asks {
     /// The values of the payload's permission mode in which no question
     /// reaches a person: a call in one is [`HookEvent::PreToolUseNoAsk`].
     pub prompt_free_modes: &'static [&'static str],
+    /// How to tell, outside the payload, that the host would approve an
+    /// `ask` without a person seeing it; a call then is
+    /// [`HookEvent::PreToolUseNoAsk`]. `None` for a host whose payload says
+    /// it, or whose asks always reach a person.
+    pub unseen: Option<Unseen>,
+}
+
+/// What the hook's process can see that makes a host approve an `ask` unseen
+/// ([`Asks::unseen`]): the CLI checks it before answering a call.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Unseen {
+    /// Variables of the hook's environment that do it when set to `1`,
+    /// `true`, `yes` or `on`, in any case.
+    pub env: &'static [&'static str],
+    /// The setting of the host's hook file, parsed, that does it; `None`
+    /// when no setting there does.
+    pub config: fn(&serde_json::Value) -> Option<&'static str>,
+}
+
+impl Unseen {
+    /// Whether `value`, a variable's, is one [`Self::env`] counts.
+    #[must_use]
+    pub fn truthy(value: &str) -> bool {
+        ["1", "true", "yes", "on"]
+            .iter()
+            .any(|t| value.trim().eq_ignore_ascii_case(t))
+    }
 }
 
 impl Asks {
     /// The value the asks of a host spec take for every field they do not
     /// name: the host asks on every tool hook, an ungoverned tool is a
-    /// `defer`, no `allow --last` hint and no prompt-free modes.
+    /// `defer`, no `allow --last` hint, no prompt-free modes and nothing
+    /// else that approves an ask unseen.
     pub const BASE: Asks = Asks {
         on_pre_tool_use: None,
         on_no_ask: None,
@@ -46,6 +75,7 @@ impl Asks {
         ungoverned: Verdict::Defer,
         allow_last_hint: false,
         prompt_free_modes: &[],
+        unseen: None,
     };
 }
 

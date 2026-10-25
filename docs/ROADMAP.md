@@ -17,8 +17,9 @@ The latest release is `0.10.1`, from GitHub Releases, the Homebrew tap and crate
 ([INSTALL.md](INSTALL.md)). What exists:
 
 - **Agents.** One policy for Claude Code, Codex, Cursor, OpenClaw (a `before_tool_call`
-  plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI and OpenCode 1 (a
-  `tool.execute.before` plugin), each through its own hooks; the Continue CLI adapter
+  plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI, OpenCode 1 (a
+  `tool.execute.before` plugin) and Hermes Agent (a `pre_tool_call` shell hook, approved
+  in its hook allowlist), each through its own hooks; the Continue CLI adapter
   waits for a `cn` release that runs hooks.
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
   `mcp`, `web.search` and `tool.unknown`; verdicts `allow`, `defer` (the default for

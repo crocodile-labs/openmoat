@@ -193,6 +193,9 @@ pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
                 .context("parsing JSON5")?
                 .value
         }
+        McpSyntax::Yaml => openmoat_hosts::yaml_hooks::parse(text)
+            .map_err(anyhow::Error::msg)
+            .context("parsing YAML")?,
     };
     let servers = source.reader.servers(&doc).map_err(anyhow::Error::msg)?;
     Ok(servers

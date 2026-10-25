@@ -306,7 +306,7 @@ fn hooks(
                 healthy = false;
                 format!("✗ {}", crate::install::stale_hint(&command))
             }
-            (HookState::Unreadable(error), None) => {
+            (HookState::Unreadable(error) | HookState::Unapproved(error), None) => {
                 healthy = false;
                 format!("✗ {error}")
             }

@@ -6,7 +6,7 @@ use std::fs;
 use openmoat_hosts::Host;
 use serde_json::Value;
 
-use super::{assert_reason, guard, install, row};
+use super::{assert_reason, dir_of, guard, row};
 use crate::common::{DENY, OK, Sandbox, json, text};
 
 /// The `agents` entry of `moat status --format json` for the host `id`.
@@ -26,7 +26,8 @@ fn a_changed_mcp_server_holds_back_only_its_tools() {
     for host in Host::ALL {
         let (id, row) = (host.id(), row(host.id()));
         let Some(mcp) = &row.mcp else { continue };
-        let dir = install(host).dir_name;
+        let dir = dir_of(host);
+        let dir = dir.as_str();
         let sb = Sandbox::bare(&[dir]);
         let file = sb.home.join(dir).join(mcp.file);
         fs::write(&file, (mcp.servers)(mcp.command)).unwrap();
@@ -74,7 +75,8 @@ fn hooks_turned_off_in_user_settings_is_not_protected() {
     for host in Host::ALL {
         let (id, row) = (host.id(), row(host.id()));
         let Some(off) = &row.hooks_off else { continue };
-        let dir = install(host).dir_name;
+        let dir = dir_of(host);
+        let dir = dir.as_str();
         let sb = Sandbox::bare(&[dir]);
         let file = sb.home.join(dir).join(off.file);
         if off.before_init {

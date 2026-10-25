@@ -92,6 +92,9 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.opencode",
     "**/.opencode/plugins",
     "**/.opencode/plugin",
+    "**/.hermes/plugins/**",
+    "**/.hermes",
+    "**/.hermes/plugins",
 ];
 
 /// The [`RUNS_LATER`] files an agent host loads as its own configuration when
@@ -118,6 +121,7 @@ pub const AGENT_CONFIG: &[&str] = &[
     "**/.opencode/opencode.jsonc",
     "**/opencode.json",
     "**/opencode.jsonc",
+    "**/.hermes/plugins/**",
 ];
 
 /// A write exclusion of one of [`RUNS_LATER`], below the project or below a

@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 115] = [
+const PROTECTED_WRITES: [&str; 121] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -158,6 +158,14 @@ const PROTECTED_WRITES: [&str; 115] = [
     "**/opencode.json",
     "**/opencode.jsonc",
     "**/.cache/opencode/node_modules/**",
+    // Hermes Agent: the skills, cron jobs, memories and persona it loads into
+    // later sessions, and a project's `.hermes.md` and plugins
+    "~/.hermes/skills/**",
+    "~/.hermes/cron/**",
+    "~/.hermes/memories/**",
+    "~/.hermes/SOUL.md",
+    "**/.hermes.md",
+    "**/.hermes/**",
     // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",

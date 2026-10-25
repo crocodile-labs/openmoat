@@ -23,7 +23,7 @@ or `deny` from what the call actually opens, runs and connects to, and records e
 decision in a local, hash-chained audit log.
 
 It is for developers who let Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
-pi, Gemini CLI or OpenCode run commands on their own machine and want one set of rules across
+pi, Gemini CLI, OpenCode or Hermes Agent run commands on their own machine and want one set of rules across
 them. It is one Rust binary (`openmoat`) for macOS, Linux and Windows. No AI model
 decides, and nothing leaves your machine unless you export it.
 
@@ -116,6 +116,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 | pi | OpenMoat's extension on pi's `tool_call` event | hook only | `pi` |
 | Gemini CLI | `BeforeTool` hook in `settings.json` | hook only | `gemini-cli` |
 | OpenCode | OpenMoat's plugin on OpenCode 1's `tool.execute.before` hook | hook only | `opencode` |
+| Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 
@@ -283,7 +284,8 @@ The main gaps:
 - **A deferred call runs if your agent lets it.** In auto-approve modes
   (`--dangerously-skip-permissions`, Run Everything) only `deny` and `ask` stop a call.
 - **Outside an OS sandbox, the hook decides alone.** For hook-only agents (OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, and Claude Code and Cursor on native Windows), an
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, and Claude Code and Cursor on native
+  Windows), an
   allowed call runs with your permissions, so a classifier mistake is a bypass. Claude
   Code's sandbox covers only `Bash`, `PowerShell` and `Monitor`; its file tools,
   `WebFetch` and MCP servers run outside it. Cursor runs some commands outside its
@@ -297,17 +299,23 @@ The main gaps:
   2.1.295, run a call unchecked if `openmoat` is missing. GitHub Copilot CLI and Gemini
   CLI run a call whose hook times out. OpenClaw, pi and OpenCode run calls unchecked when
   they do not load OpenMoat's plugin or extension (OpenCode with `--pure` or
-  `OPENCODE_PURE`, or when the plugin fails to load).
+  `OPENCODE_PURE`, or when the plugin fails to load). Hermes Agent's gateway, cron and
+  ACP sessions skip the hook when its command is not approved in
+  `shell-hooks-allowlist.json` (`openmoat init` approves it), as Hermes does under
+  `HERMES_SAFE_MODE=1` or in a profile OpenMoat did not set up.
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a
   project's.
+- **Some agents can change a call after the check.** Hermes Agent's plugins, another of
+  its shell hooks and its tool middleware run in its own process and can rewrite a call's
+  arguments after OpenMoat decided; what an `execute_code` script does itself is not
+  checked, and its in-session `/yolo` toggle approves an ask unseen.
 - **Some agents cannot ask.** Codex, OpenCode 1 and Cursor's file tools receive an
   `ask` as a deny that says how to approve the call (`openmoat`, or
   `openmoat allow --last`).
 - **OpenCode 2 is not supported yet.** It loads plugins through another API;
   `openmoat init` does not set it up and `openmoat status` says so.
-
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you
   trust it in its `/hooks` view, and settings such as `disableAllHooks` (Claude Code,
   Copilot CLI) or `[features] hooks = false` (Codex) turn hooks off. `openmoat status`

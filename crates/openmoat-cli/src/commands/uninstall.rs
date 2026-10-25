@@ -70,11 +70,18 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
         // A hook file OpenMoat owns whole (pi's extension, OpenCode's plugin) is not JSON.
         let hook = match config.layout {
             HookLayout::Owned(file) => undo_whole(path, ours, |text| file.is_ours(text))?,
+            HookLayout::Yaml(layout) => undo_yaml(&config, layout, ours)?,
             HookLayout::Entries(_) | HookLayout::Plugin(_) => {
                 undo_host_json(path, ours, strip, plugin)?
             }
         };
         let mut files = vec![(path.clone(), hook)];
+        // The host's record of consent to OpenMoat's hook (Hermes Agent's allowlist).
+        if let Some((consent_path, consent)) = install::consent::of(&config) {
+            let id = host.id();
+            let undone = undo_consent(&consent_path, ours, consent, id)?;
+            files.push((consent_path, undone));
+        }
         // A sandbox in a file of its own.
         match sandbox {
             Some(Undo::Toml(remove)) => {
@@ -227,6 +234,67 @@ fn undo_host_json(
     if plugin && original.is_none() && !created {
         install::openclaw::read_for_edit(path)?;
     }
+    let text = serde_json::to_string_pretty(&root)? + "\n";
+    finish(path, &owned(&backups, ours), original, created, &text).map(Some)
+}
+
+/// A YAML hook file (Hermes Agent's `config.yaml`): OpenMoat's lines taken
+/// out as text, so the rest stays as the person and the host left it; the
+/// backup's bytes when what is left is the document it holds.
+fn undo_yaml(
+    config: &HostConfig,
+    layout: &'static dyn openmoat_hosts::HookFile,
+    ours: &[PathBuf],
+) -> Result<Option<Undone>> {
+    let path = &config.settings_path;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let Some(stripped) = install::yaml::remove(config, layout, &text)? else {
+        return Ok(None);
+    };
+    let left = openmoat_hosts::yaml_hooks::parse(&stripped).ok();
+    let backups = install::backups(path);
+    let originals: Vec<(&PathBuf, Option<Value>)> = backups
+        .iter()
+        .filter_map(|b| {
+            let text = fs::read_to_string(b).ok()?;
+            let unchanged = install::yaml::remove(config, layout, &text).ok()?.is_none();
+            unchanged.then(|| (b, openmoat_hosts::yaml_hooks::parse(&text).ok()))
+        })
+        .collect();
+    let original = originals
+        .iter()
+        .find(|(_, doc)| doc.is_some() && *doc == left)
+        .map(|(b, _)| *b);
+    let created = originals.is_empty() && stripped.trim().is_empty();
+    finish(path, &owned(&backups, ours), original, created, &stripped).map(Some)
+}
+
+/// The host's consent file: OpenMoat's commands taken out; deleted when `init`
+/// created it and nothing else is left in it.
+fn undo_consent(
+    path: &Path,
+    ours: &[PathBuf],
+    consent: &dyn openmoat_hosts::ConsentFile,
+    id: &str,
+) -> Result<Option<Undone>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let mut root = read_or_empty(path)?;
+    if !consent.remove(&mut root, id) {
+        return Ok(None);
+    }
+    let backups = install::backups(path);
+    let originals: Vec<(&PathBuf, Value)> = backups
+        .iter()
+        .filter_map(|b| Some((b, read_or_empty(b).ok()?)))
+        .filter(|(_, v)| !consent.remove(&mut v.clone(), id))
+        .collect();
+    let original = originals.iter().find(|(_, v)| *v == root).map(|(b, _)| *b);
+    let created = originals.is_empty() && consent.is_empty(&root);
     let text = serde_json::to_string_pretty(&root)? + "\n";
     finish(path, &owned(&backups, ours), original, created, &text).map(Some)
 }

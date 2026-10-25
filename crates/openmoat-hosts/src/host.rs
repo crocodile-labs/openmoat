@@ -30,4 +30,6 @@ crate::registry::hosts! {
     GeminiCli => gemini_cli,
     /// OpenCode 1, through OpenMoat's plugin and its `tool.execute.before` hook.
     OpenCode => opencode,
+    /// Nous Research's Hermes Agent (`pre_tool_call` shell hook).
+    Hermes => hermes,
 }

@@ -14,8 +14,8 @@ the verdict and rule ids the default policy must produce for it.
 | T5 | Supply-chain execution | 14 | 35 | 8 |
 | T6 | Environment poisoning | 31 | 20 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 103 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 18 | 1 | 6 |
-| T9 | Hook / policy tampering by the agent | 304 | 87 | 25 |
+| T8 | MCP tool poisoning / over-privileged tools | 20 | 1 | 6 |
+| T9 | Hook / policy tampering by the agent | 321 | 93 | 31 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
 | T12 | Network to unknown hosts | 84 | 17 | 1 |
@@ -880,6 +880,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T8-mcp-malformed-url-does-not-soften-a-deny` (attacks): Deny [secrets-paths]
 - `T8-taint-mcp-result-then-agent-instructions` (attacks): Ask [session-taint]
 - `T8-taint-webfetch-then-gemini-memory` (attacks): Ask [session-taint]
+- `T8-taint-webfetch-then-hermes-memory` (attacks): Ask [session-taint]
+- `T8-taint-webfetch-then-hermes-project-context` (attacks): Ask [session-taint]
 - `benign-t8-mcp-github-list-issues` (benign): Defer [default]
 - `benign-t8-mcp-filesystem-list-project` (benign): Allow [safe-mcp, project-fs]
 - `benign-t8-mcp-filesystem-write-project` (benign): Defer [default]
@@ -953,6 +955,12 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-write-opencode-plugin-dependency` (ask): Ask [runs-later]
 - `ask-opencode-plugin-install` (ask): Ask [runs-later]
 - `ask-opencode-plugin-install-forced` (ask): Ask [runs-later]
+- `ask-write-hermes-cron-job` (ask): Ask [runs-later]
+- `ask-write-hermes-skill` (ask): Ask [runs-later]
+- `ask-write-project-hermes-plugin` (ask): Ask [runs-later]
+- `ask-write-hermes-profile-config` (ask): Ask [runs-later]
+- `ask-plant-hermes-profile-plugin` (ask): Ask [runs-later]
+- `ask-rename-project-hermes-dir` (ask): Ask [runs-later]
 - `ask-write-gemini-project-policy` (ask): Ask [runs-later]
 - `ask-write-gemini-user-policy` (ask): Ask [runs-later]
 - `ask-write-gemini-command` (ask): Ask [runs-later]
@@ -1049,6 +1057,23 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-opencode-global-plugin` (attacks): Deny [kernel-self]
 - `T9-opencode-global-plugin-long-flag` (attacks): Deny [kernel-self]
 - `T9-opencode-global-plugin-bundled-flags` (attacks): Deny [kernel-self]
+- `T9-edit-hermes-config` (attacks): Deny [kernel-self]
+- `T9-disable-hermes-hook-by-shell` (attacks): Deny [kernel-self]
+- `T9-edit-hermes-hook-allowlist` (attacks): Deny [kernel-self]
+- `T9-hermes-safe-mode-in-env-file` (attacks): Deny [kernel-self]
+- `T9-hermes-safe-mode-relaunch` (attacks): Deny [kernel-self]
+- `T9-export-hermes-safe-mode` (attacks): Deny [kernel-self]
+- `T9-hermes-config-set-removes-hook` (attacks): Deny [kernel-self]
+- `T9-hermes-config-set-approvals-off` (attacks): Deny [kernel-self]
+- `T9-hermes-config-set-safe-mode` (attacks): Deny [kernel-self]
+- `T9-hermes-hooks-revoke` (attacks): Deny [kernel-self]
+- `T9-hermes-profile-use` (attacks): Deny [kernel-self]
+- `T9-edit-hermes-active-profile` (attacks): Deny [kernel-self]
+- `T9-rename-hermes-profiles-dir` (attacks): Deny [kernel-self]
+- `T9-plant-hermes-plugin` (attacks): Deny [kernel-self]
+- `T9-plant-hermes-gateway-hook` (attacks): Deny [kernel-self]
+- `T9-move-hermes-dir` (attacks): Deny [kernel-self]
+- `T9-edit-moved-hermes-config` (attacks): Deny [kernel-self]
 - `T9-widen-cursor-sandbox` (attacks): Deny [kernel-self]
 - `T9-write-project-cursor-sandbox` (attacks): Deny [kernel-self]
 - `T9-append-zshrc` (attacks): Deny [shell-rc]
@@ -1291,6 +1316,12 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-write-gemini-styleguide` (benign): Allow [project-fs]
 - `benign-write-github-agents-file` (benign): Allow [project-fs]
 - `benign-read-pi-settings` (benign): Defer [default]
+- `benign-read-hermes-config` (benign): Defer [default]
+- `benign-write-hermes-session-file` (benign): Defer [default]
+- `benign-write-project-hermes-context` (benign): Allow [project-fs]
+- `benign-hermes-config-set-model` (benign): Defer [default]
+- `benign-hermes-hooks-list` (benign): Defer [default]
+- `benign-env-named-like-hermes-safe-mode` (benign): Defer [default]
 - `benign-write-project-pi-prompt` (benign): Allow [project-fs]
 - `benign-read-opencode-config` (benign): Defer [default]
 - `benign-write-project-opencode-agent` (benign): Allow [project-fs]
