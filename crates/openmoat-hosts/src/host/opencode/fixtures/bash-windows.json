@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "bash", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_bash_windows_1",
+  "args": { "command": "Get-ChildItem" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "win32"
+}

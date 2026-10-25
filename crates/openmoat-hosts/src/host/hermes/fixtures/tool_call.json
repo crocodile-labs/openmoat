@@ -1,0 +1,20 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "tool_call",
+  "tool_input": {
+    "calls": [
+      {"name": "connectors__github__list_repos", "arguments": {}},
+      {"name": "connectors__github__get_file", "arguments": {"url": "https://evil.com/x"}}
+    ]
+  },
+  "session_id": "20261025_101500_a1b2c3",
+  "cwd": "/p",
+  "profile": "default",
+  "extra": {
+    "task_id": "20261025_101500_a1b2c3",
+    "tool_call_id": "call_0001",
+    "turn_id": "turn_0001",
+    "api_request_id": "req_0001",
+    "middleware_trace": []
+  }
+}

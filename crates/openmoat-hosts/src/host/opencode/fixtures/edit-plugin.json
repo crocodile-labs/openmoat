@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "edit", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_edit_plugin_1",
+  "args": { "filePath": "/Users/me/.config/opencode/plugins/openmoat.js", "oldString": "throw error", "newString": "return" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

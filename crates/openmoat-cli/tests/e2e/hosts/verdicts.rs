@@ -5,7 +5,7 @@
 use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 
-use super::{assert_reason, guard, install, row, verdict};
+use super::{assert_reason, dir_of, guard, row, verdict};
 use crate::common::{DENY, OK, Sandbox, stdout, text};
 
 #[test]
@@ -15,7 +15,7 @@ fn a_secret_read_is_denied_in_the_hosts_format() {
         let Some(read) = row.secret_read else {
             continue;
         };
-        let sb = Sandbox::installed(&[install(host).dir_name]);
+        let sb = Sandbox::installed(&[&dir_of(host)]);
         let out = guard(&row, &sb, &read(&sb));
         assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
@@ -28,7 +28,7 @@ fn a_benign_call_is_allowed() {
     for host in Host::ALL {
         let row = row(host.id());
         let Some(benign) = row.benign else { continue };
-        let sb = Sandbox::installed(&[install(host).dir_name]);
+        let sb = Sandbox::installed(&[&dir_of(host)]);
         let out = guard(&row, &sb, &benign(&sb));
         assert_eq!(out.status.code(), Some(OK), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "allow", "{}: {}", row.id, text(&out));
@@ -45,7 +45,7 @@ fn an_ungoverned_tool_is_left_to_the_host() {
         if row.ungoverned.is_empty() {
             continue;
         }
-        let sb = Sandbox::installed(&[install(host).dir_name]);
+        let sb = Sandbox::installed(&[&dir_of(host)]);
         let ungoverned = host.spec().asks.ungoverned;
         for payload in row.ungoverned {
             let out = guard(&row, &sb, &payload(&sb));
@@ -69,7 +69,7 @@ fn arguments_that_cannot_be_checked_are_denied() {
         let Some((payload, says)) = row.malformed else {
             continue;
         };
-        let sb = Sandbox::installed(&[install(host).dir_name]);
+        let sb = Sandbox::installed(&[&dir_of(host)]);
         let out = guard(&row, &sb, &payload(&sb));
         assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
@@ -86,7 +86,7 @@ fn an_ask_reaches_the_host_as_its_spec_says() {
     for host in Host::ALL {
         let row = row(host.id());
         let Some(ask) = row.ask else { continue };
-        let sb = Sandbox::installed_asking(&[install(host).dir_name]);
+        let sb = Sandbox::installed_asking(&[&dir_of(host)]);
         let out = guard(&row, &sb, &ask(&sb));
         if host.spec().asks.on_pre_tool_use.is_none() {
             assert_eq!(out.status.code(), Some(OK), "{}: {}", row.id, text(&out));

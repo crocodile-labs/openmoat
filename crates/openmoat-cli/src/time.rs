@@ -38,6 +38,16 @@ pub fn timestamp(ts_ms: i64) -> String {
     )
 }
 
+/// `ts_ms` in RFC 3339, to the second (`2026-10-25T10:15:00Z`).
+#[must_use]
+pub fn rfc3339(ts_ms: i64) -> String {
+    format!(
+        "{}T{}Z",
+        date(ts_ms.div_euclid(1000).div_euclid(SECS_PER_DAY)),
+        clock(ts_ms)
+    )
+}
+
 /// The start of the UTC day `days` days before `ts_ms`, in RFC 3339
 /// (`2026-10-11T00:00:00Z`), the form npm and uv read.
 #[must_use]

@@ -1,4 +1,4 @@
-//! A hook file OpenMoat owns whole ([`HookLayout::Owned`]: pi's extension).
+//! A hook file OpenMoat owns whole ([`HookLayout::Owned`]: pi's extension, OpenCode's plugin).
 //!
 //! pi has no command hook; it loads every `.js` and `.ts` file in the
 //! `extensions/` of its agent directory on start (pi 1.3.0

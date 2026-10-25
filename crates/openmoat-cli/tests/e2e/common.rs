@@ -109,7 +109,10 @@ impl Sandbox {
             .env("USERPROFILE", &self.home)
             // Debug builds take Claude Code's version from here instead of
             // running the `claude` on `PATH` (`install/claude_version.rs`).
-            .env("MOAT_CLAUDE_CODE_VERSION", CLAUDE_CODE_VERSION);
+            .env("MOAT_CLAUDE_CODE_VERSION", CLAUDE_CODE_VERSION)
+            // and OpenCode's from here instead of running the `opencode` on
+            // `PATH` (`install/host_version.rs`); empty is none found
+            .env("MOAT_OPENCODE_VERSION", "");
         // Windows sockets cannot start without it (`moat proxy` binds one).
         if let Some(root) = std::env::var_os("SYSTEMROOT") {
             cmd.env("SYSTEMROOT", root);

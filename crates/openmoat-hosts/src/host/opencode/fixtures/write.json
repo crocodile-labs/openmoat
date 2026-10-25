@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "write", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_write_1",
+  "args": { "filePath": "/p/notes.txt", "content": "hello\n" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

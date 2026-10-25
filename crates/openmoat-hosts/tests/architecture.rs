@@ -174,8 +174,13 @@ fn quoted_names() -> Vec<String> {
             .chain(spec.detect.as_ref().map(|d| d.dir_name))
         {
             names.push(dir);
-            // `.pi` for `.pi/agent`
-            names.extend(dir.split_once('/').map(|(first, _)| first));
+            // `.pi` for `.pi/agent`; not `.config` for OpenCode's
+            // `.config/opencode`, a directory every XDG program shares
+            names.extend(
+                dir.split_once('/')
+                    .map(|(first, _)| first)
+                    .filter(|first| *first != ".config"),
+            );
         }
     }
     names.sort_unstable();

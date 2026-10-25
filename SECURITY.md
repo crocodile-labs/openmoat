@@ -95,13 +95,19 @@ These are known limits, documented in `docs/THREAT_MODEL.md` §4–5 and
 
 | Not yet covered | Status |
 |---|---|
-| OS enforcement where no sandbox applies (Claude Code's and Cursor's file tools, `WebFetch` and MCP calls; commands Cursor runs outside its sandbox; every call of the hook-only agents OpenClaw, GitHub Copilot CLI, pi and Gemini CLI; native Windows): a report that an allowed call could do harm because nothing below the decision stops it (a misjudged call is a policy bypass, in scope) | `openmoat run`; Windows enforcement (#135), Isolated tier (#174, #175) |
+| OS enforcement where no sandbox applies (Claude Code's and Cursor's file tools, `WebFetch` and MCP calls; commands Cursor runs outside its sandbox; every call of the hook-only agents OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent; native Windows): a report that an allowed call could do harm because nothing below the decision stops it (a misjudged call is a policy bypass, in scope) | `openmoat run`; Windows enforcement (#135), Isolated tier (#174, #175) |
 | Sandbox gaps listed as gaps in `docs/EVIDENCE.md` or as losses by `openmoat sandbox show` (for example, on Linux `openmoat run` cannot deny `.env` inside the project) | tracked in the issue each one names |
 | HTTPS secret injection, and per-host method and path rules, in `openmoat proxy` | #247 |
 | Data sent to a host the policy allows (`api.github.com`, registries) by an allowed or approved command, including project scripts such as `npm test` | known limit; session taint asks for network after a secret read |
 | PowerShell / cmd tokenisation | Claude Code `PowerShell` is always `unparseable`, which the default policy defers to the agent's own prompt (ADR-025); other PowerShell lines are lexed as POSIX and fall through to the catch-all default |
 | Hosts that proceed when the hook binary is missing or killed, or when the hook times out (GitHub Copilot CLI, Gemini CLI) | host limitation; `openmoat status` reports a missing hook |
-| Tools no hook reports (Codex web search and other hosted tools) | host limitation: the hook never sees them |
+| Hosts that skip or never register the hook: Hermes Agent's gateway, cron and ACP sessions when its `shell-hooks-allowlist.json` does not approve OpenMoat's command, `HERMES_SAFE_MODE=1`, another Hermes profile | host limitation; `openmoat init` writes the approval, `kernel-self` denies the agent changing it or setting `HERMES_SAFE_MODE`, and `openmoat status` reports an unapproved hook |
+| Code that runs inside the agent's process after the check: Hermes Agent plugins, another shell hook's `modify` reply and tool middleware rewriting a call's arguments, and what an `execute_code` script does itself | host limitation; the lock pins the hooks and plugins Hermes loads; `openmoat run` for OS confinement |
+| An ask the agent approves without showing it (Hermes Agent's in-session `/yolo`, `hermes -z`) | host limitation; asks are denies where OpenMoat sees YOLO mode or `approvals.mode: off` |
+| Tools no hook reports (Codex web search and other hosted tools, the shell commands a person types in OpenCode with `!`) | host limitation: the hook never sees them |
+| Agents that run calls unchecked when they do not load OpenMoat's plugin or extension (OpenCode with `--pure` or `OPENCODE_PURE`, or a plugin that fails to load; OpenClaw; pi), and other plugins or extensions in the agent's own process changing what OpenMoat's does (OpenCode, pi, OpenClaw) | host limitation; an agent starting OpenCode without plugins, or writing OpenMoat's plugin and the files that load plugins, is denied (in scope if it is not) |
+| OpenCode 2 (`@opencode/cli`), whose plugin API OpenMoat does not support yet | not supported; `openmoat init` does not set it up (#265) |
+
 | An attacker with root or the user's own shell, a compromised release pipeline, prompt-injection detection in text | not a target (THREAT_MODEL §4) |
 | Agents running in a vendor's cloud rather than on the host | not a target |
 

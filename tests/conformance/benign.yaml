@@ -126,11 +126,61 @@
   threat: T9
   action: { fs_read: "~/.pi/agent/settings.json" }
   expect: { verdict: defer, rules: [default] }
+# Hermes Agent: reading its configuration, its own session files, a project's
+# context file, and its commands that change no hook, approval or profile
+- id: benign-read-hermes-config
+  threat: T9
+  action: { fs_read: "~/.hermes/config.yaml" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-hermes-session-file
+  threat: T9
+  action: { fs_write: "~/.hermes/sessions/20261025_101500_a1b2c3.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-project-hermes-context
+  threat: T9
+  action: { fs_write: "/p/.hermes.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-hermes-config-set-model
+  threat: T9
+  action: { shell: "hermes config set model.default hermes-4" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-hermes-hooks-list
+  threat: T9
+  action: { shell: "hermes hooks list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-env-named-like-hermes-safe-mode
+  threat: T9
+  action: { shell: "HERMES_SAFE_MODE_DOCS=1 make docs" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-write-project-pi-prompt
   threat: T9
   context: { cwd: /p, project: /p }
   action: { fs_write: "/p/.pi/prompts/review.md" }
   expect: { verdict: allow, rules: [project-fs] }
+# OpenCode: `kernel-self` guards OpenMoat's plugin and the configuration files,
+# not reading them; a project's agents stay project work; running OpenCode with
+# its plugins, or with `--pure` only as text in a prompt, is left to the agent
+- id: benign-read-opencode-config
+  threat: T9
+  action: { fs_read: "~/.config/opencode/opencode.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-project-opencode-agent
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.opencode/agent/review.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-opencode-run
+  threat: T9
+  action: { shell: "opencode run 'fix the failing test'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-opencode-run-mentions-pure
+  threat: T9
+  action: { shell: "opencode run 'explain what --pure does'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-opencode-other-variable
+  threat: T9
+  action: { shell: "OPENCODE_DISABLE_AUTOUPDATE=1 opencode run 'list files'" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-read-repository-policy
   threat: T9
   action: { fs_read: "/p/.moat/policy.yaml" }

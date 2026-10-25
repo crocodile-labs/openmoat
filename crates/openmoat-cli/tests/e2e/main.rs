@@ -29,6 +29,7 @@ mod escapes;
 mod export;
 mod gemini_cli;
 mod guard;
+mod hermes;
 mod home_screen;
 mod host_failures;
 mod hosts;
@@ -42,6 +43,7 @@ mod lock_settings;
 mod mcp;
 mod moatbench;
 mod openclaw;
+mod opencode;
 #[cfg(unix)]
 mod packs;
 mod paths;

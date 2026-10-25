@@ -171,11 +171,14 @@ fn custom_moved(recorded: &crate::install::Recorded, host: Host) -> Result<Vec<(
     if let Some(dir) = recorded.dir(host) {
         locations.push(locate.at(dir, recorded.file(host)));
     }
-    let default = locate.default_for(&home::user_home()?);
     let (dir_name, file) = (install.dir_name, install.config_file);
+    // The policy names the directory as `~/<dir_name>`; a host whose own default
+    // is elsewhere (Hermes Agent's `%LOCALAPPDATA%\hermes` on Windows) is moved
+    // from there too.
+    let at_home = home::user_home()?.join(dir_name);
     let mut out = Vec::new();
     for located in locations {
-        if located.dir != default.dir {
+        if located.dir != at_home {
             out.push((format!("~/{dir_name}"), located.dir.clone()));
         }
         if !locate.config_is_default(&located) {

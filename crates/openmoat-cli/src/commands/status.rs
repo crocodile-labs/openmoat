@@ -276,27 +276,37 @@ fn hooks(
     let mut not_found = Vec::new();
     for host in Host::ALL {
         let config = HostConfig::for_host(home, host)?;
-        let line = match config.state(binary) {
-            HookState::Installed => "✔ installed".to_owned(),
-            HookState::Missing if recorded.skipped(host) && config.host_present() => {
+        // A version that does not load OpenMoat's hook (OpenCode 2), whatever
+        // the hook file says.
+        let unsupported = config
+            .host_present()
+            .then(|| crate::install::host_version::unsupported(host))
+            .flatten();
+        let line = match (config.state(binary), unsupported) {
+            (_, Some(why)) => {
+                healthy = false;
+                format!("✗ not protected: {why}")
+            }
+            (HookState::Installed, None) => "✔ installed".to_owned(),
+            (HookState::Missing, None) if recorded.skipped(host) && config.host_present() => {
                 format!(
                     "· not set up (`openmoat init --hosts {}` adds it)",
                     host.id()
                 )
             }
-            HookState::Missing if !config.host_present() => {
+            (HookState::Missing, None) if !config.host_present() => {
                 not_found.push(host.display_name());
                 continue;
             }
-            HookState::Missing => {
+            (HookState::Missing, None) => {
                 healthy = false;
                 "✗ hook missing (run `openmoat init`)".to_owned()
             }
-            HookState::Stale { command } => {
+            (HookState::Stale { command }, None) => {
                 healthy = false;
                 format!("✗ {}", crate::install::stale_hint(&command))
             }
-            HookState::Unreadable(error) => {
+            (HookState::Unreadable(error) | HookState::Unapproved(error), None) => {
                 healthy = false;
                 format!("✗ {error}")
             }

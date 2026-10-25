@@ -22,10 +22,12 @@ openmoat bench --hook '<command>' --host claude-code    # against any hook comma
 
 `openmoat bench` creates a throwaway home under the system temporary directory, runs
 `openmoat init --yes` there, and for each scenario and each host that has a tool for
-every step (Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI;
+every step (Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode,
+Hermes Agent;
 Copilot's payload does not name an MCP tool's server and pi has no fetch tool, so
-scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell,
-which OpenMoat leaves to it, so its shell steps are skipped there)
+scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell
+and OpenCode's may be Git Bash, PowerShell or `cmd`, which OpenMoat leaves to them,
+so their shell steps are skipped there)
 sends the steps to `openmoat guard --host <host>`
 as that host's hook payload. The scenarios' commands are never executed: only the
 hook runs. It reads the kernel verdict of each step back from the throwaway audit
@@ -38,7 +40,11 @@ log and checks:
   decision for an `allow`, so OpenClaw's own checks still run and an `allow` reads as
   `passthrough` there. Gemini CLI reads `decision: deny` or `ask` from stdout whatever
   the exit code; `decision: allow` and no output are `passthrough`, since its own
-  policy still decides.
+  policy still decides. OpenCode 1 cannot ask, so an `ask` must arrive there as a
+  `deny`, and an `allow` reads as `passthrough`, since OpenCode's own `permission`
+  rules still run. Hermes Agent reads `block` (as `decision` or `action`) and exit
+  2 as a deny and `action: approve` as its own approval prompt; `{}` and no output are
+  `passthrough`, since it has no allow that skips its own checks.
 
 `--hook <command> --host <host>` sends the same payloads on stdin to any hook command
 instead, run through the system shell the way hosts run hooks (`sh -c`, `cmd /C` on
@@ -53,13 +59,13 @@ Windows), and reads each reply by that host's hook protocol
 | `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none | exit 0 with no output, or `decision: allow`: OpenClaw's own checks decide |
 | `error` | any other exit, a timeout (45 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) | the same, or exit 0 with any other output (the plugin blocks the call) |
 
-| Answer | GitHub Copilot CLI | pi (OpenMoat's extension) | Gemini CLI |
-|---|---|---|---|
-| `allow` | exit 0, `permissionDecision: allow` | exit 0, `decision: allow` | none: `decision: allow` is read as `passthrough` (its own policy still decides) |
-| `ask` | exit 0, `permissionDecision: ask` | exit 0, `decision: ask` (the extension's dialog) | `decision: ask`, whatever the exit code |
-| `deny` | exit 2, or exit 0 with `permissionDecision: deny` | exit 2 with `decision: deny` | `decision: deny` or `block`, whatever the exit code; without one, an exit other than 0 and 1 with something printed |
-| `passthrough` | exit 0 with no output | exit 0 with no output | exit 0 with no output |
-| `error` | any other exit (Copilot then denies), a timeout or a hook that cannot start | any other reply (the extension blocks the call) | exit 1, a signal, a silent non-zero exit or unreadable output on exit 0 (Gemini CLI then runs the call) |
+| Answer | GitHub Copilot CLI | pi (OpenMoat's extension) | Gemini CLI | OpenCode (OpenMoat's plugin) | Hermes Agent |
+|---|---|---|---|---|---|
+| `allow` | exit 0, `permissionDecision: allow` | exit 0, `decision: allow` | none: `decision: allow` is read as `passthrough` (its own policy still decides) | none: exit 0 with `decision: allow` is read as `passthrough` (its own `permission` rules still decide) | none: `{}` is read as `passthrough` (its own checks still run) |
+| `ask` | exit 0, `permissionDecision: ask` | exit 0, `decision: ask` (the extension's dialog) | `decision: ask`, whatever the exit code | none: OpenCode 1 cannot ask, and the plugin blocks a `decision: ask` (`error`) | `action: approve` (its own approval prompt), on any exit but 2 |
+| `deny` | exit 2, or exit 0 with `permissionDecision: deny` | exit 2 with `decision: deny` | `decision: deny` or `block`, whatever the exit code; without one, an exit other than 0 and 1 with something printed | exit 2 with `decision: deny` | exit 2, or `block` as `decision` or `action` |
+| `passthrough` | exit 0 with no output | exit 0 with no output | exit 0 with no output | exit 0 with no output, or `decision: allow` | exit 0 with no output or a JSON object without a decision |
+| `error` | any other exit (Copilot then denies), a timeout or a hook that cannot start | any other reply (the extension blocks the call) | exit 1, a signal, a silent non-zero exit or unreadable output on exit 0 (Gemini CLI then runs the call) | any other reply (the plugin blocks the call) | a non-zero exit without a decision, a signal, output that is not a JSON object, a timeout (`fail_closed`: Hermes then blocks the call) |
 
 A step is then compared with what the host must end up doing: an expected `ask`
 becomes a `deny` where the host cannot ask, and an expected `allow` is also met by

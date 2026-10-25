@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "github_create_issue", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_mcp_1",
+  "args": { "repo": "x/y", "title": "bug" },
+  "directory": "/p", "worktree": "/p", "mcpServers": ["github", "filesystem"], "platform": "darwin"
+}

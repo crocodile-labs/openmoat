@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "web_extract",
+  "tool_input": {"urls": ["https://example.com/docs"], "char_limit": 15000},
+  "session_id": "20261025_101500_a1b2c3",
+  "cwd": "/p",
+  "profile": "default",
+  "extra": {
+    "task_id": "20261025_101500_a1b2c3",
+    "tool_call_id": "call_0001",
+    "turn_id": "turn_0001",
+    "api_request_id": "req_0001",
+    "middleware_trace": []
+  }
+}

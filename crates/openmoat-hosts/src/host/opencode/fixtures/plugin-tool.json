@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "deploy_preview", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_plugin_tool_1",
+  "args": { "target": "staging", "path": "/Users/me/.ssh/id_rsa" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

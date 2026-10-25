@@ -271,6 +271,42 @@ deny:
       - "~/.gemini/settings.json"
       - "~/.gemini/trustedFolders.json"
       - "**/.gemini/settings.json"
+      # OpenCode: its configuration directory, OpenMoat's plugin and the plugin
+      # folders around it, and the configuration files whose `plugin` list loads
+      # plugins before it (`config` is the old TOML one OpenCode moves into
+      # `config.json`); other plugins ask (`runs-later`)
+      - "~/.config/opencode"
+      - "~/.config/opencode/plugins"
+      - "~/.config/opencode/plugins/openmoat.js"
+      - "~/.config/opencode/plugin"
+      - "~/.config/opencode/config.json"
+      - "~/.config/opencode/opencode.json"
+      - "~/.config/opencode/opencode.jsonc"
+      - "~/.config/opencode/config"
+      # OpenCode also reads `~/.opencode` as a configuration directory, with its
+      # own plugin folders and configuration files
+      - "~/.opencode"
+      - "~/.opencode/plugins"
+      - "~/.opencode/plugin"
+      - "~/.opencode/opencode.json"
+      - "~/.opencode/opencode.jsonc"
+      # Hermes Agent: its home: the `config.yaml` that holds OpenMoat's hook, the
+      # hook allowlist without which a gateway, cron or ACP session skips it, the
+      # `.env` that can set `HERMES_SAFE_MODE`, the sticky profile, the plugins and
+      # hooks it runs in its own process, and the folder of its profiles (another
+      # profile's files ask, `runs-later`; `HERMES_HOME` moves these to the one in use)
+      - "~/.hermes"
+      - "~/.hermes/config.yaml"
+      - "~/.hermes/shell-hooks-allowlist.json"
+      - "~/.hermes/.env"
+      - "~/.hermes/active_profile"
+      - "~/.hermes/plugins"
+      - "~/.hermes/plugins/**"
+      - "~/.hermes/hooks"
+      - "~/.hermes/hooks/**"
+      - "~/.hermes/agent-hooks"
+      - "~/.hermes/agent-hooks/**"
+      - "~/.hermes/profiles"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it
@@ -347,6 +383,29 @@ deny:
       # uninstall` removes: systemd's `moat-proxy` and launchd's `dev.openmoat.proxy`
       - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert} * *moat-proxy*"
       - "{launchctl,*/launchctl} {bootout,unload,disable,remove,kill} * *dev.openmoat.proxy*"
+      # starting OpenCode without its plugins, OpenMoat's among them (`--pure`, or
+      # `OPENCODE_PURE` below), replacing OpenCode 1 with OpenCode 2, which does not
+      # load OpenMoat's plugin (`upgrade --major`), or adding a plugin to the global
+      # configuration, which loads it before OpenMoat's (`plugin --global`)
+      - "{opencode,*/opencode} * --pure*"
+      - "{npx,*/npx,bunx,*/bunx,pnpx,*/pnpx} * opencode-ai* * --pure*"
+      - "{opencode,*/opencode} upgrade * --major*"
+      - "{opencode,*/opencode} {plugin,plug} * --global*"
+      - "{opencode,*/opencode} {plugin,plug} * -g*"
+      - "{opencode,*/opencode} {plugin,plug} * -[!-]*g*"
+      # Hermes Agent's own commands that take OpenMoat's hook out of `config.yaml` or
+      # its allowlist (a running gateway drops it within a minute), turn approvals off,
+      # enable plugins, set `HERMES_SAFE_MODE`, or make a profile without the hook the
+      # one later sessions use
+      - "{hermes,*/hermes} config set {hooks,approvals,plugins,HERMES_SAFE_MODE}*"
+      - "{hermes,*/hermes} * config set {hooks,approvals,plugins,HERMES_SAFE_MODE}*"
+      - "{hermes,*/hermes} hooks revoke*"
+      - "{hermes,*/hermes} * hooks revoke*"
+      - "{hermes,*/hermes} profile use*"
+      - "{hermes,*/hermes} * profile use*"
+    # `OPENCODE_PURE` starts OpenCode without its plugins, and `HERMES_SAFE_MODE`
+    # starts Hermes Agent with no shell hook, OpenMoat's included in both
+    env.set: ["OPENCODE_PURE", "HERMES_SAFE_MODE"]
   # the folders above a file `kernel-self` protects that hold no agent directory of
   # their own: renaming `.github` (or `.github/copilot`) away and back edits
   # `.github/copilot/settings.json` under another name. `hook_only` (ADR-034): a
@@ -393,7 +452,13 @@ allow:
       "!${project}/**/.github/hooks", "!${project}/**/.pi", "!${project}/**/.pi/extensions",
       "!${project}/**/.gemini/policies/**", "!${project}/**/.gemini/commands/**", "!${project}/**/.gemini/agents/**",
       "!${project}/**/.github/agents/**", "!${project}/**/.claude/agents/**", "!${project}/**/.claude/skills/**",
-      "!${project}/**/.claude/commands/**"]
+      "!${project}/**/.claude/commands/**",
+      "!${project}/**/.opencode/plugins/**", "!${project}/**/.opencode/plugin/**", "!${project}/**/.opencode/tools/**",
+      "!${project}/**/.opencode/tool/**", "!${project}/**/.opencode/commands/**", "!${project}/**/.opencode/command/**",
+      "!${project}/**/.opencode/opencode.json", "!${project}/**/.opencode/opencode.jsonc", "!${project}/**/.opencode/package.json",
+      "!${project}/**/opencode.json", "!${project}/**/opencode.jsonc",
+      "!${project}/**/.opencode", "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
+      "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes", "!${project}/**/.hermes/plugins"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -779,7 +844,35 @@ ask:
       "**/.github/agents/**",
       # Claude Code subagents, skills and slash commands, which carry their own
       # hooks, allowed tools and shell
-      "**/.claude/agents/**", "**/.claude/skills/**", "**/.claude/commands/**"]
+      "**/.claude/agents/**", "**/.claude/skills/**", "**/.claude/commands/**",
+      # OpenCode plugins and custom tools, which it loads into its own process with
+      # the agent's rights (a project's at start, with no prompt); its commands,
+      # whose `` !`…` `` shell runs when the person types the command; a project's
+      # configuration, which adds plugins, MCP servers and permission rules; and the
+      # package files and caches it loads plugin code from
+      "~/.config/opencode/plugins/**", "~/.config/opencode/plugin/**",
+      "~/.config/opencode/tools/**", "~/.config/opencode/tool/**",
+      "~/.config/opencode/commands/**", "~/.config/opencode/command/**",
+      "~/.config/opencode/package.json", "~/.config/opencode/node_modules/**",
+      "~/.cache/opencode/node_modules/**",
+      "**/.opencode/plugins/**", "**/.opencode/plugin/**", "**/.opencode/tools/**", "**/.opencode/tool/**",
+      "**/.opencode/commands/**", "**/.opencode/command/**", "**/.opencode/opencode.json",
+      "**/.opencode/opencode.jsonc", "**/.opencode/package.json", "**/opencode.json", "**/opencode.jsonc",
+      # the folders above a project's OpenCode plugins: a rename away and back edits them
+      "**/.opencode", "**/.opencode/plugins", "**/.opencode/plugin",
+      # Hermes Agent: the cron jobs it runs later unattended and the skills it loads
+      # into later sessions; another profile's configuration, hook allowlist,
+      # `.env`, plugins, hooks, skills and cron jobs, which run when that profile is
+      # used; and a project's plugins (loaded with `HERMES_ENABLE_PROJECT_PLUGINS`),
+      # with the folders above them
+      "~/.hermes/cron/**", "~/.hermes/skills/**",
+      "~/.hermes/profiles/*/config.yaml", "~/.hermes/profiles/*/shell-hooks-allowlist.json",
+      "~/.hermes/profiles/*/.env", "~/.hermes/profiles/*/plugins/**", "~/.hermes/profiles/*/hooks/**",
+      "~/.hermes/profiles/*/agent-hooks/**", "~/.hermes/profiles/*/skills/**", "~/.hermes/profiles/*/cron/**",
+      "**/.hermes/plugins/**", "**/.hermes", "**/.hermes/plugins"]
+    # `opencode plugin` adds a plugin to the project's configuration (with `--global`,
+    # which `kernel-self` denies, to the person's)
+    shell: ["{opencode,*/opencode} {plugin,plug}*"]
   - id: persistence
     reason: runs again later, outside this session
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]

@@ -97,14 +97,19 @@ impl ReadOnce {
 
 /// `form` of a hook file, the form its owning host's spec pins in place of
 /// its bytes ([`openmoat_hosts::InstallSpec::pinned_form`], OpenClaw's
-/// `openclaw.json` without `mcp.servers`), read as JSON5 and serialised
-/// compactly with sorted keys; `None` when the file does not take it.
-/// Comments and formatting are not part of it: they change nothing the host
-/// reads.
+/// `openclaw.json` without `mcp.servers`, Hermes Agent's `config.yaml`
+/// without `mcp_servers` and what Hermes saves itself), read as JSON5 or YAML
+/// and serialised compactly with sorted keys; `None` when the file does not
+/// take it. Comments and formatting are not part of it: they change nothing
+/// the host reads.
 fn pinned_form(contents: &[u8], form: Form) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(contents).ok()?;
-    let value = crate::json5::parse(text).ok()?.value;
-    serde_json::to_vec(&form(value)?).ok()
+    let value = if form.yaml {
+        openmoat_hosts::yaml_hooks::parse(text).ok()?
+    } else {
+        crate::json5::parse(text).ok()?.value
+    };
+    serde_json::to_vec(&(form.shape)(value)?).ok()
 }
 
 /// The JSON object in `contents` without [`COSMETIC_KEY`], serialised compactly

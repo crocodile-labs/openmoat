@@ -1,7 +1,7 @@
 //! Hook files whose OpenMoat entries sit among the person's own: the layout
 //! `{"hooks": {"<event>": [entry, …]}}` that Claude Code, Codex, Cursor,
-//! GitHub Copilot CLI and Gemini CLI share, each with its own entry shape
-//! ([`HookFile`]).
+//! GitHub Copilot CLI, Gemini CLI and, in YAML ([`yaml`]), Hermes Agent share,
+//! each with its own entry shape ([`HookFile`]).
 //!
 //! Pure document work: the CLI reads the file, backs it up and writes it; the
 //! code here only edits and inspects the parsed document. Our entries are
@@ -15,6 +15,7 @@ use thiserror::Error;
 use crate::HookSpec;
 
 pub(crate) mod nested;
+pub mod yaml;
 
 /// How one host's hook file lays out an entry of OpenMoat's.
 pub trait HookFile: Sync + std::fmt::Debug {

@@ -1492,6 +1492,79 @@
   threat: T9
   action: { fs_write: "~/.gemini/extensions/helper/gemini-extension.json" }
   expect: { verdict: ask, rules: [runs-later] }
+# OpenCode loads plugins and custom tools into its process, the user's and a
+# project's at start with no prompt; a project's configuration adds plugins, MCP
+# servers and permission rules; commands run their `` !`…` `` shell when typed
+- id: ask-write-opencode-user-plugin
+  threat: T9
+  action: { fs_write: "~/.config/opencode/plugins/helper.js" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-opencode-plugin
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.opencode/plugins/helper.ts" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-opencode-tool
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.opencode/tools/deploy.ts" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-opencode-command
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.opencode/commands/review.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-echo-into-project-opencode-config
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { shell: "echo '{\"plugin\":[\"./x.js\"]}' > opencode.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-dot-opencode-config
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.opencode/opencode.jsonc" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-opencode-plugin-dependency
+  threat: T9
+  action: { fs_write: "~/.config/opencode/node_modules/helper/index.js" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-opencode-plugin-install
+  threat: T9
+  action: { shell: "opencode plugin opencode-helper" }
+  expect: { verdict: ask, rules: [runs-later] }
+# `--force` and a plugin whose name holds a `g` are not `--global`: the project's
+# configuration, an ask, not the person's
+- id: ask-opencode-plugin-install-forced
+  threat: T9
+  action: { shell: "opencode plugin --force opencode-gitlab-auth" }
+  expect: { verdict: ask, rules: [runs-later] }
+# Hermes Agent runs its cron jobs later, unattended, loads its skills into later
+# sessions and, with `HERMES_ENABLE_PROJECT_PLUGINS`, a project's plugins
+- id: ask-write-hermes-cron-job
+  threat: T9
+  action: { fs_write: "~/.hermes/cron/jobs.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-hermes-skill
+  threat: T9
+  action: { fs_write: "~/.hermes/skills/deploy/SKILL.md" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-hermes-plugin
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.hermes/plugins/helper/__init__.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-hermes-profile-config
+  threat: T9
+  action: { fs_write: "~/.hermes/profiles/work/config.yaml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-plant-hermes-profile-plugin
+  threat: T9
+  action: { fs_write: "~/.hermes/profiles/work/plugins/helper/__init__.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-rename-project-hermes-dir
+  threat: T9
+  action: { shell: "mv .hermes hermes-old" }
+  expect: { verdict: ask, rules: [runs-later] }
 # A call the payload shows only in part (input typed into a running shell, a
 # search over directories the payload does not name) asks, however plain
 - id: ask-partial-shell-input
@@ -1643,6 +1716,14 @@
 - id: ask-mv-inside-github-workflows
   threat: T9
   action: { shell: "mv .github/workflows/a.yml .github/workflows/b.yml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-mv-opencode-folder
+  threat: T9
+  action: { shell: "mv .opencode q" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-mv-opencode-plugins-folder
+  threat: T9
+  action: { shell: "mv .opencode/plugins p" }
   expect: { verdict: ask, rules: [runs-later] }
 
 # T9 a job `at` or `batch` runs later persists like a crontab entry

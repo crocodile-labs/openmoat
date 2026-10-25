@@ -53,6 +53,24 @@ pub(super) fn copilot(tool: &str, args: &Value) -> Value {
     })
 }
 
+/// Hermes Agent `pre_tool_call` (`crates/openmoat-hosts/src/host/hermes/fixtures`).
+pub(super) fn hermes(tool: &str, input: &Value) -> Value {
+    json!({
+        "hook_event_name": "pre_tool_call", "tool_name": tool, "tool_input": input,
+        "session_id": "hermes-1", "cwd": CWD, "profile": "default",
+        "extra": { "task_id": "hermes-1", "tool_call_id": "call-1", "turn_id": "t-1" },
+    })
+}
+
+/// `path` with a relative one placed in the working directory.
+pub(super) fn under_cwd(path: &str) -> String {
+    if path.starts_with(['/', '~']) {
+        path.to_owned()
+    } else {
+        format!("{CWD}/{path}")
+    }
+}
+
 /// OpenMoat's pi extension (`crates/openmoat-hosts/src/host/pi/fixtures`).
 pub(super) fn pi(tool: &str, input: &Value) -> Value {
     json!({
@@ -60,4 +78,24 @@ pub(super) fn pi(tool: &str, input: &Value) -> Value {
         "toolCallId": "call-1", "sessionId": "sess-1", "cwd": CWD,
         "hasUI": true, "platform": "darwin",
     })
+}
+
+/// OpenMoat's OpenCode plugin (`crates/openmoat-hosts/src/host/opencode/fixtures`).
+pub(super) fn opencode(tool: &str, args: &Value) -> Value {
+    json!({
+        "hook_event_name": "tool.execute.before", "tool": tool, "args": args,
+        "sessionID": "ses_1", "callID": "call-1", "directory": CWD, "worktree": CWD,
+        "mcpServers": [], "platform": "darwin",
+    })
+}
+
+/// A file path as OpenCode's model sends it: OpenCode expands no `~`, so a
+/// path in the home is written out, and a relative one is joined to the
+/// directory, as OpenCode's tools join it.
+pub(super) fn opencode_path(path: &str) -> String {
+    match path.strip_prefix("~/") {
+        Some(rest) => format!("{HOME}/{rest}"),
+        None if path.starts_with('/') => path.to_owned(),
+        None => format!("{CWD}/{path}"),
+    }
 }

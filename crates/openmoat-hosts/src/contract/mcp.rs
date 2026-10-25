@@ -34,6 +34,10 @@ pub enum McpFile {
     /// is in a subdirectory of it (GitHub Copilot CLI's `mcp-config.json`
     /// beside `hooks/`, pi's `mcp.json` beside `extensions/`).
     InConfigDir(&'static str),
+    /// Each file of these names in the configuration directory, all of which
+    /// the host reads and merges (OpenCode's `config.json`, `opencode.json`
+    /// and `opencode.jsonc`).
+    EachInConfigDir(&'static [&'static str]),
     /// The file of this name in the home directory while the configuration
     /// directory is the default `~/<dir_name>`, inside the configuration
     /// directory otherwise (Claude Code's `~/.claude.json`).
@@ -41,7 +45,7 @@ pub enum McpFile {
 }
 
 /// The syntax of a file of MCP servers. The CLI parses each into JSON (and
-/// writes each back), so TOML and JSON definitions pin alike.
+/// writes each back but YAML), so TOML, YAML and JSON definitions pin alike.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpSyntax {
     /// JSON; an empty file lists no servers.
@@ -49,7 +53,12 @@ pub enum McpSyntax {
     /// TOML, read as JSON.
     Toml,
     /// JSON5 (OpenClaw), written back as JSON; an empty file lists no servers.
+    /// Also JSON with comments and trailing commas (OpenCode's JSONC), which
+    /// JSON5 reads.
     Json5,
+    /// YAML (Hermes Agent), read with OpenMoat's strict YAML; an empty file
+    /// lists no servers. `moat mcp wrap` does not rewrite it.
+    Yaml,
 }
 
 /// One server definition as a file lays it out.

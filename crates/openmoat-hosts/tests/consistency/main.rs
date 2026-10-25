@@ -25,7 +25,9 @@ mod attacks;
 mod payloads;
 mod unknown;
 
-use payloads::{copilot, cursor, cursor_tool, gemini, openclaw, pi};
+use payloads::{
+    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, pi, under_cwd,
+};
 
 /// The part of a conformance fixture this suite reads. A fixture with its own
 /// context, session, repository policy, links or resolver is not a plain
@@ -89,9 +91,13 @@ enum Route {
     Pi,
     /// Gemini CLI `BeforeTool`.
     GeminiCli,
+    /// OpenCode 1 `tool.execute.before`, through OpenMoat's plugin.
+    OpenCode,
+    /// Hermes Agent `pre_tool_call`.
+    Hermes,
 }
 
-const ROUTES: [Route; 10] = [
+const ROUTES: [Route; 12] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -102,6 +108,8 @@ const ROUTES: [Route; 10] = [
     Route::CopilotCli,
     Route::Pi,
     Route::GeminiCli,
+    Route::OpenCode,
+    Route::Hermes,
 ];
 
 impl Route {
@@ -114,6 +122,8 @@ impl Route {
             Self::CopilotCli => Host::CopilotCli,
             Self::Pi => Host::Pi,
             Self::GeminiCli => Host::GeminiCli,
+            Self::OpenCode => Host::OpenCode,
+            Self::Hermes => Host::Hermes,
         }
     }
 }
@@ -130,7 +140,8 @@ fn received(route: Route, expected: Verdict) -> Verdict {
         // Claude Code in `bypassPermissions` or `dontAsk`, which puts no question
         // to a person; there a `defer` stays Claude Code's own
         // (`HookEvent::PreToolUseNoAsk`).
-        (Route::Codex | Route::ClaudeCodeNoPrompt, Verdict::Ask) => Verdict::Deny,
+        // OpenCode 1 gives plugins no way to ask either.
+        (Route::Codex | Route::ClaudeCodeNoPrompt | Route::OpenCode, Verdict::Ask) => Verdict::Deny,
         // Cursor does not enforce `ask` on `preToolUse` or `beforeReadFile`: it is
         // sent as a deny. Those file tools have no flow of their own for a
         // `defer` either, so OpenMoat asks itself, which is again a deny there
@@ -295,6 +306,53 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             gemini("web_fetch", &json!({ "prompt": format!("Summarise {u}") })),
             Action::Fetch { url: u.clone() },
         )),
+        // On Windows OpenCode's shell may be PowerShell or `cmd`, never classified.
+        (Route::OpenCode, Intent::Shell(_)) if cfg!(windows) => {
+            Err("OpenCode's shell on Windows is not read")
+        }
+        (Route::OpenCode, Intent::Shell(c)) => {
+            Ok((opencode("bash", &json!({ "command": c })), shell(c)))
+        }
+        (Route::OpenCode, Intent::Read(p)) => Ok((
+            opencode("read", &json!({ "filePath": opencode_path(p) })),
+            Action::FsRead {
+                path: opencode_path(p),
+            },
+        )),
+        (Route::OpenCode, Intent::Write(p)) => Ok((
+            opencode(
+                "edit",
+                &json!({ "filePath": opencode_path(p), "oldString": "old", "newString": "new" }),
+            ),
+            Action::FsWrite {
+                path: opencode_path(p),
+            },
+        )),
+        (Route::OpenCode, Intent::Fetch(u)) => Ok((
+            opencode("webfetch", &json!({ "url": u, "format": "markdown" })),
+            Action::Fetch { url: u.clone() },
+        )),
+        (Route::Hermes, Intent::Shell(c)) => {
+            Ok((hermes("terminal", &json!({ "command": c })), shell(c)))
+        }
+        // Hermes resolves a relative path against the session's directory,
+        // which its payload does not send, so a relative one asks; its file
+        // tools are sent the path the intent names, below the project.
+        (Route::Hermes, Intent::Read(p)) => Ok((
+            hermes("read_file", &json!({ "path": under_cwd(p) })),
+            Action::FsRead { path: under_cwd(p) },
+        )),
+        (Route::Hermes, Intent::Write(p)) => Ok((
+            hermes(
+                "patch",
+                &json!({ "path": under_cwd(p), "old_string": "old", "new_string": "new" }),
+            ),
+            Action::FsWrite { path: under_cwd(p) },
+        )),
+        (Route::Hermes, Intent::Fetch(u)) => Ok((
+            hermes("web_extract", &json!({ "urls": [u] })),
+            Action::Fetch { url: u.clone() },
+        )),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -442,6 +500,8 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::CopilotCli, &read, HookEvent::PreToolUse),
         (Route::Pi, &shell, HookEvent::PreToolUse),
         (Route::GeminiCli, &read, HookEvent::PreToolUse),
+        (Route::OpenCode, &read, HookEvent::PreToolUse),
+        (Route::Hermes, &shell, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

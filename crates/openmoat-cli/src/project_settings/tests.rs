@@ -309,3 +309,47 @@ fn warns_for_the_session_directory_and_its_project_root_not_the_home() {
     );
     assert!(rows[0].contains("review the file"), "{rows:?}");
 }
+
+/// An OpenCode project's `opencode.json`, read with its comments as OpenCode
+/// reads it, and its `.opencode/plugins/` are named; OpenCode 1 has no setting
+/// that turns OpenMoat's plugin off, so the person's own file names nothing.
+#[test]
+fn opencode_project_configuration_and_plugins_are_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let user_home = dir.path().join("home");
+    let project = user_home.join("proj");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join(".opencode/plugins")).unwrap();
+    let plugin = user_home.join(".config/opencode/plugins/openmoat.js");
+    let opencode = || super::warnings(&project, &user_home, Host::OpenCode, &plugin);
+    fs::write(
+        project.join("opencode.json"),
+        "{\n  // the model\n  \"model\": \"x/y\",\n}\n",
+    )
+    .unwrap();
+    assert!(opencode().is_empty(), "{:?}", opencode());
+
+    fs::write(
+        project.join("opencode.json"),
+        "{\n  // added\n  \"plugin\": [\"opencode-helper\"],\n  \"mcp\": {\"db\": {\"type\": \"local\", \"command\": [\"db\"]}},\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join(".opencode/plugins/helper.ts"),
+        "export default async () => ({})",
+    )
+    .unwrap();
+    let rows = opencode();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows[0].contains("`plugin` loads plugins"), "{rows:?}");
+    assert!(rows[0].contains("`mcp` adds MCP servers"), "{rows:?}");
+    assert!(
+        rows[1].contains("helper.ts: is a plugin OpenCode loads"),
+        "{rows:?}"
+    );
+
+    let config = user_home.join(".config/opencode");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(config.join("opencode.json"), "{\"plugin\": [\"x\"]}").unwrap();
+    assert_eq!(switched_off(Host::OpenCode, &config, &plugin), None);
+}

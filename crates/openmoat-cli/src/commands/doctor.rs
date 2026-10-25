@@ -403,6 +403,18 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
             );
         }
         let state = config.state(binary);
+        // A version that does not load OpenMoat's hook (OpenCode 2), whatever
+        // the hook file says.
+        if config.host_present()
+            && let Some(why) = crate::install::host_version::unsupported(host)
+        {
+            report.line(
+                Area::Hook,
+                false,
+                format!("{name:<16} not protected: {why}"),
+            );
+            continue;
+        }
         if recorded.skipped(host) && config.host_present() && matches!(state, HookState::Missing) {
             report.note(&format!(
                 "{name:<16} not set up; `openmoat init --hosts {}` adds it",
@@ -448,7 +460,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                     format!("{name:<16} {}", stale_hint(&command)),
                 );
             }
-            HookState::Unreadable(e) => {
+            HookState::Unreadable(e) | HookState::Unapproved(e) => {
                 report.line(Area::Hook, false, format!("{name:<16} {e}"));
             }
         }

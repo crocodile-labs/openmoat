@@ -6,10 +6,10 @@
 //! host does stays in that host's own test file (`codex.rs`, `pi.rs`, …).
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 
-use openmoat_hosts::{Host, HostSpec, InstallSpec};
+use openmoat_hosts::{Host, HostSpec, InstallSpec, Location};
 use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, output, stdout, text};
@@ -35,11 +35,25 @@ fn install(host: Host) -> &'static InstallSpec {
         .unwrap_or_else(|| panic!("{host} installs no hook"))
 }
 
+/// `host`'s directory relative to the home, where its default location puts
+/// it: `dir_name`, or what the host's own rules say (Hermes Agent's is
+/// `AppData\Local\hermes` on Windows).
+pub fn dir_of(host: Host) -> String {
+    let install = install(host);
+    match install.location {
+        Location::Custom(locate) => locate
+            .default_for(Path::new(""))
+            .dir
+            .to_string_lossy()
+            .into_owned(),
+        Location::OneDir => install.dir_name.to_owned(),
+    }
+}
+
 /// The file `moat init` writes `host`'s hook into, under the home's default
 /// directory for it.
 fn hook_file(sb: &Sandbox, host: Host) -> PathBuf {
-    let install = install(host);
-    sb.home.join(install.dir_name).join(install.config_file)
+    sb.home.join(dir_of(host)).join(install(host).config_file)
 }
 
 /// `moat guard` for `row`'s hook, as its host runs it, with `payload`.
@@ -59,6 +73,9 @@ pub fn reply(out: &Output) -> Value {
 
 /// The verdict in `row`'s reply format; empty when there is none.
 pub fn verdict(row: &Row, out: &Output) -> String {
+    if let Some(read) = row.read_verdict {
+        return read(&reply(out)).to_owned();
+    }
     reply(out)
         .pointer(row.verdict_at)
         .and_then(Value::as_str)
@@ -106,7 +123,7 @@ fn init_writes_its_entries_once_and_status_and_doctor_name_it() {
     for host in Host::ALL {
         let (id, name) = (host.id(), host.display_name());
         let install = install(host);
-        let sb = Sandbox::installed(&[install.dir_name]);
+        let sb = Sandbox::installed(&[&dir_of(host)]);
         let hook = hook_file(&sb, host);
         let first = fs::read(&hook).unwrap_or_else(|e| panic!("{id}: {e}"));
 
@@ -143,7 +160,8 @@ fn init_writes_its_entries_once_and_status_and_doctor_name_it() {
 fn uninstall_gives_back_the_persons_file() {
     for host in Host::ALL {
         let (id, row) = (host.id(), row(host.id()));
-        let dir = install(host).dir_name;
+        let dir = dir_of(host);
+        let dir = dir.as_str();
         if let Some(original) = row.persons_file {
             let sb = Sandbox::bare(&[dir]);
             let hook = hook_file(&sb, host);
@@ -185,7 +203,7 @@ fn an_edited_hook_file_denies_every_call() {
     for host in Host::ALL {
         let row = row(host.id());
         let Some(edit) = &row.edited else { continue };
-        let sb = Sandbox::installed(&[install(host).dir_name]);
+        let sb = Sandbox::installed(&[&dir_of(host)]);
         let hook = hook_file(&sb, host);
         let before = fs::read_to_string(&hook).unwrap();
         let after = (edit.change)(&before);

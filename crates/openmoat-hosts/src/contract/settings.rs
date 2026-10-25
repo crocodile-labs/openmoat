@@ -57,6 +57,12 @@ pub trait SettingsReader: Sync + fmt::Debug {
     fn hook_dir_effect(&self) -> &'static str {
         "adds hooks that run commands"
     }
+
+    /// Whether the host reads these files as JSON with comments and trailing
+    /// commas (OpenCode), so the CLI parses them that way.
+    fn reads_comments(&self) -> bool {
+        false
+    }
 }
 
 /// A value that sets something: not `null`, `false`, `""`, `{}` or `[]`.

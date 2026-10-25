@@ -22,12 +22,22 @@ use openmoat_hosts::Host;
 
 use super::Lock;
 
-/// A host's pinned form of its hook file, read as JSON5.
-pub(super) type Form = fn(serde_json::Value) -> Option<serde_json::Value>;
+/// A host's pinned form of its hook file, and how the file is read.
+#[derive(Clone, Copy)]
+pub(super) struct Form {
+    /// The form of the parsed file.
+    pub shape: fn(serde_json::Value) -> Option<serde_json::Value>,
+    /// Whether the file is YAML ([`openmoat_hosts::HookLayout::Yaml`]); else JSON5.
+    pub yaml: bool,
+}
 
 /// `host`'s pinned form; `None` for a host whose file is pinned by its bytes.
 pub(super) fn form_of(host: Host) -> Option<Form> {
-    host.spec().install.as_ref()?.pinned_form
+    let install = host.spec().install.as_ref()?;
+    Some(Form {
+        shape: install.pinned_form?,
+        yaml: install.hook_file.is_yaml(),
+    })
 }
 
 /// The host a lock from before [`Lock::pinned_forms`] digested `stored` for:

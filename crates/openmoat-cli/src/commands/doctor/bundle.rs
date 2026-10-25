@@ -264,6 +264,7 @@ fn agents(home: &Home, binary: &Path) -> Result<Vec<Agent>> {
                 HookState::Missing => "missing",
                 HookState::Stale { .. } => "out of date",
                 HookState::Unreadable(_) => "unreadable",
+                HookState::Unapproved(_) => "not approved",
             };
             Ok(Agent {
                 host: agent.host,

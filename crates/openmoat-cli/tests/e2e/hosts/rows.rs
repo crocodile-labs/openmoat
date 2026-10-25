@@ -13,7 +13,9 @@ mod continue_cli;
 mod copilot_cli;
 mod cursor;
 mod gemini_cli;
+mod hermes;
 mod openclaw;
+mod opencode;
 mod pi;
 
 /// A hook payload `moat guard` reads, built in a sandbox.
@@ -67,6 +69,10 @@ pub struct Row {
     pub env: Option<&'static str>,
     /// The JSON pointer of the verdict in the host's reply.
     pub verdict_at: &'static str,
+    /// The verdict a reply means, for a host whose reply spells each verdict
+    /// its own way (Hermes Agent's `decision: block`, `action: approve`);
+    /// `None` reads [`Self::verdict_at`].
+    pub read_verdict: Option<fn(&Value) -> &'static str>,
     /// The JSON pointers of the reason in the host's reply.
     pub reason_at: &'static [&'static str],
     /// A file of the person's where the hook goes, which `uninstall` gives back.
@@ -109,6 +115,7 @@ const BASE: Row = Row {
     hook: "",
     env: None,
     verdict_at: "",
+    read_verdict: None,
     reason_at: &[],
     persons_file: None,
     owns_file: false,
@@ -134,8 +141,8 @@ const PRE_TOOL_USE: Row = Row {
     ..BASE
 };
 
-/// The `{decision, reason}` reply of OpenClaw's plugin, pi's extension and
-/// Gemini CLI.
+/// The `{decision, reason}` reply of OpenClaw's plugin, pi's extension,
+/// Gemini CLI and OpenCode's plugin.
 const DECISION: Row = Row {
     verdict_at: "/decision",
     reason_at: &["/reason"],
@@ -152,6 +159,8 @@ pub fn rows() -> Vec<Row> {
         copilot_cli::row(),
         pi::row(),
         gemini_cli::row(),
+        opencode::row(),
+        hermes::row(),
     ]
 }
 

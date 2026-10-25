@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "read", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_read_1",
+  "args": { "filePath": "src/main.rs" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

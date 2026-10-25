@@ -2,13 +2,16 @@
 
 mod binary;
 mod claude_version;
+pub mod consent;
 mod dirs;
 mod hook_file;
+pub mod host_version;
 pub mod location;
 pub mod openclaw;
 pub mod owned;
 pub mod self_paths;
 pub mod trust_note;
+pub mod yaml;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -197,7 +200,9 @@ impl HostConfig {
     }
 
     /// The host's hook files besides [`Self::settings_path`]
-    /// ([`InstallSpec::extra_files`]), such as OpenClaw's plugin.
+    /// ([`InstallSpec::extra_files`]), such as OpenClaw's plugin, then the file
+    /// that records consent to the hook ([`InstallSpec::consent`]), such as
+    /// Hermes Agent's allowlist.
     pub fn extra_files(&self) -> Vec<PathBuf> {
         let files = self
             .host
@@ -212,6 +217,7 @@ impl HostConfig {
                     .iter()
                     .fold(self.dir.clone(), |path, part| path.join(part)),
             })
+            .chain(consent::of(self).map(|(path, _)| path))
             .collect()
     }
 
@@ -247,6 +253,12 @@ impl HostConfig {
     /// `openmoat init` rewrites it.
     pub fn runs_alias(&self, binary: &Path) -> bool {
         hook_file::runs_alias(self, binary)
+    }
+
+    /// The hook file parsed (as JSON, JSON5 or YAML, as its layout is), an
+    /// empty object when there is none.
+    pub fn read(&self) -> Result<serde_json::Value> {
+        hook_file::read_host(self)
     }
 
     /// Remove OpenMoat's hook entries from the parsed hook file `root`.

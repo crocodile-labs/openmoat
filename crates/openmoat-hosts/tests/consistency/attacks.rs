@@ -6,7 +6,7 @@ use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 use serde_json::json;
 
-use super::payloads::{copilot, gemini, openclaw, pi};
+use super::payloads::{copilot, gemini, openclaw, opencode, pi};
 use super::{Route, decide, pre_tool_use};
 
 /// The verdict `host` receives for `payload`, and the rules behind it.
@@ -76,6 +76,10 @@ fn glob_patterns_that_climb_to_a_secret_are_denied() {
                 copilot("glob", &json!({"pattern": pattern})),
             ),
             (Host::Pi, pi("find", &json!({"pattern": pattern}))),
+            (
+                Host::OpenCode,
+                opencode("glob", &json!({"pattern": pattern})),
+            ),
         ];
         for (host, payload) in payloads {
             let (verdict, rules) = received(host, &payload);

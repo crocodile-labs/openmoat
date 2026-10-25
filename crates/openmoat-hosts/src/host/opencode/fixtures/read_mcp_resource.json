@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "read_mcp_resource", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_read_mcp_resource_1",
+  "args": { "server": "filesystem", "uri": "file:///Users/me/.aws/credentials" },
+  "directory": "/p", "worktree": "/p", "mcpServers": ["filesystem"], "platform": "darwin"
+}

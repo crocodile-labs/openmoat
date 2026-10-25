@@ -20,6 +20,7 @@ extend-ignore-re = [
     "bash-authorize",  # the npm package compared in docs/MOATBENCH.md, spelt as its author spells it
     "\\./ba\\b",   # its install directory in the MoatBench comparison
     "--inh-caps",  # setpriv's option for the inheritable capabilities
+    "vision_analyze",  # Hermes Agent's tool, spelt as Hermes spells it
 ]
 
 [default.extend-identifiers]
@@ -42,8 +43,7 @@ color = "color"
 # The MCP `initialize` request.
 initialize = "initialize"
 # Gemini CLI's `tracker_visualize` tool.
-visualize = "visualize"
-# git takes a prefix of a long option: `--strat` is `--strategy` (conformance fixtures).
+visualize = "visualize"# git takes a prefix of a long option: `--strat` is `--strategy` (conformance fixtures).
 strat = "strat"
 # LLVM sanitizers, which cargo fuzz builds with.
 sanitizers = "sanitizers"

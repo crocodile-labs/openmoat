@@ -339,11 +339,12 @@ bubblewrap.
   loads as its own hooks, MCP servers or extensions in its next session: a project's
   `.claude/hooks/`, `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`,
   `.github/hooks/`, `.github/mcp.json`, `.openclaw/extensions/`, `.pi/extensions/`,
-  `.pi/mcp.json` and `.pi/settings.json`, at any depth. On macOS Seatbelt denies them
+  `.pi/mcp.json`, `.pi/settings.json`, OpenCode's `opencode.json[c]` and its
+  `.opencode/` plugins, tools and `opencode.json[c]`, at any depth. On macOS Seatbelt denies them
   after every grant, in either case on a case-insensitive disk (`.MCP.json` too), so
   this holds inside a `--write` path too, and also for a write the hook asked about
   and the person allowed: change one outside `openmoat run`. The folders that hold
-  them directly in the project (`.github`, `.pi`, `.openclaw`, besides `.claude`,
+  them directly in the project (`.github`, `.pi`, `.openclaw`, `.opencode`, besides `.claude`,
   `.codex` and `.cursor`) cannot be created, renamed or removed there either, since a
   folder renamed away and back would carry a hook written under the other name; create
   a missing `.github` outside `openmoat run`. CI files and commit-hook managers' files

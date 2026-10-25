@@ -22,7 +22,7 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 /// How often the probe checks whether `claude --version` has exited.
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-type Version = (u64, u64, u64);
+pub(super) type Version = (u64, u64, u64);
 
 /// Debug builds read the version from `MOAT_CLAUDE_CODE_VERSION` instead of
 /// running `claude`, so end-to-end tests do not depend on the machine; empty
@@ -55,7 +55,7 @@ fn version() -> Option<Version> {
 
 /// The standard output of `command --version`, or `None` when it cannot start,
 /// fails, or takes longer than [`PROBE_TIMEOUT`].
-fn run_version(mut command: Command) -> Option<String> {
+pub(super) fn run_version(mut command: Command) -> Option<String> {
     let mut child = command
         .arg("--version")
         .stdin(Stdio::null())
@@ -84,7 +84,7 @@ fn run_version(mut command: Command) -> Option<String> {
 
 /// `2.1.295 (Claude Code)` as `(2, 1, 295)`; a pre-release or build suffix on
 /// the last number (`2.1.295-beta.1`) is ignored.
-fn parse(text: &str) -> Option<Version> {
+pub(super) fn parse(text: &str) -> Option<Version> {
     let first = text.split_whitespace().next()?;
     let mut parts = first.trim_start_matches('v').splitn(3, '.');
     let number = |part: Option<&str>| -> Option<u64> {

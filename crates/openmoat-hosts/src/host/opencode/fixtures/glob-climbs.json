@@ -1,0 +1,6 @@
+{
+  "hook_event_name": "tool.execute.before",
+  "tool": "glob", "sessionID": "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn", "callID": "toolu_glob_climbs_1",
+  "args": { "pattern": "../../**/.env", "path": "crates" },
+  "directory": "/p", "worktree": "/p", "mcpServers": [], "platform": "darwin"
+}

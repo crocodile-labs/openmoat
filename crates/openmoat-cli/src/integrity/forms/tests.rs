@@ -77,7 +77,7 @@ fn legacy_lock(pins: &[(&Path, String)]) -> Lock {
 fn legacy_form_digest(text: &str) -> String {
     let value = crate::json5::parse(text).unwrap().value;
     let form = form_of(host("openclaw")).unwrap();
-    sha256_hex(&serde_json::to_vec(&form(value).unwrap()).unwrap())
+    sha256_hex(&serde_json::to_vec(&(form.shape)(value).unwrap()).unwrap())
 }
 
 #[test]

@@ -69,4 +69,12 @@ pub trait Locate: Sync {
     fn config_is_default(&self, located: &Located) -> bool {
         self.at(located.dir.clone(), None).config == located.config
     }
+
+    /// Whether [`Self::variables`] belong to this host alone, so one that is
+    /// set says the host is meant to be there: `moat init` then names a
+    /// directory they point at that does not exist yet. `false` for a
+    /// variable other programs read too (`XDG_CONFIG_HOME`).
+    fn variables_are_the_hosts(&self) -> bool {
+        true
+    }
 }
