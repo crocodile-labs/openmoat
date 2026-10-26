@@ -90,7 +90,7 @@ impl GlobPattern {
                 .literal_separator(true)
                 .case_insensitive(case_insensitive)
                 .build()
-                .map(LazyGlob::new)
+                .map(|g| LazyGlob::new(g, case_insensitive))
                 .map_err(|e| PolicyError::BadGlob {
                     pattern: raw.to_owned(),
                     error: e,

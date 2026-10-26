@@ -322,13 +322,15 @@ fn a_profile_init_found_is_protected_like_the_home() {
     assert!(reply.to_string().contains("agent-credentials"), "{reply}");
 }
 
-/// `skill_manage` writes a skill Hermes loads into later sessions: it asks.
+/// `skill_manage` writes a skill Hermes loads into later sessions: it asks,
+/// which reaches Hermes as its own approval prompt (exit 0, `approve`).
 #[test]
 fn skill_manage_asks() {
     let sb = bare(Some(ORIGINAL));
     init(&sb);
     let ops = json!({"operations": [{"action": "create", "name": "deploy", "content": "x"}]});
     let (code, reply) = guard(&sb, &payload(&sb, "skill_manage", &ops));
-    assert_ne!(code, Some(OK), "{reply}");
+    assert_eq!(code, Some(OK), "{reply}");
+    assert_eq!(reply["action"], "approve", "{reply}");
     assert!(reply.to_string().contains("runs-later"), "{reply}");
 }

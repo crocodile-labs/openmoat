@@ -372,7 +372,11 @@ fn opencode_jsonc_files_and_the_singular_plugin_folder_are_named() {
         "export default async () => ({})",
     )
     .unwrap();
-    let rows = super::warnings(&project, &user_home, Host::OpenCode, &plugin);
+    // Compared with `/` whatever the platform writes between the names.
+    let rows: Vec<String> = super::warnings(&project, &user_home, Host::OpenCode, &plugin)
+        .iter()
+        .map(|row| row.replace('\\', "/"))
+        .collect();
     assert_eq!(rows.len(), 3, "{rows:?}");
     assert!(
         rows[0].contains("opencode.jsonc: `plugin` loads plugins"),

@@ -64,7 +64,9 @@ search path is a version with a published advisory (`advisories.rs`).
 
 OpenClaw blocks the call when OpenMoat's plugin throws or times out (`before_tool_call`
 fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not
-answer; the call runs unchecked when the Gateway does not load the plugin.
+answer; the call runs unchecked when the Gateway does not load the plugin (a plugin
+OpenClaw must load or refuse to run is tracked upstream in
+[openclaw/openclaw#147129](https://github.com/openclaw/openclaw/issues/147129)).
 
 ## Known gaps
 

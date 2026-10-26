@@ -127,12 +127,11 @@ deny:
       # macOS when the Keychain refuses it) and the Anthropic profiles `ant auth
       # login` writes (docs: Authentication, Credential management)
       - "~/.claude/.credentials.json"
-      - "~/.config/anthropic/**"
+      - "~/.config/{anthropic,anthropic/**}"
       # Codex: its login (ChatGPT tokens or API key) and the file its MCP OAuth
       # tokens fall back to without a keyring (`codex-rs/login/src/auth/storage.rs`,
       # `rmcp-client/src/oauth.rs`)
-      - "~/.codex/auth.json"
-      - "~/.codex/.credentials.json"
+      - "~/.codex/{auth.json,.credentials.json}"
       # Continue CLI: the hub login older releases kept (`src/auth/workos.ts`) and
       # the MCP sign-ins of `mcp-remote`, which `cn` starts for a remote server that
       # asks for one (`src/services/MCPService.ts`)
@@ -142,66 +141,30 @@ deny:
       # channel credentials, the file secret store and the older sign-in files
       # (`docs/gateway/security/secrets-and-storage.md`; its `.env` is
       # `secrets-paths`')
-      - "~/.openclaw/state/openclaw.sqlite*"
-      - "~/.openclaw/agents/*/agent/openclaw-agent.sqlite*"
-      - "~/.openclaw/agents/*/agent/auth.json"
-      - "~/.openclaw/agents/*/agent/codex-home/**"
-      - "~/.openclaw/credentials/**"
-      - "~/.openclaw/secrets.json"
-      - "~/.openclaw/auth-profiles.json"
-      - "~/.openclaw/auth-state.json"
-      - "~/.openclaw/mcp-oauth/**"
+      - "~/.openclaw/{state/openclaw.sqlite*,agents/*/agent/openclaw-agent.sqlite*,agents/*/agent/auth.json,agents/*/agent/codex-home,agents/*/agent/codex-home/**,credentials,credentials/**,secrets.json,auth-profiles.json,auth-state.json,mcp-oauth,mcp-oauth/**}"
       # GitHub Copilot CLI: `config.json`, where its login goes when there is no
       # keychain, and the fallback stores of MCP sign-ins and MCP secrets
       # (docs: Authenticate Copilot CLI, config-dir reference)
-      - "~/.copilot/config.json"
-      - "~/.copilot/mcp-oauth-config/**"
-      - "~/.copilot/mcp-secrets/**"
+      - "~/.copilot/{config.json,mcp-oauth-config,mcp-oauth-config/**,mcp-secrets,mcp-secrets/**}"
       # pi: its provider keys and OAuth tokens, the API keys `models.json` may
       # hold and its MCP sign-ins (`packages/coding-agent/src/config.ts`,
       # `docs/models.md`, `src/extensions/mcp/oauth.ts`)
-      - "~/.pi/agent/auth.json"
-      - "~/.pi/agent/models.json"
-      - "~/.pi/agent/mcp-auth.json"
+      - "~/.pi/agent/{auth.json,models.json,mcp-auth.json}"
       # Gemini CLI: its Google sign-in, the MCP and A2A OAuth tokens (in
       # `~/.cache/.gemini` under the macOS Seatbelt sandbox) and the file its
       # keychain falls back to, whose key the agent could derive
       # (`core/src/config/storage.ts`, `services/fileKeychain.ts`)
-      - "~/.gemini/oauth_creds.json"
-      - "~/.gemini/mcp-oauth-tokens.json"
-      - "~/.gemini/a2a-oauth-tokens.json"
-      - "~/.gemini/gemini-credentials.json"
-      - "~/.cache/.gemini/mcp-oauth-tokens.json"
-      - "~/.cache/.gemini/a2a-oauth-tokens.json"
+      - "~/.gemini/{oauth_creds.json,mcp-oauth-tokens.json,a2a-oauth-tokens.json,gemini-credentials.json}"
+      - "~/.cache/.gemini/{mcp-oauth-tokens.json,a2a-oauth-tokens.json}"
       # OpenCode: its provider keys and OAuth tokens, its MCP sign-ins and the
       # database holding its account tokens, in its data directory on every OS
       # (`packages/opencode/src/auth/index.ts`, `mcp/auth.ts`,
       # `core/src/database/database.ts`; `XDG_DATA_HOME` moving it is not followed)
-      - "~/.local/share/opencode/auth.json"
-      - "~/.local/share/opencode/mcp-auth.json"
-      - "~/.local/share/opencode/opencode*.db*"
+      - "~/.local/share/opencode/{auth.json,mcp-auth.json,opencode*.db*}"
       # Hermes Agent: the secret files and folders its own file tools refuse
       # (`agent/file_safety.py`; its `.env` is `secrets-paths`'), in its home and
       # in each profile; its terminal tool reaches them, which this rule closes
-      - "~/.hermes/auth.json"
-      - "~/.hermes/auth.lock"
-      - "~/.hermes/.anthropic_oauth.json"
-      - "~/.hermes/webhook_subscriptions.json"
-      - "~/.hermes/auth/google_oauth.json"
-      - "~/.hermes/cache/bws_cache.json"
-      - "~/.hermes/mcp-tokens/**"
-      - "~/.hermes/vault/**"
-      - "~/.hermes/webapp/**"
-      - "~/.hermes/browser-profile/**"
-      - "~/.hermes/profiles/*/auth.json"
-      - "~/.hermes/profiles/*/.anthropic_oauth.json"
-      - "~/.hermes/profiles/*/webhook_subscriptions.json"
-      - "~/.hermes/profiles/*/auth/google_oauth.json"
-      - "~/.hermes/profiles/*/cache/bws_cache.json"
-      - "~/.hermes/profiles/*/mcp-tokens/**"
-      - "~/.hermes/profiles/*/vault/**"
-      - "~/.hermes/profiles/*/webapp/**"
-      - "~/.hermes/profiles/*/browser-profile/**"
+      - "~/.hermes/{auth.json,auth.lock,.anthropic_oauth.json,webhook_subscriptions.json,auth/google_oauth.json,cache/bws_cache.json,mcp-tokens,mcp-tokens/**,vault,vault/**,webapp,webapp/**,browser-profile,browser-profile/**,profiles/*/auth.json,profiles/*/.anthropic_oauth.json,profiles/*/webhook_subscriptions.json,profiles/*/auth/google_oauth.json,profiles/*/cache/bws_cache.json,profiles/*/mcp-tokens,profiles/*/mcp-tokens/**,profiles/*/vault,profiles/*/vault/**,profiles/*/webapp,profiles/*/webapp/**,profiles/*/browser-profile,profiles/*/browser-profile/**}"
     fs.write: *agent-credentials
     # the agents' commands that print a stored key or token: pi's, and OpenCode
     # 2's export of every stored credential

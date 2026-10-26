@@ -516,7 +516,9 @@ something OpenMoat claims to stop.
 
   An OpenClaw `ask` becomes OpenClaw's approval request, which OpenClaw blocks when no
   one can answer it (no approval route, timeout).
-  **OpenClaw runs every call unchecked when the Gateway does not load the plugin**:
+  **OpenClaw runs every call unchecked when the Gateway does not load the plugin**
+  (a plugin OpenClaw must load or refuse to run is tracked upstream in
+  [openclaw/openclaw#147129](https://github.com/openclaw/openclaw/issues/147129)):
   `plugins.enabled: false`, `openmoat` in `plugins.deny` or missing from
   `plugins.allow`, the file or its `plugins.load.paths` entry removed, or a Gateway
   started with an `OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` or `OPENCLAW_CONFIG_PATH` that

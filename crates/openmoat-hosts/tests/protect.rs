@@ -104,13 +104,96 @@ fn the_default_policy_protects_each_hosts_own_files() {
     check(POLICY, POLICY_BEFORE, POLICY_AFTER, &body);
 }
 
+/// The credential paths of each host's `Paths` as few globs as they fit in:
+/// the paths under one directory of the home (`~/.hermes`, `~/.config`) as one
+/// brace group, `dir/**` with `dir` itself as the whole pattern's `/**`
+/// would. A guard compiles a glob the first time a path is checked against
+/// it, so one glob per file would add that cost to every call naming a path;
+/// the directory stays the pattern's start, so a moved agent directory is
+/// still followed.
+fn credential_lines() -> String {
+    let mut out = String::new();
+    for host in Host::EVERY {
+        for paths in host.spec().protect.credentials {
+            for line in paths.why.lines() {
+                out.push_str(&format!("      # {line}\n"));
+            }
+            let mut groups: Vec<(&str, Vec<String>)> = Vec::new();
+            for glob in paths.globs {
+                let (root, rest) = split_root(glob);
+                let mut items = vec![rest.to_owned()];
+                if let Some(dir) = rest.strip_suffix("/**") {
+                    items.insert(0, dir.to_owned());
+                }
+                match groups.iter_mut().find(|(r, _)| *r == root) {
+                    Some((_, list)) => list.extend(items),
+                    None => groups.push((root, items)),
+                }
+            }
+            for (root, items) in groups {
+                // The folders every item shares join the start (`~/.pi/agent/`,
+                // the directory a variable moves), so the pattern keeps it.
+                let (shared, items) = shared_dirs(&items);
+                let root = format!("{root}{shared}");
+                let glob = match items.as_slice() {
+                    [one] => format!("{root}{one}"),
+                    _ => format!("{root}{{{}}}", items.join(",")),
+                };
+                out.push_str(&format!("      - \"{glob}\"\n"));
+            }
+        }
+    }
+    out
+}
+
+/// `~/.hermes/auth.json` as `("~/.hermes/", "auth.json")`: the home and the
+/// directory in it, and the rest.
+fn split_root(glob: &str) -> (&str, &str) {
+    let skip = if glob.starts_with("~/") { 2 } else { 0 };
+    match glob[skip..].find('/') {
+        Some(at) => glob.split_at(skip + at + 1),
+        None => (glob, ""),
+    }
+}
+
+/// The leading folders (no glob syntax) every one of `items` has, as
+/// `"a/b/"`, and the items without them; never all of an item.
+fn shared_dirs(items: &[String]) -> (String, Vec<String>) {
+    let split: Vec<Vec<&str>> = items.iter().map(|i| i.split('/').collect()).collect();
+    let mut n = 0;
+    while split.iter().all(|parts| {
+        parts.len() > n + 1 && !parts[n].contains(['*', '?', '[', '{']) && parts[n] == split[0][n]
+    }) {
+        n += 1;
+    }
+    let shared: String = split[0][..n].iter().map(|p| format!("{p}/")).collect();
+    let rest = split.iter().map(|parts| parts[n..].join("/")).collect();
+    (shared, rest)
+}
+
+#[test]
+fn credential_globs_group_by_directory() {
+    assert_eq!(
+        split_root("~/.hermes/auth.json"),
+        ("~/.hermes/", "auth.json")
+    );
+    assert_eq!(split_root("~/.netrc"), ("~/.netrc", ""));
+    let items = ["agent/auth.json".to_owned(), "agent/mcp/x.json".to_owned()];
+    assert_eq!(
+        shared_dirs(&items),
+        (
+            "agent/".to_owned(),
+            vec!["auth.json".to_owned(), "mcp/x.json".to_owned()]
+        )
+    );
+    // `dir` beside `dir/**` keeps nothing shared past `dir`'s parent.
+    let items = ["mcp".to_owned(), "mcp/**".to_owned()];
+    assert_eq!(shared_dirs(&items).0, "");
+}
+
 #[test]
 fn the_default_policy_keeps_each_agents_credentials_from_its_tools() {
-    let body = lines(
-        |p| p.credentials,
-        |line| format!("      # {line}"),
-        |glob| format!("      - \"{glob}\""),
-    );
+    let body = credential_lines();
     // Every host OpenMoat sets up names where it keeps a login, except
     // Cursor, whose store is not documented.
     let without: Vec<&str> = Host::ALL
@@ -119,7 +202,11 @@ fn the_default_policy_keeps_each_agents_credentials_from_its_tools() {
         .map(Host::display_name)
         .collect();
     assert_eq!(without, ["Cursor"]);
-    assert!(body.contains("~/.local/share/opencode/auth.json"), "{body}");
+    assert!(
+        body.contains("~/.local/share/opencode/{auth.json,"),
+        "{body}"
+    );
+    assert!(body.contains("~/.pi/agent/{auth.json,"), "{body}");
     check(POLICY, CREDENTIALS_BEFORE, CREDENTIALS_AFTER, &body);
 }
 
