@@ -25,6 +25,7 @@ impl HostSpec {
         resume_hint: None,
         protect: Protect::BASE,
         process: ProcessSpec::BASE,
+        advisories: super::Advisories::BASE,
         docs: HostDocs::BASE,
     };
 }
@@ -48,5 +49,6 @@ impl InstallSpec {
         extra_files: &[],
         unsupported: None,
         consent: None,
+        also_dirs: &[],
     };
 }

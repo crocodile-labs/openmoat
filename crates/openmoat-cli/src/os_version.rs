@@ -42,9 +42,42 @@ pub fn run_floor(version: Option<&str>) -> Option<String> {
     })
 }
 
+/// The system this build runs on, as host advisories name one. Linux under
+/// the Windows Subsystem for Linux sets `WSL_DISTRO_NAME` in every session and
+/// names Microsoft in its kernel release.
+pub fn platform() -> openmoat_hosts::Platform {
+    use openmoat_hosts::Platform;
+    if cfg!(windows) {
+        Platform::Windows
+    } else if cfg!(target_os = "macos") {
+        Platform::MacOs
+    } else if std::env::var_os("WSL_DISTRO_NAME").is_some_and(|v| !v.is_empty())
+        || std::fs::read_to_string("/proc/sys/kernel/osrelease")
+            .is_ok_and(|release| is_wsl_release(&release))
+    {
+        Platform::Wsl
+    } else {
+        Platform::Linux
+    }
+}
+
+/// Whether a Linux kernel release string is the Windows Subsystem for
+/// Linux's (`5.15.153.1-microsoft-standard-WSL2`).
+fn is_wsl_release(release: &str) -> bool {
+    let release = release.to_ascii_lowercase();
+    release.contains("microsoft") || release.contains("wsl")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wsl_is_told_by_its_kernel_release() {
+        assert!(is_wsl_release("5.15.153.1-microsoft-standard-WSL2\n"));
+        assert!(is_wsl_release("4.4.0-19041-Microsoft"));
+        assert!(!is_wsl_release("6.8.0-45-generic"));
+    }
 
     #[test]
     fn the_version_is_read_from_the_plist() {

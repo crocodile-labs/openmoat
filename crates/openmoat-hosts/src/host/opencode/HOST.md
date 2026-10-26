@@ -60,15 +60,28 @@ left to OpenCode's own `permission` rules, which allow most tools by default.
   (`%USERPROFILE%\.config\opencode` on Windows). The hook file is OpenMoat's plugin itself,
   `plugins/openmoat.js`; OpenCode loads every `.js` and `.ts` in `plugins/` and `plugin/`
   on start. `OPENCODE_CONFIG_DIR` names a further directory OpenCode reads; it does not
-  move this one, and the default policy does not protect the plugins and tools there.
+  move this one. `openmoat init` records it when it is set, and every rule naming
+  `~/.config/opencode` covers it too, as found then and as the guard's environment
+  names it: its plugin folders and configuration files are `kernel-self`'s, its tools
+  and commands `runs-later`'s.
+- Credentials: provider keys and OAuth tokens in `auth.json`, MCP sign-ins in
+  `mcp-auth.json` and account tokens in `opencode.db`, all in `~/.local/share/opencode`
+  on every OS. `agent-credentials` denies the agent's own tools reading or writing them,
+  and `opencode auth export` (OpenCode 2), which prints them; `XDG_DATA_HOME` moving
+  that directory is not followed.
+- The agent running `opencode mcp add`, `opencode mcp auth` or `opencode mcp debug`
+  asks (`runs-later`): they save a server, or start its OAuth sign-in, in which
+  OpenCode 1.0.137 to 1.18.32 on Windows and WSL ran a command from the server's
+  sign-in address. `openmoat status` and `openmoat doctor` warn when the `opencode` on
+  the search path is a version with a published advisory (`advisories.rs`).
 - MCP servers: `mcp.<name>` in the global `config.json`, `opencode.json` and
   `opencode.jsonc`, and in a project's `opencode.json[c]` and `.opencode/opencode.json[c]`
   (JSON with comments, read as JSON5); each is pinned. Servers from `~/.opencode`,
   `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, a remote
   `.well-known/opencode` or managed configuration are not.
-- Project settings: a project's `opencode.json` and `.opencode/opencode.json` add plugins,
-  MCP servers and permission rules, and its `.opencode/plugins/` load at start, with no
-  prompt; `openmoat status` and `openmoat doctor` warn about them. OpenCode 1 has no
+- Project settings: a project's `opencode.json[c]` and `.opencode/opencode.json[c]` add
+  plugins, MCP servers and permission rules, and its `.opencode/plugins/` and
+  `.opencode/plugin/` load at start, with no prompt; `openmoat status` and `openmoat doctor` warn about them. OpenCode 1 has no
   setting that removes a plugin, so no file turns OpenMoat's off.
 
 ## When the hook fails

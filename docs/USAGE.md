@@ -84,7 +84,16 @@ changes nothing.
 
 `openmoat status` and `openmoat doctor` print one protection level per agent, derived from the
 hook and sandbox checks above them, and one line of what that agent's hook and sandbox
-do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5). For tools that
+do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5). When the
+agent's program on the search path reports a version with a published security
+advisory that a later version fixes, both print a warning line (`!`) naming the
+advisory, how many more apply, the version to upgrade to and where it is published,
+for example `OpenCode 1.18.0 has a known security advisory, Pillar Security, MCP OAuth
+(a remote MCP server's sign-in address runs commands) and 1 more; upgrade to 1.18.33
+or later: …`
+on Windows. Such a flaw runs inside the agent, where no hook sees it; the warning does
+not change the exit code. The version is read once with `<program> --version`, at most
+5 s per agent, all agents at once. For tools that
 show them, `openmoat status --format json` prints the levels (`agents`), a policy update
 waiting for `openmoat policy upgrade` (`policy_update`, or `null`), the pinned files that
 changed (`lock_drift`), the MCP server definitions that differ from their pins

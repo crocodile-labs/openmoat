@@ -87,6 +87,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".cursor",
         shared: "hooks.json",
         local: None,
+        more: &[],
         hook_dir: None,
         reader: &project_settings::READER,
         user_file: "hooks.json",

@@ -38,6 +38,7 @@ use crate::contract::{
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisories;
 mod bench;
 mod consent;
 mod doc;
@@ -103,6 +104,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         location: Location::Custom(&location::LOCATE),
         pinned_form: Some(settings::pinned_form),
         consent: Some(&consent::ALLOWLIST),
+        // each profile is a Hermes home of its own (`hermes_cli/profiles.py`),
+        // used with `hermes -p <name>`, where OpenMoat's hook does not run
+        // unless that profile's `config.yaml` has it
+        also_dirs: &[crate::contract::AlsoDir::EachIn("profiles")],
         ..InstallSpec::BASE
     }),
     // `mcp_servers` in the profile's `config.yaml`
@@ -116,6 +121,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

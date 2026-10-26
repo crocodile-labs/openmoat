@@ -147,8 +147,38 @@ pub fn moved_dirs(state: &home::Home) -> Result<Vec<(String, String)>> {
         for (default, dir) in custom_moved(&recorded, host)? {
             add(&default, &dir)?;
         }
+        for dir in also_dirs(state, &recorded, host) {
+            add(&also_default(host), &dir)?;
+        }
     }
     Ok(out)
+}
+
+/// The further directories `host` reads laid out like its configuration
+/// directory (`InstallSpec::also_dirs`: OpenCode's `OPENCODE_CONFIG_DIR`,
+/// Hermes Agent's profiles), as `moat init` recorded them and as they are
+/// found now, so the rules naming that directory protect them as they protect
+/// a moved one.
+fn also_dirs(state: &home::Home, recorded: &crate::install::Recorded, host: Host) -> Vec<PathBuf> {
+    let has_any = host
+        .spec()
+        .install
+        .as_ref()
+        .is_some_and(|i| !i.also_dirs.is_empty());
+    if !has_any {
+        return Vec::new();
+    }
+    let mut dirs = recorded.also(host).to_vec();
+    if let Ok(config) = crate::install::HostConfig::for_host(state, host) {
+        dirs.extend(crate::install::also_dirs(host, config.dir()));
+    }
+    dirs
+}
+
+/// The name the policy gives `host`'s configuration directory.
+fn also_default(host: Host) -> String {
+    let name = host.spec().install.as_ref().map_or("", |i| i.dir_name);
+    format!("~/{name}")
 }
 
 fn env_dir(var: &str) -> Option<PathBuf> {

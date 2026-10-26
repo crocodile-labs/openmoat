@@ -288,9 +288,10 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Hermes Agent | `execute_code` | `code` (Python); the tools it calls through `hermes_tools` are checked one by one | `ForeignShell` (`unparseable`) |
 | Hermes Agent | `process_manage` | `list`, `poll`, `log`, `wait`, `kill`, `close`, `handoff`: ungoverned; `write`, `submit`: `data`, typed into a running process | none; `Unchecked` `Shell` |
 | Hermes Agent | `cronjob_manage` | `list`: ungoverned; any other action: the arguments, `script` as a command, and an ask, since the job runs the agent later, unattended | none; `Unchecked` `UnknownTool` |
+| Hermes Agent | `memory` / `skill_manage` | a write of the notes Hermes puts into later sessions (`memories/` in its home) / of each skill its `operations` name in its `skills/`; a skill write asks (`runs-later`), a memory write once the session read untrusted content (taint) | `FsWrite` / `FsWrite`, `Patch` |
 | Hermes Agent | MCP tool (`mcp__<server>__<tool>`) | tool name and `tool_input`; a name cut to 64 characters is traced by the part kept | `McpTool` |
 | Hermes Agent | `todo_list`, `clarify`, `session_search`, `skills_list`, `delegate_task` (its subagents' calls fire the hook), `read_terminal`, `close_terminal` | — | none: `ungoverned` |
-| Hermes Agent | any other tool (`memory`, `skill_manage`, `skill_view`, the other `browser_*` tools, `vision_analyze`, `computer_use`, the messaging tools, connectors, a plugin's tool, a `tool_call` Hermes did not unwrap) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| Hermes Agent | any other tool (`skill_view`, the other `browser_*` tools, `vision_analyze`, `computer_use`, the messaging tools, connectors, a plugin's tool, a `tool_call` Hermes did not unwrap) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 <!-- /generated -->
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`,

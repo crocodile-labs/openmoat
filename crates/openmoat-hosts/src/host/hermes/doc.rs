@@ -60,6 +60,13 @@ const TOOLS: &[ToolRow] = &[
         "none; `Unchecked` `UnknownTool`",
     ),
     ToolRow::new(
+        "`memory` / `skill_manage`",
+        "a write of the notes Hermes puts into later sessions (`memories/` in its home) / \
+         of each skill its `operations` name in its `skills/`; a skill write asks \
+         (`runs-later`), a memory write once the session read untrusted content (taint)",
+        "`FsWrite` / `FsWrite`, `Patch`",
+    ),
+    ToolRow::new(
         "MCP tool (`mcp__<server>__<tool>`)",
         "tool name and `tool_input`; a name cut to 64 characters is traced by the part kept",
         "`McpTool`",
@@ -71,7 +78,7 @@ const TOOLS: &[ToolRow] = &[
         "none: `ungoverned`",
     ),
     ToolRow::new(
-        "any other tool (`memory`, `skill_manage`, `skill_view`, the other `browser_*` tools, \
+        "any other tool (`skill_view`, the other `browser_*` tools, \
          `vision_analyze`, `computer_use`, the messaging tools, connectors, a plugin's tool, a \
          `tool_call` Hermes did not unwrap)",
         "tool name and arguments",

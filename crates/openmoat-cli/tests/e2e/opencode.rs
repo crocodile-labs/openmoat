@@ -230,3 +230,66 @@ fn a_projects_plugins_and_configuration_are_reported() {
     );
     assert!(!warnings.contains("cannot be checked"), "{warnings}");
 }
+
+/// `OPENCODE_CONFIG_DIR` names a further configuration directory: `init`
+/// records it, and its configuration file is protected like the default one's.
+#[test]
+fn opencode_config_dir_is_protected_like_the_configuration_directory() {
+    let sb = Sandbox::bare(&[CONFIG_DIR]);
+    let extra = sb.home.join("occ");
+    fs::create_dir_all(extra.join("plugins")).unwrap();
+    let out = output(
+        sb.command()
+            .args(["init", "--yes", "--hosts", "opencode"])
+            .env("OPENCODE_CONFIG_DIR", &extra),
+        None,
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    // Without the variable, from the record.
+    let write = json!({"filePath": extra.join("opencode.json"),
+        "content": "{\"plugin\":[\"./evil.js\"]}"});
+    let (code, reply) = guard(&sb, &payload(&sb, "write", &write));
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert!(reason(&reply).contains("kernel-self"), "{reply}");
+}
+
+/// OpenCode's stored provider keys are the agent's to use, not to read.
+#[test]
+fn reading_opencodes_stored_keys_is_denied() {
+    let sb = sandbox();
+    let auth = sb.home.join(".local/share/opencode/auth.json");
+    let (code, reply) = guard(&sb, &payload(&sb, "read", &json!({"filePath": auth})));
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert!(reason(&reply).contains("agent-credentials"), "{reply}");
+}
+
+/// A version with a published advisory is named in one warning line; the
+/// exit code stays what it was.
+#[test]
+fn status_warns_about_a_version_with_an_advisory() {
+    let sb = sandbox();
+    let mut status = sb.command();
+    status
+        .args(["status"])
+        .env("MOAT_OPENCODE_VERSION", "1.0.100");
+    let out = output(&mut status, None);
+    let printed = stdout(&out);
+    let warned: Vec<&str> = printed
+        .lines()
+        .filter(|l| l.contains("has a known security advisory"))
+        .collect();
+    assert_eq!(warned.len(), 1, "{}", text(&out));
+    assert!(warned[0].contains("OpenCode 1.0.100"), "{}", warned[0]);
+    assert!(warned[0].contains("upgrade to"), "{}", warned[0]);
+    let mut current = sb.command();
+    current
+        .args(["status"])
+        .env("MOAT_OPENCODE_VERSION", "1.19.4");
+    let quiet = output(&mut current, None);
+    assert!(
+        !stdout(&quiet).contains("security advisory"),
+        "{}",
+        text(&quiet)
+    );
+    assert_eq!(quiet.status.code(), out.status.code());
+}

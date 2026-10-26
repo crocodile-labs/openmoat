@@ -48,6 +48,17 @@ not (YOLO and auto-edit included).
   its `hooksConfig.disabled` lists are joined and its `BeforeTool` hooks run beside
   OpenMoat's and may rewrite a call's arguments. There is no local file.
 
+Credentials: `oauth_creds.json` (the Google sign-in), `mcp-oauth-tokens.json`,
+`a2a-oauth-tokens.json` (also in `~/.cache/.gemini`, where they go under the macOS
+Seatbelt sandbox) and `gemini-credentials.json` (the keychain's fallback file, whose key
+the agent could derive) are `agent-credentials`': the agent's own tools may neither
+read nor write them, under `GEMINI_CLI_HOME` too; its `.env` is `secrets-paths`'. The
+keychain entries (`gemini-cli-oauth`, `gemini-cli-api-key`) are read by `security
+find-generic-password -w` or `secret-tool lookup`, which `secrets-paths` denies.
+`gemini mcp add`, `gemini mcp enable` and `gemini extensions install`/`link` ask
+(`runs-later`). `openmoat status` and `openmoat doctor` warn when the `gemini` on the
+search path is a version with a published advisory (`advisories.rs`).
+
 ## When the hook fails
 
 Gemini CLI has no fail-closed setting. It runs the call when the hook times out, is killed

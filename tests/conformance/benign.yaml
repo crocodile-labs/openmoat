@@ -1582,3 +1582,61 @@
   action: { net: "https://example.com/" }
   repo: { policy: "version: 1\nallow:\n  - id: web\n    net: ['example.com']\n  - id: alt\n    net: ['*:8443']\n", trusted: true }
   expect: { verdict: allow, rules: [repo:web] }
+# `agent-credentials` names only where each agent keeps a login: its other
+# configuration, sessions and logs read as before
+- id: benign-read-claude-code-settings
+  action: { fs_read: "~/.claude/settings.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-codex-config
+  action: { shell: "cat ~/.codex/config.toml" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-gemini-settings
+  action: { fs_read: "~/.gemini/settings.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-opencode-log
+  action: { fs_read: "~/.local/share/opencode/log/2026-10-25T101500.log" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-copilot-mcp-config
+  action: { fs_read: "~/.copilot/mcp-config.json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-openclaw-workspace-note
+  action: { fs_read: "~/.openclaw/workspace/NOTES.md" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-hermes-profile-config
+  action: { fs_read: "~/.hermes/profiles/work/config.yaml" }
+  expect: { verdict: defer, rules: [default] }
+# pi's other `auth` commands print no secret
+- id: benign-pi-auth-list
+  action: { shell: "pi auth list" }
+  expect: { verdict: defer, rules: [default] }
+# keychain commands that print no secret
+- id: benign-security-find-generic-password-without-value
+  action: { shell: "security find-generic-password -s 'Codex Auth'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-secret-tool-search-is-not-lookup
+  action: { shell: "secret-tool --version" }
+  expect: { verdict: defer, rules: [default] }
+# listing and showing MCP servers changes nothing
+- id: benign-claude-mcp-list
+  action: { shell: "claude mcp list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-codex-mcp-get
+  action: { shell: "codex mcp get github" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-gemini-mcp-list
+  action: { shell: "gemini mcp list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-opencode-mcp-list
+  action: { shell: "opencode mcp list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-hermes-mcp-list
+  action: { shell: "hermes mcp list" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-claude-auth-status
+  action: { shell: "claude auth status" }
+  expect: { verdict: defer, rules: [default] }
+# Hermes Agent's `memory` is a write of its memory folder: left to Hermes until
+# the session reads untrusted content (taint)
+- id: benign-hermes-memory-write
+  action: { fs_write: "~/.hermes/memories" }
+  expect: { verdict: defer, rules: [default] }

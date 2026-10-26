@@ -34,6 +34,16 @@ so an ask is sent as a deny that the person approves with `openmoat allow --last
   hooks run beside OpenMoat's; `[features] hooks = false` there or in the user's
   `config.toml` turns every hook off.
 
+Credentials: `auth.json` (the ChatGPT tokens or API key, the default store) and
+`.credentials.json` (MCP OAuth tokens without a keyring) in `CODEX_HOME` are
+`agent-credentials`': the agent's own tools may not read them (`kernel-self` already
+denies every write there). The keyring entries (`Codex Auth`, `Codex MCP Credentials`)
+are read by `security find-generic-password -w` or `secret-tool lookup`, which
+`secrets-paths` denies. `codex mcp add` and `codex mcp login` ask (`runs-later`);
+`codex mcp add --url` starts the server's OAuth sign-in at once. `openmoat status` and
+`openmoat doctor` warn when the `codex` on the search path is a version with a
+published advisory (`advisories.rs`).
+
 ## When the hook fails
 
 Codex runs the call when the hook is missing, cannot start, exits non-zero other than 2

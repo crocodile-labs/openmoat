@@ -302,3 +302,33 @@ fn uninstall_gives_back_both_files() {
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(fs::read_to_string(allowlist(&sb)).unwrap(), theirs);
 }
+
+/// A profile `init` finds gets the protection of the home: another profile's
+/// `config.yaml`, which asked before, is `kernel-self`'s now, and its login
+/// is `agent-credentials`'.
+#[test]
+fn a_profile_init_found_is_protected_like_the_home() {
+    let sb = bare(Some(ORIGINAL));
+    let profile = dir(&sb).join("profiles/work");
+    fs::create_dir_all(&profile).unwrap();
+    init(&sb);
+    let write = json!({"path": profile.join("config.yaml"), "content": "hooks: {}\n"});
+    let (code, reply) = guard(&sb, &payload(&sb, "write_file", &write));
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert!(reply.to_string().contains("kernel-self"), "{reply}");
+    let read = json!({"path": profile.join("auth.json")});
+    let (code, reply) = guard(&sb, &payload(&sb, "read_file", &read));
+    assert_eq!(code, Some(DENY), "{reply}");
+    assert!(reply.to_string().contains("agent-credentials"), "{reply}");
+}
+
+/// `skill_manage` writes a skill Hermes loads into later sessions: it asks.
+#[test]
+fn skill_manage_asks() {
+    let sb = bare(Some(ORIGINAL));
+    init(&sb);
+    let ops = json!({"operations": [{"action": "create", "name": "deploy", "content": "x"}]});
+    let (code, reply) = guard(&sb, &payload(&sb, "skill_manage", &ops));
+    assert_ne!(code, Some(OK), "{reply}");
+    assert!(reply.to_string().contains("runs-later"), "{reply}");
+}

@@ -312,10 +312,10 @@ pub fn warnings(cwd: &Path, user_home: &Path, host: Host, hook_file: &Path) -> V
     }
     if let Some(dir) = &spec.hook_dir {
         let what = spec.reader.hook_dir_effect();
-        for path in project_dirs(cwd, user_home)
-            .into_iter()
-            .flat_map(|root| hook_files(&root.join(dir.path), dir.extensions))
-        {
+        for path in project_dirs(cwd, user_home).into_iter().flat_map(|root| {
+            dir.paths()
+                .flat_map(move |path| hook_files(&root.join(path), dir.extensions))
+        }) {
             rows.push(row(&path, what));
         }
     }

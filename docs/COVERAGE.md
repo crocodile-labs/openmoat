@@ -7,18 +7,18 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 131 | 51 | 3 |
-| T2 | Secret exfiltration via file tools | 26 | 2 | 1 |
-| T3 | Secret exfiltration via environment | 95 | 3 | 7 |
+| T1 | Secret exfiltration via shell | 142 | 51 | 3 |
+| T2 | Secret exfiltration via file tools | 38 | 2 | 1 |
+| T3 | Secret exfiltration via environment | 101 | 4 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
-| T5 | Supply-chain execution | 14 | 35 | 8 |
+| T5 | Supply-chain execution | 14 | 54 | 8 |
 | T6 | Environment poisoning | 31 | 20 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 103 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 20 | 1 | 6 |
-| T9 | Hook / policy tampering by the agent | 321 | 93 | 31 |
+| T8 | MCP tool poisoning / over-privileged tools | 21 | 1 | 6 |
+| T9 | Hook / policy tampering by the agent | 323 | 93 | 31 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 26 | 4 | 6 |
-| T12 | Network to unknown hosts | 84 | 17 | 1 |
+| T12 | Network to unknown hosts | 85 | 17 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -204,6 +204,17 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-curl-short-cluster-authorized-keys` (attacks): Deny [secrets-paths]
 - `T1-curl-output-dir-ssh` (attacks): Deny [secrets-paths]
 - `T1-curl-output-dir-remote-name-ssh` (attacks): Deny [secrets-paths]
+- `T1-cat-moved-claude-code-credentials` (attacks): Deny [agent-credentials]
+- `T1-cat-codex-auth` (attacks): Deny [agent-credentials]
+- `T1-base64-moved-codex-auth` (attacks): Deny [agent-credentials]
+- `T1-grep-gemini-oauth-creds` (attacks): Deny [agent-credentials]
+- `T1-copy-opencode-auth` (attacks): Deny [agent-credentials]
+- `T1-sqlite-opencode-account-tokens` (attacks): Deny [agent-credentials]
+- `T1-tar-hermes-mcp-tokens` (attacks): Deny [agent-credentials]
+- `T1-cat-pi-auth` (attacks): Deny [agent-credentials]
+- `T1-cat-moved-pi-mcp-auth` (attacks): Deny [agent-credentials]
+- `T1-sqlite-openclaw-auth-profiles` (attacks): Deny [agent-credentials]
+- `T1-cat-copilot-mcp-oauth` (attacks): Deny [agent-credentials]
 - `benign-cd-src-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-cd-crate-then-ls` (benign): Allow [dev-shell]
 - `benign-recursive-read-of-project-root` (benign): Allow [dev-shell, project-fs]
@@ -238,6 +249,18 @@ the verdict and rule ids the default policy must produce for it.
 - `T2-taint-read-ssh-key-then-websearch` (attacks): Ask [session-taint]
 - `T2-taint-read-ssh-key-then-unknown-tool` (attacks): Ask [session-taint]
 - `T2-taint-read-ssh-key-then-curl-get` (attacks): Ask [session-taint]
+- `T2-read-claude-code-credentials` (attacks): Deny [agent-credentials]
+- `T2-read-codex-mcp-credentials` (attacks): Deny [agent-credentials]
+- `T2-read-gemini-mcp-tokens-in-seatbelt-runtime-dir` (attacks): Deny [agent-credentials]
+- `T2-read-opencode-mcp-auth` (attacks): Deny [agent-credentials]
+- `T2-read-hermes-auth` (attacks): Deny [agent-credentials]
+- `T2-read-hermes-profile-auth` (attacks): Deny [agent-credentials]
+- `T2-read-moved-hermes-home-auth` (attacks): Deny [agent-credentials]
+- `T2-read-openclaw-channel-credentials` (attacks): Deny [agent-credentials]
+- `T2-read-copilot-plaintext-login` (attacks): Deny [agent-credentials]
+- `T2-read-continue-mcp-remote-tokens` (attacks): Deny [agent-credentials]
+- `T2-write-codex-auth` (attacks): Deny [agent-credentials, kernel-self]
+- `T2-write-opencode-auth` (attacks): Deny [agent-credentials]
 - `benign-taint-secret-read-then-project-edit` (benign): Allow [project-fs]
 
 ## T3: Secret exfiltration via environment
@@ -245,6 +268,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-env-assignment-wrapper-is-not-a-dump` (ask): Defer [default]
 - `ask-printenv-one-ordinary-variable` (ask): Defer [default]
 - `ask-set-shell-options-is-not-a-dump` (ask): Defer [default]
+- `ask-claude-setup-token` (ask): Ask [agent-token]
 - `T3-echo-api-key` (attacks): Deny [env-secrets]
 - `T3-braced-default-expansion` (attacks): Deny [env-secrets]
 - `T3-quoted-expansion` (attacks): Deny [env-secrets]
@@ -340,6 +364,12 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-pwsh-dir-env` (attacks): Deny [env-dump]
 - `T3-pwsh-env-drive-secret` (attacks): Deny [env-secrets]
 - `T3-pwsh-env-variable-any-case` (attacks): Deny [env-secrets]
+- `T3-pi-print-api-key` (attacks): Deny [agent-credentials]
+- `T3-pi-print-bearer-token` (attacks): Deny [agent-credentials]
+- `T3-opencode-auth-export` (attacks): Deny [agent-credentials]
+- `T3-secret-tool-lookup-gemini-oauth` (attacks): Deny [secrets-paths]
+- `T3-security-reads-codex-keychain-login` (attacks): Deny [secrets-paths]
+- `T3-security-reads-copilot-keychain-login` (attacks): Deny [secrets-paths]
 - `benign-t3-echo-home` (benign): Allow [dev-shell]
 - `benign-t3-echo-path` (benign): Allow [dev-shell]
 - `benign-t3-printenv-one-plain-variable` (benign): Defer [default]
@@ -509,6 +539,25 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-go-run-remote-module` (ask): Defer [default]
 - `ask-npx-project-tool` (ask): Defer [default]
 - `defer-install-a-dependency` (ask): Defer [default]
+- `ask-claude-mcp-add` (ask): Ask [runs-later]
+- `ask-claude-mcp-add-json` (ask): Ask [runs-later]
+- `ask-claude-mcp-login` (ask): Ask [runs-later]
+- `ask-claude-plugin-install` (ask): Ask [runs-later]
+- `ask-codex-mcp-add` (ask): Ask [runs-later]
+- `ask-codex-mcp-login` (ask): Ask [runs-later]
+- `ask-cursor-agent-mcp-enable` (ask): Ask [runs-later]
+- `ask-openclaw-mcp-set` (ask): Ask [runs-later]
+- `ask-copilot-mcp-add` (ask): Ask [runs-later]
+- `ask-pi-mcp-add` (ask): Ask [runs-later]
+- `ask-gemini-mcp-add` (ask): Ask [runs-later]
+- `ask-gemini-extensions-install` (ask): Ask [runs-later]
+- `ask-opencode-mcp-add` (ask): Ask [runs-later]
+- `ask-opencode-mcp-auth` (ask): Ask [runs-later]
+- `ask-hermes-mcp-add` (ask): Ask [runs-later]
+- `ask-hermes-profile-mcp-login` (ask): Ask [runs-later]
+- `ask-hermes-bare-mcp-picker` (ask): Ask [runs-later]
+- `ask-write-continue-config` (ask): Ask [runs-later]
+- `ask-hermes-skill-manage-writes-skill-folder` (ask): Ask [runs-later]
 - `T5-curl-pipe-sh` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-bash-unspaced` (attacks): Deny [pipe-to-shell]
 - `T5-wget-pipe-sh-with-args` (attacks): Deny [pipe-to-shell]
@@ -882,6 +931,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T8-taint-webfetch-then-gemini-memory` (attacks): Ask [session-taint]
 - `T8-taint-webfetch-then-hermes-memory` (attacks): Ask [session-taint]
 - `T8-taint-webfetch-then-hermes-project-context` (attacks): Ask [session-taint]
+- `T8-mcp-filesystem-reads-opencode-auth` (attacks): Deny [agent-credentials]
 - `benign-t8-mcp-github-list-issues` (benign): Defer [default]
 - `benign-t8-mcp-filesystem-list-project` (benign): Allow [safe-mcp, project-fs]
 - `benign-t8-mcp-filesystem-write-project` (benign): Defer [default]
@@ -1305,6 +1355,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-openmoat-in-another-case` (attacks): Deny [kernel-self]
 - `T9-openmoat-path-in-another-case` (attacks): Deny [kernel-self]
 - `T9-openmoat-in-another-case-under-script` (attacks): Deny [kernel-self]
+- `T9-write-codex-home-config-mcp-servers` (attacks): Deny [kernel-self]
+- `T9-write-gemini-project-settings-mcp-servers` (attacks): Deny [kernel-self]
 - `benign-read-moat-policy` (benign): Defer [default]
 - `benign-write-openclaw-workspace` (benign): Defer [default]
 - `benign-read-openclaw-config` (benign): Defer [default]
@@ -1498,4 +1550,5 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-curl-disable-not-first` (attacks): Deny [default.net]
 - `T12-wget-without-no-netrc` (attacks): Deny [default.net]
 - `T12-port-allow-is-no-ipv6-host-glob` (attacks): Deny [default.net]
+- `T12-codex-mcp-add-unlisted-url` (attacks): Deny [default.net]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]

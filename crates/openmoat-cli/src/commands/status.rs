@@ -274,8 +274,15 @@ fn hooks(
     let mut healthy = true;
     // Agents with no folder on this machine share one line at the end.
     let mut not_found = Vec::new();
+    crate::install::host_version::prefetch_present(home);
     for host in Host::ALL {
         let config = HostConfig::for_host(home, host)?;
+        // A version with a published advisory, a flaw no hook sees: a warning
+        // under the host's line, which does not make the status unhealthy.
+        let advisory = config
+            .host_present()
+            .then(|| crate::install::host_version::advisory(host))
+            .flatten();
         // A version that does not load OpenMoat's hook (OpenCode 2), whatever
         // the hook file says.
         let unsupported = config
@@ -317,6 +324,9 @@ fn hooks(
             host.display_name(),
             config.settings_path.display()
         )?;
+        if let Some(advisory) = advisory {
+            writeln!(out, "{:<16} ! {advisory}", host.display_name())?;
+        }
     }
     if !not_found.is_empty() {
         writeln!(out, "{:<16} · {}", "not found", not_found.join(", "))?;

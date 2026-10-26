@@ -353,3 +353,37 @@ fn opencode_project_configuration_and_plugins_are_named() {
     fs::write(config.join("opencode.json"), "{\"plugin\": [\"x\"]}").unwrap();
     assert_eq!(switched_off(Host::OpenCode, &config, &plugin), None);
 }
+
+/// OpenCode reads `opencode.jsonc` and `.opencode/opencode.jsonc` as it reads
+/// the `.json` files, and loads `.opencode/plugin/` as it loads `plugins/`.
+#[test]
+fn opencode_jsonc_files_and_the_singular_plugin_folder_are_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let user_home = dir.path().join("home");
+    let project = user_home.join("proj");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join(".opencode/plugin")).unwrap();
+    let plugin = user_home.join(".config/opencode/plugins/openmoat.js");
+    let loads = "{\n  // added\n  \"plugin\": [\"opencode-helper\"],\n}\n";
+    fs::write(project.join("opencode.jsonc"), loads).unwrap();
+    fs::write(project.join(".opencode/opencode.jsonc"), loads).unwrap();
+    fs::write(
+        project.join(".opencode/plugin/helper.js"),
+        "export default async () => ({})",
+    )
+    .unwrap();
+    let rows = super::warnings(&project, &user_home, Host::OpenCode, &plugin);
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert!(
+        rows[0].contains("opencode.jsonc: `plugin` loads plugins"),
+        "{rows:?}"
+    );
+    assert!(
+        rows[1].contains(".opencode/opencode.jsonc: `plugin`"),
+        "{rows:?}"
+    );
+    assert!(
+        rows[2].contains("plugin/helper.js: is a plugin OpenCode loads"),
+        "{rows:?}"
+    );
+}

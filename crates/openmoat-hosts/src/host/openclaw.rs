@@ -59,6 +59,7 @@ pub const CONFIG_FILE: &str = "openclaw.json";
 /// The plugin's id: the file name of OpenMoat's standalone plugin.
 pub const PLUGIN_ID: &str = "openmoat";
 
+mod advisories;
 mod bench;
 mod doc;
 mod location;
@@ -108,6 +109,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

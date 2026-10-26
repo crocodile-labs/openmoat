@@ -23,7 +23,10 @@ command ends; the file on disk does not change (`contained` in
 default `build-credentials` (`~/.m2/settings.xml`, `~/.gradle/gradle.properties`), is
 left out of every generated sandbox, so `mvn` and `gradle` can read their settings
 wherever the sandbox lets commands read `~/.m2` or `~/.gradle`; the hook still denies
-the agent's own access. The default `agent-folders` (renaming a `.github` or
+the agent's own access. So is the default `agent-credentials` (where each agent
+keeps its login, provider keys and OAuth tokens): under `openmoat run` the agent
+itself reads its login inside the sandbox, and so can any command it runs there, while
+the hook denies the agent's own tools reading or writing them. The default `agent-folders` (renaming a `.github` or
 `.github/copilot` folder) is one too, so a clone or an install inside the sandbox can
 still create a `.github`. `openmoat sandbox show` lists these groups and their paths as
 decided by the hook only, not in the OS sandbox (`hook_only` in `--format json`).

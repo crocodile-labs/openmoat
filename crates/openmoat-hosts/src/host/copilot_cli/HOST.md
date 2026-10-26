@@ -42,6 +42,15 @@ The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
   the user's `settings.json`; `disableAllHooks: true` in either turns the hook off. A
   repository's `.github/hooks/*.json` load once the folder is trusted.
 
+Credentials: `config.json` (where the login goes when there is no keychain),
+`mcp-oauth-config/` and `mcp-secrets/` in `COPILOT_HOME` are `agent-credentials`': the
+agent's own tools may not read them (`kernel-self` already denies writing
+`config.json`). The keychain entry `copilot-cli` is read by `security
+find-generic-password -w` or `secret-tool lookup`, which `secrets-paths` denies.
+`copilot mcp add` and `copilot mcp enable` ask (`runs-later`). `openmoat status` and
+`openmoat doctor` warn when the `copilot` on the search path is a version with a
+published advisory (`advisories.rs`).
+
 ## When the hook fails
 
 Copilot blocks the call when the hook cannot start, crashes or exits non-zero; it runs it

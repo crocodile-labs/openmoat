@@ -30,6 +30,7 @@ use crate::contract::{
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisories;
 mod bench;
 mod doc;
 pub(crate) mod hook_file;
@@ -92,12 +93,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".gemini",
         shared: "settings.json",
         local: None,
+        more: &[],
         hook_dir: None,
         reader: &project_settings::READER,
         user_file: "settings.json",
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

@@ -5,11 +5,14 @@
 //!   apart. The policy's bytes are pinned (a lock pins its hash, and
 //!   `openmoat policy upgrade` merges it line by line), so it carries no
 //!   markers: the block is the lines between two lines that are there anyway.
+//! - the default policy's `agent-credentials` paths of every host, between the
+//!   rule's `fs.read` anchor and its `fs.write` alias.
 //! - the core's taint list (`PROTECTED_WRITES`), between `// generated:taint`
 //!   and `// /generated`.
 //!
-//! Claude Code's, Codex's and Cursor's paths stay hand-written: those lists
-//! name them among each other's and OpenMoat's own lines.
+//! Claude Code's, Codex's and Cursor's `kernel-self` and taint paths stay
+//! hand-written: those lists name them among each other's and OpenMoat's own
+//! lines.
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect`.
 
@@ -24,6 +27,9 @@ const POLICY: &str = "crates/openmoat-core/policies/default-v1.yaml";
 /// The `kernel-self` lines just before and just after the generated block.
 const POLICY_BEFORE: &str = "      - \"**/.codex/hooks.json\"\n";
 const POLICY_AFTER: &str = "      - \"**/.moat/**\"\n";
+/// The `agent-credentials` lines just before and just after its paths.
+const CREDENTIALS_BEFORE: &str = "    fs.read: &agent-credentials\n";
+const CREDENTIALS_AFTER: &str = "    fs.write: *agent-credentials\n";
 
 const TAINT: &str = "crates/openmoat-core/src/taint.rs";
 const TAINT_BEFORE: &str = "// generated:taint ";
@@ -96,6 +102,25 @@ fn the_default_policy_protects_each_hosts_own_files() {
     );
     assert!(body.contains("~/.copilot/hooks/**"), "{body}");
     check(POLICY, POLICY_BEFORE, POLICY_AFTER, &body);
+}
+
+#[test]
+fn the_default_policy_keeps_each_agents_credentials_from_its_tools() {
+    let body = lines(
+        |p| p.credentials,
+        |line| format!("      # {line}"),
+        |glob| format!("      - \"{glob}\""),
+    );
+    // Every host OpenMoat sets up names where it keeps a login, except
+    // Cursor, whose store is not documented.
+    let without: Vec<&str> = Host::ALL
+        .into_iter()
+        .filter(|h| h.spec().protect.credentials.is_empty())
+        .map(Host::display_name)
+        .collect();
+    assert_eq!(without, ["Cursor"]);
+    assert!(body.contains("~/.local/share/opencode/auth.json"), "{body}");
+    check(POLICY, CREDENTIALS_BEFORE, CREDENTIALS_AFTER, &body);
 }
 
 #[test]
