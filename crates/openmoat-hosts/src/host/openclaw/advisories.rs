@@ -14,14 +14,14 @@ pub(super) const ADVISORIES: Advisories = Advisories {
             "provider credentials sent to the wrong endpoint",
             ((0, 0, 0), (2026, 8, 1)),
             &[],
-            "https://github.com/advisories/GHSA-vhpg-cq3w-v8p9",
+            "https://github.com/openclaw/openclaw/security/advisories/GHSA-vhpg-cq3w-v8p9",
         ),
         Advisory::new(
             "GHSA-wwx7-573h-pqwc",
             "MCP configuration changes without the owner's authorisation",
             ((0, 0, 0), (2026, 7, 1)),
             &[],
-            "https://github.com/advisories/GHSA-wwx7-573h-pqwc",
+            "https://github.com/openclaw/openclaw/security/advisories/GHSA-wwx7-573h-pqwc",
         ),
         Advisory::new(
             "GHSA-9c3v-684m-579c",
@@ -35,7 +35,7 @@ pub(super) const ADVISORIES: Advisories = Advisories {
             "a workspace's dotenv files override provider credentials",
             ((0, 0, 0), (2026, 5, 28)),
             &[],
-            "https://github.com/advisories/GHSA-4pqj-3c56-5fqq",
+            "https://github.com/openclaw/openclaw/security/advisories/GHSA-4pqj-3c56-5fqq",
         ),
         Advisory::new(
             "GHSA-rjxq-qqhf-8hwh",

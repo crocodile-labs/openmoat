@@ -12,7 +12,7 @@ pub(super) const ADVISORIES: Advisories = Advisories {
             "managed settings not applied when a stored API key was preferred",
             ((2, 0, 68), (2, 1, 260)),
             &[],
-            "https://github.com/advisories/GHSA-gfvf-j8jh-jxxw",
+            "https://github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw",
         ),
         Advisory::new(
             "GHSA-pq7j-f95f-qfcv",
@@ -33,7 +33,7 @@ pub(super) const ADVISORIES: Advisories = Advisories {
             "a symbolic link followed at write time writes any file",
             ((0, 0, 0), (2, 1, 129)),
             &[],
-            "https://github.com/advisories/GHSA-5j29-h97v-84ch",
+            "https://github.com/anthropics/claude-code/security/advisories/GHSA-5j29-h97v-84ch",
         ),
         Advisory::new(
             "GHSA-q5hj-mxqh-vv77",

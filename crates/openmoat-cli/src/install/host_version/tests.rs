@@ -1,6 +1,31 @@
 use openmoat_hosts::{Advisory, Host, Platform};
 
-use super::{advisory_line, parse, parse_any};
+use super::{advisory_line, cached, identify, parse, parse_any, remember};
+
+/// A version kept for a program file is reused while the file stays the
+/// same, and asked again once it is replaced (another size or time).
+#[test]
+fn a_kept_version_lasts_until_the_program_file_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let program = dir.path().join("opencode");
+    std::fs::write(&program, "one").unwrap();
+    let seen = identify(&program).unwrap();
+    assert_eq!(cached(dir.path(), &seen), None);
+    remember(
+        dir.path(),
+        super::Seen {
+            version: (1, 19, 4),
+            ..seen.clone()
+        },
+    );
+    assert_eq!(cached(dir.path(), &seen), Some((1, 19, 4)));
+    std::fs::write(&program, "an upgrade").unwrap();
+    let upgraded = identify(&program).unwrap();
+    assert_eq!(cached(dir.path(), &upgraded), None);
+    // A broken file is no version, not an error.
+    std::fs::write(dir.path().join("host-versions.json"), "{").unwrap();
+    assert_eq!(cached(dir.path(), &seen), None);
+}
 
 /// OpenCode 1 takes the plugin; OpenCode 2 does not, and says why.
 #[test]

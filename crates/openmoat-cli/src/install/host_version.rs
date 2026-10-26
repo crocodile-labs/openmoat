@@ -12,14 +12,38 @@
 //! protected. The same version names the advisories `moat status` and `moat
 //! doctor` warn about: a flaw in the agent's own process runs where no hook
 //! sees it, so an upgrade is the only fix.
+//!
+//! OpenMoat Bar runs `moat status` and `moat doctor` every minute with a few
+//! seconds to answer, so those two keep what each program reported in
+//! `host-versions.json` in the state directory, by the program file's path,
+//! size and modification time: a program is asked again only once it was
+//! installed, upgraded or replaced.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
+use std::time::UNIX_EPOCH;
 
 use openmoat_hosts::{Advisory, Host};
+use serde::{Deserialize, Serialize};
 
 use super::claude_version::{Version, parse, run_version};
+
+/// The state directory whose `host-versions.json` this process reads and
+/// writes, once [`prefetch_present`] named it; `init` asks without it.
+static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// The most programs `host-versions.json` keeps.
+const CACHE_LIMIT: usize = 32;
+
+/// What `--version` reported for one program file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Seen {
+    path: String,
+    len: u64,
+    modified_ns: u128,
+    version: Version,
+}
 
 /// The versions asked so far in this process, by program.
 type Asked = Mutex<Vec<(&'static str, Option<Version>)>>;
@@ -59,6 +83,9 @@ pub fn advisory(host: Host) -> Option<String> {
 /// [`prefetch`] for every host whose directory is on this machine (in
 /// `home`'s record or where its variable or default puts it).
 pub fn prefetch_present(home: &crate::home::Home) {
+    if home.exists() {
+        let _ = CACHE_DIR.set(home.root().to_path_buf());
+    }
     prefetch(
         Host::ALL.into_iter().filter(|host| {
             super::HostConfig::for_host(home, *host).is_ok_and(|c| c.host_present())
@@ -141,7 +168,67 @@ fn ask(program: &str) -> Option<Version> {
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
     let found = crate::environment::find_in(&path, &[], program)?;
-    parse_any(&run_version(Command::new(found))?)
+    let dir = CACHE_DIR.get();
+    let file = dir.and_then(|_| identify(&found));
+    if let (Some(dir), Some(seen)) = (dir, &file)
+        && let Some(known) = cached(dir, seen)
+    {
+        return Some(known);
+    }
+    let version = parse_any(&run_version(Command::new(&found))?)?;
+    if let (Some(dir), Some(mut seen)) = (dir, file) {
+        seen.version = version;
+        remember(dir, seen);
+    }
+    Some(version)
+}
+
+/// `path` as `host-versions.json` names it, with no version yet.
+fn identify(path: &Path) -> Option<Seen> {
+    let meta = std::fs::metadata(path).ok()?;
+    let modified_ns = meta
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    Some(Seen {
+        path: path.to_string_lossy().into_owned(),
+        len: meta.len(),
+        modified_ns,
+        version: (0, 0, 0),
+    })
+}
+
+fn read_cache(dir: &Path) -> Vec<Seen> {
+    std::fs::read(dir.join("host-versions.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// The version kept in `dir` for the same file at the same size and time.
+fn cached(dir: &Path, file: &Seen) -> Option<Version> {
+    read_cache(dir)
+        .into_iter()
+        .find(|s| s.path == file.path && s.len == file.len && s.modified_ns == file.modified_ns)
+        .map(|s| s.version)
+}
+
+/// Keep `seen` in `dir` in place of what was kept for its path; a file that
+/// cannot be written only means the program is asked again next time.
+fn remember(dir: &Path, seen: Seen) {
+    static WRITING: Mutex<()> = Mutex::new(());
+    let Ok(_one_at_a_time) = WRITING.lock() else {
+        return;
+    };
+    let mut all = read_cache(dir);
+    all.retain(|s| s.path != seen.path);
+    all.insert(0, seen);
+    all.truncate(CACHE_LIMIT);
+    if let Ok(bytes) = serde_json::to_vec_pretty(&all) {
+        let _ = crate::home::write_private(&dir.join("host-versions.json"), &bytes);
+    }
 }
 
 /// The first word of `text` that reads as a version: `1.19.4`, and also

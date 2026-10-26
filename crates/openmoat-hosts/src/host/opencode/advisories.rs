@@ -21,7 +21,7 @@ pub(super) const ADVISORIES: Advisories = Advisories {
             "a cross-site upgrade request installs any package",
             ((1, 14, 30), (1, 18, 22)),
             &[],
-            "https://github.com/advisories/GHSA-632h-h47v-g4x4",
+            "https://github.com/anomalyco/opencode/security/advisories/GHSA-632h-h47v-g4x4",
         ),
         Advisory::new(
             "GHSA-c83v-7274-4vgp",
