@@ -57,12 +57,14 @@ impl LazyGlob {
     fn may_match(&self, candidate: &str) -> bool {
         let mut chars = candidate.chars();
         for want in self.prefix.chars() {
-            match chars.next() {
-                None => return false,
-                Some(c) if !c.is_ascii() || c == '\\' => return true,
-                Some(c) if c == want => {}
-                Some(c) if self.case_insensitive && c.eq_ignore_ascii_case(&want) => {}
-                Some(_) => return false,
+            let Some(c) = chars.next() else {
+                return false;
+            };
+            if !c.is_ascii() || c == '\\' {
+                return true;
+            }
+            if c != want && !(self.case_insensitive && c.eq_ignore_ascii_case(&want)) {
+                return false;
             }
         }
         true

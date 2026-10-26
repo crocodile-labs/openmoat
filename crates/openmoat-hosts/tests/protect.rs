@@ -16,6 +16,7 @@
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect`.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -116,7 +117,7 @@ fn credential_lines() -> String {
     for host in Host::EVERY {
         for paths in host.spec().protect.credentials {
             for line in paths.why.lines() {
-                out.push_str(&format!("      # {line}\n"));
+                let _ = writeln!(out, "      # {line}");
             }
             let mut groups: Vec<(&str, Vec<String>)> = Vec::new();
             for glob in paths.globs {
@@ -139,7 +140,7 @@ fn credential_lines() -> String {
                     [one] => format!("{root}{one}"),
                     _ => format!("{root}{{{}}}", items.join(",")),
                 };
-                out.push_str(&format!("      - \"{glob}\"\n"));
+                let _ = writeln!(out, "      - \"{glob}\"");
             }
         }
     }
@@ -166,7 +167,7 @@ fn shared_dirs(items: &[String]) -> (String, Vec<String>) {
     }) {
         n += 1;
     }
-    let shared: String = split[0][..n].iter().map(|p| format!("{p}/")).collect();
+    let shared: String = split[0][..n].iter().flat_map(|p| [*p, "/"]).collect();
     let rest = split.iter().map(|parts| parts[n..].join("/")).collect();
     (shared, rest)
 }
