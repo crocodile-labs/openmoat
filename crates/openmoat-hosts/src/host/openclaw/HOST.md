@@ -51,11 +51,22 @@ answer.
   and each server by itself.
 - No project settings are read.
 
+Credentials: the model sign-in databases (`agents/<id>/agent/openclaw-agent.sqlite`,
+`state/openclaw.sqlite`, which also holds the MCP OAuth sessions), `credentials/`,
+`secrets.json`, the older `auth-profiles.json`, `auth-state.json`, a per-agent
+`auth.json`, `codex-home/` and `mcp-oauth/` in the state directory are
+`agent-credentials`': the agent's own tools may neither read nor write them, under
+`OPENCLAW_STATE_DIR` too. `openclaw mcp add`, `set`, `configure` and `login` ask
+(`runs-later`). `openmoat status` and `openmoat doctor` warn when the `openclaw` on the
+search path is a version with a published advisory (`advisories.rs`).
+
 ## When the hook fails
 
 OpenClaw blocks the call when OpenMoat's plugin throws or times out (`before_tool_call`
 fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not
-answer; the call runs unchecked when the Gateway does not load the plugin.
+answer; the call runs unchecked when the Gateway does not load the plugin (a plugin
+OpenClaw must load or refuse to run is tracked upstream in
+[openclaw/openclaw#147129](https://github.com/openclaw/openclaw/issues/147129)).
 
 ## Known gaps
 

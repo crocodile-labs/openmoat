@@ -48,7 +48,8 @@ impl WordGlob {
             .literal_separator(false)
             .backslash_escape(true)
             .build()
-            .map(|g| Self::Glob(Box::new(LazyGlob::new(g))))
+            // Shell words compare case-sensitively.
+            .map(|g| Self::Glob(Box::new(LazyGlob::new(g, false))))
     }
 
     pub(super) fn is_match(&self, word: &str) -> bool {
@@ -107,6 +108,7 @@ mod tests {
                     .backslash_escape(true)
                     .build()
                     .unwrap(),
+                false,
             )));
             for candidate in candidates {
                 assert_eq!(

@@ -45,6 +45,14 @@ call OpenMoat defers runs.
   off and add packages, and its `.pi/extensions/` (`.js`, `.ts`) load with the agent's
   rights; the user's `settings.json` can turn OpenMoat's extension off.
 
+Credentials: `auth.json` (provider keys and OAuth tokens), `models.json` (which may
+hold API keys) and `mcp-auth.json` (MCP sign-ins) in `PI_CODING_AGENT_DIR` are
+`agent-credentials`': the agent's own tools may neither read nor write them, and `pi
+auth print-api-key` and `pi auth print-bearer-token`, which print a stored key, are
+denied. `pi mcp add` and `pi mcp login` ask (`runs-later`). `openmoat status` and
+`openmoat doctor` warn when the `pi` on the search path is a version with a published
+advisory (`advisories.rs`), such as the `auth.json` write race before 0.78.1.
+
 ## When the hook fails
 
 pi blocks the call when OpenMoat's extension throws (`tool_call` fails closed), and the

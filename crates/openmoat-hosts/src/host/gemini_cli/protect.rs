@@ -21,6 +21,20 @@ pub(super) const PROTECT: Protect = Protect {
          every session",
         &["**/GEMINI.md", "**/.gemini", "**/.gemini/**"],
     )],
+    credentials: &[Paths::new(
+        "Gemini CLI: its Google sign-in, the MCP and A2A OAuth tokens (in\n\
+         `~/.cache/.gemini` under the macOS Seatbelt sandbox) and the file its\n\
+         keychain falls back to, whose key the agent could derive\n\
+         (`core/src/config/storage.ts`, `services/fileKeychain.ts`)",
+        &[
+            "~/.gemini/oauth_creds.json",
+            "~/.gemini/mcp-oauth-tokens.json",
+            "~/.gemini/a2a-oauth-tokens.json",
+            "~/.gemini/gemini-credentials.json",
+            "~/.cache/.gemini/mcp-oauth-tokens.json",
+            "~/.cache/.gemini/a2a-oauth-tokens.json",
+        ],
+    )],
 };
 
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {

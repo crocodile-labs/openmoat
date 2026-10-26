@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::Host;
+use openmoat_hosts::{AlsoDir, Host};
 use serde::{Deserialize, Serialize};
 
 use crate::home::{Home, write_private};
@@ -38,6 +38,12 @@ pub struct Recorded {
     /// `moat uninstall` restores those and no other.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mcp_wrapped: Vec<crate::mcp::wrap::Wrapped>,
+    /// Host id → the further directories `moat init` found that the host
+    /// reads laid out like its configuration directory (OpenCode's
+    /// `OPENCODE_CONFIG_DIR`, Hermes Agent's profiles: `InstallSpec::also_dirs`),
+    /// which the rules naming that directory cover too.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub also: BTreeMap<String, Vec<PathBuf>>,
 }
 
 impl Recorded {
@@ -89,9 +95,21 @@ impl Recorded {
         self.files.get(host.id()).cloned()
     }
 
-    /// Record `config`'s directory, and its file when that is not the default.
+    /// The further directories recorded for `host` ([`Self::also`]).
+    pub fn also(&self, host: Host) -> &[PathBuf] {
+        self.also.get(host.id()).map_or(&[], Vec::as_slice)
+    }
+
+    /// Record `config`'s directory, its file when that is not the default,
+    /// and the further directories it reads ([`also_dirs`]).
     pub fn insert(&mut self, config: &super::HostConfig) {
         let id = config.host.id().to_owned();
+        let also = also_dirs(config.host, config.dir());
+        if also.is_empty() {
+            self.also.remove(&id);
+        } else {
+            self.also.insert(id.clone(), also);
+        }
         self.dirs.insert(id.clone(), config.dir().to_path_buf());
         match config.custom_location() {
             Some((locate, located)) if !locate.config_is_default(&located) => {
@@ -110,6 +128,41 @@ impl Recorded {
     pub fn skipped(&self, host: Host) -> bool {
         !self.dirs.is_empty() && self.dir(host).is_none()
     }
+}
+
+/// The further directories `host`, whose configuration directory is `dir`,
+/// reads laid out like it ([`InstallSpec::also_dirs`]) and that exist now:
+/// the one a variable names, and each directory in a folder of `dir`. Never
+/// the home directory, an ancestor of it or a filesystem root, which would
+/// make every rule naming the configuration directory name all of them.
+///
+/// [`InstallSpec::also_dirs`]: openmoat_hosts::InstallSpec::also_dirs
+pub fn also_dirs(host: Host, dir: &Path) -> Vec<PathBuf> {
+    let Some(install) = host.spec().install.as_ref() else {
+        return Vec::new();
+    };
+    let Ok(home) = crate::home::user_home() else {
+        return Vec::new();
+    };
+    let mut found: Vec<PathBuf> = Vec::new();
+    for also in install.also_dirs {
+        match also {
+            AlsoDir::Variable(name) => found.extend(
+                std::env::var_os(name)
+                    .filter(|v| !v.is_empty())
+                    .and_then(|v| crate::context::absolute(Path::new(&v)).ok()),
+            ),
+            AlsoDir::EachIn(folder) => {
+                if let Ok(entries) = fs::read_dir(dir.join(folder)) {
+                    found.extend(entries.filter_map(|e| Some(e.ok()?.path())));
+                }
+            }
+        }
+    }
+    found.retain(|d| d.is_dir() && d != dir && crate::project::trusted(d, &home));
+    found.sort();
+    found.dedup();
+    found
 }
 
 #[cfg(test)]

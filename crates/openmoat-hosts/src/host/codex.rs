@@ -13,6 +13,7 @@ use crate::contract::{
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisories;
 mod doc;
 mod mcp;
 mod project_settings;
@@ -80,6 +81,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".codex",
         shared: "config.toml",
         local: Some("hooks.json"),
+        more: &[],
         hook_dir: None,
         reader: &project_settings::READER,
         user_file: "config.toml",
@@ -88,6 +90,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         names: &["codex"],
         ..crate::contract::ProcessSpec::BASE
     },
+    // `kernel-self` already denies every write under `~/.codex`; these are
+    // the files it keeps a login in, which the agent must not read either.
+    protect: crate::contract::Protect {
+        credentials: &[crate::contract::Paths::new(
+            "Codex: its login (ChatGPT tokens or API key) and the file its MCP OAuth\n\
+             tokens fall back to without a keyring (`codex-rs/login/src/auth/storage.rs`,\n\
+             `rmcp-client/src/oauth.rs`)",
+            &["~/.codex/auth.json", "~/.codex/.credentials.json"],
+        )],
+        ..crate::contract::Protect::BASE
+    },
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

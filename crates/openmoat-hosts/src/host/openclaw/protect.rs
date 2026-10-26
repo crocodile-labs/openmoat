@@ -40,6 +40,23 @@ pub(super) const PROTECT: Protect = Protect {
             &["**/.openclaw/state/**"],
         ),
     ],
+    credentials: &[Paths::new(
+        "OpenClaw: the databases of model sign-ins and MCP OAuth sessions, the\n\
+         channel credentials, the file secret store and the older sign-in files\n\
+         (`docs/gateway/security/secrets-and-storage.md`; its `.env` is\n\
+         `secrets-paths`')",
+        &[
+            "~/.openclaw/state/openclaw.sqlite*",
+            "~/.openclaw/agents/*/agent/openclaw-agent.sqlite*",
+            "~/.openclaw/agents/*/agent/auth.json",
+            "~/.openclaw/agents/*/agent/codex-home/**",
+            "~/.openclaw/credentials/**",
+            "~/.openclaw/secrets.json",
+            "~/.openclaw/auth-profiles.json",
+            "~/.openclaw/auth-state.json",
+            "~/.openclaw/mcp-oauth/**",
+        ],
+    )],
 };
 
 /// OpenClaw's command is `openclaw.mjs` (its package `bin`); `openclaw/dist`

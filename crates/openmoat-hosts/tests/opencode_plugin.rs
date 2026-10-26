@@ -1,0 +1,102 @@
+//! OpenMoat's OpenCode plugin (`src/host/opencode/integration/openmoat.js`)
+//! run under Node against a stand-in for `openmoat guard`
+//! (`tests/opencode_plugin/harness.mjs`): a deny throws the guard's reason,
+//! an allow or no answer lets the call run, every other outcome throws, and
+//! the checked arguments cannot change afterwards.
+//!
+//! The test skips, saying why, when `node` is not on the search path.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use serde_json::Value;
+
+fn node() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["node.exe"]
+    } else {
+        &["node"]
+    };
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
+        .find(|path| path.is_file())
+}
+
+fn run_harness(node: &Path) -> Value {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new(node)
+        .arg(root.join("tests/opencode_plugin/harness.mjs"))
+        .arg(root.join("src/host/opencode/integration/openmoat.js"))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "harness failed: {}\n{stdout}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"))
+}
+
+fn outcome<'a>(report: &'a Value, mode: &str) -> &'a str {
+    report["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["mode"] == mode)
+        .and_then(|r| r["outcome"].as_str())
+        .unwrap_or_else(|| panic!("no result for {mode}: {report}"))
+}
+
+#[test]
+fn the_opencode_plugin_blocks_on_everything_but_allow_and_no_answer() {
+    let Some(node) = node() else {
+        eprintln!("skipping the OpenCode plugin test: `node` is not on PATH");
+        return;
+    };
+    let report = run_harness(&node);
+
+    // What the guard is given: the call, the instance and the MCP servers.
+    let payload = &report["payload"];
+    assert_eq!(payload["hook_event_name"], "tool.execute.before");
+    assert_eq!(payload["tool"], "bash");
+    assert_eq!(payload["sessionID"], "ses_1");
+    assert_eq!(payload["callID"], "call_1");
+    assert_eq!(payload["args"]["command"], "cat ~/.ssh/id_rsa");
+    assert_eq!(payload["directory"], report["dir"]);
+    assert_eq!(payload["worktree"], report["dir"]);
+    assert_eq!(payload["mcpServers"], serde_json::json!(["github"]));
+    assert!(payload["platform"].is_string(), "{payload}");
+    assert_eq!(report["argv"], serde_json::json!(["--host", "opencode"]));
+    assert_eq!(
+        report["cwdIsDirectory"], true,
+        "the guard runs in the directory"
+    );
+
+    assert_eq!(
+        outcome(&report, "deny"),
+        "threw: moat: deny [secrets-paths] — secret material"
+    );
+    assert_eq!(outcome(&report, "allow"), "ran");
+    assert_eq!(outcome(&report, "defer"), "ran");
+    let blocked = "threw: OpenMoat blocked this call: ";
+    for (mode, why) in [
+        ("ask", "an answer it should not give"),
+        ("crash", "exited 1: boom"),
+        ("garbage", "no readable answer"),
+        ("deny-exit-0", "an answer it should not give"),
+        ("hang", "did not answer in time"),
+        ("missing-binary", "could not run"),
+        ("no-input", "could not run"),
+    ] {
+        let text = outcome(&report, mode);
+        assert!(
+            text.starts_with(blocked) && text.contains(why),
+            "{mode}: {text}"
+        );
+    }
+    // The checked arguments are frozen, nested objects too.
+    for result in report["results"].as_array().unwrap() {
+        assert_eq!(result["frozen"], true, "{result}");
+    }
+}

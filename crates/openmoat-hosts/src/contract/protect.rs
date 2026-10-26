@@ -3,9 +3,10 @@
 //! generated lists from them and checks them).
 
 /// A host's paths in the generated blocks of the default policy's
-/// `kernel-self` rule and of the core's taint list (`PROTECTED_WRITES`).
-/// The hosts whose paths those lists name among other hosts' lines (Claude
-/// Code, Codex, Cursor) leave both empty: their lines stay hand-written.
+/// `kernel-self` and `agent-credentials` rules and of the core's taint list
+/// (`PROTECTED_WRITES`). The hosts whose paths `kernel-self` and the taint
+/// list name among other hosts' lines (Claude Code, Codex, Cursor) leave
+/// those two empty: their lines stay hand-written.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Protect {
@@ -13,6 +14,13 @@ pub struct Protect {
     pub self_paths: &'static [Paths],
     /// The writes that ask once the session read untrusted content.
     pub taint: &'static [Paths],
+    /// `agent-credentials`' globs: the files where the host keeps its login,
+    /// provider keys and OAuth tokens, which the agent's own tools may neither
+    /// read nor write. The rule is `hook_only`, so the host itself still reads
+    /// them inside an OS sandbox. Named under the default directory; the
+    /// engine adds the moved one (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) as for
+    /// `kernel-self`.
+    pub credentials: &'static [Paths],
 }
 
 impl Protect {
@@ -20,6 +28,7 @@ impl Protect {
     pub const BASE: Protect = Protect {
         self_paths: &[],
         taint: &[],
+        credentials: &[],
     };
 }
 

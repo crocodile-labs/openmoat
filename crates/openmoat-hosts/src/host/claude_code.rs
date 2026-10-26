@@ -13,6 +13,7 @@ use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 pub(crate) mod config_change;
+mod advisories;
 mod doc;
 mod mcp;
 pub(crate) mod project_settings;
@@ -92,6 +93,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".claude",
         shared: "settings.json",
         local: Some("settings.local.json"),
+        more: &[],
         hook_dir: None,
         reader: &project_settings::READER,
         user_file: "settings.json",
@@ -103,6 +105,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         package_dirs: &[&["claude", "versions"], &["claude-code"]],
         helper: None,
     },
+    // `kernel-self`'s and the taint list's lines for Claude Code stay
+    // hand-written among Codex's and Cursor's.
+    protect: crate::contract::Protect {
+        credentials: &[crate::contract::Paths::new(
+            "Claude Code: its login where it keeps it in a file (Linux and Windows, and\n\
+             macOS when the Keychain refuses it) and the Anthropic profiles `ant auth\n\
+             login` writes (docs: Authentication, Credential management)",
+            &["~/.claude/.credentials.json", "~/.config/anthropic/**"],
+        )],
+        ..crate::contract::Protect::BASE
+    },
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

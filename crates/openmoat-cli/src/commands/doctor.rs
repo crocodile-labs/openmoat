@@ -376,9 +376,18 @@ fn finish(mut report: Report) -> Result<Code> {
 fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>> {
     let recorded = Recorded::load(home)?;
     let mut hook_files = Vec::new();
+    crate::install::host_version::prefetch_present(home);
     for host in Host::ALL {
         let config = HostConfig::for_host(home, host)?;
         let name = host.display_name();
+        // A version with a published advisory: a flaw no hook sees.
+        if let Some(line) = config
+            .host_present()
+            .then(|| crate::install::host_version::advisory(host))
+            .flatten()
+        {
+            report.warn(&line);
+        }
         // Every command follows the record; a variable naming another directory
         // is reported rather than silently ignored or followed.
         if let Some((locate, set_up)) = config.custom_location() {

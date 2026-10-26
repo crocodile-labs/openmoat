@@ -91,14 +91,65 @@ pub(super) fn action(tool: &str, args: &Value) -> Result<Option<Action>, HostErr
                 "a scheduled job runs the agent later, unattended",
             ),
         },
+        // `memory` changes the notes Hermes puts into every later session's
+        // prompt (`memories/` in its home), `skill_manage` a skill it loads
+        // into later sessions (`skills/`): writes there, which the taint list
+        // and `runs-later` ask about. Named under the default home, whose
+        // patterns cover a moved one.
+        "memory" => Action::FsWrite {
+            path: MEMORIES.to_owned(),
+        },
+        "skill_manage" => skills(args),
         name if name.starts_with("mcp__") => crate::wire::mcp::action(name, args)?,
         name if AGENT_STATE_TOOLS.contains(&name) => return Ok(None),
-        // `memory`, `skill_manage`, `skill_view`, the other browser tools,
+        // `skill_view`, the other browser tools,
         // `vision_analyze`, the messaging tools, connectors and a plugin's tools;
         // `tool_call` only when Hermes could not unwrap it.
         other => crate::wire::unknown::action(Host::Hermes, other, args)?,
     };
     Ok(Some(action))
+}
+
+/// The memory folder of Hermes Agent's home, whose files `memory` writes.
+const MEMORIES: &str = "~/.hermes/memories";
+/// The skills folder of Hermes Agent's home that `skill_manage` writes in.
+const SKILLS: &str = "~/.hermes/skills";
+
+/// What `skill_manage` writes: the folder in [`SKILLS`] of each skill its
+/// `operations` (or a lone `name`) name as one plain path segment, else the
+/// folder of every skill. The same rules apply to both; the names only make
+/// the record clearer.
+fn skills(args: &Value) -> Action {
+    let mut names: Vec<String> = match args.get("operations").and_then(Value::as_array) {
+        Some(operations) => operations
+            .iter()
+            .map(skill_name)
+            .collect::<Option<_>>()
+            .unwrap_or_default(),
+        None => skill_name(args).into_iter().collect(),
+    };
+    names.sort();
+    names.dedup();
+    let mut writes: Vec<String> = names.iter().map(|n| format!("{SKILLS}/{n}")).collect();
+    match writes.len() {
+        0 => Action::FsWrite {
+            path: SKILLS.to_owned(),
+        },
+        1 => Action::FsWrite {
+            path: writes.remove(0),
+        },
+        _ => Action::Patch { writes },
+    }
+}
+
+/// The `name` of a `skill_manage` operation when it is one plain path segment.
+fn skill_name(operation: &Value) -> Option<String> {
+    let name = operation.get("name").and_then(Value::as_str)?;
+    let plain = !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\', '\0']);
+    plain.then(|| name.to_owned())
 }
 
 /// `terminal` runs `command` in the session's persistent bash (Git Bash on

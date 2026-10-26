@@ -47,6 +47,17 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.cache/opencode/node_modules/**",
         ],
     )],
+    credentials: &[Paths::new(
+        "OpenCode: its provider keys and OAuth tokens, its MCP sign-ins and the\n\
+         database holding its account tokens, in its data directory on every OS\n\
+         (`packages/opencode/src/auth/index.ts`, `mcp/auth.ts`,\n\
+         `core/src/database/database.ts`; `XDG_DATA_HOME` moving it is not followed)",
+        &[
+            "~/.local/share/opencode/auth.json",
+            "~/.local/share/opencode/mcp-auth.json",
+            "~/.local/share/opencode/opencode*.db*",
+        ],
+    )],
 };
 
 /// OpenCode 1 runs as `opencode`: the compiled binary, or the npm package's

@@ -41,6 +41,21 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         package_dirs: &[&["@continuedev", "cli"]],
         helper: None,
     },
+    // `cn` is not set up by `moat init`, so `CONTINUE_GLOBAL_DIR` moving its
+    // directory is not followed.
+    protect: crate::contract::Protect {
+        credentials: &[crate::contract::Paths::new(
+            "Continue CLI: the hub login older releases kept (`src/auth/workos.ts`) and\n\
+             the MCP sign-ins of `mcp-remote`, which `cn` starts for a remote server that\n\
+             asks for one (`src/services/MCPService.ts`)",
+            &["~/.continue/auth.json", "~/.mcp-auth/**"],
+        )],
+        taint: &[crate::contract::Paths::new(
+            "Continue CLI: its configuration, whose MCP servers it starts",
+            &["**/.continue/config.yaml"],
+        )],
+        ..crate::contract::Protect::BASE
+    },
     // Its tool calls are Claude Code's, mapped by Claude Code's rows.
     docs: HostDocs {
         hooked_by: "`cn` runs the Claude Code hook, but the released `cn` runs no hooks yet",

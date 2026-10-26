@@ -38,6 +38,16 @@ Claude Code asks the person on `PreToolUse`, except in a permission mode that as
 - Project settings merged over the user's `settings.json`: `.claude/settings.json` and
   `.claude/settings.local.json`.
 
+Credentials: the login Claude Code keeps in a file (`.credentials.json` in its
+configuration directory on Linux and Windows, and on macOS when the Keychain refuses
+it) and the Anthropic profiles in `~/.config/anthropic` are `agent-credentials`': the
+agent's own tools may neither read nor write them, under `CLAUDE_CONFIG_DIR` too. The
+macOS Keychain entry is read by `security find-generic-password -w`, which
+`secrets-paths` denies. `claude setup-token`, which prints a new long-lived token, asks
+(`agent-token`); `claude mcp add`, `add-json`, `login` and `claude plugin install` ask
+(`runs-later`). `openmoat status` and `openmoat doctor` warn when the `claude` on the
+search path is a version with a published advisory (`advisories.rs`).
+
 ## When the hook fails
 
 Before 2.1.295 Claude Code runs the call when the hook is missing, cannot start, exits

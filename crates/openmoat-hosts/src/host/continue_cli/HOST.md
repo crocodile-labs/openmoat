@@ -27,6 +27,11 @@ from a Claude Code one and answers `cn`'s asks as denies.
   the search path.
 - MCP servers: none read; `cn` reads its own configuration and fires no hook.
 
+Credentials: the hub login older releases kept in `~/.continue/auth.json` and the MCP
+sign-ins `mcp-remote` keeps in `~/.mcp-auth/` are `agent-credentials`' (`~/.continue/.env`
+is `secrets-paths`'); `CONTINUE_GLOBAL_DIR` moving the directory is not followed. A write
+of `~/.continue/config.yaml`, whose MCP servers `cn` starts, asks (`runs-later`).
+
 ## When the hook fails
 
 `cn` runs the call when the hook is missing, cannot start, exits non-zero other than 2,

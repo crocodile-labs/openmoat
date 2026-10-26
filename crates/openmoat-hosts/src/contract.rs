@@ -7,6 +7,7 @@ use openmoat_core::{Decision, Verdict};
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisory;
 mod asks;
 mod base;
 mod consent;
@@ -18,6 +19,7 @@ mod protect;
 mod relaxed;
 mod settings;
 
+pub use advisory::{Advisories, Advisory, Platform, Version};
 pub use asks::{Asks, Unseen};
 pub(crate) use asks::{answer, decided};
 pub use consent::ConsentFile;
@@ -115,11 +117,15 @@ pub struct HostSpec {
     /// How the person resumes an agent session after `moat allow` granted it
     /// something, which `moat allow` adds after "a new session asks again".
     pub resume_hint: Option<&'static str>,
-    /// The host's own files the default policy's `kernel-self` rule and the
-    /// taint list protect, in their generated blocks (`tests/protect.rs`).
+    /// The host's own files the default policy's `kernel-self` and
+    /// `agent-credentials` rules and the taint list protect, in their
+    /// generated blocks (`tests/protect.rs`).
     pub protect: Protect,
     /// How to tell the host's process among a command's ancestors.
     pub process: ProcessSpec,
+    /// Published security advisories of the host's releases, which `moat
+    /// doctor` and `moat status` warn about for the version on the search path.
+    pub advisories: Advisories,
     /// What the generated host tables of the docs say (`tests/docs.rs`).
     pub docs: HostDocs,
 }
@@ -140,6 +146,10 @@ pub struct ProjectSettingsSpec {
     /// another file of the project's (Codex's `hooks.json`); `None` when the
     /// host reads none.
     pub local: Option<&'static str>,
+    /// Further files the host reads from that directory as it reads those two
+    /// (OpenCode's `opencode.jsonc` and `.opencode/opencode.jsonc`); empty for
+    /// most hosts.
+    pub more: &'static [&'static str],
     /// A directory of the project whose files the host loads as hooks or
     /// extensions (GitHub Copilot CLI's `.github/hooks`, pi's `.pi/extensions`);
     /// `None` when it has none.
@@ -158,7 +168,10 @@ impl ProjectSettingsSpec {
     /// The files of a project's settings directory, the shared one first.
     #[must_use]
     pub fn files(&self) -> Vec<&'static str> {
-        std::iter::once(self.shared).chain(self.local).collect()
+        std::iter::once(self.shared)
+            .chain(self.local)
+            .chain(self.more.iter().copied())
+            .collect()
     }
 }
 
@@ -168,8 +181,18 @@ impl ProjectSettingsSpec {
 pub struct HookDir {
     /// The directory, relative to the project.
     pub path: &'static str,
+    /// Other directories of the project the host loads the same way
+    /// (OpenCode's `.opencode/plugin`, beside `.opencode/plugins`).
+    pub also: &'static [&'static str],
     /// The file name extensions it loads (`json`, or `js` and `ts`).
     pub extensions: &'static [&'static str],
+}
+
+impl HookDir {
+    /// [`Self::path`] and then [`Self::also`].
+    pub fn paths(&self) -> impl Iterator<Item = &'static str> {
+        std::iter::once(self.path).chain(self.also.iter().copied())
+    }
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.
@@ -228,6 +251,24 @@ pub struct InstallSpec {
     /// OpenMoat's and the lock pins with the hook file; `None` for a host that
     /// keeps no such record, or one OpenMoat cannot write ([`Self::trust_step`]).
     pub consent: Option<&'static dyn ConsentFile>,
+    /// Further directories the host reads laid out like its configuration
+    /// directory (OpenCode's `OPENCODE_CONFIG_DIR`, Hermes Agent's profiles):
+    /// `moat init` records the ones it finds, and every rule naming the
+    /// configuration directory covers them too, as it covers a moved one.
+    /// Empty for most hosts.
+    pub also_dirs: &'static [AlsoDir],
+}
+
+/// Where to find a further directory a host reads laid out like its
+/// configuration directory ([`InstallSpec::also_dirs`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlsoDir {
+    /// The directory this environment variable names (OpenCode's
+    /// `OPENCODE_CONFIG_DIR`).
+    Variable(&'static str),
+    /// Each directory in this folder of the configuration directory (Hermes
+    /// Agent's `profiles`, each a home of its own).
+    EachIn(&'static str),
 }
 
 /// Versions of a host whose hook API OpenMoat does not support yet

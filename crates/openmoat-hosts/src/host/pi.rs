@@ -30,6 +30,7 @@ use crate::contract::{
 use crate::wire::owned_file::OwnedFile;
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisories;
 mod bench;
 mod doc;
 mod mcp;
@@ -111,8 +112,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".pi",
         shared: "settings.json",
         local: None,
+        more: &[],
         hook_dir: Some(HookDir {
             path: ".pi/extensions",
+            also: &[],
             extensions: &["js", "ts"],
         }),
         reader: &project_settings::READER,
@@ -120,6 +123,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

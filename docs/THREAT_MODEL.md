@@ -92,6 +92,17 @@ something OpenMoat claims to stop.
   proxy pinned on first sight before ADR-032 keep those pins. Plugin and managed MCP
   servers are not read (ADR-026).
 
+- **An agent's own process is not checked.** A flaw inside the agent itself runs where
+  no hook sees it: OpenCode 1.0.137 to 1.18.32 on Windows and WSL ran a command from a
+  remote MCP server's OAuth sign-in address as it connected (Pillar Security, fixed in
+  1.18.33), and the advisories of every supported agent are of this kind. OpenMoat asks
+  before the agent runs its own CLI to save an MCP server or start an MCP sign-in
+  (`runs-later`), holds a new server's tools until a person accepts them, and
+  `openmoat status` and `openmoat doctor` warn, in one line per agent, when the version
+  on the search path has a published advisory with a fixed version (the list is in each
+  agent's spec, `advisories.rs`, and is only as current as the OpenMoat release). A
+  server the person adds is trusted by them, and the sign-in itself runs unchecked.
+
 - **Package checks are offline and name-based (ADR-030).** `package-near-miss` compares
   each installed name with a bundled list of popular names per registry, written by
   hand and refreshed with `scripts/refresh-top-packages.py`; nothing asks a registry.
@@ -125,7 +136,12 @@ something OpenMoat claims to stop.
   The Maven and Gradle settings `build-credentials` names are denied by the hook only
   (ADR-034): where a policy makes them readable to sandboxed commands (a read root or
   allow rule over `~/.m2` or `~/.gradle`), any program such a command runs can read
-  them, not only `mvn` and `gradle`.
+  them, not only `mvn` and `gradle`. The same holds for `agent-credentials`, the
+  files where each agent keeps its login, provider keys and OAuth tokens: the hook
+  denies the agent's own tools reading or writing them (a shell command naming them,
+  a file tool, an MCP argument), but a sandbox leaves them readable, since the agent
+  reads its own login there; a program a sandboxed command runs, or a script that
+  builds the path at run time, can still read them.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`openmoat doctor` names a weakened setting; the differential suite executes
@@ -500,7 +516,9 @@ something OpenMoat claims to stop.
 
   An OpenClaw `ask` becomes OpenClaw's approval request, which OpenClaw blocks when no
   one can answer it (no approval route, timeout).
-  **OpenClaw runs every call unchecked when the Gateway does not load the plugin**:
+  **OpenClaw runs every call unchecked when the Gateway does not load the plugin**
+  (a plugin OpenClaw must load or refuse to run is tracked upstream in
+  [openclaw/openclaw#147129](https://github.com/openclaw/openclaw/issues/147129)):
   `plugins.enabled: false`, `openmoat` in `plugins.deny` or missing from
   `plugins.allow`, the file or its `plugins.load.paths` entry removed, or a Gateway
   started with an `OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` or `OPENCLAW_CONFIG_PATH` that

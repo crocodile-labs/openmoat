@@ -30,12 +30,13 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
+    AlsoDir, Asks, GUARD_BUDGET_S, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
     Location, McpFile, McpSpec, ProjectSettingsSpec, Unsupported, wrong_event,
 };
 use crate::wire::owned_file::OwnedFile;
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisories;
 mod bench;
 mod doc;
 mod location;
@@ -109,6 +110,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             why: "OpenCode 2 loads plugins through a new API that OpenMoat's plugin does \
                  not support yet; OpenMoat supports OpenCode 1 (`opencode-ai`)",
         }),
+        // a further configuration directory, read like this one with its own
+        // plugins, tools and configuration files (`config/paths.ts`)
+        also_dirs: &[AlsoDir::Variable("OPENCODE_CONFIG_DIR")],
         ..InstallSpec::BASE
     }),
     // `mcp.<name>` in the configuration files OpenCode merges: the global
@@ -126,18 +130,21 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         ],
         tool_names: &mcp::Joined,
     }),
-    // A project's `opencode.json` and `.opencode/opencode.json` add plugins,
-    // MCP servers and permission rules, and its `.opencode/plugins/` load in
-    // OpenCode's process at start, with no prompt (`config/config.ts`,
-    // `config/paths.ts`). OpenCode 1 has no setting that removes a plugin, so
-    // the person's own file cannot turn OpenMoat's off. Writes to these files
-    // ask (`runs-later` in the default policy).
+    // A project's `opencode.json[c]` and `.opencode/opencode.json[c]` add
+    // plugins, MCP servers and permission rules, and its `.opencode/plugins/`
+    // and `.opencode/plugin/` load in OpenCode's process at start, with no
+    // prompt (`config/config.ts`, `config/paths.ts`, `config/plugin.ts`).
+    // OpenCode 1 has no setting that removes a plugin, so the person's own
+    // file cannot turn OpenMoat's off. Writes to these files ask (`runs-later`
+    // in the default policy).
     project_settings: Some(ProjectSettingsSpec {
         dir: "",
         shared: "opencode.json",
         local: Some(".opencode/opencode.json"),
+        more: &["opencode.jsonc", ".opencode/opencode.jsonc"],
         hook_dir: Some(HookDir {
             path: ".opencode/plugins",
+            also: &[".opencode/plugin"],
             extensions: &["js", "ts"],
         }),
         reader: &project_settings::READER,
@@ -145,6 +152,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

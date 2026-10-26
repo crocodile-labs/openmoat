@@ -214,16 +214,38 @@ fn mcp_process_cron_and_agent_state_tools() {
     for tool in ["clarify", "session_search", "skills_list", "delegate_task"] {
         assert_eq!(call(tool, json!({})).unwrap().action, None, "{tool}");
     }
-    for name in ["memory", "skill_manage", "tool_call"] {
-        assert!(
-            matches!(action(name), Some(Action::UnknownTool { .. })),
-            "{name}"
-        );
-    }
+    assert!(matches!(action("tool_call"), Some(Action::UnknownTool { .. })));
     let Some(Action::UnknownTool { hosts, .. }) = action("tool_call") else {
         panic!("tool_call");
     };
     assert!(hosts.iter().any(|h| h.contains("evil.com")), "{hosts:?}");
+}
+
+/// `memory` and `skill_manage` write what Hermes loads into later sessions,
+/// so the taint list and `runs-later` see them as the file tools' writes.
+#[test]
+fn memory_and_skill_tools_write_the_hermes_home() {
+    let write = |path: &str| Action::FsWrite {
+        path: path.to_owned(),
+    };
+    assert_eq!(action("memory"), Some(write("~/.hermes/memories")));
+    assert_eq!(action("skill_manage"), Some(write("~/.hermes/skills/deploy")));
+    let ops = |names: Value| call("skill_manage", json!({"operations": names})).unwrap().action;
+    assert_eq!(
+        ops(json!([{"action": "create", "name": "b"}, {"action": "patch", "name": "a"}])),
+        Some(Action::Patch {
+            writes: vec!["~/.hermes/skills/a".into(), "~/.hermes/skills/b".into()]
+        })
+    );
+    // A name that is not one plain segment names no folder of its own.
+    for bad in [json!("../../.ssh"), json!(""), json!(".."), json!(7)] {
+        let names = json!([{"action": "create", "name": bad}]);
+        assert_eq!(ops(names), Some(write("~/.hermes/skills")), "{bad}");
+    }
+    assert_eq!(
+        call("skill_manage", json!({"name": "x"})).unwrap().action,
+        Some(write("~/.hermes/skills/x"))
+    );
 }
 
 #[test]

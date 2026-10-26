@@ -44,6 +44,16 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.github/copilot-instructions.md",
         ],
     )],
+    credentials: &[Paths::new(
+        "GitHub Copilot CLI: `config.json`, where its login goes when there is no\n\
+         keychain, and the fallback stores of MCP sign-ins and MCP secrets\n\
+         (docs: Authenticate Copilot CLI, config-dir reference)",
+        &[
+            "~/.copilot/config.json",
+            "~/.copilot/mcp-oauth-config/**",
+            "~/.copilot/mcp-secrets/**",
+        ],
+    )],
 };
 
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {

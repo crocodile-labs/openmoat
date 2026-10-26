@@ -58,8 +58,12 @@ call to them.
   calls through `hermes_tools` fires the hook on its own.
 - `process_manage` `write`/`submit` (`Unchecked` `Shell`); `cronjob_manage` other than
   `list` (`Unchecked` `UnknownTool`, its `script` read as a command).
+- `memory` (`FsWrite` of `memories/` in the Hermes home) and `skill_manage`
+  (`FsWrite` of `skills/<name>` for each skill its `operations` name, `Patch` for
+  several): the notes and skills Hermes loads into later sessions. A skill write asks (`runs-later`); a memory write asks once the session
+  has read untrusted content (session taint).
 - MCP tools `mcp__<server>__<tool>` (`McpTool`).
-- Any other tool (`memory`, `skill_manage`, `skill_view`, the other `browser_*` tools,
+- Any other tool (`skill_view`, the other `browser_*` tools,
   `vision_analyze`, `computer_use`, the messaging tools, connectors, a plugin's tool):
   `UnknownTool`.
 - Ungoverned: `todo_list`, `clarify`, `session_search`, `skills_list`, `delegate_task`
@@ -98,7 +102,16 @@ or a `hermes -z` one-shot run, which approve asks unseen.
 - Profiles: `~/.hermes/profiles/<name>/` is a home of its own, chosen with `hermes -p`,
   the sticky `active_profile` file or `HERMES_HOME`. `openmoat init` sets up the one home
   this environment names; to protect a profile, run it with `HERMES_HOME` naming that
-  profile. Any other profile runs without OpenMoat's hook.
+  profile. Any other profile runs without OpenMoat's hook. `openmoat init` records the
+  profiles it finds, and every rule naming `~/.hermes` covers each of them too (as found
+  then and when a call is checked), so another profile's `config.yaml`, allowlist,
+  `.env`, plugins and hooks are `kernel-self`'s like the home's own.
+- Credentials: the secret files and folders Hermes's own file tools refuse
+  (`agent/file_safety.py`: `auth.json`, `.anthropic_oauth.json`, `mcp-tokens/`,
+  `vault/`, `webapp/`, `browser-profile/`, …), in the home and each profile, which its
+  terminal tool still reaches; `agent-credentials` denies the agent's own tools reading
+  or writing them (its `.env` is `secrets-paths`'). `hermes mcp` (the picker), `hermes
+  mcp add`, `install`, `configure`, `login` and `reauth` ask (`runs-later`).
 - MCP servers: `mcp_servers` in `config.yaml`, pinned one by one; tools are named
   `mcp__<server>__<tool>`, each part with every character but ASCII letters, digits and
   `_` as `_`, a name longer than 64 characters cut and hashed. Hermes reads no project
@@ -114,11 +127,14 @@ itself, its `config.yaml`, `shell-hooks-allowlist.json`, `.env`, `active_profile
 `plugins/`, `hooks/`, `agent-hooks/` and the `profiles` folder; setting
 `HERMES_SAFE_MODE`; and `hermes config set hooks…`, `approvals…`, `plugins…` or
 `HERMES_SAFE_MODE`,
-`hermes hooks revoke` and `hermes profile use`. `runs-later` asks before writes to
-`cron/`, `skills/`, another profile's configuration, allowlist, `.env`, plugins, hooks,
-skills and cron jobs, and a project's `.hermes/plugins/`. Once a session has read
-untrusted content, writes to `memories/`, `SOUL.md`, a project's `.hermes.md` and
-`.hermes/` ask too (`session-taint`).
+`hermes hooks revoke` and `hermes profile use`; for a profile `openmoat init` found,
+the same files of that profile. `runs-later` asks before writes to `cron/`, `skills/`
+(the `skill_manage` tool's too), another profile's configuration, allowlist, `.env`,
+plugins, hooks, skills and cron jobs, and a project's `.hermes/plugins/`. Once a session
+has read untrusted content, writes to `memories/` (the `memory` tool's too), `SOUL.md`,
+a project's `.hermes.md` and `.hermes/` ask too (`session-taint`). `openmoat status`
+and `openmoat doctor` warn when the `hermes` on the search path is a version with a
+published advisory (`advisories.rs`).
 
 ## When the hook fails
 

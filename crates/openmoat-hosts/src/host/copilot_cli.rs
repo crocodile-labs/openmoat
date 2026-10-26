@@ -30,6 +30,7 @@ use crate::contract::{
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod advisories;
 mod bench;
 mod doc;
 pub(crate) mod hook_file;
@@ -94,8 +95,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir: ".github/copilot",
         shared: "settings.json",
         local: Some("settings.local.json"),
+        more: &[],
         hook_dir: Some(HookDir {
             path: ".github/hooks",
+            also: &[],
             extensions: &["json"],
         }),
         reader: &super::claude_code::project_settings::READER,
@@ -103,6 +106,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,
+    advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     ..HostSpec::BASE
 };

@@ -256,21 +256,29 @@ fn hook_only_deny_groups_are_left_to_the_hook() {
 }
 
 #[test]
-fn the_default_policy_leaves_build_credentials_out_of_os_layers() {
+fn the_default_policy_leaves_build_and_agent_credentials_out_of_os_layers() {
     let ir = lowered(crate::DEFAULT_POLICY);
     let json = serde_json::to_string(&ir.fs).unwrap();
+    // An agent under `openmoat run` reads its own login inside the sandbox.
     for file in [
         ".m2/settings.xml",
         ".m2/settings-security.xml",
         "gradle.properties",
+        ".claude/.credentials.json",
+        ".codex/auth.json",
+        "opencode/auth.json",
+        ".hermes/auth.json",
     ] {
         assert!(!json.contains(file), "{file} reaches OS layers: {json}");
     }
-    assert!(
-        ir.decide_only
-            .iter()
-            .any(|d| d.kind == "fs.read" && d.rules == ["build-credentials"])
-    );
+    for rule in ["build-credentials", "agent-credentials"] {
+        assert!(
+            ir.decide_only
+                .iter()
+                .any(|d| d.kind == "fs.read" && d.rules.iter().any(|r| r == rule)),
+            "{rule}"
+        );
+    }
 }
 
 #[test]

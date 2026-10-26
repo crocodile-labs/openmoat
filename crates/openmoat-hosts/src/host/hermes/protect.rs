@@ -37,6 +37,32 @@ pub(super) const PROTECT: Protect = Protect {
             "**/.hermes/**",
         ],
     )],
+    credentials: &[Paths::new(
+        "Hermes Agent: the secret files and folders its own file tools refuse\n\
+         (`agent/file_safety.py`; its `.env` is `secrets-paths`'), in its home and\n\
+         in each profile; its terminal tool reaches them, which this rule closes",
+        &[
+            "~/.hermes/auth.json",
+            "~/.hermes/auth.lock",
+            "~/.hermes/.anthropic_oauth.json",
+            "~/.hermes/webhook_subscriptions.json",
+            "~/.hermes/auth/google_oauth.json",
+            "~/.hermes/cache/bws_cache.json",
+            "~/.hermes/mcp-tokens/**",
+            "~/.hermes/vault/**",
+            "~/.hermes/webapp/**",
+            "~/.hermes/browser-profile/**",
+            "~/.hermes/profiles/*/auth.json",
+            "~/.hermes/profiles/*/.anthropic_oauth.json",
+            "~/.hermes/profiles/*/webhook_subscriptions.json",
+            "~/.hermes/profiles/*/auth/google_oauth.json",
+            "~/.hermes/profiles/*/cache/bws_cache.json",
+            "~/.hermes/profiles/*/mcp-tokens/**",
+            "~/.hermes/profiles/*/vault/**",
+            "~/.hermes/profiles/*/webapp/**",
+            "~/.hermes/profiles/*/browser-profile/**",
+        ],
+    )],
 };
 
 /// `hermes` is a Python entry point (`hermes_cli.main:main`), so a session
