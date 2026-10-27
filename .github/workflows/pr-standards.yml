@@ -1,7 +1,17 @@
 name: pr-standards
 
+# Runs on `pull_request` and on `pull_request_target`, and both run every check
+# (a job skipped by an `if` would report success under the same check name).
+# Labels are written only where the token can: a `pull_request` run from a fork
+# has a read-only token, so for a fork the `pull_request_target` run adds them.
+# `pull_request_target` is safe here because the job never checks out or runs
+# the pull request's code: it reads the title (through an environment
+# variable, never pasted into a script), the file list and the body with `gh`,
+# and edits labels.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  pull_request_target: # zizmor: ignore[dangerous-triggers] no checkout, no PR code runs
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
@@ -20,9 +30,6 @@ jobs:
       REPO: ${{ github.repository }}
       TITLE: ${{ github.event.pull_request.title }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: derive labels
         id: derive
         shell: bash
@@ -77,6 +84,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: apply labels
+        if: >-
+          github.event_name == 'pull_request_target' ||
+          github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         env:
           TYPE: ${{ steps.derive.outputs.type }}
