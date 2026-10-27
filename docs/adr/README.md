@@ -45,6 +45,7 @@ each ADR records the outcome it needs.
 | [035](ADR-035-bodyless-curl-is-a-fetch.md) | A `curl` or `wget` command that provably sends nothing but its URLs (an allowlist of options, no expansions, a domain-name host) is a `fetch` of each host, decided like `WebFetch`; anything else stays `net` | accepted; refines ADR-017; amended 2026-10-20 (`-q`/`--no-config --no-netrc` required, every written file checked, `-w` and server-chosen names stay `net`) |
 | [036](ADR-036-pack-signature-namespace.md) | Policy packs are signed and verified in the namespace `openmoat-pack`, repository policies in `openmoat-policy`, so a signed pack is never a signed repository policy or the reverse; `trust-key` allows both | accepted; amends ADR-031; amended by ADR-037 (repository policies signed in `openmoat-repo-policy`) |
 | [037](ADR-037-repo-policy-signature-namespace.md) | Repository policies are signed and verified in `openmoat-repo-policy`; nothing verifies in `openmoat-policy`, which earlier releases used for packs too, so an old pack's signature is no repository policy signature | accepted; amends ADR-036 |
+| [038](ADR-038-folders-holding-denied-paths-ask.md) | Reading a folder that is or holds the literal folder of a deny rule's `fs.read` pattern, or writing into one that holds a deny rule's `fs.write` folder, asks (`protected-contents`); extractions (`tar -x -C`, `unzip -d`) and `git checkout` pathspecs are writes | accepted; refines ADR-002 and ADR-013 |
 
 ## Names in older ADRs
 

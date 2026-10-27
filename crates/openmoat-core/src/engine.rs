@@ -15,11 +15,13 @@ use crate::verdict::{Decision, Verdict};
 
 mod aliases;
 mod atoms;
+mod contents;
 mod context;
 mod egress;
 mod taint;
 
 use atoms::checked_atoms;
+pub use contents::HOLDS_PROTECTED_RULE;
 pub use taint::{Secret, TAINT_RULE, Taint};
 
 /// Everything the engine needs from the environment. Supplied by the caller.
@@ -70,6 +72,8 @@ pub struct CompiledPolicy<'p> {
     defer: Vec<CompiledGroup<'p>>,
     /// Paths a write to asks once the session read untrusted content (`taint`).
     protected: Vec<GlobPattern>,
+    /// The folders deny rules' paths lie in, which reading or writing asks for.
+    folders: contents::ProtectedFolders,
 }
 
 #[derive(Debug)]
@@ -113,6 +117,7 @@ impl<'p> CompiledPolicy<'p> {
             ask: compile_list(&policy.ask, false)?,
             defer: compile_list(&policy.defer, false)?,
             protected: taint::compile_protected(policy, ctx)?,
+            folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
         })
     }
 
@@ -351,9 +356,12 @@ impl CompiledPolicy<'_> {
             )),
             _ => None,
         };
+        // A folder holding paths a deny rule names asks, whatever allows it (ADR-038).
+        let folders = atoms.iter().filter_map(|atom| self.folders.decide(atom));
         atoms
             .iter()
             .filter_map(|atom| self.evaluate_atomic(atom))
+            .chain(folders)
             .chain(aliased)
             .chain(pins)
             .chain(unparsed)

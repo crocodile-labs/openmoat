@@ -1166,7 +1166,8 @@
   action: { shell: "npm_config_script_shell=/tmp/x npm test" }
   expect: { verdict: defer, rules: [default] }
 # a word that is a path wherever it appears (`/`, `/etc`) is still read, also as a
-# `tr` set: deferred, not allowed
+# `tr` set: deferred, not allowed. The folder rule (ADR-038) leaves `/` and the
+# folders above the home out, so a bare `/` word does not ask
 - id: defer-tr-absolute-slash-set
   threat: T4
   action: { shell: "tr '/' '_' < notes.txt" }
@@ -1834,4 +1835,111 @@
 - id: ask-hermes-skill-manage-writes-skill-folder
   threat: T5
   action: { fs_write: "~/.hermes/skills/deploy" }
+  expect: { verdict: ask, rules: [runs-later] }
+
+# The folder rule (ADR-038): a read of a folder that holds paths a deny rule names
+# (`cp -r`, `grep -r`, `tar c`, `rsync`, `zip -r` of it, or `ls`) asks, since the
+# classifier sees one read of the folder and the deny names files inside it
+- id: ask-cp-r-codex-folder
+  threat: T1
+  action: { shell: "cp -r ~/.codex /p/x" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-grep-r-gemini-folder
+  threat: T1
+  action: { shell: "grep -r token ~/.gemini" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-tar-hermes-folder
+  threat: T1
+  action: { shell: "tar czf a.tgz ~/.hermes" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-rsync-opencode-data-folder
+  threat: T1
+  action: { shell: "rsync -a ~/.local/share/opencode /tmp/o" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-cp-r-pi-agent-folder
+  threat: T1
+  action: { shell: "cp -r ~/.pi/agent /p/p" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-zip-r-copilot-folder
+  threat: T1
+  action: { shell: "zip -r a.zip ~/.copilot" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-cp-r-openclaw-folder
+  threat: T1
+  action: { shell: "cp -r ~/.openclaw /p/o" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-rsync-codex-folder-contents
+  threat: T1
+  action: { shell: "rsync -a ~/.codex/ /p/" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-cp-r-moved-codex-folder
+  threat: T1
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.codex": /srv/codex } }
+  action: { shell: "cp -r /srv/codex /p/x" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-cp-r-codex-folder-other-case
+  threat: T1
+  context: { cwd: /p, project: /p, case_insensitive_paths: true }
+  action: { shell: "cp -r ~/.CODEX /p/x" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-read-tool-codex-folder
+  threat: T2
+  action: { fs_read: "~/.codex" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-cp-r-docker-folder
+  threat: T1
+  action: { shell: "cp -r ~/.docker /p/d" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-grep-r-containers-folder
+  threat: T1
+  action: { shell: "grep -r x ~/.config/containers" }
+  expect: { verdict: ask, rules: [protected-contents] }
+- id: ask-grep-r-doctl-folder
+  threat: T1
+  action: { shell: "grep -r x ~/.config/doctl" }
+  expect: { verdict: ask, rules: [protected-contents] }
+# the root and the folders above the home are left to the rules that name the
+# home (`home-sweep` asks for reading `~`): the folder rule does not ask for them
+- id: defer-ls-root
+  threat: T1
+  action: { shell: "ls /" }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-ls-home-still-asks
+  threat: T1
+  action: { shell: "ls ~" }
+  expect: { verdict: ask, rules: [home-sweep] }
+- id: ask-write-into-config-folder
+  threat: T9
+  action: { fs_write: "~/.config" }
+  expect: { verdict: ask, rules: [protected-contents] }
+# an extraction into the project's `.git` asks like any write there
+- id: ask-tar-extract-into-git-dir
+  threat: T9
+  action: { shell: "tar xf e.tar -C /p/.git" }
+  expect: { verdict: ask, rules: [git-internals] }
+# `git checkout [<tree-ish>] [--] <path>` rewrites each path from a commit, as
+# `git restore` does: files run later ask (`runs-later`)
+- id: ask-git-checkout-claude-hook
+  threat: T9
+  action: { shell: "git checkout -- .claude/hooks/x.sh" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-git-checkout-workflow-from-branch
+  threat: T9
+  action: { shell: "git checkout main -- .github/workflows/ci.yml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-git-checkout-pre-commit-from-old-commit
+  threat: T9
+  action: { shell: "git checkout HEAD~2 -- .pre-commit-config.yaml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-git-checkout-editor-tasks
+  threat: T9
+  action: { shell: "git checkout -- .vscode/tasks.json" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-git-checkout-workflow-without-separator
+  threat: T9
+  action: { shell: "git checkout main .github/workflows/ci.yml" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-git-checkout-claude-hook-only-operand
+  threat: T9
+  action: { shell: "git checkout .claude/hooks/x.sh" }
   expect: { verdict: ask, rules: [runs-later] }

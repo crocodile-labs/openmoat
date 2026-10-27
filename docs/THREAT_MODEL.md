@@ -51,7 +51,7 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 
 | # | Class | Hook | OS layer |
 |---|---|---|---|
-| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included | No reads of secret paths, network only through a proxy to allowed hosts |
+| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included; a read of a folder that holds denied paths (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `tar czf a.tgz ~/.docker`) asks (`protected-contents`, ADR-038), since the classifier sees one read of the folder and the deny names files inside it | No reads of secret paths, network only through a proxy to allowed hosts |
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, Gemini CLI `read_file`/`read_many_files`/`glob`/`grep_search`/`list_directory`, and MCP path arguments | Only under `openmoat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset` | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `branch -D`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
@@ -141,7 +141,10 @@ something OpenMoat claims to stop.
   denies the agent's own tools reading or writing them (a shell command naming them,
   a file tool, an MCP argument), but a sandbox leaves them readable, since the agent
   reads its own login there; a program a sandboxed command runs, or a script that
-  builds the path at run time, can still read them.
+  builds the path at run time, can still read them. A recursive read of the folder
+  that holds them (`cp -r ~/.codex x`, `tar czf a.tgz ~/.hermes`) is one read of the
+  folder; the hook asks for it (`protected-contents`, ADR-038), and a host that
+  cannot ask denies it, but once a person approves it the copy holds the files.
 - **What the Standard tier does not cover.** It is as strong as each host's sandbox
   and OpenMoat's translation, and every host version bump must keep the generated keys
   working (`openmoat doctor` names a weakened setting; the differential suite executes

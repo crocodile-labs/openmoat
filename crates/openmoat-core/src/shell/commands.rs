@@ -17,8 +17,8 @@ use super::tokens::{
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
-    copy, cwd, database, decoders, embedded, git, invocation, mailbox, make, operands, options,
-    text,
+    copy, cwd, database, decoders, embedded, extract, git, invocation, mailbox, make, operands,
+    options, text,
 };
 use crate::action::AtomicAction;
 use crate::host;
@@ -322,6 +322,9 @@ fn classify_as_written(
         .extend(options::fd_pattern(&argv, program).or(options::grep_pattern(&argv, program)));
     super::path_options::classify(&argv, program, &mut text_operands, ctx, sink)?;
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
+    for dir in extract::destinations(&argv, program) {
+        sink.write(ctx, &dir)?;
+    }
     for code in embedded::commands(&argv, program) {
         classify_into(&code, ctx, sink, depth + 1)?;
     }

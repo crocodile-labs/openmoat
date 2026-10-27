@@ -11,7 +11,8 @@
 //! `--git-dir` does the same: git takes its config and hooks from the directory it
 //! names, which may be one planted in the project with ordinary file writes.
 //!
-//! `git restore PATH` rewrites `PATH` in the working tree, so each path is an `fs.write`.
+//! `git restore PATH` rewrites `PATH` in the working tree, so each path is an `fs.write`;
+//! so is each pathspec of `git checkout [<tree-ish>] [--] <pathspec>…` (`checkout_paths`).
 //! A local repository that `clone`, `fetch`, `pull`, `ls-remote` or `archive --remote`
 //! names is an `fs.read`; the directory `clone` creates and a local repository
 //! `push` updates are `fs.write`s (`remote_paths`).
@@ -214,6 +215,9 @@ pub(super) fn push_shell(
             }
         }
     }
+    for path in checkout_paths(&git.subcommand) {
+        sink.write(ctx, path)?;
+    }
     for (path, writes) in remote_paths(&git.subcommand) {
         if writes {
             sink.write(ctx, path)?;
@@ -230,6 +234,45 @@ pub(super) fn push_shell(
         })?;
     }
     Ok(())
+}
+
+/// `git checkout` options whose value is the next word unless given with `=`.
+const CHECKOUT_VALUED: &[&str] = &["-b", "-B", "--orphan", "--pathspec-from-file"];
+
+/// The pathspecs a subcommand (`git` first) rewrites in the working tree when it
+/// is `git checkout [<tree-ish>] [--] <pathspec>…`: every word after `--`; without
+/// `--`, every operand after the first (git reads a second operand as a path) and
+/// a first one that can only be a path, since no ref name starts with `.`, `/` or
+/// `~` or holds `*`, `?` or `[` (`git checkout .claude/hooks/x.sh`). A plain
+/// `git checkout main` writes nothing here. `--pathspec-from-file` names the paths
+/// in a file: the working tree (`.`) is written.
+fn checkout_paths(sub: &[String]) -> Vec<&str> {
+    if sub.get(1).map(String::as_str) != Some("checkout") {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut operands = Vec::new();
+    let mut words = sub[2..].iter();
+    while let Some(word) = words.next() {
+        if word == "--" {
+            out.extend(words.by_ref().map(String::as_str));
+        } else if word.starts_with("--pathspec-from-file") {
+            out.push(".");
+            if !word.contains('=') {
+                words.next();
+            }
+        } else if CHECKOUT_VALUED.contains(&word.as_str()) {
+            words.next();
+        } else if !word.starts_with('-') {
+            operands.push(word.as_str());
+        }
+    }
+    let only_a_path = |w: &&str| w.starts_with(['.', '/', '~']) || w.contains(['*', '?', '[']);
+    if let Some((first, rest)) = operands.split_first() {
+        out.extend(Some(*first).filter(only_a_path));
+        out.extend(rest);
+    }
+    out
 }
 
 /// Options of `clone`, `fetch`, `pull`, `push`, `ls-remote` and `archive` whose
@@ -332,7 +375,43 @@ fn is_local_repository(remote: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_name, parse, remote_paths};
+    use super::{checkout_paths, config_name, parse, remote_paths};
+
+    #[test]
+    fn checkout_pathspecs_are_written() {
+        for (cmd, paths) in [
+            (
+                "git checkout -- .claude/hooks/x.sh",
+                &[".claude/hooks/x.sh"][..],
+            ),
+            ("git checkout main -- a b", &["a", "b"]),
+            (
+                "git checkout HEAD~2 -- .pre-commit-config.yaml",
+                &[".pre-commit-config.yaml"],
+            ),
+            (
+                "git checkout main .github/workflows/ci.yml",
+                &[".github/workflows/ci.yml"],
+            ),
+            ("git checkout main src/main.rs", &["src/main.rs"]),
+            ("git checkout .claude/hooks/x.sh", &[".claude/hooks/x.sh"]),
+            ("git checkout ./a ~/b", &["./a", "~/b"]),
+            ("git checkout '*.rs'", &["'*.rs'"]),
+            ("git checkout .", &["."]),
+            ("git checkout --pathspec-from-file=list main", &["."]),
+            ("git checkout --pathspec-from-file list main", &["."]),
+            ("git checkout main", &[]),
+            ("git checkout origin/feature", &[]),
+            ("git checkout -b feature", &[]),
+            ("git checkout -b feature origin/feature", &[]),
+            ("git checkout -B f --track origin/f", &[]),
+            ("git checkout --orphan gh-pages", &[]),
+            ("git checkout -", &[]),
+            ("git restore a", &[]),
+        ] {
+            assert_eq!(checkout_paths(&argv(cmd)), paths, "{cmd}");
+        }
+    }
 
     #[test]
     fn local_remotes_are_read_and_clone_and_push_targets_written() {
