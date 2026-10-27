@@ -1,7 +1,12 @@
 name: pr-standards
 
+# `pull_request_target`, so a pull request from a fork gets its labels too: a
+# `pull_request` run from a fork has a read-only token, which cannot add them.
+# Safe here because the job never checks out or runs the pull request's code:
+# it reads the title (through an environment variable, never pasted into a
+# script), the file list and the body with `gh`, and edits labels.
 on:
-  pull_request:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] no checkout, no PR code runs
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
@@ -20,9 +25,6 @@ jobs:
       REPO: ${{ github.repository }}
       TITLE: ${{ github.event.pull_request.title }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: derive labels
         id: derive
         shell: bash
