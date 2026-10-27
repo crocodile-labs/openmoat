@@ -318,9 +318,10 @@ fn the_plugin_names_the_host_and_waits_as_long_as_the_spec_says() {
     assert!(source.contains(r#"hook_event_name: "tool.execute.before""#));
 }
 
-/// A copy of another agent's folder asks under the default policy
+/// A read of another agent's folder asks under the default policy
 /// (`protected-contents`, ADR-038); OpenCode 1 cannot ask, so it is a deny that
-/// names the rule and how to approve it.
+/// names the rule and how to approve it. Through the `read` tool, which is
+/// checked on every OS (OpenCode's shell on Windows is left to OpenCode).
 #[test]
 fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
     let policy = openmoat_core::Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
@@ -334,7 +335,7 @@ fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
         case_insensitive_paths: false,
     };
     let compiled = openmoat_core::CompiledPolicy::compile(&policy, &ctx).unwrap();
-    let request = call("bash", json!({"command": "cp -r ~/.codex /p/x"}), json!({})).unwrap();
+    let request = call("read", json!({"filePath": "/Users/me/.codex"}), json!({})).unwrap();
     let decision = compiled.decide(request.action.as_ref().unwrap());
     assert_eq!(decision.verdict, Verdict::Ask);
     assert_eq!(decision.rules, [openmoat_core::HOLDS_PROTECTED_RULE]);
