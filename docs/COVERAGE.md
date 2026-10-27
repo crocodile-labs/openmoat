@@ -8,7 +8,7 @@ the verdict and rule ids the default policy must produce for it.
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
 | T1 | Secret exfiltration via shell | 142 | 51 | 3 |
-| T2 | Secret exfiltration via file tools | 38 | 2 | 1 |
+| T2 | Secret exfiltration via file tools | 40 | 2 | 1 |
 | T3 | Secret exfiltration via environment | 101 | 4 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
 | T5 | Supply-chain execution | 14 | 54 | 8 |
@@ -242,6 +242,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T2-read-zsh-history` (attacks): Deny [secrets-paths]
 - `T2-read-bash-history` (attacks): Deny [secrets-paths]
 - `T2-dotenv-template-exclusion-is-exact` (attacks): Deny [secrets-paths]
+- `T2-dotenv-dist-exclusion-is-exact` (attacks): Deny [secrets-paths]
+- `T2-dotenv-mode-example-exclusion-is-exact` (attacks): Deny [secrets-paths]
 - `T2-read-envrc` (attacks): Deny [secrets-paths]
 - `T2-home-session-file-tool-write` (attacks): Ask [persistence]
 - `T2-taint-read-ssh-key-then-github-api` (attacks): Ask [session-taint]

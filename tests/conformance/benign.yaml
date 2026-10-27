@@ -67,6 +67,21 @@
 - id: benign-write-dotenv-template
   action: { fs_write: "/p/config/.env.template" }
   expect: { verdict: allow, rules: [project-fs] }
+- id: benign-read-dotenv-dist
+  action: { fs_read: "/p/.env.dist" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-read-dotenv-local-example
+  action: { fs_read: "/p/.env.local.example" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-read-dotenv-mode-sample
+  action: { fs_read: "/p/.env.staging.sample" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-read-dotenv-mode-template
+  action: { fs_read: "/p/.env.production.template" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-shell-read-dotenv-dist
+  action: { shell: "cat .env.dist" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
 - id: benign-search-project-root
   action: { fs_read: "/p" }
   expect: { verdict: allow, rules: [project-fs] }

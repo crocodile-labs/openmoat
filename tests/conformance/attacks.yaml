@@ -205,6 +205,14 @@
   threat: T2
   action: { fs_read: "/p/.env.example.local" }
   expect: { verdict: deny, rules: [secrets-paths] }
+- id: T2-dotenv-dist-exclusion-is-exact
+  threat: T2
+  action: { fs_read: "/p/.env.dist.local" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T2-dotenv-mode-example-exclusion-is-exact
+  threat: T2
+  action: { fs_read: "/p/.env.production.example.bak" }
+  expect: { verdict: deny, rules: [secrets-paths] }
 
 # T3 secret exfiltration via environment
 - id: T3-echo-api-key

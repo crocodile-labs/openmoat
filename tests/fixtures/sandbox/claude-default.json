@@ -8,8 +8,8 @@
     "fs.write `claude-code.working-directories`: sandboxed commands may write the session's working directories and temp directory; OpenMoat's project is the git root and never the home directory, so a session started above a project writes more than the hook allows"
   ],
   "losses": [
-    "fs.read `secrets-paths`: Claude Code would re-open the exceptions (**/.env.example, **/.env.sample, **/.env.template) outside the working directories too, so they are left out: denied for sandboxed commands",
-    "fs.write `secrets-paths`: Claude Code would re-open the exceptions (**/.env.example, **/.env.sample, **/.env.template) outside the working directories too, so they are left out: denied for sandboxed commands",
+    "fs.read `secrets-paths`: Claude Code would re-open the exceptions (**/.env.example, **/.env.sample, **/.env.template, **/.env.dist, **/.env.*.example, **/.env.*.sample, **/.env.*.template) outside the working directories too, so they are left out: denied for sandboxed commands",
+    "fs.write `secrets-paths`: Claude Code would re-open the exceptions (**/.env.example, **/.env.sample, **/.env.template, **/.env.dist, **/.env.*.example, **/.env.*.sample, **/.env.*.template) outside the working directories too, so they are left out: denied for sandboxed commands",
     "fs.read `agent-temp`: `/tmp/claude-*/**` cannot be granted as a path, so it stays denied",
     "fs.read `agent-temp`: `/private/tmp/claude-*/**` cannot be granted as a path, so it stays denied",
     "fs.write `project-fs`: user settings cannot name the project, so `.moat/**` is denied in every directory",

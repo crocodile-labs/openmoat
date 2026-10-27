@@ -62,6 +62,10 @@ deny:
       - "!**/.env.example"
       - "!**/.env.sample"
       - "!**/.env.template"
+      - "!**/.env.dist"
+      - "!**/.env.*.example"
+      - "!**/.env.*.sample"
+      - "!**/.env.*.template"
       - "~/Library/Keychains/**"
     fs.write: *secret-paths
     # commands that print a stored token or password
