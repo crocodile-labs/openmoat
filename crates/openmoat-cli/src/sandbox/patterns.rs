@@ -95,6 +95,11 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.hermes/plugins/**",
     "**/.hermes",
     "**/.hermes/plugins",
+    // what every Python start runs; an install writes them (`pip install -e .`)
+    "**/site-packages/*.pth",
+    "**/dist-packages/*.pth",
+    "**/sitecustomize.py",
+    "**/usercustomize.py",
 ];
 
 /// The [`RUNS_LATER`] files an agent host loads as its own configuration when

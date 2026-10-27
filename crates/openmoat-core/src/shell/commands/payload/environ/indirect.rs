@@ -1,12 +1,12 @@
 //! Environment reads that use none of the bases `environ.rs` looks for:
 //! Python reaching `os.environ` through `getattr(os, 'environ')`, `vars(os)` or
-//! `os.__dict__`, or running `env` or `printenv` as a child (`os.popen('env')`,
+//! `os.__dict__` (`__import__("os").__dict__` too), or running `env` or `printenv` as a child (`os.popen('env')`,
 //! `subprocess.run(['printenv', 'X'])`); PowerShell's
 //! `[Environment]::GetEnvironmentVariable('X')` and `GetEnvironmentVariables()`,
 //! its `Env:` drive (`Get-ChildItem Env:`, `gci env:X`) and `$env:X` in any
 //! letter case, since PowerShell ignores case.
 
-use super::{Access, argument, is_ident, literal, member};
+use super::{Access, IMPORTS_OS, argument, is_ident, literal, member};
 
 /// Python calls that run a command line or an argument list.
 const CHILD_CALLS: &[&str] = &[
@@ -104,7 +104,10 @@ fn python_object(code: &str, found: &mut Found<'_>) {
             found.whole("vars(os)");
         }
     }
-    if calls(code, "os.__dict__").next().is_some() {
+    let imported = IMPORTS_OS
+        .iter()
+        .any(|import| code.contains(&format!("{import}.__dict__")));
+    if imported || calls(code, "os.__dict__").next().is_some() {
         found.whole("os.__dict__");
     }
 }

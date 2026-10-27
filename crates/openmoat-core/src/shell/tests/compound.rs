@@ -129,3 +129,17 @@ fn only_a_lowercase_variable_set_on_its_own_is_local() {
     // a child shell does not see it
     assert!(reads_env(&parsed("x=1; sh -c 'echo $x'"), "x"));
 }
+
+#[test]
+fn a_kill_of_substituted_pids_shows_the_substitution() {
+    let s = shells(&parsed("kill -9 $(pgrep openmoat)"));
+    assert!(s.contains(&"kill -9 $(…)".to_owned()), "{s:?}");
+    assert!(s.contains(&"kill -9 $(pgrep openmoat)".to_owned()), "{s:?}");
+    assert!(s.contains(&"pgrep openmoat".to_owned()), "{s:?}");
+    let s = shells(&parsed("/bin/kill `pidof moat`"));
+    assert!(s.contains(&"/bin/kill $(pidof moat)".to_owned()), "{s:?}");
+    // another command, or a `kill` without a substitution, gets no second atom
+    assert_eq!(shells(&parsed("kill 1234")), ["kill 1234"]);
+    let s = shells(&parsed("echo $(pgrep openmoat)"));
+    assert!(!s.iter().any(|x| x.contains("$(pgrep")), "{s:?}");
+}

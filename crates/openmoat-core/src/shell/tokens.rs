@@ -1,6 +1,7 @@
 //! Recognisers for what a single shell word can name: an assignment or
 //! variable references. Hosts are recognised by `crate::host`.
 
+use std::fmt::Write as _;
 use std::ops::Range;
 
 use super::tables::{GNU_PREFIXED, IGNORED_VARS, SPECIAL_PARAMS};
@@ -18,6 +19,27 @@ pub fn assignment_name(word: &str) -> Option<&str> {
     chars
         .all(|c| c.is_ascii_alphanumeric() || c == '_')
         .then_some(name)
+}
+
+/// The argv of a `kill` whose arguments hold a command substitution, with each
+/// one's text in place of `$(…)` (`kill $(pgrep openmoat)`), so a rule can name the processes it
+/// looks up (`stops-openmoat`); the substituted command is classified on its
+/// own as well. `None` for any other command, or a `kill` without one.
+pub fn kill_substituted(program: &str, words: &[Word]) -> Option<Vec<String>> {
+    if program != "kill" || words.iter().all(|w| w.substitutions.is_empty()) {
+        return None;
+    }
+    let shown = |w: &Word| {
+        if w.substitutions.is_empty() {
+            w.text.clone()
+        } else {
+            w.substitutions.iter().fold(String::new(), |mut out, s| {
+                let _ = write!(out, "$({s})");
+                out
+            })
+        }
+    };
+    Some(words.iter().map(shown).collect())
 }
 
 /// Names a shell word expands: [`env_refs`] of its text, skipping every `$`

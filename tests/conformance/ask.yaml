@@ -1943,3 +1943,129 @@
   threat: T9
   action: { shell: "git checkout .claude/hooks/x.sh" }
   expect: { verdict: ask, rules: [runs-later] }
+
+# T9 stopping OpenMoat through the pids a substitution looks up
+- id: ask-kill-pgrep-openmoat
+  threat: T9
+  action: { shell: "kill -9 $(pgrep openmoat)" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-kill-pidof-moat
+  threat: T9
+  action: { shell: "kill $(pidof moat)" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-kill-term-pgrep-f-openmoat
+  threat: T9
+  action: { shell: "kill -TERM $(pgrep -f openmoat)" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-kill-pgrep-openmoat-proxy
+  threat: T9
+  action: { shell: "kill $(pgrep -f 'openmoat proxy')" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-kill-backtick-pgrep-openmoat
+  threat: T9
+  action: { shell: "kill `pgrep openmoat`" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-kill-by-path-pgrep-openmoat
+  threat: T9
+  action: { shell: "/bin/kill $(pgrep openmoat)" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+
+# T6 a file in a folder on PATH runs in place of the command it is named after
+- id: ask-install-local-bin-git
+  threat: T6
+  action: { shell: "install -m755 /p/evil ~/.local/bin/git" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-symlink-local-bin-git
+  threat: T6
+  action: { shell: "ln -sf /p/evil ~/.local/bin/git" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-copy-home-bin-ls
+  threat: T6
+  action: { shell: "cp /p/evil ~/bin/ls" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-tee-cargo-bin-node
+  threat: T6
+  action: { shell: "echo x | tee ~/.cargo/bin/node" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-append-usr-local-bin-node
+  threat: T6
+  action: { shell: "echo x >> /usr/local/bin/node" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-copy-homebrew-bin-git
+  threat: T6
+  action: { shell: "cp /p/evil /opt/homebrew/bin/git" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-write-local-bin-ls
+  threat: T6
+  action: { fs_write: "/Users/me/.local/bin/ls" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-write-home-bin-git
+  threat: T6
+  action: { fs_write: "/Users/me/bin/git" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-write-cargo-bin
+  threat: T6
+  action: { fs_write: "/Users/me/.cargo/bin/cargo-x" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-write-usr-local-bin-git
+  threat: T6
+  action: { fs_write: "/usr/local/bin/git" }
+  expect: { verdict: ask, rules: [persistence] }
+- id: ask-write-homebrew-bin-node
+  threat: T6
+  action: { fs_write: "/opt/homebrew/bin/node" }
+  expect: { verdict: ask, rules: [persistence] }
+
+# T5 what every Python start runs, the allowed `pytest` included
+- id: ask-write-user-site-pth
+  threat: T5
+  action: { fs_write: "/Users/me/.local/lib/python3.11/site-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-tee-user-site-pth
+  threat: T5
+  action: { shell: "echo 'import os' | tee ~/.local/lib/python3.11/site-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-dist-packages-pth
+  threat: T5
+  action: { fs_write: "/usr/lib/python3/dist-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-dist-packages-sitecustomize
+  threat: T5
+  action: { fs_write: "/usr/lib/python3/dist-packages/sitecustomize.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-stdlib-sitecustomize
+  threat: T5
+  action: { fs_write: "/usr/lib/python3.11/sitecustomize.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-user-site-usercustomize
+  threat: T5
+  action: { fs_write: "/Users/me/.local/lib/python3.11/site-packages/usercustomize.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-venv-pth
+  threat: T5
+  action: { fs_write: "/p/.venv/lib/python3.11/site-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-venv-sitecustomize
+  threat: T5
+  action: { fs_write: "/p/.venv/lib/python3.11/site-packages/sitecustomize.py" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-append-project-venv-pth
+  threat: T5
+  action: { shell: "echo 'import os' >> .venv/lib/python3.11/site-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-copy-into-project-venv-site-packages
+  threat: T5
+  action: { shell: "cp evil.pth /p/.venv/lib/python3.11/site-packages/" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-install-project-venv-pth
+  threat: T5
+  action: { shell: "install -m644 evil.pth .venv/lib/python3.11/site-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-symlink-project-venv-pth
+  threat: T5
+  action: { shell: "ln -sf /p/evil.pth .venv/lib/python3.11/site-packages/x.pth" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-write-project-sitecustomize
+  threat: T5
+  action: { fs_write: "/p/src/sitecustomize.py" }
+  expect: { verdict: ask, rules: [runs-later] }

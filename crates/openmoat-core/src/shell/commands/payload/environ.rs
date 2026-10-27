@@ -2,7 +2,8 @@
 //! `os.getenv('X')`, `process.env.X`, `ENV['X']`, `$ENV{X}`, `getenv('X')`,
 //! `$env:X` read the variable they name; `print(os.environ)`,
 //! `console.log(process.env)`, `ENV.to_h`, `%ENV`, `getenv()` or a name chosen
-//! at run time (`os.environ[k]`) read all of them. Forms that name none of
+//! at run time (`os.environ[k]`) read all of them; `__import__("os").environ`
+//! is `os.environ`. Forms that name none of
 //! these bases (`getattr(os, 'environ')`, `subprocess.run(['env'])`,
 //! `Get-ChildItem Env:`) are in `indirect.rs`. The code is scanned, not
 //! parsed, like the rest of a payload: an alias (`e = os.environ`, `g = getattr`)
@@ -39,6 +40,9 @@ const WHOLE_METHODS: &[&str] = &[
     "toObject",
     "entries",
 ];
+
+/// Python's `os` module reached without an `import` statement.
+const IMPORTS_OS: &[&str] = &["__import__(\"os\")", "__import__('os')"];
 
 /// Statements that print their argument without parentheses (`p ENV`, `puts ENV`).
 const PRINTERS: &[&str] = &["p", "pp", "puts", "print", "say", "echo"];
@@ -211,6 +215,11 @@ fn printed(code: &str, at: usize, base: &str, after: &str) -> bool {
     let start = code[..at]
         .trim_end_matches(|c: char| is_ident(c) || c == '.')
         .len();
+    // `__import__("os").environ`: the expression starts at `__import__`
+    let start = IMPORTS_OS
+        .iter()
+        .find_map(|import| code[..start].strip_suffix(import))
+        .map_or(start, str::len);
     let start = if base.starts_with(['$', '%']) {
         at
     } else {
