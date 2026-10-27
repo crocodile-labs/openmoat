@@ -76,8 +76,11 @@ still `agent-credentials`.
   (`runs-later`).
 - Common commands that now ask: `ls ~/.codex`, `ls ~/.claude`, `ls ~/.gemini`,
   `ls ~/Library` (`~/Library/Keychains/**`), `ls ~/.cargo` and `du -sh ~/.cargo`
-  (`~/.cargo/credentials`), `ls ~/.m2`, `ls /`, `ls /Users`, `find / -name x`, and any
-  word that is the bare path `/` (`tr '/' '_'`). `tar xf e.tar` run in `~` and
+  (`~/.cargo/credentials`) and `ls ~/.m2`. The home folder and the folders above it
+  (`/`, `/Users`) are left out: they hold every protected path, so `ls /`,
+  `find / -name x` and a word that is the bare path `/` (`tr '/' '_'`) keep their
+  verdict, a read of `~` still asks (`home-sweep`) and a write of it is still denied
+  (`destructive`). `tar xf e.tar` run in `~` and
   `tar xf e.tar -C ~` are denied by `destructive`, which denies writing `~` itself.
   Folders below the literal one (`ls ~/.codex/sessions`, `ls ~/.cargo/registry`) keep
   their verdict.

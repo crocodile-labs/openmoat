@@ -13,6 +13,10 @@
 //! Patterns with no literal folder (`**/.env`, `**/.claude/settings.json`)
 //! contribute nothing, so a search of a project that holds a `.env` keeps its
 //! verdict. The rule only adds an ask: a deny on the folder itself still wins.
+//! The home folder and the folders above it (`/`, `/Users`) are left out: they
+//! hold every protected path, so a bare `/` word (`tr '/' '_'`) would ask, and a
+//! read of the home itself already asks (`home-sweep`) while a write of it is
+//! denied (`destructive`).
 
 use super::EvalContext;
 use crate::action::AtomicAction;
@@ -30,6 +34,9 @@ pub const HOLDS_PROTECTED_RULE: &str = "protected-contents";
 pub(super) struct ProtectedFolders {
     reads: Vec<Folder>,
     writes: Vec<Folder>,
+    /// The home folder in each spelling, with its trailing `/`: it and the
+    /// folders above it are left to the rules that name them.
+    homes: Vec<String>,
     case_insensitive: bool,
 }
 
@@ -69,9 +76,14 @@ impl ProtectedFolders {
             out.dedup();
             out
         };
+        let homes = std::iter::once(ctx.home.as_str())
+            .chain(ctx.real_home.as_deref())
+            .map(|home| format!("{}/", fold(home.trim_end_matches('/'), case_insensitive)))
+            .collect();
         Self {
             reads: folders(Kind::FsRead),
             writes: folders(Kind::FsWrite),
+            homes,
             case_insensitive,
         }
     }
@@ -85,6 +97,9 @@ impl ProtectedFolders {
             _ => return None,
         };
         let dir = fold(path.trim_end_matches('/'), self.case_insensitive);
+        if self.homes.iter().any(|home| holds(&dir, home)) {
+            return None;
+        }
         let mut rules: Vec<&str> = Vec::new();
         for folder in folders.iter().filter(|f| holds(&dir, &f.path)) {
             if !rules.contains(&folder.rule.as_str()) {
@@ -201,9 +216,20 @@ deny:
         assert!(rules(&f, &read("/Users/me/.codex/")).is_some());
         assert!(rules(&f, &read("/srv/codex")).is_some());
         assert!(rules(&f, &read("/Volumes/h/me/.ssh")).is_some());
-        let home = rules(&f, &read("/Users/me")).unwrap();
-        assert!(home.contains("`creds` and `keys` deny"), "{home}");
-        assert!(rules(&f, &read("/")).is_some());
+        // `/srv` holds the moved `/srv/codex` and is not above the home.
+        assert!(rules(&f, &read("/srv")).is_some());
+        // The home and the folders above it, in either spelling, are left to
+        // `home-sweep` and `destructive`: a bare `/` word must not ask.
+        for above in [
+            "/Users/me",
+            "/Users/me/",
+            "/Users",
+            "/",
+            "/Volumes/h/me",
+            "/Volumes",
+        ] {
+            assert_eq!(rules(&f, &read(above)), None, "{above}");
+        }
         for below in [
             "/Users/me/.codex/sessions",
             "/Users/me/.codexx",
@@ -222,11 +248,15 @@ deny:
             rules(
                 &f,
                 &AtomicAction::FsWrite {
-                    path: "/Users/me".into()
+                    path: "/Users/me/.moat".into()
                 }
             )
             .is_some()
         );
+        let home_write = AtomicAction::FsWrite {
+            path: "/Users/me".into(),
+        };
+        assert_eq!(rules(&f, &home_write), None);
         assert_eq!(rules(&f, &read("/Users/me/.moat")), None);
     }
 

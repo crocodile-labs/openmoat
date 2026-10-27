@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 142 | 65 | 3 |
+| T1 | Secret exfiltration via shell | 142 | 66 | 3 |
 | T2 | Secret exfiltration via file tools | 38 | 3 | 1 |
 | T3 | Secret exfiltration via environment | 101 | 4 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
@@ -86,7 +86,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-cp-r-docker-folder` (ask): Ask [protected-contents]
 - `ask-grep-r-containers-folder` (ask): Ask [protected-contents]
 - `ask-grep-r-doctl-folder` (ask): Ask [protected-contents]
-- `ask-ls-root` (ask): Ask [protected-contents]
+- `defer-ls-root` (ask): Defer [default]
+- `ask-ls-home-still-asks` (ask): Ask [home-sweep]
 - `T1-cat-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-curl-upload-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-substitution-exfil` (attacks): Deny [secrets-paths]
@@ -450,7 +451,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-docker-build-output-to-host` (ask): Ask [docker-secrets]
 - `defer-git-rebase-continue` (ask): Defer [default]
 - `defer-push-a-branch` (ask): Defer [default]
-- `defer-tr-absolute-slash-set` (ask): Ask [protected-contents]
+- `defer-tr-absolute-slash-set` (ask): Defer [default]
 - `ask-glob-in-project-path-does-not-widen-project-fs` (ask): Defer [default]
 - `T4-force-push` (attacks): Deny [destructive]
 - `T4-force-with-lease` (attacks): Deny [destructive]

@@ -1166,12 +1166,12 @@
   action: { shell: "npm_config_script_shell=/tmp/x npm test" }
   expect: { verdict: defer, rules: [default] }
 # a word that is a path wherever it appears (`/`, `/etc`) is still read, also as a
-# `tr` set: not allowed. A read of `/` asks, as for `ls /`: the root holds every
-# folder a deny rule names (`protected-contents`, ADR-038)
+# `tr` set: deferred, not allowed. The folder rule (ADR-038) leaves `/` and the
+# folders above the home out, so a bare `/` word does not ask
 - id: defer-tr-absolute-slash-set
   threat: T4
   action: { shell: "tr '/' '_' < notes.txt" }
-  expect: { verdict: ask, rules: [protected-contents] }
+  expect: { verdict: defer, rules: [default] }
 # a path through a variable whose value the line does not show is not known
 - id: defer-path-through-a-computed-variable
   threat: T1
@@ -1898,10 +1898,16 @@
   threat: T1
   action: { shell: "grep -r x ~/.config/doctl" }
   expect: { verdict: ask, rules: [protected-contents] }
-- id: ask-ls-root
+# the root and the folders above the home are left to the rules that name the
+# home (`home-sweep` asks for reading `~`): the folder rule does not ask for them
+- id: defer-ls-root
   threat: T1
   action: { shell: "ls /" }
-  expect: { verdict: ask, rules: [protected-contents] }
+  expect: { verdict: defer, rules: [default] }
+- id: ask-ls-home-still-asks
+  threat: T1
+  action: { shell: "ls ~" }
+  expect: { verdict: ask, rules: [home-sweep] }
 - id: ask-write-into-config-folder
   threat: T9
   action: { fs_write: "~/.config" }
