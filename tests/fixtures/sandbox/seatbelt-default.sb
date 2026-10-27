@@ -144,7 +144,11 @@
     (require-not (require-any
       (regex "^(.*/)?\\.env\\.example$")
       (regex "^(.*/)?\\.env\\.sample$")
-      (regex "^(.*/)?\\.env\\.template$")))))
+      (regex "^(.*/)?\\.env\\.template$")
+      (regex "^(.*/)?\\.env\\.dist$")
+      (regex "^(.*/)?\\.env\\.[^/]*\\.example$")
+      (regex "^(.*/)?\\.env\\.[^/]*\\.sample$")
+      (regex "^(.*/)?\\.env\\.[^/]*\\.template$")))))
 ; deny kernel-self (fs.read)
 (deny file-read-data file-read-xattr
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[mM][oO][aA][tT]/[aA][uU][dD][iI][tT]\\.[dD][bB][^/]*$")
@@ -196,7 +200,11 @@
     (require-not (require-any
       (regex "^(.*/)?\\.env\\.example$")
       (regex "^(.*/)?\\.env\\.sample$")
-      (regex "^(.*/)?\\.env\\.template$")))))
+      (regex "^(.*/)?\\.env\\.template$")
+      (regex "^(.*/)?\\.env\\.dist$")
+      (regex "^(.*/)?\\.env\\.[^/]*\\.example$")
+      (regex "^(.*/)?\\.env\\.[^/]*\\.sample$")
+      (regex "^(.*/)?\\.env\\.[^/]*\\.template$")))))
 ; deny destructive (fs.write)
 (deny file-write*
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]$")

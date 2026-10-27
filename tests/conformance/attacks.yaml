@@ -205,6 +205,18 @@
   threat: T2
   action: { fs_read: "/p/.env.example.local" }
   expect: { verdict: deny, rules: [secrets-paths] }
+- id: T2-dotenv-dist-exclusion-is-exact
+  threat: T2
+  action: { fs_read: "/p/.env.dist.local" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T2-dotenv-mode-example-exclusion-is-exact
+  threat: T2
+  action: { fs_read: "/p/.env.production.example.bak" }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T2-copy-env-into-dist-template
+  threat: T2
+  action: { shell: "cp .env .env.dist" }
+  expect: { verdict: deny, rules: [secrets-paths] }
 
 # T3 secret exfiltration via environment
 - id: T3-echo-api-key
@@ -1182,6 +1194,16 @@
   action: { fs_write: "/p/profile.sh" }
   links: { /p/profile.sh: /Users/me/.zshrc }
   expect: { verdict: deny, rules: [shell-rc] }
+- id: T11-dotenv-dist-symlink-to-env
+  threat: T11
+  action: { fs_read: "/p/.env.dist" }
+  links: { /p/.env.dist: /p/.env }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T11-dotenv-mode-example-symlink-to-ssh-key
+  threat: T11
+  action: { shell: "cat .env.local.example" }
+  links: { /p/.env.local.example: /Users/me/.ssh/id_rsa }
+  expect: { verdict: deny, rules: [secrets-paths] }
 # A linked project or home root widens nothing: links inside still resolve to secrets
 - id: T11-linked-project-read-key-through-symlink
   threat: T11

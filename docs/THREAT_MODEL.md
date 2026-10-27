@@ -186,7 +186,8 @@ something OpenMoat claims to stop.
   name, so any allowlisted host stays a relay. `openmoat sandbox show` lists every loss
   and allowance; ADR-018 lists the open risks.
 - **Translation losses (stricter than the policy).** Neither host can re-allow
-  `.env.example`, `.env.sample` or `.env.template` inside the `**/.env.*` deny, so
+  `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, `.env.*.example`,
+  `.env.*.sample` or `.env.*.template` inside the `**/.env.*` deny, so
   sandboxed commands cannot read them; Claude Code's file tools refuse them too, by the
   deny rules `openmoat init` writes on every OS so that they hold when the hook does not run. Codex keeps `.git` read-only for sandboxed
   commands and asks to run `git commit` outside. Claude Code's file tools refuse reads outside the
