@@ -23,13 +23,18 @@ pub(super) struct LazyGlob {
     matcher: OnceLock<GlobMatcher>,
 }
 
+/// The ASCII text `glob` starts with, up to its first `*`, `?`, `[`, `{` or `\`
+/// or its first non-ASCII character: every match begins with it.
+pub(super) fn literal_start(glob: &str) -> &str {
+    let end = glob
+        .find(|c: char| !c.is_ascii() || matches!(c, '*' | '?' | '[' | '{' | '\\'))
+        .unwrap_or(glob.len());
+    &glob[..end]
+}
+
 impl LazyGlob {
     pub(super) fn new(glob: Glob, case_insensitive: bool) -> Self {
-        let prefix = glob
-            .glob()
-            .chars()
-            .take_while(|c| c.is_ascii() && !matches!(c, '*' | '?' | '[' | '{' | '\\'))
-            .collect();
+        let prefix = literal_start(glob.glob()).to_owned();
         Self {
             glob,
             prefix,

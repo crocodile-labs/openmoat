@@ -317,3 +317,33 @@ fn the_plugin_names_the_host_and_waits_as_long_as_the_spec_says() {
     )));
     assert!(source.contains(r#"hook_event_name: "tool.execute.before""#));
 }
+
+/// A copy of another agent's folder asks under the default policy
+/// (`protected-contents`, ADR-038); OpenCode 1 cannot ask, so it is a deny that
+/// names the rule and how to approve it.
+#[test]
+fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
+    let policy = openmoat_core::Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+    let ctx = openmoat_core::EvalContext {
+        home: "/Users/me".into(),
+        project: Some("/p".into()),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: "/p".into(),
+        case_insensitive_paths: false,
+    };
+    let compiled = openmoat_core::CompiledPolicy::compile(&policy, &ctx).unwrap();
+    let request = call("bash", json!({"command": "cp -r ~/.codex /p/x"}), json!({})).unwrap();
+    let decision = compiled.decide(request.action.as_ref().unwrap());
+    assert_eq!(decision.verdict, Verdict::Ask);
+    assert_eq!(decision.rules, [openmoat_core::HOLDS_PROTECTED_RULE]);
+    let event = HookEvent::PreToolUse;
+    let answered = Host::OpenCode.answer(&event, &decision);
+    assert_eq!(answered.verdict, Verdict::Deny);
+    let reply: Value =
+        serde_json::from_str(&Host::OpenCode.render_response(&event, &answered)).unwrap();
+    let reason = reply["reason"].as_str().unwrap();
+    assert!(reason.contains("openmoat allow --last"), "{reason}");
+    assert!(reason.contains("/Users/me/.codex"), "{reason}");
+}

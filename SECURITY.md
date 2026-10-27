@@ -133,7 +133,8 @@ Deterministic decisions (no model in the loop); a policy lock verified on every 
 (edits to the policy or hook files deny everything until a person re-pins); fail-closed
 on every error path in `openmoat guard`; exit code 2 reserved for `deny`; protected paths
 for the kernel's own configuration; each supported agent's stored login, provider keys
-and OAuth tokens denied to the agent's own tools (`agent-credentials`); asks before an
+and OAuth tokens denied to the agent's own tools (`agent-credentials`), and an ask for reading or
+copying a folder that holds such files or other denied paths (`protected-contents`); asks before an
 agent's own CLI saves an MCP server or starts an MCP sign-in; a warning when an
 installed agent has a published security advisory; redaction before audit storage; owner-only permissions on state files; a pure core
 with no I/O and no `unsafe`; dependency and licence auditing in CI.

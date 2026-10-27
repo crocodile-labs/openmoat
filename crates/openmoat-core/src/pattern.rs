@@ -22,6 +22,18 @@ pub(crate) fn split_negation(raw: &str) -> (bool, &str) {
     }
 }
 
+/// The literal folder every path `glob` matches lies in, with its trailing
+/// `/`: the text before the first glob character, cut back to its last `/`
+/// (`/Users/me/.codex/{auth.json,x}` → `/Users/me/.codex/`, `/Users/me/.netrc`
+/// → `/Users/me/`). `None` when that is empty, a filesystem root (`/`, `C:/`)
+/// or relative, as for `**/.env`: such a pattern names no folder of its own.
+pub(crate) fn literal_folder(glob: &str) -> Option<&str> {
+    let start = lazy::literal_start(glob);
+    let folder = &start[..=start.rfind('/')?];
+    (crate::paths::is_absolute(folder) && folder.trim_end_matches('/').contains('/'))
+        .then_some(folder)
+}
+
 /// A compiled pattern that may be an exclusion.
 pub(crate) trait Matcher<C: ?Sized> {
     fn is_match(&self, candidate: &C) -> bool;
@@ -405,6 +417,32 @@ mod tests {
         let any = GlobPattern::compile("**/.git/**", false).unwrap();
         assert!(any.is_match("/p/.git") && !any.is_match("/p/.github"));
         assert!(GlobPattern::compile("**", false).unwrap().is_match("/x"));
+    }
+
+    #[test]
+    fn literal_folder_is_the_folder_before_the_first_glob_character() {
+        for (glob, folder) in [
+            (
+                "/Users/me/.codex/{auth.json,.credentials.json}",
+                Some("/Users/me/.codex/"),
+            ),
+            ("/Users/me/.ssh/**", Some("/Users/me/.ssh/")),
+            ("/Users/me/.docker/config.json", Some("/Users/me/.docker/")),
+            ("/Users/me/.netrc", Some("/Users/me/")),
+            ("/Users/me/.moat/audit.db*", Some("/Users/me/.moat/")),
+            ("/Users/me/.config/op/**", Some("/Users/me/.config/op/")),
+            ("/Users/mé/.ssh/**", Some("/Users/")),
+            ("C:/Users/me/.ssh/**", Some("C:/Users/me/.ssh/")),
+            ("/Users/*/.ssh/**", Some("/Users/")),
+            ("**/.env", None),
+            ("*.pem", None),
+            ("/", None),
+            ("/dev*", None),
+            ("C:/x", None),
+            ("rel/dir/*", None),
+        ] {
+            assert_eq!(literal_folder(glob), folder, "{glob}");
+        }
     }
 
     #[test]

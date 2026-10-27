@@ -1655,3 +1655,43 @@
 - id: benign-hermes-memory-write
   action: { fs_write: "~/.hermes/memories" }
   expect: { verdict: defer, rules: [default] }
+
+# Kept as they were by the folder rule (ADR-038) and the extraction and
+# `git checkout` writes: project folders hold no path a deny rule names by folder
+- id: benign-cp-r-project-folder
+  action: { shell: "cp -r src /p/backup" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-find-in-project
+  action: { shell: "find /p -name '*.rs'" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-grep-r-project-holding-env
+  action: { shell: "grep -r TODO /p" }
+  files: ["/p/.env"]
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-ls-projects-folder
+  action: { shell: "ls ~/projects" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-tar-extract-into-project
+  action: { shell: "tar xf vendor.tar -C /p/vendor" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-tar-extract-here
+  action: { shell: "tar xf vendor.tar" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-unzip-into-project
+  action: { shell: "unzip a.zip -d /p/out" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-checkout-source-file
+  action: { shell: "git checkout -- src/main.rs" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-checkout-source-file-from-branch
+  action: { shell: "git checkout main src/main.rs" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-git-checkout-branch
+  action: { shell: "git checkout main" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-checkout-new-feature-branch
+  action: { shell: "git checkout -b feature" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-checkout-new-branch-from-remote
+  action: { shell: "git checkout -b feature origin/feature" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }

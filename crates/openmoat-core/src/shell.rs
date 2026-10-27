@@ -57,6 +57,7 @@ mod database;
 mod decoders;
 mod embedded;
 mod error;
+mod extract;
 pub(crate) mod git;
 mod in_place;
 pub(crate) mod installs;
