@@ -402,7 +402,7 @@ fn evaluate(
         writes: &out.provenance.written,
         within_run,
     };
-    let sandboxed = || crate::protection::os_sandboxed(&home, host);
+    let sandboxed = || crate::protection::os_sandboxed_by_lock(&home, host);
     let decision = session_code::checked(
         &code,
         &compiled,

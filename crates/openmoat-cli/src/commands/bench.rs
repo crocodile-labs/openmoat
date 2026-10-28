@@ -277,6 +277,7 @@ fn compare(
 ) -> Run {
     let mut known = Vec::new();
     let mut steps = Vec::new();
+    let mut held = false;
     // `openmoat init --yes` in the throwaway home put the host's OS sandbox in
     // place wherever OpenMoat has one on this OS; another hook has none.
     let sandboxed = markers
@@ -324,8 +325,8 @@ fn compare(
             expects_ask: expect == Verdict::Ask,
             ok,
             gap: gap.is_some(),
-            held: sandboxed && step.sandboxed.is_some() && ok,
         });
+        held |= sandboxed && step.sandboxed.is_some() && ok;
     }
     let outcome = match (
         scenario.gap.as_ref().filter(|_| markers),
@@ -336,7 +337,11 @@ fn compare(
         (Some(issue), false) => Outcome::Gap(vec![format!("{issue}: {}", problems.join("; "))]),
         (None, false) => Outcome::Fail(problems),
     };
-    Run { steps, outcome }
+    Run {
+        steps,
+        outcome,
+        held,
+    }
 }
 
 fn print_text(report: &Report<'_>) -> Result<()> {

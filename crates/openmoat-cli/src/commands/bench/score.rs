@@ -25,15 +25,15 @@ pub struct StepResult {
     pub ok: bool,
     /// The step carries a gap marker.
     pub gap: bool,
-    /// The step met the expectation it has where OpenMoat's OS sandbox holds
-    /// the host's commands (`sandboxed:`): the hook leaves it to the sandbox.
-    pub held: bool,
 }
 
 /// One scenario on one host.
 pub struct Run {
     pub steps: Vec<StepResult>,
     pub outcome: Outcome,
+    /// A step met the expectation it has where OpenMoat's OS sandbox holds the
+    /// host's commands (`sandboxed:`): what the hook allows, the sandbox holds.
+    pub held: bool,
 }
 
 pub enum Outcome {
@@ -146,7 +146,7 @@ impl Scorecard {
             .map(|s| s.got)
             .max()
             .unwrap_or(Answer::Allow);
-        let held = run.steps.iter().any(|s| s.held);
+        let held = run.held;
         self.categories
             .entry(category.to_owned())
             .or_default()
