@@ -1,17 +1,17 @@
 //! What the version of a host on this shell's search path means for
-//! OpenMoat: whether it takes OpenMoat's hook
-//! ([`InstallSpec::unsupported`](openmoat_hosts::InstallSpec::unsupported)),
-//! and which of the host's published security advisories it is affected by
+//! OpenMoat: whether it takes OpenMoat's hook and through which of its hooks
+//! ([`InstallSpec::versions`](openmoat_hosts::InstallSpec::versions)), and
+//! which of the host's published security advisories it is affected by
 //! ([`HostSpec::advisories`](openmoat_hosts::HostSpec::advisories)).
 //!
-//! OpenCode 2 installs the same `opencode` program as OpenCode 1 and reads the
-//! same configuration directory, but loads plugins through another API: a
-//! plugin written for OpenCode 1 does not run there. Only the version the
-//! program reports tells them apart, so `moat init` asks it before writing the
-//! plugin, and `moat status` and `moat doctor` before calling the agent
-//! protected. The same version names the advisories `moat status` and `moat
-//! doctor` warn about: a flaw in the agent's own process runs where no hook
-//! sees it, so an upgrade is the only fix.
+//! OpenCode 1 and 2 install the same `opencode` program and read the same
+//! configuration directory; OpenMoat's one plugin serves both plugin APIs, but
+//! OpenCode before 1.3.4 does not load it. Only the version the program
+//! reports tells them apart, so `moat init` asks it before writing the plugin,
+//! and `moat status` and `moat doctor` before calling the agent protected and
+//! to name the hook it runs through. The same version names the advisories
+//! `moat status` and `moat doctor` warn about: a flaw in the agent's own
+//! process runs where no hook sees it, so an upgrade is the only fix.
 //!
 //! OpenMoat Bar runs `moat status` and `moat doctor` every minute with a few
 //! seconds to answer, so those two keep what each program reported in
@@ -53,15 +53,29 @@ type Asked = Mutex<Vec<(&'static str, Option<Version>)>>;
 /// found or its version cannot be read (a host OpenMoat cannot ask is set up as
 /// one that takes the hook), or when it is a supported one.
 pub fn unsupported(host: Host) -> Option<String> {
-    let gate = host.spec().install.as_ref()?.unsupported.as_ref()?;
+    let gate = host.spec().install.as_ref()?.versions.as_ref()?;
     let version = version(gate.program)?;
-    (version.0 >= gate.from_major).then(|| {
-        let (major, minor, patch) = version;
+    gate.hook_of(version).is_none().then(|| {
         format!(
-            "`{} --version` reports {major}.{minor}.{patch}: {}",
-            gate.program, gate.why
+            "`{} --version` reports {}: {}",
+            gate.program,
+            dotted(version),
+            gate.older
         )
     })
+}
+
+/// Which of `host`'s hooks the version on the search path runs OpenMoat
+/// through, as `status` and `doctor` name it after "installed": the program,
+/// its version and the hook, such as OpenCode 2's `execute.before`; `None`
+/// when its spec names one hook for every version, no program is found, its
+/// version cannot be read, or it is one OpenMoat does not support
+/// ([`unsupported`]).
+pub fn hook_api(host: Host) -> Option<String> {
+    let gate = host.spec().install.as_ref()?.versions.as_ref()?;
+    let version = version(gate.program)?;
+    let hook = gate.hook_of(version)?;
+    Some(format!("{} {}: {hook}", gate.program, dotted(version)))
 }
 
 /// One line on the published security advisories `host`'s version on the
@@ -101,7 +115,7 @@ pub fn prefetch(hosts: impl IntoIterator<Item = Host>) {
         .into_iter()
         .flat_map(|host| {
             let spec = host.spec();
-            let gate = spec.install.as_ref().and_then(|i| i.unsupported.as_ref());
+            let gate = spec.install.as_ref().and_then(|i| i.versions.as_ref());
             [gate.map(|g| g.program), Some(spec.advisories.program)]
         })
         .flatten()

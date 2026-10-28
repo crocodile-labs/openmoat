@@ -82,21 +82,27 @@ impl Reading<'_> {
 #[must_use]
 pub fn switched_off(host: Host, config_dir: &Path, hook_file: &Path) -> Option<String> {
     let spec = host.spec().project_settings.as_ref()?;
-    let path = config_dir.join(spec.user_file);
     let reading = Reading {
         reader: spec.reader,
         base: config_dir,
         hook_file,
     };
-    let found = match read_bytes(&path) {
-        Ok(None) => return None,
-        Ok(Some(bytes)) => match parse(&path, &bytes, spec.reader.reads_comments()) {
-            Ok(root) => reading.switched_off(&root),
-            Err(e) => vec![format!("cannot be checked: {e:#}")],
-        },
-        Err(e) => vec![format!("cannot be checked: {e:#}")],
-    };
-    (!found.is_empty()).then(|| format!("{}: {}", path.display(), found.join("; ")))
+    let rows: Vec<String> = std::iter::once(spec.user_file)
+        .chain(spec.user_more.iter().copied())
+        .filter_map(|name| {
+            let path = config_dir.join(name);
+            let found = match read_bytes(&path) {
+                Ok(None) => return None,
+                Ok(Some(bytes)) => match parse(&path, &bytes, spec.reader.reads_comments()) {
+                    Ok(root) => reading.switched_off(&root),
+                    Err(e) => vec![format!("cannot be checked: {e:#}")],
+                },
+                Err(e) => vec![format!("cannot be checked: {e:#}")],
+            };
+            (!found.is_empty()).then(|| format!("{}: {}", path.display(), found.join("; ")))
+        })
+        .collect();
+    (!rows.is_empty()).then(|| rows.join("; "))
 }
 
 /// The bytes of `path`, or `None` when there is no such file (a deleted file

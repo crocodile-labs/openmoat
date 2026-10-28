@@ -17,10 +17,10 @@ mod wire;
 
 pub use contract::{
     Advisories, Advisory, AlsoDir, Asks, ConsentFile, Detect, ExtraFile, GUARD_BUDGET_S, Helper,
-    HookDir, HookLayout, HookSpec, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located,
-    Location, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, Paths, Platform,
-    ProcessSpec, ProjectSettingsSpec, Protect, RelaxedKey, SandboxFormat, SandboxSpec,
-    SettingsFile, SettingsReader, ToolRow, Unseen, Unsupported, Version,
+    HookDir, HookLayout, HookSpec, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate,
+    Located, Location, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, Paths,
+    Platform, ProcessSpec, ProjectSettingsSpec, Protect, RelaxedKey, SandboxFormat, SandboxSpec,
+    SettingsFile, SettingsReader, ToolRow, Unseen, Version,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;

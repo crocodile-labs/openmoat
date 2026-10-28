@@ -5,9 +5,13 @@ use serde_json::Value;
 
 use crate::contract::{McpNames, McpReader, McpServer, McpSyntax, servers_at};
 
-/// `{"mcp": {"<name>": {"type": "local" | "remote", …}}}`, JSON with comments
-/// and trailing commas (OpenCode 1 `docs/mcp-servers.mdx`, `config/config.ts`),
-/// read as JSON5.
+/// `{"mcp": {"<name>": {"type": "local" | "remote", …}}}` (OpenCode 1
+/// `docs/mcp-servers.mdx`, `config/config.ts`), and OpenCode 2's
+/// `{"mcp": {"servers": {"<name>": …}, "timeout": …}}`, which OpenCode 2 reads
+/// beside the old shape: a `servers` or `timeout` key is a server of the old
+/// shape only when it has a `type` of `local` or `remote` (2.2.0
+/// `core/src/config/normalize.ts:266-305,859-861`). JSON with comments and
+/// trailing commas, read as JSON5.
 #[derive(Debug)]
 pub(crate) struct OpenCodeJson;
 
@@ -17,7 +21,18 @@ impl McpReader for OpenCodeJson {
     }
 
     fn servers(&self, doc: &Value) -> Result<Vec<McpServer>, String> {
-        Ok(servers_at(doc, "mcp", "/mcp"))
+        let legacy_shape =
+            |entry: &Value| matches!(entry.get("type").and_then(Value::as_str), Some("local" | "remote"));
+        let mut servers: Vec<McpServer> = servers_at(doc, "mcp", "/mcp")
+            .into_iter()
+            .filter(|s| !matches!(s.name.as_str(), "servers" | "timeout") || legacy_shape(&s.entry))
+            .collect();
+        if let Some(native) = doc.get("mcp").and_then(|m| m.get("servers"))
+            && !legacy_shape(native)
+        {
+            servers.extend(servers_at(&serde_json::json!({ "s": native }), "s", "/mcp/servers"));
+        }
+        Ok(servers)
     }
 }
 
@@ -80,5 +95,34 @@ mod tests {
         }
         assert!(!Joined.tool_of("mcp__other__file", "files"));
         assert_eq!(spelling("a\u{1F600}b"), "a__b");
+    }
+
+    /// OpenCode 2's `mcp.servers` and OpenCode 1's `mcp.<name>` in one file;
+    /// a server of the old shape may be called `servers`.
+    #[test]
+    fn servers_of_both_shapes_are_read() {
+        let named = |doc: Value| {
+            let mut found: Vec<(String, String)> = OpenCodeJson
+                .servers(&doc)
+                .unwrap()
+                .into_iter()
+                .map(|s| (s.name, s.pointer))
+                .collect();
+            found.sort();
+            found
+        };
+        let pair = |n: &str, p: &str| (n.to_owned(), p.to_owned());
+        assert_eq!(
+            named(serde_json::json!({"mcp": {
+                "timeout": {"catalog": 5},
+                "servers": {"db": {"type": "local", "command": ["db-mcp"]}},
+                "old": {"type": "remote", "url": "https://example.invalid"},
+            }})),
+            [pair("db", "/mcp/servers/db"), pair("old", "/mcp/old")]
+        );
+        assert_eq!(
+            named(serde_json::json!({"mcp": {"servers": {"type": "local", "command": ["x"]}}})),
+            [pair("servers", "/mcp/servers")]
+        );
     }
 }

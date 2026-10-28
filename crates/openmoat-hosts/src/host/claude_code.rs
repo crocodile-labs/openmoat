@@ -97,6 +97,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_dir: None,
         reader: &project_settings::READER,
         user_file: "settings.json",
+        user_more: &[],
     }),
     // `claude`, or `node` running a versioned file (`claude/versions/2.1.0`)
     // or the npm package's `cli.js`.

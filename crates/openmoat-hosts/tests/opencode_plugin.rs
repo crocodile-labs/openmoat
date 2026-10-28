@@ -1,8 +1,10 @@
 //! OpenMoat's OpenCode plugin (`src/host/opencode/integration/openmoat.js`)
 //! run under Node against a stand-in for `openmoat guard`
-//! (`tests/opencode_plugin/harness.mjs`): a deny throws the guard's reason,
-//! an allow or no answer lets the call run, every other outcome throws, and
-//! the checked arguments cannot change afterwards.
+//! (`tests/opencode_plugin/harness.mjs`), as OpenCode 1 and as OpenCode 2
+//! load it: a deny throws the guard's reason, an allow or no answer lets the
+//! call run, an ask is a block on OpenCode 1 and OpenCode's own prompt on
+//! OpenCode 2, every other outcome throws, and the checked call cannot change
+//! afterwards, not by a plugin that runs later either.
 //!
 //! The test skips, saying why, when `node` is not on the search path.
 
@@ -99,4 +101,115 @@ fn the_opencode_plugin_blocks_on_everything_but_allow_and_no_answer() {
     for result in report["results"].as_array().unwrap() {
         assert_eq!(result["frozen"], true, "{result}");
     }
+}
+
+#[test]
+fn on_opencode_2_the_plugin_checks_asks_and_pins_the_call() {
+    let Some(node) = node() else {
+        eprintln!("skipping the OpenCode plugin test: `node` is not on PATH");
+        return;
+    };
+    let report = run_harness(&node);
+    let v2 = &report["v2"];
+
+    // What the guard is given: OpenCode 2's event, the instance and the MCP servers.
+    let payload = &v2["payload"];
+    assert_eq!(payload["hook_event_name"], "execute.before");
+    assert_eq!(payload["tool"], "shell");
+    assert_eq!(payload["sessionID"], "ses_2");
+    assert_eq!(payload["agent"], "build");
+    assert_eq!(payload["messageID"], "msg_1");
+    assert_eq!(payload["callID"], "call_deny");
+    assert_eq!(payload["input"]["command"], "cat ~/.ssh/id_rsa");
+    assert_eq!(payload["directory"], report["dir"]);
+    assert_eq!(payload["worktree"], report["dir"]);
+    assert_eq!(payload["mcpServers"], serde_json::json!(["github"]));
+    assert!(payload["platform"].is_string(), "{payload}");
+
+    let v2_outcome = |mode| outcome(v2, mode);
+    assert_eq!(
+        v2_outcome("deny"),
+        "threw: moat: deny [secrets-paths] — secret material"
+    );
+    for mode in ["allow", "defer", "ask-approved", "minimal-allow"] {
+        assert_eq!(v2_outcome(mode), "ran", "{mode}");
+    }
+    assert!(v2_outcome("ask-rejected").starts_with("threw: "), "{v2}");
+    let blocked = "threw: OpenMoat blocked this call: ";
+    for (mode, why) in [
+        ("crash", "exited 1: boom"),
+        ("garbage", "no readable answer"),
+        ("deny-exit-0", "an answer it should not give"),
+        ("hang", "did not answer in time"),
+        ("missing-binary", "could not run"),
+        ("minimal-ask", "openmoat allow --last"),
+    ] {
+        let text = v2_outcome(mode);
+        assert!(
+            text.starts_with(blocked) && text.contains(why),
+            "{mode}: {text}"
+        );
+    }
+    // Every call's tool and input are pinned to what was checked.
+    for result in v2["results"].as_array().unwrap() {
+        assert_eq!(result["frozen"], true, "{result}");
+    }
+
+    asks_reach_the_person(v2);
+    later_plugins_cannot_change_the_call(&v2["later"]);
+}
+
+/// An ask is put to the person as OpenCode's `openmoat` permission, made an
+/// ask whatever the rules say (here they allow), with OpenMoat's reason.
+fn asks_reach_the_person(v2: &Value) {
+    let asked = v2["asked"].as_array().unwrap();
+    assert_eq!(asked.len(), 2, "{asked:?}");
+    for ask in asked {
+        assert_eq!(ask["action"], "openmoat", "{ask}");
+        assert_eq!(ask["effect"], "ask", "{ask}");
+        assert_eq!(ask["resources"], serde_json::json!(["write"]), "{ask}");
+        assert_eq!(ask["source"]["type"], "tool", "{ask}");
+        assert!(
+            ask["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("runs-later"),
+            "{ask}"
+        );
+    }
+}
+
+/// A plugin after OpenMoat's that rewrites the command, replaces the input or
+/// changes the tool fails, and the call stays the one checked.
+fn later_plugins_cannot_change_the_call(later: &Value) {
+    for name in ["rewrite-command", "replace-input", "change-tool"] {
+        let case = &later[name];
+        assert!(
+            case["outcome"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("threw: "),
+            "{name}: {case}"
+        );
+        assert_eq!(case["checked"]["tool"], "shell", "{name}: {case}");
+        assert_eq!(case["checked"]["command"], "git status", "{name}: {case}");
+        assert_eq!(case["runs"]["tool"], "shell", "{name}: {case}");
+        assert_eq!(case["runs"]["command"], "git status", "{name}: {case}");
+    }
+    let shell = &later["shell-rewrite"];
+    assert!(
+        shell["outcome"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("threw: "),
+        "{shell}"
+    );
+    assert_eq!(shell["runs"], "git status", "{shell}");
+    assert_eq!(
+        shell["cwd"], "/resolved",
+        "OpenCode's own shell tool still sets it: {shell}"
+    );
+    // A shell OpenMoat did not check (the person's `!` command) is not
+    // pinned: the later hook still changes it, as without OpenMoat.
+    assert_eq!(shell["unchecked"], "cat ~/.ssh/id_rsa", "{shell}");
 }

@@ -7,9 +7,10 @@ pub(super) const PROTECT: Protect = Protect {
     self_paths: &[
         Paths::new(
             "OpenCode: its configuration directory, OpenMoat's plugin and the plugin\n\
-             folders around it, and the configuration files whose `plugin` list loads\n\
-             plugins before it (`config` is the old TOML one OpenCode moves into\n\
-             `config.json`); other plugins ask (`runs-later`)",
+             folders around it, the configuration files whose `plugin` list loads\n\
+             plugins and whose `-openmoat` removes OpenMoat's (`config` is the old TOML\n\
+             one OpenCode moves into `config.json`), and OpenCode 2's background service\n\
+             settings, whose `env` it starts with; other plugins ask (`runs-later`)",
             &[
                 "~/.config/opencode",
                 "~/.config/opencode/plugins",
@@ -19,6 +20,7 @@ pub(super) const PROTECT: Protect = Protect {
                 "~/.config/opencode/opencode.json",
                 "~/.config/opencode/opencode.jsonc",
                 "~/.config/opencode/config",
+                "~/.config/opencode/service*.json",
             ],
         ),
         Paths::new(
@@ -62,8 +64,8 @@ pub(super) const PROTECT: Protect = Protect {
 
 /// OpenCode 1 runs as `opencode`: the compiled binary, or the npm package's
 /// `bin/opencode` launcher under Node (`opencode-ai`). OpenCode 2 installs
-/// `opencode` and `opencode2` (`@opencode/cli`); OpenMoat's hook does not run
-/// there, but a person-only command started from it is still refused.
+/// `opencode` and `opencode2` (`@opencode/cli`), and runs plugins in its
+/// background service, also an `opencode` process.
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {
     names: &["opencode", "opencode2"],
     package_dirs: &[&["opencode-ai"], &["@opencode", "cli"]],

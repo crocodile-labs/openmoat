@@ -1,108 +1,83 @@
-//! OpenCode 1's tools mapped to actions. Tool ids and arguments are those of
-//! OpenCode 1.19.4 (`packages/opencode/src/tool/*.ts`, `tool/registry.ts`,
-//! `session/tools.ts`). The hook sees every tool, so a tool not named here is
-//! decided as an MCP tool of the name it has, with every path, URL and command
-//! its arguments name checked ([`crate::wire::unknown::mcp`]): the payload does
-//! not tell an MCP server's tool from a plugin's apart by its name alone, and
+//! OpenCode's tools mapped to actions: what the two plugin APIs share, and
+//! each version's names and arguments (`tools/v1.rs`, `tools/v2.rs`). The
+//! hook sees every tool, so a tool a version's list does not name is decided
+//! as an MCP tool of the name it has, with every path, URL and command its
+//! arguments name checked ([`crate::wire::unknown::mcp`]): the payload does
+//! not tell an MCP server's tool from a plugin's by its name alone, and
 //! OpenCode runs a call OpenMoat makes no decision on.
 
 use openmoat_core::Action;
 use serde_json::Value;
 
-use super::Call;
 use super::mcp::spelling;
+use super::{Api, Call};
 use crate::HostError;
 
-/// Tools that touch no file, command or network of this machine themselves:
-/// `task` starts a subagent, whose calls are hooks of their own (with the
-/// subagent's session id); `todowrite` keeps the session's to-do list;
-/// `skill` loads a skill's instructions; `question` asks the person; `invalid`
-/// answers a call the model got wrong; the resource lists only list what MCP
-/// servers offer.
-const UNGOVERNED: &[&str] = &[
-    "task",
-    "todowrite",
-    "skill",
-    "question",
-    "invalid",
-    "list_mcp_resources",
-    "list_mcp_resource_templates",
-];
+mod v1;
+mod v2;
 
 /// Why a call of OpenCode's shell on Windows is left to OpenCode: it runs Git
-/// Bash, PowerShell or `cmd` under the one tool id `bash`, and the payload
-/// does not say which (`tool/shell/id.ts`).
+/// Bash, PowerShell or `cmd` under one tool id (`bash` in OpenCode 1, `shell`
+/// in OpenCode 2), and the payload does not say which (1.x
+/// `tool/shell/id.ts`; 2.x `core/src/shell/select.ts`).
 const WINDOWS_SHELL: &str = "OpenCode's shell on Windows";
 
 pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
-    let tool = call.tool;
-    let field = |name: &'static str| crate::input_str(call.args, tool, name);
-    let action = match tool {
-        "bash" if call.windows => {
-            // A `workdir` that is not a string is malformed on every platform.
-            optional(call, "workdir")?;
-            Action::ForeignShell {
-                shell: WINDOWS_SHELL.to_owned(),
-                command: field("command")?,
-            }
-        }
-        "bash" => Action::Shell {
-            command: in_dir(call, field("command")?)?,
-        },
-        // `lsp` (experimental) opens `filePath` and asks its language server about it.
-        "read" | "lsp" => Action::FsRead {
-            path: path(call, &field("filePath")?)?,
-        },
-        // `write` replaces the file; `edit` replaces text in it.
-        "write" | "edit" => Action::FsWrite {
-            path: path(call, &field("filePath")?)?,
-        },
-        // Offered to GPT models in place of `edit` and `write`.
-        "apply_patch" => Action::Patch {
-            writes: openmoat_core::patch_writes(&field("patchText")?)
-                .iter()
-                .map(|hunk| path(call, hunk))
-                .collect::<Result<_, _>>()?,
-        },
-        // `glob` matches `pattern` below `path`, `grep` searches the files
-        // there that `include` matches; an absolute pattern names its own
-        // directory, and a `..` in one may climb out of `path`.
-        "glob" => search(call, Some(&field("pattern")?))?,
-        "grep" => search(call, optional(call, "include")?.as_deref())?,
-        // `webfetch` only GETs `url` (ADR-017).
-        "webfetch" => Action::Fetch { url: field("url")? },
-        "websearch" => Action::WebSearch {
-            query: field("query")?,
-        },
-        "read_mcp_resource" => crate::wire::mcp::read_resource(tool, call.args)?,
-        // Code Mode's script runs in a confined interpreter; each MCP tool it
-        // calls is a hook of its own (`tool/code-mode.ts`, `invokeChildTool`).
-        "execute" => return Ok(None),
-        name if UNGOVERNED.contains(&name) => return Ok(None),
-        name => match mcp_name(name, call.mcp_servers) {
-            Some(mcp) => crate::wire::mcp::action(&mcp, call.args)?,
-            None => crate::wire::unknown::mcp(name, call.args)?,
-        },
-    };
-    Ok(Some(action))
+    match call.api {
+        Api::V1 => v1::map(call),
+        Api::V2 => v2::map(call),
+    }
+}
+
+/// A tool neither version's list names: an MCP tool of a configured server,
+/// else any other tool, checked by what its arguments name.
+fn other(call: &Call<'_>) -> Result<Action, HostError> {
+    match mcp_name(call.tool, call.mcp_servers) {
+        Some(mcp) => crate::wire::mcp::action(&mcp, call.args),
+        None => crate::wire::unknown::mcp(call.tool, call.args),
+    }
+}
+
+/// The shell tool: `command`, after a `cd` to `workdir` when the call names
+/// one; on Windows left to OpenCode.
+fn shell(call: &Call<'_>) -> Result<Action, HostError> {
+    let command = crate::input_str(call.args, call.tool, "command")?;
+    if call.windows {
+        // A `workdir` that is not a string is malformed on every platform.
+        optional(call, "workdir")?;
+        return Ok(Action::ForeignShell {
+            shell: WINDOWS_SHELL.to_owned(),
+            command,
+        });
+    }
+    Ok(Action::Shell {
+        command: in_dir(call, command)?,
+    })
 }
 
 /// `command` as it runs in `workdir`, when the call names one: after a `cd`
 /// there, so relative paths in it resolve where OpenCode runs it while the
-/// project stays the session's. OpenCode resolves `workdir` against the
-/// instance directory with `path.resolve` (`tool/shell.ts`), which expands no
-/// `~`, so the path is quoted whole.
+/// project stays the session's. OpenCode 1 resolves `workdir` with
+/// `path.resolve`, which expands no `~`, so the path is quoted whole;
+/// OpenCode 2 expands a leading `~` or `~/` (`FileAccess.resolvePath`), so
+/// that is left outside the quotes.
 fn in_dir(call: &Call<'_>, command: String) -> Result<String, HostError> {
-    Ok(match optional(call, "workdir")? {
-        Some(dir) => format!("cd '{}' && {command}", dir.replace('\'', r"'\''")),
-        None => command,
-    })
+    let Some(dir) = optional(call, "workdir")? else {
+        return Ok(command);
+    };
+    let quote = |s: &str| format!("'{}'", s.replace('\'', r"'\''"));
+    let target = match (call.api, home_relative(call, &dir)) {
+        (Api::V2, Some("")) => "~".to_owned(),
+        (Api::V2, Some(rest)) => format!("~/{}", quote(rest)),
+        _ => quote(&dir),
+    };
+    Ok(format!("cd {target} && {command}"))
 }
 
 /// What a search tool reads: `path` (else the instance directory), and where
 /// `pattern` reaches beyond it.
-fn search(call: &Call<'_>, pattern: Option<&str>) -> Result<Action, HostError> {
-    let root = match optional(call, "path")? {
+fn search(call: &Call<'_>, root: Option<String>, pattern: Option<&str>) -> Result<Action, HostError> {
+    let root = match root {
         Some(p) => path(call, &p)?,
         None => call.cwd.map(str::to_owned).ok_or_else(|| {
             malformed(
@@ -135,13 +110,23 @@ fn optional(call: &Call<'_>, name: &str) -> Result<Option<String>, HostError> {
     }
 }
 
-/// `raw` as OpenCode's tools open it: an absolute path as it is, anything else
-/// joined to the instance directory (`path.join` or `path.resolve`), a leading
-/// `~` included, which OpenCode does not expand. A relative path with no
-/// directory in the payload is an adapter error.
+/// `raw` as OpenCode's tools open it: an absolute path as it is; in
+/// OpenCode 2 a leading `~` or `~/` (`~\` on Windows) as the home directory,
+/// written `~/…` for the policy to expand; anything else joined to the
+/// instance directory, which in OpenCode 1 includes a leading `~`. A relative
+/// path with no directory in the payload is an adapter error.
 fn path(call: &Call<'_>, raw: &str) -> Result<String, HostError> {
     if is_absolute(raw, call.windows) {
         return Ok(raw.to_owned());
+    }
+    if call.api == Api::V2
+        && let Some(rest) = home_relative(call, raw)
+    {
+        return Ok(if rest.is_empty() {
+            "~".to_owned()
+        } else {
+            format!("~/{rest}")
+        });
     }
     match call.cwd {
         Some(dir) => Ok(crate::below(dir, raw)),
@@ -150,6 +135,16 @@ fn path(call: &Call<'_>, raw: &str) -> Result<String, HostError> {
             format!("`{raw}` is relative and the payload names no instance directory (`directory`)"),
         )),
     }
+}
+
+/// The rest of `raw` after a `~` OpenCode 2 expands: `~` alone (`Some("")`),
+/// `~/`, and on Windows `~\`.
+fn home_relative<'r>(call: &Call<'_>, raw: &'r str) -> Option<&'r str> {
+    if raw == "~" {
+        return Some("");
+    }
+    raw.strip_prefix("~/")
+        .or_else(|| raw.strip_prefix("~\\").filter(|_| call.windows))
 }
 
 /// Node's `path.isAbsolute` on the platform OpenCode runs on.
@@ -169,15 +164,14 @@ fn is_absolute(path: &str, windows: bool) -> bool {
 /// `tool` as `mcp__<server>__<tool>` when its name begins with a configured
 /// server's, spelled as OpenCode spells it (`<server>_<tool>`). When several
 /// servers' spellings begin it, the longest wins, as OpenCode's own Code Mode
-/// splits the name (`tool/code-mode.ts`, `groupByServer`); the pins of every
-/// such server still apply to it (`mcp::Joined`).
+/// splits the name (1.x `tool/code-mode.ts`, `groupByServer`); the pins of
+/// every such server still apply to it (`mcp::Joined`).
 fn mcp_name(tool: &str, servers: &[String]) -> Option<String> {
     servers
         .iter()
         .filter_map(|server| {
             let rest = tool.strip_prefix(&format!("{}_", spelling(server)))?;
             (!rest.is_empty()).then(|| (spelling(server).len(), server, rest))
-
         })
         .max_by_key(|(len, _, _)| *len)
         .map(|(_, server, rest)| format!("mcp__{server}__{rest}"))

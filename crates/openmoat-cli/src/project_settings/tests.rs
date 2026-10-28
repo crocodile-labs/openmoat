@@ -311,8 +311,8 @@ fn warns_for_the_session_directory_and_its_project_root_not_the_home() {
 }
 
 /// An OpenCode project's `opencode.json`, read with its comments as OpenCode
-/// reads it, and its `.opencode/plugins/` are named; OpenCode 1 has no setting
-/// that turns OpenMoat's plugin off, so the person's own file names nothing.
+/// reads it, and its `.opencode/plugins/` are named; a `plugin` list that only
+/// adds turns nothing off, so the person's own file with one names nothing.
 #[test]
 fn opencode_project_configuration_and_plugins_are_named() {
     let dir = tempfile::tempdir().unwrap();
@@ -388,6 +388,36 @@ fn opencode_jsonc_files_and_the_singular_plugin_folder_are_named() {
     );
     assert!(
         rows[2].contains("plugin/helper.js: is a plugin OpenCode loads"),
+        "{rows:?}"
+    );
+}
+
+/// OpenCode 2 removes OpenMoat's plugin for `-openmoat` in `plugins`: in the
+/// person's `opencode.json` or `opencode.jsonc` OpenCode is not protected, in a
+/// project's the warning says its sessions are not.
+#[test]
+fn a_removal_of_openmoats_opencode_plugin_is_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let user_home = dir.path().join("home");
+    let config = user_home.join(".config/opencode");
+    let plugin = config.join("plugins/openmoat.js");
+    fs::create_dir_all(&config).unwrap();
+    let removes = "{\n  // drops it\n  \"plugins\": [\"-openmoat\"],\n}\n";
+    for name in ["opencode.json", "opencode.jsonc"] {
+        fs::write(config.join(name), removes).unwrap();
+        let found = switched_off(Host::OpenCode, &config, &plugin).unwrap();
+        assert!(found.contains(name) && found.contains("`-openmoat`"), "{found}");
+        fs::remove_file(config.join(name)).unwrap();
+    }
+    assert_eq!(switched_off(Host::OpenCode, &config, &plugin), None);
+
+    let project = user_home.join("proj");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::write(project.join("opencode.json"), removes).unwrap();
+    let rows = super::warnings(&project, &user_home, Host::OpenCode, &plugin);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert!(
+        rows[0].contains("does not protect OpenCode 2 sessions started here"),
         "{rows:?}"
     );
 }

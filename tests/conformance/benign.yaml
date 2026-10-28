@@ -196,6 +196,11 @@
   threat: T9
   action: { shell: "OPENCODE_DISABLE_AUTOUPDATE=1 opencode run 'list files'" }
   expect: { verdict: defer, rules: [default] }
+# OpenCode 2's service commands that only report stay the agent's
+- id: benign-opencode2-service-status
+  threat: T9
+  action: { shell: "opencode service status" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-read-repository-policy
   threat: T9
   action: { fs_read: "/p/.moat/policy.yaml" }

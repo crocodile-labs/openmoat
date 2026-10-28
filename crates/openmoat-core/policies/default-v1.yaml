@@ -340,9 +340,10 @@ deny:
       - "~/.gemini/trustedFolders.json"
       - "**/.gemini/settings.json"
       # OpenCode: its configuration directory, OpenMoat's plugin and the plugin
-      # folders around it, and the configuration files whose `plugin` list loads
-      # plugins before it (`config` is the old TOML one OpenCode moves into
-      # `config.json`); other plugins ask (`runs-later`)
+      # folders around it, the configuration files whose `plugin` list loads
+      # plugins and whose `-openmoat` removes OpenMoat's (`config` is the old TOML
+      # one OpenCode moves into `config.json`), and OpenCode 2's background service
+      # settings, whose `env` it starts with; other plugins ask (`runs-later`)
       - "~/.config/opencode"
       - "~/.config/opencode/plugins"
       - "~/.config/opencode/plugins/openmoat.js"
@@ -351,6 +352,7 @@ deny:
       - "~/.config/opencode/opencode.json"
       - "~/.config/opencode/opencode.jsonc"
       - "~/.config/opencode/config"
+      - "~/.config/opencode/service*.json"
       # OpenCode also reads `~/.opencode` as a configuration directory, with its
       # own plugin folders and configuration files
       - "~/.opencode"
@@ -452,15 +454,21 @@ deny:
       - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert} * *moat-proxy*"
       - "{launchctl,*/launchctl} {bootout,unload,disable,remove,kill} * *dev.openmoat.proxy*"
       # starting OpenCode without its plugins, OpenMoat's among them (`--pure`, or
-      # `OPENCODE_PURE` below), replacing OpenCode 1 with OpenCode 2, which does not
-      # load OpenMoat's plugin (`upgrade --major`), or adding a plugin to the global
-      # configuration, which loads it before OpenMoat's (`plugin --global`)
+      # `OPENCODE_PURE` below), replacing the OpenCode the person runs with another
+      # major version, whose plugin API OpenMoat's plugin must serve
+      # (`upgrade --major`), changing the plugins of the global configuration, which
+      # OpenCode 1 loads before OpenMoat's and OpenCode 2 lets remove it (OpenCode
+      # 1's `plugin --global`; OpenCode 2's `plugin add`, `remove` and `update`), or
+      # setting the environment OpenCode 2's background service starts with, which
+      # can move its configuration away from OpenMoat's plugin (`service set env`)
       - "{opencode,*/opencode} * --pure*"
       - "{npx,*/npx,bunx,*/bunx,pnpx,*/pnpx} * opencode-ai* * --pure*"
-      - "{opencode,*/opencode} upgrade * --major*"
+      - "{opencode,*/opencode,opencode2,*/opencode2} upgrade * --major*"
       - "{opencode,*/opencode} {plugin,plug} * --global*"
       - "{opencode,*/opencode} {plugin,plug} * -g*"
       - "{opencode,*/opencode} {plugin,plug} * -[!-]*g*"
+      - "{opencode,*/opencode,opencode2,*/opencode2} {plugin,plug} {add,remove,update}"
+      - "{opencode,*/opencode,opencode2,*/opencode2} service {set,unset}"
       # Hermes Agent's own commands that take OpenMoat's hook out of `config.yaml` or
       # its allowlist (a running gateway drops it within a minute), turn approvals off,
       # enable plugins, set `HERMES_SAFE_MODE`, or make a profile without the hook the
@@ -472,8 +480,13 @@ deny:
       - "{hermes,*/hermes} profile use*"
       - "{hermes,*/hermes} * profile use*"
     # `OPENCODE_PURE` starts OpenCode without its plugins, and `HERMES_SAFE_MODE`
-    # starts Hermes Agent with no shell hook, OpenMoat's included in both
-    env.set: ["OPENCODE_PURE", "HERMES_SAFE_MODE"]
+    # starts Hermes Agent with no shell hook, OpenMoat's included in both;
+    # `OPENCODE_CONFIG_DIR` moves OpenCode 2's configuration directory away from
+    # OpenMoat's plugin (and adds one with plugins of its own to OpenCode 1), and
+    # `OPENCODE_CONFIG` and `OPENCODE_CONFIG_CONTENT` add configuration whose
+    # `-openmoat` removes the plugin in OpenCode 2
+    env.set: ["OPENCODE_PURE", "HERMES_SAFE_MODE", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG",
+      "OPENCODE_CONFIG_CONTENT"]
   # the folders above a file `kernel-self` protects that hold no agent directory of
   # their own: renaming `.github` (or `.github/copilot`) away and back edits
   # `.github/copilot/settings.json` under another name. `hook_only` (ADR-034): a

@@ -152,6 +152,11 @@ pub fn also_dirs(host: Host, dir: &Path) -> Vec<PathBuf> {
                     .filter(|v| !v.is_empty())
                     .and_then(|v| crate::context::absolute(Path::new(&v)).ok()),
             ),
+            AlsoDir::Below(name, child) => found.extend(
+                std::env::var_os(name)
+                    .filter(|v| !v.is_empty())
+                    .and_then(|v| crate::context::absolute(&Path::new(&v).join(child)).ok()),
+            ),
             AlsoDir::EachIn(folder) => {
                 if let Ok(entries) = fs::read_dir(dir.join(folder)) {
                     found.extend(entries.filter_map(|e| Some(e.ok()?.path())));

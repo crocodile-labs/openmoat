@@ -162,6 +162,10 @@ pub struct ProjectSettingsSpec {
     /// by `moat status` and `moat doctor` as "not protected". For Claude Code
     /// and Gemini CLI it is the hook file itself.
     pub user_file: &'static str,
+    /// Further files of the person's in the configuration directory, read as
+    /// [`Self::user_file`] is (OpenCode's `opencode.jsonc`);
+    /// empty for most hosts.
+    pub user_more: &'static [&'static str],
 }
 
 impl ProjectSettingsSpec {
@@ -241,11 +245,12 @@ pub struct InstallSpec {
     /// Files besides the hook file that `moat init` writes and the lock pins
     /// with it (OpenClaw's plugin); the sandbox file is [`SandboxSpec::file`].
     pub extra_files: &'static [ExtraFile],
-    /// The host's versions OpenMoat's hook does not work with, told by the
-    /// version its program reports: `moat init` does not set such a host up,
-    /// and `moat status` and `moat doctor` report it as not protected. `None`
-    /// when every version takes the hook.
-    pub unsupported: Option<Unsupported>,
+    /// Which of the host's versions load OpenMoat's hook, and through which of
+    /// the host's hooks, told by the version its program reports: `moat init`
+    /// does not set up an older one, `moat status` and `moat doctor` report it
+    /// as not protected and name the hook a supported one runs OpenMoat
+    /// through. `None` when every version takes the same hook.
+    pub versions: Option<HookVersions>,
     /// The file in the configuration directory where the host records the
     /// person's consent to run a hook command, which `moat init` writes for
     /// OpenMoat's and the lock pins with the hook file; `None` for a host that
@@ -269,20 +274,43 @@ pub enum AlsoDir {
     /// Each directory in this folder of the configuration directory (Hermes
     /// Agent's `profiles`, each a home of its own).
     EachIn(&'static str),
+    /// The directory of this name in the one the variable names, when it is
+    /// set (OpenCode 1 reads `$XDG_CONFIG_HOME/opencode` also when
+    /// `OPENCODE_CONFIG_DIR` moves its configuration directory).
+    Below(&'static str, &'static str),
 }
 
-/// Versions of a host whose hook API OpenMoat does not support yet
-/// ([`InstallSpec::unsupported`]).
+/// Which versions of a host load OpenMoat's hook, and through which hook
+/// ([`InstallSpec::versions`]).
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct Unsupported {
+pub struct HookVersions {
     /// The host's program, looked for on the search path and run with
     /// `--version`.
     pub program: &'static str,
-    /// The first major version OpenMoat does not support.
-    pub from_major: u64,
-    /// Why, as `init`, `status` and `doctor` print it after the version.
-    pub why: &'static str,
+    /// The oldest version that loads OpenMoat's hook.
+    pub oldest: Version,
+    /// Why older versions do not, as `init`, `status` and `doctor` print it
+    /// after the version.
+    pub older: &'static str,
+    /// The hook each version runs OpenMoat through, from the version given
+    /// on, oldest first.
+    pub hooks: &'static [(Version, &'static str)],
+}
+
+impl HookVersions {
+    /// The hook `version` runs OpenMoat through; `None` below [`Self::oldest`].
+    #[must_use]
+    pub fn hook_of(&self, version: Version) -> Option<&'static str> {
+        if version < self.oldest {
+            return None;
+        }
+        self.hooks
+            .iter()
+            .rev()
+            .find(|(from, _)| version >= *from)
+            .map(|(_, hook)| *hook)
+    }
 }
 
 impl InstallSpec {

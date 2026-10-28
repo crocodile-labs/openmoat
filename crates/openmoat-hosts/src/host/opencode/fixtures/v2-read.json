@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "execute.before",
+  "tool": "read",
+  "sessionID": "ses_7c41d2a09ffeQrStUvWxYzAbCd",
+  "agent": "build",
+  "messageID": "msg_7c41d2a0affe01",
+  "callID": "call_v2_read",
+  "input": {
+    "path": "src/main.rs",
+    "offset": 1,
+    "limit": 200
+  },
+  "directory": "/p",
+  "worktree": "/p",
+  "mcpServers": [],
+  "platform": "darwin"
+}

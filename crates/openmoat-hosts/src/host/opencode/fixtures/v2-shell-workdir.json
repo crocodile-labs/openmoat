@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "execute.before",
+  "tool": "shell",
+  "sessionID": "ses_7c41d2a09ffeQrStUvWxYzAbCd",
+  "agent": "build",
+  "messageID": "msg_7c41d2a0affe01",
+  "callID": "call_v2_shell_workdir",
+  "input": {
+    "command": "cat .env",
+    "workdir": "~/other"
+  },
+  "directory": "/p",
+  "worktree": "/p",
+  "mcpServers": [],
+  "platform": "darwin"
+}
