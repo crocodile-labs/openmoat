@@ -81,6 +81,31 @@ fn code_that_writes_writes_the_files_it_names() {
             "python3 - <<'EOF'\nopen('x.py', 'w').write('1')\nEOF",
             "/p/x.py",
         ),
+        // the file name in a variable, the mode the only literal of the call
+        (
+            r#"python3 -c 'p="/Users/me/.zshrc"; open(p,"a").write("x")'"#,
+            "/Users/me/.zshrc",
+        ),
+        (
+            r#"python3 -c 'from pathlib import Path; Path("/Users/me/.zshrc").open("a").write("x")'"#,
+            "/Users/me/.zshrc",
+        ),
+        (
+            r#"python3 -c 'import os; os.open("/Users/me/.zshrc", os.O_WRONLY|os.O_APPEND)'"#,
+            "/Users/me/.zshrc",
+        ),
+        (
+            r#"node -e "require('fs').openSync('/Users/me/.zshrc','a')""#,
+            "/Users/me/.zshrc",
+        ),
+        (
+            r#"ruby -e 'File.new("/Users/me/.zshrc", "w").puts 1'"#,
+            "/Users/me/.zshrc",
+        ),
+        (
+            r#"ruby -e 'File.binwrite("/Users/me/.zshrc", "x")'"#,
+            "/Users/me/.zshrc",
+        ),
     ] {
         let atoms = parsed(cmd);
         assert!(has_write(&atoms, path), "{cmd}: {atoms:?}");
@@ -109,6 +134,9 @@ fn code_that_only_reads_writes_nothing() {
         r#"ruby -e 'puts File.read("Gemfile")'"#,
         r#"perl -e 'open F, "<", "x.pl"; print <F>'"#,
         r#"python3 -c 'print("x" + "y")'"#,
+        r#"python3 -c 'import os; os.read(os.open("README.md", os.O_RDONLY), 9)'"#,
+        r#"python3 -c 'from pathlib import Path; print(Path("README.md").open().read())'"#,
+        r#"node -e "require('fs').openSync('README.md','r')""#,
     ] {
         let atoms = parsed(cmd);
         assert!(

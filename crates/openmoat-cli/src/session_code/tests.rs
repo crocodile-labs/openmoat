@@ -240,6 +240,12 @@ fn a_script_written_by_inline_code_counts_as_written() {
         None,
     );
     assert!(asks(&f.decide("a", "node y.js", false)));
+    // code that writes another file still runs the one the session wrote
+    assert!(asks(&f.decide(
+        "a",
+        r#"python3 -c 'open("log.txt","w").write("x"); import runpy; runpy.run_path("x.py")'"#,
+        false
+    )));
     // code that only read it records nothing
     f.ran(
         "b",

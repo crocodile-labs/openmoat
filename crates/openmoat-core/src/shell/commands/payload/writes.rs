@@ -8,6 +8,8 @@
 //! the guard records them as the session's writes (ADR-039). Code that only
 //! reads keeps its reads.
 
+use std::collections::BTreeMap;
+
 use crate::paths;
 
 /// Calls that write a file whatever arguments they get.
@@ -42,6 +44,7 @@ const WRITERS: &[&str] = &[
     "File.write",
     "IO.write",
     "File.rename",
+    "binwrite",
     "FileUtils.",
     // PHP
     "file_put_contents",
@@ -51,8 +54,12 @@ const WRITERS: &[&str] = &[
     "Out-File",
 ];
 
-/// Calls whose mode argument says whether they write (`open(p, "w")`).
-const OPENERS: &[&str] = &["open(", "fopen("];
+/// Calls whose mode argument says whether they write (`open(p, "w")`,
+/// `os.open(p, os.O_WRONLY)`, `fs.openSync(p, "a")`, `File.new(p, "w")`).
+const OPENERS: &[&str] = &["open(", "fopen(", "openSync(", "File.new("];
+
+/// `open` flags that write (`os.O_WRONLY`, `fs.constants.O_APPEND`).
+const WRITE_FLAGS: &[&str] = &["O_WRONLY", "O_RDWR", "O_CREAT", "O_APPEND", "O_TRUNC"];
 
 /// The literal file names `code` may write, or `None` when it writes nothing.
 pub(super) fn written(code: &str) -> Option<Vec<String>> {
@@ -73,6 +80,89 @@ pub(super) fn written(code: &str) -> Option<Vec<String>> {
     })
 }
 
+/// The literals `code` shows where it writes them, once per place: the
+/// arguments of a write call (`writeFileSync("x.js", …)`, `FileUtils.cp(…)`),
+/// its receiver (`Path("x.py").write_text(…)`), the file of an `open` in a
+/// write mode and Perl's `">x"`. Those places name what is written, not code
+/// that runs (`executes/inline.rs`).
+pub(super) fn targets(code: &str) -> Vec<String> {
+    // keyed by where the place starts: `fopen(` is also `open(`, and
+    // `Deno.writeFile(` also `writeFile(`; one place counts once
+    let mut places: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+    let offset = |part: &str| part.as_ptr() as usize - code.as_ptr() as usize;
+    let mut receiver = |at: usize| {
+        let before = code[..at].trim_end_matches('.');
+        if let Some(inside) = before.strip_suffix(')').and_then(opened) {
+            places.insert(offset(inside), literals(inside));
+        }
+    };
+    let mut calls: Vec<(usize, &str)> = Vec::new();
+    for writer in WRITERS {
+        for (at, _) in code.match_indices(writer) {
+            receiver(at);
+            let after = code[at + writer.len()..]
+                .trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+            let after = if writer.ends_with('(') {
+                Some(after)
+            } else {
+                after.strip_prefix('(')
+            };
+            calls.extend(after.map(|rest| (offset(rest), arguments(rest))));
+        }
+    }
+    for call in OPENERS {
+        for (at, _) in code.match_indices(call) {
+            let rest = &code[at + call.len()..];
+            let arguments = arguments(rest);
+            if !opens_for_writing(arguments) {
+                continue;
+            }
+            // `Path("x.py").open("w")`: the file is the receiver
+            receiver(at);
+            if arguments.trim_start().starts_with(['"', '\'', '`']) {
+                calls.push((
+                    offset(rest),
+                    &arguments[..arguments.find(',').unwrap_or(arguments.len())],
+                ));
+            }
+        }
+    }
+    for (at, arguments) in calls {
+        places.insert(at, literals(arguments));
+    }
+    let mut found: Vec<String> = places.into_values().flatten().collect();
+    let literals = literals(code);
+    if perl_writes(code, &literals) {
+        // `">x"`, `"+<x"`, and the name after a bare `">"` / `">>"` / `"+<"`
+        let mut after_mode = false;
+        for literal in literals {
+            let name = literal.trim_start_matches(['+', '>', '<', ' ']);
+            let writes = literal.starts_with(['>', '+']);
+            if after_mode || (writes && !name.is_empty()) {
+                found.push(name.to_owned());
+            }
+            after_mode = writes && name.is_empty();
+        }
+    }
+    found.retain(|name| !name.is_empty());
+    found
+}
+
+/// The text inside the parenthesis that `before`'s closing one (just cut off)
+/// matches: `Path("x.py"` → `"x.py"`.
+fn opened(before: &str) -> Option<&str> {
+    let mut depth = 0usize;
+    for (at, c) in before.char_indices().rev() {
+        match c {
+            ')' => depth += 1,
+            '(' if depth == 0 => return Some(&before[at + 1..]),
+            '(' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
 /// The text up to the parenthesis that closes the call `rest` starts inside.
 fn arguments(rest: &str) -> &str {
     let mut depth = 0usize;
@@ -88,12 +178,12 @@ fn arguments(rest: &str) -> &str {
 }
 
 /// Whether the arguments of an `open` call hold a mode that writes: `"w"`,
-/// `'a'`, `"x"`, `"wb"`, `"r+"`, `mode="w"`.
+/// `'a'`, `"x"`, `"wb"`, `"r+"`, `mode="w"`, a write flag. Any literal
+/// counts, whatever its place (`open(p, "w")` has no literal file name); a
+/// file that is itself named `w` is read as a mode: conservative.
 fn opens_for_writing(arguments: &str) -> bool {
-    literals(arguments).iter().skip(1).any(|l| is_write_mode(l))
-        || arguments
-            .split_once("mode=")
-            .is_some_and(|(_, rest)| literals(rest).first().is_some_and(|l| is_write_mode(l)))
+    literals(arguments).iter().any(|l| is_write_mode(l))
+        || WRITE_FLAGS.iter().any(|flag| arguments.contains(flag))
 }
 
 fn is_write_mode(text: &str) -> bool {

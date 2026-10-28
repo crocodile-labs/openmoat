@@ -8,19 +8,26 @@
 use super::interpreters::file_like;
 
 /// The words of `code`, which `program` runs, that name a file it may load as
-/// code, relative to the working directory or absolute. Code that `writes`
-/// files names the files it writes, not ones it runs: its other file names are
-/// left out (running what it wrote, `exec(open(…).read())`, is opaque code).
-pub(super) fn loads(program: &str, code: &str, writes: bool) -> Vec<String> {
+/// code, relative to the working directory or absolute. `written`: the names
+/// the code shows where it writes them (`commands/payload/writes.rs`), once
+/// per place; a name shown only there is not one it runs, a name it also
+/// shows elsewhere (`runpy.run_path("x.py")`) still is.
+pub(super) fn loads(program: &str, code: &str, written: &[String]) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
     // a program file the code names (`exec(open('tool.py').read())`, `require('./x.js')`)
     let words = code
         .split(|c: char| {
             c.is_whitespace() || matches!(c, '(' | ')' | ',' | ';' | '\'' | '"' | '`' | '[' | ']')
         })
-        .filter(|_| !writes);
-    for word in words {
-        if file_like(word) && word.rsplit_once('.').is_some_and(|(_, e)| !e.is_empty()) {
+        .collect::<Vec<_>>();
+    for &word in &words {
+        // a name the code shows only where it writes it is written, not run
+        let shown = words.iter().filter(|&&w| w == word).count();
+        let as_written = written.iter().filter(|&w| w == word).count();
+        if shown > as_written
+            && file_like(word)
+            && word.rsplit_once('.').is_some_and(|(_, e)| !e.is_empty())
+        {
             found.push(word.to_owned());
         }
     }

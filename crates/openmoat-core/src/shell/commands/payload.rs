@@ -77,7 +77,8 @@ pub(super) fn scan_payload(
             argv: vec!["@env-dump".to_owned(), expression.to_owned()],
         })?;
     }
-    crate::shell::executes::inline(payload, (program, written.is_some()), ctx, sink);
+    let targets = writes::targets(payload);
+    crate::shell::executes::inline(payload, (program, &targets), ctx, sink);
     if opaque::opaque(payload) {
         sink.push(AtomicAction::Shell {
             argv: vec!["@opaque-code".to_owned(), program.to_owned()],

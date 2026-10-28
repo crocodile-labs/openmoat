@@ -204,3 +204,47 @@ fn inline_code_that_loads_a_file_of_the_working_directory_runs_it() {
     // working directory's file of that name
     assert_eq!(files("node -e \"require('lodash')\""), Vec::<String>::new());
 }
+
+#[test]
+fn a_file_inline_code_only_writes_is_not_one_it_runs() {
+    for cmd in [
+        r#"python3 -c 'open("x.py","w").write("print(1)")'"#,
+        r#"python3 -c 'from pathlib import Path; Path("x.py").write_text("1")'"#,
+        r#"python3 -c 'from pathlib import Path; Path("x.py").open("w").write("1")'"#,
+        r#"node -e "require('fs').writeFileSync('x.py','1')""#,
+        r#"deno eval 'await Deno.writeFile("x.py", d)'"#,
+        r#"perl -e 'open(my $f, ">", "x.py"); print $f 1'"#,
+    ] {
+        assert!(!runs(cmd, "/p/x.py"), "{cmd}: {:?}", files(cmd));
+    }
+}
+
+#[test]
+fn code_that_writes_still_runs_the_files_it_loads() {
+    // writing one file does not hide another the code runs, nor the same
+    // file shown again where it is run
+    for (cmd, path) in [
+        (
+            r#"python3 -c 'open("log.txt","w").write("x"); import runpy; runpy.run_path("tool.py")'"#,
+            "/p/tool.py",
+        ),
+        (
+            r#"python3 -c 'open("x.py","w").write("1"); import runpy; runpy.run_path("x.py")'"#,
+            "/p/x.py",
+        ),
+        (
+            r#"python3 -c 'open("log.txt","w").write("x"); import tool'"#,
+            "/p/tool.py",
+        ),
+        (
+            r#"node -e "require('fs').writeFileSync('log.txt','x'); require('./tool.js')""#,
+            "/p/tool.js",
+        ),
+        (
+            r#"ruby -e 'File.write("log.txt", "x"); load "tool.rb"'"#,
+            "/p/tool.rb",
+        ),
+    ] {
+        assert!(runs(cmd, path), "{cmd}: {:?}", files(cmd));
+    }
+}

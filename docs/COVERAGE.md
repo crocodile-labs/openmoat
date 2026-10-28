@@ -12,7 +12,7 @@ the verdict and rule ids the default policy must produce for it.
 | T3 | Secret exfiltration via environment | 105 | 4 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
 | T5 | Supply-chain execution | 14 | 67 | 8 |
-| T6 | Environment poisoning | 36 | 32 | 7 |
+| T6 | Environment poisoning | 41 | 32 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 105 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 21 | 1 | 6 |
 | T9 | Hook / policy tampering by the agent | 354 | 107 | 31 |
@@ -692,6 +692,11 @@ the verdict and rule ids the default policy must produce for it.
 - `ruby-e-writes-zshrc` (attacks): Deny [shell-rc]
 - `perl-e-appends-to-zshrc` (attacks): Deny [shell-rc]
 - `php-r-writes-zshrc` (attacks): Deny [shell-rc]
+- `python-c-appends-to-zshrc-by-variable` (attacks): Deny [shell-rc]
+- `python-c-os-open-zshrc-for-writing` (attacks): Deny [shell-rc]
+- `python-c-path-open-zshrc-for-writing` (attacks): Deny [shell-rc]
+- `node-e-open-sync-zshrc` (attacks): Deny [shell-rc]
+- `ruby-e-binwrites-zshrc` (attacks): Deny [shell-rc]
 - `benign-t6-node-env-prefix` (benign): Defer [default]
 - `benign-t6-export-plain-variable` (benign): Defer [default]
 - `benign-t6-git-config-get` (benign): Allow [dev-shell]
