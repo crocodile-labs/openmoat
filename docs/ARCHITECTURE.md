@@ -135,7 +135,7 @@ Claude Code treats exit 101 as a non-blocking error. A `guard` with no answer af
 unrecorded, and exits 2, since a host that times the hook out runs the call
 (THREAT_MODEL §5, "When the hook fails"). Only one response is ever written. The
 limit is wall-clock time, which includes waiting for a CPU and for the audit
-database's lock, so it is set well above the 10–20 ms a call takes: on a machine
+database's lock, so it is set well above the 10–40 ms a call takes: on a machine
 loaded by parallel builds a call can take seconds without being stuck. The deny
 appends `<ms> <host> <phase> <elapsed ms>` to `~/.moat/guard-hangs.log`, the
 phase being the step the guard was in (`stdin`, `relay` for a hook inside `openmoat run`
@@ -953,7 +953,7 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | Proxy | `crates/openmoat-proxy/tests/proxy/`: a real listener and a local upstream on loopback, names mapped by a test resolver, no external network | every PR, all OS |
 | `wasm32` purity build | CI job | every PR |
 | Fuzz | `fuzz/`, one minute per target on PRs, ten minutes weekly | CI |
-| Guard latency | `scripts/ci/guard-latency.py`: one process per call, end to end and as recorded by guard; warns above the 15 ms p95 budget, fails above 45 ms (about 3 ms deciding and 8 ms end to end on Apple silicon) | every PR, `latency` job (not required) |
+| Guard latency | `scripts/ci/guard-latency.py`: one process per call, end to end and as recorded by guard; warns above the 15 ms p95 budget, fails above 45 ms. On the CI runners (#674, 2026-10-28) the median and p95 end to end are 12 / 14 ms on Linux (`ubuntu-latest`) and 25–28 / 33–40 ms on macOS (`macos-14`), of which the guard itself records 10 / 11 ms and 18–21 / 25–31 ms; macOS runs above the warning budget | every PR, `latency` job (not required) |
 | Guard latency in long sessions | `scripts/ci/guard-session-latency.py`: one session grown to 100, 1,000 and 5,000 earlier calls, each a distinct file read, timed in three batches with the batches' median p95 reported beside the `latency_us` p95; warns above the 15 ms p95 budget at 5,000 and fails above 45 ms, so a return to folding the whole session fails the job. With the session cache (#570), CI runners measure p95 12 / 10 / 10 ms on Linux and 15 / 12 / 18 ms on macOS 14; before it, 18 / 40 / 158 ms and 41 / 110 / 370 ms, nearly all of it the session's taint worked out again from the audit log on every call (#559) | every PR, `latency` job (not required) |
 
 | Latest agents | `scripts/ci/latest-agents.sh` per agent of `scripts/ci/latest-agents/agents.json`: the agent's latest release, `openmoat init`, `status` and `doctor`, the real agent loading the hook against a local fake model API where it runs without an account, and guard payloads in its format; a newer release than the adapter was checked against is reported, a failure opens one issue per agent | weekly and by hand, `latest agents` workflow (not required) |
