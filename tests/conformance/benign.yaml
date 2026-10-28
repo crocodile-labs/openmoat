@@ -1737,7 +1737,8 @@
 - id: benign-read-fish-config
   action: { fs_read: "/Users/me/.config/fish/config.fish" }
   expect: { verdict: defer, rules: [default] }
-# Python work in a project (`runs-later` asks only for `.pth` and `*customize.py`)
+# Python work in a project (`runs-later` asks only for `.pth`, `sitecustomize.py`
+# and `usercustomize.py`)
 - id: benign-pip-install-editable
   action: { shell: "pip install -e ." }
   expect: { verdict: defer, rules: [default] }
