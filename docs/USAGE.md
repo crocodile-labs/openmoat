@@ -367,6 +367,62 @@ If your policy says `require_signed_repo_policy: true`, a repository policy is t
 only when a trusted key signed it (`.moat/policy.yaml.sig`): a signed one needs no
 `openmoat trust`, and an unsigned one only tightens, even after `openmoat trust`.
 
+## MCP servers through the gateway
+
+The hook decides every MCP tool call an agent makes. `openmoat mcp proxy` also stands
+between the agent and a stdio MCP server, so what reaches the server is checked a second
+time, as the server receives it ([ADR-045](adr/ADR-045-mcp-gateway.md)). Turn it on per
+server, in your own terminal:
+
+```bash
+openmoat mcp wrap github          # or: openmoat init --mcp-proxy, for every stdio server
+openmoat mcp accept github        # after the agent first starts it: read each tool, accept
+```
+
+`openmoat mcp wrap` changes only that server's `command` and `args` in the agent's user
+configuration (backed up first); `openmoat mcp unwrap github` and `openmoat uninstall` put
+them back. With `--sandbox` the server itself runs under `openmoat run`.
+
+Through the gateway:
+
+- **The server never receives a call OpenMoat refused.** A tool nobody accepted, or one
+  whose description, schemas or annotations changed, is left out of the agent's tool list
+  and its calls are refused (error -32602, rule `mcp-tool-held`), the first time the server
+  starts too (ADR-032). When the server says its tools changed, the gateway reads them
+  again itself, so a changed tool is held even if the agent keeps its old list.
+- **A call passes only when the hook decided exactly that call.** The gateway matches each
+  tool call to the hook's decision for the same tool and arguments, made within the hour,
+  and uses each decision once. A call the hook never saw, or one whose arguments changed
+  after the hook checked them, is refused (error -32001, rule `mcp-unattributed`). So is a
+  call the hook denied, or asked about where no person could answer.
+- **The policy decides the arguments the server receives.** Paths and URLs in a call's
+  arguments are checked as the hook checks them (`fs.read`, `fs.write`, `net`), under the
+  name `mcp__<server>__<tool>`, so a rule on that name holds at the gateway whatever name
+  the agent gives the tool:
+
+  ```yaml
+  deny:
+    - id: no-repository-deletes
+      mcp: ["mcp__github__delete_repo"]
+  ```
+
+  `resources/read` is checked too: a `file:` URI as the file it names, an `https:` one as
+  the host.
+- **Each call is tied to the session that made it.** The gateway's audit row (host
+  `mcp-proxy`) carries the session and call id of the hook's decision, so
+  `openmoat audit export --session <id>` shows both rows, and the session's taint applies:
+  after the session read a secret, its MCP calls ask, and the gateway passes one only after
+  the person said yes.
+
+```console
+$ openmoat audit export --session 9f2c…
+{…,"host":"claude-code","session_id":"9f2c…","call_id":"toolu_01…","tool":"mcp__github__get_issue",…,"verdict":"allow",…}
+{…,"host":"mcp-proxy","session_id":"9f2c…","call_id":"toolu_01…","tool":"mcp__github__get_issue",…,"verdict":"allow","rules":["mcp-proxy"],…}
+```
+
+The gateway covers stdio servers. A remote (HTTP) server is checked by the hook alone, and
+tool results reach the model as the server sent them (they mark the session untrusted).
+
 ## If OpenMoat gets in your way
 
 OpenMoat leaves to your agent's own prompt what it has no rule for, and blocks only
@@ -388,6 +444,12 @@ these takes one command in your own terminal (agents are denied all of them):
   annotations, and asks. After upgrading from a release that pinned only the name,
   description and input schema, every pinned tool is held once this way; `openmoat status`
   and `openmoat doctor` say so, and one `openmoat mcp accept` clears it.
+- **A wrapped MCP server's calls fail with error -32001** and rule `mcp-unattributed`: the
+  gateway found no hook decision for that exact call. The agent did not run OpenMoat's hook
+  for it (`openmoat status` says whether each agent is set up), or something other than an
+  agent is using the wrapped server. `openmoat mcp unwrap <server>` takes the gateway out
+  of that server's path. With another rule, the policy denies what the call's arguments
+  name: the error message names the rule and the reason.
 - **A command you need keeps asking or is denied**: `openmoat allow --last` for this session,
   `openmoat allow --last --always` for good, or `openmoat edit` for a wider rule. Please also
   report it with the "False positive" issue template, so the default policy stops doing it.

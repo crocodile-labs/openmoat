@@ -230,6 +230,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
     } else {
         HookEvent::PreToolUseNoAsk
     };
+    let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), &p.input);
     Ok(HookRequest {
         host,
         session_id: crate::session_or_unknown(p.session_id.filter(|s| !s.is_empty())),
@@ -238,6 +239,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool: p.tool_name,
         action,
         content,
+        mcp_arguments,
         event,
     })
 }

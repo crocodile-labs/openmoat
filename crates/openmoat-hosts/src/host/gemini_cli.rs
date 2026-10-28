@@ -191,6 +191,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             .map(str::to_owned),
         _ => None,
     };
+    let mcp_arguments = crate::wire::mcp_call::hook_arguments(mapped.action.as_ref(), &p.tool_input);
     Ok(HookRequest {
         host,
         session_id: crate::session_or_unknown(p.session_id),
@@ -199,6 +200,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool: mapped.tool.unwrap_or(p.tool_name),
         action: mapped.action,
         content,
+        mcp_arguments,
         event: HookEvent::PreToolUse,
     })
 }

@@ -32,6 +32,10 @@ pub use host::openclaw::{
 };
 pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
+pub use wire::mcp_call::{
+    canonical_json, mcp_call_action, mcp_call_arguments, mcp_resource_action,
+    mcp_tools_list_request,
+};
 pub use wire::owned_file::{OwnedFile, OwnedFileError};
 
 use std::fmt;
@@ -308,6 +312,10 @@ pub struct HookRequest {
     /// hash. `None` for a tool that changes part of a file (`Edit`) or names
     /// no content.
     pub content: Option<String>,
+    /// For an MCP tool call, its arguments as [`mcp_call_arguments`] reads
+    /// them: `openmoat mcp proxy` passes a call on to the server only when it
+    /// matches one the hook decided (ADR-045). `None` for any other call.
+    pub mcp_arguments: Option<String>,
     /// Which hook fired.
     pub event: HookEvent,
 }

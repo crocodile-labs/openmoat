@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 5;
+pub(super) const SCHEMA_VERSION: i64 = 6;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -13,6 +13,8 @@ pub(super) const CHAIN_VERSION: i64 = 2;
 pub(super) const PROVENANCE_VERSION: i64 = 4;
 /// The first version with the files each session wrote ([`V5`]).
 pub(super) const SESSION_WRITES_VERSION: i64 = 5;
+/// The first version with the hook's MCP call decisions ([`V6`]).
+pub(super) const MCP_TICKETS_VERSION: i64 = 6;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -117,6 +119,26 @@ CREATE TABLE IF NOT EXISTS session_writes (
 CREATE INDEX IF NOT EXISTS session_writes_ts ON session_writes(ts_ms);
 ";
 
+/// Version 6: the MCP calls the hook let through, which `openmoat mcp proxy`
+/// matches the calls it relays against (ADR-045, `mcp_tickets.rs`). A lookup
+/// like [`V5`]: each row is removed when the proxy takes it or when it is an
+/// hour old. `IF NOT EXISTS`, as for [`V4`].
+const V6: &str = "
+CREATE TABLE IF NOT EXISTS mcp_tickets (
+    id                INTEGER PRIMARY KEY,
+    event_id          INTEGER NOT NULL,
+    ts_ms             INTEGER NOT NULL,
+    host              TEXT    NOT NULL,
+    session_id        TEXT    NOT NULL,
+    call_id           TEXT,
+    tool              TEXT    NOT NULL,
+    arguments_sha256  TEXT    NOT NULL,
+    verdict           TEXT    NOT NULL CHECK (verdict IN ('allow','defer','ask'))
+);
+CREATE INDEX IF NOT EXISTS mcp_tickets_arguments ON mcp_tickets(arguments_sha256, id);
+CREATE INDEX IF NOT EXISTS mcp_tickets_ts ON mcp_tickets(ts_ms);
+";
+
 /// The `user_version` of the open database.
 pub(super) fn version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
@@ -157,6 +179,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 5 {
         tx.execute_batch(V5)?;
+    }
+    if found < 6 {
+        tx.execute_batch(V6)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

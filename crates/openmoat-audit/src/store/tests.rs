@@ -1,5 +1,6 @@
 mod chain;
 mod export;
+mod mcp_tickets;
 mod provenance;
 mod session_cache;
 mod session_writes;

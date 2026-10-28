@@ -388,6 +388,9 @@ fn the_proxy_holds_a_new_servers_tools_until_accepted() {
     let accepted = sb.moat_approving(&["mcp", "accept", "docs"]);
     assert_eq!(accepted.status.code(), Some(OK), "{}", text(&accepted));
     assert!(proxy_session(&sb, evil, &list).contains("id_rsa"));
+    // The gateway passes on a call the hook decided (ADR-045).
+    let decided = mcp_call(&sb, &sb.project(), "mcp__docs__search");
+    assert_eq!(decided.status.code(), Some(OK), "{}", text(&decided));
     let passed = proxy_session(&sb, evil, &call);
-    assert!(!passed.contains("-32602"), "{passed}");
+    assert!(!passed.contains("error"), "{passed}");
 }

@@ -227,6 +227,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         }
         other => return Err(HostError::WrongEvent(other.to_owned())),
     };
+    let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), &p.tool_input);
     Ok(HookRequest {
         host,
         session_id: crate::session_or_unknown(p.conversation_id),
@@ -235,6 +236,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool,
         action,
         content: None,
+        mcp_arguments,
         event: event_kind(event),
     })
 }

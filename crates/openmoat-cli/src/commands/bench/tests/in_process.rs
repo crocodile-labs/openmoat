@@ -1,7 +1,9 @@
-//! The scenarios of ADR-039 and the benign category decided in-process: the
-//! default policy, the files each session wrote and the session-code check,
-//! as `openmoat guard` applies them, without hook payloads or an audit log on
-//! disk the end-to-end bench needs. Each runs with and without an OS sandbox.
+//! The scenarios of ADR-039 and the benign and MCP categories decided
+//! in-process: the default policy, the files each session wrote and the
+//! session-code check, as `openmoat guard` applies them, without hook payloads
+//! or an audit log on disk the end-to-end bench needs. An MCP step is the
+//! action `openmoat mcp proxy` decides too (ADR-045). Each runs with and
+//! without an OS sandbox.
 
 use openmoat_audit::{NewEvent, Store};
 use openmoat_core::{Action, CompiledPolicy, Decision, EvalContext, NoResolver, Policy, Verdict};
@@ -38,7 +40,9 @@ fn action(call: &Call, proj: &str) -> Option<Action> {
         Call::Read(p) => Action::FsRead { path: path(p) },
         Call::Write(p) | Call::Edit(p) => Action::FsWrite { path: path(p) },
         Call::Fetch(url) => Action::Fetch { url: url.clone() },
-        Call::Mcp { .. } => return None,
+        Call::Mcp { server, tool, args } => {
+            openmoat_hosts::mcp_call_action(&format!("mcp__{server}__{tool}"), args).ok()?
+        }
     })
 }
 
@@ -123,11 +127,11 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
 }
 
 #[test]
-fn session_code_and_benign_scenarios_hold_in_process() {
+fn session_code_benign_and_mcp_scenarios_hold_in_process() {
     let mut problems = Vec::new();
     let mut ran = 0;
     for (category, scenario) in scenarios().unwrap() {
-        if category != "benign" && !SESSION_CODE.contains(&scenario.id.as_str()) {
+        if !["benign", "mcp"].contains(&category) && !SESSION_CODE.contains(&scenario.id.as_str()) {
             continue;
         }
         for sandboxed in [false, true] {

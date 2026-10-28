@@ -29,7 +29,7 @@ const COMMAND_KEYS: &[&str] = &[
 ];
 
 /// URL schemes a string is read as a host to contact by.
-const URL_SCHEMES: &[&str] = &["http://", "https://", "ws://", "wss://", "ftp://"];
+pub(super) const URL_SCHEMES: &[&str] = &["http://", "https://", "ws://", "wss://", "ftp://"];
 
 /// Longest string read as a path by its look; longer ones are text.
 const MAX_PATH_LEN: usize = 4096;

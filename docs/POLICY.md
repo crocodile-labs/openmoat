@@ -530,7 +530,7 @@ These appear in responses and in `openmoat show` alongside the ids from `policy.
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
 | `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
 | `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept` |
-| `mcp-proxy`, `mcp-tool-held` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`): a tool call passed to the server, or refused because the tool's definition (title, description, input or output schema, annotations) is not the one a person accepted (§8) |
+| `mcp-proxy`, `mcp-tool-held`, `mcp-unattributed`, `mcp-server-request` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`, with the session and call id of the hook's decision it matched): a call passed to the server; refused because the tool's definition (title, description, input or output schema, annotations) is not the one a person accepted; refused because no hook decision names that exact call (ADR-045); a request the server sent the agent (`sampling/createMessage`, `elicitation/create`, …). A call the policy denies at the proxy carries the policy's rules (§8) |
 | `kernel-error` | deny | `openmoat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
@@ -850,7 +850,21 @@ differs from the pin, and an entry whose `name` is not a string; and a `tools/ca
 `openmoat mcp accept <server>` (rule `mcp-tool-held` in the audit log, host `mcp-proxy`).
 The first time the proxy sees a server, that is every tool it lists (ADR-032): `openmoat mcp
 accept <server>` shows each one's definition, asks, and pins
-them. A server the proxy already pinned keeps its pins. A pin written by a release that
+them. When the server sends `notifications/tools/list_changed`, the proxy lists the tools
+again itself and holds each changed one, whether or not the agent lists them again.
+
+The proxy is a gateway (ADR-045). A `tools/call` its pins let through is decided again by
+this policy, with the lock checked first, as the server will receive it: under the name
+`mcp__<server>__<tool>`, whatever name the agent gave the tool, and with every path and URL
+its arguments name as `fs.*` and `net` atoms, read as the hook reads them. A deny refuses
+the call (rule and reason in the error). The call then passes only on the hook's decision
+for exactly that call: the same tool and arguments, decided within the hour, each decision
+used once. That decision carries what only the hook knows (the session's taint, an
+`openmoat allow` grant, the person's answer), and the proxy's audit row carries its
+session and call id. A call no decision names is refused (`mcp-unattributed`).
+`resources/read` is decided on its URI (a `file:` URI as the file, an `https:`, `ws:` or
+`ftp:` one as the host) with no hook decision needed, since an agent also reads resources
+for the person. A server the proxy already pinned keeps its pins. A pin written by a release that
 pinned only the name, description and input schema matches no listing, so after the
 upgrade each such tool is held once, even unchanged; `openmoat status` and `openmoat
 doctor` count the tools held for that reason, `openmoat mcp accept` names it for each,

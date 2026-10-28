@@ -104,7 +104,7 @@ impl Store {
     /// Whether any provenance row exists; when none does, a session that read
     /// no untrusted content has nothing to look up or record.
     pub fn has_provenance(&self) -> Result<bool, StoreError> {
-        if !self.provenance {
+        if !self.provenance() {
             return Ok(false);
         }
         let found: Option<i64> = self
@@ -116,7 +116,7 @@ impl Store {
 
     /// The newest write row of `path`, if any.
     pub fn file_provenance(&self, path: &str) -> Result<Option<FileProvenance>, StoreError> {
-        if !self.provenance {
+        if !self.provenance() {
             return Ok(None);
         }
         let path = self.secrets.redact(path);
@@ -145,7 +145,7 @@ impl Store {
 
     /// What reads of tainted files did to `session_id` on `host`, if any.
     pub fn exposure(&self, session_id: &str, host: &str) -> Result<Option<Exposure>, StoreError> {
-        if !self.provenance {
+        if !self.provenance() {
             return Ok(None);
         }
         let session_id = self.secrets.redact(session_id);

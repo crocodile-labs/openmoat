@@ -4,8 +4,8 @@
 use std::time::Instant;
 
 use anyhow::Result;
-use openmoat_audit::{KnownSecrets, NewEvent, Store};
-use openmoat_core::{Decision, Verdict};
+use openmoat_audit::{EventId, KnownSecrets, NewEvent, NewTicket, Store};
+use openmoat_core::{Action, Decision, Verdict};
 use openmoat_hosts::{HookRequest, Host};
 
 use super::drift;
@@ -76,6 +76,12 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     {
         provenance.write(&store, id, host.id(), &r.session_id)?;
     }
+    // An MCP call the host may now send: `openmoat mcp proxy` passes on only
+    // a call that matches such a decision (ADR-045). Like the row, a decision
+    // that cannot be written fails the call.
+    if let Some(r) = request {
+        mcp_ticket(&store, id, host, r, decision)?;
+    }
     // Under `moat run`, the run's proxy applies this session's taint too
     // (ADR-027); a link that cannot be written fails the call like the row.
     let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
@@ -86,5 +92,35 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
         eprintln!("moat: trace {id}  (openmoat show {id})");
     }
+    Ok(())
+}
+
+/// The decision on MCP call `request`, recorded as `event`, for the proxy to
+/// match; nothing for another call, or one the host is told is denied (an
+/// `ask` where no person sees it included).
+fn mcp_ticket(
+    store: &Store,
+    event: EventId,
+    host: Host,
+    request: &HookRequest,
+    decision: &Decision,
+) -> Result<()> {
+    let (Some(Action::McpTool { name, .. }), Some(arguments)) =
+        (&request.action, &request.mcp_arguments)
+    else {
+        return Ok(());
+    };
+    if host.answer(&request.event, decision).verdict == Verdict::Deny {
+        return Ok(());
+    }
+    store.add_mcp_ticket(&NewTicket {
+        event,
+        host: host.id(),
+        session_id: &request.session_id,
+        call_id: request.call_id.as_deref(),
+        tool: name,
+        arguments_sha256: &crate::integrity::sha256_hex(arguments.as_bytes()),
+        verdict: decision.verdict.as_str(),
+    })?;
     Ok(())
 }
