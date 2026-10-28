@@ -249,10 +249,13 @@ mod tests {
     /// same, and worked out again once the lock changes.
     #[test]
     fn the_sandbox_answer_is_kept_by_the_lock_digest() {
-        let host = Host::ClaudeCode;
-        if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
-            return; // no OpenMoat sandbox for this host on this OS: always false
-        }
+        // Any host OpenMoat puts a sandbox in place for on this OS (named by its
+        // spec, not by name); none on this OS means nothing to keep.
+        let Some(host) = Host::ALL.into_iter().find(|h| {
+            host_sandbox::format(*h).is_some() && host_sandbox::unavailable(*h).is_none()
+        }) else {
+            return;
+        };
         let dir = tempfile::tempdir().unwrap();
         let home = Home::at(dir.path().join("state"));
         std::fs::create_dir_all(home.root()).unwrap();
