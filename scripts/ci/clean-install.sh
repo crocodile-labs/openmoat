@@ -169,6 +169,9 @@ shell)
     else
         echo "skip  no GH_TOKEN: attestation not verified"
     fi
+    # The token was for the attestation only: the installer, OpenMoat and the
+    # agents run without it, as on a new user's machine.
+    unset GH_TOKEN
     # What `curl … | sh` runs, from the file just checked.
     (cd "$HOME" && sh "$root/openmoat-installer.sh") </dev/null
     expected_bin="$HOME/.cargo/bin/openmoat"
