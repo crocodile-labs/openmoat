@@ -332,5 +332,5 @@ run_logged uninstall-purge python3 -I "$repo/scripts/ci/pty-run.py" openmoat uni
 snapshot compare "$HOME" "$root/home-with-claude.json" ||
     fail "after uninstall --purge the home is not as it was before OpenMoat's init"
 echo "ok    nothing of OpenMoat's is left in the home"
-step=done
+step="done"
 echo "PASS  clean install ($method): $installed"

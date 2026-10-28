@@ -53,6 +53,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          # No cache: a release run must not read what another run left.
+          package-manager-cache: false
       - name: Linux runner
         if: runner.os == 'Linux'
         # Homebrew is installed but not on PATH; Claude Code's sandbox needs

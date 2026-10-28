@@ -372,6 +372,7 @@ opencode-1)
     # OpenCode 1's opencode.json: an OpenAI-compatible provider (its SDK is
     # bundled, so nothing is fetched) and that model as the default.
     port_file="$XDG_CONFIG_HOME/opencode/opencode.json"
+    # shellcheck disable=SC2016 # `$schema` is OpenCode's JSON key, not a variable
     printf '%s\n' '{"$schema":"https://opencode.ai/config.json","provider":{"fake":{"npm":"@ai-sdk/openai-compatible","name":"Fake","options":{"baseURL":"http://127.0.0.1:FAKE_PORT/v1","apiKey":"fake-key"},"models":{"fake-model":{"name":"Fake","tool_call":true}}}},"model":"fake/fake-model"}' \
         >"$port_file.in"
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_openai.py" \
@@ -587,4 +588,4 @@ for which in allow deny; do
         >"$out/reply-$which.json" 2>"$out/reply-$which.err" || rc=$?
     check reply "$agent" "$which" "$rc" "$out/reply-$which.json"
 done
-step=done
+step="done"
