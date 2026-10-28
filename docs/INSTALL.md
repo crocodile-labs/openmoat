@@ -331,7 +331,7 @@ table is generated from each agent's `HostSpec` (`OPENMOAT_TEST_UPDATE_DOCS=1 ca
 <!-- generated:hosts-install -->
 | Agent | Directory | Moved by | Hook file | Entries `openmoat init` writes |
 |---|---|---|---|---|
-| Claude Code | `~/.claude` | `CLAUDE_CONFIG_DIR` | `settings.json` | `PreToolUse` (600 s), `ConfigChange` (60 s) |
+| Claude Code | `~/.claude` | `CLAUDE_CONFIG_DIR` | `settings.json` | `PreToolUse` (600 s), `ConfigChange` (60 s), `SessionStart` (60 s) |
 | Codex | `~/.codex` | `CODEX_HOME` | `hooks.json` | `PreToolUse` (600 s) |
 | Cursor | `~/.cursor` | `CURSOR_CONFIG_DIR` | `hooks.json` | `beforeShellExecution` (600 s), `beforeMCPExecution` (600 s), `beforeReadFile` (600 s), `preToolUse` (600 s) |
 | OpenClaw | `~/.openclaw` | `OPENCLAW_STATE_DIR` | `openclaw.json` | `before_tool_call` (60 s) |

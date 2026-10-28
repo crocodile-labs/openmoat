@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
     Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
-    ProjectSettingsSpec, SandboxFormat, SandboxSpec,
+    ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -80,6 +80,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             "Cursor's sandbox runs on macOS and Linux only; the hook still applies the policy",
         ),
         tiocsti_open_on_linux: false,
+        // `sandbox.json` has no proxy setting.
+        proxy_sessions: ProxySessions::NotProxied,
     }),
     // A project's `.cursor/hooks.json` runs its hooks beside the user's
     // (<https://cursor.com/docs/agent/hooks>, "Configuration").

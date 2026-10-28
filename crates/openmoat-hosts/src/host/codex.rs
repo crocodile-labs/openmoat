@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
-    ProjectSettingsSpec, SandboxFormat, SandboxSpec,
+    ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
@@ -72,6 +72,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         unavailable_on_windows: None,
         // Codex's Linux sandbox does not refuse `TIOCSTI`.
         tiocsti_open_on_linux: true,
+        // Its upstream proxy comes from the Codex process's own `HTTP_PROXY`,
+        // and its hooks cannot set a command's environment (ADR-044).
+        proxy_sessions: ProxySessions::NoCredential,
     }),
     // A trusted project's `.codex/` layer adds its `config.toml` and
     // `hooks.json`, whose hooks run beside OpenMoat's; `[features] hooks =
