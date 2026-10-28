@@ -59,3 +59,16 @@
   steps:
     - { shell: "sed -n 1,40p src/lib.rs", expect: allow }
     - { shell: "sort data.txt | uniq -c", expect: allow }
+
+- id: agent-writes-a-test-then-runs-the-suite
+  threat: T1
+  why: >-
+    Writing a test and running the test runner is everyday work. A test runner runs the
+    project's code by design, so code the session wrote asks only when an interpreter
+    runs the file itself (ADR-039); the suite and a script that was there before the
+    session stay allowed.
+  steps:
+    - { write: "tests/test_login.py", expect: allow, rule: project-fs }
+    - { shell: "pytest tests/test_login.py", expect: allow, rule: dev-shell }
+    - { shell: "python -m pytest -q", expect: allow, rule: dev-shell }
+    - { shell: "python3 manage.py check", expect: allow, rule: dev-shell }

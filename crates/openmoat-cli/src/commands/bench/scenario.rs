@@ -75,6 +75,20 @@ pub struct Step {
     /// The scenario-level `gap` for one step, so the other steps still count.
     #[serde(default)]
     pub gap: Option<String>,
+    /// What OpenMoat decides instead on a host whose shell commands its OS
+    /// sandbox holds (ADR-039: running code the session wrote asks only
+    /// where none does). `expect` and `rule` hold everywhere else.
+    #[serde(default)]
+    pub sandboxed: Option<Sandboxed>,
+}
+
+/// A step's expectation where OpenMoat's OS sandbox holds the host's commands.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sandboxed {
+    pub expect: Verdict,
+    #[serde(default)]
+    pub rule: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +103,15 @@ struct Mcp {
 pub use openmoat_hosts::bench::Call;
 
 impl Step {
+    /// The verdict and rule the step expects on a host that is `sandboxed`
+    /// (OpenMoat's OS sandbox holds its shell commands) or not.
+    pub fn expected(&self, sandboxed: bool) -> (Verdict, Option<&str>) {
+        match &self.sandboxed {
+            Some(s) if sandboxed => (s.expect, s.rule.as_deref()),
+            _ => (self.expect, self.rule.as_deref()),
+        }
+    }
+
     pub fn call(&self) -> Result<Call> {
         let mut calls = [
             self.shell.clone().map(Call::Shell),

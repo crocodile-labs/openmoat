@@ -21,12 +21,14 @@ mod provenance;
 mod rules;
 mod schema;
 mod session_cache;
+mod session_writes;
 
 pub use chain::{BreakKind, ChainBreak, ChainHead, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use session_cache::Cached;
+pub use session_writes::{SessionWrite, Written};
 
 const BUSY_TIMEOUT_MS: u64 = 2000;
 
@@ -211,6 +213,8 @@ pub struct Store {
     /// The schema has the provenance table (version 4). Only a read-only
     /// handle on a database no newer build has opened yet lacks it.
     provenance: bool,
+    /// The schema has the session writes table (version 5), as for `provenance`.
+    session_writes: bool,
     /// Masked in every event this handle records.
     secrets: KnownSecrets,
 }
@@ -255,6 +259,7 @@ impl Store {
             conn,
             chained: found >= schema::CHAIN_VERSION,
             provenance: found >= schema::PROVENANCE_VERSION,
+            session_writes: found >= schema::SESSION_WRITES_VERSION,
             secrets: KnownSecrets::default(),
         })
     }
@@ -273,6 +278,7 @@ impl Store {
             conn,
             chained: true,
             provenance: true,
+            session_writes: true,
             secrets: KnownSecrets::default(),
         })
     }

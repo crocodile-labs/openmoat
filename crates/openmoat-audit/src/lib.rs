@@ -20,5 +20,6 @@ pub use redact::{KnownSecrets, MIN_SECRET_LEN, TOKEN_SHAPES, redact, redact_valu
 pub use store::{
     AnchorCheck, BreakKind, Cached, ChainBreak, ChainHead, ChainReport, Event, EventId,
     ExportBreak, ExportFilter, ExportFormat, ExportReport, ExportedEvent, Exposure, FileProvenance,
-    GENESIS, NewEvent, NewProvenance, ProvenanceKind, Store, StoreError, verify_export,
+    GENESIS, NewEvent, NewProvenance, ProvenanceKind, SessionWrite, Store, StoreError, Written,
+    verify_export,
 };

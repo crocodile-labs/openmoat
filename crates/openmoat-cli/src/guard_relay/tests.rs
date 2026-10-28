@@ -261,7 +261,11 @@ fn a_call_with_the_token_is_decided_outside_with_the_runs_session() {
     let reply = ask(&service, &request(token(), "{\"payload\":1}")).unwrap();
     assert_eq!(reply.code, 0);
     let out = String::from_utf8(reply.stdout).unwrap();
-    assert!(out.contains("args=guard --host claude-code"), "{out}");
+    // `--relayed`: the call runs in the run's sandbox (ADR-039)
+    assert!(
+        out.contains("args=guard --host claude-code --relayed"),
+        "{out}"
+    );
     assert!(out.contains(&format!("run={RUN} socket=unset")), "{out}");
     assert!(out.contains("{\"payload\":1}"), "{out}");
     assert_eq!(reply.stderr, b"stderr-line\n");

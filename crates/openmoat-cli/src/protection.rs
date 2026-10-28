@@ -149,6 +149,69 @@ fn level(
     }
 }
 
+/// [`os_sandboxed`] as the guard reads it: kept in `sandboxed.json` in the
+/// state directory under the digest of `policy.lock`. The lock pins the policy
+/// and every host's sandbox settings, and the guard has verified them against
+/// it before deciding (a drifted pin denies the call), so while the lock is the
+/// same the answer is too; a changed policy or sandbox re-pins the lock, which
+/// makes the next call work it out again. Working it out compiles the policy's
+/// sandbox plan (tens of milliseconds), which a session that runs many scripts
+/// it wrote would otherwise pay on every call. The agent cannot write the state
+/// directory (`kernel-self`); a file that cannot be read or written only means
+/// the answer is worked out again.
+pub fn os_sandboxed_by_lock(home: &Home, host: Host) -> bool {
+    if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
+        return false;
+    }
+    let Ok(lock) = std::fs::read(home.lock_path()) else {
+        return os_sandboxed(home, host);
+    };
+    let digest = crate::integrity::sha256_hex(&lock);
+    let path = home.root().join("sandboxed.json");
+    let mut kept: SandboxedByLock = std::fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .filter(|k: &SandboxedByLock| k.lock == digest)
+        .unwrap_or_else(|| SandboxedByLock {
+            lock: digest,
+            hosts: std::collections::BTreeMap::new(),
+        });
+    if let Some(known) = kept.hosts.get(host.id()) {
+        return *known;
+    }
+    let answer = os_sandboxed(home, host);
+    kept.hosts.insert(host.id().to_owned(), answer);
+    if let Ok(bytes) = serde_json::to_vec(&kept) {
+        let _ = crate::home::write_private(&path, &bytes);
+    }
+    answer
+}
+
+/// `sandboxed.json`: [`os_sandboxed`] per host id, for the lock whose digest
+/// it names.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SandboxedByLock {
+    lock: String,
+    hosts: std::collections::BTreeMap<String, bool>,
+}
+
+/// Whether OpenMoat's OS sandbox runs `host`'s shell commands here: the host
+/// has one (its spec), it applies on this OS, and its settings are in place
+/// and match the policy and the lock, as `status` reports `hook + OS sandbox`.
+/// The guard reads it through [`os_sandboxed_by_lock`], only for a call that
+/// runs code its session wrote (`session_code.rs`).
+pub fn os_sandboxed(home: &Home, host: Host) -> bool {
+    if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
+        return false;
+    }
+    let plan = home
+        .load_policy()
+        .ok()
+        .and_then(|p| Plan::new(home, &p).ok());
+    let lock = Lock::load(&home.lock_path()).ok();
+    sandbox(home, host, plan.as_ref(), lock.as_ref()).is_ok()
+}
+
 /// `Ok` when OpenMoat's sandbox for `host` is in place and matches the policy;
 /// otherwise which of it is missing, off or drifted.
 fn sandbox(
@@ -181,6 +244,47 @@ fn sandbox(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The answer kept under the lock's digest is used while the lock is the
+    /// same, and worked out again once the lock changes.
+    #[test]
+    fn the_sandbox_answer_is_kept_by_the_lock_digest() {
+        // Any host OpenMoat puts a sandbox in place for on this OS (named by its
+        // spec, not by name); none on this OS means nothing to keep.
+        let Some(host) = Host::ALL.into_iter().find(|h| {
+            host_sandbox::format(*h).is_some() && host_sandbox::unavailable(*h).is_none()
+        }) else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        std::fs::create_dir_all(home.root()).unwrap();
+        std::fs::write(home.lock_path(), b"lock one").unwrap();
+        // An empty home has no sandbox settings in place.
+        assert!(!os_sandboxed_by_lock(&home, host));
+        let kept = home.root().join("sandboxed.json");
+        let text = std::fs::read_to_string(&kept).unwrap();
+        assert!(
+            text.contains(&crate::integrity::sha256_hex(b"lock one")),
+            "{text}"
+        );
+        // A kept answer is read back as it is while the lock is unchanged.
+        std::fs::write(&kept, text.replace("false", "true")).unwrap();
+        assert!(os_sandboxed_by_lock(&home, host));
+        // A new lock makes the answer be worked out again.
+        std::fs::write(home.lock_path(), b"lock two").unwrap();
+        assert!(!os_sandboxed_by_lock(&home, host));
+    }
+
+    #[test]
+    fn hosts_without_an_openmoat_sandbox_are_never_sandboxed() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        // decided from the spec alone, before any host file is read
+        for host in Host::ALL.into_iter().filter(|h| h.spec().sandbox.is_none()) {
+            assert!(!os_sandboxed(&home, host), "{}", host.id());
+        }
+    }
 
     #[test]
     fn an_installed_hook_with_a_matching_sandbox_is_hook_and_os_sandbox() {

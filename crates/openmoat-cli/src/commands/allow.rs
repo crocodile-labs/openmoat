@@ -53,6 +53,15 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
                 approvals::describe(&action)
             );
             render::line(&mut out, &last)?;
+            // A permanent rule is an allow, and code the session wrote asks
+            // whatever allows the command (ADR-039): only a session grant answers it.
+            if args.always && event.rules.iter().any(|r| r == crate::session_code::RULE) {
+                out.finish()?;
+                bail!(
+                    "it runs code this session wrote, which asks whatever a rule allows; run \
+                     `openmoat allow --last` without --always to approve it for this session"
+                );
+            }
             // The newest ask of any agent session: say which one before approving
             // it, so a person never approves a call they did not see.
             let taint = !args.always && event.rules.iter().any(|r| r == TAINT_RULE);

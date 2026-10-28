@@ -1,3 +1,5 @@
+mod in_process;
+
 use std::path::Path;
 
 use openmoat_hosts::Host;

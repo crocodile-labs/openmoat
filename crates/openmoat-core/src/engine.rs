@@ -302,6 +302,21 @@ impl CompiledPolicy<'_> {
         )
     }
 
+    /// The files `action` runs as code (ADR-039): a script an interpreter or a
+    /// shell runs (`python3 x.py`, `bash x.sh`, `source x`), a file it loads
+    /// first (`node -r ./x.js`) and a program named by a path (`./x`), through
+    /// every wrapper the classifier unwraps (`env`, `time`, `bash -c '…'`), as
+    /// canonical paths, each also as `paths` resolves it through a symlink.
+    /// Only a shell command runs any; a test runner, build tool or package
+    /// script (`pytest`, `npm test`, `go run .`) names none.
+    #[must_use]
+    pub fn executed(&self, action: &Action, paths: &dyn PathResolver) -> Vec<String> {
+        let Action::Shell { command } = action.shown() else {
+            return Vec::new();
+        };
+        atoms::executed_files(command, &self.ctx, paths)
+    }
+
     /// Decide one host action, resolving shell programs through `resolver` so
     /// that `executables` pins and installation pins are enforced, and paths
     /// through `paths` so a symlink cannot move a read or write past a rule.

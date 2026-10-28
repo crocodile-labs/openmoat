@@ -12,7 +12,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result};
-use openmoat_audit::{FileProvenance, NewProvenance, ProvenanceKind, Store};
+use openmoat_audit::{FileProvenance, NewProvenance, ProvenanceKind, SessionWrite, Store};
 use openmoat_core::{Action, AtomicAction, CompiledPolicy, TaintSettings};
 
 use crate::guard_relay::MAX_PAYLOAD_BYTES;
@@ -39,6 +39,9 @@ pub struct Call<'a> {
 pub struct Seen {
     /// The rows to append with the call's event.
     pub rows: Vec<NewProvenance>,
+    /// The files the call writes, for the session's own record of what it
+    /// wrote (ADR-039), kept whatever the session read.
+    pub written: Vec<SessionWrite>,
 }
 
 impl Seen {
@@ -52,22 +55,35 @@ impl Seen {
     ) -> Result<()> {
         store
             .add_provenance(event, host, session, &self.rows)
-            .context("recording file provenance")
+            .context("recording file provenance")?;
+        store
+            .add_session_writes(event, host, session, &self.written)
+            .context("recording the files this session wrote")
     }
 }
 
-/// The provenance rows `call` adds, looked up in `store`. Off when the
-/// policy's `taint: { provenance: false }` says so; nothing is looked up for a
-/// clean session while no row exists at all.
+/// The provenance rows `call` adds, looked up in `store`, and the files it
+/// writes. Provenance is off when the policy's `taint: { provenance: false }`
+/// says so; nothing is looked up for a clean session while no row exists at
+/// all. The files written are listed either way.
 pub fn observe(store: &Store, policy: &CompiledPolicy<'_>, call: &Call<'_>) -> Result<Seen> {
     let mut seen = Seen::default();
+    let files = Files::of(policy, call.action);
+    let ci = policy.context().case_insensitive_paths;
+    let sha256 = call.content.map(|c| content_hash(c.as_bytes()));
+    seen.written = files
+        .writes
+        .iter()
+        .map(|path| SessionWrite {
+            path: key(path, ci),
+            sha256: sha256.clone(),
+        })
+        .collect();
     if !TaintSettings::provenance_on(policy.policy().taint.as_ref())
         || (call.untrusted.is_none() && !store.has_provenance()?)
     {
         return Ok(seen);
     }
-    let files = Files::of(policy, call.action);
-    let ci = policy.context().case_insensitive_paths;
     let mut exposure = None;
     for path in &files.reads {
         let key = key(path, ci);
@@ -88,7 +104,6 @@ pub fn observe(store: &Store, policy: &CompiledPolicy<'_>, call: &Call<'_>) -> R
     // What a call writes after it read a tainted file in the same command
     // (`bash run.sh > out.txt`) is tainted too.
     let untrusted = call.untrusted.map(str::to_owned).or(exposure);
-    let sha256 = call.content.map(|c| content_hash(c.as_bytes()));
     for path in &files.writes {
         let key = key(path, ci);
         let row = match &untrusted {
@@ -196,7 +211,7 @@ fn literal(path: &str) -> bool {
 
 /// The form a path is looked up by: one spelling per file where the file
 /// system ignores case.
-fn key(path: &str, case_insensitive: bool) -> String {
+pub(crate) fn key(path: &str, case_insensitive: bool) -> String {
     if case_insensitive {
         path.to_lowercase()
     } else {

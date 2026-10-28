@@ -5,12 +5,14 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 4;
+pub(super) const SCHEMA_VERSION: i64 = 5;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
 /// The first version with file provenance ([`V4`]).
 pub(super) const PROVENANCE_VERSION: i64 = 4;
+/// The first version with the files each session wrote ([`V5`]).
+pub(super) const SESSION_WRITES_VERSION: i64 = 5;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -97,6 +99,24 @@ CREATE TRIGGER IF NOT EXISTS provenance_no_delete BEFORE DELETE ON provenance
     BEGIN SELECT RAISE(ABORT, 'provenance rows are append-only'); END;
 ";
 
+/// Version 5: the files each session wrote (ADR-039, `session_writes.rs`).
+/// One row per file and session, replaced when the session writes the file
+/// again; rows older than a bound or past a row limit are removed when a row
+/// is added, so the table stays small. `IF NOT EXISTS`, as for [`V4`].
+const V5: &str = "
+CREATE TABLE IF NOT EXISTS session_writes (
+    id          INTEGER PRIMARY KEY,
+    event_id    INTEGER NOT NULL,
+    ts_ms       INTEGER NOT NULL,
+    host        TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    path        TEXT    NOT NULL,
+    sha256      TEXT,
+    UNIQUE (host, session_id, path)
+);
+CREATE INDEX IF NOT EXISTS session_writes_ts ON session_writes(ts_ms);
+";
+
 /// The `user_version` of the open database.
 pub(super) fn version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
@@ -134,6 +154,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 4 {
         tx.execute_batch(V4)?;
+    }
+    if found < 5 {
+        tx.execute_batch(V5)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

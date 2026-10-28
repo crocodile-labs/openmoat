@@ -1012,8 +1012,11 @@ ask:
   - id: opaque-code
     reason: a program OpenMoat cannot read may open any file or variable
     # `<program> @<text>` atoms: an awk or sed program, or a text-tool option, not understood
-    # and `<shell> @stdin`: text piped into a shell that the command line does not show
-    shell: ["awk @*", "gawk @*", "mawk @*", "nawk @*", "sed @*", "gsed @*", "sort @*", "uniq @*", "cut @*", "printf -v *", "{sh,bash,zsh,dash,ksh,fish} @stdin"]
+    # and `<shell> @stdin`: text piped into a shell that the command line does not show;
+    # `@opaque-code <interpreter>`: inline code (`python3 -c`, `node -e`, a here-document)
+    # that opens files, connects, reads the environment or runs programs with text it
+    # builds at run time, so the scan cannot see what it opens
+    shell: ["awk @*", "gawk @*", "mawk @*", "nawk @*", "sed @*", "gsed @*", "sort @*", "uniq @*", "cut @*", "printf -v *", "{sh,bash,zsh,dash,ksh,fish} @stdin", "@opaque-code *"]
     env.set: ["CDPATH"]
   # `@package-near-miss <ecosystem> <name> <popular>` atoms (ADR-030): an install of a
   # name that is not on the bundled list of popular packages but is one typo or a

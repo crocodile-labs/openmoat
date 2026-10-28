@@ -7,18 +7,18 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Asks | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 142 | 66 | 3 |
+| T1 | Secret exfiltration via shell | 142 | 71 | 3 |
 | T2 | Secret exfiltration via file tools | 41 | 3 | 1 |
-| T3 | Secret exfiltration via environment | 104 | 4 | 7 |
+| T3 | Secret exfiltration via environment | 105 | 4 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
 | T5 | Supply-chain execution | 14 | 67 | 8 |
-| T6 | Environment poisoning | 31 | 31 | 7 |
-| T7 | Obfuscation and nested execution | 157 | 103 | 3 |
+| T6 | Environment poisoning | 41 | 32 | 7 |
+| T7 | Obfuscation and nested execution | 157 | 105 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 21 | 1 | 6 |
-| T9 | Hook / policy tampering by the agent | 352 | 107 | 31 |
+| T9 | Hook / policy tampering by the agent | 354 | 107 | 31 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 28 | 4 | 6 |
-| T12 | Network to unknown hosts | 85 | 17 | 1 |
+| T12 | Network to unknown hosts | 86 | 17 | 1 |
 
 ## T1: Secret exfiltration via shell
 
@@ -88,6 +88,11 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-grep-r-doctl-folder` (ask): Ask [protected-contents]
 - `defer-ls-root` (ask): Defer [default]
 - `ask-ls-home-still-asks` (ask): Ask [home-sweep]
+- `ask-python-c-opens-built-path` (ask): Ask [opaque-code]
+- `ask-node-e-reads-built-path` (ask): Ask [opaque-code]
+- `ask-perl-e-opens-interpolated-path` (ask): Ask [opaque-code]
+- `ask-python-c-opens-joined-path` (ask): Ask [opaque-code]
+- `ask-ruby-e-reads-concatenated-path` (ask): Ask [opaque-code]
 - `T1-cat-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-curl-upload-ssh-key` (attacks): Deny [secrets-paths]
 - `T1-substitution-exfil` (attacks): Deny [secrets-paths]
@@ -392,6 +397,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-python-import-os-environ` (attacks): Deny [env-dump]
 - `T3-python-import-os-environ-single-quotes` (attacks): Deny [env-dump]
 - `T3-python-import-os-dict` (attacks): Deny [env-dump]
+- `python-c-built-env-name-still-denied` (attacks): Deny [env-dump]
 - `benign-t3-echo-home` (benign): Allow [dev-shell]
 - `benign-t3-echo-path` (benign): Allow [dev-shell]
 - `benign-t3-printenv-one-plain-variable` (benign): Defer [default]
@@ -649,6 +655,7 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-write-cargo-bin` (ask): Ask [persistence]
 - `ask-write-usr-local-bin-git` (ask): Ask [persistence]
 - `ask-write-homebrew-bin-node` (ask): Ask [persistence]
+- `ask-python-c-writes-a-workflow` (ask): Ask [runs-later]
 - `T6-export-path` (attacks): Deny [env-poison]
 - `T6-export-path-unspaced` (attacks): Deny [env-poison]
 - `T6-inline-ld-preload` (attacks): Deny [env-poison]
@@ -680,6 +687,16 @@ the verdict and rule ids the default policy must produce for it.
 - `T6-tee-append-shell-rc` (attacks): Deny [shell-rc]
 - `T6-truncate-shell-rc` (attacks): Deny [shell-rc]
 - `T6-dd-of-shell-rc` (attacks): Deny [shell-rc]
+- `python-c-appends-to-zshrc` (attacks): Deny [shell-rc]
+- `node-e-writes-zshrc` (attacks): Deny [shell-rc]
+- `ruby-e-writes-zshrc` (attacks): Deny [shell-rc]
+- `perl-e-appends-to-zshrc` (attacks): Deny [shell-rc]
+- `php-r-writes-zshrc` (attacks): Deny [shell-rc]
+- `python-c-appends-to-zshrc-by-variable` (attacks): Deny [shell-rc]
+- `python-c-os-open-zshrc-for-writing` (attacks): Deny [shell-rc]
+- `python-c-path-open-zshrc-for-writing` (attacks): Deny [shell-rc]
+- `node-e-open-sync-zshrc` (attacks): Deny [shell-rc]
+- `ruby-e-binwrites-zshrc` (attacks): Deny [shell-rc]
 - `benign-t6-node-env-prefix` (benign): Defer [default]
 - `benign-t6-export-plain-variable` (benign): Defer [default]
 - `benign-t6-git-config-get` (benign): Allow [dev-shell]
@@ -793,6 +810,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-deny-next-to-an-ansi-c-nul` (ask): Ask [unparseable]
 - `ask-deny-before-an-unterminated-quote` (ask): Ask [unparseable]
 - `ask-env-split-string-harmless` (ask): Defer [default]
+- `ask-python-heredoc-opens-built-path` (ask): Ask [opaque-code]
+- `ask-python-c-execs-decoded-code` (ask): Ask [opaque-code]
 - `T7-bash-c` (attacks): Deny [secrets-paths]
 - `T7-sh-c-nested-twice` (attacks): Deny [secrets-paths]
 - `T7-eval` (attacks): Deny [pipe-to-shell]
@@ -1446,6 +1465,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-write-zlogin` (attacks): Deny [shell-rc]
 - `T9-write-cshrc` (attacks): Deny [shell-rc]
 - `T9-write-zshrc-d` (attacks): Deny [shell-rc]
+- `python-c-writes-claude-settings` (attacks): Deny [kernel-self]
+- `node-e-writes-claude-settings` (attacks): Deny [kernel-self]
 - `benign-read-moat-policy` (benign): Defer [default]
 - `benign-write-openclaw-workspace` (benign): Defer [default]
 - `benign-read-openclaw-config` (benign): Defer [default]
@@ -1642,4 +1663,5 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-wget-without-no-netrc` (attacks): Deny [default.net]
 - `T12-port-allow-is-no-ipv6-host-glob` (attacks): Deny [default.net]
 - `T12-codex-mcp-add-unlisted-url` (attacks): Deny [default.net]
+- `python-c-built-url-still-denied` (attacks): Deny [default.net]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]

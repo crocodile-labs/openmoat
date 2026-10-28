@@ -14,7 +14,8 @@
 //! | `>`/`>>`/`&>` targets other than `/dev/null` and the standard streams (`tables::STREAM_SINKS`), `tee`, destructive/destination args | `FsWrite` |
 //! | URLs with any host, bare dotted names under a known TLD, IPv4 literals (`crate::host`) | `Net` |
 //! | `$( … )`, backticks, `sh -c` (any option spelling, `invocation.rs`), `eval`, `xargs`, `sudo`, `env`, … | nested classification |
-//! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload |
+//! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload; `FsWrite` of every file name it shows when it writes (`commands/payload/writes.rs`); `@opaque-code <interpreter>` when it opens, connects or runs through names it builds (`commands/payload/opaque.rs`) |
+//! | script operands, `./x` programs, modules inline code imports (`executes.rs`) | no atom: the side list `CompiledPolicy::executed` reads (ADR-039) |
 //! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
 //! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e`, `flock -c` (`embedded.rs`) | nested classification |
 //! | `file:` URLs (`curl file:///etc/passwd`) | `FsRead` |
@@ -57,6 +58,7 @@ mod database;
 mod decoders;
 mod embedded;
 mod error;
+pub(crate) mod executes;
 mod extract;
 pub(crate) mod git;
 mod in_place;
@@ -275,6 +277,9 @@ pub(crate) struct Sink {
     depth: u8,
     /// Commands that publish commits (`push.rs`).
     pushes: Vec<push::Push>,
+    /// Files the command runs as code (`executes.rs`), each with whether its
+    /// word is a glob the shell expands.
+    executed: Vec<(String, bool)>,
 }
 
 impl Sink {
@@ -410,6 +415,26 @@ impl Sink {
                 .any(|(pos, _)| !word.literal.iter().any(|span| span.contains(&pos)));
         if expands && !self.dollar_words.contains(&word.text) {
             self.dollar_words.push(word.text.clone());
+        }
+    }
+
+    /// Note that the command runs the file `word` names as code
+    /// ([`executes`]), in every directory it may run in. A word whose value is
+    /// not known names no file; the classifier asks or defers for it already.
+    pub(crate) fn execute(&mut self, ctx: &ShellContext<'_>, word: &str) {
+        if word.is_empty() || word.contains(['$', '`']) || self.executed.len() >= MAX_ATOMS {
+            return;
+        }
+        let glob =
+            word.contains(['*', '?', '[']) && self.glob_words.iter().any(|w| w.ends_with(word));
+        let Ok(paths) = ctx.paths(word) else {
+            return;
+        };
+        for path in paths.into_iter().chain(ctx.traversals(word)) {
+            let entry = (path, glob);
+            if !self.executed.contains(&entry) {
+                self.executed.push(entry);
+            }
         }
     }
 
