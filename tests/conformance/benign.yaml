@@ -1550,6 +1550,10 @@
 - id: benign-openmoat-proxy-status
   action: { shell: "openmoat proxy status" }
   expect: { verdict: defer, rules: [default] }
+# reading whether plugins loaded stays the person's and the agent's to do
+- id: benign-openmoat-status-plugins
+  action: { shell: "openmoat status --format json" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-taskset-build
   action: { shell: "taskset -c 0 cargo build" }
   expect: { verdict: defer, rules: [default] }

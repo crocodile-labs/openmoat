@@ -77,8 +77,11 @@ whose hook can be skipped, records consent in a file `status` already reads.
 - An installed plugin that has not loaded no longer looks protected without a word: pi
   is reported not protected once it ran without the extension, the others get a note
   until their plugin reports.
-- The report is information, not a check, and no decision reads it. An agent that
-  already runs unchecked could forge one with its shell, which only hides the note.
+- The report is information, not a check, and no decision reads it. Only the plugins
+  run `guard --heartbeat`, from inside their agent where no hook sees it, so
+  `kernel-self` denies an agent's shell running it: a protected agent cannot report
+  another agent's plugin as loaded. An agent that already runs unchecked could still
+  forge one, which only hides the note.
 - A plugin that loaded once and stops loading without its file or the host's program
   changing (a Node update; a configuration that drops it is caught by the lock or
   reported by `status` on its own) shows only as "loaded" with an old time; for pi, a session written after

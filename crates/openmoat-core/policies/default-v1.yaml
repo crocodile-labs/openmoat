@@ -450,6 +450,11 @@ deny:
       - "{expect,*/expect} * '*spawn {moat,*/moat,openmoat,*/openmoat}{;,\n,'}*"
       - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat,openmoat,*/openmoat}\"{],)}*'"
       - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
+      # reporting that an agent's plugin loaded (`guard --heartbeat`, ADR-042), which only
+      # the plugins run, from inside their agent where no hook sees it; an agent that ran
+      # it could hide that another agent's plugin never loaded
+      - "{moat,*/moat,openmoat,*/openmoat} guard --heartbeat*"
+      - "{moat,*/moat,openmoat,*/openmoat} guard * --heartbeat*"
       # stopping, disabling or masking the proxy service, which only `openmoat proxy
       # uninstall` removes: systemd's `moat-proxy` and launchd's `dev.openmoat.proxy`
       - "{systemctl,*/systemctl} * {stop,disable,mask,kill,edit,revert} * *moat-proxy*"

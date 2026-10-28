@@ -837,6 +837,24 @@
   threat: T9
   action: { shell: "opencode service set env OPENCODE_CONFIG_DIR /tmp/empty" }
   expect: { verdict: deny, rules: [kernel-self] }
+# An agent reporting another agent's plugin as loaded, which would hide that it never
+# loaded (ADR-042): only the plugins run it, from inside their agent.
+- id: T9-forged-plugin-heartbeat
+  threat: T9
+  action: { shell: "openmoat guard --heartbeat --host openclaw" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-forged-plugin-heartbeat-flag-last
+  threat: T9
+  action: { shell: "moat guard --host pi --heartbeat" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-forged-plugin-heartbeat-by-path
+  threat: T9
+  action: { shell: "/opt/homebrew/bin/openmoat guard --heartbeat --host opencode" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-forged-plugin-heartbeat-in-bash-c
+  threat: T9
+  action: { shell: "bash -c 'openmoat guard --heartbeat --host openclaw'" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-opencode2-write-service-settings
   threat: T9
   action: { fs_write: "~/.config/opencode/service.json" }
