@@ -68,8 +68,8 @@ pub fn row() -> Row {
         edited: Some(Edit {
             change: |hook| {
                 hook.replace(
-                    "if (result.error) throw result.error;",
-                    "if (result.error) return;",
+                    "if (\"error\" in result) throw result.error;",
+                    "if (\"error\" in result) return;",
                 )
             },
             call: |sb| crate::opencode::payload(sb, "bash", &json!({ "command": "git status" })),
