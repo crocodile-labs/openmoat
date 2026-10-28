@@ -406,7 +406,10 @@ fn a_removal_of_openmoats_opencode_plugin_is_named() {
     for name in ["opencode.json", "opencode.jsonc"] {
         fs::write(config.join(name), removes).unwrap();
         let found = switched_off(Host::OpenCode, &config, &plugin).unwrap();
-        assert!(found.contains(name) && found.contains("`-openmoat`"), "{found}");
+        assert!(
+            found.contains(name) && found.contains("`-openmoat`"),
+            "{found}"
+        );
         fs::remove_file(config.join(name)).unwrap();
     }
     assert_eq!(switched_off(Host::OpenCode, &config, &plugin), None);
