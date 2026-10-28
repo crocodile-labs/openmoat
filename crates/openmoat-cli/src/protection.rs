@@ -86,7 +86,7 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
         .into_iter()
         .map(|host| {
             let config = HostConfig::for_host(home, host)?;
-            // A version that does not load OpenMoat's hook (OpenCode 2).
+            // A version that does not load OpenMoat's hook (OpenCode before 1.3.4).
             let unsupported = config
                 .host_present()
                 .then(|| crate::install::host_version::unsupported(host))

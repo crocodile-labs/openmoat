@@ -21,6 +21,8 @@ extend-ignore-re = [
     "\\./ba\\b",   # its install directory in the MoatBench comparison
     "--inh-caps",  # setpriv's option for the inheritable capabilities
     "vision_analyze",  # Hermes Agent's tool, spelt as Hermes spells it
+    "config/normalize\\.ts",  # OpenCode 2's source file, cited by its name
+    "\\bcatalog(\\.ts|\":)",  # OpenCode 2's `mcp/catalog.ts` and `mcp.timeout.catalog` key, spelt as OpenCode spells them
 ]
 
 [default.extend-identifiers]

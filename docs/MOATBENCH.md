@@ -40,9 +40,10 @@ log and checks:
   decision for an `allow`, so OpenClaw's own checks still run and an `allow` reads as
   `passthrough` there. Gemini CLI reads `decision: deny` or `ask` from stdout whatever
   the exit code; `decision: allow` and no output are `passthrough`, since its own
-  policy still decides. OpenCode 1 cannot ask, so an `ask` must arrive there as a
-  `deny`, and an `allow` reads as `passthrough`, since OpenCode's own `permission`
-  rules still run. Hermes Agent reads `block` (as `decision` or `action`) and exit
+  policy still decides. The bench sends OpenCode 1's payload: OpenCode 1 cannot ask,
+  so an `ask` must arrive there as a `deny` (OpenCode 2, which asks, is checked by the
+  adapter's tests and the plugin's harness), and an `allow` reads as `passthrough`,
+  since OpenCode's own `permission` rules still run. Hermes Agent reads `block` (as `decision` or `action`) and exit
   2 as a deny and `action: approve` as its own approval prompt; `{}` and no output are
   `passthrough`, since it has no allow that skips its own checks.
 

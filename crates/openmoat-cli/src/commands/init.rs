@@ -384,7 +384,7 @@ fn choose_hosts(
 }
 
 /// `hosts` but those whose version on the search path does not take OpenMoat's
-/// hook (OpenCode 2), each named with why it is not set up: a hook it does not
+/// hook (OpenCode before 1.3.4), each named with why it is not set up: a hook it does not
 /// load would be pinned and reported as protecting nothing.
 fn supported(hosts: impl Iterator<Item = Host>, out: &mut Deferred) -> Result<Vec<Host>> {
     let mut kept = Vec::new();

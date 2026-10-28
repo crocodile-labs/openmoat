@@ -26,7 +26,8 @@ mod payloads;
 mod unknown;
 
 use payloads::{
-    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, pi, under_cwd,
+    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, opencode2,
+    opencode2_path, pi, under_cwd,
 };
 
 /// The part of a conformance fixture this suite reads. A fixture with its own
@@ -93,11 +94,13 @@ enum Route {
     GeminiCli,
     /// OpenCode 1 `tool.execute.before`, through OpenMoat's plugin.
     OpenCode,
+    /// OpenCode 2 `execute.before`, through the same plugin.
+    OpenCode2,
     /// Hermes Agent `pre_tool_call`.
     Hermes,
 }
 
-const ROUTES: [Route; 12] = [
+const ROUTES: [Route; 13] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -109,6 +112,7 @@ const ROUTES: [Route; 12] = [
     Route::Pi,
     Route::GeminiCli,
     Route::OpenCode,
+    Route::OpenCode2,
     Route::Hermes,
 ];
 
@@ -122,7 +126,7 @@ impl Route {
             Self::CopilotCli => Host::CopilotCli,
             Self::Pi => Host::Pi,
             Self::GeminiCli => Host::GeminiCli,
-            Self::OpenCode => Host::OpenCode,
+            Self::OpenCode | Self::OpenCode2 => Host::OpenCode,
             Self::Hermes => Host::Hermes,
         }
     }
@@ -150,6 +154,37 @@ fn received(route: Route, expected: Verdict) -> Verdict {
             Verdict::Deny
         }
         (_, verdict) => verdict,
+    }
+}
+
+/// [`payload`] for OpenCode 2, which expands a leading `~`, so a path is sent
+/// as written.
+fn opencode2_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
+    match intent {
+        Intent::Shell(_) if cfg!(windows) => Err("OpenCode's shell on Windows is not read"),
+        Intent::Shell(c) => Ok((
+            opencode2("shell", &json!({ "command": c })),
+            Action::Shell { command: c.clone() },
+        )),
+        Intent::Read(p) => Ok((
+            opencode2("read", &json!({ "path": opencode2_path(p) })),
+            Action::FsRead {
+                path: opencode2_path(p),
+            },
+        )),
+        Intent::Write(p) => Ok((
+            opencode2(
+                "edit",
+                &json!({ "path": opencode2_path(p), "oldString": "old", "newString": "new" }),
+            ),
+            Action::FsWrite {
+                path: opencode2_path(p),
+            },
+        )),
+        Intent::Fetch(u) => Ok((
+            opencode2("webfetch", &json!({ "url": u, "format": "markdown" })),
+            Action::Fetch { url: u.clone() },
+        )),
     }
 }
 
@@ -332,6 +367,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             opencode("webfetch", &json!({ "url": u, "format": "markdown" })),
             Action::Fetch { url: u.clone() },
         )),
+        (Route::OpenCode2, _) => opencode2_route(intent),
         (Route::Hermes, Intent::Shell(c)) => {
             Ok((hermes("terminal", &json!({ "command": c })), shell(c)))
         }
@@ -500,7 +536,8 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::CopilotCli, &read, HookEvent::PreToolUse),
         (Route::Pi, &shell, HookEvent::PreToolUse),
         (Route::GeminiCli, &read, HookEvent::PreToolUse),
-        (Route::OpenCode, &read, HookEvent::PreToolUse),
+        (Route::OpenCode, &read, HookEvent::PreToolUseNoAsk),
+        (Route::OpenCode2, &read, HookEvent::PreToolUse),
         (Route::Hermes, &shell, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");

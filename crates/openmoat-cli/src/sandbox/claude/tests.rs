@@ -121,9 +121,22 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "{pattern}: {dropped:?}"
         );
     }
+    // A home path is dropped only when it is a glob (OpenCode 2's
+    // `service*.json`), and its release-channel file stays denied by name.
     assert!(
-        !dropped.iter().any(|p| p.starts_with("/Users/me/")),
+        dropped
+            .iter()
+            .filter(|p| p.starts_with("/Users/me/"))
+            .all(|p| p.contains('*')),
         "{dropped:?}"
+    );
+    assert!(
+        linux.sandbox["filesystem"]["denyWrite"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("/Users/me/.config/opencode/service.json")),
+        "{:?}",
+        linux.sandbox
     );
     for rule in [
         "claude-code.linux-read-rules",

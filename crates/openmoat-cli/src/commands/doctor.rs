@@ -412,8 +412,8 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
             );
         }
         let state = config.state(binary);
-        // A version that does not load OpenMoat's hook (OpenCode 2), whatever
-        // the hook file says.
+        // A version that does not load OpenMoat's hook (OpenCode before
+        // 1.3.4), whatever the hook file says.
         if config.host_present()
             && let Some(why) = crate::install::host_version::unsupported(host)
         {
@@ -436,11 +436,16 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                 // the files the lock pins with it (OpenClaw's plugin), as integrity lists them
                 hook_files.extend(config.extra_files());
                 hook_files.push(config.settings_path.clone());
+                // The hook a version runs OpenMoat through, where versions
+                // differ (OpenCode 1's and 2's).
+                let through = crate::install::host_version::hook_api(host)
+                    .map(|through| format!(" ({through})"))
+                    .unwrap_or_default();
                 report.line(
                     Area::Hook,
                     true,
                     format!(
-                        "{name:<16} hook installed  {}",
+                        "{name:<16} hook installed{through}  {}",
                         config.settings_path.display()
                     ),
                 );

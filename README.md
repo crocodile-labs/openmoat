@@ -117,7 +117,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 | GitHub Copilot CLI | `preToolUse` hook in a hook file of OpenMoat's own | hook only | `copilot-cli` |
 | pi | OpenMoat's extension on pi's `tool_call` event | hook only | `pi` |
 | Gemini CLI | `BeforeTool` hook in `settings.json` | hook only | `gemini-cli` |
-| OpenCode | OpenMoat's plugin on OpenCode 1's `tool.execute.before` hook | hook only | `opencode` |
+| OpenCode | OpenMoat's plugin on OpenCode 1's `tool.execute.before` (1.3.4 and later) and OpenCode 2's `execute.before` hook | hook only | `opencode` |
 | Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
@@ -316,15 +316,18 @@ The main gaps:
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
   2.1.295, run a call unchecked if `openmoat` is missing. GitHub Copilot CLI and Gemini
   CLI run a call whose hook times out. OpenClaw, pi and OpenCode run calls unchecked when
-  they do not load OpenMoat's plugin or extension (OpenCode with `--pure` or
-  `OPENCODE_PURE`, or when the plugin fails to load). Hermes Agent's gateway, cron and
+  they do not load OpenMoat's plugin or extension (OpenCode 1 with `--pure` or
+  `OPENCODE_PURE`, OpenCode 2 with `-openmoat` in a project's `plugins`, or when the
+  plugin fails to load; `openmoat status` reports such a project). Hermes Agent's gateway, cron and
   ACP sessions skip the hook when its command is not approved in
   `shell-hooks-allowlist.json` (`openmoat init` approves it), as Hermes does under
   `HERMES_SAFE_MODE=1` or in a profile OpenMoat did not set up.
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a
-  project's.
+  project's. A plugin that rewrites a call OpenMoat checked makes that call fail, but
+  one can still replace a tool, rename one, or change a shell's directory or
+  environment.
 - **Some agents can change a call after the check.** Hermes Agent's plugins, another of
   its shell hooks and its tool middleware run in its own process and can rewrite a call's
   arguments after OpenMoat decided; what an `execute_code` script does itself is not
@@ -332,8 +335,9 @@ The main gaps:
 - **Some agents cannot ask.** Codex, OpenCode 1 and Cursor's file tools receive an
   `ask` as a deny that says how to approve the call (`openmoat`, or
   `openmoat allow --last`).
-- **OpenCode 2 is not supported yet.** It loads plugins through another API;
-  `openmoat init` does not set it up and `openmoat status` says so.
+- **OpenCode 2's `--auto` approves OpenMoat's asks** as it approves OpenCode's own,
+  and OpenMoat's plugin cannot tell. OpenCode before 1.3.4 is not supported:
+  `openmoat init` does not set it up and `openmoat status` says to upgrade.
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you
   trust it in its `/hooks` view, and settings such as `disableAllHooks` (Claude Code,
   Copilot CLI) or `[features] hooks = false` (Codex) turn hooks off. `openmoat status`

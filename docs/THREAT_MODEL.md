@@ -542,7 +542,7 @@ something OpenMoat claims to stop.
   - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it); MCP tools are told apart from built-in ones only by name, so a changed server is traced by its `<server>-` prefix; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
   - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension (`openmoat status` and `doctor` report a settings entry that turns it off, not `--no-extensions`); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
   - **Gemini CLI.** Known gaps: no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings hooks at all and asks the person before every tool instead; a project's `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments (`openmoat status` and `doctor` warn about one); extension hooks run beside OpenMoat's; a hook that times out lets the call run. When the hook fails: runs the call when the hook times out, is killed by a signal or exits 1 (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits with any other code and prints something, as a missing `openmoat` does.
-  - **OpenCode.** Known gaps: no OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says how to approve it; OpenCode 2 is not supported yet; other plugins and custom tools run in OpenCode's process with the agent's rights, and a project's load at start with no prompt; the person's `!` shell commands are not checked; calls run unchecked if OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws (OpenCode's `tool.execute.before` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, or an error loading it).
+  - **OpenCode.** Known gaps: no OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says how to approve it; OpenCode before 1.3.4 is not supported; other plugins and custom tools run in OpenCode's process with the agent's rights, and a project's load at start with no prompt; a project's `-openmoat` turns OpenMoat off in OpenCode 2; OpenCode 2's `--auto` approves OpenMoat's asks; the person's `!` shell commands are not checked; calls run unchecked if OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws (OpenCode's `tool.execute.before` and `execute.before` fail closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when OpenCode does not load the plugin (OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins`, or an error loading it).
   - **Hermes Agent.** Known gaps: no OS sandbox from OpenMoat; what an `execute_code` script does itself is not checked (its tool calls are); a plugin, another hook's `modify` or tool middleware can rewrite a call's arguments after the check; terminal commands on a remote backend (docker, ssh, modal, …) are checked as local ones; the in-session `/yolo` toggle and `hermes -z` approve an ask unseen without OpenMoat seeing it; relative paths are checked against the Hermes process's directory, not the session's; another profile, or `HERMES_SAFE_MODE=1`, runs without the hook; a changed `config.yaml` is caught on the next call. When the hook fails: blocks the call when the hook cannot start, times out, exits non-zero without a decision or prints something that is not JSON (`fail_closed: true`, which `openmoat init` sets); runs every call unchecked when the hook is not registered: missing from `config.yaml` or from `shell-hooks-allowlist.json` in a gateway, cron or ACP session, another profile, or `HERMES_SAFE_MODE=1`.
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
@@ -693,38 +693,64 @@ something OpenMoat claims to stop.
   extension in its `.pi/extensions/`, is warned about; `pi --no-extensions` cannot be
   seen. There is no OS sandbox from OpenMoat for pi;
   run pi under `openmoat run` for one.
-- **OpenCode, when its hook fails.** OpenCode 1 has no command hook either: its "hook"
+- **OpenCode, when its hook fails.** OpenCode has no command hook either: its "hook"
   is OpenMoat's plugin (`crates/openmoat-hosts/src/host/opencode/integration/openmoat.js`,
-  written to `plugins/openmoat.js` in `~/.config/opencode`, or
-  `$XDG_CONFIG_HOME/opencode`), which runs `openmoat guard` from OpenCode's
-  `tool.execute.before` hook. From the OpenCode 1.19.4 source (`plugin/index.ts`
-  `trigger`, `session/tools.ts`, `session/processor.ts`), *unverified* against a running
-  OpenCode: a handler that throws blocks the call and the model sees the error, and
-  OpenCode waits for a handler without a limit or an abort signal. The plugin blocks
-  when `openmoat` is missing or cannot start, crashes, exits other than 0 or 2, answers
-  what it cannot read, or gives no answer within 45 s; no output on exit 0 is no
-  decision (a `defer`), and OpenCode's own `permission` rules decide, which allow most
-  tools by default. OpenCode 1 gives a plugin no way to ask the person (its
-  `permission.ask` hook is declared but not called since 1.3.0), so an `ask` reaches it
-  as a deny that says how to approve it. **OpenCode runs every call unchecked when it
-  does not load the plugin**: `opencode --pure` or `OPENCODE_PURE=1` (no external
-  plugins), an error while the plugin loads (OpenCode logs it and goes on), an OpenCode
-  started with another `XDG_CONFIG_HOME` or `HOME` than the one `openmoat init` set up,
-  and OpenCode 2, which loads plugins through another API. `kernel-self` denies the
+  written to `plugins/openmoat.js` in `~/.config/opencode`, `$XDG_CONFIG_HOME/opencode`
+  or `OPENCODE_CONFIG_DIR`), one file that OpenCode 1 (1.3.4 and later) loads through
+  `server` and OpenCode 2 through `setup` (ADR-040), and which runs `openmoat guard` from
+  OpenCode 1's `tool.execute.before` or OpenCode 2's `execute.before`. From the OpenCode
+  1.19.4 source (`plugin/index.ts` `trigger`, `session/tools.ts`, `session/processor.ts`)
+  and the 2.2.0 source (`core/src/plugin/hooks.ts`, `core/src/tool.ts`,
+  `plugin/src/promise/adapter.ts`), *unverified* against a running OpenCode: a handler
+  that throws blocks the call and the model sees the error (OpenCode 2.0.x: the call
+  stops with an error of its own), and OpenCode waits for a handler without a limit or
+  an abort signal. The plugin blocks when `openmoat` is missing or cannot start,
+  crashes, exits other than 0 or 2, answers what it cannot read, or gives no answer
+  within 45 s; no output on exit 0 is no decision (a `defer`), and OpenCode's own
+  permission rules decide, which allow most tools by default. OpenCode 1 gives a plugin
+  no way to ask the person (its `permission.ask` hook is declared but not called since
+  1.3.0), so an `ask` reaches it as a deny that says how to approve it; on OpenCode 2
+  the plugin asks through `ctx.permission.assert` and forces the answer to be asked
+  (an `evaluate` hook), and a configured deny, a rejection or a client that cannot ask
+  (`opencode run` without `--auto`) blocks the call, while `--auto` (`--yolo`,
+  `--dangerously-skip-permissions`) approves it unseen and the plugin cannot tell.
+  **OpenCode runs every call unchecked when it does not load the plugin**: OpenCode 1's
+  `opencode --pure` or `OPENCODE_PURE=1` (no external plugins), OpenCode 2's
+  `-openmoat` or `-*` in a configuration's `plugins` (or the old `plugin`), or a
+  `policies` entry denying `integration.use` of the plugin, an error while the plugin
+  loads (OpenCode logs it and goes on), an OpenCode started with another
+  `XDG_CONFIG_HOME`, `OPENCODE_CONFIG_DIR` or `HOME` than the one `openmoat init` set up,
+  and OpenCode before 1.3.4, which loads no object plugin. `kernel-self` denies the
   agent writes to the plugin, its folders, the directory, the global configuration
-  files (whose `plugin` list loads plugins before OpenMoat's) and `~/.opencode`, and
-  denies `opencode … --pure`, setting `OPENCODE_PURE`, `opencode upgrade --major`
-  (which replaces OpenCode 1 with OpenCode 2) and `opencode plugin --global`; the lock
-  pins the plugin, so an edit of it stops every call. `openmoat init`, `status` and
-  `doctor` ask the `opencode` on `PATH` for its version and do not set up, or report as
-  not protected, an OpenCode 2. Setting `XDG_CONFIG_HOME` or `HOME` for a nested
-  `opencode` is not denied.
-- **OpenCode tools OpenMoat does not check.** OpenCode hands every plugin's
-  `tool.execute.before` the same arguments object, and the tool receives it after the
-  last plugin; plugins in the global configuration's `plugin` list load before
-  OpenMoat's, a project's after it. OpenMoat's plugin freezes the arguments it checked,
-  so a later plugin that changes them in place throws and the call is blocked; a
-  plugin tool that changes its own arguments fails the same way. Plugins and custom
+  files (whose plugin list loads plugins and can remove OpenMoat's), OpenCode 2's
+  background service settings (`service*.json`) and `~/.opencode`, and denies
+  `opencode … --pure`, setting `OPENCODE_PURE`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG`
+  or `OPENCODE_CONFIG_CONTENT`, `opencode upgrade --major`, `opencode plugin --global`,
+  OpenCode 2's `opencode plugin add|remove|update` and `opencode service set|unset`;
+  writing a project's configuration asks (`runs-later`); the lock pins the plugin, so
+  an edit of it stops every call. `openmoat status` and `openmoat doctor` report
+  OpenCode as not protected while the person's own `opencode.json[c]` removes the
+  plugin, and warn about a removal in the configuration of the directory they run in
+  and its project root (not of the parent directories OpenCode 2 also reads). The lock
+  does not pin OpenCode's configuration files: a removed plugin calls no guard, so a
+  pin would stop nothing in OpenCode, and OpenCode rewrites its global file itself.
+  `openmoat init`, `status` and `doctor` ask the `opencode` on `PATH` for its version
+  and do not set up, or report as not protected, one before 1.3.4. Setting
+  `XDG_CONFIG_HOME` or `HOME` for a nested `opencode` is not denied.
+- **OpenCode tools OpenMoat does not check.** OpenCode hands every plugin's hook the
+  same object, and the tool runs with what it holds after the last plugin: OpenCode 1's
+  `args`, OpenCode 2's `tool` and `input`. Plugins in OpenCode 1's global `plugin` list
+  load before OpenMoat's, a project's and (in OpenCode 2) every configured one after it,
+  and in OpenCode 2 any plugin may register a hook later still. OpenMoat's plugin
+  freezes OpenCode 1's arguments, and in OpenCode 2 replaces `tool` and `input` with
+  the checked name and a frozen copy that cannot be reassigned, so a later plugin that
+  changes them throws and the call is blocked; a plugin tool that changes its own
+  arguments fails the same way. For an OpenCode 2 shell command it checked, the plugin
+  also pins the command and shell when OpenCode starts it (`shell` `create.before`);
+  a shell hook registered before OpenMoat's, a change of the shell's working directory
+  or environment, a plugin that replaces a tool's implementation (`tool.transform`) or
+  advertises a tool under another name (a session `context` hook, so the hook sees the
+  advertised name) are not caught. Plugins and custom
   tools (`tools/*.{js,ts}`) run in OpenCode's process with the agent's rights and can
   change what any code there does, OpenMoat's plugin included; a project's
   `.opencode/plugins/` and the plugins its `opencode.json` lists load at start with no
@@ -735,21 +761,24 @@ something OpenMoat claims to stop.
   spellings; writes to all of them ask (`runs-later`). A plugin can register a tool
   under a built-in's name (`bash`), which OpenMoat then checks as the built-in. The
   person's `!` shell commands and the `` !`…` `` shell of a command template run
-  outside the hook; writes to commands ask (`runs-later`). `task` (a subagent, whose calls are hooks of their own with its own
-  session id, so taint and grants do not follow the parent session), `todowrite`,
-  `skill`, `question` and Code Mode's `execute` (each MCP call it makes is checked on
-  its own) are `ungoverned`. On Windows `bash` may run Git Bash, PowerShell or `cmd`,
-  so it is `unparseable` and left to OpenCode. A tool OpenMoat does not know (a
+  outside the hook; writes to commands ask (`runs-later`). `task` (OpenCode 1) and
+  `subagent` (OpenCode 2), a subagent whose calls are hooks of their own with its own
+  session id, so taint and grants do not follow the parent session, `todowrite`,
+  `skill`, `question`, Code Mode's `execute` (each tool call it makes is checked on its
+  own) and OpenCode 2's `opencode_session_rename`, `opencode_worktree_list` and
+  `opencode_models` are `ungoverned`. On Windows `bash` (`shell` in OpenCode 2) may run
+  Git Bash, PowerShell or `cmd`, so it is `unparseable` and left to OpenCode. A tool OpenMoat does not know (a
   plugin's or custom tool's) is decided as an MCP tool of its name with what its
   arguments name, as Copilot CLI's are; MCP tools are `<server>_<tool>`, traced to the
   server names in OpenCode's configuration the plugin sends, the longest when several
-  begin the name. The MCP servers under `mcp` in OpenCode's global `config.json`,
-  `opencode.json` and `opencode.jsonc` and a project's `opencode.json[c]` and
-  `.opencode/opencode.json[c]` are pinned like every host's (ADR-026); servers from
-  `~/.opencode/`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`,
-  a remote `.well-known/opencode` or managed configuration are not. Plugins and tools
-  in the directory `OPENCODE_CONFIG_DIR` names are neither denied nor asked for: the
-  default policy knows only the default directories. There is no OS
+  begin the name. The MCP servers under `mcp` (and OpenCode 2's `mcp.servers`) in
+  OpenCode's global `config.json`, `opencode.json` and `opencode.jsonc` and a project's
+  `opencode.json[c]` and `.opencode/opencode.json[c]` are pinned like every host's
+  (ADR-026); servers from `~/.opencode/`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT`,
+  a remote `.well-known/opencode`, the parent directories OpenCode 2 also reads, or
+  managed configuration are not. The directory `OPENCODE_CONFIG_DIR` names when
+  `openmoat init` runs, or the guard's environment names, is protected like the
+  configuration directory. There is no OS
   sandbox from OpenMoat for OpenCode; run it under `openmoat run` for one.
 
   `guard` writes the reason of every deny to stderr, so Codex honours its exit 2, and

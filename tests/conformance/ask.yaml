@@ -1539,6 +1539,19 @@
   threat: T9
   action: { shell: "opencode plugin --force opencode-gitlab-auth" }
   expect: { verdict: ask, rules: [runs-later] }
+# OpenCode 2 reads a project's `plugins`, whose `-openmoat` removes OpenMoat's
+# plugin (ADR-040): writing a project's configuration asks, as before; an
+# OpenCode 1 plugin whose name only begins with `add` is not OpenCode 2's
+# `plugin add`
+- id: ask-opencode2-remove-plugin-in-project-config
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { shell: "echo '{\"plugins\":[\"-openmoat\"]}' > .opencode/opencode.jsonc" }
+  expect: { verdict: ask, rules: [runs-later] }
+- id: ask-opencode-plugin-named-like-add
+  threat: T9
+  action: { shell: "opencode plugin addon-helper" }
+  expect: { verdict: ask, rules: [runs-later] }
 # Hermes Agent runs its cron jobs later, unattended, loads its skills into later
 # sessions and, with `HERMES_ENABLE_PROJECT_PLUGINS`, a project's plugins
 - id: ask-write-hermes-cron-job

@@ -47,7 +47,7 @@ impl InstallSpec {
         location: super::Location::OneDir,
         pinned_form: None,
         extra_files: &[],
-        unsupported: None,
+        versions: None,
         consent: None,
         also_dirs: &[],
     };

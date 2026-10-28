@@ -212,7 +212,8 @@ fn arm_literals(line: &str) -> Vec<&str> {
         .collect()
 }
 
-/// `dir`'s `.rs` files that map tools: all but its tests, bench and doc rows.
+/// `dir`'s `.rs` files that map tools, in its subdirectories too (OpenCode's
+/// `tools/v1.rs` and `tools/v2.rs`): all but tests, bench and doc rows.
 fn mapping_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -220,7 +221,9 @@ fn mapping_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in entries {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        if path.extension().is_some_and(|e| e == "rs")
+        if path.is_dir() && !["fixtures", "integration", "tests"].contains(&name.as_str()) {
+            mapping_files(&path, out);
+        } else if path.extension().is_some_and(|e| e == "rs")
             && !["tests.rs", "bench.rs", "doc.rs"].contains(&name.as_str())
         {
             out.push(path);

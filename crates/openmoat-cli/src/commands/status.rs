@@ -283,8 +283,8 @@ fn hooks(
             .host_present()
             .then(|| crate::install::host_version::advisory(host))
             .flatten();
-        // A version that does not load OpenMoat's hook (OpenCode 2), whatever
-        // the hook file says.
+        // A version that does not load OpenMoat's hook (OpenCode before
+        // 1.3.4), whatever the hook file says.
         let unsupported = config
             .host_present()
             .then(|| crate::install::host_version::unsupported(host))
@@ -294,7 +294,12 @@ fn hooks(
                 healthy = false;
                 format!("✗ not protected: {why}")
             }
-            (HookState::Installed, None) => "✔ installed".to_owned(),
+            // The hook a version runs OpenMoat through, where versions differ
+            // (OpenCode 1's and 2's).
+            (HookState::Installed, None) => match crate::install::host_version::hook_api(host) {
+                Some(through) => format!("✔ installed ({through})"),
+                None => "✔ installed".to_owned(),
+            },
             (HookState::Missing, None) if recorded.skipped(host) && config.host_present() => {
                 format!(
                     "· not set up (`openmoat init --hosts {}` adds it)",

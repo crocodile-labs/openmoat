@@ -1,5 +1,9 @@
-//! `moat bench` for OpenCode: what OpenMoat's plugin sends, and how it reads
-//! the reply (`host/opencode/integration/openmoat.js`).
+//! `moat bench` for OpenCode: what OpenMoat's plugin sends from OpenCode 1's
+//! `tool.execute.before`, and how it reads the reply
+//! (`host/opencode/integration/openmoat.js`). The bench scores OpenCode 1,
+//! the stricter of the two: it cannot ask, so an `ask` must arrive as a deny;
+//! OpenCode 2's payload and asks are covered by `opencode/tests.rs` and the
+//! plugin's Node harness.
 
 use openmoat_core::Verdict;
 use serde_json::json;

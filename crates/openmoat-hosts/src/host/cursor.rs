@@ -91,6 +91,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         hook_dir: None,
         reader: &project_settings::READER,
         user_file: "hooks.json",
+        user_more: &[],
     }),
     // The CLI agent, and the macOS helper processes of the Cursor editor,
     // whose agent runs commands in terminals they start: `Cursor Helper`,

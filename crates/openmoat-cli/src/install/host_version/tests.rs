@@ -27,17 +27,32 @@ fn a_kept_version_lasts_until_the_program_file_changes() {
     assert_eq!(cached(dir.path(), &seen), None);
 }
 
-/// OpenCode 1 takes the plugin; OpenCode 2 does not, and says why.
+/// OpenCode 1.3.4 and later and OpenCode 2 take the plugin, each through its
+/// own hook; older versions do not, and say why.
 #[test]
-fn only_versions_from_the_spec_major_are_unsupported() {
-    let gate = Host::ALL
-        .iter()
-        .find_map(|h| h.spec().install.as_ref()?.unsupported.as_ref())
+fn versions_below_the_oldest_are_unsupported_and_others_name_their_hook() {
+    let gate = Host::OpenCode
+        .spec()
+        .install
+        .as_ref()
+        .and_then(|i| i.versions.as_ref())
         .unwrap();
-    assert_eq!(gate.from_major, 2);
-    assert!(!gate.why.is_empty());
-    assert!(parse("1.19.4").is_some_and(|v| v.0 < gate.from_major));
-    assert!(parse("2.1.4").is_some_and(|v| v.0 >= gate.from_major));
+    assert!(!gate.older.is_empty());
+    let hook = |text| gate.hook_of(parse(text).unwrap());
+    assert_eq!(hook("1.3.3"), None);
+    assert_eq!(hook("1.0.0"), None);
+    assert!(hook("1.3.4").unwrap().contains("OpenCode 1"));
+    assert!(hook("1.19.4").unwrap().contains("tool.execute.before"));
+    assert!(hook("2.0.0").unwrap().contains("OpenCode 2"));
+    assert!(hook("2.2.0").unwrap().contains("`execute.before`"));
+    // No other host names versions.
+    assert!(Host::ALL.iter().all(|h| {
+        *h == Host::OpenCode
+            || h.spec()
+                .install
+                .as_ref()
+                .is_none_or(|i| i.versions.is_none())
+    }));
 }
 
 #[test]

@@ -103,6 +103,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         }),
         reader: &super::claude_code::project_settings::READER,
         user_file: "settings.json",
+        user_more: &[],
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,

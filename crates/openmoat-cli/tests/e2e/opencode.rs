@@ -1,12 +1,15 @@
 //! OpenCode integration end to end: `init` writes OpenMoat's plugin into
 //! OpenCode's configuration directory and pins it, `guard --host opencode`
-//! answers in the plugin's format, OpenCode 2 is not set up, and a project's
-//! plugins and configuration are warned about. What every host shares
-//! (uninstall, the lock, MCP pins, asks) is the suite in `hosts/`.
+//! answers OpenCode 1's and OpenCode 2's payloads in the plugin's format,
+//! OpenCode before 1.3.4 is not set up, `status` and `doctor` name the hook a
+//! version runs through, and a project's plugins, configuration and removal
+//! of OpenMoat's plugin are warned about. What every host shares (uninstall,
+//! the lock, MCP pins, asks, the person's own file turning the plugin off) is
+//! the suite in `hosts/`.
 //!
-//! The payloads follow the hook and tool arguments of the OpenCode 1.19.4
-//! source (`crates/openmoat-hosts/src/host/opencode/fixtures/README.md`); none is
-//! captured from OpenCode.
+//! The payloads follow the hooks and tool arguments of the OpenCode 1.19.4 and
+//! 2.2.0 source (`crates/openmoat-hosts/src/host/opencode/fixtures/README.md`);
+//! none is captured from OpenCode.
 
 use std::fs;
 
@@ -158,19 +161,37 @@ fn a_shared_xdg_config_home_alone_does_not_name_opencode() {
     assert!(!text(&out).contains("OpenCode"), "{}", text(&out));
 }
 
-/// OpenCode 2 loads plugins through another API: `init` does not write a
-/// plugin it would not run, and `status` reports the agent as not protected.
+/// The `opencode` agent in `status --format json`, with OpenCode reporting
+/// `version`.
+fn agent_at(sb: &Sandbox, version: &str) -> Value {
+    let mut status = sb.command();
+    status
+        .args(["status", "--format", "json"])
+        .env("MOAT_OPENCODE_VERSION", version);
+    let doc = parse(&output(&mut status, None));
+    doc["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["host"] == "opencode")
+        .unwrap()
+        .clone()
+}
+
+/// OpenCode before 1.3.4 does not load an object plugin: `init` does not
+/// write a plugin it would not run, and `status` reports the agent as not
+/// protected.
 #[test]
-fn opencode_2_is_not_set_up_and_is_reported() {
+fn opencode_before_1_3_4_is_not_set_up_and_is_reported() {
     let sb = Sandbox::bare(&[CONFIG_DIR]);
     let out = output(
         sb.command()
             .args(["init", "--yes"])
-            .env("MOAT_OPENCODE_VERSION", "2.1.4"),
+            .env("MOAT_OPENCODE_VERSION", "1.3.3"),
         None,
     );
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(text(&out).contains("OpenCode 2"), "{}", text(&out));
+    assert!(text(&out).contains("before 1.3.4"), "{}", text(&out));
     assert!(
         !sb.home
             .join(CONFIG_DIR)
@@ -179,25 +200,155 @@ fn opencode_2_is_not_set_up_and_is_reported() {
         "{}",
         text(&out)
     );
-    let mut status = sb.command();
-    status
-        .args(["status", "--format", "json"])
-        .env("MOAT_OPENCODE_VERSION", "2.1.4");
-    let doc = parse(&output(&mut status, None));
-    let agent = doc["agents"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|a| a["host"] == "opencode")
-        .unwrap()
-        .clone();
+    let agent = agent_at(&sb, "1.3.3");
     assert_eq!(agent["level"], "not-protected", "{agent}");
     assert!(
         agent["reason"]
             .as_str()
             .unwrap_or_default()
-            .contains("2.1.4"),
+            .contains("1.3.3"),
         "{agent}"
+    );
+}
+
+/// OpenCode 2 loads the same plugin: `init` sets it up, `status` and
+/// `doctor` name the hook it runs through, and an upgrade from OpenCode 1
+/// needs no new `init`.
+#[test]
+fn opencode_2_is_set_up_and_its_hook_is_named() {
+    let sb = Sandbox::bare(&[CONFIG_DIR]);
+    let out = output(
+        sb.command()
+            .args(["init", "--yes"])
+            .env("MOAT_OPENCODE_VERSION", "2.2.0"),
+        None,
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let plugin = sb.home.join(CONFIG_DIR).join("plugins/openmoat.js");
+    assert!(plugin.is_file(), "{}", text(&out));
+    let source = fs::read_to_string(&plugin).unwrap();
+    assert!(source.contains("export default { id: \"openmoat\", server, setup };"));
+    for (version, hook) in [
+        ("2.2.0", "OpenCode 2's `execute.before`"),
+        ("1.19.4", "OpenCode 1's"),
+    ] {
+        assert_ne!(
+            agent_at(&sb, version)["level"],
+            "not-protected",
+            "{version}"
+        );
+        let mut status = sb.command();
+        status
+            .args(["status"])
+            .env("MOAT_OPENCODE_VERSION", version);
+        let printed = stdout(&output(&mut status, None));
+        assert!(printed.contains(hook), "{version}: {printed}");
+        let mut doctor = sb.command();
+        doctor
+            .args(["doctor"])
+            .env("MOAT_OPENCODE_VERSION", version);
+        let printed = stdout(&output(&mut doctor, None));
+        assert!(printed.contains(hook), "{version}: {printed}");
+    }
+}
+
+/// An `execute.before` payload (OpenCode 2) for `tool` with `input`.
+pub(crate) fn payload2(sb: &Sandbox, tool: &str, input: &Value) -> String {
+    let project = sb.project().to_string_lossy().into_owned();
+    let platform = if cfg!(windows) { "win32" } else { "linux" };
+    json!({
+        "hook_event_name": "execute.before",
+        "tool": tool, "input": input, "sessionID": "ses_2", "agent": "build",
+        "messageID": "msg_1", "callID": "call-2",
+        "directory": project, "worktree": project,
+        "mcpServers": ["internal-tools"], "platform": platform,
+    })
+    .to_string()
+}
+
+/// OpenCode 2's tools: its own files and the ways to switch OpenMoat off are
+/// denied, a secret named with `~` (which OpenCode 2 expands) is denied, a
+/// project file is allowed, and an ask stays an ask the plugin puts to the
+/// person.
+#[test]
+fn opencode_2_calls_are_decided_and_asks_reach_the_person() {
+    let sb = sandbox();
+    let dir = sb.home.join(CONFIG_DIR);
+    let mut denied = vec![
+        (
+            "write",
+            json!({"path": dir.join("opencode.jsonc"), "content": "{\"plugins\":[\"-openmoat\"]}"}),
+            "kernel-self",
+        ),
+        (
+            "write",
+            json!({"path": dir.join("service.json"), "content": "{}"}),
+            "kernel-self",
+        ),
+        (
+            "read",
+            json!({"path": "~/.ssh/id_ed25519"}),
+            "secrets-paths",
+        ),
+    ];
+    // On Windows OpenCode's shell may be PowerShell or `cmd`, left to OpenCode.
+    if !cfg!(windows) {
+        denied.extend([
+            (
+                "shell",
+                json!({"command": "opencode plugin add opencode-evil"}),
+                "kernel-self",
+            ),
+            (
+                "shell",
+                json!({"command": "OPENCODE_CONFIG_DIR=/tmp/x opencode run hi"}),
+                "kernel-self",
+            ),
+        ]);
+    }
+    for (tool, input, rule) in denied {
+        let (code, reply) = guard(&sb, &payload2(&sb, tool, &input));
+        assert_eq!(code, Some(DENY), "{tool} {input}: {reply}");
+        assert!(reason(&reply).contains(rule), "{tool} {input}: {reply}");
+    }
+    let file = sb.project().join("src/main.rs");
+    let (code, reply) = guard(&sb, &payload2(&sb, "read", &json!({"path": file})));
+    assert_eq!(code, Some(OK), "{reply}");
+    assert_ne!(reply["decision"], "deny", "{reply}");
+
+    let plugin = sb.project().join(".opencode/plugins/helper.ts");
+    let (code, reply) = guard(
+        &sb,
+        &payload2(&sb, "write", &json!({"path": plugin, "content": "x"})),
+    );
+    assert_eq!(code, Some(OK), "{reply}");
+    assert_eq!(reply["decision"], "ask", "{reply}");
+    assert!(reason(&reply).contains("runs-later"), "{reply}");
+    assert!(!reason(&reply).contains("allow --last"), "{reply}");
+}
+
+/// A project whose configuration removes OpenMoat's plugin in OpenCode 2 is
+/// named in `status`; the person's own makes OpenCode not protected
+/// (`hosts/` checks that row).
+#[test]
+fn a_projects_removal_of_the_plugin_is_reported() {
+    let sb = sandbox();
+    let project = sb.project();
+    fs::create_dir_all(project.join(".opencode")).unwrap();
+    fs::write(
+        project.join(".opencode/opencode.jsonc"),
+        "{\n  // OpenCode 2 drops OpenMoat's plugin\n  \"plugins\": [\"-openmoat\"],\n}\n",
+    )
+    .unwrap();
+    let mut cmd = sb.command();
+    cmd.current_dir(&project)
+        .args(["status", "--format", "json"]);
+    let doc = parse(&output(&mut cmd, None));
+    let warnings = doc["project_settings"].to_string();
+    assert!(warnings.contains("-openmoat"), "{warnings}");
+    assert!(
+        warnings.contains("does not protect OpenCode 2 sessions"),
+        "{warnings}"
     );
 }
 
@@ -231,8 +382,10 @@ fn a_projects_plugins_and_configuration_are_reported() {
     assert!(!warnings.contains("cannot be checked"), "{warnings}");
 }
 
-/// `OPENCODE_CONFIG_DIR` names a further configuration directory: `init`
-/// records it, and its configuration file is protected like the default one's.
+/// `OPENCODE_CONFIG_DIR` is where OpenCode 2 loads global plugins in place of
+/// `~/.config/opencode`, and OpenCode 1 loads them too: `init` installs the
+/// plugin there, and its configuration file is protected like the default
+/// one's.
 #[test]
 fn opencode_config_dir_is_protected_like_the_configuration_directory() {
     let sb = Sandbox::bare(&[CONFIG_DIR]);
@@ -245,6 +398,11 @@ fn opencode_config_dir_is_protected_like_the_configuration_directory() {
         None,
     );
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        extra.join("plugins/openmoat.js").is_file(),
+        "{}",
+        text(&out)
+    );
     // Without the variable, from the record.
     let write = json!({"filePath": extra.join("opencode.json"),
         "content": "{\"plugin\":[\"./evil.js\"]}"});
@@ -271,7 +429,8 @@ fn status_warns_about_a_version_with_an_advisory() {
     let mut status = sb.command();
     status
         .args(["status"])
-        .env("MOAT_OPENCODE_VERSION", "1.0.100");
+        // supported (1.3.4 and later), and affected by GHSA-632h-h47v-g4x4
+        .env("MOAT_OPENCODE_VERSION", "1.15.0");
     let out = output(&mut status, None);
     let printed = stdout(&out);
     let warned: Vec<&str> = printed
@@ -279,7 +438,7 @@ fn status_warns_about_a_version_with_an_advisory() {
         .filter(|l| l.contains("has a known security advisory"))
         .collect();
     assert_eq!(warned.len(), 1, "{}", text(&out));
-    assert!(warned[0].contains("OpenCode 1.0.100"), "{}", warned[0]);
+    assert!(warned[0].contains("OpenCode 1.15.0"), "{}", warned[0]);
     assert!(warned[0].contains("upgrade to"), "{}", warned[0]);
     let mut current = sb.command();
     current

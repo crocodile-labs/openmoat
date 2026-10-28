@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 41 | 32 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 105 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 21 | 1 | 6 |
-| T9 | Hook / policy tampering by the agent | 354 | 107 | 31 |
+| T9 | Hook / policy tampering by the agent | 363 | 109 | 32 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 28 | 4 | 6 |
 | T12 | Network to unknown hosts | 86 | 17 | 1 |
@@ -1070,6 +1070,8 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-write-opencode-plugin-dependency` (ask): Ask [runs-later]
 - `ask-opencode-plugin-install` (ask): Ask [runs-later]
 - `ask-opencode-plugin-install-forced` (ask): Ask [runs-later]
+- `ask-opencode2-remove-plugin-in-project-config` (ask): Ask [runs-later]
+- `ask-opencode-plugin-named-like-add` (ask): Ask [runs-later]
 - `ask-write-hermes-cron-job` (ask): Ask [runs-later]
 - `ask-write-hermes-skill` (ask): Ask [runs-later]
 - `ask-write-project-hermes-plugin` (ask): Ask [runs-later]
@@ -1186,6 +1188,15 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-opencode-global-plugin` (attacks): Deny [kernel-self]
 - `T9-opencode-global-plugin-long-flag` (attacks): Deny [kernel-self]
 - `T9-opencode-global-plugin-bundled-flags` (attacks): Deny [kernel-self]
+- `T9-opencode2-remove-plugin-in-global-config` (attacks): Deny [kernel-self]
+- `T9-opencode2-remove-plugin-by-config-content` (attacks): Deny [kernel-self]
+- `T9-opencode2-explicit-config-file` (attacks): Deny [kernel-self]
+- `T9-opencode2-move-config-dir` (attacks): Deny [kernel-self]
+- `T9-opencode2-service-env` (attacks): Deny [kernel-self]
+- `T9-opencode2-write-service-settings` (attacks): Deny [kernel-self]
+- `T9-opencode2-plugin-add` (attacks): Deny [kernel-self]
+- `T9-opencode2-plugin-remove` (attacks): Deny [kernel-self]
+- `T9-opencode2-upgrade-major` (attacks): Deny [kernel-self]
 - `T9-edit-hermes-config` (attacks): Deny [kernel-self]
 - `T9-disable-hermes-hook-by-shell` (attacks): Deny [kernel-self]
 - `T9-edit-hermes-hook-allowlist` (attacks): Deny [kernel-self]
@@ -1490,6 +1501,7 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-opencode-run` (benign): Defer [default]
 - `benign-opencode-run-mentions-pure` (benign): Defer [default]
 - `benign-opencode-other-variable` (benign): Defer [default]
+- `benign-opencode2-service-status` (benign): Defer [default]
 - `benign-read-repository-policy` (benign): Allow [project-fs]
 - `benign-move-project-file` (benign): Allow [dev-shell]
 - `benign-rename-project-files` (benign): Defer [default]

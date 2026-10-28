@@ -89,7 +89,26 @@ pub(super) fn opencode(tool: &str, args: &Value) -> Value {
     })
 }
 
-/// A file path as OpenCode's model sends it: OpenCode expands no `~`, so a
+/// OpenCode 2's `execute.before`, through the same plugin (`fixtures/v2-*.json`).
+pub(super) fn opencode2(tool: &str, input: &Value) -> Value {
+    json!({
+        "hook_event_name": "execute.before", "tool": tool, "input": input,
+        "sessionID": "ses_1", "agent": "build", "messageID": "msg_1", "callID": "call-1",
+        "directory": CWD, "worktree": CWD, "mcpServers": [], "platform": "darwin",
+    })
+}
+
+/// A file path as OpenCode 2's model sends it: `~/…` and absolute paths as
+/// they are (OpenCode 2 expands `~`), a relative one joined to the directory.
+pub(super) fn opencode2_path(path: &str) -> String {
+    if path.starts_with("~/") || path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("{CWD}/{path}")
+    }
+}
+
+/// A file path as OpenCode 1's model sends it: OpenCode 1 expands no `~`, so a
 /// path in the home is written out, and a relative one is joined to the
 /// directory, as OpenCode's tools join it.
 pub(super) fn opencode_path(path: &str) -> String {

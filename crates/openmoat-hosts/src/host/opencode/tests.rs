@@ -3,6 +3,8 @@ use serde_json::{Value, json};
 
 use crate::{HookEvent, HookRequest, Host, HostError};
 
+mod v2;
+
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/host/opencode/fixtures");
 
 fn fixture(name: &str) -> HookRequest {
@@ -56,7 +58,8 @@ fn bash_is_a_shell_command_in_its_workdir() {
     assert_eq!(bash.session_id, "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn");
     assert_eq!(bash.call_id.as_deref(), Some("toolu_bash_1"));
     assert_eq!(bash.cwd.as_deref(), Some("/p"));
-    assert_eq!(bash.event, HookEvent::PreToolUse);
+    // OpenCode 1 cannot ask.
+    assert_eq!(bash.event, HookEvent::PreToolUseNoAsk);
     // On Windows the shell may be Git Bash, PowerShell or `cmd`, and a guard
     // built for Windows reads every call as Windows' whatever `platform` says.
     assert!(matches!(
@@ -276,7 +279,8 @@ fn malformed_and_foreign_payloads_are_errors() {
 /// defer prints nothing.
 #[test]
 fn an_ask_is_a_deny_and_a_defer_prints_nothing() {
-    let event = HookEvent::PreToolUse;
+    let event = fixture("read").event;
+    assert_eq!(event, HookEvent::PreToolUseNoAsk);
     let mut ask = Decision::new(Verdict::Ask);
     ask.rules.push("runs-later".to_owned());
     let answered = Host::OpenCode.answer(&event, &ask);
@@ -300,7 +304,7 @@ fn every_fixture_but_the_malformed_one_parses() {
     for entry in std::fs::read_dir(FIXTURES).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
-        if path.extension().is_some_and(|e| e == "json") && name != "read-malformed" {
+        if path.extension().is_some_and(|e| e == "json") && !name.ends_with("read-malformed") {
             let _ = fixture(&name);
         }
     }
@@ -316,6 +320,9 @@ fn the_plugin_names_the_host_and_waits_as_long_as_the_spec_says() {
         super::HOOK_TIMEOUT_S
     )));
     assert!(source.contains(r#"hook_event_name: "tool.execute.before""#));
+    assert!(source.contains(r#"hook_event_name: "execute.before""#));
+    // One file for both versions: OpenCode 1 calls `server`, OpenCode 2 `setup`.
+    assert!(source.contains(r#"export default { id: "openmoat", server, setup };"#));
 }
 
 /// A read of another agent's folder asks under the default policy
@@ -339,7 +346,7 @@ fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
     let decision = compiled.decide(request.action.as_ref().unwrap());
     assert_eq!(decision.verdict, Verdict::Ask);
     assert_eq!(decision.rules, [openmoat_core::HOLDS_PROTECTED_RULE]);
-    let event = HookEvent::PreToolUse;
+    let event = request.event;
     let answered = Host::OpenCode.answer(&event, &decision);
     assert_eq!(answered.verdict, Verdict::Deny);
     let reply: Value =
