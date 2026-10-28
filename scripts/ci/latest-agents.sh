@@ -515,7 +515,9 @@ opencode_load() {
                 >"$out/opencode-plugins.json" 2>"$out/opencode-plugins.err" || true
             check opencode-settled "$out/opencode-plugins.json" && break
             tries=$((tries + 1))
-            [ "$tries" -le 60 ] && kill -0 "$serve_pid" 2>/dev/null || break
+            if [ "$tries" -gt 60 ] || ! kill -0 "$serve_pid" 2>/dev/null; then
+                break
+            fi
             sleep 1
         done
         cat "$out/opencode-plugins.json" "$out/opencode-plugins.err"
