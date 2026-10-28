@@ -151,18 +151,30 @@ brew)
 shell)
     curl --proto '=https' --tlsv1.2 -fLsS --retry 3 -o "$root/openmoat-installer.sh" \
         "$release_url/download/openmoat-installer.sh"
-    curl --proto '=https' --tlsv1.2 -fLsS --retry 3 -o "$root/sha256.sum" \
-        "$release_url/download/sha256.sum"
-    want=$(grep -E '[ *]openmoat-installer\.sh$' "$root/sha256.sum" | cut -d' ' -f1)
     if command -v sha256sum >/dev/null; then
         got=$(sha256sum "$root/openmoat-installer.sh" | cut -d' ' -f1)
     else
         got=$(shasum -a 256 "$root/openmoat-installer.sh" | cut -d' ' -f1)
     fi
-    if [ -z "$want" ] || [ "$got" != "$want" ]; then
-        fail "openmoat-installer.sh sha256 $got is not the release's ${want:-<none>}"
+    # The digest GitHub computed when the release workflow uploaded the file:
+    # independent of any checksum file the release ships, and always present.
+    curl --proto '=https' --tlsv1.2 -fsS --retry 3 -o "$root/release.json" \
+        "https://api.github.com/repos/crocodile-labs/openmoat/releases/tags/$tag"
+    digest=$(jq -r '.assets[] | select(.name == "openmoat-installer.sh") | .digest // empty' "$root/release.json")
+    [ "$digest" = "sha256:$got" ] ||
+        fail "openmoat-installer.sh sha256 $got is not the digest GitHub recorded (${digest:-none})"
+    echo "ok    openmoat-installer.sh sha256 matches the digest GitHub recorded at upload"
+    # The release's own sha256.sum lists the archives; when it lists the
+    # installer as well, that entry must agree.
+    curl --proto '=https' --tlsv1.2 -fLsS --retry 3 -o "$root/sha256.sum" \
+        "$release_url/download/sha256.sum"
+    listed=$(grep -E '[ *]openmoat-installer\.sh$' "$root/sha256.sum" | cut -d' ' -f1 || true)
+    if [ -n "$listed" ]; then
+        [ "$listed" = "$got" ] || fail "sha256.sum lists $listed for openmoat-installer.sh, the file is $got"
+        echo "ok    sha256.sum agrees"
+    else
+        echo "note  sha256.sum does not list the installer; GitHub's digest and the attestation check it"
     fi
-    echo "ok    openmoat-installer.sh sha256 matches sha256.sum"
     if [ -n "${GH_TOKEN:-}" ]; then
         gh attestation verify "$root/openmoat-installer.sh" --repo crocodile-labs/openmoat
         echo "ok    openmoat-installer.sh has the release workflow's build attestation"

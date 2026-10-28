@@ -2,6 +2,7 @@
 //! show them (the `MoatBar` app). The same rows and exit code as the text output.
 
 use anyhow::Result;
+use openmoat_hosts::Host;
 use serde::Serialize;
 
 use super::Area;
@@ -36,11 +37,21 @@ pub(super) struct Row {
 
 impl Row {
     /// The text output pads a label to a column, then the detail follows after
-    /// at least two spaces; a line without such a gap is all detail.
+    /// at least two spaces; a line without such a gap is all detail. An agent's
+    /// name as long as the column (`GitHub Copilot CLI`) is followed by one
+    /// space only, so a line that starts with one is split after it.
     pub(super) fn new(status: Status, area: Option<Area>, text: &str) -> Self {
-        let (name, detail) = match text.find("  ") {
-            Some(at) => (text[..at].trim(), text[at..].trim()),
-            None => ("", text.trim()),
+        let agent = Host::EVERY
+            .iter()
+            .map(|host| host.display_name())
+            .find(|name| {
+                text.strip_prefix(name)
+                    .is_some_and(|rest| rest.starts_with(' '))
+            });
+        let (name, detail) = match (agent, text.find("  ")) {
+            (Some(name), _) => (name, text[name.len()..].trim()),
+            (None, Some(at)) => (text[..at].trim(), text[at..].trim()),
+            (None, None) => ("", text.trim()),
         };
         Self {
             status,
@@ -89,6 +100,17 @@ mod tests {
             "Claude Code      protection: hook + sandbox",
         );
         assert_eq!(row.name, "Claude Code");
+        // every agent's name, however long, is the label of its line
+        for host in Host::EVERY {
+            let name = host.display_name();
+            let text = format!("{name:<16} protection: hook only");
+            let row = Row::new(Status::Note, None, &text);
+            assert_eq!(
+                (row.name.as_str(), row.detail.as_str()),
+                (name, "protection: hook only"),
+                "{text}"
+            );
+        }
         let row = Row::new(Status::Warning, None, "healthy");
         assert_eq!((row.name.as_str(), row.detail.as_str()), ("", "healthy"));
     }
