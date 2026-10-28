@@ -327,7 +327,9 @@ fn a_held_tool_and_a_tool_that_changed_mid_session_never_reach_the_server() {
     let deadline = Instant::now() + Duration::from_secs(20);
     let held = loop {
         let reply = live.ask(&call(2, "search", &arguments), 2);
-        if reply["error"]["code"] == -32602 || Instant::now() > deadline {
+        // While the relay reads the tools again it asks the host to retry.
+        let held = reply.to_string().contains("openmoat mcp accept docs");
+        if held || Instant::now() > deadline {
             break reply;
         }
         std::thread::sleep(Duration::from_millis(100));
