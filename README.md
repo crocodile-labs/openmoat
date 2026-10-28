@@ -38,7 +38,8 @@ covers what they leave out:
 - **A deny still holds when nobody is asked:** auto-approve modes, CI and background agents.
 - **The same policy writes the agents' own OS sandboxes** (Claude Code, Codex, Cursor), so
   code inside an allowed command is confined too; `openmoat run` does this for any agent
-  on macOS and Linux.
+  on macOS and Linux. Where no sandbox applies, a script the agent wrote asks before it
+  runs.
 
 <p align="center">
   <a href="#supported-agents"><img src="https://img.shields.io/badge/Claude_Code-D97757?style=flat-square&logo=claude&logoColor=white" alt="Claude Code"></a>
@@ -212,9 +213,13 @@ and an allow rule never overrides a deny rule.
 ### OS sandboxes, `openmoat run` and the proxy
 
 The hook decides each call, but an allowed `npm test` can run any code. For that,
-OpenMoat writes the same policy into the agent's own OS sandbox (Claude Code, Codex,
-Cursor), so code inside an allowed command cannot read your secrets or write outside
-the project (with the gaps under [Limits](#limits)). For an agent without a sandbox, or for a stricter one, `openmoat run` puts
+OpenMoat writes the same policy into the agent's own OS sandbox (Codex, and Claude Code
+and Cursor on macOS and Linux), so code inside an allowed command cannot read your secrets
+or write outside the project (with the gaps under [Limits](#limits)). Where no OS
+sandbox applies (the other agents, and Claude Code and Cursor on native Windows), the
+hook is the only check: there, running a script the same session wrote asks first
+(`session-written-code`), and so does inline code that builds the names of the files it
+opens (`opaque-code`). For an agent without a sandbox, or for a stricter one, `openmoat run` puts
 the whole agent and everything it starts in one sandbox made from the policy (Seatbelt
 on macOS 13 or later; Landlock and seccomp on Linux, or bubblewrap with `--isolate`):
 
@@ -299,7 +304,11 @@ The main gaps:
   `WebFetch` and MCP servers run outside it. Cursor runs some commands outside its
   sandbox.
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
-  sandbox bounds it, OpenMoat does not inspect it. An allowed host can receive data
+  sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
+  session wrote asks before an interpreter runs it, but a test runner, build tool or
+  package script (`pytest`, `npm test`, `cargo test`, `make`) running files the session
+  wrote does not, nor does a file another session wrote or one written out of the
+  hook's sight (a build's output, a script that writes another script). An allowed host can receive data
   from an allowed command: the proxy checks the host, not what is sent inside HTTPS.
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).

@@ -25,7 +25,7 @@ use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, Drift};
 use crate::realpath::FsPathResolver;
-use crate::{push, render, secrets, taint, time};
+use crate::{push, render, secrets, session_code, taint, time};
 
 mod config_change;
 mod drift;
@@ -50,7 +50,8 @@ pub fn run(args: &GuardArgs) -> Code {
     deny_when_over_budget(host, Instant::now());
     // A panic would exit 101, which Claude Code treats as a non-blocking hook
     // failure, i.e. the call would proceed. Turn it into an explicit deny.
-    if let Ok(code) = std::panic::catch_unwind(|| decide_and_respond(host)) {
+    let by_run = args.relayed;
+    if let Ok(code) = std::panic::catch_unwind(|| decide_and_respond(host, by_run)) {
         return code;
     }
     let decision = kernel_error(&anyhow::Error::msg("internal error while deciding"));
@@ -124,7 +125,8 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
     })
 }
 
-fn decide_and_respond(installed_for: Host) -> Code {
+/// `by_run`: `openmoat run` relayed the call from inside its sandbox (`--relayed`).
+fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
     let started = Instant::now();
     // Inside `moat run` the sandbox holds no OpenMoat home: the run decides (ADR-028).
     if let Some(endpoint) = guard_relay::configured(&|var| std::env::var(var).ok()) {
@@ -143,7 +145,10 @@ fn decide_and_respond(installed_for: Host) -> Code {
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             event = host.event_of(&payload);
-            evaluate(host, &payload, &mut out, started)
+            // Inside `openmoat run` only when the run relayed it and named its session.
+            let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
+            let within_run = by_run && taint::run::run_session(run.as_deref()).is_some();
+            evaluate(host, &payload, &mut out, (started, within_run))
                 .unwrap_or_else(|error| (None, kernel_error(&error)))
         }
         Err(error) => (None, kernel_error(&error)),
@@ -250,12 +255,13 @@ struct Evaluated {
 }
 
 /// Decide one hook payload, filling `out` as it goes. `started` is when the
-/// guard started, which its budget counts from.
+/// guard started, which its budget counts from; `within_run`, whether the call
+/// runs inside `openmoat run`'s sandbox.
 fn evaluate(
     host: Host,
     payload: &str,
     out: &mut Evaluated,
-    started: Instant,
+    (started, within_run): (Instant, bool),
 ) -> Result<(Option<HookRequest>, Decision)> {
     hangs::enter(Phase::Lock);
     let request = host
@@ -367,7 +373,6 @@ fn evaluate(
         untrusted: session.taint.untrusted.as_deref(),
     };
     out.provenance = taint::provenance::observe(&store, &compiled, &seen)?;
-    drop(store);
     let tainted = compiled.with_taint(decision.clone(), action, &FsPathResolver, &session.taint);
     let call = taint::Call {
         home: &home,
@@ -385,6 +390,27 @@ fn evaluate(
         tainted,
         crate::time::now_ms(),
     )?;
+    // Code this session wrote, run with no OS sandbox below the hook; only
+    // tightens (ADR-039). Part of the taint phase: it reads the audit log.
+    let code = session_code::Call {
+        home: &home,
+        host,
+        session: &request.session_id,
+        action,
+        cwd: &ctx.cwd,
+        user_home: &ctx.home,
+        writes: &out.provenance.written,
+        within_run,
+    };
+    let sandboxed = || crate::protection::os_sandboxed(&home, host);
+    let decision = session_code::checked(
+        &code,
+        &compiled,
+        &store,
+        decision,
+        (crate::time::now_ms(), &sandboxed),
+    )?;
+    drop(store);
     // Last: a push is checked for what it would publish (push.rs); only tightens.
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
     let pushes = compiled.pushes(action);

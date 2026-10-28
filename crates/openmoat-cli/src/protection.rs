@@ -149,6 +149,23 @@ fn level(
     }
 }
 
+/// Whether OpenMoat's OS sandbox runs `host`'s shell commands here: the host
+/// has one (its spec), it applies on this OS, and its settings are in place
+/// and match the policy and the lock, as `status` reports `hook + OS sandbox`.
+/// The guard reads it only for a call that runs code its session wrote
+/// (`session_code.rs`), so its cost is paid there alone.
+pub fn os_sandboxed(home: &Home, host: Host) -> bool {
+    if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
+        return false;
+    }
+    let plan = home
+        .load_policy()
+        .ok()
+        .and_then(|p| Plan::new(home, &p).ok());
+    let lock = Lock::load(&home.lock_path()).ok();
+    sandbox(home, host, plan.as_ref(), lock.as_ref()).is_ok()
+}
+
 /// `Ok` when OpenMoat's sandbox for `host` is in place and matches the policy;
 /// otherwise which of it is missing, off or drifted.
 fn sandbox(
@@ -181,6 +198,16 @@ fn sandbox(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosts_without_an_openmoat_sandbox_are_never_sandboxed() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        // decided from the spec alone, before any host file is read
+        for host in Host::ALL.into_iter().filter(|h| h.spec().sandbox.is_none()) {
+            assert!(!os_sandboxed(&home, host), "{}", host.id());
+        }
+    }
 
     #[test]
     fn an_installed_hook_with_a_matching_sandbox_is_hook_and_os_sandbox() {

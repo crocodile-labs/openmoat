@@ -23,7 +23,9 @@ in two of three, while a real regression slows every batch.
 
 A last row times reads after another session that read untrusted content
 wrote 500 files (file provenance, ADR-029): each read is one indexed lookup
-per path, so it is held to the same budget.
+per path, so it is held to the same budget. Another times running scripts the
+session wrote itself (ADR-039), the one case that reads the agent's sandbox
+state.
 """
 
 import json
@@ -40,6 +42,7 @@ BUDGET_MS = 15.0
 FAIL_MS = 3 * BUDGET_MS
 SESSION = "long-session"
 PROVENANCE_FILES = 500
+SCRIPTS = 100
 BATCHES = 3
 
 
@@ -72,6 +75,7 @@ def main():
     home = tempfile.mkdtemp(prefix="moat-session-latency-")
     project = os.path.join(home, "project")
     os.makedirs(os.path.join(project, ".git"))
+    os.makedirs(os.path.join(project, "tools"))
     os.makedirs(os.path.join(home, ".claude"))
     # Only what the e2e tests pass (crates/openmoat-cli/tests/e2e/common.rs), so a
     # developer's MOAT_HOME or CLAUDE_CONFIG_DIR can never be touched.
@@ -132,6 +136,15 @@ def main():
     wall, own = timed(lambda i: f"cat src/gen{i % PROVENANCE_FILES}.rs")
     worst = max(worst, report(f"{SIZES[-1]:,} and {PROVENANCE_FILES} tainted files",
                               f"with {PROVENANCE_FILES} tainted files", wall, own))
+
+    # Code the session wrote (ADR-039): the long session writes SCRIPTS files and
+    # runs them, so each call looks the files up and, where Claude Code's sandbox
+    # applies, reads whether it is in place: the slowest path of that check.
+    for i in range(SCRIPTS):
+        call(f"echo 'print(1)' > tools/s{i}.py")
+    wall, own = timed(lambda i: f"python3 tools/s{i % SCRIPTS}.py")
+    worst = max(worst, report(f"{SIZES[-1]:,} and {SCRIPTS} scripts it wrote, run",
+                              f"running {SCRIPTS} scripts the session wrote", wall, own))
 
     table = "\n".join([
         f"`openmoat guard` late in one session, {BATCHES} batches of {runs} runs per size, "

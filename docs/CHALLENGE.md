@@ -71,7 +71,10 @@ than mistakes. The main ones:
 
 - What code inside an allowed command does where no OS sandbox applies (the hook-only
   agents, native Windows, Claude Code's and Cursor's file tools). A *misjudged* call is in
-  scope; *an allowed call doing harm* where nothing below the decision stops it is not.
+  scope, and so is a script the agent wrote in the same session that an interpreter or
+  the shell runs there without an `ask` (`session-written-code`, ADR-039); *an allowed
+  call doing harm* where nothing below the decision stops it is not, such as a test
+  runner or build tool running files the session wrote.
 - Data sent to a host the policy allows (`api.github.com`, package registries) by an
   allowed command.
 - Agents that run a call when the hook is missing or times out (named in Limits).

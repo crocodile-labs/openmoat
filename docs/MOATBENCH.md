@@ -146,7 +146,12 @@ Each step is one tool call, exactly one of:
 | `fetch: <url>` | `WebFetch` | none | none |
 | `mcp: { server, tool, args }` | `mcp__<server>__<tool>` | `mcp__<server>__<tool>` | `beforeMCPExecution` |
 
-`expect` is `allow`, `ask` or `deny`; `rule` is optional. File-tool paths starting
+`expect` is `allow`, `ask` or `deny`; `rule` is optional. A step whose verdict depends on
+whether OpenMoat's OS sandbox holds the host's commands (running a file the session wrote
+asks only where none does, ADR-039) adds `sandboxed: { expect: allow, rule: dev-shell }`:
+that holds on the hosts whose sandbox `openmoat init` put in place in the throwaway home
+(Claude Code and Cursor on macOS and Linux, Codex), `expect` and `rule` everywhere else
+and against another hook. File-tool paths starting
 with `~/` are in the home directory and relative ones are in the project, sent as
 absolute paths the way hosts send them; shell commands and MCP arguments are sent as
 written. A scenario runs on every host that has a tool for all of its steps.

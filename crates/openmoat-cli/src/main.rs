@@ -29,6 +29,7 @@ mod render;
 mod repo;
 mod sandbox;
 mod secrets;
+mod session_code;
 mod signing;
 mod taint;
 mod terminal;

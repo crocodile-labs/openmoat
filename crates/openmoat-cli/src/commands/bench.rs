@@ -277,14 +277,20 @@ fn compare(
 ) -> Run {
     let mut known = Vec::new();
     let mut steps = Vec::new();
+    // `openmoat init --yes` in the throwaway home put the host's OS sandbox in
+    // place wherever OpenMoat has one on this OS; another hook has none.
+    let sandboxed = markers
+        && crate::sandbox::install::format(host).is_some()
+        && crate::sandbox::install::unavailable(host).is_none();
     for (i, ((step, call), (got, rules))) in
         scenario.steps.iter().zip(calls).zip(verdicts).enumerate()
     {
         // OpenMoat is checked on its kernel verdict; another hook on what the host does.
+        let (expect, rule) = step.expected(sandboxed);
         let want = if markers {
-            step.expect.into()
+            expect.into()
         } else {
-            hosts::seen(host, call, step.expect)
+            hosts::seen(host, call, expect)
         };
         let ok = got.meets(want);
         let gap = step.gap.as_ref().filter(|_| markers);
@@ -303,8 +309,8 @@ fn compare(
                 want.word(),
             )),
             (None, true) => {
-                if let (Some(rule), Some(rules)) = (&step.rule, rules)
-                    && !rules.contains(rule)
+                if let (Some(rule), Some(rules)) = (rule, rules)
+                    && !rules.iter().any(|r| r == rule)
                 {
                     problems.push(format!(
                         "step {i}: {} without rule {rule} ({rules:?})",
@@ -315,7 +321,7 @@ fn compare(
         }
         steps.push(StepResult {
             got: *got,
-            expects_ask: step.expect == Verdict::Ask,
+            expects_ask: expect == Verdict::Ask,
             ok,
             gap: gap.is_some(),
         });

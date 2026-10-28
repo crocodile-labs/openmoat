@@ -441,6 +441,11 @@ pub struct GuardArgs {
     /// Host whose hook payload is on stdin.
     #[arg(long, value_parser = parse_host())]
     pub host: Host,
+
+    /// Set only by `openmoat run` for a call it relays from inside its sandbox
+    /// (ADR-028): the command runs in that sandbox (ADR-039). Not for hooks.
+    #[arg(long, hide = true)]
+    pub relayed: bool,
 }
 
 #[derive(Debug, Args)]

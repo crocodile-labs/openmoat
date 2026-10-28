@@ -132,7 +132,9 @@ something OpenMoat claims to stop.
   allowlisted domains. A classifier mistake inside those bounds is
   still a bypass, and in scope as a vulnerability ([SECURITY.md](../SECURITY.md)).
   OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent get no such sandbox: the
-  hook alone decides each of their calls.
+  hook alone decides each of their calls. For them, and for Claude Code and Cursor on
+  native Windows or wherever their sandbox is not in place, running a file the same
+  session wrote asks (`session-written-code`, below).
   The Maven and Gradle settings `build-credentials` names are denied by the hook only
   (ADR-034): where a policy makes them readable to sandboxed commands (a read root or
   allow rule over `~/.m2` or `~/.gradle`), any program such a command runs can read
@@ -376,6 +378,30 @@ something OpenMoat claims to stop.
   included, and then the file no longer taints. Provenance rows are outside the hash
   chain: they sit in the same OpenMoat-only database, append-only by trigger, but an
   edit with write access to `~/.moat` is not reported by `openmoat doctor`.
+- **Code the session wrote is checked only as far as the hook sees it (ADR-039).** An
+  agent that writes a script and runs it (`python3 x.py`) hides from the hook what the
+  script opens: it can build the path of `~/.ssh/id_rsa` and send the key to an allowed
+  host. Where an OS sandbox from OpenMoat holds the command (Claude Code, Codex and
+  Cursor on macOS and Linux with their sandbox in place, anything inside `openmoat
+  run`) the sandbox stops that read, and the call keeps its verdict. Elsewhere, running
+  a file the same host session wrote asks (POLICY.md §4.3), and so does inline code
+  (`python3 -c`, `node -e`, a here-document) that opens files, connects, reads the
+  environment or runs programs through text it builds at run time (`opaque-code`).
+  Not covered: test runners, build tools and package scripts running files the session
+  wrote (`pytest`, `npm test`, `cargo test`, `make`, `go run .`), which run the
+  project's code by design; files another session or a person wrote; files written in
+  a way the hook does not see (a build's output, a script that writes another script, an
+  extracted archive, a download saved under a name the command does not show, a copy
+  made inside a script); a program the command names through a variable whose value the
+  line does not show; code that a program loads on its own (`import helper` of a
+  written `helper.py`, `require('./lib')`, a `conftest.py`, a git hook); commands in a
+  shell OpenMoat does not parse (PowerShell, `cmd`), which defer to the agent; and
+  inline code whose built text the scan does not recognise as built (an API or a
+  builder not on its lists). The hosts' sandbox state is read from their settings as
+  `openmoat status` reads it, so a flag that turns a sandbox off when the agent starts
+  (Codex's `--sandbox danger-full-access`) is not seen. The record of what each session
+  wrote keeps 30 days and the newest 100 000 files; a file whose row is gone counts as
+  one the session did not write.
 - **A proxy credential is shared by everything in its session.** `openmoat run`'s proxy
   serves only requests that carry the run's credential (ADR-027), which keeps other
   local programs and other runs off it. The credential sits in the agent's environment,

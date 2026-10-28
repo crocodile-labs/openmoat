@@ -2,6 +2,7 @@ mod chain;
 mod export;
 mod provenance;
 mod session_cache;
+mod session_writes;
 
 use super::*;
 

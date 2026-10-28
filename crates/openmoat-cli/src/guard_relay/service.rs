@@ -67,7 +67,10 @@ impl Service {
     fn decide(&self, host: Host, request: &Request) -> Result<Reply> {
         let mut command = Command::new(&self.moat);
         command
-            .args(["guard", "--host", host.id()])
+            // `--relayed`: the call comes from inside this run's sandbox, which
+            // holds the commands it runs (ADR-039). An argument, not a variable,
+            // so a host's settings cannot claim it for a hook outside the run.
+            .args(["guard", "--host", host.id(), "--relayed"])
             .env(RUN_SESSION_ENV, &self.run)
             .env_remove(SOCKET_ENV)
             .env_remove(TOKEN_ENV)
