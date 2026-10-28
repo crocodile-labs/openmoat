@@ -1,0 +1,97 @@
+name: clean install
+
+# The published release installed the way a new user installs it, on a clean
+# runner with a throwaway home: Homebrew, the shell installer and crates.io,
+# each followed by the README quick start as written, `openmoat demo`, `status`
+# and `doctor`, `openmoat init` with no agent and with Claude Code, and
+# `openmoat uninstall`, which must give every file back byte for byte
+# (scripts/ci/clean-install.sh). The README's links and images must resolve.
+# Not a required check: it tests what is already published.
+#
+# The release workflow creates the GitHub release with the workflow token,
+# which starts no other workflow, so `release: published` fires only for a
+# release a person publishes; the run after an automated release comes from
+# `workflow_run` once the release workflow, crates.io included, has finished.
+on:
+  release:
+    types: [published]
+  workflow_run: # zizmor: ignore[dangerous-triggers] checks out the default branch only, runs no code of the triggering run, read-only token
+    workflows: [release]
+    types: [completed]
+  schedule:
+    - cron: "31 7 * * 1" # Mondays, after the weekly run
+  workflow_dispatch:
+
+concurrency:
+  group: clean-install
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  install:
+    name: ${{ matrix.method }} (${{ matrix.os }})
+    # After the release workflow, only a successful run of a tag push.
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      attestations: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest]
+        method: [brew, shell, cargo]
+    steps:
+      # The README a new user reads is the default branch's; the scripts are too.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      # Claude Code, installed for the init and uninstall checks, needs Node 22 or later.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          # No cache: a release run must not read what another run left.
+          package-manager-cache: false
+      - name: Linux runner
+        if: runner.os == 'Linux'
+        # Homebrew is installed but not on PATH; Claude Code's sandbox needs
+        # bubblewrap and socat, and Ubuntu 24.04's AppArmor blocks the
+        # unprivileged user namespaces bwrap needs.
+        run: |
+          echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap socat
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: install with ${{ matrix.method }}, quick start, init, uninstall
+        env:
+          METHOD: ${{ matrix.method }}
+          CLEAN_INSTALL_OUT: ${{ runner.temp }}/clean-install-out
+          CLEAN_INSTALL_WAIT_MINUTES: ${{ github.event_name == 'schedule' && '0' || '30' }}
+          # Only to verify the installer's build attestation (contents and
+          # attestations read); the script never gives it to OpenMoat or an agent.
+          GH_TOKEN: ${{ matrix.method == 'shell' && github.token || '' }}
+        run: scripts/ci/clean-install.sh "$METHOD"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: clean-install-${{ matrix.method }}-${{ runner.os }}
+          path: ${{ runner.temp }}/clean-install-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  readme-links:
+    name: README links and images
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - run: python3 scripts/ci/check-links.py --online README.md

@@ -176,7 +176,12 @@ locally.
   Fix the finding; a `# shellcheck disable=SCxxxx` comment needs the reason on the same
   line.
 - **Markdown links:** `python3 scripts/ci/check-links.py` fails on a relative link to a
-  missing file or heading. It is offline: links to websites are not fetched.
+  missing file or heading, in Markdown and in HTML `href`, `src` and `srcset`. It is
+  offline: links to websites are not fetched. The weekly `clean install` workflow runs it
+  with `--online README.md`, which also fetches every website link and image there.
+- **CodeQL:** `.github/workflows/codeql.yml` analyses the workflows, the JavaScript
+  plugins, the Python scripts and the Rust code on every pull request (forks included),
+  on `main` and weekly, without building anything.
 - **Spelling:** [`typos`](https://github.com/crate-ci/typos) 1.51.1
   (`cargo install typos-cli --version 1.51.1 --locked`) with `_typos.toml`. The project
   writes British English (`behaviour`, `licence`); an American spelling that is someone
@@ -222,6 +227,52 @@ no traffic leaving the machine:
   is the run's proxy, which refuses loopback, so no fake model API is reachable there.
   For hooks inside `openmoat run`, CI checks that the real `codex` starts inside the run and
   that a Codex hook call made in the run is decided and recorded outside it.
+
+### Latest agents, weekly
+
+Agents release weekly or daily, and the payloads above are checked against the release
+each adapter was written for. The `latest agents` workflow
+(`.github/workflows/latest-agents.yml`, weekly and by hand, optionally for one agent)
+builds `openmoat` once per operating system, then runs `scripts/ci/latest-agents.sh` for
+every agent in `scripts/ci/latest-agents/agents.json`, on Linux and, where the agent
+ships a different build there, macOS:
+
+- the agent's latest release is installed in a throwaway home: from npm with lifecycle
+  scripts off and `npm audit signatures`, Hermes Agent with its own installer of the
+  latest tag, Cursor's CLI from the package its install script names;
+- `openmoat init --hosts <id> --yes`, then `openmoat status` and `openmoat doctor` must
+  call the agent protected by its hook, doctor must be healthy, and the agent's files
+  must still parse;
+- where the agent runs without an account, the real agent is started against a local
+  fake model API (`scripts/ci/latest-agents/fake_openai.py`,
+  `tests/differential/fake_api.py`, Gemini CLI's own `--fake-responses`) or Hermes
+  Agent's `hooks test`, asks for `cat ~/.ssh/id_rsa`, and the audit log must hold that
+  call denied by `secrets-paths` with the fake key in none of its output;
+- an allowed and a denied payload in the agent's own format (its golden fixture) go
+  through `openmoat guard`.
+
+The job summary shows each installed version beside the one the adapter was checked
+against; a newer one is reported, not failed. A failure opens one issue per agent,
+`latest <agent> <version> breaks OpenMoat`, or comments on the open one (the `report` job,
+the only one with a write permission: `issues: write`). No job has a secret. What each
+agent's run proves and what it cannot is in `scripts/ci/latest-agents/README.md`; when an
+adapter is checked against a new release, update the version in its `HOST.md` (or the
+file its record names) and in `agents.json` together: the quality gate fails when they
+disagree.
+
+### Clean install
+
+The `clean install` workflow (`.github/workflows/clean-install.yml`: weekly, after each
+release and by hand) installs the published release on clean macOS and Ubuntu runners
+with Homebrew, the shell installer (its sha256 and build attestation checked first) and
+`cargo install openmoat --locked`, and for each runs `scripts/ci/clean-install.sh`: the
+README quick start as written (the blocks marked `<!-- ci:quickstart … -->`; the `policy
+check` output must be the one the README shows), `openmoat demo`, `status` and `doctor`,
+`openmoat init` with no agent and then with Claude Code started once against a fake API,
+and `openmoat uninstall`, after which every file in the home must be as it was, byte for
+byte. Its last job fetches every link and image in the README.
+
+### By hand, with your own keys
 
 To try the same checks with your own agents and model keys, run:
 

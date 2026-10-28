@@ -1203,6 +1203,14 @@ something OpenMoat claims to stop.
   bypass becomes a fixture before its fix is published.
 - **End-to-end tests** run the real binary as a hook in isolated homes: lock drift,
   `ConfigChange`, approvals, install paths, every host's payloads.
+- **Latest agents, weekly** (`scripts/ci/latest-agents.sh`): each agent's latest
+  release is installed and set up by `openmoat init` in a throwaway home. Claude Code,
+  Codex, Gemini CLI, GitHub Copilot CLI, pi, OpenClaw and OpenCode 1 are started against
+  a local fake model API, and Hermes Agent's own `hooks test` fires its hook; each must
+  send a `cat ~/.ssh/id_rsa` to OpenMoat and have it denied. OpenCode 2 must report
+  OpenMoat's plugin active. Cursor's CLI needs an account to run, so only its install,
+  `init` and payloads are checked. What each run
+  proves and does not: [scripts/ci/latest-agents/README.md](../scripts/ci/latest-agents/README.md).
 - **MoatBench mini** ([MOATBENCH.md](MOATBENCH.md)): multi-step attack and benign
   scenarios sent as each agent's hook payloads to the real binary, with a
   scorecard of verdicts, false positives and known gaps.

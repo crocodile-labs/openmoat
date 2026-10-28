@@ -48,6 +48,9 @@ else
 fi
 if command -v python3 >/dev/null; then
     run python3 scripts/ci/check-links.py
+    # The latest-agent check's records name the version each adapter was
+    # checked against; this fails when that file no longer says so.
+    run python3 -I scripts/ci/latest-agents/check.py records
 else
     echo "▷ python3 not installed; Markdown link check skipped (CI runs it)"
 fi

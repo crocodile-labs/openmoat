@@ -1,0 +1,206 @@
+name: latest agents
+
+# Each supported agent's latest release against OpenMoat's main, weekly
+# (CONTRIBUTING "Testing with real agents"). Not a required check: agents
+# release daily, and a failure becomes one issue per agent instead.
+# - build: openmoat once per operating system, kept as an artefact.
+# - agent: one job per agent of scripts/ci/latest-agents/agents.json and runner
+#   it lists, running scripts/ci/latest-agents.sh: install the latest release,
+#   `openmoat init`, status and doctor, the real agent loading OpenMoat's hook
+#   where it can without an account, and guard payloads in its format. No
+#   secret is used; the agents talk to a fake model API on loopback.
+# - report: the only job that may write, and only issues: opens or updates one
+#   issue per failing agent, "latest <agent> <version> breaks OpenMoat".
+on:
+  schedule:
+    - cron: "11 7 * * 1" # Mondays, after the weekly run
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "One agent of scripts/ci/latest-agents/agents.json (empty: every agent)"
+        required: false
+        default: ""
+
+concurrency:
+  group: latest-agents-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build openmoat (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: rust toolchain
+        # The channel comes from rust-toolchain.toml.
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo build --locked --release -p openmoat --bin openmoat
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openmoat-${{ runner.os }}
+          path: target/release/openmoat
+          retention-days: 7
+          if-no-files-found: error
+
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: matrix
+        env:
+          ONLY: ${{ inputs.agent }}
+        run: |
+          matrix=$(python3 -I scripts/ci/latest-agents/check.py matrix |
+            jq -c --arg only "$ONLY" '{include: [.include[] | select($only == "" or .agent == $only)]}')
+          if [ "$(jq '.include | length' <<<"$matrix")" -eq 0 ]; then
+            echo "::error::no agent named '$ONLY' in scripts/ci/latest-agents/agents.json"
+            exit 1
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  agent:
+    name: ${{ matrix.agent }} (${{ matrix.os }})
+    needs: [build, plan]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Node 24: OpenClaw needs 24.22.1 or later; every other agent runs on it.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          # No cache: each run installs the agent's latest release afresh.
+          package-manager-cache: false
+      - name: bubblewrap and socat for the agents' Linux sandboxes
+        if: runner.os == 'Linux'
+        # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces bwrap needs.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap socat
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: openmoat-${{ runner.os }}
+          path: ${{ runner.temp }}/openmoat-bin
+      - name: latest ${{ matrix.agent }}
+        env:
+          AGENT: ${{ matrix.agent }}
+          OPENMOAT_BIN: ${{ runner.temp }}/openmoat-bin/openmoat
+          LATEST_AGENTS_OUT: ${{ runner.temp }}/latest-out
+        run: |
+          chmod +x "$OPENMOAT_BIN"
+          scripts/ci/latest-agents.sh "$AGENT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: latest-agent-${{ matrix.agent }}-${{ runner.os }}
+          path: ${{ runner.temp }}/latest-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  report:
+    name: report
+    needs: agent
+    if: always() && needs.agent.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: latest-agent-*
+          path: ${{ runner.temp }}/results
+      - name: summary and issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULTS: ${{ runner.temp }}/results
+          ON_MAIN: ${{ github.ref == 'refs/heads/main' }}
+          AGENT_RESULT: ${{ needs.agent.result }}
+        run: |
+          shopt -s nullglob
+          results=("$RESULTS"/*/result.json)
+          {
+            echo "## Latest agents"
+            echo
+            echo "| agent | runner | installed | checked against | outcome | failed step |"
+            echo "|---|---|---|---|---|---|"
+            for f in "${results[@]}"; do
+              jq -r '"| \(.agent) | \(.os) | \(.version | gsub("[^0-9A-Za-z.+_-]"; "")) | \(.checked) | \(.outcome) | \(if .outcome == "failed" then .step else "" end) |"' "$f"
+            done
+            echo
+            echo "A version newer than the checked one is reported, not failed: read that release's changes."
+          } >> "$GITHUB_STEP_SUMMARY"
+          failed=$(jq -s -r '[.[] | select(.outcome == "failed") | .agent] | unique | .[]' "${results[@]}" /dev/null)
+          if [ -z "$failed" ]; then
+            if [ "$AGENT_RESULT" != success ]; then
+              echo "::error::an agent job ended $AGENT_RESULT without writing its result; read the run"
+              exit 1
+            fi
+            echo "every agent passed"
+            exit 0
+          fi
+          if [ "$ON_MAIN" != true ]; then
+            echo "::warning::failures on a branch other than main open no issue: $failed"
+            exit 0
+          fi
+          gh issue list --repo "$REPO" --state open --limit 200 --search 'in:title "breaks OpenMoat"' \
+            --json number,title > "$RUNNER_TEMP/open.json"
+          while IFS= read -r agent; do
+            # The version is what the agent printed: only version characters reach the title.
+            version=$(jq -s -r --arg a "$agent" '[.[] | select(.agent == $a and .outcome == "failed") | .version | gsub("[^0-9A-Za-z.+_-]"; "") | select(. != "")] | first // "(not installed)"' "${results[@]}")
+            title="latest $agent $version breaks OpenMoat"
+            {
+              echo "The weekly check of the latest release of \`$agent\` against OpenMoat's main failed."
+              echo
+              echo "| runner | installed | checked against | failed step |"
+              echo "|---|---|---|---|"
+              jq -s -r --arg a "$agent" '.[] | select(.agent == $a and .outcome == "failed") | "| \(.os) | \(.version | gsub("[^0-9A-Za-z.+_-]"; "")) | \(.checked) | \(.step) |"' "${results[@]}"
+              echo
+              echo "Run: $RUN_URL (the \`latest-agent-$agent-*\` artefacts hold every log)."
+              echo "Re-run one agent: Actions → latest agents → Run workflow → agent \`$agent\`."
+              echo "What the check proves for this agent: scripts/ci/latest-agents/README.md."
+            } > "$RUNNER_TEMP/body.md"
+            # One open issue per agent, whatever version it names: retitled to the newest.
+            number=$(jq -r --arg a "$agent" '[.[] | select(.title | startswith("latest " + $a + " ")) | select(.title | endswith(" breaks OpenMoat"))] | first | .number // empty' "$RUNNER_TEMP/open.json")
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --repo "$REPO" --title "$title"
+              gh issue comment "$number" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+              echo "updated #$number: $title"
+            else
+              gh issue create --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+              echo "opened: $title"
+            fi
+          done <<<"$failed"

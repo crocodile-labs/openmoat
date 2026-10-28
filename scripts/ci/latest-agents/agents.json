@@ -1,0 +1,133 @@
+{
+  "_comment": "binary is relative to the install directory ({platform} is node's process.platform-process.arch); for Claude Code and OpenCode the npm bin is a stub that only the postinstall replaces, so the platform package's own binary is used. The agents the weekly latest-agent check installs (scripts/ci/latest-agents.sh). checked.version is the release the adapter was last checked against, and checked.source the file that says so; `check.py records` (in the quality gate) fails when that file no longer names the version. payload is the host's golden shell payload, with the JSON pointers of its command and of the verdict in the hook's reply.",
+  "claude-code": {
+    "host": "claude-code",
+    "name": "Claude Code",
+    "install": "npm",
+    "package": "@anthropic-ai/claude-code",
+    "binary": "node_modules/@anthropic-ai/claude-code-{platform}/claude",
+    "checked": {"version": "2.1.290", "source": "scripts/ci/host-binaries.sh"},
+    "config": [["{CLAUDE_CONFIG_DIR}/settings.json", "json"]],
+    "payload": {"fixture": "claude_code/fixtures/bash.json", "command": "/tool_input/command",
+                "verdict": "/hookSpecificOutput/permissionDecision"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "codex": {
+    "host": "codex",
+    "name": "Codex",
+    "install": "npm",
+    "package": "@openai/codex",
+    "binary": "node_modules/.bin/codex",
+    "checked": {"version": "0.160.1", "source": "scripts/ci/host-binaries.sh"},
+    "config": [["{CODEX_HOME}/hooks.json", "json"]],
+    "payload": {"fixture": "codex/fixtures/pretooluse-shell.json", "command": "/tool_input/command",
+                "verdict": "/hookSpecificOutput/permissionDecision"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "opencode-1": {
+    "host": "opencode",
+    "name": "OpenCode",
+    "install": "npm",
+    "package": "opencode-ai",
+    "binary": "node_modules/opencode-{platform}/bin/opencode",
+    "checked": {"version": "1.19.4", "source": "crates/openmoat-hosts/src/host/opencode/HOST.md"},
+    "config": [["{XDG_CONFIG_HOME}/opencode/plugins/openmoat.js", "javascript"],
+               ["{XDG_CONFIG_HOME}/opencode/opencode.json", "json"]],
+    "payload": {"fixture": "opencode/fixtures/bash.json", "command": "/args/command",
+                "verdict": "/decision"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "opencode-2": {
+    "host": "opencode",
+    "name": "OpenCode",
+    "install": "npm",
+    "package": "@opencode/cli",
+    "binary": "node_modules/@opencode/cli-{platform}/bin/opencode",
+    "checked": {"version": "2.2.0", "source": "crates/openmoat-hosts/src/host/opencode/HOST.md"},
+    "config": [["{XDG_CONFIG_HOME}/opencode/plugins/openmoat.js", "javascript"]],
+    "payload": {"fixture": "opencode/fixtures/v2-shell.json", "command": "/input/command",
+                "verdict": "/decision"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "gemini-cli": {
+    "host": "gemini-cli",
+    "name": "Gemini CLI",
+    "install": "npm",
+    "package": "@google/gemini-cli",
+    "binary": "node_modules/.bin/gemini",
+    "checked": {"version": "0.65.0", "source": "crates/openmoat-hosts/src/host/gemini_cli/HOST.md"},
+    "config": [["{GEMINI_CLI_HOME}/.gemini/settings.json", "json"]],
+    "payload": {"fixture": "gemini_cli/fixtures/run_shell_command.json", "command": "/tool_input/command",
+                "verdict": "/decision"},
+    "runners": ["ubuntu-latest"]
+  },
+  "copilot-cli": {
+    "host": "copilot-cli",
+    "name": "GitHub Copilot CLI",
+    "install": "npm",
+    "package": "@github/copilot",
+    "binary": "node_modules/.bin/copilot",
+    "checked": {"version": "1.0.101", "source": "crates/openmoat-hosts/src/host/copilot_cli/HOST.md"},
+    "config": [["{COPILOT_HOME}/hooks/openmoat.json", "json"]],
+    "payload": {"fixture": "copilot_cli/fixtures/bash.json", "command": "/toolArgs/command",
+                "verdict": "/permissionDecision"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "pi": {
+    "host": "pi",
+    "name": "pi",
+    "install": "npm",
+    "package": "@earendil-works/pi-coding-agent",
+    "binary": "node_modules/.bin/pi",
+    "checked": {"version": "1.3.0", "source": "crates/openmoat-hosts/src/host/pi/HOST.md"},
+    "config": [["{PI_CODING_AGENT_DIR}/extensions/openmoat.js", "javascript"],
+               ["{PI_CODING_AGENT_DIR}/models.json", "json"]],
+    "payload": {"fixture": "pi/fixtures/bash.json", "command": "/input/command",
+                "verdict": "/decision"},
+    "runners": ["ubuntu-latest"]
+  },
+  "openclaw": {
+    "host": "openclaw",
+    "name": "OpenClaw",
+    "install": "npm",
+    "package": "openclaw",
+    "binary": "node_modules/.bin/openclaw",
+    "checked": {"version": "2026.10.5", "source": "crates/openmoat-hosts/src/host/openclaw/fixtures/README.md"},
+    "config": [["{OPENCLAW_STATE_DIR}/openclaw.json", "openclaw"]],
+    "payload": {"fixture": "openclaw/fixtures/exec.json", "command": "/params/command",
+                "verdict": "/decision"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "hermes": {
+    "host": "hermes",
+    "name": "Hermes Agent",
+    "install": "hermes-installer",
+    "binary": "{HERMES_HOME}/hermes-agent/.hermes/bin/hermes",
+    "checked": {"version": "0.22.5", "source": "crates/openmoat-hosts/src/host/hermes/HOST.md"},
+    "config": [["{HERMES_HOME}/config.yaml", "hermes"]],
+    "payload": {"fixture": "hermes/fixtures/terminal.json", "command": "/tool_input/command",
+                "verdict": "hermes"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "cursor": {
+    "host": "cursor",
+    "name": "Cursor",
+    "install": "cursor-installer",
+    "binary": "cursor-agent",
+    "checked": {"version": null, "source": "crates/openmoat-hosts/src/host/cursor/HOST.md",
+                "note": "the adapter is checked against Cursor's hooks documentation, not a CLI release"},
+    "config": [["{CURSOR_CONFIG_DIR}/hooks.json", "json"]],
+    "payload": {"fixture": "cursor/fixtures/beforeShellExecution.json", "command": "/command",
+                "verdict": "/permission"},
+    "runners": ["ubuntu-latest", "macos-14"]
+  },
+  "continue": {
+    "host": "continue",
+    "name": "Continue CLI",
+    "install": "npm-pack",
+    "package": "@continuedev/cli",
+    "checked": {"version": null, "source": "crates/openmoat-hosts/src/host/continue_cli/HOST.md",
+                "note": "not set up by openmoat init: the released cn runs no hooks; this job fails once it does"},
+    "runners": ["ubuntu-latest"]
+  }
+}
