@@ -20,6 +20,10 @@ pub(super) const PROTECT: Protect = Protect {
                 "~/.config/opencode/opencode.json",
                 "~/.config/opencode/opencode.jsonc",
                 "~/.config/opencode/config",
+                // every release channel's file by name, which Claude Code's
+                // Linux sandbox keeps (it drops globs); other channels' files
+                // (`service-<channel>.json`) by the glob
+                "~/.config/opencode/service.json",
                 "~/.config/opencode/service*.json",
             ],
         ),

@@ -253,7 +253,7 @@ fn opencode_2_is_set_up_and_its_hook_is_named() {
 }
 
 /// An `execute.before` payload (OpenCode 2) for `tool` with `input`.
-fn payload2(sb: &Sandbox, tool: &str, input: &Value) -> String {
+pub(crate) fn payload2(sb: &Sandbox, tool: &str, input: &Value) -> String {
     let project = sb.project().to_string_lossy().into_owned();
     let platform = if cfg!(windows) { "win32" } else { "linux" };
     json!({
@@ -429,7 +429,8 @@ fn status_warns_about_a_version_with_an_advisory() {
     let mut status = sb.command();
     status
         .args(["status"])
-        .env("MOAT_OPENCODE_VERSION", "1.0.100");
+        // supported (1.3.4 and later), and affected by GHSA-632h-h47v-g4x4
+        .env("MOAT_OPENCODE_VERSION", "1.15.0");
     let out = output(&mut status, None);
     let printed = stdout(&out);
     let warned: Vec<&str> = printed
@@ -437,7 +438,7 @@ fn status_warns_about_a_version_with_an_advisory() {
         .filter(|l| l.contains("has a known security advisory"))
         .collect();
     assert_eq!(warned.len(), 1, "{}", text(&out));
-    assert!(warned[0].contains("OpenCode 1.0.100"), "{}", warned[0]);
+    assert!(warned[0].contains("OpenCode 1.15.0"), "{}", warned[0]);
     assert!(warned[0].contains("upgrade to"), "{}", warned[0]);
     let mut current = sb.command();
     current

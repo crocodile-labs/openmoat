@@ -267,6 +267,7 @@
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[cC][oO][nN][fF][iI][gG]/[oO][pP][eE][nN][cC][oO][dD][eE]/[oO][pP][eE][nN][cC][oO][dD][eE]\\.[jJ][sS][oO][nN]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[cC][oO][nN][fF][iI][gG]/[oO][pP][eE][nN][cC][oO][dD][eE]/[oO][pP][eE][nN][cC][oO][dD][eE]\\.[jJ][sS][oO][nN][cC]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[cC][oO][nN][fF][iI][gG]/[oO][pP][eE][nN][cC][oO][dD][eE]/[cC][oO][nN][fF][iI][gG]$")
+  (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[cC][oO][nN][fF][iI][gG]/[oO][pP][eE][nN][cC][oO][dD][eE]/[sS][eE][rR][vV][iI][cC][eE]\\.[jJ][sS][oO][nN]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[cC][oO][nN][fF][iI][gG]/[oO][pP][eE][nN][cC][oO][dD][eE]/[sS][eE][rR][vV][iI][cC][eE][^/]*\\.[jJ][sS][oO][nN]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[oO][pP][eE][nN][cC][oO][dD][eE]$")
   (regex "^/[uU][sS][eE][rR][sS]/[mM][eE]/\\.[oO][pP][eE][nN][cC][oO][dD][eE]/[pP][lL][uU][gG][iI][nN][sS]$")

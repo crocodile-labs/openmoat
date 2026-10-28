@@ -43,9 +43,11 @@ pub fn row() -> Row {
             )
         }],
         malformed: Some((|_| fixture("opencode/read-malformed.json"), None)),
+        // OpenCode 2's envelope, which can ask; OpenCode 1's deny with the
+        // `openmoat allow --last` hint is in `opencode.rs`.
         ask: Some(|sb| {
-            let outside = json!({"filePath": sb.home.join("notes/todo.txt")});
-            crate::opencode::payload(sb, "read", &outside)
+            let outside = json!({"path": sb.home.join("notes/todo.txt")});
+            crate::opencode::payload2(sb, "read", &outside)
         }),
         // Tools spelled as OpenCode spells them: `<server>_<tool>`, `-` kept.
         mcp: Some(Mcp {

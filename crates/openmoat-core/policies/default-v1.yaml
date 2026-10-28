@@ -352,6 +352,7 @@ deny:
       - "~/.config/opencode/opencode.json"
       - "~/.config/opencode/opencode.jsonc"
       - "~/.config/opencode/config"
+      - "~/.config/opencode/service.json"
       - "~/.config/opencode/service*.json"
       # OpenCode also reads `~/.opencode` as a configuration directory, with its
       # own plugin folders and configuration files
