@@ -14,6 +14,10 @@ use std::sync::{Mutex, PoisonError};
 /// never empty (`Credential::new`), so it names no session.
 pub(crate) const PENDING: &str = "";
 
+/// The holder of the requests served without a credential, where the policy
+/// lets the standalone proxy serve them (ADR-044). `?` is never in a session id.
+pub(crate) const WITHOUT_CREDENTIAL: &str = "?";
+
 /// Open connections per holder, each capped at half the proxy's slots.
 #[derive(Debug)]
 pub(crate) struct Shares {

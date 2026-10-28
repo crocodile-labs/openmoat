@@ -15,8 +15,9 @@
 //!   other than the secret's own is refused ([`Broker`]).
 //! - Every decision is recorded through a [`Recorder`]; a failed record is a
 //!   refused connection.
-//! - In session mode ([`Sessions`], ADR-027) every request must carry its
-//!   session's credential. The session's audit id goes on each row, a
+//! - In session mode ([`Sessions`], ADR-027, ADR-044) every request must
+//!   carry its session's credential: one the proxy holds ([`Credential`]) or
+//!   one a [`Verify`] accepts. The session's audit id goes on each row, a
 //!   session that read secret material reaches only that secret's host, and
 //!   no session holds more than half the connections.
 //! - A connection that starts with a [`LocalService`]'s prefix goes to that
@@ -57,7 +58,7 @@ pub use request::{
 pub use server::{Limits, Proxy, RULE_CAPACITY};
 pub use session::{
     AuthError, Credential, CredentialError, MIN_TOKEN_LEN, RULE_SESSION, Sessions, TaintLookup,
-    constant_time_eq,
+    Verify, constant_time_eq,
 };
 pub use sni::{Hello, HelloError, MAX_HELLO, server_name};
 pub use upstream::{Refusal, Resolve, SystemResolver, connect};
