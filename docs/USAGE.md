@@ -108,7 +108,7 @@ exit code as the text:
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
 | `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
-| `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode 2) |
+| `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
 Agents that are not set up or not found keep their `·` line. `openmoat status --format
 json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `level` is
@@ -366,12 +366,17 @@ these takes one command in your own terminal (agents are denied all of them):
   pi runs every call without OpenMoat.
 - **OpenCode**: `openmoat init --hosts opencode` writes OpenMoat's plugin to
   `~/.config/opencode/plugins/openmoat.js` (`$XDG_CONFIG_HOME/opencode/plugins/` when that
-  is set: run `init` with the `XDG_CONFIG_HOME` OpenCode runs with); start OpenCode again
-  so it loads it. OpenCode 1 has no way for a plugin to ask you, so an `ask` is a deny you
-  approve with `openmoat` or `openmoat allow --last`, then retry. A call OpenMoat defers is
-  left to OpenCode's own `permission` rules. OpenCode 2 is not supported yet: `openmoat
-  init` does not set it up and `openmoat status` says so. `opencode --pure` and
-  `OPENCODE_PURE=1` start OpenCode without plugins, OpenMoat's included.
+  is set, `$OPENCODE_CONFIG_DIR/plugins/` when that is: run `init` with the variables
+  OpenCode runs with); start OpenCode again (OpenCode 2: `opencode service restart`) so
+  it loads it. The one plugin serves OpenCode 1 (1.3.4 and later) and OpenCode 2;
+  `openmoat status` names the hook yours runs (`opencode 2.2.0: OpenCode 2's
+  `execute.before``). On OpenCode 2 an `ask` is OpenCode's own permission prompt for the
+  action `openmoat`, with OpenMoat's reason; on OpenCode 1, which has no way for a plugin
+  to ask you, it is a deny you approve with `openmoat` or `openmoat allow --last`, then
+  retry. A call OpenMoat defers is left to OpenCode's own permission rules. `opencode
+  --pure` and `OPENCODE_PURE=1` (OpenCode 1), and `-openmoat` in a configuration's
+  `plugins` (OpenCode 2), start OpenCode without OpenMoat's plugin; `openmoat status`
+  reports your own configuration doing that as not protected and warns about a project's.
 - **Gemini CLI**: `openmoat init --hosts gemini-cli` adds one `BeforeTool` hook named
   `openmoat` to `~/.gemini/settings.json` (`$GEMINI_CLI_HOME/.gemini` when that is set);
   restart Gemini CLI so it loads it. An `ask` arrives as Gemini CLI's own confirmation.
