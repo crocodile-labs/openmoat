@@ -12,7 +12,7 @@ pub struct Policy {
 
 impl Policy {
     /// Parse and lint a policy from its YAML text. The SDK reads no file: pass
-    /// the text (or, with the `fs` feature, use [`Policy::read`]).
+    /// the text (or, with the `fs` feature, use `Policy::read`).
     pub fn parse(yaml: &str) -> Result<Self, Error> {
         CorePolicy::parse(yaml)
             .map(|inner| Self { inner })

@@ -24,7 +24,7 @@
 //! The crate does no I/O. Facts that live on a filesystem (where a program
 //! resolves, where a symlink points, which files a glob names) come in as
 //! [`Facts`]; the history of a session as a [`Session`]. With the `fs`
-//! feature, [`Policy::read`] reads a policy file.
+//! feature, `Policy::read` reads a policy file.
 //!
 //! What is stable, and how this crate keeps in step with the `openmoat` CLI, is
 //! ADR-046: the decision API, the action and verdict shapes, the rule ids a

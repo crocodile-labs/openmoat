@@ -21,8 +21,8 @@ mod engines;
 mod json;
 pub mod protocol;
 
-/// Where to write a request of `len` bytes; null when `len` is over
-/// [`buffers::MAX_REQUEST`]. Valid until the next call into the module.
+/// Where to write a request of `len` bytes; null when `len` is over 16 MiB.
+/// Valid until the next call into the module.
 #[expect(
     unsafe_code,
     reason = "a WebAssembly export needs a fixed symbol name; no unsafe block"
