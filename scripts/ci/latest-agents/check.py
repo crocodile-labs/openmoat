@@ -20,6 +20,7 @@ read JSON, and the agent records they come from (agents.json beside this file).
                                              secrets-paths; no marker file's text is in the logs given
     check.py openclaw-valid <config> <report.json>
     check.py openclaw-inspect <report.json>  OpenClaw's own validator and plugin inspector agree
+    check.py opencode-settled <report.json>  OpenCode 2's plugin inventory is applied (exit 0/1, silent)
     check.py opencode-active <report.json>   OpenCode 2 reports OpenMoat's plugin active
 
 Every failure prints why and exits 1; usage errors exit 64.
@@ -321,10 +322,36 @@ def cmd_openclaw_inspect(report):
     return 0
 
 
+def opencode_settled(doc):
+    """True once OpenCode 2 has applied a location's first plugin activation.
+
+    `GET /api/plugin` returns the location's inventory as it stands: `[]` until
+    the activation, which a new location starts in the background, has applied
+    (v2.2.0 `core/src/plugin.ts:44,51-53`; `core/src/plugin/supervisor.ts`,
+    the initial `activate` is forked). Built-in plugins are always in an
+    applied inventory, and local plugin files are applied in the same first
+    step, before any package install, so a non-empty list is a settled one."""
+    return isinstance(doc, dict) and isinstance(doc.get("data"), list) and bool(doc["data"])
+
+
+def cmd_opencode_settled(report):
+    """Exit 0, silently, once the `GET /api/plugin` report is a settled
+    inventory; 1 while it is not (the caller polls)."""
+    try:
+        with open(report, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError):
+        return 1
+    return 0 if opencode_settled(doc) else 1
+
+
 def cmd_opencode_active(report):
     """OpenCode 2's `GET /api/plugin`: an `openmoat` plugin from the local file
     whose state is `active`, which OpenCode sets only once `setup` succeeded."""
-    doc = load_json(report, "opencode api GET /api/plugin")
+    doc = load_json(report, "opencode serve GET /api/plugin")
+    if not opencode_settled(doc):
+        fail("OpenCode 2's plugin inventory is empty: the location's plugins had not "
+             f"finished activating, so this proves nothing either way: {json.dumps(doc)[:1500]}")
     found = []
 
     def walk(value):
@@ -348,7 +375,7 @@ def cmd_opencode_active(report):
 
 
 COMMANDS = {
-    "opencode-active": (cmd_opencode_active, 1),
+    "opencode-active": (cmd_opencode_active, 1), "opencode-settled": (cmd_opencode_settled, 1),
     "openclaw-valid": (cmd_openclaw_valid, 2), "openclaw-inspect": (cmd_openclaw_inspect, 1),
     "records": (cmd_records, 0), "matrix": (cmd_matrix, 0), "get": (cmd_get, 2),
     "version": (cmd_version, 2), "configs": (cmd_configs, 1), "json": (cmd_json, 1),

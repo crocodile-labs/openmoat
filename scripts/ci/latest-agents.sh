@@ -68,9 +68,12 @@ version=""
 relation=""
 checked=$(check get "$agent" checked.version || echo none)
 fake_pid=""
+fake_log=""
 finish() {
     local rc=$?
     [ -z "$fake_pid" ] || kill "$fake_pid" 2>/dev/null || true
+    # The fake API's log is in the artefact too; the job log shows it at once.
+    [ "$rc" -eq 0 ] || show_fake
     local outcome=passed
     [ "$rc" -eq 0 ] || outcome=failed
     printf '{"agent":"%s","host":"%s","name":"%s","os":"%s","version":"%s","checked":"%s","relation":"%s","outcome":"%s","step":"%s"}\n' \
@@ -160,6 +163,21 @@ start_fake() {
         sleep 0.1
     done
     read -r fake_port <"$log.port"
+    fake_log=$log
+    # It answers before any agent is pointed at it.
+    curl -fsS -m 10 -o /dev/null "http://127.0.0.1:$fake_port/v1/models" || {
+        cat "$log" >&2
+        echo "FAIL  the fake model API listens on $fake_port but does not answer" >&2
+        return 1
+    }
+}
+
+# show_fake: every request the fake model API saw, for a failed real-agent step.
+show_fake() {
+    [ -z "${fake_log:-}" ] || [ ! -f "$fake_log" ] || {
+        echo "-- requests the fake model API saw ($fake_log):"
+        cat "$fake_log"
+    }
 }
 
 stop_fake() {
@@ -441,7 +459,8 @@ done <<<"$configs"
 # OpenCode 1 says which plugin files it found (`debug info`) but not that their
 # `server` ran; a headless `opencode run` against the fake API proves that.
 # OpenCode 2's plugin API reports each plugin's state, `active` only once its
-# `setup` ran; its headless run is not driven here (its provider settings
+# `setup` ran, asked of one `opencode serve` until the location's plugins have
+# activated; its headless run is not driven here (its provider settings
 # differ from 1's and are not read yet).
 opencode_load() {
     case "$agent" in
@@ -462,11 +481,49 @@ opencode_load() {
         expect_denied "$out/agent.txt"
         ;;
     opencode-2)
-        (cd "$project" && bounded 120 "$bin" api --standalone GET \
-            "/api/plugin?location[directory]=$project") </dev/null >"$out/opencode-plugins.json" \
-            2>"$out/opencode-plugins.err" || true
+        # One long-lived `opencode serve`, polled. `api --standalone` starts a
+        # new server per call, and a new location activates its plugins in the
+        # background, so its single answer is `[]` before activation applies
+        # (v2.2.0 `core/src/plugin.ts:44,51-53`, `plugin/supervisor.ts`). A
+        # location stays loaded once built (`core/src/location-services.ts`,
+        # `idleTimeToLive: infinity`), so a later request sees the settled set.
+        local pw url tries=0 rc=0 serve_pid
+        pw="moat-ci-$RANDOM$RANDOM$RANDOM"
+        (cd "$project" && OPENCODE_PASSWORD="$pw" exec perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' \
+            300 "$bin" serve --hostname 127.0.0.1 --port 0) </dev/null >"$out/opencode-serve.txt" \
+            2>"$out/opencode-serve.err" &
+        serve_pid=$!
+        url=""
+        while [ -z "$url" ]; do
+            url=$(grep -o 'server listening on http://[^ ]*' "$out/opencode-serve.txt" 2>/dev/null | head -n 1) || true
+            url=${url#server listening on }
+            [ -n "$url" ] && break
+            tries=$((tries + 1))
+            if [ "$tries" -gt 120 ] || ! kill -0 "$serve_pid" 2>/dev/null; then
+                cat "$out/opencode-serve.txt" "$out/opencode-serve.err"
+                kill "$serve_pid" 2>/dev/null || true
+                echo "FAIL  opencode serve did not report its address"
+                return 1
+            fi
+            sleep 0.5
+        done
+        echo "ok    opencode serve listening on $url"
+        tries=0
+        while :; do
+            curl -sS --max-time 10 -u "opencode:$pw" \
+                "$url/api/plugin?location%5Bdirectory%5D=$project" \
+                >"$out/opencode-plugins.json" 2>"$out/opencode-plugins.err" || true
+            check opencode-settled "$out/opencode-plugins.json" && break
+            tries=$((tries + 1))
+            [ "$tries" -le 60 ] && kill -0 "$serve_pid" 2>/dev/null || break
+            sleep 1
+        done
         cat "$out/opencode-plugins.json" "$out/opencode-plugins.err"
-        check opencode-active "$out/opencode-plugins.json"
+        check opencode-active "$out/opencode-plugins.json" || rc=$?
+        kill "$serve_pid" 2>/dev/null || true
+        wait "$serve_pid" 2>/dev/null || true
+        cat "$out/opencode-serve.err"
+        return "$rc"
         ;;
     esac
 }
@@ -509,9 +566,11 @@ gemini-cli)
         "{\"method\":\"generateContentStream\",\"response\":[{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"run_shell_command\",\"args\":{\"command\":\"$denied\",\"description\":\"probe\"}}}]},\"finishReason\":\"STOP\",\"index\":0}]}]}" \
         '{"method":"generateContentStream","response":[{"candidates":[{"content":{"role":"model","parts":[{"text":"done"}]},"finishReason":"STOP","index":0}]}]}' \
         >"$root/gemini-responses.jsonl"
+    # A named model: with the default (`auto`) Gemini CLI first asks the model
+    # which model to route to (`generateContent`), a call the file does not hold.
     (cd "$project" && GEMINI_API_KEY=fake-key \
-        bounded 180 "$bin" --skip-trust --approval-mode=yolo --fake-responses "$root/gemini-responses.jsonl" \
-        -p "run it") </dev/null >"$out/agent.txt" 2>&1 || true
+        bounded 180 "$bin" --skip-trust --approval-mode=yolo --model gemini-2.5-flash \
+        --fake-responses "$root/gemini-responses.jsonl" -p "run it") </dev/null >"$out/agent.txt" 2>&1 || true
     cat "$out/agent.txt"
     expect_denied "$out/agent.txt"
     ;;

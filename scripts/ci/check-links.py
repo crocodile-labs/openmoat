@@ -121,8 +121,23 @@ def targets_of(source):
             yield number, target
 
 
+def probe(url):
+    """The URL that shows whether `url` exists, for pages that answer an
+    automated request 404 whatever the truth: a crate page (crates.io serves
+    its HTML to browsers only) is its API record, a GitHub repository's
+    stargazers page (sign-in only) is the repository's API record."""
+    crate = re.fullmatch(r"https://crates\.io/crates/([A-Za-z0-9_-]+)/?", url)
+    if crate:
+        return f"https://crates.io/api/v1/crates/{crate.group(1)}"
+    stars = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+)/stargazers/?", url)
+    if stars:
+        return f"https://api.github.com/repos/{stars.group(1)}/{stars.group(2)}"
+    return url
+
+
 def fetch(url, attempts=3):
     """The HTTP status `url` finally answers with, or the error that stopped it."""
+    url = probe(url)
     last = None
     for attempt in range(attempts):
         for method in ("HEAD", "GET"):
