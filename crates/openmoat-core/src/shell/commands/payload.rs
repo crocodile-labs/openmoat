@@ -4,6 +4,7 @@
 
 mod environ;
 mod opaque;
+mod writes;
 
 use crate::action::AtomicAction;
 use crate::host;
@@ -12,7 +13,8 @@ use crate::shell::tokens::env_refs;
 use crate::shell::{ClassifyError, ShellContext, Sink, mailbox};
 
 /// Mine inline interpreter code for the resources it names. The payload is
-/// not shell, so it is scanned rather than parsed. Code `program` runs that
+/// not shell, so it is scanned rather than parsed. Code that writes a file
+/// writes every file name it shows (`writes.rs`). Code `program` runs that
 /// reaches files, the network, the environment or other programs through text
 /// it builds at run time is `@opaque-code <program>`, which `opaque-code` asks
 /// for: what it opens is not on the command line.
@@ -24,6 +26,8 @@ pub(super) fn scan_payload(
 ) -> Result<(), ClassifyError> {
     let is_separator =
         |c: char| c.is_whitespace() || matches!(c, '(' | ')' | ',' | ';' | '\'' | '"' | '`');
+    // Code that writes writes any file it names, as far as the scan can tell.
+    let written = writes::written(payload);
     let mut rest = payload;
     while let Some(start) = rest.find(|c: char| !is_separator(c)) {
         let tail = &rest[start..];
@@ -41,6 +45,9 @@ pub(super) fn scan_payload(
         let called = rest.starts_with('(');
         if paths::looks_like_path(raw) {
             sink.read(ctx, raw)?;
+            if written.is_some() {
+                sink.write(ctx, raw)?;
+            }
         } else if let Some(host) = host::of_word(raw).filter(|_| !called) {
             // Code names a host it contacts as a URL or a string; a bare dotted word
             // is more often an attribute (`config.dev`), and a string that is a mail
@@ -57,6 +64,9 @@ pub(super) fn scan_payload(
             sink.push(AtomicAction::EnvRead { name })?;
         }
     }
+    for file in written.iter().flatten() {
+        sink.write(ctx, file)?;
+    }
     let (names, whole) = environ::reads(payload);
     for name in names {
         sink.push(AtomicAction::EnvRead { name })?;
@@ -67,7 +77,7 @@ pub(super) fn scan_payload(
             argv: vec!["@env-dump".to_owned(), expression.to_owned()],
         })?;
     }
-    crate::shell::executes::inline(payload, program, ctx, sink);
+    crate::shell::executes::inline(payload, (program, written.is_some()), ctx, sink);
     if opaque::opaque(payload) {
         sink.push(AtomicAction::Shell {
             argv: vec!["@opaque-code".to_owned(), program.to_owned()],

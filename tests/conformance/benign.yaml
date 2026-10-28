@@ -1780,3 +1780,14 @@
 - id: benign-ruby-e-reads-literal-file
   action: { shell: "ruby -e 'puts File.read(\"Gemfile\")'" }
   expect: { verdict: defer, rules: [default] }
+# inline code that only reads keeps its reads; one that writes a project file is the
+# project write it is
+- id: benign-python-c-prints-readme
+  action: { shell: "python3 -c 'print(open(\"README.md\").read())'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-c-loads-package-json
+  action: { shell: "python3 -c 'import json;json.load(open(\"package.json\"))'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-c-writes-project-file
+  action: { shell: "python3 -c 'open(\"/p/out.txt\",\"w\").write(\"x\")'" }
+  expect: { verdict: defer, rules: [default] }

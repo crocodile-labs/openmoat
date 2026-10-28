@@ -226,6 +226,30 @@ fn a_shell_write_and_a_write_in_the_same_call_count() {
 }
 
 #[test]
+fn a_script_written_by_inline_code_counts_as_written() {
+    let f = fixture();
+    f.ran(
+        "a",
+        &shell(r#"python3 -c 'open("x.py","w").write("print(1)")'"#),
+        None,
+    );
+    assert!(asks(&f.decide("a", "python3 x.py", false)));
+    f.ran(
+        "a",
+        &shell(r#"node -e "require('fs').writeFileSync('y.js','1')""#),
+        None,
+    );
+    assert!(asks(&f.decide("a", "node y.js", false)));
+    // code that only read it records nothing
+    f.ran(
+        "b",
+        &shell(r#"python3 -c 'print(open("x.py").read())'"#),
+        None,
+    );
+    assert_eq!(f.decide("b", "python3 x.py", false).verdict, Verdict::Allow);
+}
+
+#[test]
 fn a_session_grant_after_the_last_write_answers_it() {
     let f = fixture();
     let wrote = f.write("a", "x.py");

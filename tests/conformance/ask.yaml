@@ -2102,3 +2102,7 @@
   threat: T7
   action: { shell: "python3 -c 'import base64;exec(base64.b64decode(\"cHJpbnQoMSk=\"))'" }
   expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-python-c-writes-a-workflow
+  threat: T6
+  action: { shell: "python3 -c 'open(\"/p/.github/workflows/x.yml\",\"w\").write(\"on: push\")'" }
+  expect: { verdict: ask, rules: [runs-later] }

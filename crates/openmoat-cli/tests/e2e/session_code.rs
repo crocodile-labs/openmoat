@@ -111,6 +111,16 @@ fn a_script_written_through_the_shell_asks_too() {
         let (_, reply) = gemini_run(&sb, "g1", command);
         assert!(asks_for_session_code(&reply), "{command}: {reply}");
     }
+    // written by inline code, then run
+    let (_, wrote) = gemini_run(
+        &sb,
+        "g1",
+        "python3 -c 'open(\"z.py\",\"w\").write(\"print(1)\")'",
+    );
+    assert!(!asks_for_session_code(&wrote), "{wrote}");
+    std::fs::write(sb.project().join("z.py"), "print(1)\n").unwrap();
+    let (_, inline) = gemini_run(&sb, "g1", "python3 z.py");
+    assert!(asks_for_session_code(&inline), "{inline}");
     // written and run by one command
     let (_, same) = gemini_run(&sb, "g3", "cat > y.sh <<'EOF'\necho hi\nEOF\nsh y.sh");
     assert!(asks_for_session_code(&same), "{same}");

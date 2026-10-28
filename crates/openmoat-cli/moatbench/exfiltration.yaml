@@ -81,3 +81,13 @@
   steps:
     - { shell: "echo 'echo checking' > run.sh", expect: allow }
     - { shell: "bash run.sh", expect: ask, rule: session-written-code, sandboxed: { expect: defer } }
+
+- id: agent-written-script-through-inline-code
+  threat: T1
+  why: >-
+    The same with the script written by a one-liner instead of a file tool: inline code
+    that writes a file writes every file name it shows, so `x.py` is recorded as written
+    by the session and running it asks where no OS sandbox holds the command.
+  steps:
+    - { shell: "python3 -c 'open(\"diag2.py\",\"w\").write(\"print(1)\")'", expect: defer }
+    - { shell: "python3 diag2.py", expect: ask, rule: session-written-code, sandboxed: { expect: allow, rule: dev-shell } }

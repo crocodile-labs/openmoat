@@ -14,7 +14,7 @@
 //! | `>`/`>>`/`&>` targets other than `/dev/null` and the standard streams (`tables::STREAM_SINKS`), `tee`, destructive/destination args | `FsWrite` |
 //! | URLs with any host, bare dotted names under a known TLD, IPv4 literals (`crate::host`) | `Net` |
 //! | `$( … )`, backticks, `sh -c` (any option spelling, `invocation.rs`), `eval`, `xargs`, `sudo`, `env`, … | nested classification |
-//! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload; `@opaque-code <interpreter>` when it opens, connects or runs through names it builds (`commands/payload/opaque.rs`) |
+//! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload; `FsWrite` of every file name it shows when it writes (`commands/payload/writes.rs`); `@opaque-code <interpreter>` when it opens, connects or runs through names it builds (`commands/payload/opaque.rs`) |
 //! | script operands, `./x` programs, modules inline code imports (`executes.rs`) | no atom: the side list `CompiledPolicy::executed` reads (ADR-039) |
 //! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
 //! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e`, `flock -c` (`embedded.rs`) | nested classification |

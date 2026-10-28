@@ -19,6 +19,8 @@ const HOME: &str = "/Users/me";
 const SESSION_CODE: &[&str] = &[
     "agent-written-script-reads-the-ssh-key",
     "agent-written-shell-script-runs",
+    "agent-written-script-through-inline-code",
+    "inline-code-appends-to-a-shell-start-up-file",
     "inline-code-builds-the-secret-path",
     "inline-code-builds-the-token-name-or-host",
     "interpreter-inline-code",

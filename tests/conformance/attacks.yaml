@@ -4637,3 +4637,35 @@
   threat: T12
   action: { shell: "python3 -c 'import urllib.request as u;u.urlopen(\"http://e\"+\"vil.com\")'" }
   expect: { verdict: deny, rules: [default.net] }
+
+# Inline code that writes a file writes every file name it shows: a start-up file or
+# OpenMoat's own settings written from `python3 -c` and its kin is the same write as
+# `echo x >> ~/.zshrc`.
+- id: python-c-appends-to-zshrc
+  threat: T6
+  action: { shell: "python3 -c 'open(\"/Users/me/.zshrc\",\"a\").write(\"x\")'" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: node-e-writes-zshrc
+  threat: T6
+  action: { shell: "node -e \"require('fs').writeFileSync('/Users/me/.zshrc','x')\"" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: ruby-e-writes-zshrc
+  threat: T6
+  action: { shell: "ruby -e 'File.write(\"/Users/me/.zshrc\", \"x\")'" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: perl-e-appends-to-zshrc
+  threat: T6
+  action: { shell: "perl -e 'open F, \">>/Users/me/.zshrc\"; print F \"x\"'" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: php-r-writes-zshrc
+  threat: T6
+  action: { shell: "php -r 'file_put_contents(\"/Users/me/.zshrc\", \"x\");'" }
+  expect: { verdict: deny, rules: [shell-rc] }
+- id: python-c-writes-claude-settings
+  threat: T9
+  action: { shell: "python3 -c 'open(\"/Users/me/.claude/settings.json\",\"w\").write(\"{}\")'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: node-e-writes-claude-settings
+  threat: T9
+  action: { shell: "node -e \"require('fs').writeFileSync('/Users/me/.claude/settings.json','{}')\"" }
+  expect: { verdict: deny, rules: [kernel-self] }

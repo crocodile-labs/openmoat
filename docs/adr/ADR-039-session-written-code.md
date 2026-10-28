@@ -52,7 +52,10 @@ both one `fs.read` of `x.py`.
 2. **Every session's writes are recorded** (`session_writes`, audit schema 5). For each
    call that may have run, each file it writes by a literal path (`Write`, `Edit`,
    `apply_patch`, an MCP tool's file argument, a shell write: `>`, `tee`, `cp`, `mv`
-   destinations, patches): host, session, path in the lookup form ADR-029 uses (one
+   destinations, patches, and inline code that writes: code using a write API writes
+   every file name it shows as literal text, since the scan cannot bind which one is
+   written; conservative, and the same writes then meet `shell-rc`, `kernel-self` and
+   `runs-later`): host, session, path in the lookup form ADR-029 uses (one
    spelling where paths compare without case), the event, and for `Write` the content's
    SHA-256. One row per file, host and session, replaced by a newer write. The rows are
    a lookup, not a record of events: adding one removes rows older than 30 days and all

@@ -89,8 +89,14 @@ fn stdin_files(reads: &[String], ctx: &ShellContext<'_>, sink: &mut Sink) {
 
 /// Note the files inline code `program` runs loads as code: a module of the
 /// working directory it imports or a program file it names (`inline.rs`).
-pub(crate) fn inline(code: &str, program: &str, ctx: &ShellContext<'_>, sink: &mut Sink) {
-    for word in inline::loads(program, code) {
+/// `writes`: the code writes files (`commands/payload/writes.rs`).
+pub(crate) fn inline(
+    code: &str,
+    (program, writes): (&str, bool),
+    ctx: &ShellContext<'_>,
+    sink: &mut Sink,
+) {
+    for word in inline::loads(program, code, writes) {
         sink.execute(ctx, &word);
     }
 }

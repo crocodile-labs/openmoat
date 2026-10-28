@@ -307,8 +307,9 @@ The main gaps:
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote asks before an interpreter runs it, but a test runner, build tool or
   package script (`pytest`, `npm test`, `cargo test`, `make`) running files the session
-  wrote does not, nor does a file another session wrote or one written out of the
-  hook's sight (a build's output, a script that writes another script). An allowed host can receive data
+  wrote does not, nor does a file another session wrote or one written by a program
+  whose writes the hook cannot see (the files `tar x` or `unzip` extract, a build's or
+  a package manager's output, what a script writes). An allowed host can receive data
   from an allowed command: the proxy checks the host, not what is sent inside HTTPS.
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).

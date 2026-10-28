@@ -8,13 +8,18 @@
 use super::interpreters::file_like;
 
 /// The words of `code`, which `program` runs, that name a file it may load as
-/// code, relative to the working directory or absolute.
-pub(super) fn loads(program: &str, code: &str) -> Vec<String> {
+/// code, relative to the working directory or absolute. Code that `writes`
+/// files names the files it writes, not ones it runs: its other file names are
+/// left out (running what it wrote, `exec(open(…).read())`, is opaque code).
+pub(super) fn loads(program: &str, code: &str, writes: bool) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
     // a program file the code names (`exec(open('tool.py').read())`, `require('./x.js')`)
-    for word in code.split(|c: char| {
-        c.is_whitespace() || matches!(c, '(' | ')' | ',' | ';' | '\'' | '"' | '`' | '[' | ']')
-    }) {
+    let words = code
+        .split(|c: char| {
+            c.is_whitespace() || matches!(c, '(' | ')' | ',' | ';' | '\'' | '"' | '`' | '[' | ']')
+        })
+        .filter(|_| !writes);
+    for word in words {
         if file_like(word) && word.rsplit_once('.').is_some_and(|(_, e)| !e.is_empty()) {
             found.push(word.to_owned());
         }

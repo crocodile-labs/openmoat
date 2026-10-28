@@ -389,10 +389,13 @@ something OpenMoat claims to stop.
   environment or runs programs through text it builds at run time (`opaque-code`).
   Not covered: test runners, build tools and package scripts running files the session
   wrote (`pytest`, `npm test`, `cargo test`, `make`, `go run .`), which run the
-  project's code by design; files another session or a person wrote; files written in
-  a way the hook does not see (a build's output, a script that writes another script, an
-  extracted archive, a download saved under a name the command does not show, a copy
-  made inside a script); a program the command names through a variable whose value the
+  project's code by design; files another session or a person wrote; files written by a
+  program whose writes OpenMoat cannot see: the member files of an archive (`tar x`,
+  `unzip`: the destination folder is a write, the files in it are not listed), a build
+  tool's or a package manager's output, what a script the agent wrote writes in turn, a
+  download saved under a name the command does not show, a copy made inside a script;
+  inline code that writes only through a name it builds (that is `opaque-code`, which
+  asks itself); a program the command names through a variable whose value the
   line does not show; code that a program loads on its own (`import helper` of a
   written `helper.py`, `require('./lib')`, a `conftest.py`, a git hook); commands in a
   shell OpenMoat does not parse (PowerShell, `cmd`), which defer to the agent; and
