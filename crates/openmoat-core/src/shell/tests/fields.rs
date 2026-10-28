@@ -120,6 +120,12 @@ fn inline_code_reading_every_variable_is_an_env_dump() {
         ),
         ("python3 -c 'import os;print(vars(os))'", "vars(os)"),
         ("python3 -c 'import os;print(os.__dict__)'", "os.__dict__"),
+        ("python3 -c 'print(__import__(\"os\").environ)'", "environ"),
+        ("python3 -c \"print(__import__('os').environ)\"", "environ"),
+        (
+            "python3 -c 'print(__import__(\"os\").__dict__)'",
+            "os.__dict__",
+        ),
         (
             "python3 -c \"import os;print(os.popen('env').read())\"",
             "env",
@@ -160,6 +166,7 @@ fn inline_code_that_hands_the_environment_on_is_no_dump() {
         "python3 -c \"import os,subprocess;subprocess.run(['ls'],env=dict(os.environ))\"",
         "python3 -c \"import os;os.environ['A']='1'\"",
         "python3 -c \"import os;print(os.getcwd())\"",
+        "python3 -c 'print(__import__(\"os\").getcwd())'",
         "node -e 'console.log(process.argv)'",
         "python3 -c 'print(environment)'",
         "python3 -c \"import os;print(getattr(os,'name'))\"",

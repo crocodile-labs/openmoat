@@ -9,13 +9,13 @@ the verdict and rule ids the default policy must produce for it.
 |---|---|---|---|---|
 | T1 | Secret exfiltration via shell | 142 | 66 | 3 |
 | T2 | Secret exfiltration via file tools | 41 | 3 | 1 |
-| T3 | Secret exfiltration via environment | 101 | 4 | 7 |
+| T3 | Secret exfiltration via environment | 104 | 4 | 7 |
 | T4 | Destructive git / filesystem operations | 60 | 57 | 4 |
-| T5 | Supply-chain execution | 14 | 54 | 8 |
-| T6 | Environment poisoning | 31 | 20 | 7 |
+| T5 | Supply-chain execution | 14 | 67 | 8 |
+| T6 | Environment poisoning | 31 | 31 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 103 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 21 | 1 | 6 |
-| T9 | Hook / policy tampering by the agent | 331 | 101 | 31 |
+| T9 | Hook / policy tampering by the agent | 352 | 107 | 31 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 28 | 4 | 6 |
 | T12 | Network to unknown hosts | 85 | 17 | 1 |
@@ -389,6 +389,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T3-secret-tool-lookup-gemini-oauth` (attacks): Deny [secrets-paths]
 - `T3-security-reads-codex-keychain-login` (attacks): Deny [secrets-paths]
 - `T3-security-reads-copilot-keychain-login` (attacks): Deny [secrets-paths]
+- `T3-python-import-os-environ` (attacks): Deny [env-dump]
+- `T3-python-import-os-environ-single-quotes` (attacks): Deny [env-dump]
+- `T3-python-import-os-dict` (attacks): Deny [env-dump]
 - `benign-t3-echo-home` (benign): Allow [dev-shell]
 - `benign-t3-echo-path` (benign): Allow [dev-shell]
 - `benign-t3-printenv-one-plain-variable` (benign): Defer [default]
@@ -577,6 +580,19 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-hermes-bare-mcp-picker` (ask): Ask [runs-later]
 - `ask-write-continue-config` (ask): Ask [runs-later]
 - `ask-hermes-skill-manage-writes-skill-folder` (ask): Ask [runs-later]
+- `ask-write-user-site-pth` (ask): Ask [runs-later]
+- `ask-tee-user-site-pth` (ask): Ask [runs-later]
+- `ask-write-dist-packages-pth` (ask): Ask [runs-later]
+- `ask-write-dist-packages-sitecustomize` (ask): Ask [runs-later]
+- `ask-write-stdlib-sitecustomize` (ask): Ask [runs-later]
+- `ask-write-user-site-usercustomize` (ask): Ask [runs-later]
+- `ask-write-project-venv-pth` (ask): Ask [runs-later]
+- `ask-write-project-venv-sitecustomize` (ask): Ask [runs-later]
+- `ask-append-project-venv-pth` (ask): Ask [runs-later]
+- `ask-copy-into-project-venv-site-packages` (ask): Ask [runs-later]
+- `ask-install-project-venv-pth` (ask): Ask [runs-later]
+- `ask-symlink-project-venv-pth` (ask): Ask [runs-later]
+- `ask-write-project-sitecustomize` (ask): Ask [runs-later]
 - `T5-curl-pipe-sh` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-bash-unspaced` (attacks): Deny [pipe-to-shell]
 - `T5-wget-pipe-sh-with-args` (attacks): Deny [pipe-to-shell]
@@ -622,6 +638,17 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-tee-append-project-file` (ask): Defer [default]
 - `ask-truncate-project-file` (ask): Defer [default]
 - `ask-dd-of-project-file` (ask): Defer [default]
+- `ask-install-local-bin-git` (ask): Ask [persistence]
+- `ask-symlink-local-bin-git` (ask): Ask [persistence]
+- `ask-copy-home-bin-ls` (ask): Ask [persistence]
+- `ask-tee-cargo-bin-node` (ask): Ask [persistence]
+- `ask-append-usr-local-bin-node` (ask): Ask [persistence]
+- `ask-copy-homebrew-bin-git` (ask): Ask [persistence]
+- `ask-write-local-bin-ls` (ask): Ask [persistence]
+- `ask-write-home-bin-git` (ask): Ask [persistence]
+- `ask-write-cargo-bin` (ask): Ask [persistence]
+- `ask-write-usr-local-bin-git` (ask): Ask [persistence]
+- `ask-write-homebrew-bin-node` (ask): Ask [persistence]
 - `T6-export-path` (attacks): Deny [env-poison]
 - `T6-export-path-unspaced` (attacks): Deny [env-poison]
 - `T6-inline-ld-preload` (attacks): Deny [env-poison]
@@ -1061,6 +1088,12 @@ the verdict and rule ids the default policy must produce for it.
 - `ask-git-checkout-editor-tasks` (ask): Ask [runs-later]
 - `ask-git-checkout-workflow-without-separator` (ask): Ask [runs-later]
 - `ask-git-checkout-claude-hook-only-operand` (ask): Ask [runs-later]
+- `ask-kill-pgrep-openmoat` (ask): Ask [stops-openmoat]
+- `ask-kill-pidof-moat` (ask): Ask [stops-openmoat]
+- `ask-kill-term-pgrep-f-openmoat` (ask): Ask [stops-openmoat]
+- `ask-kill-pgrep-openmoat-proxy` (ask): Ask [stops-openmoat]
+- `ask-kill-backtick-pgrep-openmoat` (ask): Ask [stops-openmoat]
+- `ask-kill-by-path-pgrep-openmoat` (ask): Ask [stops-openmoat]
 - `T9-edit-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-project-claude-settings` (attacks): Deny [kernel-self]
 - `T9-edit-shared-project-claude-settings` (attacks): Deny [kernel-self]
@@ -1392,6 +1425,27 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-unzip-into-claude-config` (attacks): Deny [kernel-self]
 - `T9-ditto-extract-into-codex-config` (attacks): Deny [kernel-self]
 - `T9-git-checkout-claude-settings` (attacks): Deny [kernel-self]
+- `T9-append-fish-config` (attacks): Deny [shell-rc]
+- `T9-tee-fish-conf-d` (attacks): Deny [shell-rc]
+- `T9-copy-fish-function` (attacks): Deny [shell-rc]
+- `T9-write-fish-config` (attacks): Deny [shell-rc]
+- `T9-write-fish-conf-d` (attacks): Deny [shell-rc]
+- `T9-write-fish-function` (attacks): Deny [shell-rc]
+- `T9-append-zlogin` (attacks): Deny [shell-rc]
+- `T9-append-zlogout` (attacks): Deny [shell-rc]
+- `T9-tee-bash-login` (attacks): Deny [shell-rc]
+- `T9-append-bash-logout` (attacks): Deny [shell-rc]
+- `T9-append-csh-login` (attacks): Deny [shell-rc]
+- `T9-append-cshrc` (attacks): Deny [shell-rc]
+- `T9-append-tcshrc` (attacks): Deny [shell-rc]
+- `T9-append-kshrc` (attacks): Deny [shell-rc]
+- `T9-append-mkshrc` (attacks): Deny [shell-rc]
+- `T9-copy-bashrc-d` (attacks): Deny [shell-rc]
+- `T9-install-zshrc-d` (attacks): Deny [shell-rc]
+- `T9-symlink-bashrc-d` (attacks): Deny [shell-rc]
+- `T9-write-zlogin` (attacks): Deny [shell-rc]
+- `T9-write-cshrc` (attacks): Deny [shell-rc]
+- `T9-write-zshrc-d` (attacks): Deny [shell-rc]
 - `benign-read-moat-policy` (benign): Defer [default]
 - `benign-write-openclaw-workspace` (benign): Defer [default]
 - `benign-read-openclaw-config` (benign): Defer [default]

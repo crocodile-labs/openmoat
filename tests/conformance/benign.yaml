@@ -1695,3 +1695,68 @@
 - id: benign-git-checkout-new-branch-from-remote
   action: { shell: "git checkout -b feature origin/feature" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
+# installers are commands, not writes into the folders on PATH (`persistence`)
+- id: benign-pip-install-user
+  action: { shell: "pip install --user requests" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pipx-install
+  action: { shell: "pipx install black" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-uv-tool-install
+  action: { shell: "uv tool install ruff" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-cargo-install
+  action: { shell: "cargo install ripgrep" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-brew-install
+  action: { shell: "brew install jq" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-npm-install-global
+  action: { shell: "npm i -g typescript" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-list-local-bin
+  action: { shell: "ls ~/.local/bin" }
+  expect: { verdict: defer, rules: [default] }
+# listing OpenMoat's processes, and `kill` of other pids, stay as they were
+- id: benign-pgrep-openmoat
+  action: { shell: "pgrep openmoat" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-pidof-openmoat
+  action: { shell: "pidof openmoat" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-kill-pgrep-node
+  action: { shell: "kill $(pgrep node)" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-kill-port-owner
+  action: { shell: "kill -9 $(lsof -ti :3000)" }
+  expect: { verdict: defer, rules: [default] }
+# reading a shell startup file stays as it was (`shell-rc` denies writes)
+- id: benign-cat-fish-config
+  action: { shell: "cat ~/.config/fish/config.fish" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-read-fish-config
+  action: { fs_read: "/Users/me/.config/fish/config.fish" }
+  expect: { verdict: defer, rules: [default] }
+# Python work in a project (`runs-later` asks only for `.pth`, `sitecustomize.py`
+# and `usercustomize.py`)
+- id: benign-pip-install-editable
+  action: { shell: "pip install -e ." }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-venv
+  action: { shell: "python -m venv .venv" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-pytest-bare
+  action: { shell: "pytest" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-write-project-app-py
+  action: { fs_write: "/p/src/app.py" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-venv-package-module
+  action: { fs_write: "/p/.venv/lib/python3.11/site-packages/foo/__init__.py" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-python-import-sys
+  action: { shell: "python3 -c 'print(__import__(\"sys\").version)'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-import-os-getcwd
+  action: { shell: "python3 -c 'print(__import__(\"os\").getcwd())'" }
+  expect: { verdict: defer, rules: [default] }

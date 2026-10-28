@@ -13,7 +13,8 @@ use super::tables::{
     SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
-    assignment_name, flag_payload, for_variable, program_name, strip_at, word_env_refs,
+    assignment_name, flag_payload, for_variable, kill_substituted, program_name, strip_at,
+    word_env_refs,
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
@@ -277,6 +278,7 @@ fn classify_as_written(
     } else {
         sink.push(AtomicAction::Shell { argv: argv.clone() })?;
     }
+    push_kill_substituted(program, words, sink)?;
 
     if ENV_BUILTINS.contains(&program) {
         for name in argv[1..].iter().filter_map(|w| assignment_name(w)) {
@@ -381,6 +383,18 @@ fn classify_as_written(
         }
     }
     options::classify(&argv, program, ctx, sink, depth)
+}
+
+/// The second atom of a `kill` of substituted pids ([`kill_substituted`]).
+fn push_kill_substituted(
+    program: &str,
+    words: &[Word],
+    sink: &mut Sink,
+) -> Result<(), ClassifyError> {
+    match kill_substituted(program, words) {
+        Some(argv) => sink.push(AtomicAction::Shell { argv }),
+        None => Ok(()),
+    }
 }
 
 /// Classify a wrapper's inner argv (`sudo rm …` → `rm …`) as its own command.

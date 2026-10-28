@@ -484,9 +484,15 @@ deny:
     fs.write: ["**/.github", "**/.github/copilot"]
   - id: shell-rc
     reason: edits persist into every future shell session
-    # and the files curl and wget read on every run, which can add a body or an
-    # upload to each later call (`data = @~/.ssh/id_rsa`): `~/.config/wget/` is wget2's
+    # the login and logout files, the other shells' startup files (fish, csh, tcsh,
+    # ksh, mksh) and the drop-in folders many rc files source, which run on the
+    # same schedule; and the files curl and wget read on every run, which can add
+    # a body or an upload to each later call (`data = @~/.ssh/id_rsa`):
+    # `~/.config/wget/` is wget2's
     fs.write: ["~/.zshrc", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zprofile", "~/.zshenv",
+      "~/.zlogin", "~/.zlogout", "~/.bash_login", "~/.bash_logout", "~/.bashrc.d/**", "~/.zshrc.d/**",
+      "~/.config/fish/config.fish", "~/.config/fish/conf.d/**", "~/.config/fish/functions/**",
+      "~/.login", "~/.cshrc", "~/.tcshrc", "~/.kshrc", "~/.mkshrc",
       "~/.curlrc", "~/_curlrc", "~/.config/curlrc", "~/.wgetrc", "~/.config/wget/**"]
   - id: cloud-metadata
     reason: instance metadata and link-local services hand out cloud credentials
@@ -526,7 +532,10 @@ allow:
       "!${project}/**/.opencode/opencode.json", "!${project}/**/.opencode/opencode.jsonc", "!${project}/**/.opencode/package.json",
       "!${project}/**/opencode.json", "!${project}/**/opencode.jsonc",
       "!${project}/**/.opencode", "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
-      "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes", "!${project}/**/.hermes/plugins"]
+      "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes", "!${project}/**/.hermes/plugins",
+      # what every Python start runs, a project's `.venv` included
+      "!${project}/**/site-packages/*.pth", "!${project}/**/dist-packages/*.pth",
+      "!${project}/**/sitecustomize.py", "!${project}/**/usercustomize.py"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -939,7 +948,11 @@ ask:
       "~/.hermes/profiles/*/agent-hooks/**", "~/.hermes/profiles/*/skills/**", "~/.hermes/profiles/*/cron/**",
       "**/.hermes/plugins/**", "**/.hermes", "**/.hermes/plugins",
       # the Continue CLI's configuration, whose `mcpServers` it starts
-      "~/.continue/config.yaml"]
+      "~/.continue/config.yaml",
+      # what every Python start runs, the allowed `pytest` included: a `.pth`
+      # file in a site directory (a line starting `import` is executed) and
+      # `sitecustomize`/`usercustomize`, imported from any folder on `sys.path`
+      "**/site-packages/*.pth", "**/dist-packages/*.pth", "**/sitecustomize.py", "**/usercustomize.py"]
     shell:
       # `opencode plugin` adds a plugin to the project's configuration (with
       # `--global`, which `kernel-self` denies, to the person's)
@@ -964,13 +977,20 @@ ask:
       - "{hermes,*/hermes} * mcp {add*,install*,picker*,configure*,login*,reauth*}"
   - id: persistence
     reason: runs again later, outside this session
-    fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**"]
+    fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**",
+      # folders on `PATH`: a file named after `git`, `ls` or `node` there runs in
+      # its place later, with the person's rights. Installers (`pipx`, `cargo
+      # install`, `brew`) are commands, not writes, and keep their verdict;
+      # `kernel-self` denies OpenMoat's own binary names in any `bin`
+      "~/.local/bin/**", "~/bin/**", "~/.cargo/bin/**", "/usr/local/bin/**", "/opt/homebrew/bin/**"]
     # `at` and `batch` run the job on their stdin or in `-f FILE` later; the job's
     # commands are classified too, so a denied one stays denied
     shell: ["crontab *", "at *", "batch *"]
   - id: stops-openmoat
     reason: stops a running OpenMoat process, such as the egress proxy service
-    shell: ["{pkill,*/pkill,killall,*/killall} * *moat*"]
+    # and `kill` of the pids a substitution names (`kill $(pgrep openmoat)`): its
+    # atom carries the substitution's text in place of `$(…)`
+    shell: ["{pkill,*/pkill,killall,*/killall,kill,*/kill} * *moat*"]
   - id: home-sweep
     reason: reads the whole home folder, secrets included
     # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)
