@@ -292,6 +292,11 @@ and guardhook 0.2.0. Each tool got the same 28 MoatBench attack steps as Claude 
   and network egress.
 - To reproduce, run the same scenarios against any hook command with
   `openmoat bench --hook '<command>' --host claude-code`.
+- MoatBench has grown since this comparison: 0.11.0 ships 55 scenarios (scripts the
+  agent writes and runs, inline code that builds its paths, plugins that rewrite a
+  call). `openmoat bench` runs the whole set; every CI build runs the benign and
+  session-written-code scenarios with and without an OS sandbox. This comparison is
+  rerun on the larger set after 0.11.0.
 
 The method, the results per category, the time per call, the limits of this comparison
 and the exact commands for each tool are in
