@@ -12,6 +12,7 @@ mod asks;
 mod base;
 mod consent;
 mod docs;
+mod heartbeat;
 mod hook_file;
 mod location;
 mod mcp;
@@ -24,6 +25,7 @@ pub use asks::{Asks, Unseen};
 pub(crate) use asks::{answer, decided};
 pub use consent::ConsentFile;
 pub use docs::{HostDocs, ToolRow};
+pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
 pub use hook_file::HookLayout;
 pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
@@ -262,6 +264,10 @@ pub struct InstallSpec {
     /// configuration directory covers them too, as it covers a moved one.
     /// Empty for most hosts.
     pub also_dirs: &'static [AlsoDir],
+    /// How the host's plugin reports that the host loaded it, for a host that
+    /// runs OpenMoat through a plugin it loads ([`HookLayout::Owned`] and
+    /// [`HookLayout::Plugin`]); `None` for a host that runs a hook command.
+    pub heartbeat: Option<Heartbeat>,
 }
 
 /// Where to find a further directory a host reads laid out like its

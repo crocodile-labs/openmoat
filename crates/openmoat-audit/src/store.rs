@@ -20,6 +20,7 @@ mod export_verify;
 mod provenance;
 mod rules;
 mod schema;
+mod seen;
 mod session_cache;
 mod session_writes;
 

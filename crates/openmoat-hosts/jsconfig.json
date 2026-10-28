@@ -1,0 +1,21 @@
+{
+  "//": "Type-checks the JavaScript OpenMoat installs into OpenClaw, pi and OpenCode (scripts/ci/check-js.sh). Nothing is emitted; the plugins have no dependencies.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": false,
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "skipLibCheck": true
+  },
+  "include": ["src/host/*/integration/*.js", "src/host/*/integration/*.mjs", "src/host/integration.d.ts"]
+}

@@ -14,6 +14,16 @@ runs `moat guard --host pi`. Every fact here comes from [`pi.rs`](../pi.rs) and
 The extension sends pi's `toolName`, `input`, `toolCallId` and `parentToolCallId`, and
 adds `sessionId`, `cwd`, `hasUI` and `platform`. It returns nothing for `allow`, asks with
 `ctx.ui.confirm` for `ask` and blocks for `deny`; anything it cannot read blocks the call.
+When pi loads it, the extension runs `moat guard --heartbeat --host pi`
+([ADR-042](../../../../../docs/adr/ADR-042-plugins-report-loading.md)).
+
+pi hands every `tool_call` handler the same `input` object, in the order the extensions
+loaded, and runs the tool with it (`emitToolCall` in `src/core/extensions/runner.ts`;
+pi's documentation: "`tool_call` can mutate input"). The extension does not freeze it,
+as OpenCode's plugin does: that would make every later extension that changes a call
+throw, which pi treats as a block, and pi documents changing the input as a feature. So
+an extension that loads after OpenMoat's can change a call after it was checked (Known
+gaps).
 
 ## Tools OpenMoat sees
 
@@ -60,14 +70,24 @@ extension blocks when `openmoat` is missing, crashes or does not answer within 4
 call runs unchecked when pi does not load the extension (`--no-extensions`, or an
 `extensions` entry in pi's or a trusted project's settings that turns it off).
 
+An extension that fails to load is a diagnostic ("Failed to load extension"), and the
+session starts without it (`loadExtension` in `src/core/extensions/loader.ts`,
+`main.ts`). `openmoat status` and `openmoat doctor` say whether the extension has
+reported loading, or sent a call the guard decided, since OpenMoat wrote it or the `pi`
+on the search path changed. Without either, a session file pi wrote since
+(`sessions/--<cwd>--/*.jsonl` in the agent directory) means pi ran without it: a
+warning, and the protection line says "not protected". Without one, "plugin not loaded
+yet" is a note: pi has not run since. `--no-extensions` is reported this way too.
+
 ## Known gaps
 
 No OS sandbox from OpenMoat; a call OpenMoat defers runs; an input change by an extension
 pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are
 not checked; a trusted project's `.pi` settings and extensions load with the agent's
 rights; calls run unchecked if pi does not load the extension (`openmoat status` and
-`doctor` report a settings entry that turns it off, not `--no-extensions`); a failed or
-slow hook blocks the call.
+`doctor` report a settings entry that turns it off, and a session pi wrote since the
+extension or pi changed without the extension reporting that it loaded); a failed or slow
+hook blocks the call.
 
 ## Sandbox
 

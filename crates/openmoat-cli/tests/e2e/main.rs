@@ -29,6 +29,7 @@ mod escapes;
 mod export;
 mod gemini_cli;
 mod guard;
+mod heartbeat;
 mod hermes;
 mod home_screen;
 mod host_failures;

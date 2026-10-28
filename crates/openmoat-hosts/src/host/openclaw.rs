@@ -15,6 +15,12 @@
 //! "reason"}`. The plugin returns no decision for `allow`, `requireApproval`
 //! for `ask` (OpenClaw asks the person and blocks when no one can answer) and
 //! `block` for `deny`; anything else it cannot read blocks the call.
+//!
+//! OpenClaw runs the handlers in priority order and gives each the call as it
+//! came; the `params` the last handler returns run (`runBeforeToolCall` in
+//! `src/plugins/hooks.ts`). The plugin decides at the highest priority and, at
+//! the lowest, returns the parameters it decided on, so a change another
+//! plugin returned in between is undone (ADR-041).
 
 use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
@@ -22,8 +28,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, ExtraFile, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
-    Location, McpFile, McpSpec, wrong_event,
+    Asks, ExtraFile, GUARD_BUDGET_S, Heartbeat, HookLayout, HookSpec, HostAdapter, HostSpec,
+    InstallSpec, Location, McpFile, McpSpec, wrong_event,
 };
 use crate::wire::owned_file::OwnedFile;
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -80,10 +86,15 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     on_hook_failure: "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
          `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, \
          crashes or does not answer; runs the call unchecked when the Gateway does not \
-         load the plugin",
-    gaps: "no OS sandbox from OpenMoat; a parameter rewrite by another plugin and \
-         OpenClaw's process input are not checked; calls run unchecked if the Gateway does \
-         not load the plugin; a failed or slow hook blocks the call",
+         load the plugin (a load error leaves the plugin `status: \"error\"` and the \
+         Gateway running)",
+    gaps: "no OS sandbox from OpenMoat; parameters another plugin changes are undone, \
+         except where that plugin also asks for approval (OpenClaw then keeps the \
+         parameters the person approved) or runs after OpenMoat's last handler at the \
+         same lowest priority; OpenClaw's process input is not checked; calls run \
+         unchecked if the Gateway does not load the plugin (`openmoat status` and \
+         `doctor` say when it has not reported loading since it or OpenClaw changed); a \
+         failed or slow hook blocks the call",
     // The state directory, which holds `openclaw.json` unless
     // `OPENCLAW_CONFIG_PATH` puts it elsewhere
     // (<https://docs.openclaw.ai/help/environment>).
@@ -97,6 +108,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         pinned_form: Some(location::pinned_form),
         // OpenMoat's plugin, which OpenClaw loads from `plugins.load.paths`.
         extra_files: &[ExtraFile::InConfigDir(&["openmoat", "openmoat.mjs"])],
+        // The Gateway loads its plugins when it starts and keeps running when
+        // one fails (`status: "error"`, `src/plugins/loader-records.ts`;
+        // `throwOnLoadError` only for a reload, `src/gateway/server-plugins.ts`).
+        // Since 2026.8.1 an agent's sessions and transcripts are in its SQLite
+        // database (`agents/<agent>/agent/openclaw-agent.sqlite`,
+        // `src/config/sessions/session-sqlite-target-paths.ts`), which sign-in
+        // commands that load no plugin write too, so no activity tells a run
+        // that should have loaded it.
+        heartbeat: Some(Heartbeat {
+            program: "openclaw",
+            activity: &[],
+        }),
         ..InstallSpec::BASE
     }),
     // <https://docs.openclaw.ai/tools/mcp>: "Server definitions live under

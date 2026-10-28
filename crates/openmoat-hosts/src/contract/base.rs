@@ -50,5 +50,6 @@ impl InstallSpec {
         versions: None,
         consent: None,
         also_dirs: &[],
+        heartbeat: None,
     };
 }

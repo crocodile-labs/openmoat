@@ -221,6 +221,18 @@ impl HostConfig {
             .collect()
     }
 
+    /// The plugin file the host loads to run OpenMoat: the hook file itself
+    /// for a file OpenMoat owns whole (pi's extension, OpenCode's plugin), the
+    /// first extra file for a plugin configuration (OpenClaw's); `None` for a
+    /// host that runs a hook command.
+    pub fn plugin_file(&self) -> Option<PathBuf> {
+        match self.layout {
+            HookLayout::Owned(_) => Some(self.settings_path.clone()),
+            HookLayout::Plugin(_) => self.extra_files().into_iter().next(),
+            HookLayout::Entries(_) | HookLayout::Yaml(_) => None,
+        }
+    }
+
     /// The host is considered present when its configuration directory exists.
     pub fn host_present(&self) -> bool {
         self.dir.is_dir()

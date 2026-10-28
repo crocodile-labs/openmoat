@@ -97,14 +97,17 @@ pub fn state(config: &HostConfig, layout: &'static dyn HookFile, binary: &Path) 
     };
     let id = config.host.id();
     let binary_text = binary.to_string_lossy();
-    match layout.state(&root, id, config.hooks, &binary_text, || false) {
+    let state = match layout.state(&root, id, config.hooks, &binary_text, || false) {
         HookFileState::Missing => HookState::Missing,
         HookFileState::Stale { command } => HookState::Stale { command },
         HookFileState::Installed => match consent::missing(config, binary) {
             Some(why) => HookState::Unapproved(why),
             None => HookState::Installed,
         },
-    }
+    };
+    // An entry the host would run past on a failure says so, rather than
+    // "out of date".
+    super::hook_file::unless_fails_open(state, config, layout, &root)
 }
 
 /// The hook file's text without OpenMoat's entries; `None` when it holds

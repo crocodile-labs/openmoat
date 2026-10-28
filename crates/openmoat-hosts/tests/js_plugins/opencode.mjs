@@ -1,6 +1,6 @@
 // Loads OpenMoat's OpenCode plugin the way each OpenCode version loads it and
 // drives its hooks against a stand-in for `openmoat guard`, then prints what
-// happened as JSON for `tests/opencode_plugin.rs`:
+// happened as JSON for `opencode.rs`:
 //
 // - OpenCode 1 (1.3.4 and later): the default export's `server(input)`, whose
 //   `tool.execute.before` gets `(call, output)` (`plugin/index.ts`,
@@ -14,20 +14,28 @@
 // The guard stand-in is a Node script named `guard` in the plugin's
 // `directory`: the plugin runs `<MOAT> guard --host opencode` there, and with
 // MOAT set to this Node it runs that script, on every system. Its answer is
-// FAKE_MODE's.
+// FAKE_MODE's. A heartbeat (`--heartbeat`, run where the process is, which is
+// that directory too) adds a line to `heartbeats.jsonl` and reads nothing.
 
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { heartbeats } from "./common.mjs";
+
 const [source] = process.argv.slice(2);
 const dir = mkdtempSync(join(tmpdir(), "openmoat-opencode-plugin-"));
+process.chdir(dir);
 
 const FAKE_GUARD = `
 const fs = require("node:fs");
 const path = require("node:path");
 const out = process.env.FAKE_DIR;
+if (process.argv.includes("--heartbeat")) {
+  fs.appendFileSync(path.join(out, "heartbeats.jsonl"), JSON.stringify(process.argv.slice(2)) + "\\n");
+  process.exit(0);
+}
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => (input += chunk));
@@ -44,6 +52,7 @@ process.stdin.on("end", () => {
     case "crash": process.stderr.write("boom\\n"); process.exitCode = 1; return;
     case "garbage": return say("not json", 0);
     case "deny-exit-0": return say('{"decision":"deny","reason":"x"}', 0);
+    case "allow-exit-3": return say('{"decision":"allow","reason":"x"}', 3);
     case "hang": setTimeout(() => {}, 10000); return;
   }
 });
@@ -292,9 +301,12 @@ try {
   const argv = JSON.parse(readFileSync(join(dir, "args.json"), "utf8"));
   const ranIn = realpathSync(readFileSync(join(dir, "cwd.txt"), "utf8"));
   const cwdIsDirectory = ranIn === realpathSync(dir);
-  for (const mode of ["allow", "defer", "ask", "crash", "garbage", "deny-exit-0", "hang"]) {
+  for (const mode of ["allow", "defer", "ask", "crash", "garbage", "deny-exit-0", "allow-exit-3", "hang"]) {
     results.push(await callV1(hooks, mode, "read", { filePath: "a" }));
   }
+  // `server` reported loading once; the two below point at a missing binary
+  // and load all the same, without a report.
+  const beatsV1 = await heartbeats(dir, 1);
   const missing = await (await load(plugin(join(dir, "no-such-dir", "openmoat"), "missing.mjs"))).server(input);
   results.push(await callV1(missing, "allow", "bash", { command: "ls" }, "missing-binary"));
   // No input at all and no call: still a block, never a crash of OpenCode.
@@ -303,6 +315,8 @@ try {
 
   // OpenCode 2.
   const second = await v2(file);
+  // `setup` reported loading too: one more.
+  const beatsV2 = await heartbeats(dir, beatsV1.length + 1);
   const missingV2 = context(dir);
   await (await load(plugin(join(dir, "no-such-dir", "openmoat"), "missing2.mjs"))).setup(missingV2.ctx);
   second.results.push(await callV2(missingV2, "allow", "shell", { command: "ls" }, "missing-binary"));
@@ -322,9 +336,11 @@ try {
       cwdIsDirectory,
       dir,
       results,
+      heartbeats: { server: beatsV1, setup: beatsV2.slice(beatsV1.length) },
       v2: { payload: second.payload, results: second.results, asked: second.asked, later },
     }),
   );
 } finally {
+  process.chdir(join(dir, ".."));
   rmSync(dir, { recursive: true, force: true });
 }

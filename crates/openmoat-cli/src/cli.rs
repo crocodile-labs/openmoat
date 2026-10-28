@@ -446,6 +446,10 @@ pub struct GuardArgs {
     /// (ADR-028): the command runs in that sandbox (ADR-039). Not for hooks.
     #[arg(long, hide = true)]
     pub relayed: bool,
+    /// Record that the host loaded OpenMoat's plugin, and read no payload
+    /// (run by the plugin as it loads; `openmoat status` reports it).
+    #[arg(long)]
+    pub heartbeat: bool,
 }
 
 #[derive(Debug, Args)]

@@ -449,6 +449,15 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                         config.settings_path.display()
                     ),
                 );
+                // Whether the host loaded the plugin (ADR-042).
+                if let Some(loaded) = crate::heartbeat::check(home, &config) {
+                    let (mark, text) = crate::heartbeat::line(name, &loaded);
+                    let text = format!("{name:<16} {text}");
+                    match mark {
+                        crate::heartbeat::Mark::Note => report.note(&text),
+                        crate::heartbeat::Mark::Warning => report.warn(&text),
+                    }
+                }
                 if config.runs_calls_when_hook_fails() {
                     report.warn(&format!(
                         "{name:<16} runs a tool call when its hook fails to start, crashes or \
@@ -474,7 +483,7 @@ fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>
                     format!("{name:<16} {}", stale_hint(&command)),
                 );
             }
-            HookState::Unreadable(e) | HookState::Unapproved(e) => {
+            HookState::Unreadable(e) | HookState::Unapproved(e) | HookState::FailsOpen(e) => {
                 report.line(Area::Hook, false, format!("{name:<16} {e}"));
             }
         }

@@ -35,7 +35,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    AlsoDir, Asks, GUARD_BUDGET_S, HookDir, HookLayout, HookSpec, HookVersions, HostAdapter,
+    AlsoDir, Asks, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HookVersions,
+    HostAdapter,
     HostSpec, InstallSpec, Location, McpFile, McpSpec, ProjectSettingsSpec, wrong_event,
 };
 use crate::wire::owned_file::OwnedFile;
@@ -118,8 +119,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          a project's load at start with no prompt; a project's `-openmoat` turns \
          OpenMoat off in OpenCode 2; OpenCode 2's `--auto` approves OpenMoat's asks; the \
          person's `!` shell commands are not checked; calls run unchecked if OpenCode \
-         does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error); a failed \
-         or slow hook blocks the call",
+         does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error; `openmoat \
+         status` and `doctor` say when it has not reported loading since it or OpenCode \
+         changed); a failed or slow hook blocks the call",
     // `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode` (1.x
     // `packages/core/src/global.ts`; 2.x `util/src/global-roots.ts`), or
     // `OPENCODE_CONFIG_DIR`, which OpenCode 1 reads as well and OpenCode 2
@@ -140,6 +142,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             AlsoDir::Variable(location::CONFIG_DIR),
             AlsoDir::Below(location::VARIABLE, location::APP),
         ],
+        // OpenCode 1 loads its plugins for a project when it first serves one
+        // and logs a plugin that fails and skips it (`plugin/index.ts`,
+        // `Plugin.state`); the plugin reports loading from `server` and from
+        // OpenCode 2's `setup` alike. Its sessions live in a database in its
+        // data directory that commands loading no plugin write too, so no
+        // activity tells a run that should have loaded it.
+        heartbeat: Some(Heartbeat {
+            program: "opencode",
+            activity: &[],
+        }),
         ..InstallSpec::BASE
     }),
     // `mcp.<name>` (1.x) and `mcp.servers.<name>` (2.x) in the configuration

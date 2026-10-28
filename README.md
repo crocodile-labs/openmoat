@@ -318,10 +318,13 @@ The main gaps:
   CLI run a call whose hook times out. OpenClaw, pi and OpenCode run calls unchecked when
   they do not load OpenMoat's plugin or extension (OpenCode 1 with `--pure` or
   `OPENCODE_PURE`, OpenCode 2 with `-openmoat` in a project's `plugins`, or when the
-  plugin fails to load; `openmoat status` reports such a project). Hermes Agent's gateway, cron and
-  ACP sessions skip the hook when its command is not approved in
+  plugin fails to load, which each of them logs and goes on; `openmoat status` reports
+  such a project). The plugin reports loading, and `openmoat status` says "plugin not
+  loaded yet" until it has, and for pi "not protected" once pi ran without it. Hermes
+  Agent's gateway, cron and ACP sessions skip the hook when its command is not approved in
   `shell-hooks-allowlist.json` (`openmoat init` approves it), as Hermes does under
-  `HERMES_SAFE_MODE=1` or in a profile OpenMoat did not set up.
+  `HERMES_SAFE_MODE=1` or in a profile OpenMoat did not set up, and Hermes runs a call
+  unchecked when its own hook dispatcher fails (a Hermes bug, not a failing hook).
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a
@@ -331,7 +334,10 @@ The main gaps:
 - **Some agents can change a call after the check.** Hermes Agent's plugins, another of
   its shell hooks and its tool middleware run in its own process and can rewrite a call's
   arguments after OpenMoat decided; what an `execute_code` script does itself is not
-  checked, and its in-session `/yolo` toggle approves an ask unseen.
+  checked, and its in-session `/yolo` toggle approves an ask unseen. A pi extension that
+  loads after OpenMoat's can change a call's input. OpenClaw runs the parameters
+  OpenMoat decided on, except where another plugin changes them and asks for approval
+  itself in one answer: OpenClaw then runs that plugin's change once you approve it.
 - **Some agents cannot ask.** Codex, OpenCode 1 and Cursor's file tools receive an
   `ask` as a deny that says how to approve the call (`openmoat`, or
   `openmoat allow --last`).

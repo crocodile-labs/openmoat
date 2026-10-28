@@ -86,6 +86,37 @@ fn the_entry_is_added_as_text_and_counts_once_it_is_approved() {
     );
 }
 
+/// OpenMoat's entry without `fail_closed: true` is reported as failing open,
+/// approved or not, not as out of date; `init` puts the key back.
+#[test]
+fn an_entry_without_fail_closed_true_fails_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(dir.path());
+    let binary = Path::new("/x/openmoat");
+    let text = render(&config, layout(&config), binary, ORIGINAL)
+        .unwrap()
+        .unwrap();
+    assert!(text.contains("fail_closed: true"), "{text}");
+    approve(&config, binary);
+    for edited in [
+        text.replace("fail_closed: true", "fail_closed: false"),
+        text.replace("fail_closed: true", "fail_closed: 'true'"),
+    ] {
+        fs::write(&config.settings_path, &edited).unwrap();
+        let state = state(&config, layout(&config), binary);
+        assert!(
+            matches!(&state, HookState::FailsOpen(why)
+                if why.contains("lacks `fail_closed: true`") && why.contains("openmoat init")),
+            "{state:?}"
+        );
+        assert!(
+            render(&config, layout(&config), binary, &edited)
+                .unwrap()
+                .is_some()
+        );
+    }
+}
+
 #[test]
 fn a_broken_file_is_unreadable_and_a_broken_allowlist_is_refused() {
     let dir = tempfile::tempdir().unwrap();

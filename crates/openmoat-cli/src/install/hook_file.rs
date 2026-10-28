@@ -32,6 +32,32 @@ pub enum HookState {
     /// Installed, but the host's consent file does not approve it, so the
     /// host skips it where it cannot ask; the reason says so.
     Unapproved(String),
+    /// An entry of ours lacks the host's fail-closed key set to `true`
+    /// ([`openmoat_hosts::HookFile::fail_closed_key`]), so the host runs a
+    /// call whose hook failed to start, crashed or timed out; the reason says so.
+    FailsOpen(String),
+}
+
+/// [`HookState::FailsOpen`] for `config` when an entry of ours in `root`
+/// lacks the layout's fail-closed key, otherwise `state`.
+pub fn unless_fails_open(
+    state: HookState,
+    config: &HostConfig,
+    layout: &'static dyn openmoat_hosts::HookFile,
+    root: &Value,
+) -> HookState {
+    if matches!(state, HookState::Missing | HookState::Unreadable(_)) {
+        return state;
+    }
+    match layout.fails_open(root, config.host.id(), config.hooks) {
+        Some(key) => HookState::FailsOpen(format!(
+            "OpenMoat's hook entry in {} lacks `{key}: true`, so {} runs a call when the \
+             hook cannot start, crashes or times out; run `openmoat init`",
+            config.settings_path.display(),
+            config.host.display_name()
+        )),
+        None => state,
+    }
 }
 
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
@@ -159,11 +185,12 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     };
     let id = config.host.id();
     let binary = binary.to_string_lossy();
-    match layout.state(&root, id, config.hooks, &binary, config.blocks_on_failure) {
+    let state = match layout.state(&root, id, config.hooks, &binary, config.blocks_on_failure) {
         HookFileState::Missing => HookState::Missing,
         HookFileState::Installed => HookState::Installed,
         HookFileState::Stale { command } => HookState::Stale { command },
-    }
+    };
+    unless_fails_open(state, config, layout, &root)
 }
 
 /// Whether one of our entries that should block a call when `moat guard`

@@ -355,6 +355,34 @@ fn the_hook_command_is_quoted_for_hermes_and_read_back() {
     assert_eq!(Hermes.binary(&entry, "hermes").as_deref(), Some("/x/openmoat"));
 }
 
+/// An entry of ours without `fail_closed: true` (absent, `false`, or a string
+/// Hermes reads as `false`) is one Hermes runs a call past when the hook fails;
+/// the entry `init` writes is not.
+#[test]
+fn an_entry_without_fail_closed_true_fails_open() {
+    let hooks = Host::Hermes.spec().install.as_ref().unwrap().hooks;
+    let layout: &dyn HookFile = &Hermes;
+    let with = |entry: Value| json!({ "hooks": { "pre_tool_call": [entry] } });
+    let ours = Hermes.entry(&hooks[0], "hermes", "/x/openmoat", false);
+    assert_eq!(layout.fails_open(&with(ours.clone()), "hermes", hooks), None);
+    for value in [None, Some(json!(false)), Some(json!("true"))] {
+        let mut entry = ours.clone();
+        match value {
+            Some(v) => entry["fail_closed"] = v,
+            None => {
+                entry.as_object_mut().unwrap().remove("fail_closed");
+            }
+        }
+        assert_eq!(
+            layout.fails_open(&with(entry), "hermes", hooks),
+            Some("fail_closed")
+        );
+    }
+    // Someone else's hook is not ours to judge.
+    let theirs = with(json!({ "command": "/bin/true" }));
+    assert_eq!(layout.fails_open(&theirs, "hermes", hooks), None);
+}
+
 /// `moat init` adds the entry to a `config.yaml` Hermes wrote, comments and
 /// all, and `moat uninstall` gives the file back as it was.
 #[test]

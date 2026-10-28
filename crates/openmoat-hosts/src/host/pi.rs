@@ -24,8 +24,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
-    McpFile, McpSpec, McpServersJson, ProjectSettingsSpec, wrong_event,
+    Activity, Asks, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HostAdapter,
+    HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, ProjectSettingsSpec, wrong_event,
 };
 use crate::wire::owned_file::OwnedFile;
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -80,8 +80,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          (a package's) and an extension that replaces a built-in tool are not checked; \
          a trusted project's `.pi` settings and extensions load with the agent's rights; \
          calls run unchecked if pi does not load the extension (`openmoat status` and \
-         `doctor` report a settings entry that turns it off, not `--no-extensions`); a \
-         failed or slow hook blocks the call",
+         `doctor` report a settings entry that turns it off, and a session pi wrote \
+         since the extension or pi changed without the extension reporting that it \
+         loaded); a failed or slow hook blocks the call",
     // The agent directory, `~/.pi/agent` unless `PI_CODING_AGENT_DIR` moves it;
     // pi loads every `.js` and `.ts` file in its `extensions/` on start
     // (pi 1.3.0 `docs/configuration.md`, `docs/environment-variables.md`).
@@ -91,6 +92,14 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "extensions/openmoat.js",
         hooks: HOOKS,
         hook_file: HookLayout::Owned(&EXTENSION),
+        // pi loads its extensions when a session starts, then writes the
+        // session to `sessions/--<cwd>--/<file>.jsonl` (`getDefaultSessionDirPath`
+        // in `core/session-manager.ts`); a failed extension is a diagnostic and
+        // the session starts (`loadExtension` in `core/extensions/loader.ts`).
+        heartbeat: Some(Heartbeat {
+            program: "pi",
+            activity: &[Activity::new(&["sessions", Activity::ANY])],
+        }),
         ..InstallSpec::BASE
     }),
     // pi reads `<agent dir>/mcp.json` and a trusted project's `.pi/mcp.json`,
