@@ -1540,7 +1540,7 @@
   action: { shell: "opencode plugin --force opencode-gitlab-auth" }
   expect: { verdict: ask, rules: [runs-later] }
 # OpenCode 2 reads a project's `plugins`, whose `-openmoat` removes OpenMoat's
-# plugin (ADR-039): writing a project's configuration asks, as before; an
+# plugin (ADR-040): writing a project's configuration asks, as before; an
 # OpenCode 1 plugin whose name only begins with `add` is not OpenCode 2's
 # `plugin add`
 - id: ask-opencode2-remove-plugin-in-project-config

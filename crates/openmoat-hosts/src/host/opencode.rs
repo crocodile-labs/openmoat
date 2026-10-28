@@ -1,5 +1,5 @@
 //! OpenCode 1 (`opencode-ai`, 1.3.4 and later) and OpenCode 2 (`@opencode/cli`)
-//! through one plugin (ADR-039).
+//! through one plugin (ADR-040).
 //!
 //! OpenCode has no command hook. OpenMoat's plugin
 //! (`host/opencode/integration/openmoat.js`) exports `{ id, server, setup }`:

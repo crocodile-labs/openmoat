@@ -697,7 +697,7 @@ something OpenMoat claims to stop.
   is OpenMoat's plugin (`crates/openmoat-hosts/src/host/opencode/integration/openmoat.js`,
   written to `plugins/openmoat.js` in `~/.config/opencode`, `$XDG_CONFIG_HOME/opencode`
   or `OPENCODE_CONFIG_DIR`), one file that OpenCode 1 (1.3.4 and later) loads through
-  `server` and OpenCode 2 through `setup` (ADR-039), and which runs `openmoat guard` from
+  `server` and OpenCode 2 through `setup` (ADR-040), and which runs `openmoat guard` from
   OpenCode 1's `tool.execute.before` or OpenCode 2's `execute.before`. From the OpenCode
   1.19.4 source (`plugin/index.ts` `trigger`, `session/tools.ts`, `session/processor.ts`)
   and the 2.2.0 source (`core/src/plugin/hooks.ts`, `core/src/tool.ts`,

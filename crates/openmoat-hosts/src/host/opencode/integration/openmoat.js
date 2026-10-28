@@ -2,7 +2,7 @@
 // OpenCode's configuration directory (`~/.config/opencode`,
 // `$XDG_CONFIG_HOME/opencode`, or `OPENCODE_CONFIG_DIR`) with the path of the
 // `openmoat` binary in place of __MOAT_BINARY__, and pins it; do not edit the
-// installed copy. One file serves both plugin APIs (ADR-039): OpenCode 1
+// installed copy. One file serves both plugin APIs (ADR-040): OpenCode 1
 // (`opencode-ai`, 1.3.4 and later) calls `server`, OpenCode 2 (`@opencode/cli`)
 // calls `setup`; each ignores the other.
 //

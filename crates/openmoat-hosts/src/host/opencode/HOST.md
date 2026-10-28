@@ -7,7 +7,7 @@ plugin hook, checked against the source of OpenCode 1.19.4; and OpenCode 2
 2.1.0 where they differ). OpenCode has no command hook: OpenMoat's one plugin
 ([`integration/openmoat.js`](integration/openmoat.js)) exports `{ id: "openmoat", server,
 setup }`; OpenCode 1 calls `server`, OpenCode 2 calls `setup`, and either runs
-`openmoat guard --host opencode` (ADR-039). Every fact here comes from
+`openmoat guard --host opencode` (ADR-040). Every fact here comes from
 [`opencode.rs`](../opencode.rs) and [`doc.rs`](doc.rs); if they disagree, the code wins.
 
 `openmoat init` asks `opencode --version` and does not set up a version before 1.3.4,

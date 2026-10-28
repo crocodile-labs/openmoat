@@ -1,4 +1,4 @@
-# ADR-039: OpenCode 1 and 2 through one plugin that pins the call it checked
+# ADR-040: OpenCode 1 and 2 through one plugin that pins the call it checked
 
 Status: accepted · Date: 2026-10-27 · Builds on ADR-004 (exit codes), ADR-006 (policy
 lock), ADR-025 (quiet by default) and ADR-033 (a plugin that runs `openmoat guard`)

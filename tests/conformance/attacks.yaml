@@ -813,7 +813,7 @@
   threat: T9
   action: { shell: "opencode plugin -fg opencode-evil" }
   expect: { verdict: deny, rules: [kernel-self] }
-# OpenCode 2 (ADR-039): `-openmoat` in a configuration's `plugins` removes
+# OpenCode 2 (ADR-040): `-openmoat` in a configuration's `plugins` removes
 # OpenMoat's plugin; the global files, the variables that add or move
 # configuration, the background service's environment and `opencode plugin
 # add|remove|update` (which write the global configuration) are the person's
