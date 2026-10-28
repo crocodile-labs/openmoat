@@ -77,6 +77,19 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    if policy
+        .sandbox
+        .as_ref()
+        .is_some_and(|s| s.proxy_serve_without_credential)
+    {
+        out.push(Warning {
+            rule: "sandbox.proxy_serve_without_credential".to_owned(),
+            message: "`openmoat proxy` serves requests without a session credential: any local \
+                      process may use it, and a session that read a secret escapes its taint \
+                      by sending no credential"
+                .to_owned(),
+        });
+    }
     if policy.trust_mcp_first_sight() {
         out.push(Warning {
             rule: "mcp.trust_first_sight".to_owned(),
@@ -421,6 +434,16 @@ mod tests {
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("ECH"), "{w:?}");
         assert!(warn("version: 1\nsandbox: { proxy_allow_ech: false }\n").is_empty());
+    }
+
+    #[test]
+    fn serving_without_a_session_credential_is_reported() {
+        let w = warn("version: 1\nsandbox: { proxy_serve_without_credential: true }\n");
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("escapes its taint"), "{w:?}");
+        assert!(
+            warn("version: 1\nsandbox: { proxy_serve_without_credential: false }\n").is_empty()
+        );
     }
 
     #[test]

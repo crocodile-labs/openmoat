@@ -114,6 +114,8 @@ fn planted_secrets_never_reach_the_audit_log_or_an_export() {
 /// Send each request to a `moat proxy` holding the brokered value; each is
 /// refused and recorded.
 fn proxy(sb: &Sandbox, requests: &[String]) {
+    // Raw requests carry no session credential (ADR-044).
+    sb.serve_proxy_without_credential();
     let mut child = sb
         .command()
         .args(["proxy", "--listen", "127.0.0.1:0"])

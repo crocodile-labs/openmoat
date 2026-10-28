@@ -38,6 +38,9 @@ anyhow = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
 regex = "1"
 sha2 = "0.11"
+# Random bytes from the OS on every platform: the proxy session key (ADR-044)
+# is made on Windows too, which has no `/dev/urandom`.
+getrandom = "0.4"
 tempfile = "3"
 httparse = "1.10"
 signal-hook = { version = "0.4", default-features = false }

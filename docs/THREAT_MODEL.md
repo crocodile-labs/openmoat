@@ -354,8 +354,16 @@ something OpenMoat claims to stop.
   agent session read secret material, a request to any host but that secret's own is
   refused, and a connection opened before the read is closed within about a second
   (the proxy checks each open connection's session again every second). A hook inside `openmoat run` gets its decision from the `openmoat run` process
-  (ADR-028), which writes the links. Connections through the standalone `openmoat proxy` (the host
-  sandboxes' `sandbox.proxy_port`) carry no session, and taint does not apply to them.
+  (ADR-028), which writes the links. The standalone `openmoat proxy` (the host
+  sandboxes' `sandbox.proxy_port`) applies it the same way to each Claude Code session
+  (ADR-044): the session's `SessionStart` hook issues its sandboxed commands a credential
+  of their own, and the proxy folds that session's calls with the effective policy of
+  the project it started in. Codex's proxy sends no credential, so its traffic is
+  refused there unless `sandbox.proxy_serve_without_credential` serves it, with no
+  session and no taint; `openmoat run -- codex` gives each run its own. Cursor's
+  sandboxed commands never reach the proxy. A request the credential lets through
+  before the session read the secret runs on, re-checked every second like
+  `openmoat run`'s.
   It does not count these as untrusted content: shell network to
   allowed hosts (`gh pr view`, `git pull`), an allowed command that reads secrets at run
   time (a project script), or a command OpenMoat cannot classify. A secret that leaves
@@ -410,8 +418,25 @@ something OpenMoat claims to stop.
   local programs and other runs off it. The credential sits in the agent's environment,
   so every command in the run's sandbox has it; they all are the session. A process of
   the same user outside the sandbox that can read the agent's environment (`ps eww` on
-  some systems, `/proc/<pid>/environ` on Linux) can use the session too. The standalone
-  `openmoat proxy` asks for no credential, so any local process may use it.
+  some systems, `/proc/<pid>/environ` on Linux) can use the session too.
+  The standalone `openmoat proxy` serves only requests with a credential its key signed
+  (ADR-044): the session id, an expiry 24 hours after issue and an HMAC-SHA-256 under
+  `~/.moat/proxy.key`, which `kernel-self` keeps every agent and sandboxed command from
+  reading. A credential names one session, cannot be edited into another or stretched,
+  and is refused once it expires; replacing the key revokes them all. A sandboxed
+  command cannot issue one itself by running the hook: it can read neither the key nor
+  the audit log the issue must be recorded in first. What it does not stop: Claude Code keeps the credential in the session's environment file
+  (`CLAUDE_ENV_FILE`, under `~/.claude/session-env/`) and runs that file's lines before
+  each Bash command, by its own account inlining them into the command line it starts.
+  OpenMoat makes the file owner-only, but a process of the same user that can read
+  another session's file, or the command lines of its shell, can send as that session.
+  A tainted session that does so sends under a clean session's taint. The default
+  policy does not deny reading `~/.claude/session-env/` to sandboxed commands, since
+  whether Claude Code reads the file from inside the sandbox is not documented; a
+  policy that denies it closes that path where Claude Code reads the file outside.
+  `sandbox.proxy_serve_without_credential: true` (a lint warning) serves requests that
+  carry none, as before ADR-044: any local process may then use the proxy, and a
+  session escapes its taint by sending no credential.
 - **The hook relay of `openmoat run` is attack surface (ADR-028).** Hooks inside the run's
   sandbox cannot open `~/.moat`, so they send each payload to the `openmoat run` process
   over the proxy's loopback port with the run's `MOAT_GUARD_TOKEN`, and that process

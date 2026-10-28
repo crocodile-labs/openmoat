@@ -116,6 +116,8 @@ fn codex_layer_agrees_with_every_scenario() {
     };
     let fx = Fixtures::build();
     let port = fx.sb.use_free_proxy_port();
+    // Codex's proxy sends no session credential (ADR-044): served without one.
+    fx.sb.serve_proxy_without_credential();
     fx.sync_with_codex(&codex);
     let _proxy = fx.sb.start_proxy();
     let mut matrix = String::from("\ndifferential matrix (codex sandbox):\n");

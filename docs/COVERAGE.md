@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 41 | 32 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 105 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 21 | 1 | 6 |
-| T9 | Hook / policy tampering by the agent | 367 | 109 | 32 |
+| T9 | Hook / policy tampering by the agent | 370 | 109 | 32 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 28 | 4 | 6 |
 | T12 | Network to unknown hosts | 86 | 17 | 1 |
@@ -1126,6 +1126,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-cat-policy-lock` (attacks): Deny [kernel-self]
 - `T9-read-trust-records` (attacks): Deny [kernel-self]
 - `T9-sqlite-readonly-audit-db` (attacks): Deny [kernel-self]
+- `T9-read-proxy-session-key` (attacks): Deny [kernel-self]
+- `T9-cat-proxy-session-key` (attacks): Deny [kernel-self]
+- `T9-read-moved-proxy-session-key` (attacks): Deny [kernel-self]
 - `T9-read-mcp-pins` (attacks): Deny [kernel-self]
 - `T9-read-moved-audit-db` (attacks): Deny [kernel-self]
 - `T9-agent-anchors-audit-log` (attacks): Deny [kernel-self]

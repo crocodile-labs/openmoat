@@ -91,6 +91,9 @@ pub struct Plan {
     /// The loopback port the host sandboxes send their commands' traffic to,
     /// when the policy opts in.
     pub proxy_port: Option<u16>,
+    /// `sandbox.proxy_serve_without_credential` (ADR-044): `openmoat proxy`
+    /// serves requests that carry no session credential.
+    pub serve_without_credential: bool,
     /// Claude Code's settings.
     pub claude: claude::Generated,
     /// Codex's permissions profile.
@@ -349,6 +352,10 @@ impl Plan {
         Ok(Self {
             default_read_roots,
             proxy_port,
+            serve_without_credential: policy
+                .sandbox
+                .as_ref()
+                .is_some_and(|s| s.proxy_serve_without_credential),
             claude,
             codex,
             cursor: cursor::generate(&ir, proxy_port)?,

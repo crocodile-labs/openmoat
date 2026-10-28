@@ -41,6 +41,7 @@ sandbox:                            # optional: what the host sandboxes may read
   read_roots: ["/usr", "~/.cargo"]
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `openmoat proxy` (§9)
   proxy_allow_ech: false            # optional: let `openmoat proxy` forward encrypted server names (ECH) (§9)
+  proxy_serve_without_credential: false  # optional: let `openmoat proxy` serve requests with no session credential (§9)
   package_min_release_age_days: 7   # optional: `openmoat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
@@ -1005,6 +1006,29 @@ traffic through `openmoat proxy` (§5.2) on `127.0.0.1:<port>` instead. `openmoa
 without `--listen` then uses that port, and the policy lock pins it with the rest of
 the file.
 
+`openmoat proxy` serves sessions only (ADR-044). Every request must carry, in
+`Proxy-Authorization`, a credential issued to one agent session, and is recorded under
+that session and decided with its taint (§4.1) and its share of the connections:
+
+- **Claude Code:** its `SessionStart` hook, which `openmoat init` installs, issues each
+  session one at every start, resume, `/clear` and compaction. It appends
+  `export HTTP_PROXY=http://<credential>@127.0.0.1:<port>` (and `HTTPS_PROXY`,
+  `ALL_PROXY`, lower case too) to the session's `CLAUDE_ENV_FILE`, which Claude Code runs
+  before each Bash command of that session. A credential is accepted for 24 hours.
+- **Codex:** its proxy sends no credential, so `openmoat proxy` refuses what Codex hands
+  on (407). `openmoat run -- codex` gives each run a credential of its own (ADR-027).
+- **Cursor:** its sandboxed commands never reach `openmoat proxy`.
+
+A request without a credential, with a wrong or expired one, gets `407 Proxy
+Authentication Required` (rule `proxy-session`), recorded with no session, before its
+host is decided. `sandbox.proxy_serve_without_credential: true` serves a request that
+carries no credential at all, with no session, as before ADR-044 (a wrong one is still
+refused); `openmoat policy lint`, `doctor` and `status` warn about it, since any local
+process may then use the proxy and a session escapes its taint by sending none.
+Credentials are signed with `~/.moat/proxy.key`, which `openmoat proxy` makes on first
+start and `kernel-self` keeps from every agent; replacing the file revokes every
+credential within a second.
+
 `openmoat proxy` refuses a TLS tunnel whose `ClientHello` carries an encrypted server name
 (ECH, extension `0xfe0d`, or the older ESNI, `0xffce`), rule `proxy-sni`: the server acts
 on the encrypted inner name, so a site the policy does not allow could be reached
@@ -1026,6 +1050,8 @@ on macOS or a systemd user unit on Linux (INSTALL.md). Windows has no user servi
 Codex's own proxy still decides Codex's commands. It hands what it allows on to `openmoat
 proxy` only when Codex starts with `HTTP_PROXY` and `HTTPS_PROXY` set to
 `http://127.0.0.1:<port>`, and its API hosts then need an allow rule (THREAT_MODEL.md §5).
+That traffic carries no session credential, so it also needs
+`sandbox.proxy_serve_without_credential: true`.
 
 What each host enforces for sandboxed commands after `openmoat init` with the default
 policy:

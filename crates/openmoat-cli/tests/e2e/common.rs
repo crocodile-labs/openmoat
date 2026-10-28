@@ -177,6 +177,19 @@ impl Sandbox {
         port
     }
 
+    /// Let `moat proxy` serve requests without a session credential
+    /// (`sandbox.proxy_serve_without_credential`, ADR-044), re-pinned as a
+    /// person would: what a host that cannot send one (Codex) needs.
+    pub fn serve_proxy_without_credential(&self) {
+        let path = self.home.join(".moat/policy.yaml");
+        let mut policy: serde_json::Value =
+            openmoat_core::yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        policy["sandbox"]["proxy_serve_without_credential"] = true.into();
+        std::fs::write(&path, openmoat_core::yaml::to_string(&policy).unwrap()).unwrap();
+        let accepted = self.moat_as_person(&["doctor", "--accept"]);
+        assert!(text(&accepted).contains("re-pinned"), "{}", text(&accepted));
+    }
+
     /// `moat proxy` on the policy's port, stopped when the guard drops.
     pub fn start_proxy(&self) -> RunningProxy {
         let mut child = self

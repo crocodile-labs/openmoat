@@ -18,7 +18,7 @@ fn init_creates_state_and_installs_claude_code_hook() {
     let sb = Sandbox::bare(&[".claude"]);
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
-    assert!(stdout(&out).contains("installed: PreToolUse, ConfigChange →"));
+    assert!(stdout(&out).contains("installed: PreToolUse, ConfigChange, SessionStart →"));
     assert!(sb.home.join(".moat/policy.yaml").is_file());
     assert!(sb.home.join(".moat/audit.db").is_file());
 

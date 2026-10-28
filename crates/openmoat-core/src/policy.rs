@@ -336,6 +336,12 @@ pub struct SandboxSettings {
     /// on the encrypted name, which may be another site than the allowed host.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub proxy_allow_ech: bool,
+    /// Let `moat proxy` serve a request that carries no session credential,
+    /// with no session (ADR-044). Off, such a request gets 407: a session's
+    /// taint and connection share cannot be escaped by sending no credential,
+    /// and other local processes cannot use the proxy. `moat run` ignores it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub proxy_serve_without_credential: bool,
     /// Days a package version must have been published before the package
     /// managers `moat run` starts install it (ADR-030); `0` turns this off,
     /// absent is 7 days ([`Policy::package_min_release_age_days`]).
