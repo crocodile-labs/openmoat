@@ -324,6 +324,7 @@ fn compare(
             expects_ask: expect == Verdict::Ask,
             ok,
             gap: gap.is_some(),
+            held: sandboxed && step.sandboxed.is_some() && ok,
         });
     }
     let outcome = match (

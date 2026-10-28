@@ -25,6 +25,9 @@ pub struct StepResult {
     pub ok: bool,
     /// The step carries a gap marker.
     pub gap: bool,
+    /// The step met the expectation it has where OpenMoat's OS sandbox holds
+    /// the host's commands (`sandboxed:`): the hook leaves it to the sandbox.
+    pub held: bool,
 }
 
 /// One scenario on one host.
@@ -47,16 +50,21 @@ struct Row {
     blocked: usize,
     asked: usize,
     allowed: usize,
+    /// Allowed or passed through by the hook where OpenMoat's OS sandbox holds
+    /// the step, as the scenario expects there (`sandboxed:`).
+    sandboxed: usize,
     passthrough: usize,
     error: usize,
 }
 
 impl Row {
-    fn count(&mut self, strictest: Answer) {
+    /// `held`: an allow or passthrough that the OS sandbox holds instead.
+    fn count(&mut self, strictest: Answer, held: bool) {
         self.runs += 1;
         *match strictest {
             Answer::Deny => &mut self.blocked,
             Answer::Ask => &mut self.asked,
+            Answer::Allow | Answer::Passthrough if held => &mut self.sandboxed,
             Answer::Allow => &mut self.allowed,
             Answer::Passthrough => &mut self.passthrough,
             Answer::Error => &mut self.error,
@@ -68,6 +76,7 @@ impl Row {
         self.blocked += other.blocked;
         self.asked += other.asked;
         self.allowed += other.allowed;
+        self.sandboxed += other.sandboxed;
         self.passthrough += other.passthrough;
         self.error += other.error;
     }
@@ -137,10 +146,11 @@ impl Scorecard {
             .map(|s| s.got)
             .max()
             .unwrap_or(Answer::Allow);
+        let held = run.steps.iter().any(|s| s.held);
         self.categories
             .entry(category.to_owned())
             .or_default()
-            .count(strictest);
+            .count(strictest, held);
         if category == WORKFLOWS {
             self.workflows
                 .entry(id.to_owned())
@@ -192,14 +202,14 @@ impl fmt::Display for Scorecard {
         let line = |f: &mut fmt::Formatter<'_>, name: &str, r: &Row| {
             writeln!(
                 f,
-                "{name:<16} {:>5} {:>8} {:>6} {:>8} {:>12} {:>6}",
-                r.runs, r.blocked, r.asked, r.allowed, r.passthrough, r.error
+                "{name:<16} {:>5} {:>8} {:>6} {:>8} {:>10} {:>12} {:>6}",
+                r.runs, r.blocked, r.asked, r.allowed, r.sandboxed, r.passthrough, r.error
             )
         };
         writeln!(
             f,
-            "{:<16} {:>5} {:>8} {:>6} {:>8} {:>12} {:>6}",
-            "category", "runs", "blocked", "asked", "allowed", "passthrough", "error"
+            "{:<16} {:>5} {:>8} {:>6} {:>8} {:>10} {:>12} {:>6}",
+            "category", "runs", "blocked", "asked", "allowed", "sandboxed", "passthrough", "error"
         )?;
         let mut total = Row::default();
         for (category, row) in &self.categories {
