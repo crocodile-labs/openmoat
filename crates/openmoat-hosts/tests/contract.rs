@@ -6,7 +6,9 @@ use std::path::Path;
 
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
-use openmoat_hosts::{GUARD_BUDGET_S, Host, HostError, reason_line};
+use openmoat_hosts::{
+    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HookLayout, Host, HostError, reason_line,
+};
 use serde_json::json;
 
 /// Every host, the installable ones and those that run another's hook.
@@ -161,6 +163,42 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
             .map(|h| h.event)
             .collect();
         assert_eq!(blocks, blocking, "{host:?}");
+    }
+}
+
+/// A host that runs OpenMoat through a plugin it loads says how the plugin
+/// reports that it loaded, and the plugin runs `guard --heartbeat --host
+/// <id>` (ADR-042); a host that runs a hook command has nothing to report.
+#[test]
+fn every_plugin_reports_that_it_loaded() {
+    for host in Host::ALL {
+        let install = host.spec().install.as_ref().unwrap();
+        let plugin = match install.hook_file {
+            HookLayout::Owned(file) | HookLayout::Plugin(file) => Some(file),
+            HookLayout::Entries(_) | HookLayout::Yaml(_) => None,
+        };
+        assert_eq!(install.heartbeat.is_some(), plugin.is_some(), "{host:?}");
+        let (Some(file), Some(heartbeat)) = (plugin, &install.heartbeat) else {
+            continue;
+        };
+        let call = format!(
+            r#"["guard", "{HEARTBEAT_FLAG}", "--host", "{}"]"#,
+            host.id()
+        );
+        assert!(file.source.contains(&call), "{host:?} plugin has no {call}");
+        assert!(!heartbeat.program.is_empty(), "{host:?}");
+        for activity in heartbeat.activity {
+            assert!(
+                activity.dir.first().is_some_and(|d| *d != Activity::ANY),
+                "{host:?}: an activity directory starts with a name"
+            );
+            assert!(
+                activity
+                    .dir
+                    .iter()
+                    .all(|d| !d.is_empty() && !d.contains(['/', '\\']))
+            );
+        }
     }
 }
 

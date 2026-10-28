@@ -101,19 +101,44 @@ not change the exit code. The version is read once with `<program> --version`, a
 show them, `openmoat status --format json` prints the levels (`agents`), a policy update
 waiting for `openmoat policy upgrade` (`policy_update`, or `null`), the pinned files that
 changed (`lock_drift`), the MCP server definitions that differ from their pins
-(`mcp_changes`) and the project settings warnings (`project_settings`), and `openmoat doctor --format json` every check (`ok`, `problem`, `warning` or `note`, with its name and detail), with the same
+(`mcp_changes`), the project settings warnings (`project_settings`) and whether each
+agent loaded OpenMoat's plugin (`plugins`, below), and `openmoat doctor --format json` every check (`ok`, `problem`, `warning` or `note`, with its name and detail), with the same
 exit code as the text:
 
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
 | `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
-| `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
+| `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or its entry lacks the agent's fail-closed key (`fail_closed: true` for Hermes Agent, `failClosed: true` for Cursor: the agent would run a call whose hook failed; run `openmoat init`), or the agent ran without loading OpenMoat's plugin (below), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
 Agents that are not set up or not found keep their `·` line. `openmoat status --format
 json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `level` is
 `hook-and-os-sandbox`, `hook-only`, `not-protected`, `not-set-up` or `not-found`) and
 exits 0; the text form exits 64 when something needs fixing.
+
+### Did the agent load OpenMoat's plugin?
+
+OpenClaw, pi and OpenCode run OpenMoat through a plugin they load, and each starts
+without a plugin it cannot load, running every call unchecked. So the plugin runs
+`openmoat guard --heartbeat --host <id>` as it loads, which records the time in
+`loaded/<id>.json` in the state directory (owner-only; the agent, the time and the
+OpenMoat release, nothing else). Under the agent's hook line, `openmoat status` and
+`openmoat doctor` then print one of:
+
+| Line | Means |
+|---|---|
+| `· plugin loaded: last report or call <time>` | the plugin reported, or sent a call the guard decided, after the last change that could have stopped it loading |
+| `· plugin not loaded yet since OpenMoat wrote it (<time>)` (or `since <agent> was updated`) | neither since `openmoat init` wrote the plugin, or since the agent's program on the search path changed (an update), and the agent has not run since as far as OpenMoat can tell: start it, or restart it if it was running. A note, not a problem: this is what a fresh `init` shows |
+| `! plugin has not reported loading since …, but <agent> has run since (last <time>): its tool calls may run unchecked` | the agent wrote a session since that change without the plugin reporting: it ran without loading it (`pi --no-extensions`, an error loading it) or a process from before is still running. The protection level is `not protected` until the plugin reports. Restart the agent; if the line stays, look for the plugin error in its log |
+
+"Has run" is known only where the agent writes a file of its own for each session and
+nothing else: pi's session files. OpenClaw and OpenCode keep their sessions in a database
+that commands loading no plugin write too, so for them the line stays a note.
+`openmoat status --format json` lists the same as `plugins`: `host`, `state`
+(`reported`, `not-yet` or `missing`), `since` (`change`: `plugin-written` or
+`host-updated`, `at_ms`) and `at_ms` or `active_ms`. Inside `openmoat run` the plugin
+cannot write its report; the run's decisions for the agent count instead. The report
+is information for you, not a check: nothing is decided from it.
 
 ## A call is denied
 
@@ -376,7 +401,8 @@ these takes one command in your own terminal (agents are denied all of them):
   retry. A call OpenMoat defers is left to OpenCode's own permission rules. `opencode
   --pure` and `OPENCODE_PURE=1` (OpenCode 1), and `-openmoat` in a configuration's
   `plugins` (OpenCode 2), start OpenCode without OpenMoat's plugin; `openmoat status`
-  reports your own configuration doing that as not protected and warns about a project's.
+  reports your own configuration doing that as not protected and warns about a project's,
+  and says "plugin not loaded yet" until OpenCode has loaded the plugin.
 - **Gemini CLI**: `openmoat init --hosts gemini-cli` adds one `BeforeTool` hook named
   `openmoat` to `~/.gemini/settings.json` (`$GEMINI_CLI_HOME/.gemini` when that is set);
   restart Gemini CLI so it loads it. An `ask` arrives as Gemini CLI's own confirmation.
@@ -393,6 +419,9 @@ these takes one command in your own terminal (agents are denied all of them):
   `openmoat allow --last`. Hermes saves `hermes model` and display choices in the same
   file without affecting OpenMoat; any other change there, or a hook you approve in
   Hermes's own prompt, denies every call until you run `openmoat doctor --accept`.
+  Hermes gives each hook at most `plugins.hook_callback_timeout` (30 s by default) and
+  then blocks the call, as the guard does after its own 30 s; `openmoat init` leaves
+  that setting as it is.
 - **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
   file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). An
   `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
@@ -456,7 +485,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat run [--isolate] [--write PATH]… [--netns auto\|require] [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; on Linux it does not protect `.env`, `.git` or `.moat` inside the project); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp; `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
 | `openmoat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own; an allowed host is reached on ports 443 and 80 unless a `net` or `fetch` rule names `host:port`, and a plain-HTTP secret goes to port 80 unless it sets `port` ([POLICY.md](POLICY.md#52-openmoat-proxy)) |
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
-| `openmoat guard --host <id>` | the hook entry point; agents call it, you do not |
+| `openmoat guard --host <id>` | the hook entry point; agents call it, you do not. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
 Exit codes: 0 allow or success, 1 the agent `openmoat run` started exited non-zero, 2 deny,
 3 unresolved ask (`policy check`), 64 usage or configuration error. `openmoat guard` never

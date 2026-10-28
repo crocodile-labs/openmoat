@@ -188,6 +188,19 @@ locally.
   it; if it is used in a way machete cannot see, list it under
   `[package.metadata.cargo-machete] ignored` with a comment saying where it is used.
 
+Two more checks cover the JavaScript plugins OpenMoat installs into OpenClaw, pi and
+OpenCode (`crates/openmoat-hosts/src/host/*/integration/`):
+
+- **Plugin behaviour:** `cargo test -p openmoat-hosts --test js_plugins` runs each
+  plugin under Node against a stand-in for its host and for `openmoat guard`
+  (`tests/js_plugins/`). It is part of the gate's tests and skips, saying so, when
+  `node` is not on `PATH`.
+- **Plugin types:** `scripts/ci/check-js.sh` type-checks the plugins (`// @ts-check`,
+  strict, `crates/openmoat-hosts/jsconfig.json`) with TypeScript and `@types/node` at
+  pinned versions, installed into a throwaway directory. It needs `npm` and the
+  registry, so the gate does not run it; CI does. Describe a host's objects with JSDoc
+  types rather than `any`, and keep the plugins free of dependencies.
+
 ## Testing with real agents
 
 Most end-to-end tests hand `openmoat guard` a hook payload the test wrote. CI's

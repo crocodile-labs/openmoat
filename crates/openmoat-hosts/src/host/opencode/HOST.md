@@ -152,6 +152,18 @@ call runs unchecked when OpenCode does not load the plugin: OpenCode 1's `--pure
 plugin, an error loading it (OpenCode logs it and goes on), an OpenCode started with
 another `XDG_CONFIG_HOME`, `OPENCODE_CONFIG_DIR` or `HOME`, or OpenCode before 1.3.4.
 
+OpenCode 1 loads the plugin when it first serves a project; a plugin that fails to
+import is a session error ("Failed to load plugin …"), and one whose function throws is
+only logged; either way it is skipped (`Plugin.state` in `src/plugin/index.ts`, 1.19.4).
+When OpenCode loads it, through OpenCode 1's `server` or OpenCode 2's `setup`, the
+plugin runs `openmoat guard --heartbeat --host opencode`
+([ADR-042](../../../../../docs/adr/ADR-042-plugins-report-loading.md)), and `openmoat
+status` and `openmoat doctor` say whether it has reported, or sent a call the guard
+decided, since OpenMoat wrote it or the `opencode` on the search path changed: "plugin
+loaded", or the note "plugin not loaded yet". OpenCode keeps its sessions in a database
+that commands loading no plugin write too, so OpenMoat cannot tell an OpenCode that ran
+without the plugin from one that has not run: the note stays a note.
+
 ## Known gaps
 
 No OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says

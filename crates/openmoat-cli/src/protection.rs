@@ -103,6 +103,12 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                             config.dir(),
                             &config.settings_path,
                         )
+                        .map(|off| format!("hook turned off by {off}"))
+                        .or_else(|| {
+                            crate::heartbeat::check(home, &config).and_then(|loaded| {
+                                crate::heartbeat::not_loaded(host.display_name(), &loaded)
+                            })
+                        })
                     },
                     || sandbox(home, host, plan.as_ref(), lock.as_ref()),
                 ),
@@ -119,22 +125,20 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
 }
 
 /// The level from the hook's state, the agent's presence, whether `moat init`
-/// skipped it, and (read only when the hook is installed) whether the agent's
-/// own settings turn the hook off and its sandbox check.
+/// skipped it, and (read only when the hook is installed) why the installed
+/// hook does not run (the agent's own settings turn it off, or its plugin has
+/// not loaded though the agent ran, ADR-042) and its sandbox check.
 fn level(
     hook: &HookState,
     present: bool,
     skipped: bool,
-    switched_off: impl FnOnce() -> Option<String>,
+    not_running: impl FnOnce() -> Option<String>,
     sandbox: impl FnOnce() -> Result<(), String>,
 ) -> (Level, Option<String>) {
     let not_protected = |why: &str| (Level::NotProtected, Some(why.to_owned()));
     match hook {
-        HookState::Installed => match switched_off() {
-            Some(off) => (
-                Level::NotProtected,
-                Some(format!("hook turned off by {off}")),
-            ),
+        HookState::Installed => match not_running() {
+            Some(why) => (Level::NotProtected, Some(why)),
             None => match sandbox() {
                 Ok(()) => (Level::HookAndOsSandbox, None),
                 Err(why) => (Level::HookOnly, Some(why)),
@@ -146,6 +150,7 @@ fn level(
         HookState::Stale { .. } => not_protected("hook out of date"),
         HookState::Unreadable(_) => not_protected("hook file unreadable"),
         HookState::Unapproved(_) => not_protected("hook not approved by the agent"),
+        HookState::FailsOpen(_) => not_protected("hook runs the call when it fails"),
     }
 }
 
@@ -310,7 +315,7 @@ mod tests {
             &HookState::Installed,
             true,
             false,
-            || Some("settings.json: `disableAllHooks`".to_owned()),
+            || Some("hook turned off by settings.json: `disableAllHooks`".to_owned()),
             || panic!("sandbox read for a hook that is off"),
         );
         assert_eq!(got.0, Level::NotProtected);
@@ -318,6 +323,25 @@ mod tests {
             got.1.as_deref(),
             Some("hook turned off by settings.json: `disableAllHooks`")
         );
+    }
+
+    /// ADR-042: an agent that ran since its plugin was written, without the
+    /// plugin reporting, is not protected, whatever its sandbox.
+    #[test]
+    fn an_installed_plugin_the_agent_did_not_load_is_not_protected() {
+        let why =
+            "plugin not loaded since it was written 2026-10-27 10:00 UTC, though pi has run since";
+        let got = level(
+            &HookState::Installed,
+            true,
+            false,
+            || Some(why.to_owned()),
+            || panic!("sandbox read for a hook that does not run"),
+        );
+        assert_eq!(got, (Level::NotProtected, Some(why.to_owned())));
+        let fails_open = HookState::FailsOpen("lacks `fail_closed: true`".to_owned());
+        let got = level(&fails_open, true, false, || None, || Ok(()));
+        assert_eq!(got.0, Level::NotProtected);
     }
 
     #[test]

@@ -106,6 +106,20 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo build --locked -p openmoat-core --target wasm32-unknown-unknown
 
+  # The JavaScript plugins OpenMoat installs into OpenClaw, pi and OpenCode are
+  # type-checked strictly (`// @ts-check`, no emit); their Node harnesses run in
+  # the quality gate's `cargo test` on every OS.
+  js-plugins:
+    name: JavaScript plugins type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node --version
+      - run: scripts/ci/check-js.sh
+
   # Not a required check: shared runners are noisy. Warns above the 15 ms p95
   # budget, fails above 3x it (scripts/ci/guard-latency.py), and the same late in
   # a 5,000-call session (scripts/ci/guard-session-latency.py).

@@ -13,6 +13,7 @@ mod environment;
 mod exit;
 mod guard_relay;
 mod hangs;
+mod heartbeat;
 mod home;
 mod install;
 mod integrity;

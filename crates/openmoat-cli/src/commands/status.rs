@@ -32,6 +32,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
             .unwrap_or_default();
         render::json(&serde_json::json!({
             "agents": protection::report(&home, &binary)?,
+            "plugins": crate::heartbeat::all(&home, &binary),
             "policy_update": update,
             "lock_drift": drift,
             "mcp_changes": mcp_changes(&home, &binary).unwrap_or_default(),
@@ -289,7 +290,9 @@ fn hooks(
             .host_present()
             .then(|| crate::install::host_version::unsupported(host))
             .flatten();
-        let line = match (config.state(binary), unsupported) {
+        let state = config.state(binary);
+        let installed = state == HookState::Installed && unsupported.is_none();
+        let line = match (state, unsupported) {
             (_, Some(why)) => {
                 healthy = false;
                 format!("✗ not protected: {why}")
@@ -318,7 +321,12 @@ fn hooks(
                 healthy = false;
                 format!("✗ {}", crate::install::stale_hint(&command))
             }
-            (HookState::Unreadable(error) | HookState::Unapproved(error), None) => {
+            (
+                HookState::Unreadable(error)
+                | HookState::Unapproved(error)
+                | HookState::FailsOpen(error),
+                None,
+            ) => {
                 healthy = false;
                 format!("✗ {error}")
             }
@@ -331,6 +339,19 @@ fn hooks(
         )?;
         if let Some(advisory) = advisory {
             writeln!(out, "{:<16} ! {advisory}", host.display_name())?;
+        }
+        // Whether the host loaded the plugin (ADR-042): a warning, like the
+        // protection line it changes, that leaves `healthy` alone.
+        if let Some(loaded) = installed
+            .then(|| crate::heartbeat::check(home, &config))
+            .flatten()
+        {
+            let (mark, text) = crate::heartbeat::line(host.display_name(), &loaded);
+            let mark = match mark {
+                crate::heartbeat::Mark::Note => "·",
+                crate::heartbeat::Mark::Warning => "!",
+            };
+            render::line(out, &format!("{:<16} {mark} {text}", host.display_name()))?;
         }
     }
     if !not_found.is_empty() {

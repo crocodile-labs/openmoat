@@ -47,6 +47,9 @@ const MIN_TAINT_TIME: Duration = Duration::from_secs(1);
 
 pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
+    if args.heartbeat {
+        return heartbeat(host);
+    }
     deny_when_over_budget(host, Instant::now());
     // A panic would exit 101, which Claude Code treats as a non-blocking hook
     // failure, i.e. the call would proceed. Turn it into an explicit deny.
@@ -56,6 +59,24 @@ pub fn run(args: &GuardArgs) -> Code {
     }
     let decision = kernel_error(&anyhow::Error::msg("internal error while deciding"));
     respond(host, &HookEvent::default(), &decision)
+}
+
+/// `--heartbeat`: the plugin's report that its host loaded it (ADR-042). No
+/// call is decided and nothing is read from stdin or written to stdout; a
+/// report that cannot be written exits 2, which the plugin ignores. Inside
+/// `openmoat run` the sandbox holds no state directory: the report is skipped,
+/// and the run's decisions for the host show the plugin loaded instead.
+fn heartbeat(host: Host) -> Code {
+    if guard_relay::configured(&|var| std::env::var(var).ok()).is_some() {
+        return Code::Ok;
+    }
+    match Home::locate().and_then(|home| crate::heartbeat::report(&home, host, time::now_ms())) {
+        Ok(()) => Code::Ok,
+        Err(error) => {
+            eprintln!("moat: could not record that {host} loaded the plugin: {error:#}");
+            Code::Deny
+        }
+    }
 }
 
 /// A hook the host times out counts as failed, and most hosts then run the

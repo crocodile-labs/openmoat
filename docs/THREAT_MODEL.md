@@ -527,7 +527,7 @@ something OpenMoat claims to stop.
   | Ours: malformed or truncated payload, unknown event | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 | deny, exit 2 |
   | Ours: tool OpenMoat does not know | defer (no output: Claude Code's own prompt and rules decide), rule `ungoverned`, recorded | as Claude Code | a tool naming a path is checked as writing it (reading it only for Cursor's listing and search tools); otherwise `tool.unknown` with whatever else its arguments name (paths and URLs by their look, commands), which asks (sent as a deny) | every tool reaches the plugin; one OpenMoat does not know is `tool.unknown` together with the paths, URLs and commands its arguments name (POLICY.md §6), which defers when they name nothing denied | every tool reaches the hook (matcher `*`); one OpenMoat does not know is `tool.unknown` with what its arguments name, as OpenClaw's; its to-do, tracker, plan, skill and subagent tools are `ungoverned` | every tool reaches the hook (no matcher); one OpenMoat does not know is `tool.unknown` with what its arguments name, as OpenClaw's; its to-do, clarify, session-search, skill-list and subagent tools are `ungoverned` | as Claude Code |
   | Ours: no decision within 30 s (`GUARD_BUDGET_S`) | deny, exit 2; listed in `~/.moat/guard-hangs.log`, not the audit log | same | same | same | same | same | same |
-  | Ours: hook missing, out of date or naming a binary that does not exist | `openmoat status` and `openmoat doctor`: `not protected` | same | same | same (the plugin file and its `openclaw.json` entries) | same | same, and a hook its `shell-hooks-allowlist.json` does not approve | not applicable: `cn` fires no hooks (below) |
+  | Ours: hook missing, out of date or naming a binary that does not exist | `openmoat status` and `openmoat doctor`: `not protected` | same | same, and an entry without `failClosed: true` | same (the plugin file and its `openclaw.json` entries); a plugin that has not reported loading since it was written or OpenClaw changed is a note (ADR-042) | same | same, and a hook its `shell-hooks-allowlist.json` does not approve or an entry without `fail_closed: true` | not applicable: `cn` fires no hooks (below) |
 
   What `openmoat status` and `openmoat doctor` print as each host's `known gaps`, and what the
   host does when its hook fails, generated from its `HostSpec` (`gaps`,
@@ -538,12 +538,12 @@ something OpenMoat claims to stop.
   - **Claude Code.** Known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295 calls run unchecked if the hook binary is missing or crashes. When the hook fails: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`openmoat init` sets `onFailure: "block"`).
   - **Codex.** Known gaps: web search and hosted tools are not hooked; asks become denies; Codex skips a new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = false` turns hooks off (`openmoat status` and `doctor` report that); calls run unchecked if the hook binary is missing or crashes. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2 (or 2 with nothing on stderr), or times out (default 600 s).
   - **Cursor.** Known gaps: commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined; file-tool asks become denies; Task and tools that name no path are not hooked; a failed hook blocks the call. When the hook fails: runs the call when the hook is missing, crashes or times out, unless the hook entry sets `failClosed: true`; then it blocks the call.
-  - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; a parameter rewrite by another plugin and OpenClaw's process input are not checked; calls run unchecked if the Gateway does not load the plugin; a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin.
+  - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; parameters another plugin changes are undone, except where that plugin also asks for approval (OpenClaw then keeps the parameters the person approved) or runs after OpenMoat's last handler, at the same lowest priority or a lower one (`-Infinity`); OpenClaw's process input is not checked; calls run unchecked if the Gateway does not load the plugin (`openmoat status` and `doctor` say when it has not reported loading since it or OpenClaw changed); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin (a load error leaves the plugin `status: "error"` and the Gateway running).
   - **GitHub Copilot CLI.** Known gaps: a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it); MCP tools are told apart from built-in ones only by name, so a changed server is traced by its `<server>-` prefix; asks become denies in autopilot; no OS sandbox is configured. When the hook fails: blocks the call when the hook cannot start, crashes or exits non-zero; runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) or its file is gone.
-  - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension (`openmoat status` and `doctor` report a settings entry that turns it off, not `--no-extensions`); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
+  - **pi.** Known gaps: no OS sandbox from OpenMoat; pi has no approval step of its own, so a call OpenMoat defers runs; an input change by an extension pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are not checked; a trusted project's `.pi` settings and extensions load with the agent's rights; calls run unchecked if pi does not load the extension (`openmoat status` and `doctor` report a settings entry that turns it off, and a session pi wrote since the extension or pi changed without the extension reporting that it loaded); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's extension throws (pi's `tool_call` fails closed), and the extension blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when pi does not load the extension (`--no-extensions`, or an `extensions` entry in pi's or a trusted project's settings that turns it off).
   - **Gemini CLI.** Known gaps: no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings hooks at all and asks the person before every tool instead; a project's `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments (`openmoat status` and `doctor` warn about one); extension hooks run beside OpenMoat's; a hook that times out lets the call run. When the hook fails: runs the call when the hook times out, is killed by a signal or exits 1 (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits with any other code and prints something, as a missing `openmoat` does.
-  - **OpenCode.** Known gaps: no OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says how to approve it; OpenCode before 1.3.4 is not supported; other plugins and custom tools run in OpenCode's process with the agent's rights, and a project's load at start with no prompt; a project's `-openmoat` turns OpenMoat off in OpenCode 2; OpenCode 2's `--auto` approves OpenMoat's asks; the person's `!` shell commands are not checked; calls run unchecked if OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws (OpenCode's `tool.execute.before` and `execute.before` fail closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when OpenCode does not load the plugin (OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins`, or an error loading it).
-  - **Hermes Agent.** Known gaps: no OS sandbox from OpenMoat; what an `execute_code` script does itself is not checked (its tool calls are); a plugin, another hook's `modify` or tool middleware can rewrite a call's arguments after the check; terminal commands on a remote backend (docker, ssh, modal, …) are checked as local ones; the in-session `/yolo` toggle and `hermes -z` approve an ask unseen without OpenMoat seeing it; relative paths are checked against the Hermes process's directory, not the session's; another profile, or `HERMES_SAFE_MODE=1`, runs without the hook; a changed `config.yaml` is caught on the next call. When the hook fails: blocks the call when the hook cannot start, times out, exits non-zero without a decision or prints something that is not JSON (`fail_closed: true`, which `openmoat init` sets); runs every call unchecked when the hook is not registered: missing from `config.yaml` or from `shell-hooks-allowlist.json` in a gateway, cron or ACP session, another profile, or `HERMES_SAFE_MODE=1`.
+  - **OpenCode.** Known gaps: no OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says how to approve it; OpenCode before 1.3.4 is not supported; other plugins and custom tools run in OpenCode's process with the agent's rights, and a project's load at start with no prompt; a project's `-openmoat` turns OpenMoat off in OpenCode 2; OpenCode 2's `--auto` approves OpenMoat's asks; the person's `!` shell commands are not checked; calls run unchecked if OpenCode does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error; `openmoat status` and `doctor` say when it has not reported loading since it or OpenCode changed); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws (OpenCode's `tool.execute.before` and `execute.before` fail closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer within 45 s; runs the call unchecked when OpenCode does not load the plugin (OpenCode 1's `--pure` or `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins`, or an error loading it).
+  - **Hermes Agent.** Known gaps: no OS sandbox from OpenMoat; what an `execute_code` script does itself is not checked (its tool calls are); a plugin, another hook's `modify` or tool middleware can rewrite a call's arguments after the check; terminal commands on a remote backend (docker, ssh, modal, …) are checked as local ones; the in-session `/yolo` toggle and `hermes -z` approve an ask unseen without OpenMoat seeing it; relative paths are checked against the Hermes process's directory, not the session's; another profile, or `HERMES_SAFE_MODE=1`, runs without the hook; an internal error in Hermes's hook dispatcher runs the call unchecked; a changed `config.yaml` is caught on the next call. When the hook fails: blocks the call when the hook cannot start, times out, exits non-zero without a decision or prints something that is not JSON (`fail_closed: true`, which `openmoat init` sets), and when it has not answered within `plugins.hook_callback_timeout` (30 s by default); runs every call unchecked when the hook is not registered: missing from `config.yaml` or from `shell-hooks-allowlist.json` in a gateway, cron or ACP session, another profile, or `HERMES_SAFE_MODE=1`; runs a call unchecked when Hermes's own hook dispatcher raises an error, which it catches and proceeds past.
   - **Continue CLI.** Known gaps: the released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls; run it under `openmoat run`. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s).
   <!-- /generated -->
 
@@ -563,6 +563,16 @@ something OpenMoat claims to stop.
   call the plugin sends, not when the Gateway reloads. Files an `$include` in
   `openclaw.json` merges in are not pinned. OpenClaw versions before 2026.5.6 skip the
   hook for skill commands ([CVE-2026-53845][cve-2026-53845], GHSA-68xw-r643-9p5w).
+  A plugin that fails to load (a syntax error, an API OpenClaw dropped, a broken Node)
+  is recorded with `status: "error"` and the Gateway starts without it; with no
+  `before_tool_call` handler OpenClaw runs every call. The plugin therefore reports
+  loading (`openmoat guard --heartbeat --host openclaw`, ADR-042), and `openmoat status`
+  and `openmoat doctor` say "plugin not loaded yet" until it has reported, or sent a
+  call, since `openmoat init` wrote it or the `openclaw` on the search path changed.
+  OpenClaw keeps its sessions in a database its sign-in commands write too, so OpenMoat
+  cannot tell a Gateway that ran without the plugin from one that has not run: for
+  OpenClaw this stays a note, not "not protected". The report is information, not a
+  check: an agent that already runs unchecked could forge one.
 - **Gemini CLI: what its hook leaves open.** Gemini CLI has no fail-closed setting, so
   a `BeforeTool` hook that times out or is killed lets the call run; `guard` denies on
   its own after 30 s, well inside the 600 s `openmoat init` sets. Gemini CLI runs no
@@ -604,8 +614,15 @@ something OpenMoat claims to stop.
   `openmoat status` and `openmoat doctor` report a hook it does not approve. With
   `fail_closed: true`, which `openmoat init` sets, a hook that cannot start, times out,
   exits non-zero without a decision or prints something that is not a JSON object
-  blocks the call; Hermes's own dispatcher still lets a call run when it raises an
-  exception itself, which takes a Hermes bug. `HERMES_SAFE_MODE=1`, Hermes's private
+  blocks the call; Hermes reads any other value of the key as `false`, and `openmoat
+  status` and `openmoat doctor` report OpenMoat's entry without it as not protected.
+  Hermes runs the shell hook as a plugin callback under `plugins.hook_callback_timeout`
+  (30 s by default), after which it blocks the call: the limit that ends first, equal to
+  the guard's own 30 s budget, so a slow call is blocked by one or the other. Hermes's
+  own dispatcher still lets a call run when it raises an exception itself
+  (`_pre_dispatch_guards` in `model_tools.py` and `_pre_tool_block` in
+  `agent/tool_executor.py` catch it and go on), which takes a Hermes bug and which no
+  hook can see. `HERMES_SAFE_MODE=1`, Hermes's private
   safe-worker mode and every profile other than the one `openmoat init` set up run no
   OpenMoat hook; `kernel-self` denies the agent setting `HERMES_SAFE_MODE`, writing the
   home's `config.yaml`, allowlist, `.env`, `active_profile`, plugins and hooks, and
@@ -630,10 +647,18 @@ something OpenMoat claims to stop.
   `config.yaml`) the ask is a deny; the in-session `/yolo` toggle and `hermes -z` are not
   visible to the hook. There is no OS sandbox from OpenMoat for Hermes Agent; run it under
   `openmoat run`, or set its `terminal.backend` to a container.
-- **OpenClaw tools OpenMoat does not check.** Another plugin's `before_tool_call` can
-  rewrite a call's parameters after OpenMoat saw them (OpenClaw gives each handler the
-  original call; only an approval freezes them), and plugins run inside the Gateway
-  with its rights. `process` input to a running `exec` session and Code Mode `exec`
+- **OpenClaw tools OpenMoat does not check.** OpenClaw runs `before_tool_call`
+  handlers highest priority first, gives each the call as it came, and runs the
+  `params` of the last handler that returns some; a block is final, and the first
+  approval request fixes the parameters (`runBeforeToolCall`, `src/plugins/hooks.ts`).
+  OpenMoat's plugin decides at the highest priority and returns the parameters it
+  decided on at the lowest (ADR-041), so another plugin's change is undone and the call
+  that runs is the one OpenMoat checked. Two cases remain, as OpenClaw gives a plugin no
+  way to see the merged result: a plugin that changes the call and asks for approval in
+  the same answer keeps its change once a person approves its request (unchecked by
+  OpenMoat), and a plugin registered at the same lowest priority after OpenMoat's, or at
+  a lower one (`-Infinity`), runs after it. A change another plugin meant is undone too. Plugins run inside the Gateway
+  with its rights and can change what any code there does. `process` input to a running `exec` session and Code Mode `exec`
   are `unparseable`, so they are left to OpenClaw; so is `exec` on Windows
   (PowerShell), and `nodes` `invoke`, which runs a command on a paired device, where
   no rule of this machine applies. Other `nodes` actions that act on a device (camera,
@@ -673,6 +698,13 @@ something OpenMoat claims to stop.
   the sandbox denies those writes to pi itself too, so pi cannot save its settings or
   a trust decision there. A project's
   `.pi/settings.json`, `.pi/extensions/` and `.pi/mcp.json` ask (`runs-later`).
+  An extension that fails to load is a diagnostic and the session starts without it.
+  The extension reports loading (`openmoat guard --heartbeat --host pi`, ADR-042):
+  `openmoat status` and `openmoat doctor` say "plugin not loaded yet", a note, until it
+  has reported or sent a call since `openmoat init` wrote it or the `pi` on the search
+  path changed, and once pi has written a session since without either (pi with
+  `--no-extensions`, or an extension that failed), they warn and report pi as not
+  protected.
 - **pi tools OpenMoat does not check.** pi runs `tool_call` handlers in extension
   load order and lets each change the call's input; an extension loaded after
   OpenMoat's (a pi package, a built-in extension) can change it after OpenMoat saw
@@ -690,8 +722,11 @@ something OpenMoat claims to stop.
   `extensions` entry in pi's `settings.json` that excludes OpenMoat's extension
   (`-extensions/openmoat.js`, `!*.js`) makes `openmoat status` and `openmoat doctor`
   report pi as not protected, and one in a project's `.pi/settings.json`, or an
-  extension in its `.pi/extensions/`, is warned about; `pi --no-extensions` cannot be
-  seen. There is no OS sandbox from OpenMoat for pi;
+  extension in its `.pi/extensions/`, is warned about; `pi --no-extensions` is seen
+  only afterwards, as a session written without the extension reporting (above). The
+  extension does not freeze the input it checked, as OpenCode's plugin does: pi
+  documents changing it as a feature, and a frozen input would block every call another
+  extension changes. There is no OS sandbox from OpenMoat for pi;
   run pi under `openmoat run` for one.
 - **OpenCode, when its hook fails.** OpenCode has no command hook either: its "hook"
   is OpenMoat's plugin (`crates/openmoat-hosts/src/host/opencode/integration/openmoat.js`,
@@ -736,7 +771,12 @@ something OpenMoat claims to stop.
   pin would stop nothing in OpenCode, and OpenCode rewrites its global file itself.
   `openmoat init`, `status` and `doctor` ask the `opencode` on `PATH` for its version
   and do not set up, or report as not protected, one before 1.3.4. Setting
-  `XDG_CONFIG_HOME` or `HOME` for a nested `opencode` is not denied.
+  `XDG_CONFIG_HOME` or `HOME` for a nested `opencode` is not denied. The plugin reports
+  loading from `server` and from `setup` alike (`openmoat guard --heartbeat --host
+  opencode`, ADR-042), and `openmoat status` and `openmoat doctor` say "plugin not loaded
+  yet", a note, until it has reported or sent a call since `openmoat init` wrote it or
+  the `opencode` on the search path changed; OpenCode keeps its sessions in a database
+  that commands loading no plugin write too, so the note cannot become a warning.
 - **OpenCode tools OpenMoat does not check.** OpenCode hands every plugin's hook the
   same object, and the tool runs with what it holds after the last plugin: OpenCode 1's
   `args`, OpenCode 2's `tool` and `input`. Plugins in OpenCode 1's global `plugin` list

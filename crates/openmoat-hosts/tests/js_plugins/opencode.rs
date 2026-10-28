@@ -1,43 +1,15 @@
 //! OpenMoat's OpenCode plugin (`src/host/opencode/integration/openmoat.js`)
-//! run under Node against a stand-in for `openmoat guard`
-//! (`tests/opencode_plugin/harness.mjs`), as OpenCode 1 and as OpenCode 2
-//! load it: a deny throws the guard's reason, an allow or no answer lets the
-//! call run, an ask is a block on OpenCode 1 and OpenCode's own prompt on
-//! OpenCode 2, every other outcome throws, and the checked call cannot change
-//! afterwards, not by a plugin that runs later either.
-//!
-//! The test skips, saying why, when `node` is not on the search path.
-
-use std::path::{Path, PathBuf};
-use std::process::Command;
+//! run under Node against a stand-in for `openmoat guard` (`opencode.mjs`),
+//! as OpenCode 1 and as OpenCode 2 load it: a deny throws the guard's reason,
+//! an allow or no answer lets the call run, an ask is a block on OpenCode 1
+//! and OpenCode's own prompt on OpenCode 2, every other outcome throws, the
+//! checked call cannot change afterwards, not by a plugin that runs later
+//! either, and each way of loading it reports loading (ADR-042).
 
 use serde_json::Value;
 
-fn node() -> Option<PathBuf> {
-    let names: &[&str] = if cfg!(windows) {
-        &["node.exe"]
-    } else {
-        &["node"]
-    };
-    std::env::split_paths(&std::env::var_os("PATH")?)
-        .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
-        .find(|path| path.is_file())
-}
-
-fn run_harness(node: &Path) -> Value {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let output = Command::new(node)
-        .arg(root.join("tests/opencode_plugin/harness.mjs"))
-        .arg(root.join("src/host/opencode/integration/openmoat.js"))
-        .output()
-        .unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        output.status.success(),
-        "harness failed: {}\n{stdout}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"))
+fn opencode() -> Option<Value> {
+    super::report("opencode", "opencode/integration/openmoat.js")
 }
 
 fn outcome<'a>(report: &'a Value, mode: &str) -> &'a str {
@@ -52,11 +24,9 @@ fn outcome<'a>(report: &'a Value, mode: &str) -> &'a str {
 
 #[test]
 fn the_opencode_plugin_blocks_on_everything_but_allow_and_no_answer() {
-    let Some(node) = node() else {
-        eprintln!("skipping the OpenCode plugin test: `node` is not on PATH");
+    let Some(report) = opencode() else {
         return;
     };
-    let report = run_harness(&node);
 
     // What the guard is given: the call, the instance and the MCP servers.
     let payload = &report["payload"];
@@ -87,6 +57,7 @@ fn the_opencode_plugin_blocks_on_everything_but_allow_and_no_answer() {
         ("crash", "exited 1: boom"),
         ("garbage", "no readable answer"),
         ("deny-exit-0", "an answer it should not give"),
+        ("allow-exit-3", "exited 3 with an answer it should not give"),
         ("hang", "did not answer in time"),
         ("missing-binary", "could not run"),
         ("no-input", "could not run"),
@@ -103,13 +74,23 @@ fn the_opencode_plugin_blocks_on_everything_but_allow_and_no_answer() {
     }
 }
 
+/// OpenCode 1's `server` and OpenCode 2's `setup` each report loading once;
+/// a plugin pointing at a missing binary loads without one.
 #[test]
-fn on_opencode_2_the_plugin_checks_asks_and_pins_the_call() {
-    let Some(node) = node() else {
-        eprintln!("skipping the OpenCode plugin test: `node` is not on PATH");
+fn the_opencode_plugin_reports_loading_from_both_apis() {
+    let Some(report) = opencode() else {
         return;
     };
-    let report = run_harness(&node);
+    let beat = serde_json::json!([["--heartbeat", "--host", "opencode"]]);
+    assert_eq!(report["heartbeats"]["server"], beat, "{report}");
+    assert_eq!(report["heartbeats"]["setup"], beat, "{report}");
+}
+
+#[test]
+fn on_opencode_2_the_plugin_checks_asks_and_pins_the_call() {
+    let Some(report) = opencode() else {
+        return;
+    };
     let v2 = &report["v2"];
 
     // What the guard is given: OpenCode 2's event, the instance and the MCP servers.

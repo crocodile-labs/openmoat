@@ -37,6 +37,12 @@ impl HookFile for Hermes {
     fn binary(&self, entry: &Value, id: &str) -> Option<String> {
         binary_of(command(entry)?, id)
     }
+
+    /// Hermes reads `fail_closed`, a YAML boolean; any other value it takes as
+    /// `false` (`_parse_spec` in `agent/shell_hooks.py`).
+    fn fail_closed_key(&self) -> Option<&'static str> {
+        Some("fail_closed")
+    }
 }
 
 fn command(entry: &Value) -> Option<&str> {

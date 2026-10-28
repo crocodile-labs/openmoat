@@ -45,7 +45,9 @@ Only the shell and MCP events prompt on `ask`; on the others an ask is sent as a
 ## When the hook fails
 
 Cursor runs the call when the hook is missing, crashes or times out, unless the hook entry
-sets `failClosed: true`; then it blocks the call.
+sets `failClosed: true`; then it blocks the call. `openmoat status` and `openmoat doctor`
+report an entry of OpenMoat's without it as "not protected", and `openmoat init` puts it
+back.
 
 ## Known gaps
 

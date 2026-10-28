@@ -293,3 +293,21 @@ fn ask_is_a_deny_where_cursor_does_not_prompt() {
         );
     }
 }
+
+/// Cursor runs a call whose hook failed unless the entry has `failClosed:
+/// true`; an entry of ours without it is one that fails open.
+#[test]
+fn an_entry_without_fail_closed_fails_open() {
+    use crate::wire::hook_file::HookFile;
+    let layout: &dyn HookFile = &hook_file::Cursor;
+    let mut entry = hook_file::Cursor.entry(&HOOKS[0], "cursor", "/x/openmoat", false);
+    let root = |entry: &serde_json::Value| {
+        serde_json::json!({ "version": 1, "hooks": { HOOKS[0].event: [entry] } })
+    };
+    assert_eq!(layout.fails_open(&root(&entry), "cursor", &HOOKS[..1]), None);
+    entry["failClosed"] = serde_json::json!(false);
+    assert_eq!(
+        layout.fails_open(&root(&entry), "cursor", &HOOKS[..1]),
+        Some("failClosed")
+    );
+}

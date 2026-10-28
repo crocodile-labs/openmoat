@@ -18,7 +18,8 @@ wins.
 exact command in `shell-hooks-allowlist.json` beside it: Hermes runs a shell hook only
 once that `(event, command)` pair is there, and its gateway, cron, ACP and `mcp-serve`
 sessions skip one that is not without asking. `openmoat status` and `openmoat doctor`
-report a hook the allowlist does not approve; `openmoat init` approves it again.
+report a hook the allowlist does not approve, and an entry without `fail_closed: true`;
+`openmoat init` approves it again and puts the key back.
 
 `config.yaml` is the person's and Hermes rewrites it itself, comments kept, so OpenMoat
 edits it as text: only its own entry's lines are added or taken out, and the result is
@@ -139,13 +140,30 @@ published advisory (`advisories.rs`).
 ## When the hook fails
 
 With `fail_closed: true`, which `openmoat init` sets, Hermes blocks the call when the hook
-cannot start, times out (60 s, or `plugins.hook_callback_timeout`, 30 s by default),
-exits other than 0 without a decision or prints something that is not a JSON object. It
-runs every call unchecked when the hook is not registered: missing from `config.yaml`, not
-approved in `shell-hooks-allowlist.json` in a gateway, cron or ACP session, in another
-profile, or under `HERMES_SAFE_MODE=1`. An exception inside Hermes's own hook dispatcher
-lets the call run (`model_tools.py`, `agent/tool_executor.py`); that takes a Hermes bug,
-not a failing hook.
+cannot start, times out, exits other than 0 without a decision or prints something that
+is not a JSON object. Hermes reads `fail_closed` as a YAML boolean and anything else as
+`false` (`_parse_spec` in `agent/shell_hooks.py`); `openmoat status` and `openmoat doctor`
+report OpenMoat's entry without `fail_closed: true` as "not protected" (the hook would
+fail open), and `openmoat init` puts it back.
+
+The time limit that ends first is 30 s, not the entry's 60 s: Hermes registers a shell
+hook as a plugin callback and runs every `pre_tool_call` callback under
+`plugins.hook_callback_timeout` (30 s by default, at most 600, `0` for none), then blocks
+the call ("`pre_tool_call` plugin callback timed out", `_run_hook_callbacks` in
+`hermes_cli/plugins_dispatch.py`). That is the guard's own budget, after which it denies
+by itself, so either way a slow call is blocked. `openmoat init` leaves the setting
+alone: it bounds every Python plugin's callbacks, and a larger one would only let a stuck
+plugin hold the agent longer. A smaller one blocks calls sooner; `0` leaves the entry's
+60 s, after the guard's own 30 s deny.
+
+Hermes runs every call unchecked when the hook is not registered: missing from
+`config.yaml`, not approved in `shell-hooks-allowlist.json` in a gateway, cron or ACP
+session (skipped with a warning in Hermes's log), in another profile, or under
+`HERMES_SAFE_MODE=1`. An exception inside Hermes's own hook dispatcher lets the call
+run: `_pre_dispatch_guards` in `model_tools.py` and `_pre_tool_block` in
+`agent/tool_executor.py` catch it, log it and go on with the call's arguments. That takes
+a Hermes bug, not a failing hook (a hook that raises or times out is a block), and no
+hook can see or stop it.
 
 ## Known gaps
 
@@ -165,6 +183,7 @@ not a failing hook.
   settings-change hook); a gateway drops a hook removed from it within about 30 s.
 - `HERMES_SAFE_MODE=1`, another profile, or Hermes's private safe-worker mode runs no
   shell hook.
+- An internal error in Hermes's hook dispatcher runs the call unchecked.
 - Hermes's hook API moves fast; the fixtures are built from v0.22.5's source, not
   captured from a running agent.
 

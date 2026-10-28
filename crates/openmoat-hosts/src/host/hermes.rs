@@ -52,11 +52,19 @@ mod tools;
 /// The one event OpenMoat answers.
 pub(crate) const EVENT: &str = "pre_tool_call";
 
-/// Seconds Hermes waits for the hook (its own default; it clamps a value
-/// above 300). Hermes asks the person after the hook returns, so the hook
-/// never waits on one; a timed-out hook blocks the call (`fail_closed`).
-/// `plugins.hook_callback_timeout` (30 s by default) also bounds it, and
-/// blocks the call too when it runs out.
+/// Seconds Hermes waits for the hook process (its own default; it clamps a
+/// value above 300). Hermes asks the person after the hook returns, so the
+/// hook never waits on one; a timed-out hook blocks the call (`fail_closed`).
+///
+/// The wait that ends first is shorter: Hermes registers a shell hook as a
+/// plugin callback, and runs every `pre_tool_call` callback under
+/// `plugins.hook_callback_timeout` (30 s by default, at most 600, `0` for
+/// none), after which it blocks the call (`_run_hook_callbacks` in
+/// `hermes_cli/plugins_dispatch.py`: "`pre_tool_call` plugin callback timed out"). 30 s is
+/// [`crate::GUARD_BUDGET_S`]; the guard denies on its own at that point too, so
+/// whichever comes first, the call is blocked. `openmoat init` leaves that
+/// setting alone: it bounds every Python plugin's callbacks, not only
+/// OpenMoat's, and a larger one only lets a stuck plugin hold the agent longer.
 const HOOK_TIMEOUT_S: u64 = 60;
 const _: () = assert!(crate::GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 
@@ -84,17 +92,21 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "blocks the call when the hook cannot start, times out, exits non-zero \
          without a decision or prints something that is not JSON (`fail_closed: true`, which \
-         `openmoat init` sets); runs every call unchecked when the hook is not registered: \
-         missing from `config.yaml` or from `shell-hooks-allowlist.json` in a gateway, cron or \
-         ACP session, another profile, or `HERMES_SAFE_MODE=1`",
+         `openmoat init` sets), and when it has not answered within \
+         `plugins.hook_callback_timeout` (30 s by default); runs every call unchecked when the \
+         hook is not registered: missing from `config.yaml` or from \
+         `shell-hooks-allowlist.json` in a gateway, cron or ACP session, another profile, or \
+         `HERMES_SAFE_MODE=1`; runs a call unchecked when Hermes's own hook dispatcher raises \
+         an error, which it catches and proceeds past",
     gaps: "no OS sandbox from OpenMoat; what an `execute_code` script does itself is not \
          checked (its tool calls are); a plugin, another hook's `modify` or tool middleware can \
          rewrite a call's arguments after the check; terminal commands on a remote backend \
          (docker, ssh, modal, …) are checked as local ones; the in-session `/yolo` toggle and \
          `hermes -z` approve an ask unseen without OpenMoat seeing it; relative paths are \
          checked against the Hermes process's directory, not the session's; another profile, \
-         or `HERMES_SAFE_MODE=1`, runs without the hook; a changed `config.yaml` is caught on \
-         the next call",
+         or `HERMES_SAFE_MODE=1`, runs without the hook; an internal error in Hermes's hook \
+         dispatcher runs the call unchecked; a changed `config.yaml` is caught on the next \
+         call",
     install: Some(InstallSpec {
         dir_variable: location::HOME_VARIABLE,
         dir_name: location::DIR_NAME,

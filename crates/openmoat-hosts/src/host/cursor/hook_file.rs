@@ -40,6 +40,10 @@ impl HookFile for Cursor {
     fn has_version(&self) -> bool {
         true
     }
+
+    fn fail_closed_key(&self) -> Option<&'static str> {
+        Some("failClosed")
+    }
 }
 
 /// Cursor takes one shell string; the binary path is quoted so spaces survive.

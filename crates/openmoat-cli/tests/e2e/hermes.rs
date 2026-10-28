@@ -243,6 +243,35 @@ fn a_hook_missing_from_the_allowlist_is_reported() {
     assert!(!status.contains("hook not approved"), "{status}");
 }
 
+/// An entry without `fail_closed: true` is one Hermes runs a call past when
+/// the hook fails: `status` and `doctor` say so and the agent is not
+/// protected (it is drift too, which denies every call); `init` puts it back.
+#[test]
+fn an_entry_without_fail_closed_is_reported() {
+    let sb = bare(None);
+    init(&sb);
+    let text_now = fs::read_to_string(config(&sb)).unwrap();
+    assert!(text_now.contains("fail_closed: true"), "{text_now}");
+    fs::write(
+        config(&sb),
+        text_now.replace("fail_closed: true", "fail_closed: false"),
+    )
+    .unwrap();
+    let lacks = "lacks `fail_closed: true`";
+    let status = text(&sb.moat(&["status"]));
+    assert!(status.contains(lacks), "{status}");
+    assert!(
+        status.contains("protection: not protected: hook runs the call when it fails"),
+        "{status}"
+    );
+    let doctor = text(&sb.moat(&["doctor"]));
+    assert!(doctor.contains(lacks), "{doctor}");
+    let again = sb.moat_as_person(&["init", "--yes"]);
+    assert_eq!(again.status.code(), Some(OK), "{}", text(&again));
+    let status = text(&sb.moat(&["status"]));
+    assert!(!status.contains(lacks), "{status}");
+}
+
 /// Hermes rewrites its own model and display settings; that is no drift. A
 /// changed hook list or approvals is.
 #[test]

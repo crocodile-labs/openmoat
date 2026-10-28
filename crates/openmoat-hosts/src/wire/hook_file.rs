@@ -39,6 +39,14 @@ pub trait HookFile: Sync + std::fmt::Debug {
     fn knows_on_failure(&self) -> bool {
         false
     }
+
+    /// The key that must be `true` on each of our entries for the host to
+    /// block a call whose hook fails to start, crashes or times out, where the
+    /// host runs the call otherwise (Cursor's `failClosed`, Hermes Agent's
+    /// `fail_closed`); `None` for a layout without one.
+    fn fail_closed_key(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 /// What an edit did to the hook file.
@@ -227,6 +235,19 @@ impl dyn HookFile {
                 .filter(|spec| spec.block_on_failure)
                 .filter_map(|spec| self.ours(root, id, spec))
                 .any(|entry| !has_block(entry))
+    }
+
+    /// The [`HookFile::fail_closed_key`] one of our entries in `root` lacks
+    /// (absent, or anything but `true`), so the host runs a call whose hook
+    /// failed; `None` when every entry has it or the layout has no such key.
+    #[must_use]
+    pub fn fails_open(&self, root: &Value, id: &str, hooks: &[HookSpec]) -> Option<&'static str> {
+        let key = self.fail_closed_key()?;
+        hooks
+            .iter()
+            .filter_map(|spec| self.ours(root, id, spec))
+            .any(|entry| entry.get(key) != Some(&Value::Bool(true)))
+            .then_some(key)
     }
 
     /// The inverse of `upsert`: remove every entry of ours, then the
