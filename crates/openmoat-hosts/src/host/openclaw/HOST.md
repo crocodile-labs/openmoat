@@ -109,7 +109,8 @@ from one that has not run: the note stays a note. `openclaw plugins inspect open
 No OS sandbox from OpenMoat; a parameter change by another plugin is undone, except by a
 plugin that also asks for approval (OpenClaw keeps the parameters of the first approval
 request, so a person approving that plugin's request runs its change, unchecked) or one
-that registers at the same lowest priority after OpenMoat and so runs last; OpenClaw's
+that registers at the same lowest priority after OpenMoat, or at a lower one
+(`-Infinity`), and so runs last; OpenClaw's
 process input is not checked; calls run unchecked if the Gateway does not load the
 plugin (`openmoat status` says when it has not reported loading); a failed or slow hook
 blocks the call.

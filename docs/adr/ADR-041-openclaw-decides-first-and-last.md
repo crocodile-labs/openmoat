@@ -68,7 +68,11 @@ the merged parameters.
   that returns changed `params` together with its own `requireApproval` keeps them once
   a person approves its request (OpenClaw freezes an approved call's parameters, before
   OpenMoat's last handler), and a plugin registered at the same lowest priority after
-  OpenMoat's runs after it. Plugins are code in the Gateway's own process and can do more
+  OpenMoat's, or at a lower one, runs after it. OpenClaw stores any number as a
+  priority, so `-Infinity` is lower than OpenMoat's `Number.MIN_SAFE_INTEGER`; the
+  plugin does not use `±Infinity` itself, because a later OpenClaw that accepts only
+  finite or integer priorities would refuse them or read them as 0, which would put
+  OpenMoat's last handler in the middle. Plugins are code in the Gateway's own process and can do more
   than that; the point here is that an ordinary plugin's change no longer runs unseen.
 - The plugin's second handler costs no `moat guard` run; each handler has OpenClaw's
   hook timeout of its own.

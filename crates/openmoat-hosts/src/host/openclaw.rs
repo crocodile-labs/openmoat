@@ -90,8 +90,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          Gateway running)",
     gaps: "no OS sandbox from OpenMoat; parameters another plugin changes are undone, \
          except where that plugin also asks for approval (OpenClaw then keeps the \
-         parameters the person approved) or runs after OpenMoat's last handler at the \
-         same lowest priority; OpenClaw's process input is not checked; calls run \
+         parameters the person approved) or runs after OpenMoat's last handler, at the \
+         same lowest priority or a lower one (`-Infinity`); OpenClaw's process input is not checked; calls run \
          unchecked if the Gateway does not load the plugin (`openmoat status` and \
          `doctor` say when it has not reported loading since it or OpenClaw changed); a \
          failed or slow hook blocks the call",
