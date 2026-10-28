@@ -343,7 +343,8 @@ touch the manifests or the workflow run `dist plan` only. Running the workflow b
 
 1. Dry-run the workflow on `main` if the build changed since the last release.
 2. In a PR (`build: release vX.Y.Z`): bump `version` in `[workspace.package]` and
-   the four `openmoat-*` entries of `[workspace.dependencies]` in `Cargo.toml`, run
+   the five `openmoat-*` entries of `[workspace.dependencies]` in `Cargo.toml` and the
+   `version` of `sdk/js/package.json` (the JavaScript SDK, ADR-046), run
    `cargo check` to update `Cargo.lock` (and `fuzz/Cargo.lock`), fold the fragments with
    `python3 scripts/changelog-assemble.py`, move the `[Unreleased]`
    entries of `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD` (add its compare
@@ -353,13 +354,18 @@ touch the manifests or the workflow run `dist plan` only. Running the workflow b
    release fails without that CHANGELOG section; its text becomes the release notes,
    after a line saying what the operating system does and does not enforce (ADR-013).
    `python3 scripts/ci/check-versions.py` (in the quality gate and the `crates package`
-   CI job) fails until the manifests, both lockfiles, the README and ROADMAP "The latest
+   CI job) fails until the manifests, `sdk/js/package.json`, both lockfiles, the README and ROADMAP "The latest
    release is" lines and the CHANGELOG headings agree.
 3. After the merge, tag the merge commit: `git tag -s vX.Y.Z -m vX.Y.Z`
    and `git push origin vX.Y.Z`.
 4. Check the GitHub release and the tap commit, then approve the `release` environment in
    the workflow run; `publish-crates` publishes openmoat-core, then openmoat-hosts,
-   openmoat-audit and openmoat-proxy, then openmoat.
+   openmoat-audit and openmoat-proxy, then openmoat. `cargo publish --workspace` includes
+   openmoat-sdk; its first publish is manual, like the others' was (below).
+5. The JavaScript SDK is published by a maintainer, by hand, from the tagged commit:
+   `scripts/ci/sdk-js.sh` (it builds `sdk/js/dist/openmoat.wasm` and runs every test),
+   compare the printed SHA-256 with the CI job's, then `npm publish --access public` in
+   `sdk/js` (docs/SDK.md, ADR-046).
 
 The first crates.io publish is manual, because trusted publishing can only be configured
 for a crate that exists. Reject the `release` deployment in the workflow run, then:
