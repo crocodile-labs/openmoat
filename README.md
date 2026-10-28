@@ -63,6 +63,7 @@ covers what they leave out:
 
 ## Quick start
 
+<!-- ci:quickstart run: the clean-install workflow runs the commands of each block so marked, as written -->
 ```bash
 brew install crocodile-labs/tap/openmoat     # macOS and Linux
 openmoat init                                # asks before it sets up each agent it finds
@@ -75,10 +76,12 @@ before it changes it, and `openmoat uninstall` puts them back.
 
 Then check a verdict without running anything:
 
+<!-- ci:quickstart run -->
 ```bash
 openmoat policy check "cat ~/.ssh/id_rsa"
 ```
 
+<!-- ci:quickstart output: the output of the command before, with the home directory as /Users/you -->
 ```
 ⛔ deny
    rules : secrets-paths
@@ -124,9 +127,14 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 
 "Hook + OS sandbox" means `openmoat init` also writes the agent's own sandbox settings
 from the same policy, so the operating system confines the commands that agent runs in
-its sandbox. "Hook only" means the hook's decision is the only check. CI runs the real
-Claude Code and Codex binaries; the other agents' hooks are tested with recorded
-payloads. What each hook sees, tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
+its sandbox. "Hook only" means the hook's decision is the only check. Every pull request
+runs the pinned Claude Code and Codex binaries and every agent's hook payloads. Each week
+CI installs every agent's latest release and sets it up with `openmoat init`; where the
+agent runs without an account, CI checks that the real agent loads OpenMoat's hook, and
+for most agents that a read of `~/.ssh/id_rsa` it makes against a local fake model API is
+blocked
+([what is checked per agent](scripts/ci/latest-agents/README.md)). What each hook sees,
+tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
 
 ## What it checks
 
