@@ -271,6 +271,7 @@ fn classify_as_written(
     let program = program_name(&argv[0]);
     sink.refuse_dot_dirs(program);
     super::push::note(&argv, program, ctx, sink);
+    super::executes::note(&argv, program, &cmd.reads, ctx, sink);
     super::installs::note(&argv, program, sink)?;
 
     if program == "git" {
@@ -298,6 +299,7 @@ fn classify_as_written(
         && let Some(file) = argv.get(1)
     {
         sink.read(ctx, file)?;
+        sink.execute(ctx, file);
     }
     // `apply_patch <<'EOF'`: Codex applies a patch a shell command hands it,
     // here-document, piped text or argument alike, so every file it names is
@@ -344,6 +346,9 @@ fn classify_as_written(
         // as the program.
         let piped = cmd.piped.iter().filter_map(Piped::text);
         let stdin_code = cmd.stdin_texts().chain(piped).filter(|_| run.reads_stdin);
+        // a script operand, or `sh < x.sh`, runs a file
+        let runs_from_stdin = run.reads_stdin && run.code.is_empty();
+        super::executes::shell_files(run.script, runs_from_stdin, &cmd.reads, ctx, sink);
         for code in run.code.into_iter().chain(stdin_code) {
             classify_into(code, ctx, sink, depth + 1)?;
         }
@@ -375,11 +380,11 @@ fn classify_as_written(
     if let Some(flags) = inline
         && let Some(payload) = flag_payload(&argv, flags)
     {
-        payload::scan_payload(payload, ctx, sink)?;
+        payload::scan_payload(payload, program, ctx, sink)?;
     }
     if inline.is_some() {
         for text in cmd.stdin_texts() {
-            payload::scan_payload(text, ctx, sink)?;
+            payload::scan_payload(text, program, ctx, sink)?;
         }
     }
     options::classify(&argv, program, ctx, sink, depth)

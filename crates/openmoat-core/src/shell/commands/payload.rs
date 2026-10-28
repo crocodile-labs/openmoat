@@ -3,6 +3,7 @@
 //! variables it names rather than parsed.
 
 mod environ;
+mod opaque;
 
 use crate::action::AtomicAction;
 use crate::host;
@@ -11,9 +12,13 @@ use crate::shell::tokens::env_refs;
 use crate::shell::{ClassifyError, ShellContext, Sink, mailbox};
 
 /// Mine inline interpreter code for the resources it names. The payload is
-/// not shell, so it is scanned rather than parsed.
+/// not shell, so it is scanned rather than parsed. Code `program` runs that
+/// reaches files, the network, the environment or other programs through text
+/// it builds at run time is `@opaque-code <program>`, which `opaque-code` asks
+/// for: what it opens is not on the command line.
 pub(super) fn scan_payload(
     payload: &str,
+    program: &str,
     ctx: &ShellContext<'_>,
     sink: &mut Sink,
 ) -> Result<(), ClassifyError> {
@@ -60,6 +65,12 @@ pub(super) fn scan_payload(
     if let Some(expression) = whole {
         sink.push(AtomicAction::Shell {
             argv: vec!["@env-dump".to_owned(), expression.to_owned()],
+        })?;
+    }
+    crate::shell::executes::inline(payload, program, ctx, sink);
+    if opaque::opaque(payload) {
+        sink.push(AtomicAction::Shell {
+            argv: vec!["@opaque-code".to_owned(), program.to_owned()],
         })?;
     }
     Ok(())

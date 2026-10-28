@@ -1760,3 +1760,23 @@
 - id: benign-python-import-os-getcwd
   action: { shell: "python3 -c 'print(__import__(\"os\").getcwd())'" }
   expect: { verdict: defer, rules: [default] }
+# inline code that only computes or prints, or hands file and environment APIs
+# literal text, is not opaque code: it keeps its verdict
+- id: benign-python-c-arithmetic
+  action: { shell: "python3 -c 'print(1+1)'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-node-e-print
+  action: { shell: "node -e 'console.log(2)'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-c-json-from-stdin
+  action: { shell: "python3 -c 'import json,sys; json.load(sys.stdin)'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-python-c-reads-literal-file
+  action: { shell: "python3 -c \"import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-node-e-reads-package-json
+  action: { shell: "node -e \"console.log(require('./package.json').version)\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-ruby-e-reads-literal-file
+  action: { shell: "ruby -e 'puts File.read(\"Gemfile\")'" }
+  expect: { verdict: defer, rules: [default] }

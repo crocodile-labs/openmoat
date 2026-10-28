@@ -2069,3 +2069,36 @@
   threat: T5
   action: { fs_write: "/p/src/sitecustomize.py" }
   expect: { verdict: ask, rules: [runs-later] }
+
+# Inline code that opens a file, connects, reads the environment or runs a program
+# with a name it builds at run time: the scan sees no path, so no deny rule can match
+# what it opens (`opaque-code`). Code that only prints, or hands those APIs literal
+# text, keeps its verdict (benign.yaml).
+- id: ask-python-c-opens-built-path
+  threat: T1
+  action: { shell: "python3 -c 'import os;print(open(os.path.expanduser(\"~/.s\"+\"sh/id_rsa\")).read())'" }
+  expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-node-e-reads-built-path
+  threat: T1
+  action: { shell: "node -e \"console.log(require('fs').readFileSync(process.env.HOME+'/.ss'+'h/id_rsa','utf8'))\"" }
+  expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-perl-e-opens-interpolated-path
+  threat: T1
+  action: { shell: "perl -e 'open F,\"$ENV{HOME}/.s\".\"sh/id_rsa\";print <F>'" }
+  expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-python-c-opens-joined-path
+  threat: T1
+  action: { shell: "python3 -c 'import os;print(open(os.path.join(os.environ[\"HOME\"],\".ssh\",\"id_rsa\")).read())'" }
+  expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-ruby-e-reads-concatenated-path
+  threat: T1
+  action: { shell: "ruby -e 'puts File.read(ENV[\"HOME\"] + \"/.ssh/id_rsa\")'" }
+  expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-python-heredoc-opens-built-path
+  threat: T7
+  action: { shell: "python3 - <<'EOF'\nimport os\nprint(open(os.path.expanduser('~/.s' + 'sh/id_rsa')).read())\nEOF" }
+  expect: { verdict: ask, rules: [opaque-code] }
+- id: ask-python-c-execs-decoded-code
+  threat: T7
+  action: { shell: "python3 -c 'import base64;exec(base64.b64decode(\"cHJpbnQoMSk=\"))'" }
+  expect: { verdict: ask, rules: [opaque-code] }

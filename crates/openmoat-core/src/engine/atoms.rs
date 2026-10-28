@@ -292,3 +292,47 @@ fn with_resolved_paths(atoms: Vec<AtomicAction>, paths: &dyn PathResolver) -> Ve
         .collect();
     atoms.into_iter().chain(resolved).collect()
 }
+
+/// The files the shell command `command` runs as code (`shell/executes.rs`),
+/// as canonical paths: a glob word as the files it names, a `..` where the OS
+/// lands, and a path through a symlink also as where it points, so a file is
+/// found under any of the names a write of it was recorded with.
+pub(super) fn executed_files(
+    command: &str,
+    ctx: &EvalContext,
+    paths: &dyn PathResolver,
+) -> Vec<String> {
+    let cwd = [Some(ctx.cwd.clone())];
+    let shell = ShellContext {
+        home: &ctx.home,
+        cwd: &cwd,
+    };
+    let mut expansion = Expansion::new(paths);
+    let mut atoms = Vec::new();
+    for (path, glob) in crate::shell::executes::executed(command, &shell) {
+        if glob {
+            let pattern = if paths::has_dotdot(&path) {
+                physical(&path, paths)
+            } else {
+                path.clone()
+            };
+            atoms.extend(
+                expansion
+                    .paths(&pattern, true)
+                    .into_iter()
+                    .map(|path| AtomicAction::FsRead { path }),
+            );
+        }
+        atoms.push(AtomicAction::FsRead { path });
+    }
+    let mut files: Vec<String> = with_resolved_paths(atoms, paths)
+        .into_iter()
+        .filter_map(|atom| match atom {
+            AtomicAction::FsRead { path } => Some(path),
+            _ => None,
+        })
+        .collect();
+    files.sort_unstable();
+    files.dedup();
+    files
+}

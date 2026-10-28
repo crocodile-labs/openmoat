@@ -2,6 +2,7 @@ mod compound;
 mod database;
 mod fields;
 mod installs;
+mod opaque;
 mod path_options;
 mod quotes;
 mod redirects;

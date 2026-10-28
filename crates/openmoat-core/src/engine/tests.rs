@@ -1,4 +1,5 @@
 mod defer;
+mod executed;
 mod fetch;
 mod glob;
 mod installs;

