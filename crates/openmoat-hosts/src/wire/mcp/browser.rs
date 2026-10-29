@@ -135,8 +135,8 @@ mod tests {
     use super::{Open, open};
     use serde_json::json;
 
-    fn url(u: &str) -> Option<Open> {
-        Some(Open::Url(u.to_owned()))
+    fn url(u: &str) -> Open {
+        Open::Url(u.to_owned())
     }
 
     /// The navigation tools of the popular browser servers, as their schemas
@@ -163,7 +163,7 @@ mod tests {
             ("navigate", json!({"url": u, "tabId": 7})),
             ("browserbase_stagehand_navigate", json!({"url": u})),
         ] {
-            assert_eq!(open(tool, &args), url(u), "{tool} {args}");
+            assert_eq!(open(tool, &args), Some(url(u)), "{tool} {args}");
         }
         assert_eq!(
             open("navigate", &json!({"url": "back", "tabId": 7})),

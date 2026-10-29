@@ -90,33 +90,43 @@ fn carries_encoded(url: &str) -> bool {
     run.counts()
 }
 
-/// One stretch of the encoding alphabet.
+/// Character classes a [`Run`] has seen, as bits of [`Run::seen`].
+const UPPER: u8 = 1;
+const LOWER: u8 = 2;
+const DIGIT: u8 = 4;
+/// A character that is no hex digit.
+const NOT_HEX: u8 = 8;
+
+/// One stretch of the encoding alphabet: its length and the classes it holds.
 #[derive(Default)]
 struct Run {
     len: usize,
-    upper: bool,
-    lower: bool,
-    digit: bool,
-    /// A character that is no hex digit.
-    not_hex: bool,
+    seen: u8,
 }
 
 impl Run {
     fn push(&mut self, c: u8) {
         self.len += 1;
-        self.upper |= c.is_ascii_uppercase();
-        self.lower |= c.is_ascii_lowercase();
-        self.digit |= c.is_ascii_digit();
-        self.not_hex |= !c.is_ascii_hexdigit();
+        for (class, holds) in [
+            (UPPER, c.is_ascii_uppercase()),
+            (LOWER, c.is_ascii_lowercase()),
+            (DIGIT, c.is_ascii_digit()),
+            (NOT_HEX, !c.is_ascii_hexdigit()),
+        ] {
+            if holds {
+                self.seen |= class;
+            }
+        }
     }
 
     fn symbol(&mut self) {
         self.len += 1;
-        self.not_hex = true;
+        self.seen |= NOT_HEX;
     }
 
     fn counts(&self) -> bool {
-        self.len >= MIN_RUN && (!self.not_hex || (self.upper && self.lower && self.digit))
+        let mixed = UPPER | LOWER | DIGIT;
+        self.len >= MIN_RUN && (self.seen & NOT_HEX == 0 || self.seen & mixed == mixed)
     }
 }
 
