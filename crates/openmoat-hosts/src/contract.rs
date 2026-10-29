@@ -398,6 +398,26 @@ pub struct SandboxSpec {
     /// Whether the sandbox lets a command type into the terminal (`TIOCSTI`)
     /// on Linux, so only the kernel stops it, as `moat doctor` warns.
     pub tiocsti_open_on_linux: bool,
+    /// How the sandbox's traffic to `openmoat proxy` carries an agent session
+    /// when the policy sets `sandbox.proxy_port` (ADR-044).
+    pub proxy_sessions: ProxySessions,
+}
+
+/// How a host sandbox's traffic to `openmoat proxy` carries an agent session
+/// (ADR-044), as `moat guard`, `moat doctor` and `moat status` read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProxySessions {
+    /// A session-start hook gives each session's commands their own
+    /// credential, appended as `export` lines to the file this variable of the
+    /// hook's environment names (Claude Code's `CLAUDE_ENV_FILE`).
+    EnvFile(&'static str),
+    /// The host's own proxy hands traffic on to `openmoat proxy` with no
+    /// credential, which no hook of the host can add (Codex).
+    NoCredential,
+    /// The sandboxed commands never reach `openmoat proxy`: the sandbox has
+    /// no proxy setting (Cursor).
+    NotProxied,
 }
 
 /// A host's sandbox settings format. The CLI has one backend per format.

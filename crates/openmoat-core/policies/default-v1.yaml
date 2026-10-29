@@ -271,8 +271,12 @@ deny:
       - "~/.moat/trust.json"
       - "~/.moat/allowed_signers"
       - "~/.moat/mcp/**"
+      # the key `openmoat proxy` checks session credentials with (ADR-044): who
+      # reads it can make one for any session, a clean one included
+      - "~/.moat/proxy.key"
       - "**/.moat/audit.db*"
       - "**/.moat/policy.lock"
+      - "**/.moat/proxy.key"
     fs.write:
       # the state and host directories themselves: renaming, deleting or replacing
       # one with a link removes every pinned file and hook inside it at once

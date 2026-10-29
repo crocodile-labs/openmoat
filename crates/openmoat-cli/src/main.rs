@@ -24,6 +24,7 @@ mod packs;
 mod project;
 mod project_settings;
 mod protection;
+mod proxy_session;
 mod push;
 mod realpath;
 mod render;

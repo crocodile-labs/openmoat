@@ -526,6 +526,21 @@
   threat: T9
   action: { shell: "sqlite3 -readonly ~/.moat/audit.db 'select count(*) from events'" }
   expect: { verdict: deny, rules: [kernel-self] }
+# The proxy's session key (ADR-044): a credential made with it passes for any
+# session, so a session that read a secret could send as a clean one
+- id: T9-read-proxy-session-key
+  threat: T9
+  action: { fs_read: "~/.moat/proxy.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-proxy-session-key
+  threat: T9
+  action: { shell: "cat ~/.moat/proxy.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-moved-proxy-session-key
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/proxy.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-read-mcp-pins
   threat: T9
   action: { fs_read: "~/.moat/mcp/tools.json" }

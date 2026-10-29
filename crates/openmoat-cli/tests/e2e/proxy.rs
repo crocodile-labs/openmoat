@@ -46,6 +46,8 @@ fn refuses_to_start_over_a_drifted_lock() {
 #[test]
 fn an_unlisted_host_gets_403_and_an_audit_row() {
     let sb = Sandbox::installed(&[]);
+    // A raw request carries no session credential (ADR-044, `proxy_session.rs`).
+    sb.serve_proxy_without_credential();
     let mut child = sb
         .command()
         .args(["proxy", "--listen", "127.0.0.1:0"])
@@ -389,6 +391,7 @@ fn sandbox_sync_notes_the_service_restart_when_installed() {
 #[test]
 fn brokered_secrets_never_reach_the_agent_or_the_audit_log() {
     let sb = brokered();
+    sb.serve_proxy_without_credential();
     let mut child = sb
         .command()
         .args(["proxy", "--listen", "127.0.0.1:0"])

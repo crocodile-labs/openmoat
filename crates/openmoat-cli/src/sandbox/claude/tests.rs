@@ -87,6 +87,7 @@ fn linux_adds_working_directory_rules_for_wildcard_denies() {
             "Read(./**/.envrc)",
             "Read(./**/.moat/audit.db*)",
             "Read(./**/.moat/policy.lock)",
+            "Read(./**/.moat/proxy.key)",
             "Edit(./.env)",
             "Edit(./.envrc)",
             "Edit(./.moat)",

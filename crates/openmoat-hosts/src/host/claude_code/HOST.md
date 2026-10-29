@@ -10,6 +10,7 @@ Anthropic's Claude Code. Its `PreToolUse` format is also what the Continue CLI s
 |---|---|---|---|
 | `PreToolUse` | `Bash\|Monitor\|PowerShell\|Edit\|Write\|MultiEdit\|NotebookEdit\|Read\|Glob\|Grep\|LSP\|SendFile\|WebFetch\|WebSearch\|ReadMcpResourceTool\|EnterWorktree\|Skill\|Artifact\|ArtifactData\|mcp__.*` | 600 s | sets `onFailure: "block"` |
 | `ConfigChange` | `user_settings\|project_settings\|local_settings` | 60 s | the settings-change veto |
+| `SessionStart` | `startup\|resume\|clear\|compact` | 60 s | with `sandbox.proxy_port`, issues the session its `openmoat proxy` credential in `CLAUDE_ENV_FILE` (ADR-044); prints nothing, a failure exits 2 |
 
 ## Tools OpenMoat sees
 

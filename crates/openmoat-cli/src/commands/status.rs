@@ -413,6 +413,7 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
     let lock = Lock::load(&home.lock_path()).ok();
     let mut healthy = true;
     let mut present = false;
+    let mut with_sandbox = Vec::new();
     for host in host_sandbox::hosts()
         .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
     {
@@ -423,6 +424,9 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
             continue;
         }
         present |= !matches!(problems, Ok(None));
+        if !matches!(problems, Ok(None)) {
+            with_sandbox.push(host);
+        }
         match problems {
             Ok(None) => {}
             Ok(Some(problems)) if problems.is_empty() => {
@@ -454,6 +458,11 @@ fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) 
             "openmoat proxy   {} {text}",
             if ok { "✔" } else { "!" }
         )?;
+        // Warnings too: a request without a credential fails closed.
+        let lines = super::proxy::session_lines(&with_sandbox, plan.serve_without_credential);
+        for (ok, label, text) in lines {
+            writeln!(out, "{label:<16} {} {text}", if ok { "✔" } else { "!" })?;
+        }
     }
     let home = Home::locate()?;
     if let Some((ok, text)) = super::proxy::service_line(&home) {

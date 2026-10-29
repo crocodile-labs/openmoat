@@ -1,10 +1,16 @@
-//! Per-session proxy credentials (ADR-027).
+//! Per-session proxy credentials (ADR-027, ADR-044).
 //!
 //! In session mode every request carries a `Basic` proxy credential whose user
-//! name is the audit session id and whose password is a random token only that
-//! session's processes were given. Clients send it when their proxy URL has
-//! userinfo (`http://<session>:<token>@127.0.0.1:<port>`). A request without a
-//! valid credential is refused (`proxy-session`) before its host is decided.
+//! name names the audit session and whose password only that session's
+//! processes were given. Clients send it when their proxy URL has userinfo
+//! (`http://<user>:<password>@127.0.0.1:<port>`). A request without a valid
+//! credential is refused (`proxy-session`) before its host is decided.
+//!
+//! Two kinds of credential are accepted:
+//!
+//! - [`Credential`]s the proxy holds: `moat run` makes one for its run.
+//! - Credentials a [`Verify`] accepts: the standalone `moat proxy` checks the
+//!   ones the agent's session-start hook issued, which it never saw (ADR-044).
 //!
 //! The session id then selects the session's taint ([`TaintLookup`]) and its
 //! share of the connections (`slots.rs`).
@@ -93,6 +99,15 @@ impl Credential {
     }
 }
 
+/// Checks credentials the proxy does not hold: those the standalone proxy's
+/// sessions were issued after it started (ADR-044). The CLI implements it.
+pub trait Verify: Send + Sync {
+    /// The audit session that `user` and `password` authenticate, or `None`.
+    /// The comparison must take time that does not depend on where a guess
+    /// first differs from a valid credential.
+    fn verify(&self, user: &[u8], password: &[u8]) -> Option<String>;
+}
+
 /// What a session was exposed to, read when one of its requests is decided.
 /// The CLI reads it from the audit log; tests pass a fixed map.
 pub trait TaintLookup: Send + Sync {
@@ -129,9 +144,20 @@ pub enum AuthError {
 /// A taint as looked up: when, at which [`TaintLookup::version`], and what.
 type Looked = (Instant, Option<i64>, Taint);
 
+/// How many sessions' recent taint is kept before idle ones are forgotten.
+const MAX_RECENT: usize = 1024;
+
+/// A recent taint not used for this long is forgotten once [`MAX_RECENT`] is reached.
+const RECENT_IDLE: Duration = Duration::from_mins(10);
+
 /// Session mode: the credentials the proxy accepts and where their taint is read.
 pub struct Sessions<'a> {
     credentials: Vec<Credential>,
+    issued: Option<&'a dyn Verify>,
+    /// Serve a request that carries no credential at all, with no session
+    /// (`sandbox.proxy_serve_without_credential`, ADR-044). A wrong or
+    /// malformed credential is refused either way.
+    without_credential: bool,
     taint: &'a dyn TaintLookup,
     /// The last taint looked up per session, when, and at which
     /// [`TaintLookup::version`]: what the open connections are checked against
@@ -143,6 +169,8 @@ impl fmt::Debug for Sessions<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Sessions")
             .field("credentials", &self.credentials)
+            .field("issued", &self.issued.is_some())
+            .field("without_credential", &self.without_credential)
             .finish_non_exhaustive()
     }
 }
@@ -153,15 +181,42 @@ impl<'a> Sessions<'a> {
     pub fn new(credentials: Vec<Credential>, taint: &'a dyn TaintLookup) -> Self {
         Self {
             credentials,
+            issued: None,
+            without_credential: false,
             taint,
             recent: Mutex::new(HashMap::new()),
         }
     }
 
+    /// Accept the credentials `issued` verifies; look each session's taint up
+    /// in `taint` (the standalone proxy, ADR-044).
+    #[must_use]
+    pub fn issued(issued: &'a dyn Verify, taint: &'a dyn TaintLookup) -> Self {
+        Self {
+            issued: Some(issued),
+            ..Self::new(Vec::new(), taint)
+        }
+    }
+
+    /// Also serve requests that carry no credential, with no session: no
+    /// taint applies to them, and they share one holder's half of the
+    /// connections. A wrong or malformed credential is still refused.
+    #[must_use]
+    pub fn serving_without_credential(mut self) -> Self {
+        self.without_credential = true;
+        self
+    }
+
+    /// Whether a request without any credential is served.
+    #[must_use]
+    pub fn serves_without_credential(&self) -> bool {
+        self.without_credential
+    }
+
     /// The session that `headers` (every `Proxy-Authorization` value of the
     /// request) authenticate. Every credential is compared in full, in time
     /// that does not depend on where a guess first differs.
-    pub fn verify<T: AsRef<[u8]>>(&self, headers: &[T]) -> Result<&str, AuthError> {
+    pub fn verify<T: AsRef<[u8]>>(&self, headers: &[T]) -> Result<String, AuthError> {
         let value = match headers {
             [] => return Err(AuthError::Missing),
             [one] => one.as_ref(),
@@ -178,8 +233,13 @@ impl<'a> Sessions<'a> {
             let id = constant_time_eq(credential.session.as_bytes(), session);
             let secret = constant_time_eq(&credential.token, token);
             if id & secret {
-                found = Some(credential.session.as_str());
+                found = Some(credential.session.clone());
             }
+        }
+        if found.is_none()
+            && let Some(issued) = self.issued
+        {
+            found = issued.verify(session, token);
         }
         found.ok_or(AuthError::Invalid)
     }
@@ -190,6 +250,11 @@ impl<'a> Sessions<'a> {
         let version = self.taint.version();
         let taint = self.taint.taint(session)?;
         let mut recent = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
+        // A standalone proxy serves session after session for days: forget
+        // the ones not looked up for a while, which only costs a lookup.
+        if recent.len() >= MAX_RECENT {
+            recent.retain(|_, (at, _, _)| at.elapsed() < RECENT_IDLE);
+        }
         recent.insert(session.to_owned(), (Instant::now(), version, taint.clone()));
         Ok(taint)
     }

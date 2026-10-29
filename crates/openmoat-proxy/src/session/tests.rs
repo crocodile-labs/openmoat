@@ -90,14 +90,82 @@ fn fresh_tokens_are_valid_and_differ() {
 fn a_valid_credential_names_its_own_session() {
     let lookup = Fixed(HashMap::new());
     let sessions = two_sessions(&lookup);
-    assert_eq!(sessions.verify(&[header("run-a", token_a())]), Ok("run-a"));
-    assert_eq!(sessions.verify(&[header("run-b", token_b())]), Ok("run-b"));
+    assert_eq!(
+        sessions.verify(&[header("run-a", token_a())]).as_deref(),
+        Ok("run-a")
+    );
+    assert_eq!(
+        sessions.verify(&[header("run-b", token_b())]).as_deref(),
+        Ok("run-b")
+    );
     // The scheme is matched without regard to case, extra blanks are allowed.
     let loose = format!(
         "  bAsIc   {}  ",
         encode(format!("run-a:{}", token_a()).as_bytes())
     );
-    assert_eq!(sessions.verify(&[loose]), Ok("run-a"));
+    assert_eq!(sessions.verify(&[loose]).as_deref(), Ok("run-a"));
+}
+
+/// Accepts `user` with `password` as session `named`, as the CLI's signed
+/// credentials do; counts the calls.
+pub(crate) struct Issued {
+    pub(crate) user: String,
+    pub(crate) password: String,
+    pub(crate) named: &'static str,
+    pub(crate) calls: std::sync::atomic::AtomicUsize,
+}
+
+impl Issued {
+    pub(crate) fn new(named: &'static str) -> Self {
+        Self {
+            user: format!("v1.test.{named}"),
+            password: fresh_token(),
+            named,
+            calls: 0.into(),
+        }
+    }
+}
+
+impl Verify for Issued {
+    fn verify(&self, user: &[u8], password: &[u8]) -> Option<String> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let ok = constant_time_eq(user, self.user.as_bytes())
+            & constant_time_eq(password, self.password.as_bytes());
+        ok.then(|| self.named.to_owned())
+    }
+}
+
+#[test]
+fn an_issued_credential_names_the_session_its_verifier_says() {
+    let lookup = Fixed(HashMap::new());
+    let issued = Issued::new("claude-a");
+    let sessions = Sessions::issued(&issued, &lookup);
+    assert_eq!(
+        sessions
+            .verify(&[header(&issued.user, &issued.password)])
+            .as_deref(),
+        Ok("claude-a")
+    );
+    // The verifier decides: another password, or none, opens nothing.
+    assert_eq!(
+        sessions.verify(&[header(&issued.user, &fresh_token())]),
+        Err(AuthError::Invalid)
+    );
+    let none: [&str; 0] = [];
+    assert_eq!(sessions.verify(&none), Err(AuthError::Missing));
+    // A malformed header never reaches the verifier.
+    let calls = issued.calls.load(std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sessions.verify(&["Basic !!!"]), Err(AuthError::Malformed));
+    assert_eq!(
+        issued.calls.load(std::sync::atomic::Ordering::SeqCst),
+        calls
+    );
+    assert!(!sessions.serves_without_credential());
+    assert!(
+        sessions
+            .serving_without_credential()
+            .serves_without_credential()
+    );
 }
 
 #[test]

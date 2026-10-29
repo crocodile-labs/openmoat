@@ -1,6 +1,11 @@
 //! `moat proxy [--listen 127.0.0.1:<port>]`: the default-deny egress proxy
 //! (ADR-020, `openmoat-proxy`).
 //!
+//! It serves sessions only (ADR-044): every request must carry a credential
+//! the agent's session-start hook issued (`proxy_session.rs`), and is decided
+//! with that session's taint and connection share. `sandbox.proxy_serve_without_credential`
+//! also serves requests that carry none, with no session.
+//!
 //! Starts only from an intact installation: the policy lock must match, so a
 //! tampered policy is never compiled into a long-running proxy. The policy is
 //! read once; restart the proxy after changing it. Every brokered secret
@@ -18,6 +23,7 @@ use std::sync::Mutex;
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{NewEvent, Store};
 use openmoat_core::{Action, CompiledPolicy, EvalContext, Policy, Secret};
+use openmoat_hosts::{Host, ProxySessions};
 use openmoat_proxy::{
     Broker, Connection, Credential, Limits, Proxy, RULE_AUDIT, RecordError, Recorder, Sessions,
     SystemResolver,
@@ -30,8 +36,10 @@ use crate::context;
 use crate::exit::Code;
 use crate::home::Home;
 use crate::integrity;
+use crate::proxy_session::Verifier;
 use crate::render::Deferred;
 use crate::secrets;
+use crate::taint::issued::IssuedTaint;
 use crate::taint::run::RunTaint;
 
 use super::service;
@@ -67,13 +75,17 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
         "moat proxy: listening on {addr} (audit session {})",
         exit.session()
     )?;
-    // The host sandboxes cannot send a credential, so this proxy serves
-    // without sessions (ADR-027); `moat run` serves its own that needs one.
-    writeln!(
-        std::io::stderr(),
-        "moat proxy: note: no session credentials here, so any local process may use this \
-         proxy and session taint does not apply to it; `openmoat run` serves one that requires them"
-    )?;
+    // ADR-044: Claude Code's sessions get a credential from their
+    // session-start hook; Codex's proxy cannot send one.
+    let note = if exit.serves_without_credential() {
+        "requests without a session credential are served too \
+         (`sandbox.proxy_serve_without_credential`): any local process may use this proxy, \
+         and no session taint applies to them"
+    } else {
+        "every request needs a session credential (Claude Code's sessions get one from \
+         their session-start hook); requests without one get 407"
+    };
+    writeln!(std::io::stderr(), "moat proxy: note: {note}")?;
     if let Some(port) = hosts_port.filter(|p| *p != addr.port()) {
         writeln!(
             std::io::stderr(),
@@ -259,6 +271,58 @@ pub(super) fn listening_line(port: u16) -> (bool, String) {
     }
 }
 
+/// What the traffic each present host sandbox sends to `openmoat proxy`
+/// carries (ADR-044), for `moat doctor` and `moat status`: `(ok, label,
+/// text)`, a `false` one a warning. `serve_without` is the policy's
+/// `sandbox.proxy_serve_without_credential`.
+pub(super) fn session_lines(
+    hosts: &[Host],
+    serve_without: bool,
+) -> Vec<(bool, &'static str, String)> {
+    let mut lines = Vec::new();
+    for host in hosts {
+        let Some(sandbox) = host.spec().sandbox.as_ref() else {
+            continue;
+        };
+        let (ok, text) = match sandbox.proxy_sessions {
+            ProxySessions::EnvFile(_) => (
+                true,
+                "proxy sessions: each session's sandboxed commands send their own credential \
+                 (session-start hook), so its taint and connection share apply",
+            ),
+            ProxySessions::NoCredential if serve_without => (
+                false,
+                "proxy sessions: its proxy sends no session credential, so its traffic is \
+                 served without a session and no session taint applies; `openmoat run` \
+                 gives each run its own",
+            ),
+            ProxySessions::NoCredential => (
+                false,
+                "proxy sessions: its proxy sends no session credential, so `openmoat proxy` \
+                 refuses what it hands on (407); `openmoat run` gives each run its own",
+            ),
+            ProxySessions::NotProxied => (
+                true,
+                "proxy sessions: none; its sandboxed commands do not reach `openmoat proxy` \
+                 (its sandbox has no proxy setting)",
+            ),
+            _ => continue,
+        };
+        lines.push((ok, host.display_name(), text.to_owned()));
+    }
+    if serve_without {
+        lines.push((
+            false,
+            "openmoat proxy",
+            "serves requests without a session credential \
+             (`sandbox.proxy_serve_without_credential`): any local process may use it, and a \
+             session escapes its taint by sending none"
+                .to_owned(),
+        ));
+    }
+    lines
+}
+
 /// The installation, refused when it is missing or its policy lock shows
 /// drift, so a tampered policy is never compiled into a sandbox or a proxy.
 pub(super) fn installed() -> Result<Home> {
@@ -278,6 +342,9 @@ pub(super) struct Exit {
     broker: Broker,
     recorder: AuditLog,
     run: Option<RunSession>,
+    /// The standalone proxy's sessions (ADR-044): the check of their issued
+    /// credentials and the home their taint is read from.
+    issued: Option<(Verifier, Home)>,
     /// `moat run`'s decisions for its sandboxed hooks, on the same port (ADR-028).
     local: Option<crate::guard_relay::Service>,
 }
@@ -294,7 +361,8 @@ impl Exit {
     /// Fails when the policy does not compile, a secret's source cannot be read,
     /// or the audit log cannot be opened. With `credential`, the proxy serves
     /// that session alone and records under its id (`moat run`); without, it
-    /// serves any local client under a `proxy-<ms>` session (`moat proxy`).
+    /// serves the sessions their hooks issued credentials to, and records what
+    /// it serves without one under a `proxy-<ms>` session (`moat proxy`, ADR-044).
     pub(super) fn open(
         home: &Home,
         policy: Policy,
@@ -318,6 +386,10 @@ impl Exit {
             || format!("proxy-{}", crate::time::now_ms()),
             |c| c.session().to_owned(),
         );
+        let issued = match credential {
+            Some(_) => None,
+            None => Some((Verifier::open(home)?, home.clone())),
+        };
         let run = match credential {
             Some(credential) => {
                 let effective = crate::repo::effective_policy(home, &ctx)?;
@@ -339,8 +411,20 @@ impl Exit {
                 session,
             },
             run,
+            issued,
             local: None,
         })
+    }
+
+    /// Whether requests without a credential are served
+    /// (`sandbox.proxy_serve_without_credential`); never under `moat run`.
+    pub(super) fn serves_without_credential(&self) -> bool {
+        self.run.is_none()
+            && self
+                .policy
+                .sandbox
+                .as_ref()
+                .is_some_and(|s| s.proxy_serve_without_credential)
     }
 
     /// Serve `service` on the proxy's port too.
@@ -382,8 +466,19 @@ impl Exit {
                 .as_ref()
                 .map(|s| s as &dyn openmoat_proxy::LocalService),
         };
+        let serve_without = self.serves_without_credential();
         let Some(run) = self.run else {
-            return proxy(None).serve(listener).context("accepting connections");
+            let Some((verifier, home)) = &self.issued else {
+                bail!("the proxy has neither a run nor issued sessions");
+            };
+            let lookup = IssuedTaint::new(home.clone());
+            let mut sessions = Sessions::issued(verifier, &lookup);
+            if serve_without {
+                sessions = sessions.serving_without_credential();
+            }
+            return proxy(Some(&sessions))
+                .serve(listener)
+                .context("accepting connections");
         };
         let effective = CompiledPolicy::compile(&run.effective, &self.ctx)?;
         let id = run.credential.session().to_owned();

@@ -1,5 +1,5 @@
-//! Anthropic's Claude Code: `PreToolUse` ([`crate::wire::pre_tool_use`]) and
-//! `ConfigChange` ([`config_change`]).
+//! Anthropic's Claude Code: `PreToolUse` ([`crate::wire::pre_tool_use`]),
+//! `ConfigChange` ([`config_change`]) and `SessionStart` ([`session_start`]).
 
 use openmoat_core::Decision;
 use serde_json::json;
@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
     Asks, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpSpec, McpServersJson, Prefixed, ProjectSettingsSpec, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
+    McpSpec, McpServersJson, Prefixed, ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -17,6 +17,7 @@ mod advisories;
 mod doc;
 mod mcp;
 pub(crate) mod project_settings;
+mod session_start;
 
 /// Every Claude Code tool `openmoat-hosts` maps to an action; a tool missing here
 /// never reaches `moat guard`.
@@ -26,12 +27,20 @@ pub(crate) mod project_settings;
 const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|Artifact|ArtifactData|mcp__.*";
 
 /// `PreToolUse` asks Claude Code to block a call whose hook fails
-/// (`onFailure`); the settings-change veto does not.
+/// (`onFailure`); the settings-change veto does not, and a session start
+/// cannot be blocked. `SessionStart` gives each session its own credential for
+/// `openmoat proxy` (ADR-044) at every start, resume, `/clear` and compaction.
 const HOOKS: &[HookSpec] = &[
     HookSpec::new("PreToolUse", TOOL_MATCHER, TOOL_HOOK_TIMEOUT_S, true),
     HookSpec::new(
         "ConfigChange",
         "user_settings|project_settings|local_settings",
+        CONFIG_HOOK_TIMEOUT_S,
+        false,
+    ),
+    HookSpec::new(
+        session_start::EVENT,
+        "startup|resume|clear|compact",
         CONFIG_HOOK_TIMEOUT_S,
         false,
     ),
@@ -86,6 +95,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
              (use WSL2 for OS confinement)",
         ),
         tiocsti_open_on_linux: false,
+        // The hooks reference, "Persist environment variables": each Bash
+        // command runs the file's lines first (ADR-044).
+        proxy_sessions: ProxySessions::EnvFile("CLAUDE_ENV_FILE"),
     }),
     // Merged over the user `settings.json`, where a key set wins
     // (`disableAllHooks`, `hooks`, `env`, …).
@@ -142,18 +154,21 @@ impl HostAdapter for Adapter {
         match event {
             None | Some(pre_tool_use::EVENT) => pre_tool_use::parse(host, payload),
             Some(config_change::EVENT) => config_change::parse(host, payload),
+            Some(session_start::EVENT) => session_start::parse(host, payload),
             other => Err(wrong_event(other)),
         }
     }
 
     fn event_of(&self, event: &str) -> HookEvent {
-        if event == config_change::EVENT {
-            HookEvent::ConfigChange {
+        match event {
+            config_change::EVENT => HookEvent::ConfigChange {
                 source: String::new(),
                 change_type: None,
-            }
-        } else {
-            HookEvent::PreToolUse
+            },
+            session_start::EVENT => HookEvent::SessionStart {
+                source: String::new(),
+            },
+            _ => HookEvent::PreToolUse,
         }
     }
 
@@ -161,6 +176,7 @@ impl HostAdapter for Adapter {
         match event {
             HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk => pre_tool_use::render(decision),
             HookEvent::ConfigChange { .. } => config_change::render(decision),
+            HookEvent::SessionStart { .. } => session_start::render(decision),
         }
     }
 

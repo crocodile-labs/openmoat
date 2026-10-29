@@ -295,6 +295,64 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
     written
 }
 
+/// Write `bytes` to `path`, owner-only, unless `path` exists already: the file
+/// appears whole or not at all, and when two processes race the first one's
+/// stays. Whether this call wrote it.
+pub fn write_private_new(path: &Path, bytes: &[u8]) -> Result<bool> {
+    let parent = path.parent().context("path has no parent")?;
+    create_private_dir(parent)?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let tmp = parent.join(format!(".new-{}-{nanos}.tmp", std::process::id()));
+    let written = (|| {
+        let mut file = private_file_options()
+            .open(&tmp)
+            .with_context(|| format!("creating {}", tmp.display()))?;
+        file.write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .with_context(|| format!("writing {}", tmp.display()))?;
+        // A hard link, unlike a rename, never replaces a file already there.
+        match fs::hard_link(&tmp, path) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(e).with_context(|| format!("creating {}", path.display())),
+        }
+    })();
+    let _ = fs::remove_file(&tmp);
+    written
+}
+
+/// Append `bytes` to the regular file `path`, made owner-only when missing,
+/// and leave it readable by its owner only (Unix). A symbolic link or anything
+/// but a regular file there is refused rather than followed.
+pub fn append_owner_only(path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut file = match fs::symlink_metadata(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let mut options = private_file_options();
+            options.write(false).append(true);
+            options
+                .open(path)
+                .with_context(|| format!("creating {}", path.display()))?
+        }
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+        Ok(meta) if !meta.file_type().is_file() => {
+            bail!("{} is not a regular file", path.display())
+        }
+        Ok(_) => {
+            #[cfg(unix)]
+            restrict(path, 0o600)?;
+            fs::OpenOptions::new()
+                .append(true)
+                .open(path)
+                .with_context(|| format!("opening {}", path.display()))?
+        }
+    };
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .with_context(|| format!("writing {}", path.display()))
+}
+
 /// Unit tests run in-process with the developer's or CI runner's real
 /// environment, so a `Home::locate` there would read and write the real
 /// `~/.moat`. They pass a [`Home::at`] a temporary directory instead.

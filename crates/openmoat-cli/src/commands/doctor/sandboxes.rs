@@ -33,6 +33,7 @@ pub(super) fn sandboxes(
         }
     };
     let mut present = false;
+    let mut with_sandbox = Vec::new();
     for host in host_sandbox::hosts()
         .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
     {
@@ -43,6 +44,9 @@ pub(super) fn sandboxes(
             continue;
         }
         present |= !matches!(problems, Ok(None));
+        if !matches!(problems, Ok(None)) {
+            with_sandbox.push(host);
+        }
         let translation = host_sandbox::report(host, &plan);
         match problems {
             Ok(None) => continue,
@@ -88,6 +92,16 @@ pub(super) fn sandboxes(
             report.line(Area::Service, true, line);
         } else {
             report.warn(&line);
+        }
+        let lines =
+            crate::commands::proxy::session_lines(&with_sandbox, plan.serve_without_credential);
+        for (ok, label, text) in lines {
+            let line = format!("{label:<16} {text}");
+            if ok {
+                report.line(Area::Service, true, line);
+            } else {
+                report.warn(&line);
+            }
         }
     }
 }

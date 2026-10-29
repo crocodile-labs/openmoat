@@ -153,10 +153,14 @@ Network has two modes:
   secrets and refuses private addresses.
   - Claude Code's `network.httpProxyPort` and `socksProxyPort` name the proxy. While
     it is stopped, its sandboxed commands have no network, and `openmoat doctor` and
-    `openmoat status` warn.
+    `openmoat status` warn. Each session's `SessionStart` hook gives its commands a
+    credential of their own (ADR-044), so the proxy applies that session's taint.
   - Codex's proxy passes what it allows on to `openmoat proxy` when you start Codex with
     `HTTP_PROXY` and `HTTPS_PROXY` set to `http://127.0.0.1:18080`. Codex's own API
-    hosts then need an allow rule.
+    hosts then need an allow rule. Codex sends no session credential, so
+    `openmoat proxy` refuses that traffic unless the policy sets
+    `sandbox.proxy_serve_without_credential: true` (no session taint then);
+    `openmoat run -- codex` is the per-session alternative.
 
 Claude Code's own broker also runs from the policy (#363). `openmoat sandbox sync` writes
 the policy's `secrets:` entries into Claude Code's `sandbox.credentials` as `mask` entries

@@ -35,8 +35,8 @@ use crate::broker::{Broker, Watch};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
-use crate::session::{RULE_SESSION, Sessions};
-use crate::slots::{PENDING, Share, Shares};
+use crate::session::{AuthError, RULE_SESSION, Sessions};
+use crate::slots::{PENDING, Share, Shares, WITHOUT_CREDENTIAL};
 use crate::tunnel::{self, Forward};
 use crate::upstream::{self, Refusal, Resolve};
 
@@ -62,10 +62,10 @@ pub struct Proxy<'a> {
     /// Forward a `ClientHello` that carries an encrypted server name (ECH,
     /// ESNI); refused when false (`sandbox.proxy_allow_ech`).
     pub allow_ech: bool,
-    /// Session mode (ADR-027): every request must carry one of these
+    /// Session mode (ADR-027, ADR-044): every request must carry one of these
     /// credentials, and is decided with that session's taint and connection
-    /// share. `None` serves any local client, as the standalone `moat proxy`
-    /// does for the host sandboxes, which cannot send a credential.
+    /// share. `None` serves any local client with no session; `moat run` and
+    /// `moat proxy` always serve sessions.
     pub sessions: Option<&'a Sessions<'a>>,
     /// A service of this process that shares the port (ADR-028): `moat run`
     /// answers its sandboxed hooks here. `None` in `moat proxy`.
@@ -189,10 +189,14 @@ impl Proxy<'_> {
                 return;
             }
         };
-        let Some((turn, _share)) = self.admit(client, &request, served, started) else {
+        let Some((session, _share)) = self.admit(client, &request, served, started) else {
             return;
         };
         drop(pending);
+        let turn = Turn {
+            session: session.as_deref(),
+            started,
+        };
         // `buf` holds the head and any body bytes read with it. Watching all of
         // it before `rest` is split off leaves its end in the watch's tail, so a
         // secret split between `rest` and the next body chunk is still found.
@@ -309,39 +313,55 @@ impl Proxy<'_> {
     /// The connection's session and its share of the slots, or `None` once
     /// the request has been refused and recorded: a missing or invalid
     /// credential gets `407`, a session holding its share `503`. Without
-    /// session mode every request is admitted, with no session.
+    /// session mode every request is admitted, with no session; where the
+    /// sessions serve requests without a credential, one that carries none
+    /// is admitted with no session, in the share of all such requests.
     fn admit<'s>(
         &'s self,
         client: &TcpStream,
         request: &Request,
         served: &'s Served<'_>,
         started: Instant,
-    ) -> Option<(Turn<'s>, Option<Share<'s>>)> {
-        let mut turn = Turn {
+    ) -> Option<(Option<String>, Option<Share<'s>>)> {
+        let unnamed = Turn {
             session: None,
             started,
         };
         let Some(sessions) = self.sessions else {
-            return Some((turn, None));
+            return Some((None, None));
         };
-        let session = match sessions.verify(&request.credentials) {
-            Ok(session) => session,
+        let (session, holder) = match sessions.verify(&request.credentials) {
+            Ok(session) => {
+                let holder = session.clone();
+                (Some(session), holder)
+            }
+            Err(AuthError::Missing) if sessions.serves_without_credential() => {
+                (None, WITHOUT_CREDENTIAL.to_owned())
+            }
             Err(why) => {
                 let decision = Decision::single(Verdict::Deny, RULE_SESSION, why.to_string());
-                self.record(turn, Some(request), &decision);
+                self.record(unnamed, Some(request), &decision);
                 refuse(client, 407, &summary(&decision));
                 return None;
             }
         };
-        turn.session = Some(session);
-        if let Some(share) = served.shares.take(session) {
-            return Some((turn, Some(share)));
+        if let Some(share) = served.shares.take(&holder) {
+            return Some((session, Some(share)));
         }
+        let turn = Turn {
+            session: session.as_deref(),
+            started,
+        };
+        let holder = if session.is_some() {
+            "the session already holds"
+        } else {
+            "requests without a credential already hold"
+        };
         let decision = Decision::single(
             Verdict::Deny,
             RULE_SESSION,
             format!(
-                "the session already holds {} connections, half of the proxy's",
+                "{holder} {} connections, half of the proxy's",
                 served.shares.cap()
             ),
         );

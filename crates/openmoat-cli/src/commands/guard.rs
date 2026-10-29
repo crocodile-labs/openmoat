@@ -30,6 +30,7 @@ use crate::{push, render, secrets, session_code, taint, time};
 mod config_change;
 mod drift;
 mod record;
+mod session_start;
 mod unseen;
 
 const UNGOVERNED_RULE: &str = "ungoverned";
@@ -198,6 +199,10 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
     };
     if let Err(error) = record(host, recorded) {
         decision = kernel_error(&error.context("audit log unavailable"));
+    } else if let Some(pending) = &out.proxy_credential
+        && let Err(error) = pending.write()
+    {
+        decision = kernel_error(&error.context("writing the session's environment file"));
     }
 
     hangs::enter(Phase::Answer);
@@ -273,6 +278,9 @@ struct Evaluated {
     drifted: Vec<Drift>,
     /// The file provenance rows the call adds when it runs (ADR-029).
     provenance: taint::provenance::Seen,
+    /// A session start's `openmoat proxy` credential, written to the
+    /// session's environment file once its row is recorded (ADR-044).
+    proxy_credential: Option<session_start::Pending>,
 }
 
 /// Decide one hook payload, filling `out` as it goes. `started` is when the
@@ -290,6 +298,12 @@ fn evaluate(
         .context("parsing hook payload")?;
     let home = Home::locate()?;
 
+    if let HookEvent::SessionStart { .. } = &request.event {
+        let env = |name: &str| std::env::var_os(name);
+        let (decision, pending) = session_start::decision(&home, &request, &env, within_run)?;
+        out.proxy_credential = pending;
+        return Ok((Some(request), decision));
+    }
     if let HookEvent::ConfigChange {
         source,
         change_type,

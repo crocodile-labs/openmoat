@@ -38,6 +38,15 @@ fn secret_read() -> Taint {
 /// the bytes the upstream received, and the rows. `held` connections of
 /// `run-a` are open already.
 fn exchange(lookup: &Fixed, credential: Option<&str>, held: usize) -> (String, Vec<u8>, Vec<Row>) {
+    exchange_with(&two_sessions(lookup), credential, held)
+}
+
+/// [`exchange`] with `sessions`; `held` connections of `run-a` are open already.
+fn exchange_with(
+    sessions: &Sessions<'_>,
+    credential: Option<&str>,
+    held: usize,
+) -> (String, Vec<u8>, Vec<Row>) {
     let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
     let policy = super::allowed_on(upstream.local_addr().unwrap().port());
     let compiled = CompiledPolicy::compile(&policy, &ctx()).unwrap();
@@ -47,7 +56,6 @@ fn exchange(lookup: &Fixed, credential: Option<&str>, held: usize) -> (String, V
     let ports = CompiledPolicy::compile(&port_policy, &ctx()).unwrap();
     upstream.set_nonblocking(true).unwrap();
     let rows = Rows::default();
-    let sessions = two_sessions(lookup);
     let limits = Limits {
         idle_timeout: Duration::from_millis(300),
         max_connections: 4,
@@ -61,7 +69,7 @@ fn exchange(lookup: &Fixed, credential: Option<&str>, held: usize) -> (String, V
         broker: &Broker::default(),
         loopback_ok: &[upstream.local_addr().unwrap()],
         allow_ech: false,
-        sessions: Some(&sessions),
+        sessions: Some(sessions),
         local: None,
     };
     let served = Served {
@@ -187,4 +195,56 @@ fn a_session_holding_half_the_slots_gets_503() {
     );
     let (_, forwarded, _) = exchange(&lookup, Some(&header("run-a", token_a())), 1);
     assert!(!forwarded.is_empty(), "a session under its share is served");
+}
+
+/// The standalone proxy (ADR-044): the credentials a verifier accepts.
+#[test]
+fn an_issued_credential_is_served_as_its_session_and_others_get_407() {
+    use crate::session::tests::Issued;
+    let lookup = Fixed(HashMap::from([
+        ("claude-a", Taint::default()),
+        ("claude-b", secret_read()),
+    ]));
+    let a = Issued::new("claude-a");
+    let sessions = Sessions::issued(&a, &lookup);
+    let (_, forwarded, rows) = exchange_with(&sessions, Some(&header(&a.user, &a.password)), 0);
+    assert!(!forwarded.is_empty());
+    assert_eq!(rows[0].0.as_deref(), Some("claude-a"));
+    assert!(!rows[0].2.contains(&a.password));
+    // No credential, or a password the verifier does not accept: 407.
+    for credential in [None, Some(header(&a.user, &fresh_token()))] {
+        let (reply, forwarded, rows) = exchange_with(&sessions, credential.as_deref(), 0);
+        assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
+        assert!(forwarded.is_empty());
+        assert_eq!(rows[0].1, [RULE_SESSION]);
+    }
+    // A tainted session's own credential carries its taint.
+    let b = Issued::new("claude-b");
+    let sessions = Sessions::issued(&b, &lookup);
+    let (reply, forwarded, _) = exchange_with(&sessions, Some(&header(&b.user, &b.password)), 0);
+    assert!(reply.contains("session-taint"), "{reply}");
+    assert!(forwarded.is_empty());
+}
+
+/// `sandbox.proxy_serve_without_credential`: a request with no credential is
+/// served with no session and no taint; a wrong one is still refused, so a
+/// session cannot pass for another by sending a bad credential.
+#[test]
+fn serving_without_a_credential_serves_none_and_still_refuses_a_wrong_one() {
+    use crate::session::tests::Issued;
+    let lookup = Fixed(HashMap::from([("claude-a", secret_read())]));
+    let a = Issued::new("claude-a");
+    let sessions = Sessions::issued(&a, &lookup).serving_without_credential();
+    let (reply, forwarded, rows) = exchange_with(&sessions, None, 0);
+    assert!(!forwarded.is_empty(), "{reply}");
+    assert_eq!(rows[0].0, None);
+    assert_eq!(rows[0].1, ["hosts"]);
+    // A well-formed password made at run time that the verifier does not accept.
+    let wrong = fresh_token();
+    let (reply, forwarded, _) = exchange_with(&sessions, Some(&header(&a.user, &wrong)), 0);
+    assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
+    assert!(forwarded.is_empty());
+    // The tainted session's own credential is still refused at egress.
+    let (reply, _, _) = exchange_with(&sessions, Some(&header(&a.user, &a.password)), 0);
+    assert!(reply.contains("session-taint"), "{reply}");
 }

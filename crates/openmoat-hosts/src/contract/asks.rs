@@ -100,7 +100,7 @@ pub(crate) fn answer(spec: &HostSpec, event: &HookEvent, decision: &Decision) ->
     let why = match event {
         HookEvent::PreToolUse => spec.asks.on_pre_tool_use,
         HookEvent::PreToolUseNoAsk => spec.asks.on_no_ask,
-        HookEvent::ConfigChange { .. } => None,
+        HookEvent::ConfigChange { .. } | HookEvent::SessionStart { .. } => None,
     };
     let mut answer = decision.clone();
     if let Some(why) = why

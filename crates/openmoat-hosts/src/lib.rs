@@ -20,7 +20,8 @@ pub use contract::{
     HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookVersions, HostDocs,
     HostSpec, InstallSpec, KeyShape, Locate, Located, Location, McpFile, McpNames, McpReader,
     McpServer, McpSpec, McpSyntax, Paths, Platform, ProcessSpec, ProjectSettingsSpec, Protect,
-    RelaxedKey, SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow, Unseen, Version,
+    ProxySessions, RelaxedKey, SandboxFormat, SandboxSpec, SettingsFile, SettingsReader, ToolRow,
+    Unseen, Version,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
@@ -277,6 +278,13 @@ pub enum HookEvent {
         source: String,
         /// The kind of change, when the host reports one (earlier Claude Code builds).
         change_type: Option<String>,
+    },
+    /// A session started, resumed, or began again after `/clear` or a
+    /// compaction (Claude Code only): no call to decide; OpenMoat gives the
+    /// session its `openmoat proxy` credential (ADR-044).
+    SessionStart {
+        /// Why it started (`startup`, `resume`, `clear`, `compact`).
+        source: String,
     },
 }
 
