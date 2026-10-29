@@ -251,20 +251,28 @@ fn a_call_the_policy_denies_never_reaches_the_server() {
 #[test]
 fn a_call_asked_after_a_secret_read_and_refused_never_reaches_the_server() {
     let gw = Gateway::new();
-    // A policy that asks for secret reads, so one can run and taint the session.
-    let policy = gw.sb.home.join(".moat/policy.yaml");
-    let now = std::fs::read_to_string(&policy).unwrap();
+    // The default policy denies secret reads, so none runs and none taints a
+    // session. This one asks for them instead (as `taint.rs` does): an asked
+    // read the host may run counts as the session reading the secret. Its
+    // catch-all defers, so an MCP call asks only because of the taint.
     std::fs::write(
-        &policy,
-        now.replacen(
-            "deny:\n",
-            "ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\ndeny:\n",
-            1,
-        ),
+        gw.sb.home.join(".moat/policy.yaml"),
+        "version: 1\ndefaults: { '*': defer, net: deny }\n\
+         ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
     )
     .unwrap();
+    // A person re-pins the edited policy and brings the host sandbox in line.
     let accept = gw.sb.moat_as_person(&["doctor", "--accept"]);
     assert!(text(&accept).contains("re-pinned"), "{}", text(&accept));
+    let sync = gw.sb.moat_as_person(&["sandbox", "sync"]);
+    assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
+    // Before the read, a call in a prompt-free mode is not denied: what
+    // denies it below is the taint.
+    let control = json!({"q": "control"});
+    assert_ne!(
+        gw.hook_in("claude-code", "k1", "search", &control, "dontAsk"),
+        "deny"
+    );
     let read = json!({"file_path": gw.sb.home.join(".ssh/id_rsa").to_string_lossy()});
     let payload = json!({"session_id": "k1", "cwd": gw.sb.project().to_string_lossy(),
         "hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": read, "tool_use_id": "r1"});

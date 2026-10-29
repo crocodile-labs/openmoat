@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn the_proxys_actions_are_the_hooks() {
+    fn the_proxy_actions_are_the_hooks() {
         let args = json!({"path": "~/.ssh/id_rsa"});
         assert_eq!(
             mcp_call_action("mcp__fs__read_file", &args).unwrap(),
