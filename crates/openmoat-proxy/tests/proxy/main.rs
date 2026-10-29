@@ -50,6 +50,7 @@ struct Row {
     verdict: Verdict,
     rules: Vec<String>,
     reasons: Vec<String>,
+    terminated: bool,
 }
 
 #[derive(Default)]
@@ -63,6 +64,7 @@ impl Recorder for MemoryRecorder {
             verdict: c.decision.verdict,
             rules: c.decision.rules.clone(),
             reasons: c.decision.reasons.clone(),
+            terminated: c.terminated,
         });
         Ok(())
     }
@@ -190,6 +192,7 @@ fn launch_with(
         allow_ech: false,
         sessions,
         local: None,
+        tls: None,
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -296,4 +299,5 @@ mod http;
 mod limits;
 mod private;
 mod sessions;
+mod terminate;
 mod tunnel;

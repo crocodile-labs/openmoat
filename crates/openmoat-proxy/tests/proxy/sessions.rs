@@ -13,7 +13,7 @@ use super::*;
 
 /// A 64-character hex token made at run time, so no credential in these
 /// tests is a fixed value: each `RandomState` is freshly keyed.
-fn fresh_token() -> String {
+pub(super) fn fresh_token() -> String {
     let mut token = String::new();
     for _ in 0..4 {
         let random = RandomState::new().build_hasher().finish();
@@ -34,7 +34,7 @@ fn token_b() -> &'static str {
     TOKEN.get_or_init(fresh_token)
 }
 
-struct Fixed(HashMap<&'static str, Taint>);
+pub(super) struct Fixed(pub(super) HashMap<&'static str, Taint>);
 
 impl TaintLookup for Fixed {
     fn taint(&self, session: &str) -> Result<Taint, String> {
@@ -45,7 +45,7 @@ impl TaintLookup for Fixed {
     }
 }
 
-fn basic(user: &str, password: &str) -> String {
+pub(super) fn basic(user: &str, password: &str) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let raw = format!("{user}:{password}");
     let mut out = String::from("Basic ");

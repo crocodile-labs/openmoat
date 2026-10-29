@@ -257,6 +257,15 @@ pub struct SecretAddArgs {
     /// Read the value from this file (absolute or under `~/`).
     #[arg(long, value_name = "PATH")]
     pub file: Option<String>,
+    /// Inside `openmoat run`, decrypt HTTPS to the host to put the value in
+    /// (`tls: terminate`, ADR-043). Needs the proxy CA, which this offers to make.
+    #[arg(long)]
+    pub tls_terminate: bool,
+    /// Only the requests this rule names get the value: `METHOD /path`, where `*` is one
+    /// path segment and `**` any number (`--allow 'GET /repos/**'`). Repeatable; any other
+    /// request to the host is refused. Needs `--tls-terminate`.
+    #[arg(long = "allow", value_name = "RULE", requires = "tls_terminate")]
+    pub allow: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -363,6 +372,21 @@ pub enum ProxyCommand {
     /// Report the user service's state: not installed / stopped / running / drift-blocked /
     /// crashlooping. Exits 64 for any state other than running or not installed.
     Status(ProxyStatusArgs),
+    /// The certificate authority `openmoat run`'s proxy reads HTTPS with, for the brokered
+    /// secrets that say `tls: terminate` (ADR-043).
+    Ca {
+        #[command(subcommand)]
+        command: CaCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CaCommand {
+    /// Make a new CA for the hosts of the secrets that say `tls: terminate`, limited to them
+    /// by name constraints, and pin it in the policy lock; again to rotate it or cover new
+    /// hosts. Shows what it covers and asks first. Refused unless run by a person at an
+    /// interactive terminal.
+    Init,
 }
 
 #[derive(Debug, Args)]

@@ -11,6 +11,7 @@ fn session(proxy_port: Option<u16>) -> Grants {
         program: Some("/Users/me/.local/share/agent/1.0/agent".into()),
         writes: vec!["/Users/me/.agent".into()],
         terminals: vec!["/dev/ttys003".into()],
+        trust: None,
     }
 }
 

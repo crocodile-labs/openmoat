@@ -53,6 +53,7 @@ use crate::environment::find_in;
 use crate::exit::Code;
 use crate::guard_relay::{self, Service, random_hex};
 use crate::home::Home;
+use crate::proxy_ca::Trust;
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
@@ -85,6 +86,17 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .context("listening on a loopback port for the proxy")?;
     let port = listener.local_addr()?.port();
+    let mut policy = home.load_policy()?;
+    crate::install::self_paths::protect_recorded(&home, &mut policy)?;
+    // TLS termination (ADR-043), checked before anything starts: a CA that is
+    // missing, not pinned or not covering a host stops the run here. The
+    // agent's clients trust it through files in the run's temp directory.
+    let terminating = crate::proxy_ca::load(&home, &policy)?;
+    let trust = terminating
+        .as_ref()
+        .map(|t| Trust::write(&t.cert_pem))
+        .transpose()?;
+    let ca_notice = terminating.as_ref().and_then(|t| t.notice.clone());
     let grants = Grants {
         proxy_port: Some(port),
         tmpdir: None,
@@ -92,9 +104,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         writes: args.writes.iter().map(|w| resolved(w)).collect(),
         // The person's other terminals stay out of reach of the agent's commands.
         terminals: platform::terminals(),
+        trust: trust.as_ref().map(|t| path_string(t.dir())),
     };
-    let mut policy = home.load_policy()?;
-    crate::install::self_paths::protect_recorded(&home, &mut policy)?;
     let state = home.root();
     let mut agent = if args.isolate {
         platform::isolate(&policy, &ctx, grants, &program, state)?
@@ -121,8 +132,16 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
     let (guard, guard_token) = guard_service(&home, &run_session)?;
-    let exit = Exit::open(&home, policy, ctx, Some(credential))?.with_guard(guard);
+    let exit = Exit::open(&home, policy, ctx, Some(credential))?
+        .with_guard(guard)
+        .with_tls(terminating.map(|t| t.tls));
     notice(&program, port, exit.session(), &agent, args)?;
+    let notices = ca_notice
+        .into_iter()
+        .chain(trust.iter().filter_map(Trust::notice));
+    for line in notices {
+        eprintln!("{line}");
+    }
     std::thread::spawn(move || {
         if let Err(error) = exit.serve(&listener) {
             eprintln!("moat run: the proxy stopped, so the agent has no network: {error:#}");
@@ -141,6 +160,10 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .env_remove("NO_PROXY")
         .env_remove("no_proxy");
     agent.command().envs(git);
+    // Set last, over any the person had: what the agent's clients trust.
+    for (var, path) in trust.iter().flat_map(Trust::env) {
+        agent.command().env(var, path);
+    }
     // Ctrl-C at the terminal reaches the agent and OpenMoat alike. The agent decides
     // what it means; OpenMoat keeps running, or the proxy would die under the agent.
     signal_hook::flag::register(

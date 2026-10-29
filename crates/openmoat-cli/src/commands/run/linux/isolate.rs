@@ -71,6 +71,8 @@ pub fn isolate(
     )?;
     let disable_userns = usable(&bwrap)?;
     let port = grants.proxy_port.context("no proxy port")?;
+    // The run's CA files are in the temp directory, which starts empty here.
+    let trust = grants.trust.clone();
     let generated = bwrap_mounts(policy, ctx, grants)?;
     // The mounts hide the state directory only under the empty temp directory.
     refuse_exposed(state, &generated.rules, true)?;
@@ -90,6 +92,11 @@ pub fn isolate(
         // Read-only: connecting to the socket needs no write access to the
         // mount, and the placeholders stay as they are.
         .args(["--ro-bind", &moat, &moat, "--ro-bind", &dir, &dir])
+        .args(
+            trust
+                .iter()
+                .flat_map(|t| ["--ro-bind", t.as_str(), t.as_str()]),
+        )
         .args(["--chdir", &ctx.cwd, "--", &moat, "isolated", "--socket"])
         .arg(&session.socket)
         .args(["--port", &port.to_string(), "--rules"])

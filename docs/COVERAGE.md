@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 41 | 32 | 7 |
 | T7 | Obfuscation and nested execution | 157 | 105 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 28 | 1 | 9 |
-| T9 | Hook / policy tampering by the agent | 370 | 109 | 32 |
+| T9 | Hook / policy tampering by the agent | 373 | 109 | 33 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 28 | 4 | 6 |
 | T12 | Network to unknown hosts | 113 | 20 | 8 |
@@ -1144,6 +1144,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-read-audit-db-wal` (attacks): Deny [kernel-self]
 - `T9-cat-policy-lock` (attacks): Deny [kernel-self]
 - `T9-read-trust-records` (attacks): Deny [kernel-self]
+- `T9-read-proxy-ca-key` (attacks): Deny [kernel-self]
+- `T9-cat-proxy-ca-key` (attacks): Deny [kernel-self]
+- `T9-copy-proxy-ca-key-of-another-state-dir` (attacks): Deny [kernel-self]
 - `T9-sqlite-readonly-audit-db` (attacks): Deny [kernel-self]
 - `T9-read-proxy-session-key` (attacks): Deny [kernel-self]
 - `T9-cat-proxy-session-key` (attacks): Deny [kernel-self]
@@ -1505,6 +1508,7 @@ the verdict and rule ids the default policy must produce for it.
 - `python-c-writes-claude-settings` (attacks): Deny [kernel-self]
 - `node-e-writes-claude-settings` (attacks): Deny [kernel-self]
 - `benign-read-moat-policy` (benign): Defer [default]
+- `benign-read-project-proxy-ca-dir` (benign): Allow [project-fs]
 - `benign-write-openclaw-workspace` (benign): Defer [default]
 - `benign-read-openclaw-config` (benign): Defer [default]
 - `benign-write-copilot-session-plan` (benign): Defer [default]

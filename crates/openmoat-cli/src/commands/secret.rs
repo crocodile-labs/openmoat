@@ -7,7 +7,7 @@ use std::fs;
 use std::io::Write as _;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_core::{Secret, SecretSource};
+use openmoat_core::{Secret, SecretSource, SecretTls};
 use similar::{Algorithm, udiff::unified_diff};
 
 use crate::cli::{Format, SecretAddArgs, SecretListArgs};
@@ -135,6 +135,22 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
         secret.header,
         secret.host
     )?;
+    if secret.terminates() {
+        writeln!(
+            out,
+            "Inside `openmoat run`, OpenMoat decrypts HTTPS to {} to put it in, with its own \
+             certificate authority (`openmoat proxy ca init`).",
+            secret.host
+        )?;
+    }
+    if !secret.allow.is_empty() {
+        writeln!(
+            out,
+            "Only these requests get it, and any other request to {} is refused: {}.",
+            secret.host,
+            secret.allow.join(", ")
+        )?;
+    }
     if let Some(id) = &source_denied {
         writeln!(
             out,
@@ -149,6 +165,17 @@ pub fn add(args: &SecretAddArgs) -> Result<Code> {
     super::edit::apply(&home, &before, &after, &mut out)?;
     out.finish()?;
     super::sandbox::sync()?;
+    if secret.terminates() {
+        // The CA must cover the new host; making one is its own question.
+        let policy = home.load_policy()?;
+        let mut out = Deferred::default();
+        if crate::proxy_ca::load(&home, &policy).is_ok() {
+            writeln!(out, "The proxy CA already covers {}.", secret.host)?;
+        } else {
+            super::proxy::make_ca(&home, &policy, &mut out)?;
+        }
+        out.finish()?;
+    }
     println!("Start a new agent session to use it.");
     Ok(Code::Ok)
 }
@@ -182,6 +209,8 @@ fn secret(args: &SecretAddArgs) -> Result<Secret> {
         source,
         plain_http: false,
         port: None,
+        tls: args.tls_terminate.then_some(SecretTls::Terminate),
+        allow: args.allow.clone(),
     })
 }
 
@@ -305,6 +334,8 @@ mod tests {
             header: None,
             env: None,
             file: None,
+            tls_terminate: false,
+            allow: Vec::new(),
         };
         secret(&args).unwrap()
     }
@@ -327,6 +358,8 @@ mod tests {
             header: None,
             env: Some("API_KEY".into()),
             file: None,
+            tls_terminate: false,
+            allow: Vec::new(),
         };
         assert!(secret(&other).is_err(), "another id needs its host");
     }
@@ -363,8 +396,28 @@ mod tests {
             header: None,
             env: env.map(Into::into),
             file: file.map(Into::into),
+            tls_terminate: false,
+            allow: Vec::new(),
         })
         .unwrap()
+    }
+
+    #[test]
+    fn tls_termination_and_rules_are_written_as_the_policy_reads_them() {
+        let routed = secret(&SecretAddArgs {
+            id: "gh".into(),
+            host: None,
+            header: None,
+            env: None,
+            file: None,
+            tls_terminate: true,
+            allow: vec!["GET /repos/**".into(), "POST /repos/*/*/issues".into()],
+        })
+        .unwrap();
+        assert!(routed.terminates());
+        let out = with_entry("version: 1\n", &routed).unwrap();
+        assert!(out.contains("tls: terminate"), "{out}");
+        assert_eq!(secrets(&out), [routed]);
     }
 
     #[test]

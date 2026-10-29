@@ -55,6 +55,7 @@ mod policy_upgrade;
 mod protection;
 mod provenance;
 mod proxy;
+mod proxy_ca;
 mod proxy_session;
 mod push;
 mod replay_report;

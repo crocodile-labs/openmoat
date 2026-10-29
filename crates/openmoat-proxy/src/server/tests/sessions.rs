@@ -71,6 +71,7 @@ fn exchange_with(
         allow_ech: false,
         sessions: Some(sessions),
         local: None,
+        tls: None,
     };
     let served = Served {
         addresses: &addresses,

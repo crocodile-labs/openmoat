@@ -62,6 +62,18 @@ fn entries(secrets: &[BrokeredSecret], allowed: &[String], report: &mut Report) 
             );
             continue;
         }
+        if !secret.allow.is_empty() {
+            // Claude Code's broker puts a value in every request to its
+            // hosts; the rules would not hold there.
+            report.loss(
+                Kind::Net,
+                &rule,
+                "the secret goes only to the requests its `allow` rules name, which Claude \
+                 Code's broker cannot hold it to; the secret still works through `openmoat run`"
+                    .into(),
+            );
+            continue;
+        }
         if secret.plain_http || secret.port.is_some() {
             // Claude Code's broker injects for a host on every port; the
             // secret's plain-HTTP requests go to one.

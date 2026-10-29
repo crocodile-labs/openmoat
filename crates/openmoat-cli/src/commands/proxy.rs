@@ -46,6 +46,11 @@ use super::service;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::service::State;
 
+mod ca;
+
+pub use self::ca::init as ca_init;
+pub(super) use self::ca::make as make_ca;
+
 /// Where `moat proxy` listens when neither `--listen` nor `sandbox.proxy_port` says.
 const DEFAULT_PORT: u16 = 18080;
 
@@ -90,6 +95,21 @@ pub fn run(args: &ProxyArgs) -> Result<Code> {
         writeln!(
             std::io::stderr(),
             "moat proxy: note: the host sandboxes send traffic to port {port} (`sandbox.proxy_port`), not here"
+        )?;
+    }
+    // Only `moat run` can make its clients trust the CA (ADR-043).
+    let terminated: Vec<&str> = exit
+        .secrets()
+        .iter()
+        .filter(|s| s.terminates())
+        .map(|s| s.host.as_str())
+        .collect();
+    if !terminated.is_empty() {
+        writeln!(
+            std::io::stderr(),
+            "moat proxy: note: {} `tls: terminate`; only `openmoat run` decrypts HTTPS, so here \
+             HTTPS requests there keep the placeholder",
+            terminated.join(", ")
         )?;
     }
     // Only what the agent may know: the id, host, header and placeholder.
@@ -347,6 +367,8 @@ pub(super) struct Exit {
     issued: Option<(Verifier, Home)>,
     /// `moat run`'s decisions for its sandboxed hooks, on the same port (ADR-028).
     local: Option<crate::guard_relay::Service>,
+    /// `moat run`'s TLS termination for secrets that say `tls: terminate` (ADR-043).
+    tls: Option<openmoat_proxy::Tls>,
 }
 
 /// Session mode (ADR-027): the one session `moat run` serves, and the
@@ -413,6 +435,7 @@ impl Exit {
             run,
             issued,
             local: None,
+            tls: None,
         })
     }
 
@@ -425,6 +448,12 @@ impl Exit {
                 .sandbox
                 .as_ref()
                 .is_some_and(|s| s.proxy_serve_without_credential)
+    }
+
+    /// Terminate TLS with `tls` for the secrets that say `tls: terminate`.
+    pub(super) fn with_tls(mut self, tls: Option<openmoat_proxy::Tls>) -> Self {
+        self.tls = tls;
+        self
     }
 
     /// Serve `service` on the proxy's port too.
@@ -465,6 +494,7 @@ impl Exit {
                 .local
                 .as_ref()
                 .map(|s| s as &dyn openmoat_proxy::LocalService),
+            tls: self.tls.as_ref(),
         };
         let serve_without = self.serves_without_credential();
         let Some(run) = self.run else {
@@ -501,7 +531,9 @@ struct AuditLog {
 impl Recorder for AuditLog {
     fn record(&self, c: &Connection<'_>) -> Result<(), RecordError> {
         let action = c.destination.map(|(host, port)| {
-            let scheme = if c.method == Some("CONNECT") {
+            let scheme = if c.terminated {
+                "https"
+            } else if c.method == Some("CONNECT") {
                 "connect"
             } else {
                 "http"

@@ -28,7 +28,7 @@ mod uninstall;
 use anyhow::Result;
 
 use crate::cli::{
-    AuditCommand, Cli, Command, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand,
+    AuditCommand, CaCommand, Cli, Command, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand,
     SecretCommand,
 };
 use crate::exit::Code;
@@ -59,6 +59,9 @@ pub fn run(cli: Cli) -> Result<Code> {
             Some(ProxyCommand::Install) => proxy::install(),
             Some(ProxyCommand::Uninstall) => proxy::uninstall(),
             Some(ProxyCommand::Status(status_args)) => proxy::status(&status_args),
+            Some(ProxyCommand::Ca {
+                command: CaCommand::Init,
+            }) => proxy::ca_init(),
         },
         Command::Audit { command } => match command {
             AuditCommand::Export(args) => audit::export(&args),

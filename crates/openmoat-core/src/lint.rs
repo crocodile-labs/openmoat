@@ -135,6 +135,13 @@ fn secrets(policy: &Policy, out: &mut Vec<Warning>) {
                 secret.host
             ));
         }
+        if secret.terminates() && secret.is_loopback() {
+            warn(format!(
+                "`tls: terminate` names {}, a loopback host; `openmoat proxy` never connects to \
+                 a loopback address, so the secret is never injected",
+                secret.host
+            ));
+        }
     }
 }
 
@@ -486,5 +493,23 @@ mod tests {
             );
             assert!(!w[0].contains("in clear text"), "{w:?}");
         }
+    }
+
+    #[test]
+    fn tls_termination_to_loopback_is_reported_as_never_injected() {
+        let policy = |host: &str| {
+            format!(
+                "version: 1\ndeny:\n  - id: s\n    env.read: ['*']\nallow:\n  - id: n\n    net: ['*']\n\
+                 secrets:\n  - id: s\n    host: {host}\n    header: X-K\n    source: {{ env: K }}\n    \
+                 tls: terminate\n"
+            )
+        };
+        assert!(warn(&policy("api.example.com")).is_empty());
+        let w = warn(&policy("api.localhost"));
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(
+            w[0].contains("`tls: terminate` names api.localhost"),
+            "{w:?}"
+        );
     }
 }

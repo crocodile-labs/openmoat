@@ -1,6 +1,6 @@
 [package]
 name = "openmoat-proxy"
-description = "Default-deny egress proxy for OpenMoat: CONNECT with an SNI check, plain HTTP, its own DNS and an audit record per connection."
+description = "Default-deny egress proxy for OpenMoat: CONNECT with an SNI check, plain HTTP, its own DNS, an audit record per connection, and opt-in TLS termination for brokered secrets."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,9 @@ openmoat-core.workspace = true
 httparse.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+rustls-native-certs.workspace = true
 
 [lints]
 workspace = true

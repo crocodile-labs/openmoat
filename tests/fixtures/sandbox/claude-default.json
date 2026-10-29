@@ -95,9 +95,12 @@
         "/Users/me/.moat/allowed_signers",
         "/Users/me/.moat/mcp",
         "/Users/me/.moat/proxy.key",
+        "/Users/me/.moat/proxy-ca",
         "/**/.moat/audit.db*",
         "/**/.moat/policy.lock",
-        "/**/.moat/proxy.key"
+        "/**/.moat/proxy.key",
+        "/**/.moat/proxy-ca",
+        "/**/.moat/proxy-ca/**"
       ],
       "denyWrite": [
         "/Users/me/.ssh",
