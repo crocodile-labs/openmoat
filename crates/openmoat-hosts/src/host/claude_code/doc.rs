@@ -5,7 +5,7 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "`PreToolUse` and `ConfigChange` hooks in `settings.json`",
+    hooked_by: "`PreToolUse`, `ConfigChange` and `SessionStart` hooks in `settings.json`",
     protection: "hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows",
     tools: TOOLS,
 };

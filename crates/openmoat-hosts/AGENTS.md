@@ -12,7 +12,7 @@ Host adapters: each supported agent's `HostSpec` (`host/<module>.rs`) and `HostA
 - If the host fails open by default, its hook entries set its fail-closed flag.
 
 ## Test
-- `cargo test -p openmoat-hosts`: unit tests in `host/<module>/tests.rs`, `tests/contract.rs`, `tests/docs.rs`, `tests/protect.rs`, `tests/architecture.rs`.
+- `cargo test -p openmoat-hosts`: unit tests in `host/<module>/tests.rs`, `tests/contract.rs`, `tests/docs.rs`, `tests/protect.rs`, `tests/architecture.rs`, `tests/consistency/` (one intent, one verdict, whichever host sends it) and `tests/js_plugins/` (the JavaScript plugins under Node; skips without `node`).
 - `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` regenerates the README, INSTALL, ARCHITECTURE §3 and THREAT_MODEL §5 blocks from the specs; `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` regenerates the policy and taint blocks. Review the diff.
 - Payloads come from `host/<module>/fixtures/` with a README naming each one's source. End-to-end tests are in `crates/openmoat-cli/tests/e2e/` (`hosts/` runs one table-driven suite over every host).
 

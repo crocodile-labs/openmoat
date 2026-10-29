@@ -144,7 +144,7 @@ sandbox for macOS and Linux only.
 
 | Agent | What is hooked | Hook file |
 |---|---|---|
-| Claude Code | `PreToolUse`: `Bash`, `Monitor`, `PowerShell` (never parsed: `unparseable`), `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Glob`, `Grep`, `LSP`, `SendFile`, `Artifact` and `ArtifactData` (the local files they upload or save), `WebFetch` (as `fetch`), `WebSearch` (as `web.search`), MCP tools. `ConfigChange`: user, project and local settings | `~/.claude/settings.json` |
+| Claude Code | `PreToolUse`: `Bash`, `Monitor`, `PowerShell` (never parsed: `unparseable`), `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Glob`, `Grep`, `LSP`, `SendFile`, `Artifact` and `ArtifactData` (the local files they upload or save), `WebFetch` (as `fetch`), `WebSearch` (as `web.search`), `ReadMcpResourceTool` (a `file:` URI as a read, any other as its host), `EnterWorktree` (an existing worktree's `path` as a read; a new worktree, and `Skill`, are left to Claude Code), MCP tools. `ConfigChange`: user, project and local settings. `SessionStart`: each session's credential for `openmoat proxy` (ADR-044) | `~/.claude/settings.json` |
 | Codex | `PreToolUse`: shell commands, `apply_patch` (every file the patch names), MCP tools. Codex hooks cannot ask (`PermissionRequest` runs only when Codex itself prompts), so an `ask` blocks the call until you run `openmoat` or `openmoat allow --last`, for `apply_patch` too. Codex does not hook web search or hosted tools. Codex skips a new or changed user hook until you review and trust it in `/hooks` ([hooks docs](https://learn.chatgpt.com/docs/hooks)): after `openmoat init` (and after an upgrade that rewrites the entry), open `/hooks` in Codex and trust OpenMoat's (`openmoat init` and `openmoat doctor` remind you). `[features] hooks = false` in `config.toml` turns every hook off: `openmoat status` and `openmoat doctor` report Codex as not protected while yours sets it, and warn about a trusted project's `.codex/config.toml` or `.codex/hooks.json` that turns hooks off, adds hooks or starts programs | `~/.codex/hooks.json` |
 | Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` (`Read`, `Write`, `Edit`, `MultiEdit`, `StrReplace`, `Delete`, `Grep`, `Glob`, `WebSearch`, `WebFetch`, and any other tool: one that names a path is checked against it, one that does not asks as `tool.unknown`); installed with `failClosed`. Cursor prompts on `ask` only for shell and MCP calls, so an `ask` on `preToolUse` or `beforeReadFile` is sent as a deny until you run `openmoat` or `openmoat allow --last`. `openmoat init` also writes Cursor's own sandbox settings (`sandbox.json`) on macOS and Linux; Cursor still runs a command outside that sandbox when its Auto-review classifier approves it, in Run Everything mode, and in the CLI without `--sandbox enabled` ([SANDBOX.md](SANDBOX.md#cursors-sandbox)) | `~/.cursor/hooks.json`, `~/.cursor/sandbox.json` |
 | OpenClaw | Every tool, through OpenMoat's plugin and OpenClaw's `before_tool_call` hook: `exec` (PowerShell on Windows: `unparseable`), `read`, `write`, `edit`, `apply_patch`, `web_fetch`, `web_search`, `browser` `open`/`navigate`/`upload`, MCP tools (`<server>__<tool>`; each server in `mcp.servers` pinned), `gateway config.get`, `plugins` changes (as a write to `openclaw.json`), `cron` jobs added or updated (ask, `runs-later`), `view_image` (a file read, or a fetch of one URL), `nodes` `invoke` (`unparseable`); `process` input is `unparseable`; any other tool is `tool.unknown`, checked for the paths, URLs and commands its arguments name. `exec`'s `workdir` is where the command runs, never the project. An `ask` becomes OpenClaw's own approval request; a hook that throws or takes over 60 s blocks the call. `openclaw.json` is read as JSON5 and written back as plain JSON (values kept, formatting not); `openmoat init` refuses a file with comments, which that would drop: move them out of the file first. `OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` are followed when `openmoat init` runs and recorded; run `init` again after changing them. An `$include` that may bring MCP servers holds back every OpenClaw MCP call. Restart the Gateway after `openmoat init` | `~/.openclaw/openclaw.json` (or `OPENCLAW_CONFIG_PATH`), `<state dir>/openmoat/openmoat.mjs` |
@@ -203,7 +203,9 @@ Then, in a terminal of your own:
    they run `openmoat` by its stable path (ADR-016), and nothing has to be re-pinned. Doctor
    names what is left, if anything:
    - `hook entry for … is out of date (written by an older OpenMoat); run openmoat init`: the new
-     release writes its hook entry differently (more tools, another timeout, a new event).
+     release writes its hook entry differently (more tools, another timeout, a new event
+     such as Claude Code's `SessionStart`, which from the next release gives each session
+     its credential for `openmoat proxy`, ADR-044).
      Run `openmoat init`. It keeps your policy, backs up the agent's file before it changes
      OpenMoat's own entry, and re-pins.
    - `hook runs …, which does not exist`, `a different OpenMoat binary than this one`, or
@@ -228,7 +230,8 @@ Before 1.0 a minor release (0.5 → 0.6) may change things a patch release does 
 Read the [CHANGELOG](../CHANGELOG.md) entries since your version first; so far these
 kinds of change have happened:
 
-- **The audit log schema moves forward** (version 3 in 0.5.0, version 4 in 0.6.0). The
+- **The audit log schema moves forward** (version 3 in 0.5.0, version 4 in 0.6.0,
+  version 5 in 0.11.0, version 6 from the next release). The
   new `openmoat` updates the log when it first opens it; an older `openmoat` then refuses to
   open it (`schema too new`), and its hook denies every call. Going back to an older
   release is not supported.
@@ -299,7 +302,7 @@ warn about it, but cannot stop it at start (THREAT_MODEL §5). Only Claude Code'
 administrator deploys and the user cannot edit, make the hooks immune: a `disableAllHooks`
 outside them cannot turn off a hook set in them. For teams:
 
-1. Copy the `PreToolUse` and `ConfigChange` entries `openmoat init` wrote to
+1. Copy the `PreToolUse`, `ConfigChange` and `SessionStart` entries `openmoat init` wrote to
    `~/.claude/settings.json` (they run `openmoat` by its stable path, ADR-016) into the
    managed settings file, and keep them in the user file too, which `openmoat doctor`
    checks.

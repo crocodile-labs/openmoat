@@ -60,3 +60,6 @@ hook blocks the call.
 
 OpenMoat writes Cursor's `sandbox.json`, which the lock pins whole (macOS and Linux).
 Cursor's sandbox does not run on Windows; the hook still applies the policy there.
+`sandbox.json` has no proxy setting, so sandboxed commands never reach `openmoat proxy`
+and carry no session (ADR-044); `openmoat status` and `openmoat doctor` say so under
+"proxy sessions".

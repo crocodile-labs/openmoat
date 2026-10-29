@@ -18,7 +18,7 @@ the agent's output.
 
 | Agent | Install | Real load | Not proven |
 |---|---|---|---|
-| Claude Code (`claude-code`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `claude -p` against `tests/differential/fake_api.py`: one `Bash` call | interactive prompts; the `ConfigChange` hook |
+| Claude Code (`claude-code`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `claude -p` against `tests/differential/fake_api.py`: one `Bash` call | interactive prompts; the `ConfigChange` and `SessionStart` hooks |
 | Codex (`codex`) | npm, scripts off | `codex exec` with a custom Responses-API provider at `fake_openai.py`: one shell call | Codex's persisted hook trust (`/hooks`): the run uses `--dangerously-bypass-hook-trust`, as Codex's own hook tests do |
 | OpenCode 1 (`opencode-1`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `opencode debug info` lists `plugins/openmoat.js`; `opencode run` with an OpenAI-compatible provider in `opencode.json` at `fake_openai.py`: one `bash` call | interactive sessions |
 | OpenCode 2 (`opencode-2`) | npm, scripts off; the platform package's native binary | one `opencode serve`, `GET /api/plugin` polled until the location's plugins have activated: OpenMoat's plugin `active`, a state OpenCode 2 sets only once the plugin's `setup` ran | a tool call: OpenCode 2's provider settings are not driven yet, so the denied call is not proven in the real agent |

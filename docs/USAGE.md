@@ -393,7 +393,11 @@ openmoat policy upgrade --undo      # put the previous policy back
 ```
 
 Lines you changed are never touched; a change that would overlap them is listed for you to
-make with `openmoat edit` if you want it.
+make with `openmoat edit` if you want it. From the next release the default policy adds
+the deny group `encoded-egress` (a long encoded value in a URL after the session read a
+secret, ADR-047) and denies agents reading `~/.moat/proxy.key` and `~/.moat/proxy-ca/`
+under `kernel-self` (the proxy's session key and certificate authority, ADR-043,
+ADR-044); `openmoat policy upgrade` offers them to an existing policy.
 
 ## Share rules with your team
 

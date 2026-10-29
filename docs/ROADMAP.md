@@ -14,7 +14,19 @@ carries dates. Release stages and their exit criteria come from ADR-013.
 ## Where it is today
 
 The latest release is `0.11.0`, from GitHub Releases, the Homebrew tap and crates.io
-([INSTALL.md](INSTALL.md)). What exists:
+([INSTALL.md](INSTALL.md)).
+
+**Release stage:** 0.x, usable daily, before 1.0. ADR-013's first two stages are
+complete: installers for every target with the conformance suite green on every CI
+platform and false positives from daily use turned into fixtures, then enforcement
+(`openmoat run` with Seatbelt and Landlock + seccomp, the egress proxy, session taint,
+the MCP proxy with description pinning) shown by the executing fixtures in
+[EVIDENCE.md](EVIDENCE.md), where exfiltration fails at the OS level. What 1.0 still
+needs, as ADR-013 sets it: a stable policy schema with `openmoat policy migrate` (#136),
+`openmoat serve` (#320), and MoatBench meeting a 1.0 gate. [MOATBENCH.md](MOATBENCH.md)
+defines the gate CI applies today (every bundled scenario decided as expected, with no
+false positive, on every platform); the threshold 1.0 asks beyond that is not yet set.
+What exists:
 
 - **Agents.** One policy for Claude Code, Codex, Cursor, OpenClaw (a `before_tool_call`
   plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI, OpenCode 1 and 2
@@ -33,13 +45,17 @@ The latest release is `0.11.0`, from GitHub Releases, the Homebrew tap and crate
   rules, Claude Code's `ConfigChange` veto, stable hook binary paths (ADR-016), and
   person-only commands that refuse when an agent is among their parent processes.
 - **Session taint.** After a secret read or untrusted content, risky follow-up calls
-  ask (ADR-020), also across the files a tainted session writes (ADR-029).
+  ask (ADR-020), also across the files a tainted session writes (ADR-029); after a
+  secret read, a URL carrying a long encoded value is denied (`encoded-egress`, ADR-047).
 - **Package installs.** A name one typo away from a popular package asks (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
 - **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
   per server with `openmoat mcp wrap` or `openmoat init --mcp-proxy`, pins
   each tool's description and holds a new server's tools until `openmoat mcp accept`
-  (ADR-032).
+  (ADR-032), and is a gateway: it passes only the messages it checked and rewrote itself,
+  and a call only when the policy does not deny it as the server receives it and the
+  agent's hook decided exactly that call (ADR-045). A browser MCP call that only opens a
+  page is a `fetch`, judged by every host a client may read its URL as (ADR-047).
 - **Signed policy packs.** `openmoat policy trust-key`, `install` and `remove`, verified
   with OpenSSH signatures (ADR-031).
 - **Repository policy.** `<repo>/.moat/policy.yaml` only tightens until `openmoat trust`
@@ -50,7 +66,13 @@ The latest release is `0.11.0`, from GitHub Releases, the Homebrew tap and crate
   on Linux, around the whole agent.
 - **Isolated tier on Linux.** `openmoat run --isolate` under bubblewrap, rootless.
 - **Egress proxy.** `openmoat proxy`: default deny, SNI check, its own DNS, an audit
-  row per connection, a secrets broker, and a user service on macOS and Linux.
+  row per connection, a secrets broker, and a user service on macOS and Linux. It serves
+  agent sessions only: `openmoat run`'s proxy issues its run's credentials (ADR-027), and
+  the standalone proxy the host sandboxes use accepts the ones Claude Code's
+  `SessionStart` hook issues, so each request carries its session's taint and share of
+  the connections (#558, ADR-044). Inside `openmoat run`, a brokered secret with
+  `tls: terminate` is injected into HTTPS requests, and only into the requests its
+  `allow` rules name (ADR-043).
 - **Evidence.** A conformance suite tagged by threat ([COVERAGE.md](COVERAGE.md)), a
   differential suite across the hook and the host sandboxes ([EVIDENCE.md](EVIDENCE.md)),
   MoatBench ([MOATBENCH.md](MOATBENCH.md)) and fuzz targets, all run in CI.
@@ -72,7 +94,8 @@ Making what exists solid in daily use, in the order of
 - The gaps in what each agent's hook shows OpenMoat, closed one at a time, each with a fixture.
 - Hardening items found in review, each with a fixture.
 - The Continue CLI checked end to end once a released `cn` runs hooks (#264).
-- A bypass round with security people (#131), then a public challenge (#323).
+- A bypass round with security people (#131); the public challenge is open
+  ([CHALLENGE.md](CHALLENGE.md), #323).
 
 ## Later
 
@@ -85,8 +108,6 @@ Planned for 1.0 or after, not yet scheduled:
 - HTTPS injection of brokered secrets in the standalone `openmoat proxy`, and keep-alive
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
   rules (ADR-043, #247).
-- Per-session credentials and session taint in the standalone `openmoat proxy` the host
-  sandboxes use; `openmoat run`'s proxy has them (#558, ADR-027).
 - `openmoat serve` (#320).
 - A conservative PowerShell tokenizer; until then PowerShell is `unparseable` and defers.
 - A scrubbed environment for agent commands (THREAT_MODEL T3).
