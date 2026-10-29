@@ -8,6 +8,7 @@ changes every place below at once:
 - each crate's `version` is `version.workspace = true` (or the same string);
 - the `openmoat-*` entries of `[workspace.dependencies]` require that version;
 - Cargo.lock and fuzz/Cargo.lock record it for every `openmoat*` package;
+- sdk/js/package.json, the JavaScript SDK, has it as its `version` (ADR-046);
 - README.md and docs/ROADMAP.md say "The latest release is `<version>`";
 - CHANGELOG.md starts with `## [Unreleased]`, then `## [<version>] - YYYY-MM-DD`,
   names each release once and repeats no `###` heading inside one section.
@@ -15,6 +16,7 @@ changes every place below at once:
     python3 scripts/ci/check-versions.py
 """
 
+import json
 import re
 import sys
 import tomllib
@@ -51,6 +53,12 @@ def check_lockfiles(version, problems):
             if name.startswith("openmoat") and name != "openmoat-fuzz":
                 if package["version"] != version:
                     problems.append(f"{lock}: {name} {package['version']}, workspace is {version}")
+
+
+def check_packages(version, problems):
+    package = json.loads((ROOT / "sdk/js/package.json").read_text(encoding="utf-8"))
+    if package.get("version") != version:
+        problems.append(f"sdk/js/package.json: version {package.get('version')!r}, workspace is {version}")
 
 
 def check_docs(version, problems):
@@ -91,6 +99,7 @@ def main():
     problems = []
     check_manifests(version, problems)
     check_lockfiles(version, problems)
+    check_packages(version, problems)
     check_docs(version, problems)
     check_changelog(version, problems)
     for problem in problems:

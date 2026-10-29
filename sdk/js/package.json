@@ -1,0 +1,36 @@
+{
+  "name": "@openmoat/sdk",
+  "version": "0.10.1",
+  "description": "OpenMoat's policy decisions for your own agent: decide each tool call before it runs. WebAssembly, no dependencies, no network.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crocodile-labs/openmoat.git",
+    "directory": "sdk/js"
+  },
+  "homepage": "https://github.com/crocodile-labs/openmoat/blob/main/docs/SDK.md",
+  "keywords": ["ai-agents", "security", "policy", "mcp", "guardrails"],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./openmoat.wasm": "./dist/openmoat.wasm"
+  },
+  "types": "./src/index.d.ts",
+  "files": [
+    "src/",
+    "dist/openmoat.wasm",
+    "dist/openmoat.wasm.sha256",
+    "LICENSE",
+    "LICENSE-APACHE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  }
+}

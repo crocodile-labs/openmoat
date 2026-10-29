@@ -6,6 +6,8 @@ members = [
     "crates/openmoat-audit",
     "crates/openmoat-proxy",
     "crates/openmoat-cli",
+    "crates/openmoat-sdk",
+    "crates/openmoat-wasm",
 ]
 # Fuzz targets build with nightly and `cargo fuzz`; they are their own workspace.
 exclude = ["fuzz"]
@@ -26,6 +28,7 @@ openmoat-core = { path = "crates/openmoat-core", version = "0.11.0" }
 openmoat-hosts = { path = "crates/openmoat-hosts", version = "0.11.0" }
 openmoat-audit = { path = "crates/openmoat-audit", version = "0.11.0" }
 openmoat-proxy = { path = "crates/openmoat-proxy", version = "0.11.0" }
+openmoat-sdk = { path = "crates/openmoat-sdk", version = "0.11.0" }
 serde = { version = "1", features = ["derive"] }
 serde-saphyr = { version = "2.0", default-features = false, features = ["deserialize", "serialize"] }
 # `float_roundtrip`: a number OpenMoat reads from a host's config file and
