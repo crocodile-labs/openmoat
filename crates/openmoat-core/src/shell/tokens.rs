@@ -62,7 +62,10 @@ fn expanded_refs(token: &str, literal: &[Range<usize>]) -> Vec<String> {
             continue;
         }
         let rest = &token[pos + 1..];
-        let body = rest.strip_prefix('{').unwrap_or(rest);
+        let (body, braced) = match rest.strip_prefix('{') {
+            Some(body) => (body, true),
+            None => (rest, false),
+        };
         if body
             .chars()
             .next()
@@ -72,7 +75,13 @@ fn expanded_refs(token: &str, literal: &[Range<usize>]) -> Vec<String> {
         }
         let end = body.find(|c: char| !is_name_char(c)).unwrap_or(body.len());
         let name = &body[..end];
+        // `${NAME:+word}` and `${NAME+word}` expand to `word` or to nothing: they
+        // tell whether `NAME` is set and show nothing of its value (a `$` in
+        // `word` is its own reference)
+        let presence_only =
+            braced && (body[end..].starts_with(":+") || body[end..].starts_with('+'));
         let skip = name.is_empty()
+            || presence_only
             || IGNORED_VARS.contains(&name)
             || name.chars().all(|c| c.is_ascii_digit());
         if !skip && !names.iter().any(|n| n == name) {
@@ -89,8 +98,43 @@ pub fn strip_at(token: &str) -> &str {
 
 /// The argument following the first of `flags`, if any.
 pub fn flag_payload<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
+    flag_payload_index(argv, flags).map(|at| argv[at].as_str())
+}
+
+/// The argv index of the argument following the first of `flags`, if any.
+pub fn flag_payload_index(argv: &[String], flags: &[&str]) -> Option<usize> {
     let pos = argv.iter().position(|a| flags.contains(&a.as_str()))?;
-    argv.get(pos + 1).map(String::as_str)
+    (pos + 1 < argv.len()).then_some(pos + 1)
+}
+
+/// `[ -n "$X" ]`, `[[ -z $X ]]`, `test -n "$X"`: the word at `i` is the one
+/// operand of a `-n`/`-z` test, which tells whether `X` has a value and shows
+/// nothing of it. Only a word that is a single `$X` or `${X}` counts; any other
+/// use of the variable in the test (`[ "$X" = y ]`, `${X:0:4}`) is a read.
+pub fn tests_presence(argv: &[String], i: usize) -> bool {
+    matches!(program_name(&argv[0]), "[" | "[[" | "test")
+        && i >= 2
+        && matches!(argv[i - 1].as_str(), "-n" | "-z")
+        && is_single_reference(&argv[i])
+}
+
+/// `$NAME` or `${NAME}` and nothing else.
+fn is_single_reference(word: &str) -> bool {
+    let Some(rest) = word.strip_prefix('$') else {
+        return false;
+    };
+    let name = match rest.strip_prefix('{') {
+        Some(inner) => match inner.strip_suffix('}') {
+            Some(name) => name,
+            None => return false,
+        },
+        None => rest,
+    };
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 pub fn basename(program: &str) -> &str {

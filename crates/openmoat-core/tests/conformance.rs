@@ -31,6 +31,10 @@ struct Fixture {
     /// from over-matching.
     #[serde(default)]
     threat: Option<String>,
+    /// One sentence on why a benign fixture's command is harmless, shown with
+    /// a failure so the reader does not have to work it out again.
+    #[serde(default)]
+    why: Option<String>,
     action: FixtureAction,
     expect: Expect,
     /// Program name → path it resolves to on the kernel search path.
@@ -334,13 +338,18 @@ fn default_policy_conformance() {
             failed += 1;
             let _ = writeln!(
                 report,
-                "  {file}/{id}: expected {expected:?} {rules:?}, got {got:?} {got_rules:?}\n    reasons: {reasons}",
+                "  {file}/{id}: expected {expected:?} {rules:?}, got {got:?} {got_rules:?}\n    reasons: {reasons}{why}",
                 id = fixture.id,
                 expected = fixture.expect.verdict,
                 rules = fixture.expect.rules,
                 got = decision.verdict,
                 got_rules = decision.rules,
                 reasons = decision.reasons.join(" | "),
+                why = fixture
+                    .why
+                    .as_deref()
+                    .map(|why| format!("\n    why: {why}"))
+                    .unwrap_or_default(),
             );
         }
     }

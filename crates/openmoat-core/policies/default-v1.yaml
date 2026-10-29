@@ -212,14 +212,20 @@ deny:
     env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*"]
   - id: pipe-to-shell
     reason: executes remote or decoded content
+    # a pipeline whose consumer runs its stdin as its program is also reported
+    # as `<stages> | <interpreter>` with the consumer's options dropped
+    # (shell/commands/pipelines.rs; `source`/`.` of stdin and `xargs <interpreter>`
+    # count), so `$` matches it whatever they are, and not an interpreter given
+    # its program on the line (`| python3 -c CODE`, `| node -e CODE`), which
+    # reads the stream as data
     shell:
-      - "curl * | {sh,bash,zsh,dash,ksh,fish}"
-      - "curl * | {python*,node,perl,ruby,php,deno,bun,pwsh}"
-      - "wget * | {sh,bash,zsh,dash,ksh,fish}"
-      - "wget * | {python*,node,perl,ruby,php,deno,bun,pwsh}"
+      - "curl * | {sh,bash,zsh,dash,ksh,fish,source,.} $"
+      - "curl * | {python*,node,perl,ruby,php,deno,bun,pwsh} $"
+      - "wget * | {sh,bash,zsh,dash,ksh,fish,source,.} $"
+      - "wget * | {python*,node,perl,ruby,php,deno,bun,pwsh} $"
       # decoder stages are reported as a canonical `<decoder> -d | <interpreter>` pipeline
-      - "* -d | {sh,bash,zsh,dash,ksh,fish}"
-      - "* -d | {python*,node,perl,ruby,php,deno,bun,pwsh}"
+      - "* -d | {sh,bash,zsh,dash,ksh,fish,source,.} $"
+      - "* -d | {python*,node,perl,ruby,php,deno,bun,pwsh} $"
       - "eval *"
   - id: destructive
     reason: irreversible damage
@@ -1021,9 +1027,14 @@ ask:
     shell: ["crontab *", "at *", "batch *"]
   - id: stops-openmoat
     reason: stops a running OpenMoat process, such as the egress proxy service
+    # `@kills <name>` atoms: a `pkill` or `killall` pattern that could match the
+    # process name `openmoat` or `moat`, read as the regular expression it is
+    # (`pkill -f 'open.*'`, `killall moat`; not `pkill -f my-server.js`, shell/kills.rs);
     # and `kill` of the pids a substitution names (`kill $(pgrep openmoat)`): its
     # atom carries the substitution's text in place of `$(…)`
-    shell: ["{pkill,*/pkill,killall,*/killall,kill,*/kill} * *moat*"]
+    shell:
+      - "@kills *moat*"
+      - "{kill,*/kill} * *moat*"
   - id: home-sweep
     reason: reads the whole home folder, secrets included
     # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)

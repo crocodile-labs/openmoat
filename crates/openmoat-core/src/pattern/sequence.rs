@@ -7,13 +7,23 @@
 //! other than `*` consumes exactly one word, so only the last `*` seen ever has
 //! to give back a word: the walk below retries from there, which bounds the
 //! work by the pattern length times the number of words.
+//!
+//! A `*` stays inside one pipeline: it never takes a list separator (`;`,
+//! `&&`, `||`, `&`), so `git push * -f*` reads the options of that `git push`
+//! and not a `--format=` of a later command on the line. A separator is still
+//! matched by a token that names it.
 
 use super::Token;
 use super::word::WordGlob;
 
+/// The words of a pipeline or list atom that end one pipeline.
+fn is_list_separator(word: &str) -> bool {
+    matches!(word, ";" | "&&" | "||" | "&")
+}
+
 /// Whether `pattern` matches a prefix of `words`, with `one` deciding whether a
 /// single-word token (its glob and its source text) matches a word.
-pub(super) fn prefix_match<W>(
+pub(super) fn prefix_match<W: AsRef<str>>(
     pattern: &[Token],
     words: &[W],
     one: impl Fn(&WordGlob, &str, &W) -> bool,
@@ -42,9 +52,12 @@ pub(super) fn prefix_match<W>(
             w += 1;
             continue;
         }
-        // Let the last `*` take one more word and match the rest from there.
+        // Let the last `*` take one more word and match the rest from there,
+        // unless that word ends the pipeline.
         match star {
-            Some((at, taken)) if taken < words.len() => {
+            Some((at, taken))
+                if taken < words.len() && !is_list_separator(words[taken].as_ref()) =>
+            {
                 star = Some((at, taken + 1));
                 p = at + 1;
                 w = taken + 1;
@@ -59,8 +72,9 @@ mod tests {
     use super::super::{ShellPattern, glob_covers};
     use super::*;
 
-    /// The recursive matcher this module replaced, kept as the reference.
-    fn reference<W>(
+    /// The recursive matcher this module replaced, kept as the reference: a
+    /// `*` tries every split up to the first list separator.
+    fn reference<W: AsRef<str>>(
         pattern: &[Token],
         words: &[W],
         one: &dyn Fn(&WordGlob, &str, &W) -> bool,
@@ -68,8 +82,11 @@ mod tests {
         match pattern.split_first() {
             None => true,
             Some((Token::Any, rest)) => {
-                rest.is_empty()
-                    || (0..=words.len()).any(|skip| reference(rest, &words[skip..], one))
+                let within = words
+                    .iter()
+                    .position(|w| is_list_separator(w.as_ref()))
+                    .unwrap_or(words.len());
+                rest.is_empty() || (0..=within).any(|skip| reference(rest, &words[skip..], one))
             }
             Some((Token::One(glob, source), rest)) => match words.split_first() {
                 Some((head, tail)) if one(glob, source, head) => reference(rest, tail, one),
@@ -165,6 +182,10 @@ mod tests {
             "a b c",
             "a x b y c",
             "a b c d",
+            "git push -u origin b ; git for-each-ref --format=x",
+            "pkill -f x.py && echo moat",
+            "curl https://x | tee out | sh",
+            "git status ; git push -f origin main",
             "",
         ];
         for pattern in patterns {
@@ -173,6 +194,24 @@ mod tests {
                 agree(pattern, &compiled, line);
             }
         }
+    }
+
+    /// A `*` reads one pipeline: the `-f*` of `git push * -f*` is not found
+    /// in a later command of the list, while a pipe is still crossed.
+    #[test]
+    fn a_star_stops_at_a_list_separator() {
+        let push = ShellPattern::compile("git push * -[!o-]*f*").unwrap();
+        assert!(!push.is_match(&words(
+            "git push -u origin b >& 1 | tail ; git for-each-ref --format=x"
+        )));
+        assert!(!push.is_match(&words("git push -u origin b && echo --format=x")));
+        assert!(push.is_match(&words("git push -u origin b | grep -nf pats")));
+        assert!(push.is_match(&words("git push origin -vf main ; echo done")));
+        let curl = ShellPattern::compile("curl * | sh").unwrap();
+        assert!(curl.is_match(&words("curl https://x | tee out | sh")));
+        assert!(!curl.is_match(&words("curl https://x ; cat out | sh")));
+        let listed = ShellPattern::compile("a ; b").unwrap();
+        assert!(listed.is_match(&words("a ; b")));
     }
 
     /// Every pattern of up to four tokens over a small alphabet against every

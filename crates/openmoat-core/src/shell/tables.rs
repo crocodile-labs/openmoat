@@ -254,6 +254,11 @@ pub const FILE_OPERANDS: &[&str] = &[
 /// `tr` takes character sets. A `/` in them is text.
 pub const NO_FILE_OPERANDS: &[&str] = &["echo", "printf", "tr"];
 
+/// Programs whose path operands name the file system holding them, which they
+/// query without opening anything under it: `df -h ~` reports free space and
+/// reads no file of the home folder. (`du` walks the tree and is a reader.)
+pub const FILESYSTEM_QUERIES: &[&str] = &["df"];
+
 /// Words before a command that leave it running in the current shell, so a
 /// `cd` after them still moves it (`builtin cd`, `if cd x; then`, `{ cd x; }`).
 pub const CWD_PREFIXES: &[&str] = &[

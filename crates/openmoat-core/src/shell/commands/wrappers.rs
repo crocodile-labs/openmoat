@@ -164,7 +164,7 @@ fn quote(word: &str) -> String {
 
 /// For `sudo -u x cmd …`, `env A=1 cmd …`, `xargs -0 cmd …`, `timeout 5 cmd …`
 /// return the wrapped argv.
-pub(super) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&'a [String]> {
+pub(crate) fn wrapped_command<'a>(argv: &'a [String], program: &str) -> Option<&'a [String]> {
     if let Some((_, subcommands)) = WRAPPER_SUBCOMMANDS
         .iter()
         .find(|(name, _)| *name == program)

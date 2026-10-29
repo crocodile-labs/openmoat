@@ -43,7 +43,10 @@ pub(super) fn scan_payload(
         // A word followed by `(` is a call (`subprocess.run(`, `app.dev(`), never a
         // host: a host in code is a string, so a quote or an operator follows it.
         let called = rest.starts_with('(');
-        if paths::looks_like_path(raw) {
+        // In code a `~` is an operator or a regex delimiter (`~x`, `=~`, perl's
+        // `s~a~b~`, a trailing `~s`), not a login name: only `~/…` is a path.
+        let tilde_operator = raw.starts_with('~') && !raw.starts_with("~/");
+        if !tilde_operator && paths::looks_like_path(raw) {
             sink.read(ctx, raw)?;
             if written.is_some() {
                 sink.write(ctx, raw)?;

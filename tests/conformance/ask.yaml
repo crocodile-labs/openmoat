@@ -1763,6 +1763,40 @@
   threat: T9
   action: { shell: "killall openmoat" }
   expect: { verdict: ask, rules: [stops-openmoat] }
+# the pattern is read as the regular expression pkill reads: these could match
+# `openmoat` or `moat` (shell/kills.rs)
+- id: ask-pkill-f-moat
+  threat: T9
+  action: { shell: "pkill -f moat" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-pkill-prefix-wildcard
+  threat: T9
+  action: { shell: "pkill -f 'open.*'" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-pkill-any-character
+  threat: T9
+  action: { shell: "pkill -f ." }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-pkill-wildcard-between-letters
+  threat: T9
+  action: { shell: "pkill -f 'o.*t'" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-pkill-exact-openmoat
+  threat: T9
+  action: { shell: "pkill -x openmoat" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-killall-moat
+  threat: T9
+  action: { shell: "killall moat" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-pkill-f-binary-path
+  threat: T9
+  action: { shell: "pkill -f /usr/local/bin/openmoat" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
+- id: ask-killall-regex-any-character
+  threat: T9
+  action: { shell: "killall -r 'm.at'" }
+  expect: { verdict: ask, rules: [stops-openmoat] }
 
 # T5 an agent's own CLI saving an MCP server, which it starts in every later
 # session, or starting a server's OAuth sign-in (`runs-later`)
