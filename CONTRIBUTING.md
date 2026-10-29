@@ -181,7 +181,10 @@ locally.
   with `--online README.md`, which also fetches every website link and image there.
 - **CodeQL:** `.github/workflows/codeql.yml` analyses the workflows, the JavaScript
   plugins, the Python scripts and the Rust code on every pull request (forks included),
-  on `main` and weekly, without building anything.
+  on `main` and weekly, without building anything. It analyses shipped code only
+  (`.github/codeql/codeql-config.yml` leaves out test files and folders, whose assertion
+  messages it would read as log injection); an alert's review thread must be resolved
+  before a pull request merges.
 - **Spelling:** [`typos`](https://github.com/crate-ci/typos) 1.51.1
   (`cargo install typos-cli --version 1.51.1 --locked`) with `_typos.toml`. The project
   writes British English (`behaviour`, `licence`); an American spelling that is someone
