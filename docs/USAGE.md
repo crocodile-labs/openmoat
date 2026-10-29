@@ -349,6 +349,37 @@ Then start a new agent session. Other services: `openmoat secret add <id> --host
 host by itself. When nothing denies the source yet, `openmoat secret add` adds a deny rule
 for it in the same diff. [POLICY.md](POLICY.md) §2.1 has the details.
 
+### Use a token over HTTPS, for some requests only
+
+Most APIs are HTTPS, which the proxy does not read unless a secret asks it to. Inside
+`openmoat run`, a secret with `--tls-terminate` gets its value into HTTPS requests, and
+`--allow` limits which requests may have it:
+
+```bash
+openmoat secret add gh --tls-terminate --allow 'GET /repos/**' --allow 'POST /repos/*/*/issues'
+openmoat run -- claude        # the agent holds moat-secret:gh:placeholder, never the token
+```
+
+`openmoat secret add` shows the change and asks, then offers to make the proxy's
+certificate authority (`openmoat proxy ca init`, also asked first): it can sign for
+`api.github.com` only, its key stays in `~/.moat/proxy-ca/`, which no sandbox lets the
+agent read, and only the commands `openmoat run` starts trust it. Then, in the run:
+
+- `curl https://api.github.com/repos/o/r -H "Authorization: Bearer $GITHUB_TOKEN"`,
+  and Python and Node.js clients reach GitHub with the real token; what they read back
+  never holds it.
+- A request the rules do not name (`DELETE /repos/o/r`, `GET /user/keys`, a path with
+  `..` in any spelling, a method-override header) gets `403` from the proxy and never
+  reaches GitHub. `openmoat show` lists it under `proxy-secret-route`.
+- A client that ignores `SSL_CERT_FILE` and `NODE_EXTRA_CA_CERTS` (Go programs such as
+  `gh` on macOS, tools that pin certificates) or speaks only HTTP/2 cannot reach the host; its request
+  is refused, recorded under `proxy-tls`, and the token is never sent.
+
+Run `openmoat proxy ca init` again to rotate the CA (it lasts a year; `openmoat run`
+warns a month before) or after adding a host. The standalone `openmoat proxy` and the
+agents' own sandboxes do not decrypt: there the HTTPS request keeps the placeholder.
+[ADR-043](adr/ADR-043-tls-termination-for-brokered-secrets.md) has the design.
+
 ### After upgrading OpenMoat
 
 `openmoat init` keeps your policy, so a rule the new default gained is offered, not forced.
@@ -580,6 +611,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat allowed [--format json]` | list what you allowed: permanent rules, session grants still in force, trusted repositories, each with how to take it back |
 | `openmoat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
 | `openmoat secret add gh` · `openmoat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only (`--file <path>` reads it from a file, `--header <name>` names the request header) |
+| `openmoat secret add <id> … --tls-terminate [--allow 'METHOD /path']…` | also put the value into HTTPS to the host inside `openmoat run`, which decrypts it with its own CA, and only into the requests the rules name; any other request to the host is refused ([ADR-043](adr/ADR-043-tls-termination-for-brokered-secrets.md)) |
+| `openmoat proxy ca init` | make the CA `openmoat run`'s proxy decrypts HTTPS with, for the hosts of `tls: terminate` secrets only; shows what it covers and asks, then pins it. Again to rotate it or cover a new host. Person-only |
 | `openmoat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
