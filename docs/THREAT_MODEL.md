@@ -989,8 +989,11 @@ something OpenMoat claims to stop.
   'print(os.environ)'`, ADR-010), and options that run programs (ADR-012) are matched
   by lists. Spellings outside the lists defer to the agent's own prompt or, if a broad allow covers them, are
   allowed.
-- **Interpreter code is scanned, not parsed.** A file that inline `python -c`, `node -e`
-  or similar code opens for writing is not checked as a write. Environment reads are
+- **Interpreter code is scanned, not parsed.** Inline code that calls a write API
+  (`open(p, "w")`, `write_text`, `fs.writeFileSync`, `File.write`, Perl's `">x"`, …)
+  writes every file name it shows as literal text, since the scan cannot tell which one
+  the write goes to; a name it builds at run time makes the code opaque (`opaque-code`
+  asks). Environment reads are
   recognised by their usual spellings (`os.environ`, `os.getenv`, `process.env`, `ENV`,
   `$ENV{…}`, `%ENV`, `getenv`, `$env:` in any case), Python's `getattr(os, 'environ')`,
   `vars(os)`, `os.__dict__`, `os` reached through `__import__('os')` and `env`/`printenv` run as a child with a literal command
