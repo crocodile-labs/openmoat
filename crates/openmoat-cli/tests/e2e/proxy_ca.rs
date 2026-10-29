@@ -106,8 +106,9 @@ fn a_terminated_secret_gets_a_pinned_ca_that_covers_its_host() {
         );
     }
     let lock = fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
+    // The lock is JSON, where a Windows separator is written escaped.
     assert!(
-        lock.contains(&ca_file("ca.pem")) && lock.contains(&ca_file("key.pem")),
+        lock.contains("proxy-ca") && lock.contains("ca.pem") && lock.contains("key.pem"),
         "{lock}"
     );
     let doctor = sb.moat(&["doctor"]);
