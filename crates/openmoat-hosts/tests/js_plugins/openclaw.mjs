@@ -180,7 +180,14 @@ try {
   );
 } finally {
   process.chdir(join(dir, ".."));
-  // Windows keeps a folder busy while a stand-in guard the plugin just killed
-  // exits; Node retries EBUSY, EPERM and ENOTEMPTY with these.
-  rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  // Best effort: stand-in processes the plugin does not wait for (the heartbeat
+  // it starts detached, a child it killed on timeout while it exits) can still
+  // have this folder as their working directory, which Windows refuses to
+  // remove (EBUSY). Every check has run by now; the folder is in the system
+  // temp directory.
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (error) {
+    console.error(`left ${dir}: ${error.code ?? error}`);
+  }
 }
