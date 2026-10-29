@@ -17,6 +17,7 @@ use crate::KnownSecrets;
 mod chain;
 mod export;
 mod export_verify;
+mod mcp_tickets;
 mod provenance;
 mod rules;
 mod schema;
@@ -27,6 +28,7 @@ mod session_writes;
 pub use chain::{BreakKind, ChainBreak, ChainHead, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
+pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use session_cache::Cached;
 pub use session_writes::{SessionWrite, Written};
@@ -208,14 +210,10 @@ pub struct Event {
 #[derive(Debug)]
 pub struct Store {
     pub(crate) conn: Connection,
-    /// The schema has the chain columns. Only a read-only handle on a database
-    /// no newer build has opened yet lacks them.
-    chained: bool,
-    /// The schema has the provenance table (version 4). Only a read-only
-    /// handle on a database no newer build has opened yet lacks it.
-    provenance: bool,
-    /// The schema has the session writes table (version 5), as for `provenance`.
-    session_writes: bool,
+    /// The schema version of the database as this handle reads it: only a
+    /// read-only handle on a database no newer build has opened yet is below
+    /// [`schema::SCHEMA_VERSION`], and lacks what later versions added.
+    version: i64,
     /// Masked in every event this handle records.
     secrets: KnownSecrets,
 }
@@ -258,9 +256,7 @@ impl Store {
         }
         Ok(Self {
             conn,
-            chained: found >= schema::CHAIN_VERSION,
-            provenance: found >= schema::PROVENANCE_VERSION,
-            session_writes: found >= schema::SESSION_WRITES_VERSION,
+            version: found,
             secrets: KnownSecrets::default(),
         })
     }
@@ -277,11 +273,29 @@ impl Store {
         schema::migrate(&conn)?;
         Ok(Self {
             conn,
-            chained: true,
-            provenance: true,
-            session_writes: true,
+            version: schema::SCHEMA_VERSION,
             secrets: KnownSecrets::default(),
         })
+    }
+
+    /// The schema has the chain columns (version 2).
+    fn chained(&self) -> bool {
+        self.version >= schema::CHAIN_VERSION
+    }
+
+    /// The schema has the provenance table (version 4).
+    fn provenance(&self) -> bool {
+        self.version >= schema::PROVENANCE_VERSION
+    }
+
+    /// The schema has the session writes table (version 5).
+    fn session_writes(&self) -> bool {
+        self.version >= schema::SESSION_WRITES_VERSION
+    }
+
+    /// The schema has the MCP call decisions table (version 6).
+    fn mcp_tickets(&self) -> bool {
+        self.version >= schema::MCP_TICKETS_VERSION
     }
 
     /// This handle, masking `secrets` in every event it records from now on.
@@ -427,7 +441,7 @@ const SELECT_UNCHAINED: &str = "SELECT id, ts_ms, host, session_id, call_id, cwd
 impl Store {
     /// The event query for this database's schema, for [`row_to_event`].
     pub(crate) fn select(&self) -> &'static str {
-        if self.chained {
+        if self.chained() {
             SELECT_CHAINED
         } else {
             SELECT_UNCHAINED

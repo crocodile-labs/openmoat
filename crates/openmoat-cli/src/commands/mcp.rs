@@ -21,6 +21,7 @@ use crate::mcp::wrap::{self, Done};
 use crate::mcp::{self, Change};
 use crate::render::Deferred;
 
+mod gate;
 mod proxy;
 
 pub use proxy::run as proxy;

@@ -57,7 +57,7 @@ impl Store {
         session_id: &str,
         writes: &[SessionWrite],
     ) -> Result<(), StoreError> {
-        if writes.is_empty() || !self.session_writes {
+        if writes.is_empty() || !self.session_writes() {
             return Ok(());
         }
         let secrets = &self.secrets;
@@ -100,7 +100,7 @@ impl Store {
 
     /// Whether `session_id` on `host` wrote any file: one probe of the index.
     pub fn session_wrote_any(&self, host: &str, session_id: &str) -> Result<bool, StoreError> {
-        if !self.session_writes {
+        if !self.session_writes() {
             return Ok(false);
         }
         let found: Option<i64> = self
@@ -123,7 +123,7 @@ impl Store {
         session_id: &str,
         paths: &[String],
     ) -> Result<Vec<Written>, StoreError> {
-        if paths.is_empty() || !self.session_writes {
+        if paths.is_empty() || !self.session_writes() {
             return Ok(Vec::new());
         }
         let secrets = &self.secrets;

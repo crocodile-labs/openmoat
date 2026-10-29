@@ -154,7 +154,7 @@ impl Store {
     /// Chained events matching `filter`, oldest first, in export form. Events
     /// written before the chain existed have no hash to verify and are left out.
     pub fn export(&self, filter: &ExportFilter<'_>) -> Result<Vec<ExportedEvent>, StoreError> {
-        if !self.chained {
+        if !self.chained() {
             return Ok(Vec::new());
         }
         let mut stmt = self.conn.prepare(&format!(

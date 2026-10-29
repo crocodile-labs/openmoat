@@ -236,7 +236,7 @@ impl Store {
             head: None,
             broken: None,
         };
-        if !self.chained {
+        if !self.chained() {
             report.events = self.count()?;
             report.unchained = report.events;
             return Ok(report);
@@ -286,7 +286,7 @@ impl Store {
     /// The newest event that has a hash, or `None` for a log without one. It is
     /// the chain's head only when [`Store::verify_chain`] finds no break.
     pub fn head(&self) -> Result<Option<ChainHead>, StoreError> {
-        if !self.chained {
+        if !self.chained() {
             return Ok(None);
         }
         Ok(self
@@ -308,7 +308,7 @@ impl Store {
     /// The stored chain hash of event `id`; `None` when there is no such
     /// event or it has no hash.
     pub fn hash_of(&self, id: super::EventId) -> Result<Option<String>, StoreError> {
-        if !self.chained {
+        if !self.chained() {
             return Ok(None);
         }
         Ok(self

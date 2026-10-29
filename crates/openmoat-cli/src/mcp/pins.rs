@@ -184,39 +184,7 @@ pub fn tool_of(tool: &str, name: &str) -> bool {
 /// `value` as JSON with every object's keys sorted, so the digest does not
 /// depend on the order a host writes them in.
 pub fn canonical(value: &Value) -> String {
-    let mut out = String::new();
-    write_canonical(value, &mut out);
-    out
-}
-
-fn write_canonical(value: &Value, out: &mut String) {
-    match value {
-        Value::Object(map) => {
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort();
-            out.push('{');
-            for (i, key) in keys.into_iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                out.push_str(&Value::String(key.clone()).to_string());
-                out.push(':');
-                write_canonical(&map[key], out);
-            }
-            out.push('}');
-        }
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_canonical(item, out);
-            }
-            out.push(']');
-        }
-        scalar => out.push_str(&scalar.to_string()),
-    }
+    openmoat_hosts::canonical_json(value)
 }
 
 /// The entry as a person is shown it.
