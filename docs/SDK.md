@@ -31,7 +31,7 @@ The crate is `openmoat-sdk` in `crates/openmoat-sdk`.
 
 ```toml
 [dependencies]
-openmoat-sdk = "0.10.1"   # until it is on crates.io: { git = "https://github.com/crocodile-labs/openmoat" }
+openmoat-sdk = { git = "https://github.com/crocodile-labs/openmoat" }   # on crates.io from the next release
 ```
 
 ```rust
