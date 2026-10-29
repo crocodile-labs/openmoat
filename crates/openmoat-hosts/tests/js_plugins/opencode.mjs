@@ -342,5 +342,7 @@ try {
   );
 } finally {
   process.chdir(join(dir, ".."));
-  rmSync(dir, { recursive: true, force: true });
+  // Windows keeps a folder busy while a stand-in guard the plugin just killed
+  // exits; Node retries EBUSY, EPERM and ENOTEMPTY with these.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }
