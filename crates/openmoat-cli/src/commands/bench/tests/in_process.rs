@@ -1,6 +1,7 @@
 //! The scenarios of ADR-039 and the benign and MCP categories decided
-//! in-process: the default policy, the files each session wrote and the
-//! session-code check, as `openmoat guard` applies them, without hook payloads
+//! in-process: the default policy, the session's taint from its earlier
+//! steps, the files each session wrote and the session-code check, as
+//! `openmoat guard` applies them, without hook payloads
 //! or an audit log on disk the end-to-end bench needs. An MCP step is the
 //! action `openmoat mcp proxy` decides too (ADR-045). Each runs with and
 //! without an OS sandbox.
@@ -8,12 +9,13 @@
 use openmoat_audit::{NewEvent, Store};
 use openmoat_core::{Action, CompiledPolicy, Decision, EvalContext, NoResolver, Policy, Verdict};
 use openmoat_hosts::Host;
+use std::time::{Duration, Instant};
 
 use super::super::scenario::{Call, Scenario, scenarios};
 use crate::home::Home;
 use crate::realpath::FsPathResolver;
 use crate::session_code;
-use crate::taint::provenance;
+use crate::taint::{self, provenance};
 
 const HOME: &str = "/Users/me";
 
@@ -70,6 +72,17 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
             return Vec::new();
         };
         let decided = compiled.decide_with(&action, &NoResolver, &FsPathResolver);
+        // What the steps before exposed the session to, folded from the audit
+        // log as the guard folds it (`session-taint` after untrusted content).
+        let mut save = |_: &taint::CacheWrite| {};
+        let mut progress = taint::Progress {
+            deadline: Instant::now() + Duration::from_secs(10),
+            save: &mut save,
+            folded: 0,
+        };
+        let (session, _) =
+            taint::of_session(&store, host, "s", &compiled, &proj, &mut progress).unwrap();
+        let decided = compiled.with_taint(decided, &action, &FsPathResolver, &session.taint);
         let seen = provenance::observe(
             &store,
             &compiled,
@@ -77,7 +90,7 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
                 session: "s",
                 action: &action,
                 content: None,
-                untrusted: None,
+                untrusted: session.taint.untrusted.as_deref(),
             },
         )
         .unwrap();

@@ -532,6 +532,12 @@ deny:
     # `@placeholder-egress <id> <host>` atoms: `moat-secret:<id>:placeholder` going
     # anywhere but the secret's `host` (POLICY.md §2.1)
     shell: ["@placeholder-egress *"]
+  - id: encoded-egress
+    reason: sends a long encoded value in a URL after the session read secret material
+    # `@encoded-egress <host>` atoms, added only once the session read a secret: a URL a
+    # fetch, browser or MCP tool opens that carries 80 or more characters of base64 or
+    # hex (POLICY.md §4.1, ADR-047)
+    shell: ["@encoded-egress *"]
 
 allow:
   - id: project-fs

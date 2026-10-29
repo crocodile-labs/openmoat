@@ -272,22 +272,9 @@ fn plain_url(word: &str) -> bool {
     !word.starts_with('@') && !authority.contains('@')
 }
 
-/// Whether `host` is a domain name a fetch may name: dotted, ending in a
-/// letters-only top-level label, with no all-digit label. IP literals in any
-/// spelling (`2852039166`, `0x7f000001`, `[::1]`, `203.0.113.7`) and
-/// single-label names (`intranet`) stay `net`.
+/// Whether `host` is a domain name a fetch may name ([`crate::host::fetchable`]).
 pub(super) fn fetchable_host(host: &str) -> bool {
-    let labels: Vec<&str> = host.trim_end_matches('.').split('.').collect();
-    labels.len() >= 2
-        && labels.iter().all(|l| {
-            !l.is_empty()
-                && !l.chars().all(|c| c.is_ascii_digit())
-                && l.chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        })
-        && labels
-            .last()
-            .is_some_and(|tld| tld.chars().all(|c| c.is_ascii_alphabetic()))
+    crate::host::fetchable(host)
 }
 
 #[cfg(test)]

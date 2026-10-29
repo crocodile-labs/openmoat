@@ -324,6 +324,11 @@ The main gaps:
   whose writes the hook cannot see (the files `tar x` or `unzip` extract, a build's or
   a package manager's output, what a script writes). An allowed host can receive data
   from an allowed command: the proxy checks the host, not what is sent inside HTTPS.
+- **A browser goes where the page sends it.** A browser MCP call that only opens a page
+  defers like `WebFetch`, and OpenMoat checks the URL it names, but not where the page's
+  scripts, links and redirects lead next, nor where its name resolves. What the page says
+  marks the session as untrusted, so writes to files that run later ask; installs and
+  later pages do not.
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before

@@ -12,8 +12,13 @@
 //! token itself is never put in an atom, so it never reaches a reason.
 
 use crate::action::{Action, AtomicAction};
+use crate::host::web;
 use crate::secret::Secret;
 use crate::{host, shell, token};
+
+mod encoded;
+
+pub(super) use encoded::atoms as encoded_atoms;
 
 /// First word of an atom for a token sent to a host not its service's.
 const TOKEN_ATOM: &str = "@token-egress";
@@ -75,10 +80,7 @@ fn push(out: &mut Vec<AtomicAction>, first: &str, what: &str, host: &str) {
 
 fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
     match action {
-        Action::Fetch { url } | Action::Net { url } => vec![Send {
-            texts: vec![url],
-            hosts: host::of_url(url).into_iter().collect(),
-        }],
+        Action::Fetch { url } | Action::Net { url } => vec![url_send(url)],
         Action::WebSearch { query } => vec![Send {
             texts: vec![query],
             hosts: vec![WEB_SEARCH.to_owned()],
@@ -86,16 +88,26 @@ fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
         // A tool's arguments: each URL it names, and what each shell command
         // among them sends.
         Action::McpTool {
-            hosts, commands, ..
-        }
-        | Action::UnknownTool {
+            hosts,
+            opens,
+            commands,
+            ..
+        } => hosts
+            .iter()
+            .map(|url| url_send(url))
+            .chain(opens.iter().map(|url| open_send(url)))
+            .chain(
+                (!commands.is_empty())
+                    .then(|| atoms.iter().flat_map(command_sends))
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect(),
+        Action::UnknownTool {
             hosts, commands, ..
         } => hosts
             .iter()
-            .map(|url| Send {
-                texts: vec![url],
-                hosts: host::of_url(url).into_iter().collect(),
-            })
+            .map(|url| url_send(url))
             .chain(
                 (!commands.is_empty())
                     .then(|| atoms.iter().flat_map(command_sends))
@@ -106,6 +118,27 @@ fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
         Action::Shell { .. } => atoms.iter().flat_map(command_sends).collect(),
         Action::Unchecked { action, .. } => sends(action, atoms),
         _ => Vec::new(),
+    }
+}
+
+/// A URL a tool reads or connects to: sent to every host a client may read it
+/// as reaching ([`web::readings`]).
+fn url_send(url: &str) -> Send<'_> {
+    Send {
+        texts: vec![url],
+        hosts: web::readings(url),
+    }
+}
+
+/// The page a read-only call opens (ADR-047): sent to its hosts, as a browser
+/// opens it, and to the hosts of the URLs inside it, which a redirect reaches.
+fn open_send(url: &str) -> Send<'_> {
+    let opened = web::with_scheme(url);
+    let mut hosts = web::readings(&opened);
+    hosts.extend(web::embedded_hosts(&opened));
+    Send {
+        texts: vec![url],
+        hosts,
     }
 }
 

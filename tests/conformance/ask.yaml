@@ -2119,3 +2119,19 @@
   threat: T6
   action: { shell: "python3 -c 'open(\"/p/.github/workflows/x.yml\",\"w\").write(\"on: push\")'" }
   expect: { verdict: ask, rules: [runs-later] }
+
+# Browser MCP page opens (ADR-047): look-alike hosts are not the host they imitate.
+# A host is matched in its ASCII (punycode) form, so a look-alike never inherits an
+# allow; one with characters outside ASCII names no host the hook can read.
+- id: ask-browser-open-punycode-lookalike
+  threat: T12
+  action: { mcp_tool: { name: mcp__playwright__browser_navigate, opens: ["https://xn--gthub-2ta.com/login"] } }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: ask-browser-open-unicode-lookalike
+  threat: T12
+  action: { mcp_tool: { name: mcp__playwright__browser_navigate, opens: ["https://gíthub.com/login"] } }
+  expect: { verdict: defer, rules: [unparseable] }
+- id: ask-browser-open-unlisted-host
+  threat: T12
+  action: { mcp_tool: { name: mcp__playwright__browser_navigate, opens: ["https://evil.example/"] } }
+  expect: { verdict: defer, rules: [default.fetch] }

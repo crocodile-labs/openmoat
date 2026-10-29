@@ -14,6 +14,26 @@
 
 use crate::shell::tables::{FILE_EXTENSIONS, KNOWN_TLDS};
 
+pub(crate) mod web;
+
+/// Whether `host` is a domain name a fetch may name: dotted, ending in a
+/// letters-only top-level label, with no all-digit label. IP literals in any
+/// spelling (`2852039166`, `0x7f000001`, `[::1]`, `203.0.113.7`) and
+/// single-label names (`intranet`, `localhost`) stay `net` (ADR-035, ADR-047).
+pub(crate) fn fetchable(host: &str) -> bool {
+    let labels: Vec<&str> = host.trim_end_matches('.').split('.').collect();
+    labels.len() >= 2
+        && labels.iter().all(|l| {
+            !l.is_empty()
+                && !l.chars().all(|c| c.is_ascii_digit())
+                && l.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
+        && labels
+            .last()
+            .is_some_and(|tld| tld.chars().all(|c| c.is_ascii_alphabetic()))
+}
+
 /// Longest DNS name in text form, without the trailing dot (RFC 1035 §2.3.4).
 pub const MAX_DNS_NAME_LEN: usize = 253;
 

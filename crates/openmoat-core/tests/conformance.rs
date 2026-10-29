@@ -135,7 +135,7 @@ struct ForeignShellFixture {
     command: String,
 }
 
-/// `mcp_tool: "name"` or `mcp_tool: { name, reads, writes, hosts, unchecked }`.
+/// `mcp_tool: "name"` or `mcp_tool: { name, reads, writes, hosts, opens, unchecked }`.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum McpFixture {
@@ -148,6 +148,9 @@ enum McpFixture {
         writes: Vec<String>,
         #[serde(default)]
         hosts: Vec<String>,
+        /// The one page a read-only call opens (a browser's `navigate`, ADR-047).
+        #[serde(default)]
+        opens: Vec<String>,
         #[serde(default)]
         commands: Vec<String>,
         unchecked: Option<String>,
@@ -191,6 +194,7 @@ impl FixtureAction {
                     reads,
                     writes,
                     hosts,
+                    opens,
                     commands,
                     unchecked,
                 } => Action::McpTool {
@@ -198,6 +202,7 @@ impl FixtureAction {
                     reads,
                     writes,
                     hosts,
+                    opens,
                     commands,
                     unchecked,
                 },
