@@ -22,12 +22,14 @@ extend-ignore-re = [
     "--inh-caps",  # setpriv's option for the inheritable capabilities
     "vision_analyze",  # Hermes Agent's tool, spelt as Hermes spells it
     "config/normalize\\.ts",  # OpenCode 2's source file, cited by its name
+    "\\bcomand\"?:",  # a misspelt field the SDK tests send on purpose: an unknown field is refused
     "\\bcatalog(\\.ts|\":)",  # OpenCode 2's `mcp/catalog.ts` and `mcp.timeout.catalog` key, spelt as OpenCode spells them
 ]
 
 [default.extend-identifiers]
 TransactionBehavior = "TransactionBehavior" # rusqlite
 AppArmor = "AppArmor"
+FinalizationRegistry = "FinalizationRegistry" # JavaScript's built-in, spelt as the language spells it
 
 [default.extend-words]
 # OpenMoat's own rule id and verdict reason.
