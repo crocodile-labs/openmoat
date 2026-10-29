@@ -125,6 +125,12 @@ pub enum Action {
         /// URLs or hosts the call contacts, derived from its arguments.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hosts: Vec<String>,
+        /// The one URL a call that only opens or reads a page names (a
+        /// browser's `navigate`), when its arguments send nothing else
+        /// (ADR-047): decided as a `fetch` of a plain web page, as `hosts`
+        /// otherwise or under `mcp.browser_open: net`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        opens: Vec<String>,
         /// Shell commands the call may run, derived from its arguments where
         /// the host cannot tell an MCP tool from one of its own.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -162,6 +168,7 @@ impl Action {
             reads: Vec::new(),
             writes: Vec::new(),
             hosts: Vec::new(),
+            opens: Vec::new(),
             commands: Vec::new(),
             unchecked: None,
         }

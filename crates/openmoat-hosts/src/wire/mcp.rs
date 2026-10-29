@@ -3,7 +3,9 @@
 //! Servers are not standardised, so this is key-based: arguments named like a
 //! path become `fs.read` (or `fs.write` for write-shaped tools), arguments named
 //! like a URL become `net`, down to `MAX_DEPTH` levels. Unknown shapes add nothing
-//! and the call is judged by its name alone. Adding resources can only make a
+//! and the call is judged by its name alone. A call that only opens one web
+//! page (a browser's `navigate`, [`browser`]) names that page in `opens`
+//! instead, which the engine decides as a fetch (ADR-047). Adding resources can only make a
 //! verdict stricter, so arguments that cannot be read are an error (the guard
 //! fails closed) rather than silently ignored, and arguments nested past
 //! `MAX_DEPTH` are reported in `unchecked` so the call is decided at least `ask`.
@@ -12,6 +14,8 @@ use openmoat_core::Action;
 use serde_json::Value;
 
 use crate::HostError;
+
+mod browser;
 
 const PATH_KEYS: &[&str] = &[
     "path",
@@ -40,11 +44,16 @@ pub(super) const MAX_RESOURCES: usize = 1024;
 /// Cursor sends the input as a JSON string, Claude Code and Codex as an object.
 pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
     let args = &arguments(name, input)?;
-    let tool = name
-        .rsplit("__")
-        .next()
-        .unwrap_or(name)
-        .to_ascii_lowercase();
+    let own = name.rsplit("__").next().unwrap_or(name);
+    // A call that only opens a page names nothing else to search for.
+    if let Some(open) = browser::open(own, args) {
+        let mut action = Action::mcp(name);
+        if let (browser::Open::Url(url), Action::McpTool { opens, .. }) = (open, &mut action) {
+            opens.push(url);
+        }
+        return Ok(action);
+    }
+    let tool = own.to_ascii_lowercase();
     let mut found = Resources {
         // any word of the name: `file_write`, `bulk_delete` and `download_file`
         // write as surely as `write_file`
@@ -63,6 +72,7 @@ pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
         reads: found.reads,
         writes: found.writes,
         hosts: found.hosts,
+        opens: Vec::new(),
         commands: found.commands,
         unchecked: found.unchecked,
     })
@@ -108,6 +118,7 @@ pub(crate) fn read_resource(tool: &str, input: &Value) -> Result<Action, HostErr
         reads,
         writes: Vec::new(),
         hosts,
+        opens: Vec::new(),
         commands: Vec::new(),
         unchecked: None,
     })
@@ -168,7 +179,7 @@ impl Resources {
         let ends = |suffixes: &[&str]| suffixes.iter().any(|s| key.ends_with(&format!("_{s}")));
         if self.everything && super::unknown::names_a_command(key) {
             self.commands.extend(super::unknown::command_lines(value));
-        } else if URL_KEYS.contains(&key) || ends(&["url", "uri"]) {
+        } else if names_url(key) {
             self.hosts.extend(strings(value));
         } else if PATH_KEYS.contains(&key)
             || ends(&["path", "paths", "dir", "directory", "file", "filename"])
@@ -195,6 +206,12 @@ impl Resources {
             None => {}
         }
     }
+}
+
+/// Whether `key` (in snake case) names a URL: `url`, `uri`, `href`, …, or ends
+/// in `_url` or `_uri` (`base_url`).
+fn names_url(key: &str) -> bool {
+    URL_KEYS.contains(&key) || key.ends_with("_url") || key.ends_with("_uri")
 }
 
 /// `key` in snake case, as the key lists spell it: `sourcePath`, `source-path`
@@ -330,13 +347,47 @@ mod tests {
 
     #[test]
     fn url_arguments_yield_hosts_and_cursor_strings_are_parsed() {
-        let a = ok("mcp__fetch__fetch", &json!({"url": "https://evil.com/x"}));
+        let a = ok("mcp__http__request", &json!({"url": "https://evil.com/x"}));
         assert_eq!(parts(a).2, ["https://evil.com/x"]);
         let a = ok(
-            "mcp__fetch__fetch",
-            &json!("{\"url\":\"https://evil.com/x\"}"),
+            "mcp__http__request",
+            &json!("{\"url\":\"https://evil.com/x\", \"method\": \"POST\"}"),
         );
         assert_eq!(parts(a).2, ["https://evil.com/x"]);
+    }
+
+    /// A call that only opens a page names it in `opens`; one that sends more
+    /// keeps its URL in `hosts`, and a screenshot's path is a write (ADR-047).
+    #[test]
+    fn a_page_open_names_its_page_and_anything_more_stays_a_host() {
+        let opens = |name: &str, input: &serde_json::Value| match ok(name, input) {
+            Action::McpTool { opens, hosts, .. } => (opens, hosts),
+            other => panic!("not an mcp action: {other:?}"),
+        };
+        let u = "https://docs.rs/serde";
+        assert_eq!(
+            opens("mcp__playwright__browser_navigate", &json!({"url": u})),
+            (vec![u.to_owned()], vec![])
+        );
+        assert_eq!(
+            opens(
+                "mcp__claude-in-chrome__navigate",
+                &json!({"url": "back", "tabId": 1})
+            ),
+            (vec![], vec![])
+        );
+        assert_eq!(
+            opens(
+                "mcp__chrome-devtools__navigate_page",
+                &json!({"url": u, "initScript": "x()"})
+            ),
+            (vec![], vec![u.to_owned()])
+        );
+        let (_, writes, _) = parts(ok(
+            "mcp__chrome-devtools__take_screenshot",
+            &json!({"pageId": 1, "filePath": "~/.zshrc"}),
+        ));
+        assert_eq!(writes, ["~/.zshrc"]);
     }
 
     #[test]

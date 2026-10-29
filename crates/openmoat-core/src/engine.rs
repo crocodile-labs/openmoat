@@ -279,10 +279,17 @@ impl CompiledPolicy<'_> {
         action: &Action,
         paths: &dyn PathResolver,
     ) -> (Vec<AtomicAction>, Option<crate::shell::Unparsed>) {
-        let (mut atoms, unparsed) = checked_atoms(action, &self.ctx, paths);
+        let (mut atoms, unparsed) = checked_atoms(action, &self.ctx, self.opens_as(), paths);
         let egress = egress::atoms(action, &atoms, &self.policy.secrets);
         atoms.extend(egress);
         (atoms, unparsed)
+    }
+
+    /// How a read-only page open is decided under this policy (ADR-047).
+    fn opens_as(&self) -> atoms::Opens {
+        atoms::Opens {
+            as_fetch: self.policy.browser_open_is_fetch(),
+        }
     }
 
     /// The commands of `action` that publish local commits (`git push`, `gh pr

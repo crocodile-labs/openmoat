@@ -83,7 +83,7 @@ impl CompiledPolicy<'_> {
             cwd: cwd.to_owned(),
             ..self.ctx.clone()
         };
-        let (atoms, _) = checked_atoms(action, &ctx, paths);
+        let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
         let mut taint = Taint::default();
         for atom in atoms {
             match atom {
@@ -126,10 +126,29 @@ impl CompiledPolicy<'_> {
         if *taint == Taint::default() {
             return decision;
         }
+        // After a secret read, a long encoded value in a URL is what a secret
+        // looks like on its way out: `@encoded-egress` atoms, which the policy's
+        // rules decide (`encoded-egress` denies them in the default policy).
+        let encoded = if taint.secrets.is_empty() {
+            Vec::new()
+        } else {
+            super::egress::encoded_atoms(action.shown(), |host| {
+                taint.secrets.iter().all(|s| {
+                    s.host
+                        .as_deref()
+                        .is_some_and(|own| own.eq_ignore_ascii_case(host))
+                })
+            })
+        };
+        let encoded = encoded
+            .iter()
+            .filter_map(|atom| self.matched_rules(atom))
+            .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Ask));
         self.atoms(action, paths)
             .0
             .iter()
             .filter_map(|atom| self.tainted(atom, taint))
+            .chain(encoded)
             .fold(decision, |mut acc, next| {
                 acc.merge(next);
                 acc

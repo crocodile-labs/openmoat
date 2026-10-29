@@ -67,10 +67,28 @@ pub fn reason_line(decision: &Decision) -> String {
 }
 
 /// Words that make a tool name write-shaped (`write_file`, `DeleteDirectory`):
-/// the paths such a tool names are checked as written, not read.
+/// the paths such a tool names are checked as written, not read. A browser's
+/// screenshot, snapshot or trace tool writes the file its path names (Chrome
+/// DevTools MCP `take_screenshot {filePath}`, Playwright MCP
+/// `browser_take_screenshot {filename}`).
 const WRITE_VERBS: &[&str] = &[
-    "write", "edit", "create", "move", "rename", "delete", "remove", "append", "mkdir", "copy",
-    "save", "patch", "update", "download",
+    "write",
+    "edit",
+    "create",
+    "move",
+    "rename",
+    "delete",
+    "remove",
+    "append",
+    "mkdir",
+    "copy",
+    "save",
+    "patch",
+    "update",
+    "download",
+    "screenshot",
+    "snapshot",
+    "trace",
 ];
 
 /// A non-empty string field of a tool's input, or the error naming it.

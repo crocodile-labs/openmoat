@@ -100,3 +100,41 @@ fn fetch_defaults_fall_back_to_net() {
         (Verdict::Defer, vec!["unparseable".to_owned()])
     );
 }
+
+/// An MCP call that only opens a page (`opens`, ADR-047) is a fetch of a plain
+/// web page, so `fetch` rules and `defaults.fetch` decide it; under
+/// `mcp.browser_open: net` it is a `net` connection, as before.
+#[test]
+fn a_page_open_is_a_fetch_unless_the_policy_says_net() {
+    let open = |url: &str| {
+        let mut action = Action::mcp("mcp__playwright__browser_navigate");
+        if let Action::McpTool { opens, .. } = &mut action {
+            opens.push(url.to_owned());
+        }
+        action
+    };
+    let rules = "defaults: { '*': defer, net: deny, fetch: defer }\n\
+                 allow:\n  - id: docs\n    fetch: ['docs.rs']\n";
+    let as_fetch = policy(&format!("version: 1\n{rules}"));
+    let as_net = policy(&format!(
+        "version: 1\nmcp: {{ browser_open: net }}\n{rules}"
+    ));
+    assert!(as_fetch.browser_open_is_fetch());
+    assert!(!as_net.browser_open_is_fetch());
+    let unlisted = open("https://example.org/");
+    assert_eq!(verdict_and_rules(&as_fetch, &unlisted).0, Verdict::Defer);
+    assert_eq!(
+        verdict_and_rules(&as_net, &unlisted),
+        (Verdict::Deny, vec!["default.net".to_owned()])
+    );
+    // a `fetch` allow covers the page, never the strict `net` reading of it
+    assert_eq!(
+        verdict_and_rules(&as_fetch, &open("https://docs.rs/")).0,
+        Verdict::Defer
+    );
+    assert_eq!(
+        verdict_and_rules(&as_net, &open("https://docs.rs/")).0,
+        Verdict::Deny
+    );
+    assert!(Policy::parse("version: 1\nmcp: { browser_open: always }\n").is_err());
+}

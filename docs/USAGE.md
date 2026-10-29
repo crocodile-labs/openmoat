@@ -49,6 +49,34 @@ or follows redirects (`curl -L`, `wget` without `--max-redirect=0`) to an unlist
 host is denied ([POLICY.md](POLICY.md) §4). Every file a fetch writes (`-o`, `-O`,
 `--output-dir`, `wget -P`, a plain `wget`'s saved name) is checked like any other write.
 
+### Browser MCP servers
+
+An agent's browser tools can open public pages without OpenMoat stopping them. A call
+that only opens a page is decided like `WebFetch` (ADR-047), so it defers to the agent's
+own prompt and auto-approve modes run it:
+
+| Call | Verdict | Rule |
+|---|---|---|
+| Playwright `browser_navigate`, Chrome DevTools `navigate_page` or `new_page`, Puppeteer `puppeteer_navigate`, Claude in Chrome `navigate`, Browserbase `navigate` to `https://docs.rust-lang.org/std/` | defer | `default.fetch` |
+| the same to `http://localhost:5173/` or `http://127.0.0.1:3000/` | defer | `local-net` |
+| a screenshot, a snapshot or a click on the open page (no URL) | defer | `default` |
+| a page whose URL holds a token (`?t=ghp_…`) or a placeholder | deny | `token-egress`, `placeholder-egress` |
+| `http://169.254.169.254/`, `http://metadata.google.internal/`, and a URL that redirects there (`?next=http://169.254.169.254/`) | deny | `cloud-metadata` |
+| an IP address in another spelling (`http://2852039166/`), a private address (`http://192.168.1.1/`), a single-label host (`http://intranet/`), `https://github.com@evil.example/` | deny | `default.net` |
+| `file:///Users/you/.ssh/id_rsa` | deny | `secrets-paths` |
+| `javascript:…`, `data:…`, `chrome://settings` | ask | `unparseable` |
+| a navigation that also runs a script (`initScript`), sets headers or launch options, or a form submit, to an unlisted host | deny | `default.net` |
+| any page open after the session read secret material | ask | `session-taint` |
+| the same with 80 or more characters of base64 or hex in the URL | deny | `encoded-egress` |
+
+A page can carry a prompt injection, so opening one marks the session as having read
+untrusted content: a later write to a CI workflow, a build file or an agent instruction
+file asks (`session-taint`), while reading code, editing source and running tests do not.
+To allow a documentation site outright, add it under a `fetch` allow; to keep every page
+open denied for unlisted hosts, as before, set `mcp: { browser_open: net }` in your policy
+(POLICY.md §1). What the hook cannot see is where the page itself leads next (its
+scripts, links and redirects); see THREAT_MODEL.md §5.
+
 To see these decisions without an agent, run `openmoat demo`: it decides a few example
 calls (everyday work, a key read, a key sent out, an encoded command, a misspelled
 package, switching OpenMoat off) with your policy, and runs, changes and writes nothing.

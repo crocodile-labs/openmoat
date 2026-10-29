@@ -359,6 +359,22 @@ pub struct McpSettings {
     /// tool descriptions pinned as good.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub trust_first_sight: bool,
+    /// How an MCP call that only opens or reads one web page is decided
+    /// (ADR-047): `fetch` (absent) as a `fetch` of its host, like `WebFetch`;
+    /// `net` as a `net` connection, which the default policy denies for
+    /// unlisted hosts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser_open: Option<BrowserOpen>,
+}
+
+/// `mcp.browser_open`: the kind a read-only page open of an MCP tool is decided as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BrowserOpen {
+    /// A `fetch` of the page's host (the default).
+    Fetch,
+    /// A `net` connection to the page's host, as any other MCP URL argument.
+    Net,
 }
 
 /// The release age `moat run` asks of new package versions when the policy
@@ -381,6 +397,13 @@ impl Policy {
     #[must_use]
     pub fn trust_mcp_first_sight(&self) -> bool {
         self.mcp.as_ref().is_some_and(|m| m.trust_first_sight)
+    }
+
+    /// Whether an MCP call that only opens a web page is decided as a `fetch`
+    /// (`mcp.browser_open`, ADR-047): yes unless the policy says `net`.
+    #[must_use]
+    pub fn browser_open_is_fetch(&self) -> bool {
+        self.mcp.as_ref().and_then(|m| m.browser_open) != Some(BrowserOpen::Net)
     }
 }
 

@@ -6,15 +6,26 @@
 use super::EvalContext;
 use crate::action::{Action, AtomicAction};
 use crate::expand::Expansion;
+use crate::host::web;
+use crate::paths;
 use crate::realpath::{PathResolver, physical};
 use crate::shell::{ParseOutcome, ShellContext, Unparsed, classify_globs};
-use crate::{host, paths};
+
+mod urls;
+
+/// How an MCP call that only opens a page is decided (`mcp.browser_open`,
+/// ADR-047): as a `fetch` of a plain web page, or as a `net` connection.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Opens {
+    pub(super) as_fetch: bool,
+}
 
 /// Classify an [`Action`] into atomic actions for the given context, and list
 /// the reads and writes among them whose path is a glob the shell expands.
 fn classify_action(
     action: &Action,
     ctx: &EvalContext,
+    opens_as: Opens,
 ) -> (ParseOutcome, Vec<(AtomicAction, bool)>) {
     let outcome = match action {
         Action::Shell { command } => {
@@ -55,21 +66,22 @@ fn classify_action(
                 .flat_map(|p| file_atoms(p, ctx, read))
                 .collect(),
         ),
-        Action::Net { url } => match host::of_url(url) {
-            Some(host) => ParseOutcome::Parsed(vec![AtomicAction::Net { host }]),
-            None => ParseOutcome::Unparseable {
+        // every host a client may read the URL as reaching (`host::web`)
+        Action::Net { url } | Action::Fetch { url } => match web::readings(url) {
+            hosts if hosts.is_empty() => ParseOutcome::Unparseable {
                 reason: format!("no host in url `{url}`"),
                 atoms: Vec::new(),
                 asks: false,
             },
-        },
-        Action::Fetch { url } => match host::of_url(url) {
-            Some(host) => ParseOutcome::Parsed(vec![AtomicAction::Fetch { host }]),
-            None => ParseOutcome::Unparseable {
-                reason: format!("no host in url `{url}`"),
-                atoms: Vec::new(),
-                asks: false,
-            },
+            hosts => ParseOutcome::Parsed(
+                hosts
+                    .into_iter()
+                    .map(|host| match action {
+                        Action::Fetch { .. } => AtomicAction::Fetch { host },
+                        _ => AtomicAction::Net { host },
+                    })
+                    .collect(),
+            ),
         },
         Action::WebSearch { query } => ParseOutcome::Parsed(vec![AtomicAction::WebSearch {
             query: query.clone(),
@@ -90,15 +102,17 @@ fn classify_action(
                 reads,
                 writes,
                 hosts,
+                opens: &[],
                 commands,
             };
-            return named.atoms(first, "tool", ctx);
+            return named.atoms(first, "tool", ctx, opens_as);
         }
         Action::McpTool {
             name,
             reads,
             writes,
             hosts,
+            opens,
             commands,
             ..
         } => {
@@ -107,11 +121,12 @@ fn classify_action(
                 reads,
                 writes,
                 hosts,
+                opens,
                 commands,
             };
-            return named.atoms(first, "mcp", ctx);
+            return named.atoms(first, "mcp", ctx, opens_as);
         }
-        Action::Unchecked { action, .. } => return classify_action(action, ctx),
+        Action::Unchecked { action, .. } => return classify_action(action, ctx, opens_as),
     };
     (outcome, Vec::new())
 }
@@ -122,6 +137,8 @@ struct Named<'a> {
     reads: &'a [String],
     writes: &'a [String],
     hosts: &'a [String],
+    /// The page a read-only call opens (MCP `opens`, ADR-047).
+    opens: &'a [String],
     commands: &'a [String],
 }
 
@@ -134,21 +151,26 @@ impl Named<'_> {
         first: AtomicAction,
         what: &str,
         ctx: &EvalContext,
+        opens_as: Opens,
     ) -> (ParseOutcome, Vec<(AtomicAction, bool)>) {
         let mut atoms = vec![first];
         atoms.extend(self.reads.iter().flat_map(|p| file_atoms(p, ctx, read)));
         atoms.extend(self.writes.iter().flat_map(|p| file_atoms(p, ctx, write)));
         let mut unparsed: Option<Unparsed> = None;
-        for host in self.hosts {
-            match host::of_url(host) {
-                Some(host) => atoms.push(AtomicAction::Net { host }),
-                None => {
-                    unparsed.get_or_insert_with(|| Unparsed {
-                        reason: format!("no host in {what} argument `{host}`"),
-                        asks: false,
-                    });
-                }
+        let mut note = |why: Option<Unparsed>| {
+            // a URL that asks wins over one that only cannot be read
+            if let Some(why) = why
+                && (why.asks || unparsed.is_none())
+                && !unparsed.as_ref().is_some_and(|u| u.asks)
+            {
+                unparsed = Some(why);
             }
+        };
+        for url in self.hosts {
+            note(urls::named(url, what, ctx, &mut atoms));
+        }
+        for url in self.opens {
+            note(urls::opened(url, opens_as.as_fetch, ctx, &mut atoms));
         }
         let mut globs = Vec::new();
         let cwd = [Some(ctx.cwd.clone())];
@@ -186,9 +208,10 @@ impl Named<'_> {
 pub(super) fn checked_atoms(
     action: &Action,
     ctx: &EvalContext,
+    opens_as: Opens,
     paths: &dyn PathResolver,
 ) -> (Vec<AtomicAction>, Option<Unparsed>) {
-    let (outcome, globs) = classify_action(action, ctx);
+    let (outcome, globs) = classify_action(action, ctx, opens_as);
     let (mut atoms, unparsed) = outcome.into_parts();
     let mut expansion = Expansion::new(paths);
     for (glob, dot_dirs) in &globs {

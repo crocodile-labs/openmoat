@@ -339,6 +339,28 @@ fn response_bytes_are_exact_and_escaped() {
     );
 }
 
+/// A browser server's navigation that only opens a page names it in `opens`
+/// (decided as a fetch, ADR-047); one that also runs a script on the page
+/// keeps its URL in `hosts`.
+#[test]
+fn claude_code_browser_navigation() {
+    let parse = |name| {
+        Host::ClaudeCode
+            .parse_request(&fixture("claude-code", name))
+            .unwrap()
+            .action
+    };
+    let page = "https://docs.rust-lang.org/std/".to_owned();
+    let Some(Action::McpTool { opens, hosts, .. }) = parse("mcp-browser-navigate") else {
+        panic!("not an mcp action");
+    };
+    assert_eq!((opens, hosts), (vec![page.clone()], vec![]));
+    let Some(Action::McpTool { opens, hosts, .. }) = parse("mcp-browser-navigate-script") else {
+        panic!("not an mcp action");
+    };
+    assert_eq!((opens, hosts), (vec![], vec![page]));
+}
+
 /// Tools the matcher sends since the hook covers them: an MCP resource is read
 /// as its server's `read_resource`, a `file:` one as the (percent-decoded) file;
 /// entering an existing worktree reads its directory; `Skill` and a new worktree
@@ -358,6 +380,7 @@ fn claude_code_mcp_resources_worktrees_and_skills() {
             reads: vec!["/Users/me/.ssh/id_rsa".into()],
             writes: vec![],
             hosts: vec![],
+            opens: vec![],
             commands: vec![],
             unchecked: None,
         })
@@ -369,6 +392,7 @@ fn claude_code_mcp_resources_worktrees_and_skills() {
             reads: vec![],
             writes: vec![],
             hosts: vec!["https://api.github.com/repos/x/y/readme".into()],
+            opens: vec![],
             commands: vec![],
             unchecked: None,
         })
