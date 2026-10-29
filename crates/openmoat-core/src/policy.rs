@@ -71,6 +71,7 @@ use crate::verdict::Verdict;
 
 mod hook_only;
 
+/// The policy schema version (`version:`) this build reads; any other is an error.
 pub const SUPPORTED_VERSION: u32 = 1;
 
 /// Why a policy file cannot be used. Any of these keeps `guard` from deciding.

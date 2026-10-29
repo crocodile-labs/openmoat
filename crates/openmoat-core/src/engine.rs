@@ -5,6 +5,8 @@
 //! an allow rule can never override a deny, so "deny by default with holes"
 //! is expressed through per-kind `defaults`, never through a deny rule.
 
+use std::borrow::Cow;
+
 use crate::action::{Action, AtomicAction};
 use crate::kind::Kind;
 use crate::pattern::{GlobPattern, ShellPattern, any_match};
@@ -60,16 +62,18 @@ pub struct EvalContext {
 /// A policy with all patterns compiled for one evaluation context.
 ///
 /// Compile once per process (or per policy reload) and reuse for every tool
-/// call; compilation dominates the cost of a single decision.
+/// call; compilation dominates the cost of a single decision. It borrows the
+/// policy ([`Self::compile`]) or owns it ([`Self::compile_owned`], for a caller
+/// such as `openmoat-sdk` that keeps one engine for as long as it likes).
 #[derive(Debug)]
 pub struct CompiledPolicy<'p> {
-    policy: &'p Policy,
+    policy: Cow<'p, Policy>,
     ctx: EvalContext,
-    deny: Vec<CompiledGroup<'p>>,
-    repo_ask: Vec<CompiledGroup<'p>>,
-    allow: Vec<CompiledGroup<'p>>,
-    ask: Vec<CompiledGroup<'p>>,
-    defer: Vec<CompiledGroup<'p>>,
+    deny: Vec<CompiledGroup>,
+    repo_ask: Vec<CompiledGroup>,
+    allow: Vec<CompiledGroup>,
+    ask: Vec<CompiledGroup>,
+    defer: Vec<CompiledGroup>,
     /// Paths a write to asks once the session read untrusted content (`taint`).
     protected: Vec<GlobPattern>,
     /// The folders deny rules' paths lie in, which reading or writing asks for.
@@ -77,8 +81,11 @@ pub struct CompiledPolicy<'p> {
 }
 
 #[derive(Debug)]
-struct CompiledGroup<'p> {
-    group: &'p RuleGroup,
+struct CompiledGroup {
+    /// The group's id, as decisions name it.
+    id: String,
+    /// The group's `reason`, which prefixes each of its reasons.
+    reason: Option<String>,
     shell: Vec<ShellPattern>,
     /// Glob patterns per kind, indexed by `Kind as usize`; the shell slot is empty.
     globs: [Vec<GlobPattern>; Kind::ALL.len()],
@@ -101,30 +108,42 @@ impl<'p> CompiledPolicy<'p> {
     /// not compile, and on a `moved_dirs` entry whose `default` could alias every
     /// pattern (empty, bare `/`, or not an absolute or `~/`-rooted directory).
     pub fn compile(policy: &'p Policy, ctx: &EvalContext) -> Result<Self, PolicyError> {
+        Self::build(Cow::Borrowed(policy), ctx)
+    }
+
+    /// [`Self::compile`] for a policy the result keeps, so it borrows nothing.
+    pub fn compile_owned(
+        policy: Policy,
+        ctx: &EvalContext,
+    ) -> Result<CompiledPolicy<'static>, PolicyError> {
+        CompiledPolicy::build(Cow::Owned(policy), ctx)
+    }
+
+    fn build(policy: Cow<'p, Policy>, ctx: &EvalContext) -> Result<Self, PolicyError> {
         ctx.validate_moved_dirs()?;
-        let compile_list = |groups: &'p [RuleGroup], allow: bool| {
+        let compile_list = |groups: &[RuleGroup], allow: bool| {
             groups
                 .iter()
                 .map(|g| CompiledGroup::compile(g, ctx, allow))
                 .collect::<Result<Vec<_>, _>>()
         };
         Ok(Self {
-            policy,
             ctx: ctx.clone(),
             deny: compile_list(&policy.deny, false)?,
             repo_ask: compile_list(&policy.repo_ask, false)?,
             allow: compile_list(&policy.allow, true)?,
             ask: compile_list(&policy.ask, false)?,
             defer: compile_list(&policy.defer, false)?,
-            protected: taint::compile_protected(policy, ctx)?,
+            protected: taint::compile_protected(&policy, ctx)?,
             folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
+            policy,
         })
     }
 
     /// The policy this was compiled from.
     #[must_use]
-    pub fn policy(&self) -> &'p Policy {
-        self.policy
+    pub fn policy(&self) -> &Policy {
+        &self.policy
     }
 
     /// The context this was compiled for.
@@ -168,11 +187,11 @@ impl<'p> CompiledPolicy<'p> {
             let mut hit = Decision::new(verdict);
             for g in groups {
                 if g.matches(action) {
-                    let why = g.group.reason.as_ref().map_or_else(
+                    let why = g.reason.as_ref().map_or_else(
                         || action.describe(),
                         |r| format!("{r}: {}", action.describe()),
                     );
-                    hit.push(&g.group.id, why);
+                    hit.push(&g.id, why);
                 }
             }
             if !hit.rules.is_empty() {
@@ -183,9 +202,9 @@ impl<'p> CompiledPolicy<'p> {
     }
 }
 
-impl<'p> CompiledGroup<'p> {
+impl CompiledGroup {
     /// `allow` says whether the group is an allow rule ([`Self::bare_hosts`]).
-    fn compile(group: &'p RuleGroup, ctx: &EvalContext, allow: bool) -> Result<Self, PolicyError> {
+    fn compile(group: &RuleGroup, ctx: &EvalContext, allow: bool) -> Result<Self, PolicyError> {
         let shell = group
             .shell
             .iter()
@@ -212,7 +231,8 @@ impl<'p> CompiledGroup<'p> {
             }
         }
         Ok(Self {
-            group,
+            id: group.id.clone(),
+            reason: group.reason.clone(),
             shell,
             globs,
             bare_hosts: allow.then_some(bare),

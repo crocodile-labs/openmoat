@@ -242,6 +242,22 @@ install` keeps it running as a user service. What each layer stops is tested in 
 ([docs/EVIDENCE.md](docs/EVIDENCE.md)); the details are in [docs/SANDBOX.md](docs/SANDBOX.md).
 `openmoat run` is not available on Windows.
 
+### In your own agent: the SDK
+
+Building your own agent product? The same decisions are a library: `openmoat-sdk` for
+Rust and `@openmoat/sdk` for JavaScript (the engine as WebAssembly, no dependencies, no
+network). Compile a policy once, then decide each tool call before your loop runs it:
+
+```js
+const engine = (await load()).compile({ policy, context: { home, cwd, project: cwd } });
+engine.decide({ type: "shell", command: "cat ~/.ssh/id_rsa" }); // { verdict: "deny", rules: ["secrets-paths"], … }
+```
+
+The SDK decides and your code enforces: a denied call must not run, and an `ask` waits for
+a person. It is not a sandbox. Both packages decide every conformance fixture exactly as
+`openmoat guard` does. Guide, examples and the stability contract:
+[docs/SDK.md](docs/SDK.md).
+
 ## Everyday use
 
 Run these in your own terminal. Agents are denied all of them.
@@ -383,6 +399,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 | [Usage](docs/USAGE.md) | Every command, reviewing what the agent did, changing the policy |
 | [Policy](docs/POLICY.md) | The rule format, pattern syntax, evaluation order and the policy lock |
 | [Sandboxes](docs/SANDBOX.md) | The agents' own sandboxes, `openmoat run` and `openmoat run --isolate` |
+| [SDK](docs/SDK.md) | OpenMoat's decisions in your own agent product, from Rust or JavaScript |
 | [Threat model](docs/THREAT_MODEL.md) | What is defended, and what is not |
 | [MoatBench](docs/MOATBENCH.md), [coverage](docs/COVERAGE.md), [evidence](docs/EVIDENCE.md) | Attack scenarios, conformance fixtures per threat, what the OS layer stops |
 | [Architecture](docs/ARCHITECTURE.md), [decisions](docs/adr/README.md) | How the code is built and why |

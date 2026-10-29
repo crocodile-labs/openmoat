@@ -54,6 +54,9 @@ The latest release is `0.11.0`, from GitHub Releases, the Homebrew tap and crate
 - **Evidence.** A conformance suite tagged by threat ([COVERAGE.md](COVERAGE.md)), a
   differential suite across the hook and the host sandboxes ([EVIDENCE.md](EVIDENCE.md)),
   MoatBench ([MOATBENCH.md](MOATBENCH.md)) and fuzz targets, all run in CI.
+- **SDK.** `openmoat-sdk` for Rust and `@openmoat/sdk` for JavaScript (the engine as
+  WebAssembly): the same decisions inside your own agent product, which enforces them
+  (ADR-046, [SDK.md](SDK.md)). On `main`; not yet on crates.io or npm.
 
 What it does not do: confine every call. Only commands inside the host sandboxes or
 `openmoat run` are confined by the operating system. Elsewhere an allowed call runs with

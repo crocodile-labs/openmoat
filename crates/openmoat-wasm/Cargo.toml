@@ -1,0 +1,42 @@
+[package]
+name = "openmoat-wasm"
+description = "The WebAssembly module behind OpenMoat's JavaScript SDK (sdk/js): openmoat-sdk behind a plain C ABI, JSON in and out, no imports."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# Shipped inside the npm package (sdk/js), not on crates.io.
+publish = false
+
+[lib]
+# `cdylib` is the `.wasm`; `rlib` lets the protocol's tests run natively.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+openmoat-core.workspace = true
+openmoat-sdk.workspace = true
+serde.workspace = true
+
+# The workspace's lints, except `unsafe_code`: `deny` instead of `forbid`, so the
+# three exports in `lib.rs` can each `#[expect]` it. Exporting a function under a
+# fixed symbol name (`#[unsafe(no_mangle)]`) counts as unsafe code; the crate has
+# no `unsafe` block (ADR-046). Keep this table in step with Cargo.toml's.
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"

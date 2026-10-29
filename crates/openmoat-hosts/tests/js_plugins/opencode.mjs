@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { heartbeats } from "./common.mjs";
+import { HARNESS_GUARD_TIMEOUT_MS, heartbeats } from "./common.mjs";
 
 const [source] = process.argv.slice(2);
 const dir = mkdtempSync(join(tmpdir(), "openmoat-opencode-plugin-"));
@@ -65,7 +65,7 @@ function plugin(moat, name) {
   }
   const text = original
     .replace("const MOAT = __MOAT_BINARY__;", `const MOAT = ${JSON.stringify(moat)};`)
-    .replace("const GUARD_TIMEOUT_MS = 45_000;", "const GUARD_TIMEOUT_MS = 1_000;");
+    .replace("const GUARD_TIMEOUT_MS = 45_000;", `const GUARD_TIMEOUT_MS = ${HARNESS_GUARD_TIMEOUT_MS};`);
   const file = join(dir, name);
   writeFileSync(file, text);
   return file;

@@ -57,7 +57,8 @@ pub use patch::writes as patch_writes;
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
 pub use policy::{
-    BrowserOpen, Defaults, McpSettings, Policy, PolicyError, RuleGroup, SandboxSettings,
+    BrowserOpen, Defaults, McpSettings, Policy, PolicyError, RuleGroup, SUPPORTED_VERSION,
+    SandboxSettings,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};

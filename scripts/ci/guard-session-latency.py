@@ -13,8 +13,10 @@ other, so the log is the real, hash-chained one.
 
 The session cache (#570) folds only the calls since the last one, so a long
 session should cost what a short one does. Like guard-latency.py, it warns
-when p95 at 5,000 earlier calls is over the 15 ms budget and fails above
-three times it: a regression back to folding the whole session fails here.
+when p95 at 5,000 earlier calls is over the 15 ms budget, and fails above
+three times it when the guard's own time (`latency_us`) is over three times
+it too: a regression back to folding the whole session fails here, while a
+loaded runner's slow process starts only warn.
 
 Each size times BATCHES batches of `runs` calls and reports the median of the
 batches' p95. With 50 runs a batch's p95 is its third-slowest call, so three
@@ -115,17 +117,17 @@ def main():
         print(f"::notice title=guard latency {title}::"
               f"end to end median {statistics.median(flat_wall):.1f} ms, p95 {p95:.1f} ms; "
               f"latency_us median {statistics.median(flat_own):.1f} ms, p95 {own_p95:.1f} ms")
-        return p95
+        return p95, own_p95
 
-    rows, earlier, worst = [], 0, 0.0
+    rows, earlier, worst, worst_own = [], 0, 0.0, 0.0
     for size in SIZES:
         while earlier < size:
             call(f"cat src/file{earlier}.rs")
             earlier += 1
         wall, own = timed(lambda _: "git status")
-        p95 = report(f"{size:,}", f"after {size} earlier calls", wall, own)
+        p95, own_p95 = report(f"{size:,}", f"after {size} earlier calls", wall, own)
         if size == SIZES[-1]:
-            worst = p95
+            worst, worst_own = p95, own_p95
 
     # File provenance (ADR-029): another session reads untrusted content and
     # writes PROVENANCE_FILES files; every later read is looked up by path.
@@ -134,8 +136,9 @@ def main():
     for i in range(PROVENANCE_FILES):
         call(f"echo x > src/gen{i}.rs", session="tainted-writer")
     wall, own = timed(lambda i: f"cat src/gen{i % PROVENANCE_FILES}.rs")
-    worst = max(worst, report(f"{SIZES[-1]:,} and {PROVENANCE_FILES} tainted files",
-                              f"with {PROVENANCE_FILES} tainted files", wall, own))
+    p95, own_p95 = report(f"{SIZES[-1]:,} and {PROVENANCE_FILES} tainted files",
+                          f"with {PROVENANCE_FILES} tainted files", wall, own)
+    worst, worst_own = max(worst, p95), max(worst_own, own_p95)
 
     # Code the session wrote (ADR-039): the long session writes SCRIPTS files and
     # runs them, so each call looks the files up and, where Claude Code's sandbox
@@ -143,8 +146,9 @@ def main():
     for i in range(SCRIPTS):
         call(f"echo 'print(1)' > tools/s{i}.py")
     wall, own = timed(lambda i: f"python3 tools/s{i % SCRIPTS}.py")
-    worst = max(worst, report(f"{SIZES[-1]:,} and {SCRIPTS} scripts it wrote, run",
-                              f"running {SCRIPTS} scripts the session wrote", wall, own))
+    p95, own_p95 = report(f"{SIZES[-1]:,} and {SCRIPTS} scripts it wrote, run",
+                          f"running {SCRIPTS} scripts the session wrote", wall, own)
+    worst, worst_own = max(worst, p95), max(worst_own, own_p95)
 
     table = "\n".join([
         f"`openmoat guard` late in one session, {BATCHES} batches of {runs} runs per size, "
@@ -158,11 +162,15 @@ def main():
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
             out.write(table + "\n")
-    if worst > FAIL_MS:
-        print(f"::error::guard p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
-              f"over {FAIL_MS:.0f} ms (3x the budget)")
+    if worst_own > FAIL_MS:
+        print(f"::error::guard's own p95 at {SIZES[-1]} earlier calls is {worst_own:.1f} ms, "
+              f"over {FAIL_MS:.0f} ms (3x the budget; end to end {worst:.1f} ms)")
         sys.exit(1)
-    if worst > BUDGET_MS:
+    if worst > FAIL_MS:
+        print(f"::warning::guard end to end p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
+              f"over {FAIL_MS:.0f} ms, but its own p95 is {worst_own:.1f} ms: a slow runner, "
+              "not a slower guard")
+    elif worst > BUDGET_MS:
         print(f"::warning::guard p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
               f"over the {BUDGET_MS:.0f} ms budget")
 

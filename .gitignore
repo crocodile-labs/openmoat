@@ -5,3 +5,4 @@
 /dist
 # Claude Code agent worktrees: full checkouts of this repository
 /.claude/worktrees/
+/sdk/js/dist/

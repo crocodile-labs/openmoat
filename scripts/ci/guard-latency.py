@@ -11,10 +11,15 @@ p99 are over all the runs; the p95 is the median of the batches' p95, as in
 guard-session-latency.py: a few slow process starts on a busy runner push up
 one batch, rarely two of three, while a real regression slows every batch.
 
-The 15 ms p95 budget is in docs/ARCHITECTURE.md (testing layers). CI runners are shared and noisy, so the end
-to end p95 only warns above the budget and fails above three times it: the
-check exists to catch a regression of the kind fixed in #95 (a policy load
-that grew to most of the budget), not to measure the laptop number.
+The 15 ms p95 budget is in docs/ARCHITECTURE.md (testing layers). CI runners
+are shared and noisy, so the end to end p95 only warns above the budget, and
+fails above three times it only when the guard's own time (`latency_us`, from
+its start to before the audit write) is over three times it too: the check
+exists to catch a regression of the kind fixed in #95 (a policy load that
+grew to most of the budget), which shows in the guard's own time, not to
+measure the laptop number or the runner's process start. The same binary
+measured 20-33 ms end to end on pushes to main and 46-50 ms in pull request
+runs of the same day; its own time stayed under half the limit in both.
 """
 
 import json
@@ -69,7 +74,7 @@ def main():
     # binary inside the project of the current directory.
     subprocess.run([moat, "init"], env=env, cwd=home, check=True, capture_output=True)
 
-    rows, worst = [], 0.0
+    rows, worst, worst_own = [], 0.0, 0.0
     for name, command, code in CASES:
         payload = json.dumps({
             "session_id": "latency",
@@ -99,6 +104,7 @@ def main():
                     "SELECT latency_us FROM events ORDER BY id DESC LIMIT ?", (runs,))])
         e2e, own = summary(wall), summary(recorded)
         worst = max(worst, e2e["p95"])
+        worst_own = max(worst_own, own["p95"])
         rows.append(f"| {name} | " + " | ".join(
             f"{s['median']:.1f} / {s['p95']:.1f} / {s['p99']:.1f}" for s in (e2e, own)) + " |")
 
@@ -114,10 +120,14 @@ def main():
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
             out.write(table + "\n")
-    if worst > FAIL_MS:
-        print(f"::error::guard p95 {worst:.1f} ms is over {FAIL_MS:.0f} ms (3x the budget)")
+    if worst_own > FAIL_MS:
+        print(f"::error::guard's own p95 {worst_own:.1f} ms is over {FAIL_MS:.0f} ms "
+              f"(3x the budget; end to end {worst:.1f} ms)")
         sys.exit(1)
-    if worst > BUDGET_MS:
+    if worst > FAIL_MS:
+        print(f"::warning::guard end to end p95 {worst:.1f} ms is over {FAIL_MS:.0f} ms, "
+              f"but its own p95 is {worst_own:.1f} ms: a slow runner, not a slower guard")
+    elif worst > BUDGET_MS:
         print(f"::warning::guard p95 {worst:.1f} ms is over the {BUDGET_MS:.0f} ms budget")
 
 

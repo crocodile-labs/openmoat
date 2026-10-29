@@ -585,6 +585,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "openmoat-sdk"
+version = "0.11.0"
+dependencies = [
+ "openmoat-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "openmoat-wasm"
+version = "0.11.0"
+dependencies = [
+ "openmoat-core",
+ "openmoat-sdk",
+ "serde",
+]
+
+[[package]]
 name = "pkg-config"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"

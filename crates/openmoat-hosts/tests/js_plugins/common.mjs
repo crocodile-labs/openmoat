@@ -47,6 +47,14 @@ process.stdin.on("end", () => {
 });
 `;
 
+/**
+ * The guard timeout the harnesses give the plugin: long enough for a Node start on a
+ * loaded CI runner (one second was not: allow and ask answers arrived late and were
+ * read as "did not answer in time"), short enough that the `hang` stand-in, which
+ * lives ten seconds, is cut off first.
+ */
+export const HARNESS_GUARD_TIMEOUT_MS = 5_000;
+
 /** A scratch directory holding the stand-in, which becomes the working directory. */
 export function scratch(prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -59,7 +67,8 @@ export function scratch(prefix) {
 
 /**
  * The plugin at `source` written to `dir/name` running `moat`, with the guard's
- * timeout cut to one second. Fails when the lines it replaces are not there.
+ * timeout cut to [`HARNESS_GUARD_TIMEOUT_MS`]. Fails when the lines it replaces are
+ * not there.
  */
 export function plugin(source, dir, moat, name) {
   const original = readFileSync(source, "utf8");
@@ -68,7 +77,7 @@ export function plugin(source, dir, moat, name) {
   }
   const text = original
     .replace("const MOAT = __MOAT_BINARY__;", `const MOAT = ${JSON.stringify(moat)};`)
-    .replace("const GUARD_TIMEOUT_MS = 45_000;", "const GUARD_TIMEOUT_MS = 1_000;");
+    .replace("const GUARD_TIMEOUT_MS = 45_000;", `const GUARD_TIMEOUT_MS = ${HARNESS_GUARD_TIMEOUT_MS};`);
   const file = join(dir, name);
   writeFileSync(file, text);
   return file;

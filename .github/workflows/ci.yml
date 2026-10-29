@@ -120,6 +120,23 @@ jobs:
       - run: node --version
       - run: scripts/ci/check-js.sh
 
+  # The JavaScript SDK: the WebAssembly module built for wasm32 and every
+  # conformance fixture decided through it under Node (ADR-046).
+  sdk-js:
+    name: JavaScript SDK (wasm module, conformance under Node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: rust toolchain
+        # The channel, components and targets come from rust-toolchain.toml.
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: node --version
+      - run: scripts/ci/sdk-js.sh
+
   # Not a required check: shared runners are noisy. Warns above the 15 ms p95
   # budget, fails above 3x it (scripts/ci/guard-latency.py), and the same late in
   # a 5,000-call session (scripts/ci/guard-session-latency.py).
@@ -226,7 +243,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if cargo semver-checks check-release -p openmoat-core -p openmoat-hosts -p openmoat-audit -p openmoat-proxy --baseline-rev "$BASE_SHA"; then
+          if cargo semver-checks check-release -p openmoat-core -p openmoat-hosts -p openmoat-audit -p openmoat-proxy -p openmoat-sdk --baseline-rev "$BASE_SHA"; then
             exit 0
           fi
           if gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx breaking; then

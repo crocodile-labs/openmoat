@@ -190,7 +190,7 @@ impl CompiledPolicy<'_> {
             .into_iter()
             .flatten()
             .any(|g| {
-                let id = g.group.id.as_str();
+                let id = g.id.as_str();
                 (id == SECRET_RULE
                     || id
                         .strip_prefix(REPO_RULE_PREFIX)

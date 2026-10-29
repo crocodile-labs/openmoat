@@ -1,0 +1,33 @@
+[package]
+name = "openmoat-sdk"
+description = "OpenMoat's policy decisions for your own agent: compile a policy, decide each tool call before it runs. Pure; enforcement stays with the caller."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories = ["development-tools"]
+readme = "README.md"
+
+[features]
+# `Policy::read`: read a policy file from disk. Everything else does no I/O.
+fs = []
+
+[dependencies]
+openmoat-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+
+# The example is a real agent loop; `cargo test` runs its tests.
+[[example]]
+name = "agent_loop"
+test = true
+
+[lints]
+workspace = true

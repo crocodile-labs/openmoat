@@ -464,3 +464,23 @@ fn moved_dirs_add_a_spelling_under_the_default_they_replace() {
     assert_eq!(moved.spellings("~/.claudex/x"), ["/h/.claudex/x"]);
     assert_eq!(moved.spellings("**/.claude"), ["**/.claude"]);
 }
+
+/// A policy compiled owned decides exactly as the same policy compiled borrowed.
+#[test]
+fn owned_and_borrowed_compilation_decide_the_same() {
+    let p = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+    let borrowed = CompiledPolicy::compile(&p, &ctx()).unwrap();
+    let owned = CompiledPolicy::compile_owned(p.clone(), &ctx()).unwrap();
+    for command in [
+        "git status",
+        "cat ~/.ssh/id_rsa",
+        "curl https://evil.example",
+        "x $(",
+    ] {
+        assert_eq!(
+            owned.decide(&shell(command)),
+            borrowed.decide(&shell(command))
+        );
+    }
+    assert_eq!(owned.policy(), &p);
+}
