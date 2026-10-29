@@ -239,7 +239,9 @@ fn serving_without_a_credential_serves_none_and_still_refuses_a_wrong_one() {
     assert!(!forwarded.is_empty(), "{reply}");
     assert_eq!(rows[0].0, None);
     assert_eq!(rows[0].1, ["hosts"]);
-    let (reply, forwarded, _) = exchange_with(&sessions, Some(&header(&a.user, "wrong")), 0);
+    // A well-formed password made at run time that the verifier does not accept.
+    let wrong = fresh_token();
+    let (reply, forwarded, _) = exchange_with(&sessions, Some(&header(&a.user, &wrong)), 0);
     assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
     assert!(forwarded.is_empty());
     // The tainted session's own credential is still refused at egress.

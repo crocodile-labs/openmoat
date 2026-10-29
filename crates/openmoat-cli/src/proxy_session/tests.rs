@@ -123,12 +123,14 @@ fn a_credential_opens_only_its_own_session_and_cannot_be_edited() {
     for user in edits {
         assert_eq!(check(&user, &password_a), None, "{user}");
     }
-    for password in [
-        String::new(),
-        password_a[..63].to_owned(),
-        password_a.to_uppercase(),
-    ] {
-        assert_eq!(check(&user_a, &password), None, "{password}");
+    // The message names the case, never the password.
+    let cases = [
+        ("empty", String::new()),
+        ("one character short", password_a[..63].to_owned()),
+        ("upper case", password_a.to_uppercase()),
+    ];
+    for (case, password) in cases {
+        assert!(check(&user_a, &password).is_none(), "{case}");
     }
 }
 

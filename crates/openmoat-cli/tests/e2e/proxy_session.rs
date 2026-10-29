@@ -115,6 +115,19 @@ fn base64(raw: &[u8]) -> String {
     out
 }
 
+/// 64 hex characters made at run time from freshly keyed hashers: a password
+/// of the right shape that no key signed, and no fixed value in the source.
+fn made_up_password() -> String {
+    use std::hash::{BuildHasher as _, Hasher as _};
+    (0..4).fold(String::new(), |mut out, _| {
+        let random = std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish();
+        let _ = write!(out, "{random:016x}");
+        out
+    })
+}
+
 fn authorization(user: &str, password: &str) -> String {
     format!(
         "Proxy-Authorization: Basic {}\r\n",
@@ -383,8 +396,10 @@ fn init_installs_the_entry_and_doctor_and_status_name_each_host() {
     sb.use_free_proxy_port();
     for args in [["doctor"], ["status"]] {
         let shown = text(&sb.moat(&args));
-        assert!(
+        // No Claude Code sandbox on native Windows (#327), so no line for it.
+        assert_eq!(
             shown.contains("each session's sandboxed commands send their own"),
+            !cfg!(windows),
             "{shown}"
         );
         assert!(
@@ -413,7 +428,7 @@ fn serving_without_a_credential_is_the_named_fallback() {
         port,
         &format!(
             "GET http://evil.example/ HTTP/1.1\r\n{}",
-            authorization(&user, "wrong")
+            authorization(&user, &made_up_password())
         ),
     );
     assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");

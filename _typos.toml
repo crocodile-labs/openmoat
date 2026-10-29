@@ -32,6 +32,8 @@ AppArmor = "AppArmor"
 [default.extend-words]
 # OpenMoat's own rule id and verdict reason.
 unparseable = "unparseable"
+# The RustCrypto `sha2`/`digest` API (`Digest::finalize`), used for HMAC-SHA-256.
+finalize = "finalize"
 # serde (`Serialize`, `skip_serializing_if`).
 serialize = "serialize"
 serializing = "serializing"
