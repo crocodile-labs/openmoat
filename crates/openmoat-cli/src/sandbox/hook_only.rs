@@ -44,6 +44,7 @@ fn grants() -> Grants {
         program: Some("/usr/bin/agent".into()),
         writes: Vec::new(),
         terminals: Vec::new(),
+        trust: None,
     }
 }
 

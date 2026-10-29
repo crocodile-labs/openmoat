@@ -2,9 +2,13 @@
 //! `secrets:` list, and where they may go.
 //!
 //! A brokered secret's placeholder and value may be sent to its own host only.
-//! A plain-HTTP request to that host gets the value in the secret's header
-//! ([`Broker::inject`]); the agent never needs it. Any other request that carries either, in its head or its plain-HTTP body,
-//! is refused and recorded. The check matches exact bytes: it catches a token
+//! A plain-HTTP request to that host (`plain_http`), or one read inside a
+//! terminated tunnel (`tls: terminate`, ADR-043), gets the value in the
+//! secret's header ([`Broker::inject`]); the agent never needs it. A secret
+//! with `allow` rules goes only into the requests they name; any other request
+//! that would get it is refused before anything is sent (`route.rs`). Any
+//! other request that carries the placeholder or the value, in its head or a
+//! body the proxy reads, is refused and recorded. The check matches exact bytes: it catches a token
 //! sent by mistake or by a naive script, not one that was encoded or split
 //! across requests (`docs/THREAT_MODEL.md`). What keeps a secret safe is that
 //! the agent never holds the value.
@@ -19,11 +23,34 @@ use zeroize::Zeroizing;
 /// host that is not the secret's own.
 pub const RULE_SECRET: &str = "proxy-secret";
 
+/// Where a request to a secret's host travels, which decides whether the
+/// secret goes in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Channel {
+    /// Plain HTTP to this port: secrets with `plain_http` on it.
+    Plain(u16),
+    /// Read inside a tunnel the proxy terminated: secrets with `tls: terminate`.
+    Terminated,
+}
+
 /// One secret and its value.
 struct Held {
     secret: Secret,
     placeholder: String,
     value: Zeroizing<String>,
+}
+
+impl Held {
+    /// Whether a request to `host` over `channel` gets this secret.
+    fn injects(&self, host: &str, channel: Channel) -> bool {
+        self.secret.host == host
+            && match channel {
+                Channel::Plain(port) => {
+                    self.secret.plain_http && self.secret.plain_http_port() == port
+                }
+                Channel::Terminated => self.secret.terminates(),
+            }
+    }
 }
 
 /// The brokered secrets of one proxy run. [`Broker::default`] holds none.
@@ -119,6 +146,13 @@ impl Broker {
         self.held.is_empty()
     }
 
+    /// Whether a secret of `host` says `tls: terminate`.
+    pub(crate) fn terminates(&self, host: &str) -> bool {
+        self.held
+            .iter()
+            .any(|h| h.secret.host == host && h.secret.terminates())
+    }
+
     /// The first secret whose placeholder or value occurs in `bytes`, sent
     /// towards `host`, that `host` may not receive.
     #[must_use]
@@ -167,19 +201,23 @@ impl Broker {
             .collect()
     }
 
-    /// `head` (a plain-HTTP request head the proxy wrote, lines ending in
-    /// CRLF) to `host` on `port`, with the secrets of `host` that allow
-    /// `plain_http` on that port (80 unless the secret names one) put in: in
-    /// each header a secret names, the placeholder becomes the value; a secret
-    /// whose header is absent, or holds no placeholder, gets its own header
-    /// line. `None` when there is no such secret.
-    pub(crate) fn inject(&self, host: &str, port: u16, head: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    /// `head` (a request head the proxy wrote, lines ending in CRLF) to
+    /// `host` over `channel`, with the secrets of `host` that channel carries
+    /// ([`Channel`]) put in: in each header a secret names, the placeholder
+    /// becomes the value; a secret whose header is absent, or holds no
+    /// placeholder, gets its own header line. `None` when there is no such
+    /// secret. The caller has checked the request against their `allow` rules
+    /// ([`Broker::admit`]).
+    pub(crate) fn inject(
+        &self,
+        host: &str,
+        channel: Channel,
+        head: &[u8],
+    ) -> Option<Zeroizing<Vec<u8>>> {
         let owned: Vec<&Held> = self
             .held
             .iter()
-            .filter(|h| {
-                h.secret.host == host && h.secret.plain_http && h.secret.plain_http_port() == port
-            })
+            .filter(|h| h.injects(host, channel))
             .collect();
         // Each line keeps its `\r`; only the `\n`s are split on and re-added.
         let lines = head.strip_suffix(b"\n\r\n")?;
@@ -288,6 +326,12 @@ fn header_name(line: &[u8]) -> Option<&[u8]> {
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && haystack.windows(needle.len()).any(|w| w == needle)
 }
+
+mod echo;
+mod route;
+
+pub(crate) use self::echo::Holdback;
+pub use self::route::RULE_SECRET_ROUTE;
 
 #[cfg(test)]
 mod tests;

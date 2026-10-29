@@ -18,6 +18,9 @@ pub(crate) enum Framing {
     Length(u64),
     /// `Transfer-Encoding: chunked`.
     Chunked,
+    /// A response with neither: it ends when the server closes (RFC 9112
+    /// §6.3). Never a request's framing.
+    UntilClose,
 }
 
 /// The framing of the head the proxy forwards. The head was parsed and its
@@ -93,6 +96,8 @@ enum State {
     },
     /// The body is complete.
     Done,
+    /// Every byte until the connection closes is body.
+    UntilClose,
 }
 
 /// The parts of a chunk-size line: `1*HEXDIG BWS [ ";" chunk-ext ] CRLF`.
@@ -119,6 +124,7 @@ impl BodyEnd {
             Framing::None | Framing::Length(0) => State::Done,
             Framing::Length(n) => State::Length(n),
             Framing::Chunked => SIZE_START,
+            Framing::UntilClose => State::UntilClose,
         };
         Self { state }
     }
@@ -132,17 +138,32 @@ impl BodyEnd {
     /// start, belong to the body. Fewer than `bytes.len()` means the body
     /// ended inside them.
     pub(crate) fn feed(&mut self, bytes: &[u8]) -> Result<usize, Malformed> {
+        self.feed_data(bytes, &mut |_| {})
+    }
+
+    /// [`feed`](Self::feed), also handing `data` the body's payload as it
+    /// goes by: chunk data without the chunked framing, or the bytes of a
+    /// `Content-Length` or until-close body.
+    pub(crate) fn feed_data(
+        &mut self,
+        bytes: &[u8],
+        data: &mut dyn FnMut(&[u8]),
+    ) -> Result<usize, Malformed> {
         let mut at = 0;
         while at < bytes.len() && !self.done() {
-            at += self.step(&bytes[at..])?;
+            at += self.step(&bytes[at..], data)?;
         }
         Ok(at)
     }
 
     /// Consume from the start of `bytes` (never empty); returns how many.
-    fn step(&mut self, bytes: &[u8]) -> Result<usize, Malformed> {
+    fn step(&mut self, bytes: &[u8], data: &mut dyn FnMut(&[u8])) -> Result<usize, Malformed> {
         let available = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         match self.state {
+            State::UntilClose => {
+                data(bytes);
+                Ok(bytes.len())
+            }
             State::Length(left) | State::Data(left) => {
                 let take = left.min(available);
                 let rest = left - take;
@@ -153,7 +174,9 @@ impl BodyEnd {
                     _ => State::Data(rest),
                 };
                 // `take` is at most `bytes.len()`, so it fits.
-                Ok(usize::try_from(take).unwrap_or(bytes.len()))
+                let take = usize::try_from(take).unwrap_or(bytes.len());
+                data(&bytes[..take]);
+                Ok(take)
             }
             _ => {
                 self.byte(bytes[0])?;

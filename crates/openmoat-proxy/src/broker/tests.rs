@@ -1,7 +1,7 @@
 use openmoat_core::{Policy, Verdict};
 use zeroize::Zeroizing;
 
-use super::{Broker, BrokerError, Carried, RULE_SECRET, Watch};
+use super::{Broker, BrokerError, Carried, Channel, RULE_SECRET, Watch};
 
 /// A generated stand-in; no real secret is used anywhere in these tests.
 const VALUE: &str = "fake-0123456789abcdef";
@@ -95,7 +95,9 @@ fn the_owner_head_gets_the_value_in_place_of_the_placeholder() {
     let head = b"GET /moat-secret:gh:placeholder HTTP/1.1\r\nHost: api.github.com\r\n\
                  authorization: Bearer moat-secret:gh:placeholder\r\n\
                  X-Other: moat-secret:gh:placeholder\r\nConnection: close\r\n\r\n";
-    let out = b.inject("api.github.com", 80, head).unwrap();
+    let out = b
+        .inject("api.github.com", Channel::Plain(80), head)
+        .unwrap();
     assert_eq!(
         String::from_utf8(out.to_vec()).unwrap(),
         format!(
@@ -110,13 +112,15 @@ fn the_owner_head_gets_the_value_in_place_of_the_placeholder() {
 fn a_missing_header_is_added_and_other_hosts_get_nothing() {
     let b = broker_with(VALUE, true).unwrap();
     let head = b"GET / HTTP/1.1\r\nHost: api.github.com\r\nConnection: close\r\n\r\n";
-    let out = b.inject("api.github.com", 80, head).unwrap();
+    let out = b
+        .inject("api.github.com", Channel::Plain(80), head)
+        .unwrap();
     let added = format!("Connection: close\r\nAuthorization: {VALUE}\r\n\r\n");
     assert!(out.ends_with(added.as_bytes()));
-    assert!(b.inject("github.com", 80, head).is_none());
+    assert!(b.inject("github.com", Channel::Plain(80), head).is_none());
     assert!(
         Broker::default()
-            .inject("api.github.com", 80, head)
+            .inject("api.github.com", Channel::Plain(80), head)
             .is_none()
     );
     assert!(b.withheld("api.github.com", 80).is_empty());
@@ -126,7 +130,10 @@ fn a_missing_header_is_added_and_other_hosts_get_nothing() {
 fn without_plain_http_the_owner_head_is_left_alone() {
     let b = broker(VALUE).unwrap();
     let head = b"GET / HTTP/1.1\r\nAuthorization: moat-secret:gh:placeholder\r\n\r\n";
-    assert!(b.inject("api.github.com", 80, head).is_none());
+    assert!(
+        b.inject("api.github.com", Channel::Plain(80), head)
+            .is_none()
+    );
     assert_eq!(
         b.withheld("api.github.com", 80),
         ["secret `gh` not injected: plain HTTP needs `plain_http: true`"]
@@ -145,12 +152,16 @@ fn a_request_the_server_echoes_back_gets_no_value() {
              Authorization: moat-secret:gh:placeholder\r\n\r\n"
         );
         assert!(
-            b.inject("api.github.com", 80, head.as_bytes()).is_none(),
+            b.inject("api.github.com", Channel::Plain(80), head.as_bytes())
+                .is_none(),
             "{method}"
         );
     }
     let head = b"TRACEX / HTTP/1.1\r\nHost: api.github.com\r\n\r\n";
-    assert!(b.inject("api.github.com", 80, head).is_some());
+    assert!(
+        b.inject("api.github.com", Channel::Plain(80), head)
+            .is_some()
+    );
 }
 
 #[test]
@@ -158,13 +169,23 @@ fn a_secret_header_without_the_placeholder_is_replaced_by_the_secret() {
     let b = broker_with(VALUE, true).unwrap();
     let head = b"GET / HTTP/1.1\r\nAuthorization: Bearer chosen-by-client\r\n\
                  authorization: Bearer moat-secret:gh:placeholder\r\nX-Other: 1\r\n\r\n";
-    let out = String::from_utf8(b.inject("api.github.com", 80, head).unwrap().to_vec()).unwrap();
+    let out = String::from_utf8(
+        b.inject("api.github.com", Channel::Plain(80), head)
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
     assert_eq!(
         out,
         format!("GET / HTTP/1.1\r\nauthorization: Bearer {VALUE}\r\nX-Other: 1\r\n\r\n")
     );
     let head = b"GET / HTTP/1.1\r\nAUTHORIZATION: chosen-by-client\r\n\r\n";
-    let out = String::from_utf8(b.inject("api.github.com", 80, head).unwrap().to_vec()).unwrap();
+    let out = String::from_utf8(
+        b.inject("api.github.com", Channel::Plain(80), head)
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
     assert_eq!(
         out,
         format!("GET / HTTP/1.1\r\nAuthorization: {VALUE}\r\n\r\n")
@@ -177,8 +198,16 @@ fn a_secret_header_without_the_placeholder_is_replaced_by_the_secret() {
 fn only_the_secrets_port_gets_the_value() {
     let head = b"GET / HTTP/1.1\r\nAuthorization: moat-secret:gh:placeholder\r\n\r\n";
     let default = broker_with(VALUE, true).unwrap();
-    assert!(default.inject("api.github.com", 80, head).is_some());
-    assert!(default.inject("api.github.com", 8080, head).is_none());
+    assert!(
+        default
+            .inject("api.github.com", Channel::Plain(80), head)
+            .is_some()
+    );
+    assert!(
+        default
+            .inject("api.github.com", Channel::Plain(8080), head)
+            .is_none()
+    );
     assert_eq!(
         default.withheld("api.github.com", 8080),
         ["secret `gh` not injected: it goes to port 80 only, not 8080"]
@@ -195,8 +224,117 @@ fn only_the_secrets_port_gets_the_value() {
         .map(|s| (s, Zeroizing::new(VALUE.to_owned())))
         .collect();
     let named = Broker::new(secrets).unwrap();
-    let out = named.inject("api.github.com", 8080, head).unwrap();
+    let out = named
+        .inject("api.github.com", Channel::Plain(8080), head)
+        .unwrap();
     assert!(String::from_utf8_lossy(&out).contains(VALUE));
-    assert!(named.inject("api.github.com", 80, head).is_none());
+    assert!(
+        named
+            .inject("api.github.com", Channel::Plain(80), head)
+            .is_none()
+    );
     assert!(named.withheld("api.github.com", 8080).is_empty());
+}
+
+fn routed(extra: &str) -> Broker {
+    let policy = Policy::parse(&format!(
+        "version: 1\nsecrets:\n  - id: gh\n    host: api.github.com\n    header: Authorization\n    \
+         source: {{ env: FAKE_TOKEN }}\n{extra}    allow:\n      - GET /repos/**\n      \
+         - POST /repos/*/*/issues\n",
+    ))
+    .unwrap();
+    let secrets = policy
+        .secrets
+        .into_iter()
+        .map(|s| (s, Zeroizing::new(VALUE.to_owned())))
+        .collect();
+    Broker::new(secrets).unwrap()
+}
+
+#[test]
+fn a_request_the_rules_do_not_name_is_refused_before_the_value_goes_in() {
+    use super::RULE_SECRET_ROUTE;
+    let plain = routed("    plain_http: true\n");
+    let tls = routed("    tls: terminate\n");
+    let head = |line: &str, extra: &str| format!("{line}\r\nHost: api.github.com\r\n{extra}\r\n");
+    for (b, channel) in [(&plain, Channel::Plain(80)), (&tls, Channel::Terminated)] {
+        let ok = b
+            .admit(
+                "api.github.com",
+                channel,
+                head("GET /repos/o/r HTTP/1.1", "").as_bytes(),
+            )
+            .unwrap();
+        assert_eq!(
+            ok,
+            ["secret `gh` goes in: the request matches `GET /repos/**`"]
+        );
+        for (line, extra, why) in [
+            ("DELETE /repos/o/r HTTP/1.1", "", "matches none"),
+            ("GET /user/keys HTTP/1.1", "", "matches none"),
+            ("GET /repos/../user/keys HTTP/1.1", "", "`..`"),
+            ("GET /repos/%2e%2e/user HTTP/1.1", "", "`..`"),
+            ("GET /repos/x%2f..%2fuser HTTP/1.1", "", "decodes to `/`"),
+            (
+                "POST /repos/o/r/issues HTTP/1.1",
+                "X-HTTP-Method-Override: DELETE\r\n",
+                "another method",
+            ),
+            (
+                "POST /repos/o/r/issues?_method=DELETE HTTP/1.1",
+                "",
+                "`_method`",
+            ),
+        ] {
+            let refused = b
+                .admit("api.github.com", channel, head(line, extra).as_bytes())
+                .unwrap_err();
+            assert_eq!(refused.verdict, Verdict::Deny);
+            assert_eq!(refused.rules, [RULE_SECRET_ROUTE]);
+            assert!(refused.reasons[0].contains(why), "{line}: {refused:?}");
+            assert!(!refused.reasons[0].contains("user"), "no path: {refused:?}");
+        }
+    }
+    // Another channel, another host: the secret does not go in, so no rule applies.
+    let other = head("DELETE /x HTTP/1.1", "");
+    assert!(
+        plain
+            .admit("api.github.com", Channel::Plain(8080), other.as_bytes())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        plain
+            .admit("api.github.com", Channel::Terminated, other.as_bytes())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tls.admit("api.github.com", Channel::Plain(80), other.as_bytes())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        tls.admit("github.com", Channel::Terminated, other.as_bytes())
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_terminated_secret_goes_into_tunnel_requests_only() {
+    let tls = routed("    tls: terminate\n");
+    let head = b"GET /repos/o HTTP/1.1\r\nHost: api.github.com\r\n\r\n";
+    let out = tls
+        .inject("api.github.com", Channel::Terminated, head)
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out).contains(&format!("Authorization: {VALUE}\r\n")));
+    assert!(
+        tls.inject("api.github.com", Channel::Plain(80), head)
+            .is_none()
+    );
+    assert!(
+        tls.inject("github.com", Channel::Terminated, head)
+            .is_none()
+    );
 }

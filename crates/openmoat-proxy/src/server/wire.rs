@@ -117,6 +117,11 @@ pub(super) fn refuse(client: &TcpStream, status: u16, message: &str) {
 }
 
 pub(super) fn respond(client: &TcpStream, status: u16, message: &str) {
+    let _ = (&*client).write_all(response(status, message).as_bytes());
+}
+
+/// The whole answer `respond` sends: `status`, and `message` as a text body.
+pub(crate) fn response(status: u16, message: &str) -> String {
     let (reason, extra) = match status {
         400 => ("Bad Request", ""),
         403 => ("Forbidden", ""),
@@ -135,10 +140,9 @@ pub(super) fn respond(client: &TcpStream, status: u16, message: &str) {
         .map(|c| if c.is_control() { '?' } else { c })
         .collect();
     let body = format!("moat proxy: {message}\n");
-    let response = format!(
+    format!(
         "HTTP/1.1 {status} {reason}\r\n{extra}Content-Type: text/plain; charset=utf-8\r\n\
          Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
-    );
-    let _ = (&*client).write_all(response.as_bytes());
+    )
 }

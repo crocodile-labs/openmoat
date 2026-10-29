@@ -129,6 +129,14 @@ pub struct Grants {
     /// on, resolved: besides `/dev/tty` (the controlling terminal) the only
     /// terminals commands may open, so none of the person's other terminals.
     pub terminals: Vec<String>,
+    /// The directory of the run's CA files (ADR-043), resolved, inside the
+    /// temp directory, which commands may read already. Under `--isolate`,
+    /// whose temp directory starts empty, it is bound in read-only.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        expect(dead_code, reason = "only the Linux `--isolate` tier binds it in")
+    )]
+    pub trust: Option<String>,
 }
 
 /// The IR of a `moat run` session in `ctx`, and `grants` plus this process's

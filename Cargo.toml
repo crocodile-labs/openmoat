@@ -52,6 +52,11 @@ seccompiler = "0.5"
 libc = "0.2"
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
 zeroize = "1"
+# TLS termination for brokered secrets (ADR-043): `ring` as the provider, no
+# aws-lc-rs (a C and cmake build), and the platform's roots for upstreams.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem", "zeroize"] }
+rustls-native-certs = "0.8"
 similar = { version = "3", default-features = false, features = ["text"] }
 
 [workspace.lints.rust]

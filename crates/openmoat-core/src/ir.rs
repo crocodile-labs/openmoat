@@ -180,6 +180,15 @@ pub struct BrokeredSecret {
     /// policy names one (80 otherwise).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    /// `tls: terminate`: `openmoat run`'s proxy decrypts HTTPS to the host
+    /// and injects there (ADR-043).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tls_terminate: bool,
+    /// The secret's `allow` rules (`METHOD /path`); empty when every request
+    /// to the host may receive it. A backend that cannot hold a secret to
+    /// them must not inject it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<String>,
 }
 
 impl std::fmt::Debug for BrokeredSecret {

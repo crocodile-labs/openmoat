@@ -17,6 +17,9 @@ pub struct Connection<'a> {
     pub method: Option<&'a str>,
     /// Destination host and port; `None` when the head was unreadable.
     pub destination: Option<(&'a str, u16)>,
+    /// The request was read inside a tunnel the proxy terminated (ADR-043):
+    /// `method` is that request's, and the destination was reached over TLS.
+    pub terminated: bool,
     /// The verdict and the rules behind it.
     pub decision: &'a Decision,
     /// Time from accepting the connection to this decision, in microseconds.

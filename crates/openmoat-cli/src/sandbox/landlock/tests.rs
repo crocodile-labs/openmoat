@@ -19,6 +19,7 @@ fn generated(yaml: &str) -> Generated {
         program: Some("/home/me/.local/bin/agent".into()),
         writes: vec!["/home/me/.agent".into()],
         terminals: vec!["/dev/pts/3".into()],
+        trust: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
     generate(&ir, &grants).expect("generates")

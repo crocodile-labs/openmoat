@@ -68,6 +68,7 @@ fn grants() -> Grants {
         program: Some("/home/me/.local/bin/agent".into()),
         writes: vec!["/home/me/.agent".into()],
         terminals: vec!["/dev/pts/3".into()],
+        trust: None,
     }
 }
 

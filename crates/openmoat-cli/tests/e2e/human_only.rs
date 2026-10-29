@@ -41,6 +41,7 @@ fn a_human_only_command_started_by_an_agent_is_refused() {
         &["policy", "install", "pack.yaml"],
         &["policy", "trust-key", "key.pub", "--name", "a"],
         &["policy", "remove", "team"],
+        &["proxy", "ca", "init"],
     ] {
         // The script's `exit $?` keeps it from replacing itself with `moat`.
         let mut cmd = sb.configure(Command::new(&agent));

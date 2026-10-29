@@ -79,6 +79,7 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
         allow_ech: false,
         sessions: None,
         local: None,
+        tls: None,
     };
     let (proxy_end, mut client) = pair();
     let port = upstream.local_addr().unwrap().port();
@@ -135,6 +136,7 @@ fn with_echo(request: &[u8]) -> (String, Vec<Vec<String>>) {
         allow_ech: false,
         sessions: None,
         local: Some(&Echo),
+        tls: None,
     };
     let (proxy_end, mut client) = pair();
     client.write_all(request).unwrap();

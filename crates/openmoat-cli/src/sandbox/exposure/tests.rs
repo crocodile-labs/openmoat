@@ -133,6 +133,7 @@ fn default_rules(moved_dirs: Vec<(String, String)>) -> Rules {
         program: Some("/home/me/.local/bin/agent".into()),
         writes: Vec::new(),
         terminals: Vec::new(),
+        trust: None,
     };
     let ir = openmoat_core::ir::lower(&policy, &ctx).unwrap();
     landlock::generate(&ir, &grants).unwrap().rules

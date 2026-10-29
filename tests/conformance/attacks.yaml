@@ -522,6 +522,18 @@
   threat: T9
   action: { shell: "cat ~/.moat/trust.json ~/.moat/allowed_signers" }
   expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-proxy-ca-key
+  threat: T9
+  action: { fs_read: "~/.moat/proxy-ca/key.pem" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-proxy-ca-key
+  threat: T9
+  action: { shell: "cat ~/.moat/proxy-ca/key.pem" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-copy-proxy-ca-key-of-another-state-dir
+  threat: T9
+  action: { shell: "cp /srv/agent/.moat/proxy-ca/key.pem /tmp/k" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-sqlite-readonly-audit-db
   threat: T9
   action: { shell: "sqlite3 -readonly ~/.moat/audit.db 'select count(*) from events'" }

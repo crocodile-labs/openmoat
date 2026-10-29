@@ -83,6 +83,8 @@ fn lower_secret(secret: &Secret) -> BrokeredSecret {
         source: secret.source.clone(),
         plain_http: secret.plain_http,
         port: secret.port,
+        tls_terminate: secret.terminates(),
+        allow: secret.allow.clone(),
     }
 }
 

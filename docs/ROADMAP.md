@@ -82,7 +82,9 @@ Planned for 1.0 or after, not yet scheduled:
 - A user service for `openmoat proxy` on Windows (#272).
 - A stable policy schema and `openmoat policy migrate` (#136).
 - The Isolated tier on macOS: `openmoat run --isolate` in an Apple Virtualization guest (#175, ADR-023).
-- HTTPS injection of brokered secrets, and per-host method and path rules, in `openmoat proxy` (#247).
+- HTTPS injection of brokered secrets in the standalone `openmoat proxy`, and keep-alive
+  inside a terminated tunnel; `openmoat run` has both injection and the method and path
+  rules (ADR-043, #247).
 - Per-session credentials and session taint in the standalone `openmoat proxy` the host
   sandboxes use; `openmoat run`'s proxy has them (#558, ADR-027).
 - `openmoat serve` (#320).

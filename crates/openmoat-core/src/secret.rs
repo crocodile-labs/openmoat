@@ -1,12 +1,16 @@
 //! Brokered secrets: the policy's `secrets:` list (ADR-020, docs/POLICY.md §2.1).
 //!
 //! OpenMoat keeps the value; the agent holds a placeholder; `moat proxy` puts the
-//! value into one header of requests to one host. This module is the schema
-//! and its validation only: reading the source is the CLI's job, using the
-//! value is the proxy's.
+//! value into one header of requests to one host, and with `allow` rules only
+//! of the requests they name (`route.rs`, ADR-043). This module is the schema,
+//! its validation and the rules' matching: reading the source is the CLI's
+//! job, using the value is the proxy's.
+
+mod route;
 
 use serde::{Deserialize, Serialize};
 
+pub use self::route::{MAX_ROUTES, METHOD_OVERRIDE_HEADERS, PathRefusal, RequestPath, Route};
 use crate::host::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN};
 use crate::policy::PolicyError;
 
@@ -55,6 +59,38 @@ pub struct Secret {
     /// placeholder. Only with `plain_http`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    /// `terminate`: `openmoat run`'s proxy decrypts HTTPS to `host` with its own
+    /// certificate authority and puts the value in there (ADR-043). Off unless
+    /// set: without it an HTTPS request keeps the placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<Tls>,
+    /// The only requests that may receive the value, `METHOD /path` each
+    /// ([`Route`]). Empty: every request to `host` does. With rules, any other
+    /// request to `host` that would get the value is refused before it is
+    /// added. Needs `tls: terminate` or `plain_http`, where requests can be read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<String>,
+}
+
+/// How a brokered secret reaches HTTPS requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Tls {
+    /// The proxy ends the agent's TLS with a certificate it makes for the host,
+    /// reads each request, and opens its own TLS to the host.
+    Terminate,
+}
+
+/// What a secret's `allow` rules say about one request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Permit {
+    /// The secret has no rules: every request to its host gets it.
+    Unrestricted,
+    /// The request matches this rule.
+    Rule(String),
+    /// The request matches no rule, or cannot be matched; why, without the path.
+    Refused(String),
 }
 
 /// Where OpenMoat reads a secret's value. The agent should not be able to read it
@@ -108,6 +144,53 @@ impl Secret {
             || host
                 .parse::<core::net::Ipv4Addr>()
                 .is_ok_and(|ip| ip.is_loopback())
+    }
+
+    /// Whether `openmoat run`'s proxy decrypts HTTPS to the host (`tls: terminate`).
+    #[must_use]
+    pub fn terminates(&self) -> bool {
+        self.tls == Some(Tls::Terminate)
+    }
+
+    /// What the `allow` rules say about a `method` request for `target` (the
+    /// request line's target) whose headers are named `header_names`. With
+    /// rules, a request is refused when its path could be read as another
+    /// ([`PathRefusal`]) or it asks for another method ([`METHOD_OVERRIDE_HEADERS`],
+    /// a `_method` query parameter). Reasons never quote the path: it may hold
+    /// what the request is about.
+    #[must_use]
+    pub fn permit(&self, method: &str, target: &str, header_names: &[&str]) -> Permit {
+        if self.allow.is_empty() {
+            return Permit::Unrestricted;
+        }
+        let refused = |why: String| {
+            Permit::Refused(format!(
+                "{method} request to {} is refused for secret `{}`: {why}",
+                self.host, self.id
+            ))
+        };
+        let path = match RequestPath::parse(target) {
+            Ok(path) => path,
+            Err(why) => return refused(why.to_string()),
+        };
+        if let Some(name) = header_names.iter().find(|name| {
+            METHOD_OVERRIDE_HEADERS
+                .iter()
+                .any(|h| name.eq_ignore_ascii_case(h))
+        }) {
+            return refused(format!("its `{name}` header asks for another method"));
+        }
+        if path.overrides_method() {
+            return refused("its query names a `_method` parameter".to_owned());
+        }
+        // Validated when the policy loaded, so every rule parses.
+        self.allow
+            .iter()
+            .find(|rule| Route::parse(rule).is_ok_and(|r| r.matches(method, &path)))
+            .map_or_else(
+                || refused("it matches none of the secret's `allow` rules".to_owned()),
+                |rule| Permit::Rule(rule.clone()),
+            )
     }
 }
 
@@ -173,6 +256,7 @@ fn check_one(secret: &Secret) -> Result<(), String> {
         }
         _ => {}
     }
+    check_transport(secret)?;
     match &secret.source {
         Source::File(path) if !(crate::paths::is_absolute(path) || path.starts_with("~/")) => Err(
             format!("source file `{path}` must be absolute or start with `~/`"),
@@ -189,6 +273,35 @@ fn check_one(secret: &Secret) -> Result<(), String> {
         }
         _ => Ok(()),
     }
+}
+
+/// `tls` and `allow`: termination names a host a certificate can name, and
+/// rules need requests the proxy can read.
+fn check_transport(secret: &Secret) -> Result<(), String> {
+    if secret.terminates() && secret.host.parse::<core::net::Ipv4Addr>().is_ok() {
+        return Err(format!(
+            "`tls: terminate` needs a DNS name; {} is an address, which the proxy's \
+             certificate authority may not sign for",
+            secret.host
+        ));
+    }
+    if secret.allow.is_empty() {
+        return Ok(());
+    }
+    if !secret.terminates() && !secret.plain_http {
+        return Err(
+            "`allow` rules need `tls: terminate` or `plain_http: true`: elsewhere the proxy \
+             cannot read the request"
+                .into(),
+        );
+    }
+    if secret.allow.len() > MAX_ROUTES {
+        return Err(format!("`allow` lists more than {MAX_ROUTES} rules"));
+    }
+    secret
+        .allow
+        .iter()
+        .try_for_each(|rule| Route::parse(rule).map(drop))
 }
 
 /// The form `moat proxy` reports hosts in, so the comparison is exact.
@@ -217,138 +330,4 @@ fn is_env_name(name: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::policy::{Policy, PolicyError};
-
-    use super::Source;
-
-    fn parse(secrets: &str) -> Result<Policy, PolicyError> {
-        Policy::parse(&format!("version: 1\nsecrets:\n{secrets}"))
-    }
-
-    fn problem(secrets: &str) -> String {
-        parse(secrets).unwrap_err().to_string()
-    }
-
-    const GH: &str = "  - id: gh\n    host: api.github.com\n    header: Authorization\n";
-
-    #[test]
-    fn parses_every_source() {
-        let p = parse(&format!(
-            "{GH}    source: {{ env: GITHUB_TOKEN }}\n  \
-             - id: npm\n    host: registry.npmjs.org\n    header: Authorization\n    \
-             source: {{ file: ~/.config/moat/npm }}\n  \
-             - id: k\n    host: example.com\n    header: X-Api-Key\n    \
-             source: {{ keychain: {{ service: moat, account: k }} }}\n"
-        ))
-        .unwrap();
-        assert_eq!(p.secrets.len(), 3);
-        assert_eq!(p.secrets[0].source, Source::Env("GITHUB_TOKEN".into()));
-        assert_eq!(
-            p.secrets[1].source,
-            Source::File("~/.config/moat/npm".into())
-        );
-        assert!(
-            matches!(&p.secrets[2].source, Source::Keychain { service, .. } if service == "moat")
-        );
-        assert_eq!(p.secrets[0].placeholder(), "moat-secret:gh:placeholder");
-        assert!(Policy::parse("version: 1\n").unwrap().secrets.is_empty());
-    }
-
-    #[test]
-    fn debug_output_names_only_the_id() {
-        let policy = parse(&format!("{GH}    source: {{ file: ~/.config/moat/gh }}\n")).unwrap();
-        let secret = &policy.secrets[0];
-        let brokered = crate::ir::BrokeredSecret {
-            id: secret.id.clone(),
-            host: secret.host.clone(),
-            header: secret.header.clone(),
-            source: secret.source.clone(),
-            plain_http: false,
-            port: None,
-        };
-        for shown in [format!("{policy:?}"), format!("{brokered:?}")] {
-            assert!(shown.contains("\"gh\""), "{shown}");
-            for hidden in ["~/.config/moat/gh", "api.github.com", "Authorization"] {
-                assert!(!shown.contains(hidden), "{hidden} in {shown}");
-            }
-        }
-    }
-
-    #[test]
-    fn plain_http_is_off_unless_set() {
-        let off = parse(&format!("{GH}    source: {{ env: T }}\n")).unwrap();
-        assert!(!off.secrets[0].plain_http);
-        let on = parse(&format!(
-            "{GH}    source: {{ env: T }}\n    plain_http: true\n"
-        ))
-        .unwrap();
-        assert!(on.secrets[0].plain_http);
-        assert!(!on.secrets[0].is_loopback());
-        for (host, loopback) in [
-            ("localhost", true),
-            ("api.localhost", true),
-            ("127.0.0.2", true),
-            ("10.0.0.1", false),
-            ("localhost.example", false),
-        ] {
-            let mut s = on.secrets[0].clone();
-            s.host = host.into();
-            assert_eq!(s.is_loopback(), loopback, "{host}");
-        }
-    }
-
-    #[test]
-    fn a_plain_http_secret_goes_to_port_80_unless_it_names_one() {
-        let plain = format!("{GH}    source: {{ env: T }}\n    plain_http: true\n");
-        assert_eq!(parse(&plain).unwrap().secrets[0].plain_http_port(), 80);
-        let on = parse(&format!("{plain}    port: 8080\n")).unwrap();
-        assert_eq!(on.secrets[0].port, Some(8080));
-        assert_eq!(on.secrets[0].plain_http_port(), 8080);
-        assert!(problem(&format!("{plain}    port: 0\n")).contains("1 to 65535"));
-        for bad in ["65536", "-1", "80.5", "http", "[80, 81]"] {
-            assert!(
-                parse(&format!("{plain}    port: {bad}\n")).is_err(),
-                "{bad}"
-            );
-        }
-        let without = format!("{GH}    source: {{ env: T }}\n    port: 8080\n");
-        assert!(problem(&without).contains("needs `plain_http: true`"));
-    }
-
-    #[test]
-    fn rejects_bad_fields() {
-        let src = "    source: { env: T }\n";
-        for (yaml, want) in [
-            (format!("  - id: Gh\n    host: a.com\n    header: A\n{src}"), "id must be"),
-            (format!("  - id: g:h\n    host: a.com\n    header: A\n{src}"), "id must be"),
-            (format!("  - id: g\n    host: '*.a.com'\n    header: A\n{src}"), "host `*.a.com`"),
-            (format!("  - id: g\n    host: A.com\n    header: A\n{src}"), "host `A.com`"),
-            (format!("  - id: g\n    host: a.com:443\n    header: A\n{src}"), "host `a.com:443`"),
-            (format!("  - id: g\n    host: a.com\n    header: 'A B'\n{src}"), "not an HTTP header"),
-            (format!("  - id: g\n    host: a.com\n    header: Host\n{src}"), "frames the request"),
-            (format!("  - id: g\n    host: a.com\n    header: content-length\n{src}"), "frames"),
-            ("  - id: g\n    host: a.com\n    header: A\n    source: { file: rel/t }\n".into(), "absolute"),
-            ("  - id: g\n    host: a.com\n    header: A\n    source: { env: 'A-B' }\n".into(), "variable name"),
-            (
-                "  - id: g\n    host: a.com\n    header: A\n    source: { keychain: { service: '', account: a } }\n".into(),
-                "keychain",
-            ),
-        ] {
-            let got = problem(&yaml);
-            assert!(got.contains(want), "{yaml}: {got}");
-        }
-        assert!(parse(&format!("{GH}    source: {{ vault: x }}\n")).is_err());
-        assert!(parse(&format!("{GH}    source: {{ env: T }}\n    extra: 1\n")).is_err());
-    }
-
-    #[test]
-    fn rejects_duplicates() {
-        let two = format!("{GH}    source: {{ env: A }}\n{GH}    source: {{ env: B }}\n");
-        assert!(matches!(parse(&two), Err(PolicyError::DuplicateId(id)) if id == "secrets.gh"));
-        let same_header = format!(
-            "{GH}    source: {{ env: A }}\n  - id: gh2\n    host: api.github.com\n    header: authorization\n    source: {{ env: B }}\n"
-        );
-        assert!(problem(&same_header).contains("already sets"));
-    }
-}
+mod tests;

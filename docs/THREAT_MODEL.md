@@ -495,7 +495,8 @@ something OpenMoat claims to stop.
     `openmoat policy lint` warns);
   - the value encoded (base64, percent-encoding, compression) or split across requests,
     since the check matches exact bytes;
-  - anything inside a CONNECT tunnel, which is TLS and is not decrypted;
+  - anything inside a CONNECT tunnel the proxy does not terminate (below), which is TLS
+    and is not decrypted;
   - an observer on the network path of a plain-HTTP request to the owner host. The proxy
     injects the value there in clear text, but only for a secret that opts in with
     `plain_http: true`, which `openmoat policy lint` flags for any host off this machine;
@@ -509,6 +510,46 @@ something OpenMoat claims to stop.
     in-process tools; every host sandbox command unless the policy sets
     `sandbox.proxy_port`; and even then, under Codex, every command whose Codex was
     started without `HTTP(S)_PROXY` naming it (ARCHITECTURE.md §13).
+- **TLS termination (ADR-043) puts the value into HTTPS, inside `openmoat run` only.**
+  For a secret that says `tls: terminate`, the run's proxy decrypts the agent's tunnel to
+  the host with a leaf its own CA signs, checks each request and adds the value outside
+  the sandbox. What it defends against:
+  - *The agent reading the value back.* The answer is searched for every brokered value
+    and stopped before one, raw and without its chunked framing; `Accept-Encoding` is
+    forced to `identity` and an answer with any other content coding is refused.
+  - *A token used for more than it is for.* With `allow` rules, a request they do not
+    name never reaches the host: other methods and paths, a path the server could read
+    as another (`..`, `%2e%2e`, `%2f`, `..;`, double encoding, `//`, `\`), method
+    override headers and `_method`.
+  - *Another host through the same tunnel.* The SNI must name the CONNECT host; inside,
+    the target must be a path and `Host` must name the tunnel's host and port; one
+    request per tunnel, so connection reuse cannot switch host after the check; HTTP/2
+    is refused in the handshake. The proxy never follows a redirect; a client that does
+    reaches the other host through a new CONNECT, decided and leak-checked as any.
+  - *A forged upstream.* The proxy verifies the host's certificate against the system's
+    roots with the CONNECT host as the name, before any byte of the request is sent.
+  - *The CA's key.* `openmoat proxy ca init` is person-only; the key is owner-only in
+    `~/.moat/proxy-ca/`, which `kernel-self` denies reading and no sandbox OpenMoat writes
+    grants (Seatbelt, Landlock and bubblewrap in `openmoat run`; Claude Code's
+    `denyRead`; Codex and Cursor grant named paths only). Both files are pinned in the
+    lock; a changed one is drift. The CA's name constraints limit it to the terminated
+    hosts, so even a leaked key cannot sign for any other name, and nothing outside a run
+    trusts it.
+
+  What it does not defend against:
+  - a value the host sends back encoded (base64, JSON escapes, inside an image), or only
+    part of it;
+  - data the agent puts in a request the rules allow (an allowed `POST` still carries a
+    body), the host itself reflecting the token, or a host that answers a method or path
+    other than the one its request line names (a framework reading a method from a form
+    body, which the proxy does not parse);
+  - a name under a terminated host: the CA's DNS constraint covers `*.host` too, as RFC
+    5280 defines it, though the proxy terminates only the host itself;
+  - clients that ignore the CA variables or pin certificates: they cannot use the host
+    (the safe failure), and the files and variables are not a boundary, since a command
+    in the run can only change what it itself trusts;
+  - while the run lasts, plaintext of terminated requests and answers in the proxy's
+    memory (outside the sandbox).
 - **By default the host sandboxes' own proxies decide network.** The default is no
   `sandbox.proxy_port`. Claude Code's and Codex's proxies then enforce the policy's
   domain names, with no direct route out. They do not write OpenMoat's audit log and

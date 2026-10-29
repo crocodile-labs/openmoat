@@ -14,6 +14,7 @@
 mod capacity;
 mod limits;
 mod recheck;
+mod terminate;
 mod wire;
 
 use std::io::{self, ErrorKind, Write as _};
@@ -28,15 +29,17 @@ use zeroize::Zeroizing;
 pub use self::capacity::RULE_CAPACITY;
 use self::capacity::{Full, Refusals};
 pub use self::limits::Limits;
+pub(crate) use self::wire::response;
 use self::wire::{read_head, read_hello, refuse, respond, summary};
 use crate::audit::{Connection, Recorder};
 use crate::body::{self, BodyEnd, Framing};
-use crate::broker::{Broker, Watch};
+use crate::broker::{Broker, Channel, Watch};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
 use crate::session::{AuthError, RULE_SESSION, Sessions};
 use crate::slots::{PENDING, Share, Shares, WITHOUT_CREDENTIAL};
+use crate::tls::Tls;
 use crate::tunnel::{self, Forward};
 use crate::upstream::{self, Refusal, Resolve};
 
@@ -70,6 +73,11 @@ pub struct Proxy<'a> {
     /// A service of this process that shares the port (ADR-028): `moat run`
     /// answers its sandboxed hooks here. `None` in `moat proxy`.
     pub local: Option<&'a dyn LocalService>,
+    /// TLS termination (ADR-043): a CONNECT to the host of a secret that says
+    /// `tls: terminate` is decrypted, and each request in it checked, given
+    /// the value and recorded. `None`: every tunnel is relayed as it is, as
+    /// in `moat proxy`, whose clients cannot be made to trust the CA.
+    pub tls: Option<&'a Tls>,
 }
 
 impl std::fmt::Debug for Proxy<'_> {
@@ -81,6 +89,7 @@ impl std::fmt::Debug for Proxy<'_> {
             .field("allow_ech", &self.allow_ech)
             .field("sessions", &self.sessions)
             .field("local", &self.local.is_some())
+            .field("tls", &self.tls.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -219,6 +228,34 @@ impl Proxy<'_> {
             refuse(client, 403, &summary(&refusal));
             return;
         }
+        // A secret's `allow` rules, before anything goes upstream (ADR-043).
+        let routed = match &request.target {
+            Target::Http { head, host, port } => {
+                match self.broker.admit(host, Channel::Plain(*port), head) {
+                    Ok(reasons) => reasons,
+                    Err(refusal) => {
+                        self.record(turn, Some(&request), &refusal);
+                        refuse(client, 403, &summary(&refusal));
+                        return;
+                    }
+                }
+            }
+            Target::Connect { .. } => Vec::new(),
+        };
+        if let Target::Connect { host, .. } = &request.target
+            && let Some(tls) = self.terminating(host, turn)
+        {
+            self.terminate(
+                client,
+                &request,
+                turn,
+                &decision,
+                rest.to_vec(),
+                served,
+                tls,
+            );
+            return;
+        }
         // A plain-HTTP request is one request: its body is forwarded, and
         // nothing the client sends after it (body.rs). A tunnel carries TLS,
         // where the proxy cannot see a secret or a second request.
@@ -281,6 +318,7 @@ impl Proxy<'_> {
             Target::Http { head, host, port } => {
                 let mut decision = decision.clone();
                 decision.reasons.extend(self.broker.withheld(host, *port));
+                decision.reasons.extend(routed);
                 if !self.record(turn, Some(&request), &decision) {
                     refuse(client, 403, "audit log unavailable");
                     return;
@@ -288,7 +326,7 @@ impl Proxy<'_> {
                 let inspect: tunnel::Inspect<'_> = &mut inspect;
                 // Only the owner host's head carries a value; it is zeroed
                 // with `first_bytes` once written.
-                let injected = self.broker.inject(host, *port, head);
+                let injected = self.broker.inject(host, Channel::Plain(*port), head);
                 let head = injected.as_deref().map_or(head.as_slice(), Vec::as_slice);
                 let body_bytes = &rest[..body_in_rest];
                 (Zeroizing::new([head, body_bytes].concat()), Some(inspect))
@@ -423,10 +461,16 @@ impl Proxy<'_> {
             session: turn.session,
             method: request.map(|r| r.method.as_str()),
             destination: request.map(|r| (r.host(), r.port())),
+            terminated: false,
             decision,
             latency_us: u64::try_from(turn.started.elapsed().as_micros()).unwrap_or(u64::MAX),
         };
-        match self.recorder.record(&connection) {
+        self.write_row(&connection)
+    }
+
+    /// Record `connection`; `false` when it could not be recorded.
+    fn write_row(&self, connection: &Connection<'_>) -> bool {
+        match self.recorder.record(connection) {
             Ok(()) => true,
             Err(error) => {
                 // The caller refuses the connection; the recorder reports the

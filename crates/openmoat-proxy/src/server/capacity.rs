@@ -119,6 +119,7 @@ fn write(full: Full, count: u64, recorder: &dyn Recorder) {
         session: None,
         method: None,
         destination: None,
+        terminated: false,
         decision: &decision,
         latency_us: 0,
     };

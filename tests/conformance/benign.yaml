@@ -91,6 +91,12 @@
   threat: T9
   action: { fs_read: "~/.moat/policy.yaml" }
   expect: { verdict: defer, rules: [default] }
+# Only OpenMoat's own `proxy-ca` is kept from the agent (ADR-043), not a
+# project's directory of that name
+- id: benign-read-project-proxy-ca-dir
+  threat: T9
+  action: { fs_read: "/p/deploy/proxy-ca/key.pem" }
+  expect: { verdict: allow, rules: [project-fs] }
 # OpenClaw's default workspace is inside its state directory: `kernel-self`
 # guards the directory, its configuration and OpenMoat's plugin, not the work
 - id: benign-write-openclaw-workspace

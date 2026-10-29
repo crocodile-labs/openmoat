@@ -127,6 +127,10 @@ secrets:
     source: { env: GITHUB_TOKEN }   # or { file: ~/.config/moat/gh } or { keychain: { service: moat, account: gh } }
     plain_http: false               # optional; true also injects into plain-HTTP (clear-text) requests
     port: 8080                      # optional, with plain_http only: the port those requests go to (default 80)
+    tls: terminate                  # optional; inside `openmoat run`, decrypt HTTPS to the host and inject there
+    allow:                          # optional, with tls or plain_http: the only requests that get the value
+      - GET /repos/**
+      - POST /repos/*/*/issues
 ```
 
 `openmoat secret add gh` adds exactly this entry, shows the diff and asks, then re-pins and
@@ -135,6 +139,9 @@ policy does not deny, a `file` outside the secret paths), it also adds one, firs
 `deny:` and in the same diff: `secret-<id>` with an `env.read` or `fs.read` of the
 source, so the agent cannot read the value it brokers. For another secret: `openmoat secret add <id> --host <host>
 [--header <name>] (--env NAME | --file PATH)`; the header defaults to `Authorization`.
+`--tls-terminate` sets `tls: terminate` and `--allow 'METHOD /path'` (repeatable) adds a
+rule; with `--tls-terminate` it then offers to make the proxy CA (below) when none covers
+the host.
 
 A brokered secret is kept by OpenMoat, not by the agent (ADR-020). The agent holds the
 placeholder `moat-secret:<id>:placeholder` instead of the value. `openmoat proxy` reads the
@@ -153,9 +160,43 @@ sandbox can broker it too, below).
 - **`port`** (1 to 65535, an integer) is the one port of the plain-HTTP requests that get
   the value; without it, 80. It needs `plain_http: true`, and a policy that sets it
   without, or sets 0, does not load.
+- **`tls: terminate`** (off unless set) makes `openmoat run`'s proxy decrypt every
+  CONNECT to `host` with a leaf its own CA signs, read each request, put the value in and
+  open its own TLS to the host, verified against the system's roots
+  ([ADR-043](adr/ADR-043-tls-termination-for-brokered-secrets.md)). `host` must be a DNS
+  name. It needs the proxy CA: `openmoat proxy ca init` (person-only, asks first) makes
+  one that can sign for the terminated hosts only (X.509 name constraints; names under
+  them included), keeps its key in `~/.moat/proxy-ca/` (owner-only, `kernel-self`) and
+  pins both files in the lock. `openmoat run` refuses to start when no pinned CA covers
+  every terminated host today, and gives the agent's clients the CA through
+  `NODE_EXTRA_CA_CERTS` and a bundle with the system's roots in `SSL_CERT_FILE`,
+  `REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` and
+  `CARGO_HTTP_CAINFO`, files in the run's temp directory. Nothing outside the run trusts
+  it. The standalone `openmoat proxy` and the host sandboxes do not decrypt.
+- **`allow`** lists the only requests that may receive the value, `METHOD /path` each:
+  - the method in capitals, compared exactly (`GET` does not cover `HEAD`); `TRACE`,
+    `TRACK` and `CONNECT` cannot be named;
+  - the path in `/`-separated segments, each a literal (letters, digits and
+    `-._~!$&'()+,=:@`, written decoded), `*` (exactly one non-empty segment) or `**`
+    (any number of segments, none included); a trailing `/` is a segment of its own;
+    the query is not matched;
+  - at most 64 rules, and it needs `tls: terminate` or `plain_http: true`, where the
+    proxy reads requests; a policy that sets it otherwise does not load.
+
+  Every request that would get the value is checked, with or without the placeholder
+  in it. One the rules do not name is refused with `403` before anything is sent
+  upstream (`proxy-secret-route`; the row names the method, never the path). So is a
+  path the server could read as another: each segment is percent-decoded once, and a
+  `.` or `..` segment in any spelling, a segment that decodes to `/`, `\`, `%`, `;` or
+  a control byte, a raw `;`, an empty segment (`//`), a `\`, a `#`, a byte outside
+  visible ASCII and invalid UTF-8 are refused. A request with a method override (the
+  `X-HTTP-Method-Override`, `X-HTTP-Method` or `X-Method-Override` header, or a `_method`
+  query parameter) is refused too. Claude Code's own broker is not given a secret with
+  rules.
 - **Never wider.** A secret opens nothing: its host still needs a `net` or `fetch` allow
   rule, or the proxy refuses it.
-- **Lint.** `openmoat policy lint` warns in four cases:
+- **Lint.** `openmoat policy lint` warns in five cases (the fifth: `tls: terminate` for a
+  loopback host, which the proxy never connects to, so the secret is never injected):
   - no allow rule names the host;
   - no deny rule covers a `file` source (`fs.read`) or an `env` source (`env.read`), so
     the agent could read the value itself;
@@ -176,9 +217,17 @@ What the proxy does with them:
 - **Without `plain_http`** the request is forwarded unchanged, still carrying the
   placeholder, and the server rejects it. The audit row says
   ``secret `<id>` not injected``.
-- **HTTPS (CONNECT)** is not decrypted, so a request there carries the placeholder and
-  the server rejects it. Injection into HTTPS needs opt-in TLS termination, which is not
-  built (#172).
+- **HTTPS (CONNECT)** to a host whose secret says `tls: terminate`, inside `openmoat
+  run`: one request per tunnel, read in the clear (origin form; `Host` must name the
+  tunnel's host and port; HTTP/1.1 only, ALPN `http/1.1`), checked by the leak check
+  and the `allow` rules, given the value in its header as above, and forwarded over the
+  proxy's own TLS to the host (`proxy-tls` when its certificate does not verify).
+  `Accept-Encoding` becomes `identity`, and the answer is searched for every brokered
+  value before the client gets it: it stops before one (`proxy-secret`), and an answer
+  the proxy cannot search (a content coding other than `identity`, a protocol switch)
+  is refused with `502`. Each request gets its own audit row, `https://host:port`.
+- **HTTPS (CONNECT)** anywhere else is not decrypted, so a request there carries the
+  placeholder and the server rejects it.
 - **Leak blocking.** The proxy refuses a request to any other host that carries the
   placeholder or the value, in its head or plain-HTTP body (`proxy-secret`, §5.1).
   `openmoat guard` already denies the call that would send it (`placeholder-egress`, §6): a
@@ -593,7 +642,8 @@ first. Differences from the hook:
   (`*:8443` is no glob over IPv6 text such as `2001:db8::8443`), so list the bare host
   too when the hook should allow it.
 - A `fetch` allow opens the host to every method through the proxy, including requests with a
-  body. Inside a CONNECT tunnel the method cannot be seen until TLS termination exists.
+  body. Inside a CONNECT tunnel the method cannot be seen, except to a host whose
+  brokered secret says `tls: terminate` (§2.1).
 - Loopback, link-local, cloud metadata (`metadata.google.internal`, `metadata.goog`,
   `100.100.100.200`, `fd00:ec2::254`) and non-unicast destinations are refused whatever the
   policy allows. This applies to the name as written and to every address it resolves to.

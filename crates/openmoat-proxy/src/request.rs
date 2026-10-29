@@ -9,6 +9,8 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use openmoat_core::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN};
 use zeroize::Zeroizing;
 
+pub(crate) mod origin;
+
 /// Most headers one request head may carry.
 pub const MAX_HEADERS: usize = 64;
 
