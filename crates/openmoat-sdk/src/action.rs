@@ -100,6 +100,12 @@ pub struct McpCall {
     /// Shell commands the call runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub commands: Vec<String>,
+    /// The one URL a call that only opens or reads a web page names (a
+    /// browser's `navigate`): decided like a fetch of that page, not as a
+    /// connection that may send data (ADR-047). A call that sends more than
+    /// the URL names it in `hosts` instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opens: Vec<String>,
     /// Why the arguments were not searched in full (a depth or size limit);
     /// the call is then at least `ask`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -195,6 +201,7 @@ impl Action {
                 writes: call.writes,
                 hosts: call.hosts,
                 commands: call.commands,
+                opens: call.opens,
                 unchecked: call.unchecked,
             },
             Self::UnknownTool(call) => CoreAction::UnknownTool {
@@ -220,6 +227,7 @@ impl McpCall {
             writes: Vec::new(),
             hosts: Vec::new(),
             commands: Vec::new(),
+            opens: Vec::new(),
             unchecked: None,
         }
     }
@@ -249,6 +257,13 @@ impl McpCall {
     #[must_use]
     pub fn commands<S: Into<String>>(mut self, commands: impl IntoIterator<Item = S>) -> Self {
         self.commands.extend(commands.into_iter().map(Into::into));
+        self
+    }
+
+    /// Add the URL of a page the call only opens or reads (ADR-047).
+    #[must_use]
+    pub fn opens<S: Into<String>>(mut self, urls: impl IntoIterator<Item = S>) -> Self {
+        self.opens.extend(urls.into_iter().map(Into::into));
         self
     }
 

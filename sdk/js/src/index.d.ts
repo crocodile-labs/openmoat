@@ -29,7 +29,9 @@ export type Action =
   | { type: "net"; url: string }
   | { type: "fetch"; url: string }
   | { type: "web_search"; query: string }
-  | ({ type: "mcp_tool"; name: string; unchecked?: string } & Touches)
+  /** `opens`: the one URL a call that only opens or reads a page names (a browser's
+   * `navigate`), decided like a fetch; a call that sends more names it in `hosts`. */
+  | ({ type: "mcp_tool"; name: string; opens?: string[]; unchecked?: string } & Touches)
   | ({ type: "unknown_tool"; host: string; tool: string } & Touches)
   | { type: "unchecked"; action: Action; reason: string };
 

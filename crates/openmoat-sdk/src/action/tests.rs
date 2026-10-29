@@ -65,6 +65,7 @@ fn every_variant_maps_to_the_engine_action_it_names() {
         .writes(["/w"])
         .hosts(["x"])
         .commands(["ls"])
+        .opens(["https://docs.example/page"])
         .unchecked("depth");
     assert_eq!(
         Action::mcp(call).to_core(),
@@ -74,6 +75,7 @@ fn every_variant_maps_to_the_engine_action_it_names() {
             writes: vec!["/w".into()],
             hosts: vec!["x".into()],
             commands: vec!["ls".into()],
+            opens: vec!["https://docs.example/page".into()],
             unchecked: Some("depth".into()),
         }
     );

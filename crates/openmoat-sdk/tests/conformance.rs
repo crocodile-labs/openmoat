@@ -123,6 +123,8 @@ enum McpFixture {
         hosts: Vec<String>,
         #[serde(default)]
         commands: Vec<String>,
+        #[serde(default)]
+        opens: Vec<String>,
         unchecked: Option<String>,
     },
 }
@@ -167,13 +169,15 @@ impl FixtureAction {
                     writes,
                     hosts,
                     commands,
+                    opens,
                     unchecked,
                 } => {
                     let call = McpCall::new(name)
                         .reads(reads)
                         .writes(writes)
                         .hosts(hosts)
-                        .commands(commands);
+                        .commands(commands)
+                        .opens(opens);
                     Action::mcp(match unchecked {
                         Some(limit) => call.unchecked(limit),
                         None => call,
@@ -224,6 +228,7 @@ impl FixtureAction {
                     writes,
                     hosts,
                     commands,
+                    opens,
                     unchecked,
                 } => core::Action::McpTool {
                     name,
@@ -231,6 +236,7 @@ impl FixtureAction {
                     writes,
                     hosts,
                     commands,
+                    opens,
                     unchecked,
                 },
             }),

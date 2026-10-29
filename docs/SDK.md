@@ -114,14 +114,17 @@ unknown field is an error, so a misspelt key never decides an empty call.
 | `net` | `url` (a URL, or a host with an optional port) | `Action::net(url)` |
 | `fetch` | `url`, read with no request body | `Action::fetch(url)` |
 | `web_search` | `query` | `Action::WebSearch { query }` |
-| `mcp_tool` | `name` (`mcp__<server>__<tool>`), `reads`, `writes`, `hosts`, `commands`, `unchecked` | `Action::mcp(McpCall::new(name).reads(…))` |
+| `mcp_tool` | `name` (`mcp__<server>__<tool>`), `reads`, `writes`, `hosts`, `commands`, `opens`, `unchecked` | `Action::mcp(McpCall::new(name).reads(…))` |
 | `unknown_tool` | `host`, `tool`, `reads`, `writes`, `hosts`, `commands` | `Action::UnknownTool(UnknownToolCall::new(host, tool))` |
 | `foreign_shell` | `shell`, `command`: a shell OpenMoat cannot read, never `allow` | `Action::ForeignShell { shell, command }` |
 | `unchecked` | `action`, `reason`: a call you see only in part, at least `ask` | `Action::unchecked(action, reason)` |
 
 For an MCP or unknown tool, list in `reads`, `writes`, `hosts` and `commands` what its
-arguments name, so the file, network and shell rules apply to them too. A tool you
-cannot describe is still decided (`unknown_tool`), never skipped.
+arguments name, so the file, network and shell rules apply to them too. An MCP call
+that only opens or reads one web page (a browser's `navigate`) names that URL in
+`opens`: it is decided like a fetch of the page, not as a connection that may send
+data (ADR-047). A tool you cannot describe is still decided (`unknown_tool`), never
+skipped.
 
 ## Context
 
