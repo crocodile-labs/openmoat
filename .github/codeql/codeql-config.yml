@@ -1,0 +1,14 @@
+name: openmoat
+
+# Shipped code only. Tests put the outputs they compare (a proxy's HTTP answer,
+# a command's output, a credential under test) into assertion messages, which
+# CodeQL reads as log injection, cleartext logging and hard-coded secrets;
+# test code never runs on a person's machine. Everything that ships, the CI
+# scripts included, is still analysed.
+paths-ignore:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/*_tests.rs"
+  - "**/test/**"
+  - "**/*.test.js"
+  - "tests/**"
