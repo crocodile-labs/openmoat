@@ -17,6 +17,12 @@ fn ca_files(sb: &Sandbox) -> (std::path::PathBuf, std::path::PathBuf) {
     (dir.join("ca.pem"), dir.join("key.pem"))
 }
 
+/// A CA file as the lock and `doctor` spell it: under `proxy-ca/` with the OS
+/// separator.
+fn ca_file(name: &str) -> String {
+    format!("proxy-ca{}{name}", std::path::MAIN_SEPARATOR)
+}
+
 #[test]
 fn ca_init_is_for_a_person_with_a_terminated_secret() {
     let sb = Sandbox::installed(&[".claude"]);
@@ -101,7 +107,7 @@ fn a_terminated_secret_gets_a_pinned_ca_that_covers_its_host() {
     }
     let lock = fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
     assert!(
-        lock.contains("proxy-ca/ca.pem") && lock.contains("proxy-ca/key.pem"),
+        lock.contains(&ca_file("ca.pem")) && lock.contains(&ca_file("key.pem")),
         "{lock}"
     );
     let doctor = sb.moat(&["doctor"]);
@@ -111,7 +117,7 @@ fn a_terminated_secret_gets_a_pinned_ca_that_covers_its_host() {
     fs::write(&key, "-----BEGIN PRIVATE KEY-----\nplanted\n").unwrap();
     let doctor = sb.moat(&["doctor"]);
     assert!(
-        text(&doctor).contains("proxy-ca/key.pem"),
+        text(&doctor).contains(&ca_file("key.pem")),
         "{}",
         text(&doctor)
     );
@@ -151,12 +157,16 @@ fn the_agent_cannot_read_the_ca() {
         let (verdict, reason) = verdict_and_reason(&sb.guard("claude-code", &read));
         assert_eq!(verdict, "deny", "{file}: {reason}");
         assert!(reason.contains("kernel-self"), "{reason}");
-        let (verdict, _) = sb.guard_bash(
-            "s-ca",
-            &sb.project(),
-            &format!("cat {}", path.to_string_lossy()),
-        );
-        assert_eq!(verdict, "deny", "{file}");
+        // On Windows the shell behind `Bash` may be PowerShell or `cmd`, and a
+        // `C:\…` path is not a POSIX word: OpenMoat leaves that to the host.
+        if !cfg!(windows) {
+            let (verdict, _) = sb.guard_bash(
+                "s-ca",
+                &sb.project(),
+                &format!("cat {}", path.to_string_lossy()),
+            );
+            assert_eq!(verdict, "deny", "{file}");
+        }
     }
 }
 
