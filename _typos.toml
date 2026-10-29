@@ -30,6 +30,7 @@ extend-ignore-re = [
 TransactionBehavior = "TransactionBehavior" # rusqlite
 AppArmor = "AppArmor"
 FinalizationRegistry = "FinalizationRegistry" # JavaScript's built-in, spelt as the language spells it
+OrganizationName = "OrganizationName" # rcgen's `DnType::OrganizationName`
 
 [default.extend-words]
 # OpenMoat's own rule id and verdict reason.
@@ -42,6 +43,10 @@ serializing = "serializing"
 # The HTTP `Authorization` header and OAuth wording around it.
 authorization = "authorization"
 authorized = "authorized"
+# The HTTP 401 reason phrase, as servers send it.
+unauthorized = "unauthorized"
+# Python's `certifi` package, whose CA bundle `requests` and pip read.
+certifi = "certifi"
 # Apple's `containerization` toolchain (ADR-023).
 containerization = "containerization"
 # `--color`, git's `color.*` keys.

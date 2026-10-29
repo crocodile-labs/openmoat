@@ -235,8 +235,12 @@ fn https(h: &Harness, auth: &str, ca: &str, sni: &str, request: &str) -> String 
     String::from_utf8_lossy(&out).into_owned()
 }
 
-fn request(line: &str) -> String {
-    format!("{line} HTTP/1.1\r\nHost: owner.test\r\nAuthorization: Bearer {PLACEHOLDER}\r\n\r\n")
+/// A request inside the tunnel. Its `Host` names the port the tunnel was
+/// opened to, as a client's does: one without a port names 443.
+fn request(line: &str, port: u16) -> String {
+    format!(
+        "{line} HTTP/1.1\r\nHost: owner.test:{port}\r\nAuthorization: Bearer {PLACEHOLDER}\r\n\r\n"
+    )
 }
 
 #[test]
@@ -247,7 +251,7 @@ fn a_terminated_tunnel_gets_the_value_in_and_never_out() {
         &t.auth,
         &t.agent_trusts,
         "owner.test",
-        &request("GET /repos/o/r"),
+        &request("GET /repos/o/r", t.h.port()),
     );
     assert!(reply.starts_with("HTTP/1.1 200 OK\r\n"), "{reply}");
     assert!(reply.ends_with("\r\n\r\nok"), "{reply}");
@@ -279,7 +283,13 @@ fn a_terminated_tunnel_gets_the_value_in_and_never_out() {
 fn a_request_the_rules_refuse_never_reaches_the_upstream() {
     let t = terminating(true);
     for line in ["DELETE /repos/o/r", "GET /repos/../user/keys", "GET /user"] {
-        let reply = https(&t.h, &t.auth, &t.agent_trusts, "owner.test", &request(line));
+        let reply = https(
+            &t.h,
+            &t.auth,
+            &t.agent_trusts,
+            "owner.test",
+            &request(line, t.h.port()),
+        );
         assert!(reply.starts_with("HTTP/1.1 403 "), "{line}: {reply}");
         assert!(reply.contains("proxy-secret-route"), "{reply}");
     }
@@ -302,7 +312,7 @@ fn a_server_name_other_than_the_connect_host_is_refused_before_tls() {
         &t.auth,
         &t.agent_trusts,
         "evil.test",
-        &request("GET /repos/o"),
+        &request("GET /repos/o", t.h.port()),
     );
     assert!(reply.is_empty(), "{reply}");
     assert!(t.h.nothing_forwarded());
@@ -320,7 +330,7 @@ fn without_tls_terminate_the_tunnel_is_relayed_and_keeps_the_placeholder() {
         &t.auth,
         &t.upstream_ca,
         "owner.test",
-        &request("DELETE /anything"),
+        &request("DELETE /anything", t.h.port()),
     );
     assert!(reply.starts_with("HTTP/1.1 200 OK\r\n"), "{reply}");
     let head = String::from_utf8(t.h.received.recv_timeout(WAIT).unwrap()).unwrap();
@@ -343,7 +353,7 @@ fn a_request_without_a_session_is_never_terminated() {
         "",
         &t.upstream_ca,
         "owner.test",
-        &request("DELETE /x"),
+        &request("DELETE /x", t.h.port()),
     );
     assert!(reply.starts_with("HTTP/1.1 200 OK\r\n"), "{reply}");
     let head = String::from_utf8(t.h.received.recv_timeout(WAIT).unwrap()).unwrap();
