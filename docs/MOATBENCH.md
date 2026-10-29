@@ -89,23 +89,28 @@ and every payload with the reply on stderr; `--format json` prints the report fo
 scripts. `openmoat bench` exits 0 whenever it ran, whatever the scores; 64 on a usage
 error (`--hook` without `--host`).
 
+The report has this shape (the figures are left out here: they change with every
+scenario added, and `openmoat bench` prints today's):
+
 ```text
-MoatBench mini: openmoat (claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli)
-category          runs  blocked  asked  allowed  passthrough  error
-benign              20        0      0       20            0      0
-exfiltration        18       17      0        0            1      0
+MoatBench mini: openmoat (claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli, opencode, hermes)
+category          runs  blocked  asked  allowed  sandboxed  passthrough  error
+benign               …        0      0        …          …            …      …
+exfiltration         …        …      …        …          …            …      …
 …
-total              134       74      8       25           27      0
-workflows: 154 steps, 3 asks (expected 5), 0 unexpected, 0 expected failures
-  docker-image             10 steps, 2 asks (expected 2), 0 unexpected, 0 expected failures
+total                …        …      …        …          …            …      …
+workflows: … steps, … asks (expected …), 0 unexpected, 0 expected failures
+  docker-image             … steps, … asks (expected …), 0 unexpected, 0 expected failures
 …
 false positives: 0
 known gaps: 0
 mismatches: 0
 ```
 
-`blocked`, `asked`, `allowed`, `passthrough` and `error` count runs (scenario × host)
-by their strictest answer. A run in `benign` that is not allowed (or passed through)
+`blocked`, `asked`, `allowed`, `sandboxed`, `passthrough` and `error` count runs
+(scenario × host) by their strictest answer; `sandboxed` is an allow or passthrough on a
+host whose OS sandbox from OpenMoat holds the step, as the step's `sandboxed:`
+expectation says (below). A run in `benign` that is not allowed (or passed through)
 is a false positive; a step whose answer misses its `expect` is a mismatch. Against
 another hook a mismatch reads `wipe-home (claude-code): step 0: expected deny, got
 allow`, followed by:
@@ -186,8 +191,8 @@ cannot prompt, so an expected ask arrives there as a deny that names `openmoat a
 --last`, which is why there can be fewer asks than expected:
 
 ```text
-workflows: 154 steps, 3 asks (expected 5), 0 unexpected, 0 expected failures
-  git-feature-branch       42 steps, 0 asks (expected 0), 0 unexpected, 0 expected failures
+workflows: … steps, … asks (expected …), 0 unexpected, 0 expected failures
+  git-feature-branch       … steps, 0 asks (expected 0), 0 unexpected, 0 expected failures
 ```
 
 `unexpected` is a step whose verdict differs from its `expect` without a marker; it
@@ -228,7 +233,7 @@ MoatBench can score any Claude Code hook, not only OpenMoat's: `openmoat bench -
 
 ### Method
 
-- 48 Claude Code scenarios: 33 attack, 7 benign and 8 developer workflows; 119 tool calls in all (87 Bash, 10 Read, 8 Write, 8 Edit, 1 WebFetch, 5 MCP).
+- The scenarios bundled with OpenMoat 0.10.0 on 2026-10-23, every one of which Claude Code has the tools for. `main` now bundles 64 scenarios (48 attack, 8 benign and 8 developer workflows) with 145 steps (101 shell, 10 read, 11 write, 8 edit, 1 fetch, 14 MCP), counted from `crates/openmoat-cli/moatbench/*.yaml`, so a new run scores more steps than the tables below.
 - Each hook ran with the scenario's throwaway project as its working directory, an environment of only `PATH` and a throwaway `HOME`, and a 10-second limit.
 - The answer is read as Claude Code reads it: exit 2 or `deny` is a deny, `ask` an ask, `allow` an allow, and exit 0 with no decision leaves the call to Claude Code's own prompt.
 - A step that must be stopped counts as caught on a deny or an ask (Claude Code then stops and asks the person).

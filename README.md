@@ -113,7 +113,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 <!-- generated:hosts-agents -->
 | Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |
 |---|---|---|---|
-| Claude Code | `PreToolUse` and `ConfigChange` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
+| Claude Code | `PreToolUse`, `ConfigChange` and `SessionStart` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
 | Codex | `PreToolUse` hook in `hooks.json`; an `ask` becomes a deny you approve with `openmoat allow --last` | hook + OS sandbox | `codex` |
 | Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` hooks, fail-closed | hook + OS sandbox (macOS, Linux); hook only on Windows | `cursor` |
 | OpenClaw | OpenMoat's plugin on OpenClaw's `before_tool_call` hook | hook only | `openclaw` |
@@ -147,15 +147,21 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   supported agent's own login and key files are denied, shell startup files and git
   hooks are protected.
 - **Network.** Commands reach only the hosts the policy lists; cloud metadata services
-  are refused; known token formats sent to the wrong host are denied.
+  are refused; known token formats sent to the wrong host are denied, and so is a URL
+  carrying a long encoded value once the session has read a secret (`encoded-egress`).
 - **Secrets.** Secret-shaped environment variables and environment dumps are denied.
   With `openmoat secret add`, the agent holds a placeholder and the proxy puts the real
-  token into requests to one host only.
+  token into requests to one host only; with `--tls-terminate --allow 'GET /repos/**'`,
+  `openmoat run`'s proxy does that inside HTTPS and refuses every request to the host
+  the rules do not name.
 - **MCP.** MCP tool calls are checked by tool name and by the paths and URLs in their
-  arguments. Each MCP server definition the agents read is pinned, and a changed or new
+  arguments; a browser MCP call that only opens a page is checked like `WebFetch`. Each
+  MCP server definition the agents read is pinned, and a changed or new
   server's calls are held until you run `openmoat mcp accept`. `openmoat mcp wrap` (or
   `openmoat init --mcp-proxy`) runs stdio servers through `openmoat mcp proxy`, which
-  also pins each tool's description and schemas and hides a changed tool until you accept it.
+  also pins each tool's description and schemas, hides a changed tool until you accept it,
+  and passes a call to the server only when the policy does not deny it as the server
+  receives it and the agent's hook decided exactly that call (`mcp-unattributed` otherwise).
   An agent adding an MCP server or starting a server's sign-in through an agent's own
   command (`claude mcp add`, `codex mcp login`, …) asks first.
 - **Known flaws.** `openmoat status` and `openmoat doctor` warn when an agent's installed
@@ -238,7 +244,10 @@ openmoat run --write ~/.claude --write ~/.claude.json -- claude
 Inside `openmoat run`, network goes only through `openmoat proxy`: a default-deny egress
 proxy that allows the hosts the policy lists, refuses loopback and metadata addresses
 and private ones the policy does not name, records every connection, and injects brokered secrets. `openmoat proxy
-install` keeps it running as a user service. What each layer stops is tested in CI
+install` keeps it running as a user service for the host sandboxes; it serves agent
+sessions only (Claude Code's `SessionStart` hook gives each session a credential, so
+each request is recorded under its session and the session's taint applies), and a
+request without one gets `407` (`proxy-session`). What each layer stops is tested in CI
 ([docs/EVIDENCE.md](docs/EVIDENCE.md)); the details are in [docs/SANDBOX.md](docs/SANDBOX.md).
 `openmoat run` is not available on Windows.
 
@@ -255,8 +264,8 @@ engine.decide({ type: "shell", command: "cat ~/.ssh/id_rsa" }); // { verdict: "d
 
 The SDK decides and your code enforces: a denied call must not run, and an `ask` waits for
 a person. It is not a sandbox. Both packages decide every conformance fixture exactly as
-`openmoat guard` does. Guide, examples and the stability contract:
-[docs/SDK.md](docs/SDK.md).
+`openmoat guard` does. Both are on `main` and reach crates.io and npm with the next
+release. Guide, examples and the stability contract: [docs/SDK.md](docs/SDK.md).
 
 ## Everyday use
 

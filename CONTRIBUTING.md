@@ -125,9 +125,9 @@ reviewer can read; a generated wall of text is a reason to ask for a rewrite, no
 
 - Commit and PR title types: `feat`, `fix`, `sec`, `policy`, `host(claude-code)`,
   `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, lowercase subject.
-- Library crates (`openmoat-core`, `openmoat-hosts`, `openmoat-audit`, `openmoat-proxy`) use
-  typed `thiserror` errors and never print. `anyhow` and terminal output live only in
-  `openmoat-cli`.
+- Library crates (`openmoat-core`, `openmoat-hosts`, `openmoat-audit`, `openmoat-proxy`,
+  `openmoat-sdk`) use typed `thiserror` errors and never print; nor does `openmoat-wasm`.
+  `anyhow` and terminal output live only in `openmoat-cli`.
 - `openmoat-core` has no I/O, no `unsafe`, and no internal dependencies; CI builds it
   for `wasm32` to prove it.
 - Rust files stay at or under 500 lines of code; functions under 200 (clippy enforces
@@ -380,12 +380,14 @@ for a crate that exists. Reject the `release` deployment in the workflow run, th
    cargo login                                   # paste the token
    cargo publish --locked --workspace --dry-run
    cargo publish --locked --workspace            # openmoat-core, then openmoat-hosts,
-                                                 # openmoat-audit, openmoat-proxy, then openmoat
+                                                 # openmoat-audit, openmoat-proxy and
+                                                 # openmoat-sdk, then openmoat
    ```
 
    If it stops halfway, publish the rest one by one in that order with
    `cargo publish --locked -p <crate>`; a published version cannot be replaced.
-3. For each of the five crates, open Settings → Trusted Publishing on crates.io and add a
+3. For each of the six published crates (`openmoat-wasm` is `publish = false`), open
+   Settings → Trusted Publishing on crates.io and add a
    GitHub publisher: owner `crocodile-labs`, repository `openmoat`, workflow `release.yml`,
    environment `release`.
 4. Revoke the token on crates.io and run `cargo logout`.
@@ -400,19 +402,20 @@ token with contents write on `crocodile-labs/homebrew-tap` only (the tap needs o
 ## API changes
 
 `openmoat-core`, `openmoat-hosts`, `openmoat-audit` and `openmoat-proxy` are published
-libraries. While the version is 0.x, a breaking change to their public API needs a minor
+libraries, and `openmoat-sdk` joins them with its first release (ADR-046 is its
+stability contract). While the version is 0.x, a breaking change to their public API needs a minor
 bump (0.1.x → 0.2.0) and anything else a patch bump. The `semver of the library crates`
 CI job runs [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks)
 0.51.0 twice:
 
-- **against the PR's base commit**, blocking: a PR that breaks the API fails. If the
+- **against the PR's base commit**, blocking, `openmoat-sdk` included: a PR that breaks the API fails. If the
   break is intended, say so in the PR's **Release note** (what breaks and what to use
   instead), ask a maintainer to add the `breaking` label, and re-run the job; it then
   passes with a warning. Its changelog fragment goes under `### Changed` or
   `### Removed` and the entry starts with **Breaking** and the crate.
-- **against the latest crates.io release**, reporting only, except on a release PR
-  (`build: release …`), where it blocks until the version bump covers every break
-  since that release.
+- **against the latest crates.io release** (the four crates published so far), reporting
+  only, except on a release PR (`build: release …`), where it blocks until the version
+  bump covers every break since that release.
 
 Locally: `cargo install cargo-semver-checks --version 0.51.0 --locked`, then
 `cargo semver-checks check-release -p openmoat-core --baseline-rev origin/main`.

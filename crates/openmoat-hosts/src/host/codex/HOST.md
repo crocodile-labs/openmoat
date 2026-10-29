@@ -61,3 +61,10 @@ binary is missing or crashes.
 OpenMoat writes its permissions profile into Codex's `config.toml`; the lock pins the part
 OpenMoat owns. Codex's Linux sandbox does not refuse `TIOCSTI`, so only the kernel stops a
 command typing into the terminal there (`openmoat doctor` warns).
+
+With `sandbox.proxy_port`, Codex's own proxy hands its traffic on to `openmoat proxy`
+with no session credential, and no Codex hook can add one (ADR-044). `openmoat proxy`
+refuses that traffic (`407`, a `proxy-session` row) unless the policy sets
+`sandbox.proxy_serve_without_credential: true`, which serves it without a session and
+without session taint; `openmoat run -- codex` gives each run a credential of its own.
+`openmoat status` and `openmoat doctor` report this under "proxy sessions" as a warning.

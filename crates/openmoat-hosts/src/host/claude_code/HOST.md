@@ -65,3 +65,8 @@ calls run unchecked if the hook binary is missing or crashes.
 OpenMoat writes Claude Code's `sandbox` block and permission rules into `settings.json`
 (macOS, Linux, WSL2). Not on native Windows: the hook still applies the policy there (use
 WSL2 for OS confinement).
+
+With `sandbox.proxy_port`, each session's sandboxed commands send `openmoat proxy` the
+credential the `SessionStart` hook issued (ADR-044), so the proxy records them under that
+session and applies its taint and connection share; `openmoat status` and `openmoat
+doctor` report this under "proxy sessions".

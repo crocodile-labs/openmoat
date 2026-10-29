@@ -402,6 +402,23 @@ bubblewrap.
   credential as `http://<session>:<token>@127.0.0.1:<port>`, and a request without it
   gets `407` (ADR-027). A tool that drops the URL's user and password has no network
   either.
+- A secret with `tls: terminate` (ADR-043) is put into HTTPS here and nowhere else:
+  the run's proxy decrypts the agent's tunnel to that host with a certificate its own
+  CA signs, puts the value in, refuses a request the secret's `allow` rules do not name
+  and stops an answer before any brokered value in it. The CA is made by
+  `openmoat proxy ca init` (a person at a terminal) in `~/.moat/proxy-ca/` and pinned in
+  the lock; a policy with such a secret and no pinned CA makes `openmoat run` refuse to
+  start. Only the commands the run starts trust it: `openmoat run` writes the
+  certificate, and a bundle of the system's roots with it, to a private directory under
+  the temp directory for the session and names the files in the run's environment
+  (`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`,
+  `CARGO_HTTP_CAINFO`; `NODE_EXTRA_CA_CERTS` gets the certificate alone). Nothing is
+  added to the system's or the person's trust store, and the standalone `openmoat proxy`
+  of the Standard tier never terminates. `~/.moat/proxy-ca/` itself stays out of reach
+  of sandboxed commands: `kernel-self` denies reading it, and every sandbox OpenMoat
+  writes keeps it out (Seatbelt, Landlock and bubblewrap here, where the state directory
+  is in no grant; Claude Code's `denyRead` and `Read(//…)` rules; Codex's and Cursor's
+  sandboxes, which grant named paths only).
 - Turn the agent's own sandbox off inside: sandboxes do not nest, so Claude Code's
   `sandbox.enabled` (which `openmoat init` turns on) fails there and Codex needs
   `--sandbox danger-full-access`. Credentials must not come from the keychain: use
@@ -416,7 +433,8 @@ It is weaker per command than the Standard tier: the agent and its scripts share
 sandbox, so whatever the agent needs, `npm test` gets too. On macOS and Linux alike,
 data can still leave through the hosts the policy allows: the proxy checks the host,
 and the secrets broker blocks a brokered secret it can see, but it cannot read inside
-HTTPS. It applies the session's taint from the agent sessions whose hooks linked
+HTTPS, except the tunnel to the host of a secret that says `tls: terminate`, which it
+terminates (above, ADR-043). It applies the session's taint from the agent sessions whose hooks linked
 themselves to the run ([THREAT_MODEL.md](THREAT_MODEL.md) §5, ADR-027).
 
 The agent's hooks run inside the sandbox too, where `~/.moat` is closed to them. They
