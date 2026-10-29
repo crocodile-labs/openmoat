@@ -29,7 +29,9 @@
 //! - a response that lists tools (`result.tools`) leaves out the tools the pins
 //!   hold;
 //! - `notifications/tools/list_changed` has the relay read the tools again
-//!   itself, so a changed tool is held even when the host never lists again;
+//!   itself, so a changed tool is held even when the host never lists again
+//!   (a call the relay forwarded before it read the notification reaches the
+//!   server, as it would without the relay: the hold starts at the notification);
 //! - each request it sends the host (`sampling/createMessage`,
 //!   `elicitation/create`, …) is recorded.
 

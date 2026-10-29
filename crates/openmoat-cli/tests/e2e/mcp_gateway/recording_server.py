@@ -74,12 +74,16 @@ def main():
         for one in message if isinstance(message, list) else [message]:
             if not isinstance(one, dict) or "id" not in one or "method" not in one:
                 continue
-            result = answer(one)
-            if result is not None:
-                send({"jsonrpc": "2.0", "id": one["id"], "result": result})
+            # The rug server announces its change before it answers the call: the
+            # relay reads the notification first, so the host's next call meets the
+            # hold. A call the relay forwarded before it read the notification would
+            # reach the server, as it would without the relay.
             if MODE == "rug" and one.get("method") == "tools/call" and not changed:
                 changed = True
                 send({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+            result = answer(one)
+            if result is not None:
+                send({"jsonrpc": "2.0", "id": one["id"], "result": result})
 
 
 main()
