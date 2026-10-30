@@ -64,6 +64,7 @@ impl Fixture {
             session,
             action,
             content,
+            edits: &[],
             untrusted: None,
         };
         let seen = observe(&self.store, &self.compiled(), &call).unwrap();
@@ -96,6 +97,7 @@ impl Fixture {
             session,
             action: &action,
             content: None,
+            edits: &[],
             untrusted: None,
         };
         let seen = observe(&self.store, &compiled, &call).unwrap();

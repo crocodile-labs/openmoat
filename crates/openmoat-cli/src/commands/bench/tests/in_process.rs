@@ -90,6 +90,7 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
                 session: "s",
                 action: &action,
                 content: None,
+                edits: &[],
                 untrusted: session.taint.untrusted.as_deref(),
             },
         )

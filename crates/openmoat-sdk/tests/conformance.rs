@@ -31,6 +31,9 @@ struct Fixture {
     #[serde(default)]
     #[expect(dead_code, reason = "the core's conformance test checks threats")]
     threat: Option<String>,
+    #[serde(default)]
+    #[expect(dead_code, reason = "the core's conformance test shows the reason")]
+    why: Option<String>,
     action: FixtureAction,
     expect: Expect,
     #[serde(default)]

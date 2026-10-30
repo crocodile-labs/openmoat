@@ -489,4 +489,46 @@ fn copies_into_a_directory_write_the_entry() {
     assert!(!has_write(&parsed("scp key host:/tmp/"), "/p/key"));
 }
 
+#[test]
+fn inert_assignments_set_nothing() {
+    // a value through `$PATH` is not a known path, so some lines are unparseable;
+    // the assignment atoms are the same either way
+    let atoms = |cmd: &str| match classify(cmd, &ctx()) {
+        ParseOutcome::Parsed(atoms) | ParseOutcome::Unparseable { atoms, .. } => atoms,
+    };
+    for line in [
+        "GIT_EDITOR=true git rebase --continue",
+        "EDITOR=: git commit --amend",
+        "VISUAL=cat git commit -a",
+        "export GIT_SEQUENCE_EDITOR=true",
+        "PATH=$PATH cargo build",
+        "PATH=\"${PATH}\" cargo build",
+        "PATH=/usr/bin:/bin:/usr/sbin:/sbin cargo build",
+        "env -i PATH=/usr/local/bin:/usr/bin:/bin cargo build",
+        "export PATH=/usr/bin:/bin",
+    ] {
+        let a = atoms(line);
+        assert!(
+            !a.iter().any(|x| matches!(x, AtomicAction::EnvSet { .. })),
+            "{line}: {a:?}"
+        );
+    }
+    for (line, name) in [
+        ("GIT_EDITOR='sh -c id' git rebase --continue", "GIT_EDITOR"),
+        ("EDITOR=/tmp/x git commit -a", "EDITOR"),
+        ("EDITOR=vim git commit -a", "EDITOR"),
+        ("PATH=/tmp:$PATH git status", "PATH"),
+        ("PATH=.:$PATH git status", "PATH"),
+        // a literal `$PATH` from single quotes is a relative directory
+        ("PATH='$PATH' git status", "PATH"),
+        ("PATH=/usr/bin:/bin: git status", "PATH"),
+        ("PATH= git status", "PATH"),
+        ("PATH+=:/tmp git status", "PATH"),
+        ("env -i PATH=/tmp/x:/usr/bin:/bin git status", "PATH"),
+        ("export PATH=/usr/bin:/bin:./node_modules/.bin", "PATH"),
+    ] {
+        assert!(has_env_set(&atoms(line), name), "{line}");
+    }
+}
+
 mod net;

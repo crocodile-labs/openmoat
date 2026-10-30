@@ -1,6 +1,8 @@
 //! From tokens to simple commands to atomic actions.
 
+mod atoms;
 mod fetch;
+mod filters;
 mod locals;
 mod payload;
 mod piped;
@@ -9,24 +11,26 @@ mod recover;
 mod wrappers;
 
 use super::tables::{
-    ENV_BUILTINS, HOST_PROGRAMS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS, RESERVED_PREFIXES,
-    SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
+    ENV_BUILTINS, FILESYSTEM_QUERIES, HOST_PROGRAMS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS,
+    RESERVED_PREFIXES, SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
-    assignment_name, flag_payload, for_variable, kill_substituted, program_name, strip_at,
-    word_env_refs,
+    assignment_name, flag_payload, flag_payload_index, for_variable, program_name, strip_at,
+    tests_presence, word_env_refs,
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
-    copy, cwd, database, decoders, embedded, extract, git, invocation, mailbox, make, operands,
-    options, text,
+    copy, cwd, database, decoders, embedded, extract, git, in_place, invocation, kills, mailbox,
+    make, operands, options, text,
 };
 use crate::action::AtomicAction;
 use crate::host;
 use crate::lexer::{self, Operator, Token, Word};
 use crate::paths;
+use atoms::{push_command, push_env_set, push_kill_substituted};
 use piped::Piped;
 use recover::lex_like_bash;
+pub(super) use wrappers::wrapped_command;
 
 /// A simple command, or the opening or closing parenthesis of a subshell.
 #[derive(Debug)]
@@ -49,6 +53,8 @@ struct SimpleCommand {
     literal_stdin: Vec<String>,
     /// Data the previous command of a pipe passes on (`piped.rs`).
     piped: Vec<Piped>,
+    /// The words of the command this one pipes into, when there is one.
+    consumer: Option<Vec<String>>,
 }
 
 impl SimpleCommand {
@@ -117,6 +123,17 @@ fn group_commands(tokens: &[Token]) -> Vec<Item> {
     let mut commands = Vec::new();
     let mut current = SimpleCommand::default();
     let mut pending_redirect: Option<Operator> = None;
+    // The command before the last `|`, which gets the next one as its consumer.
+    let mut producer: Option<usize> = None;
+    let mut finish = |commands: &mut Vec<Item>, current: &mut SimpleCommand, pipes: bool| {
+        if let Some(Item::Command(before)) = producer.take().and_then(|at| commands.get_mut(at)) {
+            before.consumer = Some(current.words.iter().map(|w| w.text.clone()).collect());
+        }
+        commands.push(Item::Command(std::mem::take(current)));
+        if pipes {
+            producer = Some(commands.len() - 1);
+        }
+    };
 
     for token in tokens {
         match token {
@@ -124,7 +141,7 @@ fn group_commands(tokens: &[Token]) -> Vec<Item> {
                 pending_redirect = None;
                 if !current.is_empty() {
                     let piped = piped::data(&current).filter(|_| *op == Operator::Pipe);
-                    commands.push(Item::Command(std::mem::take(&mut current)));
+                    finish(&mut commands, &mut current, *op == Operator::Pipe);
                     current.piped.extend(piped);
                 } else if *op == Operator::Pipe && matches!(commands.last(), Some(Item::Close)) {
                     // `( … ) | sh`: what the group prints is not on the command line.
@@ -163,7 +180,7 @@ fn group_commands(tokens: &[Token]) -> Vec<Item> {
         }
     }
     if !current.is_empty() {
-        commands.push(Item::Command(current));
+        finish(&mut commands, &mut current, false);
     }
     commands
 }
@@ -245,12 +262,10 @@ fn classify_as_written(
     }
     let first_assignment = idx;
     while let Some(word) = cmd.words.get(idx) {
-        let Some(name) = assignment_name(&word.text) else {
+        if assignment_name(&word.text).is_none() {
             break;
-        };
-        sink.push(AtomicAction::EnvSet {
-            name: name.to_owned(),
-        })?;
+        }
+        push_env_set(word, sink)?;
         for name in word_env_refs(word) {
             sink.push(AtomicAction::EnvRead { name })?;
         }
@@ -274,18 +289,14 @@ fn classify_as_written(
     super::executes::note(&argv, program, &cmd.reads, ctx, sink);
     super::installs::note(&argv, program, sink)?;
 
-    if program == "git" {
-        git::push_shell(&argv, ctx, sink)?;
-    } else {
-        sink.push(AtomicAction::Shell { argv: argv.clone() })?;
-    }
+    let substitution = in_place::substitution(&argv, program);
+    push_command(cmd, &argv, program, substitution, ctx, sink)?;
     push_kill_substituted(program, words, sink)?;
+    kills::note(&argv, program, sink)?;
 
     if ENV_BUILTINS.contains(&program) {
-        for name in argv[1..].iter().filter_map(|w| assignment_name(w)) {
-            sink.push(AtomicAction::EnvSet {
-                name: name.to_owned(),
-            })?;
+        for word in &words[1..] {
+            push_env_set(word, sink)?;
         }
         locals::note_builtin(&words[1..], program, ctx.home, sink);
     }
@@ -313,7 +324,7 @@ fn classify_as_written(
             sink.write(ctx, &path)?;
         }
     }
-    let mut text_operands = text::classify(&argv, program, ctx, sink)?;
+    let mut text_operands = text::classify(&argv, words, program, ctx, sink)?;
     let stdin = cmd
         .stdin_texts()
         .chain(cmd.piped.iter().filter_map(Piped::text));
@@ -321,9 +332,16 @@ fn classify_as_written(
         .data
         .extend(database::classify(&argv, program, stdin, ctx, sink)?);
     text_operands.data.extend(git::data_words(&argv, program));
+    // a `perl -pi` substitution program is data, not a path
+    text_operands.data.extend(substitution);
     text_operands
         .data
         .extend(options::fd_pattern(&argv, program).or(options::grep_pattern(&argv, program)));
+    // the program `python3 -c CODE` or `perl -e CODE` runs is text, not a file
+    // (`payload.rs` scans it below)
+    text_operands
+        .data
+        .extend(inline_flags(program).and_then(|flags| flag_payload_index(&argv, flags)));
     super::path_options::classify(&argv, program, &mut text_operands, ctx, sink)?;
     classify_arguments(&argv, program, words, &text_operands, ctx, sink)?;
     for dir in extract::destinations(&argv, program) {
@@ -377,7 +395,9 @@ fn classify_as_written(
         return done;
     }
     let inline = inline_flags(program);
+    // a program that is only substitutions opens nothing, so it is not scanned
     if let Some(flags) = inline
+        && substitution.is_none()
         && let Some(payload) = flag_payload(&argv, flags)
     {
         payload::scan_payload(payload, program, ctx, sink)?;
@@ -388,18 +408,6 @@ fn classify_as_written(
         }
     }
     options::classify(&argv, program, ctx, sink, depth)
-}
-
-/// The second atom of a `kill` of substituted pids ([`kill_substituted`]).
-fn push_kill_substituted(
-    program: &str,
-    words: &[Word],
-    sink: &mut Sink,
-) -> Result<(), ClassifyError> {
-    match kill_substituted(program, words) {
-        Some(argv) => sink.push(AtomicAction::Shell { argv }),
-        None => Ok(()),
-    }
 }
 
 /// Classify a wrapper's inner argv (`sudo rm …` → `rm …`) as its own command.
@@ -450,19 +458,21 @@ fn classify_arguments(
     let fetch_only = fetch::sends_nothing(argv, program, words, sink);
 
     for (i, (tok, word)) in argv.iter().zip(words).enumerate() {
-        for name in word_env_refs(word) {
-            sink.push(AtomicAction::EnvRead { name })?;
+        // `[ -n "$X" ]` tells whether `X` has a value and shows nothing of it
+        if !tests_presence(argv, i) {
+            for name in word_env_refs(word) {
+                sink.push(AtomicAction::EnvRead { name })?;
+            }
         }
-        if program == "env"
-            && i > 0
-            && let Some(name) = assignment_name(tok)
-        {
-            sink.push(AtomicAction::EnvSet {
-                name: name.to_owned(),
-            })?;
+        if program == "env" && i > 0 {
+            push_env_set(word, sink)?;
         }
         let skip = copy.as_ref().is_some_and(|d| d.index == i) || mailbox::names_no_host(argv, i);
         if i == 0 || text_operands.data.contains(&i) || skip {
+            continue;
+        }
+        // `df -h ~` names the file system holding a path and opens nothing under it
+        if FILESYSTEM_QUERIES.contains(&program) {
             continue;
         }
         let options_ended = options_end.is_some_and(|end| i > end);

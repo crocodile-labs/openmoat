@@ -4,7 +4,9 @@
 use std::fmt::Write as _;
 use std::ops::Range;
 
-use super::tables::{GNU_PREFIXED, IGNORED_VARS, SPECIAL_PARAMS};
+use super::tables::{
+    EDITOR_VARS, GNU_PREFIXED, IGNORED_VARS, INERT_EDITOR_VALUES, SPECIAL_PARAMS, SYSTEM_PATH_DIRS,
+};
 use crate::lexer::Word;
 
 /// `NAME=value` or `NAME+=value` → `NAME`.
@@ -19,6 +21,31 @@ pub fn assignment_name(word: &str) -> Option<&str> {
     chars
         .all(|c| c.is_ascii_alphanumeric() || c == '_')
         .then_some(name)
+}
+
+/// Whether the assignment `word` (`NAME=value`) changes nothing about what
+/// later commands run: an editor variable set to a no-op or a reader
+/// (`GIT_EDITOR=true`, `EDITOR=:`, `GIT_EDITOR=cat`), or `PATH` kept as it is
+/// (`PATH=$PATH`, `PATH="$PATH"`) or set to system directories only
+/// (`PATH=/usr/bin:/bin`), in any order. A `PATH` that adds any other
+/// directory, is empty or has an empty entry (the working directory) is not.
+pub fn inert_assignment(word: &Word) -> bool {
+    let Some((name, value)) = word.text.split_once('=') else {
+        return false;
+    };
+    if EDITOR_VARS.contains(&name) {
+        return INERT_EDITOR_VALUES.contains(&value);
+    }
+    if name != "PATH" {
+        return false;
+    }
+    if value == "$PATH" || value == "${PATH}" {
+        // only a `$` the shell expands keeps the path; from single quotes it
+        // is a literal, so the value would be a relative directory
+        let dollar = name.len() + 1;
+        return !word.literal.iter().any(|span| span.contains(&dollar));
+    }
+    !value.is_empty() && value.split(':').all(|dir| SYSTEM_PATH_DIRS.contains(&dir))
 }
 
 /// The argv of a `kill` whose arguments hold a command substitution, with each
@@ -62,7 +89,10 @@ fn expanded_refs(token: &str, literal: &[Range<usize>]) -> Vec<String> {
             continue;
         }
         let rest = &token[pos + 1..];
-        let body = rest.strip_prefix('{').unwrap_or(rest);
+        let (body, braced) = match rest.strip_prefix('{') {
+            Some(body) => (body, true),
+            None => (rest, false),
+        };
         if body
             .chars()
             .next()
@@ -72,7 +102,13 @@ fn expanded_refs(token: &str, literal: &[Range<usize>]) -> Vec<String> {
         }
         let end = body.find(|c: char| !is_name_char(c)).unwrap_or(body.len());
         let name = &body[..end];
+        // `${NAME:+word}` and `${NAME+word}` expand to `word` or to nothing: they
+        // tell whether `NAME` is set and show nothing of its value (a `$` in
+        // `word` is its own reference)
+        let presence_only =
+            braced && (body[end..].starts_with(":+") || body[end..].starts_with('+'));
         let skip = name.is_empty()
+            || presence_only
             || IGNORED_VARS.contains(&name)
             || name.chars().all(|c| c.is_ascii_digit());
         if !skip && !names.iter().any(|n| n == name) {
@@ -89,8 +125,43 @@ pub fn strip_at(token: &str) -> &str {
 
 /// The argument following the first of `flags`, if any.
 pub fn flag_payload<'a>(argv: &'a [String], flags: &[&str]) -> Option<&'a str> {
+    flag_payload_index(argv, flags).map(|at| argv[at].as_str())
+}
+
+/// The argv index of the argument following the first of `flags`, if any.
+pub fn flag_payload_index(argv: &[String], flags: &[&str]) -> Option<usize> {
     let pos = argv.iter().position(|a| flags.contains(&a.as_str()))?;
-    argv.get(pos + 1).map(String::as_str)
+    (pos + 1 < argv.len()).then_some(pos + 1)
+}
+
+/// `[ -n "$X" ]`, `[[ -z $X ]]`, `test -n "$X"`: the word at `i` is the one
+/// operand of a `-n`/`-z` test, which tells whether `X` has a value and shows
+/// nothing of it. Only a word that is a single `$X` or `${X}` counts; any other
+/// use of the variable in the test (`[ "$X" = y ]`, `${X:0:4}`) is a read.
+pub fn tests_presence(argv: &[String], i: usize) -> bool {
+    matches!(program_name(&argv[0]), "[" | "[[" | "test")
+        && i >= 2
+        && matches!(argv[i - 1].as_str(), "-n" | "-z")
+        && is_single_reference(&argv[i])
+}
+
+/// `$NAME` or `${NAME}` and nothing else.
+fn is_single_reference(word: &str) -> bool {
+    let Some(rest) = word.strip_prefix('$') else {
+        return false;
+    };
+    let name = match rest.strip_prefix('{') {
+        Some(inner) => match inner.strip_suffix('}') {
+            Some(name) => name,
+            None => return false,
+        },
+        None => rest,
+    };
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 pub fn basename(program: &str) -> &str {

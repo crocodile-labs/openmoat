@@ -254,6 +254,11 @@ pub const FILE_OPERANDS: &[&str] = &[
 /// `tr` takes character sets. A `/` in them is text.
 pub const NO_FILE_OPERANDS: &[&str] = &["echo", "printf", "tr"];
 
+/// Programs whose path operands name the file system holding them, which they
+/// query without opening anything under it: `df -h ~` reports free space and
+/// reads no file of the home folder. (`du` walks the tree and is a reader.)
+pub const FILESYSTEM_QUERIES: &[&str] = &["df"];
+
 /// Words before a command that leave it running in the current shell, so a
 /// `cd` after them still moves it (`builtin cd`, `if cd x; then`, `{ cd x; }`).
 pub const CWD_PREFIXES: &[&str] = &[
@@ -279,6 +284,17 @@ pub const SPECIAL_PARAMS: &[char] = &['?', '$', '!', '#', '@', '*', '-', '0'];
 
 /// Variables that are expanded by the classifier itself or carry no secret.
 pub const IGNORED_VARS: &[&str] = &["HOME", "PWD", "OLDPWD", "USER", "SHELL", "TERM", "project"];
+
+/// Variables naming the editor git and other tools run.
+pub const EDITOR_VARS: &[&str] = &["GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "EDITOR", "VISUAL"];
+
+/// Editor values that run nothing of their own: a no-op, or a reader that
+/// prints the file and leaves it as it is.
+pub const INERT_EDITOR_VALUES: &[&str] = &["true", ":", "cat"];
+
+/// The directories a `PATH` may be set to without changing what any command
+/// resolves to: the system's own, which no agent writes.
+pub const SYSTEM_PATH_DIRS: &[&str] = &["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin"];
 
 /// Programs whose arguments name hosts: a host-shaped word there is network
 /// evidence (`Net`), elsewhere only a word that looks like one (`NetWord`, ADR-025).

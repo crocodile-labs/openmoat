@@ -57,6 +57,9 @@ fn every_spelling_of_an_output_is_a_write() {
     // a value-taking letter ends the cluster: `-do` sends `o`, writes nothing
     assert!(writes("curl -do https://x.test").is_empty());
     assert!(writes("curl -o - https://x.test").is_empty());
+    assert!(writes("curl -o /dev/null https://x.test").is_empty());
+    assert!(writes("curl -sSo /dev/stdout https://x.test").is_empty());
+    assert!(writes("wget -O /dev/stdout https://x.test/a").is_empty());
     assert!(writes("wget -qO- https://x.test/a").is_empty());
 }
 

@@ -32,6 +32,12 @@ pub struct SessionWrite {
     /// Lowercase hex SHA-256 of what the call writes, when it sends the whole
     /// file (`Write`); `None` when it is not known (`Edit`, a shell write).
     pub sha256: Option<String>,
+    /// The hash of the file as it was when the call was decided: `""` when
+    /// there was no file; `None` when it is not known (`sha256` is not known
+    /// either, the file could not be read, or an older build wrote the row).
+    /// With `sha256`, a later call can tell that this one ran and changed the
+    /// file (ADR-048).
+    pub before: Option<String>,
 }
 
 /// The newest write of a file by one session.
@@ -45,6 +51,8 @@ pub struct Written {
     pub ts_ms: i64,
     /// The hash of what it wrote, when known.
     pub sha256: Option<String>,
+    /// The hash of the file before that call, as [`SessionWrite::before`].
+    pub before: Option<String>,
 }
 
 impl Store {
@@ -68,18 +76,30 @@ impl Store {
         for write in writes {
             // `REPLACE` deletes the old row and adds one with a new id, so the
             // newest rows have the highest ids for the row limit.
-            tx.execute(
-                "INSERT OR REPLACE INTO session_writes (event_id, ts_ms, host, session_id, path, sha256)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    event.0,
-                    ts_ms,
-                    host,
-                    session_id,
-                    secrets.redact(&write.path),
-                    write.sha256
-                ],
-            )?;
+            let path = secrets.redact(&write.path);
+            if self.write_before() {
+                tx.execute(
+                    "INSERT OR REPLACE INTO session_writes
+                     (event_id, ts_ms, host, session_id, path, sha256, before_sha256)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        event.0,
+                        ts_ms,
+                        host,
+                        session_id,
+                        path,
+                        write.sha256,
+                        write.before
+                    ],
+                )?;
+            } else {
+                // a read-only handle on a database no newer build has opened yet
+                tx.execute(
+                    "INSERT OR REPLACE INTO session_writes (event_id, ts_ms, host, session_id, path, sha256)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![event.0, ts_ms, host, session_id, path, write.sha256],
+                )?;
+            }
         }
         // Pruning scans the age index; once every PRUNE_EVERY rows keeps the
         // table within its bounds at a fraction of the cost.
@@ -129,10 +149,16 @@ impl Store {
         let secrets = &self.secrets;
         let host = secrets.redact(host);
         let session_id = secrets.redact(session_id);
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT event_id, ts_ms, sha256 FROM session_writes
-             WHERE host = ?1 AND session_id = ?2 AND path = ?3",
-        )?;
+        // a handle on a database before version 7 has no `before_sha256` column
+        let before = if self.write_before() {
+            "before_sha256"
+        } else {
+            "NULL"
+        };
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT event_id, ts_ms, sha256, {before} FROM session_writes
+             WHERE host = ?1 AND session_id = ?2 AND path = ?3"
+        ))?;
         let mut found = Vec::new();
         for path in paths {
             let mut rows = stmt.query(params![host, session_id, secrets.redact(path)])?;
@@ -142,6 +168,7 @@ impl Store {
                     event_id: EventId(row.get(0)?),
                     ts_ms: row.get(1)?,
                     sha256: row.get(2)?,
+                    before: row.get(3)?,
                 });
             }
         }

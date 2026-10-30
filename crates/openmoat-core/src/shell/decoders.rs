@@ -7,7 +7,7 @@
 //! for every decoder stage that feeds an interpreter reading its program from
 //! stdin. Policy rules such as `* -d | sh` then match every spelling.
 
-use super::tables::{INLINE_INTERPRETERS, SHELLS};
+use super::tables::{INLINE_INTERPRETERS, SHELLS, SOURCE_BUILTINS, STREAM_SOURCES};
 use super::tokens::basename;
 use super::{ClassifyError, Sink, invocation};
 use crate::action::AtomicAction;
@@ -65,7 +65,7 @@ pub(super) fn push(tokens: &[Token], sink: &mut Sink) -> Result<(), ClassifyErro
 }
 
 /// Stages (argv without redirections) of every `a | b | c` chain.
-fn pipe_chains(tokens: &[Token]) -> Vec<Vec<Vec<&str>>> {
+pub(super) fn pipe_chains(tokens: &[Token]) -> Vec<Vec<Vec<&str>>> {
     let mut chains = vec![vec![Vec::new()]];
     let mut skip_target = false;
     for token in tokens {
@@ -112,9 +112,26 @@ fn decoder<'a>(stage: &[&'a str]) -> Option<&'a str> {
 }
 
 /// The interpreter's name when `stage` runs a program read from stdin: a shell
-/// or language runtime with no script argument (or `-`) and no inline code.
-fn stdin_interpreter<'a>(stage: &[&'a str]) -> Option<&'a str> {
+/// or language runtime with no script argument (or `-`) and no inline code;
+/// `source`/`.` of the standard input; or `xargs` starting one of them, which
+/// runs the files the stream names.
+pub(super) fn stdin_interpreter<'a>(stage: &[&'a str]) -> Option<&'a str> {
     let program = basename(stage.first()?);
+    if SOURCE_BUILTINS.contains(&program) {
+        let file = stage.get(1)?;
+        return (STREAM_SOURCES.contains(file) && *file != "/dev/null").then_some(program);
+    }
+    if program == "xargs" {
+        // `xargs sh` runs `sh` on the files the stream names, `xargs -I {} sh -c
+        // '{}'` the stream itself: any shell or interpreter counts
+        let owned: Vec<String> = stage.iter().map(|w| (*w).to_owned()).collect();
+        let rest = super::commands::wrapped_command(&owned, program)?;
+        let inner = basename(stage[stage.len() - rest.len()]);
+        let interpreter = SHELLS.contains(&inner)
+            || STDIN_INTERPRETERS.contains(&inner)
+            || inner.starts_with("python3.");
+        return interpreter.then_some(inner);
+    }
     if SHELLS.contains(&program) {
         // Options the parser cannot read make the whole command unparseable
         // before this runs, so `Err` never decides a verdict here.
@@ -174,9 +191,17 @@ mod tests {
             &["bash", "-o", "pipefail"],
             &["sh", "-s", "arg"],
             &["python3", "-"],
+            &["python3", "-I"],
             &["python3.12"],
             &["node"],
+            &["node", "-"],
             &["perl"],
+            &["ruby"],
+            &["source", "/dev/stdin"],
+            &[".", "/dev/fd/0"],
+            &["xargs", "sh"],
+            &["xargs", "-0", "-n", "1", "python3"],
+            &["xargs", "-I", "{}", "sh", "-c", "{}"],
         ] {
             assert!(stdin_interpreter(stage).is_some(), "{stage:?}");
         }
@@ -185,6 +210,16 @@ mod tests {
             &["sh", "-c", "echo"],
             &["bash", "-lc", "echo"],
             &["python3", "-c", "print(1)"],
+            &["python3", "-I", "-c", "print(1)"],
+            &["node", "-e", "1"],
+            &["node", "-p", "1"],
+            &["perl", "-e", "1"],
+            &["ruby", "-e", "1"],
+            &["jq", "."],
+            &["source", "setup.sh"],
+            &["source", "/dev/null"],
+            &["xargs", "cat"],
+            &["xargs", "-n", "1", "grep", "sh"],
             &["tar", "x"],
             &["grep", "sh"],
         ] {

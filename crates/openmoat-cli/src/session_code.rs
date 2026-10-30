@@ -86,6 +86,7 @@ pub fn checked(
             event_id: openmoat_audit::EventId(0),
             ts_ms: 0,
             sha256: None,
+            before: None,
         });
     written.extend(now);
     if written.is_empty() || sandboxed() {

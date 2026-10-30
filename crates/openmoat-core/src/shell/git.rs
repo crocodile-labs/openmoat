@@ -41,20 +41,48 @@ const DIRECTORIES: &[&str] = &["-C", GIT_DIR, "--work-tree"];
 const CONFIG: &[&str] = &["-c", "--config-env"];
 const OTHER_VALUES: &[&str] = &["--namespace", "--super-prefix", "--attr-source"];
 
-/// Config keys (lowercase; a trailing `.` is a whole section) that never name a program.
+/// Config keys (lowercase; a trailing `.` is a whole section) that never name a
+/// program: identity, output, line endings, and how pull, push, fetch, rebase,
+/// merge, diff and gc behave. `user.signingkey` and `commit.gpgsign` (except
+/// `=false`, [`inert_config`]) make git run a signing program, so they are not here.
 const INERT_CONFIG: &[&str] = &[
     "color.",
     "column.",
     "advice.",
     "log.",
+    "i18n.",
     "user.name",
     "user.email",
     "core.quotepath",
     "core.autocrlf",
+    "core.safecrlf",
     "core.abbrev",
     "init.defaultbranch",
     "pull.rebase",
+    "pull.ff",
+    "push.default",
+    "push.autosetupremote",
+    "fetch.prune",
+    "rebase.autostash",
+    "rebase.autosquash",
+    "merge.conflictstyle",
+    "diff.renames",
+    "status.short",
+    "gc.auto",
 ];
+
+/// Whether a `-c`/`--config-env` value (`KEY[=VALUE]`) cannot make git run a
+/// program: its key is in [`INERT_CONFIG`], or it turns signing off.
+fn inert_config(value: &str) -> bool {
+    let (key, setting) = value
+        .split_once('=')
+        .map_or((value, None), |(k, v)| (k, Some(v)));
+    let key = key.to_ascii_lowercase();
+    INERT_CONFIG
+        .iter()
+        .any(|k| key == *k || (k.ends_with('.') && key.starts_with(k)))
+        || (key == "commit.gpgsign" && setting.is_some_and(|v| v.eq_ignore_ascii_case("false")))
+}
 
 /// `git config` options whose value is the next word unless given with `=`.
 const CONFIG_VALUED: &[&str] = &[
@@ -131,13 +159,7 @@ pub(crate) fn parse(argv: &[String]) -> GitCommand<'_> {
             }
             keep_original |= name == GIT_DIR;
         } else if CONFIG.contains(&name) {
-            let key = value
-                .split_once('=')
-                .map_or(value, |(k, _)| k)
-                .to_ascii_lowercase();
-            keep_original |= !INERT_CONFIG
-                .iter()
-                .any(|k| key == *k || (k.ends_with('.') && key.starts_with(k)));
+            keep_original |= !inert_config(value);
         }
     }
     GitCommand {

@@ -42,11 +42,11 @@ fn fetch_is_a_narrower_kind_of_net() {
             Verdict::Ask,
             "default",
         ),
-        // without `-q` first, curl reads `~/.curlrc`, which may add a body
+        // a download is that fetch plus the write of the file it saves
         (
-            shell("curl https://docs.rs/serde"),
-            Verdict::Deny,
-            "default.net",
+            shell("curl -sSL -o serde.html https://docs.rs/serde"),
+            Verdict::Ask,
+            "default",
         ),
         (
             shell("curl -d x=1 https://docs.rs/serde"),

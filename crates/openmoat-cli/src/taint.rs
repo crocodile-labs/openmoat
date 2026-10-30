@@ -4,8 +4,10 @@
 //!
 //! A person can answer a taint ask: a grant for that exact call, made with
 //! `moat allow` after the session last read untrusted content, stands for it
-//! ([`answered`]) until the session reads more. A grant made before that read,
-//! or a taint from a secret the session read, still asks.
+//! ([`answered`]) until the session reads more. So does their answer in the
+//! agent to an earlier write of the same file, once the file shows that write
+//! ran (ADR-048). A grant made before that read, or a taint from a secret the
+//! session read, still asks.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -254,6 +256,9 @@ fn fold(
 /// Everything `answered` needs about the call being decided.
 pub struct Call<'a> {
     pub home: &'a Home,
+    /// The audit log, for the files this session wrote (ADR-039); a handle
+    /// that masks no secrets, as [`of_session`] reads it.
+    pub store: &'a Store,
     pub host: Host,
     pub session: &'a str,
     pub action: &'a Action,
@@ -263,9 +268,11 @@ pub struct Call<'a> {
 
 /// `tainted` is `untainted` tightened by the session's taint. When it is a
 /// taint ask a person can answer, and they did: a grant for this exact call,
-/// made after the session last read untrusted content, gives `untainted` back.
-/// Taint from a secret the session read is never answered this way, and a
-/// grant made before the latest untrusted read did not see that content.
+/// made after the session last read untrusted content, gives `untainted` back;
+/// so does an earlier write of the same files in this session that the person
+/// let run after that read ([`earlier_write_ran`], ADR-048). Taint from a
+/// secret the session read is never answered this way, and a grant or write
+/// from before the latest untrusted read did not see that content.
 ///
 /// A taint ask that a grant could answer, and has not, says how to give one.
 pub fn answered(
@@ -332,6 +339,11 @@ pub fn answered(
         );
         return Ok(decision);
     }
+    if let Some(reason) = earlier_write_ran(call, policy, session)? {
+        let mut decision = untainted;
+        decision.reasons.push(reason);
+        return Ok(decision);
+    }
     let mut decision = tainted;
     // Hosts that cannot ask are told how already (`Host::answer`).
     if call.host.spec().asks.allow_last_hint {
@@ -341,6 +353,64 @@ pub fn answered(
         );
     }
     Ok(decision)
+}
+
+/// Whether every file `call` writes is as an earlier call of this session left
+/// it, one the person let run after the session last read untrusted content
+/// (ADR-048): the session's newest write of the file (ADR-039's record) was
+/// recorded after that read, sent the whole file, would change it, and the
+/// file holds that content now. A write to a protected path after untrusted
+/// content runs only when a person approves its ask (or granted it), so their
+/// answer stands for this write of the same file too. The reason to show when
+/// it does; `None` when it does not.
+///
+/// What is no evidence: a declined write (the file does not hold it); a write
+/// that would have left the file as it was (`before` equals the content: a
+/// retry of the same content, or a probe); an edit or a shell write, whose
+/// content the hook never saw; a write from before the latest untrusted read,
+/// which saw none of it; another session's write; a file changed since.
+fn earlier_write_ran(
+    call: &Call<'_>,
+    policy: &CompiledPolicy<'_>,
+    session: &SessionTaint,
+) -> Result<Option<String>> {
+    let files = provenance::Files::of(policy, call.action);
+    if files.writes.is_empty() {
+        return Ok(None);
+    }
+    let ci = policy.context().case_insensitive_paths;
+    let keys: Vec<String> = files
+        .writes
+        .iter()
+        .map(|path| provenance::key(path, ci))
+        .collect();
+    let written = call
+        .store
+        .session_wrote(call.host.id(), call.session, &keys)
+        .context("reading the files this session wrote from the audit log")?;
+    for (path, key) in files.writes.iter().zip(&keys) {
+        let Some(write) = written.iter().find(|w| &w.path == key) else {
+            return Ok(None);
+        };
+        // strictly after the read: the same row could be the read itself
+        let after = match (session.untrusted_last_row, session.untrusted_last_ms) {
+            (Some(read_row), _) => write.event_id.0 > read_row,
+            (None, Some(read_ms)) => write.ts_ms > read_ms,
+            (None, None) => false,
+        };
+        let (Some(sha256), Some(before)) = (&write.sha256, &write.before) else {
+            return Ok(None);
+        };
+        if !after || sha256 == before || !provenance::holds(path, Some(sha256)) {
+            return Ok(None);
+        }
+    }
+    let files: Vec<&str> = files.writes.iter().map(String::as_str).collect();
+    Ok(Some(format!(
+        "an earlier write of {} in this session was approved after the session last read \
+         untrusted content",
+        files.join(", ")
+    )))
 }
 
 /// Whether a grant made at `granted_ms`, having seen the audit log up to row

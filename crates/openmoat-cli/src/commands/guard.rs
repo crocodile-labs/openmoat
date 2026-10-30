@@ -405,12 +405,14 @@ fn evaluate(
         session: &request.session_id,
         action,
         content: request.content.as_deref(),
+        edits: &request.edits,
         untrusted: session.taint.untrusted.as_deref(),
     };
     out.provenance = taint::provenance::observe(&store, &compiled, &seen)?;
     let tainted = compiled.with_taint(decision.clone(), action, &FsPathResolver, &session.taint);
     let call = taint::Call {
         home: &home,
+        store: &store,
         host,
         session: &request.session_id,
         action,

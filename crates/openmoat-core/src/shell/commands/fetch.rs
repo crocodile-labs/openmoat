@@ -1,21 +1,28 @@
 //! `curl` and `wget` commands that provably send nothing but the request line
 //! (ADR-035): decided as a fetch, like a host's own fetch tool, not as `net`.
+//! A download (`curl -o FILE URL`, `-O`, `wget -O FILE URL`, a plain `wget URL`)
+//! is such a fetch plus the `fs.write` of the file it saves, which the path
+//! rules decide (`options/transfer.rs`).
 //!
 //! The check is an allowlist. Every word must be a URL, or an option on the
 //! lists below whose value (when it takes one) is checked too; anything else
 //! (a body, a form, an upload, a header, credentials, a cookie, a config file,
 //! `--next`, `--write-out`, a server-chosen file name, an option not on the
 //! lists) keeps the command `net`. So does a word the shell expands (`$X`,
-//! `$(…)`, a backtick), an `@` in a value or in a URL's user part, and a
+//! `$(…)`, a backtick) anywhere but in the name of the file written (`-o
+//! $TMPDIR/x.tgz`: the write is then of a path the hook cannot place, which the
+//! catch-all decides), an `@` in a value or in a URL's user part, and a
 //! variable set earlier on the line that points the program at another
 //! configuration file or a proxy (`CURL_HOME`, `WGETRC`).
 //!
-//! Both programs read configuration files on their own, which can add a body or
-//! an upload (`data = @~/.ssh/id_rsa` in `~/.curlrc`): curl only skips them when
-//! `-q`/`--disable` is its first argument, and wget needs `--no-config` and
-//! `--no-netrc` (it sends a `.netrc` `default` login to any host). The words are
-//! read by the same parser that finds the files the command writes
-//! (`options/transfer.rs`), so a write is never hidden in a short cluster.
+//! Redirects are followed (`curl -L`, and wget by default): the agent's prompt
+//! or the person sees the URL, as for a browser page open (ADR-047). Both
+//! programs read configuration files on their own, which can add a body or an
+//! upload (`data = @~/.ssh/id_rsa` in `~/.curlrc`); `shell-rc` denies writing
+//! those files and `env-poison` denies moving them (`CURL_HOME`,
+//! `XDG_CONFIG_HOME`, `WGETRC`), so a command need not turn them off. The
+//! words are read by the same parser that finds the files the command writes,
+//! so a write is never hidden in a short cluster.
 
 use crate::action::AtomicAction;
 use crate::lexer::Word;
@@ -23,7 +30,8 @@ use crate::shell::Sink;
 use crate::shell::options::transfer::{self, Arg, Client};
 
 /// curl long options that take no value and send nothing. Not `-J`/
-/// `--remote-header-name`: the server would choose the file name.
+/// `--remote-header-name`: the server would choose the file name. Not
+/// `--location-trusted`: it sends the credentials on to the redirect target.
 const CURL_FLAGS: &[&str] = &[
     "silent",
     "show-error",
@@ -50,6 +58,7 @@ const CURL_FLAGS: &[&str] = &[
     "retry-connrefused",
     "retry-all-errors",
     "disable",
+    "location",
 ];
 /// curl long options that take a value and send nothing. Not `--write-out`:
 /// since curl 8.3 its `%output{FILE}` writes text the agent chooses to a file.
@@ -68,9 +77,8 @@ const CURL_VALUED: &[&str] = &[
     "max-filesize",
     "limit-rate",
 ];
-/// curl short flags with no value (`-sS`), and short options with one. `-L`
-/// (`--location`) is left out: a redirect leads where the hook cannot see.
-const CURL_SHORT_FLAGS: &str = "sSfiIkvOgNR46#q";
+/// curl short flags with no value (`-sSL`), and short options with one.
+const CURL_SHORT_FLAGS: &str = "sSfiIkvOgNR46#qL";
 const CURL_SHORT_VALUED: &str = "oXmrC";
 
 /// wget long options that send nothing. Not `--content-disposition`: the
@@ -155,48 +163,33 @@ pub(super) fn sends_nothing(argv: &[String], program: &str, words: &[Word], sink
         "wget" => &WGET,
         _ => return false,
     };
-    let expands = words.iter().any(|w| !w.substitutions.is_empty())
-        || argv.iter().any(|a| a.contains(['$', '`']));
+    // A word the shell expands could be any option or URL, except where it can
+    // only name the file written, whose write is checked on its own.
+    let outputs = output_words(argv, options.client);
+    let expands = argv.iter().zip(words).enumerate().any(|(i, (text, word))| {
+        !outputs.contains(&i) && (!word.substitutions.is_empty() || text.contains(['$', '`']))
+    });
     let configured = sink
         .atoms
         .iter()
         .any(|a| matches!(a, AtomicAction::EnvSet { name } if redirects_config(name)));
-    // wget follows redirects unless told not to; curl only with `-L`, which is not listed
-    let stays = program != "wget" || wget_follows_no_redirect(argv);
-    !expands && !configured && stays && words_send_nothing(argv, options)
+    !expands && !configured && words_send_nothing(argv, options)
 }
 
-/// Whether the last `--max-redirect` of a wget command line is `0`: a redirect
-/// leads where the hook cannot see, a link-local address included.
-fn wget_follows_no_redirect(argv: &[String]) -> bool {
-    let mut last = None;
-    let mut words = argv.iter();
-    while let Some(arg) = words.next() {
-        if let Some(value) = arg.strip_prefix("--max-redirect=") {
-            last = Some(value);
-        } else if arg == "--max-redirect" {
-            last = words.next().map(String::as_str);
-        }
-    }
-    last == Some("0")
+/// The indices of the words that are, or hold, the name of a file or
+/// directory the command writes to (`-o FILE`, `-oFILE`, `--output=FILE`,
+/// `--output-dir DIR`, wget `-O FILE`, `-P DIR`).
+fn output_words(argv: &[String], client: Client) -> Vec<usize> {
+    transfer::parse_indexed(argv, client)
+        .into_iter()
+        .filter(|(_, arg)| transfer::names_output(arg, client))
+        .map(|(at, _)| at)
+        .collect()
 }
 
 fn words_send_nothing(argv: &[String], options: &Options) -> bool {
     let parsed = transfer::parse(argv, options.client);
-    let long = |n: &str| {
-        parsed
-            .iter()
-            .any(|a| matches!(a, Arg::Long { name, exact: true, value: None } if *name == n))
-    };
-    // curl reads `.curlrc` unless `-q`/`--disable` is its very first argument;
-    // wget reads `.wgetrc` and `.netrc` unless told not to
-    let no_config = match options.client {
-        Client::Curl => matches!(argv.get(1).map(String::as_str), Some("-q" | "--disable")),
-        Client::Wget => long("no-config") && long("no-netrc"),
-    };
-    no_config
-        && parsed.iter().all(|a| sends_nothing_arg(a, options))
-        && names_known(&parsed, options)
+    parsed.iter().all(|a| sends_nothing_arg(a, options)) && names_known(&parsed, options)
 }
 
 fn sends_nothing_arg(arg: &Arg<'_>, options: &Options) -> bool {

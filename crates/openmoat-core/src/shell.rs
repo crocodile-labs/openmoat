@@ -8,6 +8,8 @@
 //! | the command itself | `Shell { argv }`; for `git`, without its global options (`git.rs`) |
 //! | every pipeline / list suffix with ≥ 2 commands | `Pipeline { argv }` |
 //! | a decoder stage piped into an interpreter reading stdin (`decoders.rs`) | canonical `Pipeline { <decoder> -d \| <interpreter> }` |
+//! | any stages piped into an interpreter reading its program from stdin (`commands/pipelines.rs`) | canonical `Pipeline { <stages> \| <interpreter> }` |
+//! | a `pkill`/`killall` pattern that could match an OpenMoat process name (`kills.rs`) | `@kills <name>` `Shell` atom |
 //! | leading `VAR=value`, `export`/`declare`/`set` assignments | `EnvSet` |
 //! | `$VAR` / `${VAR}` references, `printenv NAME` | `EnvRead` |
 //! | path-looking arguments, relative operands (`operands.rs`), `<` targets other than `/dev/null` and stdin, `source`/`.` files | `FsRead`, one per directory `cd` may have moved to (`cwd.rs`); also listed as a glob when unquoted `* ? [` make the shell expand it (`crate::expand`) |
@@ -64,6 +66,7 @@ pub(crate) mod git;
 mod in_place;
 pub(crate) mod installs;
 mod invocation;
+mod kills;
 pub(crate) mod mailbox;
 mod make;
 mod operands;

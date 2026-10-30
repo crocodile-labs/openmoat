@@ -39,6 +39,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool: EVENT.to_owned(),
         action: None,
         content: None,
+        edits: Vec::new(),
         mcp_arguments: None,
         event: HookEvent::SessionStart {
             source: p.source.unwrap_or_default(),

