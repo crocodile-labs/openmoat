@@ -99,6 +99,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          # The newest 24.x, not the runner's cached one: OpenClaw 2026.10.9 refuses
+          # to start below Node 24.22.1, and the macOS runner image ships 24.20.0.
+          check-latest: true
           # No cache: each run installs the agent's latest release afresh.
           package-manager-cache: false
       - name: bubblewrap and socat for the agents' Linux sandboxes
