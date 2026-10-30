@@ -1897,14 +1897,14 @@
 # T1: a `~` in an interpreter's program is a delimiter or an operator, not a login name
 - id: benign-t1-perl-tilde-delimiter
   threat: T1
-  why: "perl's `s~…~…~s` uses `~` as its delimiter; the trailing `~s` is a flag, not user `s`'s home."
+  why: "perl's `s~…~…~s` uses `~` as its delimiter; the trailing `~s` is a flag, not user `s`'s home; the substitution-only program rewrites the named file."
   action: { shell: "perl -0pi -e 's~\\A.*?\\}#include \"core/Details\\.hpp\"~#include \"core/Details.hpp\"~s' src/core/Details.cpp" }
-  expect: { verdict: defer, rules: [default] }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
 - id: benign-t1-perl-tilde-delimiter-spaced
   threat: T1
   why: "a `~` delimiter standing alone between spaces in the program is not the home folder."
   action: { shell: "perl -0pi -e 's~    void a\\(\\) \\{ ~ void b() { ~' t.cpp" }
-  expect: { verdict: defer, rules: [default] }
+  expect: { verdict: allow, rules: [text-tools] }
 - id: benign-t1-sed-tilde-delimiter
   threat: T1
   why: "a sed script with `~` as its `s` delimiter is data; only the file operand is read."
@@ -2055,3 +2055,131 @@
   why: "`${X+set}` is the same with an empty value counting as set."
   action: { shell: "echo ${GITHUB_TOKEN+set}" }
   expect: { verdict: allow, rules: [dev-shell] }
+# awk programs whose `|` is regex alternation and whose `>` sits inside a regex or
+# a string are read-only: neither is a pipe or an output redirection (shell/awk.rs)
+- id: benign-awk-regex-alternation
+  action: { shell: "awk '/^## |^# /{print}' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-field-separator-equals
+  action: { shell: "awk -F= '{print $1}' config.ini" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-range-pattern
+  action: { shell: "awk '/a/,/b/' notes.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-sum-column
+  action: { shell: "awk '{s+=$1} END{print s}' sizes.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-conflict-markers-regex-after-print
+  action: { shell: "awk '/<<<<<<< /{p=1} p{print NR\": \"$0} />>>>>>> /{p=0}' src/lib.rs" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-pipe-inside-string
+  action: { shell: "awk '{print \"a|b\", $1}' data.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-awk-greater-than-inside-string
+  action: { shell: "awk '{print $1 \" -> \" $2}' data.txt" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+# `perl -i` with `-p` or `-n` and a program that is only `s` substitutions without
+# the `e` flag edits the files it names (shell/in_place.rs); the path rules decide,
+# as they do for `sed -i`
+- id: benign-perl-in-place-substitution-project-file
+  action: { shell: "perl -pi -e 's/foo/bar/g' src/lib.rs" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-tilde-delimiter
+  action: { shell: "perl -0pi -e 's~\\A.*?\\}#include \"x\\.hpp\"~#include \"x.hpp\"~s' src/a.cpp" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-backup-suffix
+  action: { shell: "perl -pi.bak -e 's/a/b/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-separate-flags-braces
+  action: { shell: "perl -i -pe 's{a}{b}gs' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-two-substitutions
+  action: { shell: "perl -ni -e 's|a|b|; s/c/d/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-perl-in-place-slurp
+  action: { shell: "perl -0777 -pi -e 's/a\\nb/c/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+- id: benign-sed-in-place-substitution-project-file
+  action: { shell: "sed -i 's/a/b/' README.md" }
+  expect: { verdict: allow, rules: [text-tools, project-fs] }
+# `git -c KEY=VALUE` with a key that never names a program git runs (shell/git.rs)
+- id: benign-git-config-identity-commit
+  action: { shell: "git -c user.name=Bot -c user.email=bot@example.com commit -m x" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-gpgsign-off
+  action: { shell: "git -c commit.gpgsign=false commit -m x" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-advice-and-colour
+  action: { shell: "git -c advice.detachedHead=false -c color.ui=never checkout v1.0" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-line-endings
+  action: { shell: "git -c core.autocrlf=false -c core.safecrlf=false -c core.quotepath=off status" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-pull-and-fetch
+  action: { shell: "git -c pull.rebase=true -c pull.ff=only -c fetch.prune=true pull" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-rebase-and-merge
+  action: { shell: "git -c rebase.autostash=true -c rebase.autosquash=true -c merge.conflictstyle=diff3 rebase main" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-diff-log-status
+  action: { shell: "git -c diff.renames=true -c log.date=iso -c status.short=true log --stat" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-encoding-and-gc
+  action: { shell: "git -c i18n.commitEncoding=utf-8 -c gc.auto=0 commit -m x" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-push-defaults
+  action: { shell: "git -c push.default=current -c push.autoSetupRemote=true push" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-config-default-branch-init
+  action: { shell: "git -c init.defaultBranch=main init" }
+  expect: { verdict: defer, rules: [default] }
+# an empty `--template` tells git to copy no template at all
+- id: benign-git-init-empty-template
+  action: { shell: "git init --template= new" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-init-empty-template-separate-word
+  action: { shell: "git init --template '' new" }
+  expect: { verdict: defer, rules: [default] }
+# an editor variable set to a no-op or a reader, and `PATH` kept as it is or set to
+# system directories only, change nothing about what later commands run
+# (shell/tokens.rs), so `env-poison` does not see them; the command itself is decided
+# as without them (`git rebase --continue` and `env … cmd` defer to the agent's prompt)
+- id: benign-git-editor-true-rebase-continue
+  action: { shell: "GIT_EDITOR=true git rebase --continue" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-editor-true-commit-amend
+  action: { shell: "EDITOR=true git commit --amend" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-visual-true-commit
+  action: { shell: "VISUAL=true git commit -a" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-editor-colon
+  action: { shell: "GIT_EDITOR=: git rebase --continue" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-editor-cat
+  action: { shell: "GIT_EDITOR=cat git commit --amend" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-sequence-editor-true
+  action: { shell: "GIT_SEQUENCE_EDITOR=true git rebase -i main" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-export-git-editor-true
+  action: { shell: "export GIT_EDITOR=true; git commit --amend" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-path-kept
+  action: { shell: "PATH=$PATH cargo build" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-path-kept-quoted
+  action: { shell: "PATH=\"$PATH\" cargo test" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-path-system-directories
+  action: { shell: "PATH=/usr/bin:/bin:/usr/sbin:/sbin cargo build" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-env-clean-system-path
+  action: { shell: "env -i PATH=/usr/bin:/bin cargo build" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-env-clean-system-path-with-sbin
+  action: { shell: "env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin git status" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-export-system-path
+  action: { shell: "export PATH=/usr/local/bin:/usr/bin:/bin && cargo build" }
+  expect: { verdict: defer, rules: [default] }

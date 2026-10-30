@@ -209,7 +209,10 @@ deny:
       - "@env-dump *"
   - id: env-poison
     reason: changes how later commands resolve or load code
-    env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*"]
+    # the classifier leaves out an assignment whose value changes nothing: an editor
+    # set to `true`, `:` or `cat`, and `PATH` kept as `$PATH` or set to system
+    # directories only (`shell/tokens.rs`)
+    env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "EDITOR", "VISUAL", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*"]
   - id: pipe-to-shell
     reason: executes remote or decoded content
     # a pipeline whose consumer runs its stdin as its program is also reported
@@ -256,7 +259,6 @@ deny:
       - "git push * -[!o-]*d*"
       - "git reset --hard*"
       - "git clean -fdx*"
-      - "git branch -D *"
       - "git stash drop*"
       - "git stash clear*"
       - "sudo *"
@@ -802,6 +804,14 @@ allow:
       - "!git merge * --str*"
       - "!git merge * -s*"
       - "!git merge * -[!-]*s*"
+      # deleting a branch by force drops commits only the reflog keeps: `destructive-recoverable` asks
+      - "!git branch -D *"
+      - "!git branch --delete --force *"
+      - "!git branch --force --delete *"
+      - "!git branch -d -f *"
+      - "!git branch -f -d *"
+      - "!git branch -df *"
+      - "!git branch -fd *"
       # options that run a program: a pager to open matches in (`-O`), and the textconv
       # or filter drivers that `--textconv` and `--filters` turn on; any prefix git
       # accepts (`--op*`, `--te*`/`--t*`, `--fi*`)
@@ -898,6 +908,9 @@ allow:
       - "cut *"
       # reads only stdin and writes only stdout; its operands are character sets
       - "tr *"
+      # `perl -pi -e 's/a/b/' FILE…` whose program is only substitutions without the
+      # `e` flag (shell/in_place.rs): the files are fs.write atoms, as for `sed -i`
+      - "perl @substitute *"
       # what the classifier cannot prove read-only is reported as `<program> @<argument>`
       - "!{sed,awk,sort,uniq,cut} @*"
   - id: registries
@@ -922,8 +935,18 @@ ask:
     reason: git runs what its config, hooks and refs name, later and outside any sandbox
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted directory)
     fs.write: ["${project}/.git", "${project}/.git/**", "${project}/**/.git", "${project}/**/.git/**"]
-    # `dev-shell` allows the forms that only read; the rest of these change what git runs
-    shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*"]
+    # `dev-shell` allows the forms that only read; the rest of these change what git runs.
+    # A `-c` key that never names a program is dropped from the atom (shell/git.rs), so
+    # `git -c user.name=x commit` matches `git commit`. `git init --template=DIR` copies
+    # DIR's hooks into the new repository; an empty `--template=` copies none
+    shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*",
+      "git init --template=?*", "git init --template ?*", "git init * --template=?*", "git init * --template ?*"]
+  # deleting a local branch loses nothing the reflog does not keep for weeks, so it
+  # asks where a force push or `reset --hard` is denied
+  - id: destructive-recoverable
+    reason: deletes local work that the reflog still holds for a while
+    shell: ["git branch -D *", "git branch --delete --force *", "git branch --force --delete *",
+      "git branch -d -f *", "git branch -f -d *", "git branch -df *", "git branch -fd *"]
   # CI configuration runs with the repository's secrets once a branch is pushed, and
   # commit-hook managers and editor tasks run on this machine outside any sandbox;
   # so do the agent hosts' hook scripts, MCP server lists and Codex's project config,

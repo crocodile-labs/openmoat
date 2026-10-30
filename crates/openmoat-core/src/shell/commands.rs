@@ -1,5 +1,6 @@
 //! From tokens to simple commands to atomic actions.
 
+mod atoms;
 mod fetch;
 mod filters;
 mod locals;
@@ -14,18 +15,19 @@ use super::tables::{
     RESERVED_PREFIXES, SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
-    assignment_name, flag_payload, flag_payload_index, for_variable, kill_substituted,
-    program_name, strip_at, tests_presence, word_env_refs,
+    assignment_name, flag_payload, flag_payload_index, for_variable, program_name, strip_at,
+    tests_presence, word_env_refs,
 };
 use super::{ClassifyError, MAX_DEPTH, ShellContext, Sink};
 use super::{
-    copy, cwd, database, decoders, embedded, extract, git, invocation, kills, mailbox, make,
-    operands, options, text,
+    copy, cwd, database, decoders, embedded, extract, git, in_place, invocation, kills, mailbox,
+    make, operands, options, text,
 };
 use crate::action::AtomicAction;
 use crate::host;
 use crate::lexer::{self, Operator, Token, Word};
 use crate::paths;
+use atoms::{push_command, push_env_set, push_kill_substituted};
 use piped::Piped;
 use recover::lex_like_bash;
 pub(super) use wrappers::wrapped_command;
@@ -260,12 +262,10 @@ fn classify_as_written(
     }
     let first_assignment = idx;
     while let Some(word) = cmd.words.get(idx) {
-        let Some(name) = assignment_name(&word.text) else {
+        if assignment_name(&word.text).is_none() {
             break;
-        };
-        sink.push(AtomicAction::EnvSet {
-            name: name.to_owned(),
-        })?;
+        }
+        push_env_set(word, sink)?;
         for name in word_env_refs(word) {
             sink.push(AtomicAction::EnvRead { name })?;
         }
@@ -289,15 +289,14 @@ fn classify_as_written(
     super::executes::note(&argv, program, &cmd.reads, ctx, sink);
     super::installs::note(&argv, program, sink)?;
 
-    push_command(cmd, &argv, program, ctx, sink)?;
+    let substitution = in_place::substitution(&argv, program);
+    push_command(cmd, &argv, program, substitution, ctx, sink)?;
     push_kill_substituted(program, words, sink)?;
     kills::note(&argv, program, sink)?;
 
     if ENV_BUILTINS.contains(&program) {
-        for name in argv[1..].iter().filter_map(|w| assignment_name(w)) {
-            sink.push(AtomicAction::EnvSet {
-                name: name.to_owned(),
-            })?;
+        for word in &words[1..] {
+            push_env_set(word, sink)?;
         }
         locals::note_builtin(&words[1..], program, ctx.home, sink);
     }
@@ -325,7 +324,7 @@ fn classify_as_written(
             sink.write(ctx, &path)?;
         }
     }
-    let mut text_operands = text::classify(&argv, program, ctx, sink)?;
+    let mut text_operands = text::classify(&argv, words, program, ctx, sink)?;
     let stdin = cmd
         .stdin_texts()
         .chain(cmd.piped.iter().filter_map(Piped::text));
@@ -333,6 +332,8 @@ fn classify_as_written(
         .data
         .extend(database::classify(&argv, program, stdin, ctx, sink)?);
     text_operands.data.extend(git::data_words(&argv, program));
+    // a `perl -pi` substitution program is data, not a path
+    text_operands.data.extend(substitution);
     text_operands
         .data
         .extend(options::fd_pattern(&argv, program).or(options::grep_pattern(&argv, program)));
@@ -394,7 +395,9 @@ fn classify_as_written(
         return done;
     }
     let inline = inline_flags(program);
+    // a program that is only substitutions opens nothing, so it is not scanned
     if let Some(flags) = inline
+        && substitution.is_none()
         && let Some(payload) = flag_payload(&argv, flags)
     {
         payload::scan_payload(payload, program, ctx, sink)?;
@@ -405,43 +408,6 @@ fn classify_as_written(
         }
     }
     options::classify(&argv, program, ctx, sink, depth)
-}
-
-/// The command's own `Shell` atom: `git` without its global options
-/// (`git.rs`); an environment listing piped into a filter that keeps only the
-/// names (`env | cut -d= -f1`, `filters.rs`) as `env @names-only`, since it is
-/// not the listing `env-dump` denies; anything else as written.
-fn push_command(
-    cmd: &SimpleCommand,
-    argv: &[String],
-    program: &str,
-    ctx: &ShellContext<'_>,
-    sink: &mut Sink,
-) -> Result<(), ClassifyError> {
-    if program == "git" {
-        return git::push_shell(argv, ctx, sink);
-    }
-    let mut shown = argv.to_vec();
-    if cmd
-        .consumer
-        .as_deref()
-        .is_some_and(|next| filters::keeps_only_names(argv, program, next))
-    {
-        shown.push("@names-only".to_owned());
-    }
-    sink.push(AtomicAction::Shell { argv: shown })
-}
-
-/// The second atom of a `kill` of substituted pids ([`kill_substituted`]).
-fn push_kill_substituted(
-    program: &str,
-    words: &[Word],
-    sink: &mut Sink,
-) -> Result<(), ClassifyError> {
-    match kill_substituted(program, words) {
-        Some(argv) => sink.push(AtomicAction::Shell { argv }),
-        None => Ok(()),
-    }
 }
 
 /// Classify a wrapper's inner argv (`sudo rm …` → `rm …`) as its own command.
@@ -498,13 +464,8 @@ fn classify_arguments(
                 sink.push(AtomicAction::EnvRead { name })?;
             }
         }
-        if program == "env"
-            && i > 0
-            && let Some(name) = assignment_name(tok)
-        {
-            sink.push(AtomicAction::EnvSet {
-                name: name.to_owned(),
-            })?;
+        if program == "env" && i > 0 {
+            push_env_set(word, sink)?;
         }
         let skip = copy.as_ref().is_some_and(|d| d.index == i) || mailbox::names_no_host(argv, i);
         if i == 0 || text_operands.data.contains(&i) || skip {

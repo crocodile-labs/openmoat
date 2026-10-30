@@ -16,9 +16,12 @@ every change:
 | Command | Verdict | Rule |
 |---|---|---|
 | `git status --short`, `cargo test`, `npm test` | allow | `dev-shell` |
+| `GIT_EDITOR=true git commit --amend`, `git -c user.name=Bot commit -m x` | allow | `dev-shell` (an editor set to a no-op and an inert config key change nothing) |
 | `cat src/main.rs` | allow | `dev-shell`, `project-fs` |
+| `awk '/^## \|^# /{print}' README.md`, `perl -pi -e 's/a/b/g' README.md` | allow | `text-tools`, `project-fs` |
 | `npm install left-pad`, `git push origin main`, `docker run --rm alpine` | defer | `default` (nothing matched: your agent's own prompt decides) |
 | `git config core.hooksPath .h`, `echo x > .git/hooks/pre-commit` | ask | `git-internals` |
+| `git branch -D old-branch` | ask | `destructive-recoverable` (the reflog still holds the commits) |
 | `grep -r token ~`, `echo x > ~/Library/LaunchAgents/a.plist` | ask | `home-sweep`, `persistence`, `protected-contents` |
 | `cp -r ~/.codex /tmp/c`, `ls ~/.gemini` | ask | `protected-contents` (the folder holds files a deny rule names) |
 | `git checkout main -- .github/workflows/ci.yml` | ask | `runs-later` |

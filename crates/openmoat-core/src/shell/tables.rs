@@ -285,6 +285,17 @@ pub const SPECIAL_PARAMS: &[char] = &['?', '$', '!', '#', '@', '*', '-', '0'];
 /// Variables that are expanded by the classifier itself or carry no secret.
 pub const IGNORED_VARS: &[&str] = &["HOME", "PWD", "OLDPWD", "USER", "SHELL", "TERM", "project"];
 
+/// Variables naming the editor git and other tools run.
+pub const EDITOR_VARS: &[&str] = &["GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "EDITOR", "VISUAL"];
+
+/// Editor values that run nothing of their own: a no-op, or a reader that
+/// prints the file and leaves it as it is.
+pub const INERT_EDITOR_VALUES: &[&str] = &["true", ":", "cat"];
+
+/// The directories a `PATH` may be set to without changing what any command
+/// resolves to: the system's own, which no agent writes.
+pub const SYSTEM_PATH_DIRS: &[&str] = &["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin"];
+
 /// Programs whose arguments name hosts: a host-shaped word there is network
 /// evidence (`Net`), elsewhere only a word that looks like one (`NetWord`, ADR-025).
 pub const HOST_PROGRAMS: &[&str] = &[

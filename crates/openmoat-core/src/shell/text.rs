@@ -11,6 +11,7 @@
 
 use super::{ClassifyError, ShellContext, Sink, awk, sed};
 use crate::action::AtomicAction;
+use crate::lexer::Word;
 
 /// What the caller must know about a text tool's arguments.
 #[derive(Debug, Default)]
@@ -57,16 +58,18 @@ pub(super) enum Arg<'a> {
     Unknown(&'a str),
 }
 
-/// Classify a text tool's options; for any other program, nothing.
+/// Classify a text tool's options; for any other program, nothing. `words`
+/// are `argv` as the lexer read them, for what the shell expands in them.
 pub(super) fn classify(
     argv: &[String],
+    words: &[Word],
     program: &str,
     ctx: &ShellContext<'_>,
     sink: &mut Sink,
 ) -> Result<Operands, ClassifyError> {
     let (mut ops, operands) = match program {
         "sed" => return sed::classify(argv, ctx, sink),
-        "awk" => return awk::classify(argv, sink),
+        "awk" => return awk::classify(argv, words, sink),
         "sort" => options(argv, &SORT, SORT_WRITES, ctx, sink)?,
         "uniq" => options(argv, &UNIQ, &[], ctx, sink)?,
         "cut" => options(argv, &CUT, &[], ctx, sink)?,

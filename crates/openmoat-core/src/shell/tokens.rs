@@ -4,7 +4,9 @@
 use std::fmt::Write as _;
 use std::ops::Range;
 
-use super::tables::{GNU_PREFIXED, IGNORED_VARS, SPECIAL_PARAMS};
+use super::tables::{
+    EDITOR_VARS, GNU_PREFIXED, IGNORED_VARS, INERT_EDITOR_VALUES, SPECIAL_PARAMS, SYSTEM_PATH_DIRS,
+};
 use crate::lexer::Word;
 
 /// `NAME=value` or `NAME+=value` → `NAME`.
@@ -19,6 +21,31 @@ pub fn assignment_name(word: &str) -> Option<&str> {
     chars
         .all(|c| c.is_ascii_alphanumeric() || c == '_')
         .then_some(name)
+}
+
+/// Whether the assignment `word` (`NAME=value`) changes nothing about what
+/// later commands run: an editor variable set to a no-op or a reader
+/// (`GIT_EDITOR=true`, `EDITOR=:`, `GIT_EDITOR=cat`), or `PATH` kept as it is
+/// (`PATH=$PATH`, `PATH="$PATH"`) or set to system directories only
+/// (`PATH=/usr/bin:/bin`), in any order. A `PATH` that adds any other
+/// directory, is empty or has an empty entry (the working directory) is not.
+pub fn inert_assignment(word: &Word) -> bool {
+    let Some((name, value)) = word.text.split_once('=') else {
+        return false;
+    };
+    if EDITOR_VARS.contains(&name) {
+        return INERT_EDITOR_VALUES.contains(&value);
+    }
+    if name != "PATH" {
+        return false;
+    }
+    if value == "$PATH" || value == "${PATH}" {
+        // only a `$` the shell expands keeps the path; from single quotes it
+        // is a literal, so the value would be a relative directory
+        let dollar = name.len() + 1;
+        return !word.literal.iter().any(|span| span.contains(&dollar));
+    }
+    !value.is_empty() && value.split(':').all(|dir| SYSTEM_PATH_DIRS.contains(&dir))
 }
 
 /// The argv of a `kill` whose arguments hold a command substitution, with each
