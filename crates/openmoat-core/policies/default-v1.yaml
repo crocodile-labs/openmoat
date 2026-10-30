@@ -212,7 +212,12 @@ deny:
     # the classifier leaves out an assignment whose value changes nothing: an editor
     # set to `true`, `:` or `cat`, and `PATH` kept as `$PATH` or set to system
     # directories only (`shell/tokens.rs`)
-    env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "EDITOR", "VISUAL", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*"]
+    # `CURL_HOME`, `XDG_CONFIG_HOME` and `WGETRC` move the configuration files curl and
+    # wget read on every run (`.curlrc`, `wgetrc`), which can add a body or an upload to
+    # a download the hook sees as a plain fetch (ADR-035); `shell-rc` denies writing the
+    # files in their usual place. `XDG_CONFIG_HOME` also moves git's `config`
+    env.set: ["PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_*", "NODE_OPTIONS", "PYTHONPATH", "GIT_*", "EDITOR", "VISUAL", "BASH_ENV", "ENV", "PROMPT_COMMAND", "MOAT_*",
+      "CURL_HOME", "XDG_CONFIG_HOME", "WGETRC", "SYSTEM_WGETRC"]
   - id: pipe-to-shell
     reason: executes remote or decoded content
     # a pipeline whose consumer runs its stdin as its program is also reported
@@ -438,6 +443,15 @@ deny:
       # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
       - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
       - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      # taken out again: the read-only forms `openmoat-readonly` allows. `policy lint`
+      # and `policy check` read a file or a command and the policy, which stays
+      # readable; `--help`/`-h` right after a one- or two-word command prints the
+      # usage and runs nothing (clap stops there). `[!-]*` is one word, not `*`, which
+      # is any number: with a value before it (`allow -- --help`) the command may run.
+      # The wrappers below name no `--help`, so a wrapped command stays denied
+      - "!{moat,openmoat,*/moat,*/openmoat} policy {lint,check}"
+      - "!{moat,openmoat,*/moat,*/openmoat} [!-]* {--help,-h}"
+      - "!{moat,openmoat,*/moat,*/openmoat} {policy,mcp,proxy,sandbox,audit} [!-]* {--help,-h}"
       # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept` require
       # (`*moat` inside a quoted command line covers `openmoat` too)
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
@@ -913,6 +927,21 @@ allow:
       - "perl @substitute *"
       # what the classifier cannot prove read-only is reported as `<program> @<argument>`
       - "!{sed,awk,sort,uniq,cut} @*"
+  # OpenMoat's own commands that read no state and change nothing: the usage and the
+  # version, `policy lint FILE` (the file is an `fs.read`, decided by the path rules),
+  # `policy check` of a command, and the `demo` table; by either name and by path (a
+  # build in `target/debug/`). Every other command of the binary stays as it is:
+  # the person-only ones denied (`kernel-self`), the rest to the catch-all
+  - id: openmoat-readonly
+    reason: OpenMoat's usage, version, policy lint and check, and demo read no state and change nothing
+    shell:
+      - "{moat,openmoat,*/moat,*/openmoat} {--help,-h,help}"
+      - "{moat,openmoat,*/moat,*/openmoat} {--version,-V}"
+      # `[!-]*` is one word (a subcommand); `*` would be any number of words
+      - "{moat,openmoat,*/moat,*/openmoat} [!-]* {--help,-h}"
+      - "{moat,openmoat,*/moat,*/openmoat} {policy,mcp,proxy,sandbox,audit} [!-]* {--help,-h}"
+      - "{moat,openmoat,*/moat,*/openmoat} policy {lint,check}"
+      - "{moat,openmoat,*/moat,*/openmoat} demo"
   - id: registries
     net:
       - "api.github.com"

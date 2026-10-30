@@ -8,7 +8,7 @@ use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{HookEvent, HookRequest, Host, HostError};
+use crate::{HookEvent, HookRequest, Host, HostError, Replacement};
 
 mod artifact;
 pub(crate) mod bench;
@@ -44,6 +44,18 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             .map(str::to_owned),
         _ => None,
     };
+    // `Edit` and `MultiEdit` change part of the file: the replacements, for the
+    // guard to work out the content they leave (ADR-048).
+    let edits = match p.tool_name.as_str() {
+        "Edit" => replacement(&p.tool_input).into_iter().collect(),
+        "MultiEdit" => p
+            .tool_input
+            .get("edits")
+            .and_then(Value::as_array)
+            .map(|edits| edits.iter().filter_map(replacement).collect())
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
     // A permission mode in which no question reaches a person
     // (`Asks::prompt_free_modes`): an `ask` there is answered as a deny that
     // says how to approve it.
@@ -62,8 +74,22 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool: p.tool_name,
         action,
         content,
+        edits,
         mcp_arguments,
         event,
+    })
+}
+
+/// The replacement an `Edit` input, or one entry of `MultiEdit`'s `edits`,
+/// describes; `None` when it lacks its strings.
+fn replacement(input: &Value) -> Option<Replacement> {
+    Some(Replacement {
+        old: input.get("old_string")?.as_str()?.to_owned(),
+        new: input.get("new_string")?.as_str()?.to_owned(),
+        all: input
+            .get("replace_all")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 

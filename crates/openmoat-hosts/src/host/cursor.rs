@@ -236,6 +236,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool,
         action,
         content: None,
+        edits: Vec::new(),
         mcp_arguments,
         event: event_kind(event),
     })

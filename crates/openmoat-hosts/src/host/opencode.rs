@@ -337,6 +337,7 @@ fn parse(host: Host, api: Api, payload: &str) -> Result<HookRequest, HostError> 
         tool: p.tool,
         action,
         content,
+        edits: Vec::new(),
         mcp_arguments,
         event: hook_event(api),
     })

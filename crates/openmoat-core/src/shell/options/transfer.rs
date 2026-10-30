@@ -211,51 +211,71 @@ pub(in crate::shell) enum Arg<'a> {
 
 /// The options and operands of `argv` (the program at index 0), in order.
 pub(in crate::shell) fn parse(argv: &[String], client: Client) -> Vec<Arg<'_>> {
+    parse_indexed(argv, client)
+        .into_iter()
+        .map(|(_, arg)| arg)
+        .collect()
+}
+
+/// [`parse`], with each argument's place in `argv`: the index of the word its
+/// value came from when it has one (`-o FILE` is the index of `FILE`, `-oFILE`
+/// and `--output=FILE` that of the one word), else of the word itself.
+pub(in crate::shell) fn parse_indexed(argv: &[String], client: Client) -> Vec<(usize, Arg<'_>)> {
     let mut parsed = Vec::new();
-    let mut words = argv.iter().skip(1).map(String::as_str);
+    let mut words = argv.iter().enumerate().skip(1);
     let mut ended = false;
-    while let Some(word) = words.next() {
+    while let Some((at, word)) = words.next() {
+        let word = word.as_str();
         if ended || word == "-" || !word.starts_with('-') {
-            parsed.push(Arg::Operand(word));
+            parsed.push((at, Arg::Operand(word)));
         } else if word == "--" {
             ended = true;
-            parsed.push(Arg::EndOfOptions);
+            parsed.push((at, Arg::EndOfOptions));
         } else if let Some(long) = word.strip_prefix("--") {
             let (written, attached) = long
                 .split_once('=')
                 .map_or((long, None), |(n, v)| (n, Some(v)));
             let (name, exact) = client.resolve(written);
-            let value = match attached {
+            let (at, value) = match attached {
                 None if client.long_valued().contains(&name) => {
-                    let Some(v) = words.next() else {
-                        parsed.push(Arg::Missing);
+                    let Some((at, v)) = words.next() else {
+                        parsed.push((at, Arg::Missing));
                         continue;
                     };
-                    Some(v)
+                    (at, Some(v.as_str()))
                 }
-                other => other,
+                other => (at, other),
             };
-            parsed.push(Arg::Long { name, exact, value });
+            parsed.push((at, Arg::Long { name, exact, value }));
         } else {
             let cluster = &word[1..];
             for (pos, letter) in cluster.char_indices() {
                 if !client.short_valued().contains(letter) {
-                    parsed.push(Arg::Short {
-                        letter,
-                        value: None,
-                    });
+                    parsed.push((
+                        at,
+                        Arg::Short {
+                            letter,
+                            value: None,
+                        },
+                    ));
                     continue;
                 }
                 let rest = &cluster[pos + letter.len_utf8()..];
-                let value = if rest.is_empty() {
-                    words.next()
+                let (at, value) = if rest.is_empty() {
+                    match words.next() {
+                        Some((at, v)) => (at, Some(v.as_str())),
+                        None => (at, None),
+                    }
                 } else {
-                    Some(rest)
+                    (at, Some(rest))
                 };
-                parsed.push(value.map_or(Arg::Missing, |v| Arg::Short {
-                    letter,
-                    value: Some(v),
-                }));
+                parsed.push((
+                    at,
+                    value.map_or(Arg::Missing, |v| Arg::Short {
+                        letter,
+                        value: Some(v),
+                    }),
+                ));
                 break;
             }
         }
@@ -305,6 +325,13 @@ fn role<'a>(arg: &Arg<'a>, client: Client) -> Role<'a> {
     }
 }
 
+/// Whether `arg` names a file or directory the command writes to (`-o FILE`,
+/// `--output-dir DIR`, wget `-O FILE`, `-P DIR`): the one place a word the
+/// shell expands only names what is written, never what is sent.
+pub(in crate::shell) fn names_output(arg: &Arg<'_>, client: Client) -> bool {
+    matches!(role(arg, client), Role::Output(_) | Role::Dir(_))
+}
+
 /// The last segment of a URL's path, without its query or fragment (`""` when
 /// the URL has no path): the name `curl -O` and a plain `wget` save it under.
 pub(in crate::shell) fn last_segment(url: &str) -> &str {
@@ -329,6 +356,8 @@ pub(in crate::shell) fn names_its_file(url: &str) -> bool {
 /// curl `--write-out`; under every `--output-dir` or `-P` directory the line names
 /// (curl joins it to `-o` and `-O` names alike). An absolute output is also listed
 /// as written, and wget's `-O` both with and without `-P`: stricter, never looser.
+/// Standard output and the data sink (`-o -`, `-o /dev/stdout`, `-o /dev/null`)
+/// write no file, as for a redirection (`tables::STREAM_SINKS`).
 pub(in crate::shell) fn written(argv: &[String], client: Client) -> Vec<String> {
     let parsed = parse(argv, client);
     let roles: Vec<Role<'_>> = parsed.iter().map(|a| role(a, client)).collect();
@@ -345,7 +374,10 @@ pub(in crate::shell) fn written(argv: &[String], client: Client) -> Vec<String> 
         match r {
             Role::Output(file) => {
                 outputs = true;
-                if !file.is_empty() && *file != "-" {
+                if !file.is_empty()
+                    && *file != "-"
+                    && !crate::shell::tables::STREAM_SINKS.contains(file)
+                {
                     under(&dirs, file, client == Client::Wget, &mut files);
                 }
             }

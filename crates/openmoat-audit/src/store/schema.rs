@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 6;
+pub(super) const SCHEMA_VERSION: i64 = 7;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -15,6 +15,9 @@ pub(super) const PROVENANCE_VERSION: i64 = 4;
 pub(super) const SESSION_WRITES_VERSION: i64 = 5;
 /// The first version with the hook's MCP call decisions ([`V6`]).
 pub(super) const MCP_TICKETS_VERSION: i64 = 6;
+/// The first version that keeps, with each file a session wrote, the state of
+/// the file before the write ([`V7`]).
+pub(super) const WRITE_BEFORE_VERSION: i64 = 7;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -139,6 +142,27 @@ CREATE INDEX IF NOT EXISTS mcp_tickets_arguments ON mcp_tickets(arguments_sha256
 CREATE INDEX IF NOT EXISTS mcp_tickets_ts ON mcp_tickets(ts_ms);
 ";
 
+/// Version 7: the hash of a file as it was when a call that writes it was
+/// decided, beside the hash of what the call writes (`session_writes.rs`), so
+/// a later call can tell that the write ran and changed the file (ADR-048).
+/// Added to the table only when it is not there yet: a database whose version
+/// was set back by hand still migrates, as for [`V4`].
+const V7: &str = "
+ALTER TABLE session_writes ADD COLUMN before_sha256 TEXT;
+";
+
+/// Whether `table` has a column named `column`.
+fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = stmt.query_map([], |r| r.get::<_, String>(1))?;
+    for name in names {
+        if name? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// The `user_version` of the open database.
 pub(super) fn version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
@@ -182,6 +206,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 6 {
         tx.execute_batch(V6)?;
+    }
+    if found < 7 && !has_column(&tx, "session_writes", "before_sha256")? {
+        tx.execute_batch(V7)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

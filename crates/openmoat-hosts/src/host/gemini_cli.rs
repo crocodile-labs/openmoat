@@ -200,6 +200,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool: mapped.tool.unwrap_or(p.tool_name),
         action: mapped.action,
         content,
+        edits: Vec::new(),
         mcp_arguments,
         event: HookEvent::PreToolUse,
     })

@@ -330,12 +330,29 @@ pub struct HookRequest {
     /// hash. `None` for a tool that changes part of a file (`Edit`) or names
     /// no content.
     pub content: Option<String>,
+    /// The replacements a partial edit of the one file makes, in order (Claude
+    /// Code `Edit`, each entry of `MultiEdit`): the guard applies them to the
+    /// file as it is to learn the content the call leaves (ADR-048). Empty
+    /// for every other tool.
+    pub edits: Vec<Replacement>,
     /// For an MCP tool call, its arguments as [`mcp_call_arguments`] reads
     /// them: `openmoat mcp proxy` passes a call on to the server only when it
     /// matches one the hook decided (ADR-045). `None` for any other call.
     pub mcp_arguments: Option<String>,
     /// Which hook fired.
     pub event: HookEvent,
+}
+
+/// One replacement a partial edit makes: `old` becomes `new`, once (`old` must
+/// then occur exactly once, as Claude Code requires) or everywhere (`all`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Replacement {
+    /// The text to find.
+    pub old: String,
+    /// What replaces it.
+    pub new: String,
+    /// Replace every occurrence (`replace_all`), not exactly one.
+    pub all: bool,
 }
 
 /// Why a payload could not be turned into a request. `guard` denies on any of these.

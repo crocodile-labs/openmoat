@@ -298,6 +298,11 @@ impl Store {
         self.version >= schema::MCP_TICKETS_VERSION
     }
 
+    /// The session writes keep the state of the file before the write (version 7).
+    fn write_before(&self) -> bool {
+        self.version >= schema::WRITE_BEFORE_VERSION
+    }
+
     /// This handle, masking `secrets` in every event it records from now on.
     #[must_use]
     pub fn with_secrets(self, secrets: KnownSecrets) -> Self {

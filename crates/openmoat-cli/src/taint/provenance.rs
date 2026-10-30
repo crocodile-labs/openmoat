@@ -14,6 +14,7 @@ use std::collections::BTreeSet;
 use anyhow::{Context as _, Result};
 use openmoat_audit::{FileProvenance, NewProvenance, ProvenanceKind, SessionWrite, Store};
 use openmoat_core::{Action, AtomicAction, CompiledPolicy, TaintSettings};
+use openmoat_hosts::Replacement;
 
 use crate::guard_relay::MAX_PAYLOAD_BYTES;
 use crate::integrity::sha256_hex;
@@ -30,6 +31,10 @@ pub struct Call<'a> {
     pub action: &'a Action,
     /// The whole content the call writes to its one file (`Write`), if known.
     pub content: Option<&'a str>,
+    /// The replacements a partial edit makes (`Edit`, `MultiEdit`), in order;
+    /// applied to the file as it is to learn the content the call leaves
+    /// (ADR-048). Empty for every other call.
+    pub edits: &'a [Replacement],
     /// The untrusted content the session had read before this call.
     pub untrusted: Option<&'a str>,
 }
@@ -70,13 +75,32 @@ pub fn observe(store: &Store, policy: &CompiledPolicy<'_>, call: &Call<'_>) -> R
     let mut seen = Seen::default();
     let files = Files::of(policy, call.action);
     let ci = policy.context().case_insensitive_paths;
+    // The whole content a `Write` sends. Provenance (below) records only that:
+    // an edit may keep what a tainted session wrote, whatever hash it leaves.
     let sha256 = call.content.map(|c| content_hash(c.as_bytes()));
     seen.written = files
         .writes
         .iter()
-        .map(|path| SessionWrite {
-            path: key(path, ci),
-            sha256: sha256.clone(),
+        .map(|path| {
+            // The content the call leaves and what the file held before it, so
+            // a later call can tell this one ran and changed the file (ADR-048).
+            // For an edit, the content is the file as it is with the
+            // replacements applied; without a content there is nothing a later
+            // call could compare the file against, so the state before is not
+            // kept either.
+            let (sha256, before) = match (&sha256, call.edits.is_empty()) {
+                (Some(sha256), _) => (Some(sha256.clone()), state_of(path)),
+                (None, false) => match edited(path, call.edits) {
+                    Some((after, before)) => (Some(after), Some(before)),
+                    None => (None, None),
+                },
+                (None, true) => (None, None),
+            };
+            SessionWrite {
+                path: key(path, ci),
+                sha256,
+                before,
+            }
         })
         .collect();
     if !TaintSettings::provenance_on(policy.policy().taint.as_ref())
@@ -222,7 +246,71 @@ pub(crate) fn key(path: &str, case_insensitive: bool) -> String {
 /// Whether the regular file at `path` still holds what a write of `sha256`
 /// wrote; any content when the hash is not known. A file larger than a hook
 /// payload cannot hold what a `Write` sent.
-fn holds(path: &str, sha256: Option<&str>) -> bool {
+/// A file as it is now, when that is known.
+enum FileNow {
+    /// No file there.
+    Missing,
+    /// A plain file within the size the hook reads, and its bytes.
+    Content(Vec<u8>),
+}
+
+/// The file at `path` as it is now; `None` when it cannot be read, is not a
+/// plain file, or is larger than the hook reads.
+fn file_now(path: &str) -> Option<FileNow> {
+    match std::fs::metadata(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(FileNow::Missing),
+        Err(_) => None,
+        Ok(meta) if !meta.is_file() || meta.len() > MAX_PAYLOAD_BYTES => None,
+        Ok(_) => std::fs::read(path).ok().map(FileNow::Content),
+    }
+}
+
+/// The content hash of the file at `path` as it is now: `""` when there is no
+/// file there, `None` when it cannot be read ([`file_now`]).
+pub(crate) fn state_of(path: &str) -> Option<String> {
+    Some(match file_now(path)? {
+        FileNow::Missing => String::new(),
+        FileNow::Content(bytes) => content_hash(&bytes),
+    })
+}
+
+/// The hashes of the file at `path` with `edits` applied, and of the file as
+/// it is: `None` when the file is missing or unreadable, is not UTF-8, or an
+/// edit does not apply ([`apply_edits`]), since the edit then fails or its
+/// outcome is not known.
+fn edited(path: &str, edits: &[Replacement]) -> Option<(String, String)> {
+    let FileNow::Content(bytes) = file_now(path)? else {
+        return None;
+    };
+    let text = std::str::from_utf8(&bytes).ok()?;
+    let after = apply_edits(text, edits)?;
+    Some((content_hash(after.as_bytes()), content_hash(&bytes)))
+}
+
+/// `text` with `edits` applied in order, as Claude Code applies them: each
+/// `old` must be found, must differ from its `new`, and must occur exactly once
+/// unless the edit replaces every occurrence. `None` when one does not apply,
+/// since Claude Code then refuses the whole edit.
+pub(crate) fn apply_edits(text: &str, edits: &[Replacement]) -> Option<String> {
+    let mut text = text.to_owned();
+    for edit in edits {
+        if edit.old.is_empty() || edit.old == edit.new {
+            return None;
+        }
+        let occurrences = text.matches(edit.old.as_str()).count();
+        text = match occurrences {
+            0 => return None,
+            1 => text.replacen(edit.old.as_str(), &edit.new, 1),
+            _ if edit.all => text.replace(edit.old.as_str(), &edit.new),
+            _ => return None,
+        };
+    }
+    Some(text)
+}
+
+/// Whether a plain file at `path` is there, and holds content hashing to
+/// `sha256` when one is given.
+pub(crate) fn holds(path: &str, sha256: Option<&str>) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
     };

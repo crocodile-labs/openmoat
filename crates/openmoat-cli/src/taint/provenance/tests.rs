@@ -61,6 +61,7 @@ fn call(
             session,
             action,
             content,
+            edits: &[],
             untrusted,
         },
     )
@@ -257,4 +258,34 @@ fn crlf_line_ends_hash_as_lf() {
     assert_eq!(content_hash(b"a\r\nb\r\n"), content_hash(b"a\nb\n"));
     assert_ne!(content_hash(b"a\rb"), content_hash(b"ab"));
     assert_eq!(content_hash(b"plain"), sha256_hex(b"plain"));
+}
+
+/// Replacements apply as Claude Code applies them: in order, each found
+/// exactly once unless it replaces every occurrence, and never a no-op.
+#[test]
+fn edits_apply_as_claude_code_applies_them() {
+    let edit = |old: &str, new: &str, all| openmoat_hosts::Replacement {
+        old: old.to_owned(),
+        new: new.to_owned(),
+        all,
+    };
+    let apply = |text: &str, edits: &[openmoat_hosts::Replacement]| apply_edits(text, edits);
+    assert_eq!(
+        apply("a b", &[edit("a", "c", false)]).as_deref(),
+        Some("c b")
+    );
+    assert_eq!(
+        apply("a b a", &[edit("b", "c", false), edit("a", "d", true)]).as_deref(),
+        Some("d c d")
+    );
+    // twice without `replace_all`, not found, empty, or a no-op
+    assert_eq!(apply("a b a", &[edit("a", "c", false)]), None);
+    assert_eq!(apply("a b", &[edit("x", "c", false)]), None);
+    assert_eq!(apply("a b", &[edit("", "c", true)]), None);
+    assert_eq!(apply("a b", &[edit("a", "a", false)]), None);
+    // a later replacement that does not apply fails the whole edit
+    assert_eq!(
+        apply("a b", &[edit("a", "c", false), edit("z", "y", false)]),
+        None
+    );
 }
