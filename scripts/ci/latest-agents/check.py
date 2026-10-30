@@ -117,7 +117,7 @@ def cmd_records():
             except (OSError, ValueError, KeyError) as error:
                 problems.append(f"{agent}: payload {payload['fixture']} {payload['command']}: {error!r}")
         for runner in rec.get("runners", []):
-            if runner not in ("ubuntu-latest", "macos-14"):
+            if runner not in ("ubuntu-latest", "macos-15"):
                 problems.append(f"{agent}: unknown runner {runner}")
     for line in problems:
         print(f"agents.json: {line}")

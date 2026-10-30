@@ -237,9 +237,9 @@ something OpenMoat claims to stop.
     names `(ioctl-command TIOCSTI)`, an identifier `sandbox-exec` only recognises
     from macOS 13 onwards. On macOS 12 and earlier `openmoat run` refuses without
     starting the agent (fail closed); where it cannot read the macOS version it
-    tries, and `sandbox-exec` refuses the profile itself. CI covers `macos-14` and
-    `macos-15-intel`; GitHub Actions no longer offers a `macos-13` runner, so
-    macOS 13 is not exercised (#389).
+    tries, and `sandbox-exec` refuses the profile itself. CI covers `macos-15` and
+    `macos-15-intel`; GitHub Actions no longer offers `macos-13` or `macos-14`
+    runners, so macOS 13 and 14 are not exercised (#389).
   - The profile leaves every file's existence, size and times visible.
   - On Linux, Landlock only grants. Secrets inside a granted tree stay readable and
     writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`
