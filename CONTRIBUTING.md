@@ -85,7 +85,7 @@ is pushed to `main` directly.
 | `needs: fixture` | core or policy changed without `tests/conformance/` | add a fixture |
 
 Checks that must pass before merge (enforced by the `main` ruleset; names as shown on the
-PR): `macos-14`, `macos-15-intel`, `ubuntu-latest`, `windows-latest` (the quality gate),
+PR): `macos-15`, `macos-15-intel`, `ubuntu-latest`, `windows-latest` (the quality gate),
 `openmoat-core builds for wasm32 (no I/O)`, `cargo-deny`, `crates package and build from
 their tarballs`, `workflows (actionlint, zizmor)`, `conventional` (title) and
 `labels · size · risk · body` (pr-standards). The branch must be up to date with `main`

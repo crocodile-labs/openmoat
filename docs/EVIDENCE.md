@@ -61,11 +61,11 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 
 | Layer | Status |
 |---|---|
-| `openmoat run`, macOS (Seatbelt) | verified by the `macos-14` and `macos-15-intel` CI jobs |
+| `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |
 | `openmoat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |
 | `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
 | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
-| Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-14)` CI job |
+| Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |
 | Claude Code sandbox and Codex profile, Linux | verified by the `standard tier (ubuntu-latest)` CI job (bubblewrap and socat installed) |
 | `openmoat run`, Windows | not run: `openmoat run` refuses on Windows, where OpenMoat generates no OS sandbox (#135) |
 | Claude Code sandbox, Windows | not run: Claude Code's sandbox does not run on native Windows, so `openmoat init` writes no sandbox settings there ([SANDBOX.md](SANDBOX.md)) |

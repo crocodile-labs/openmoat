@@ -10,7 +10,7 @@
     "config": [["{CLAUDE_CONFIG_DIR}/settings.json", "json"]],
     "payload": {"fixture": "claude_code/fixtures/bash.json", "command": "/tool_input/command",
                 "verdict": "/hookSpecificOutput/permissionDecision"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "codex": {
     "host": "codex",
@@ -22,7 +22,7 @@
     "config": [["{CODEX_HOME}/hooks.json", "json"]],
     "payload": {"fixture": "codex/fixtures/pretooluse-shell.json", "command": "/tool_input/command",
                 "verdict": "/hookSpecificOutput/permissionDecision"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "opencode-1": {
     "host": "opencode",
@@ -35,7 +35,7 @@
                ["{XDG_CONFIG_HOME}/opencode/opencode.json", "json"]],
     "payload": {"fixture": "opencode/fixtures/bash.json", "command": "/args/command",
                 "verdict": "/decision"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "opencode-2": {
     "host": "opencode",
@@ -47,7 +47,7 @@
     "config": [["{XDG_CONFIG_HOME}/opencode/plugins/openmoat.js", "javascript"]],
     "payload": {"fixture": "opencode/fixtures/v2-shell.json", "command": "/input/command",
                 "verdict": "/decision"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "gemini-cli": {
     "host": "gemini-cli",
@@ -71,7 +71,7 @@
     "config": [["{COPILOT_HOME}/hooks/openmoat.json", "json"]],
     "payload": {"fixture": "copilot_cli/fixtures/bash.json", "command": "/toolArgs/command",
                 "verdict": "/permissionDecision"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "pi": {
     "host": "pi",
@@ -96,7 +96,7 @@
     "config": [["{OPENCLAW_STATE_DIR}/openclaw.json", "openclaw"]],
     "payload": {"fixture": "openclaw/fixtures/exec.json", "command": "/params/command",
                 "verdict": "/decision"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "hermes": {
     "host": "hermes",
@@ -107,7 +107,7 @@
     "config": [["{HERMES_HOME}/config.yaml", "hermes"]],
     "payload": {"fixture": "hermes/fixtures/terminal.json", "command": "/tool_input/command",
                 "verdict": "hermes"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "cursor": {
     "host": "cursor",
@@ -119,7 +119,7 @@
     "config": [["{CURSOR_CONFIG_DIR}/hooks.json", "json"]],
     "payload": {"fixture": "cursor/fixtures/beforeShellExecution.json", "command": "/command",
                 "verdict": "/permission"},
-    "runners": ["ubuntu-latest", "macos-14"]
+    "runners": ["ubuntu-latest", "macos-15"]
   },
   "continue": {
     "host": "continue",

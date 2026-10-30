@@ -59,8 +59,9 @@ Then run `openmoat init` ([below](#set-up-with-openmoat-init)).
 > `(ioctl-command TIOCSTI)` (CVE-2017-5226 class), an identifier `sandbox-exec`
 > only recognises from macOS 13 onwards, so on macOS 12 and earlier `openmoat run`
 > refuses (exit 64) without starting the agent and says so, and `openmoat doctor`
-> warns. CI tests macOS 14 and 15 (`macos-14` and `macos-15-intel`); GitHub
-> Actions no longer offers a `macos-13` runner, so macOS 13 is not tested. The
+> warns. CI tests macOS 15 on Apple silicon and Intel (`macos-15` and
+> `macos-15-intel`); GitHub Actions no longer offers `macos-13` or `macos-14` runners,
+> so macOS 13 and 14 are not tested. The
 > hooks, `openmoat init`, `openmoat status` and `openmoat doctor` work on earlier macOS and
 > still apply the policy to each tool call; only `openmoat run` has this floor.
 >
