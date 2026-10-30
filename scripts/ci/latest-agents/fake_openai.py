@@ -108,7 +108,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/chat/completions"):
             self.chat(request)
         elif path.endswith("/responses"):
-            self.responses(request)
+            self.responses_api(request)
         else:
             self.send(404, json.dumps({"error": {"message": f"no {path}"}}))
 
@@ -141,7 +141,9 @@ class Handler(BaseHTTPRequestHandler):
         body = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks) + "data: [DONE]\n\n"
         self.send(200, body, "text/event-stream")
 
-    def responses(self, request):
+    # Not `responses`: that name is `BaseHTTPRequestHandler`'s status-code table,
+    # which `send_response` reads for every reply.
+    def responses_api(self, request):
         step = next_step(offered(request), responses_result(request))
         if step[0] == "call":
             item = {"type": "function_call", "id": "fc_fake_1", "call_id": "call_fake_1",
