@@ -220,7 +220,35 @@ fixture in `tests/conformance/benign.yaml` or `ask.yaml`.
 
 ## Comparison with other Claude Code guards
 
-MoatBench can score any Claude Code hook, not only OpenMoat's: `openmoat bench --hook '<command>' --host claude-code` sends each scenario step to that command as a Claude Code `PreToolUse` payload and reads its answer the way Claude Code does. Nothing in the scenarios is executed; only the hook runs. This section records one such run.
+MoatBench can score any Claude Code hook, not only OpenMoat's: `openmoat bench --hook '<command>' --host claude-code` sends each scenario step to that command as a Claude Code `PreToolUse` payload and reads its answer the way Claude Code does. Nothing in the scenarios is executed; only the hook runs. This section records two such runs, the latest first.
+
+### Latest run: 2026-10-30, OpenMoat 0.12.0
+
+macOS 12 (Intel), OpenMoat 0.12.0, cc-safety-net 2.7.1, bash-authorize 0.9.9, guardhook
+0.2.0, every guard in its default configuration, the 64 scenarios bundled with 0.12.0
+scored as scenarios (not steps), with the method below. OpenMoat ran as `openmoat bench
+--host claude-code`.
+
+| Category (attack scenarios) | OpenMoat | cc-safety-net | bash-authorize | guardhook |
+|---|---|---|---|---|
+| destructive (4) | 3 | 3 | 3 | 4 |
+| exfiltration (10) | 6, plus 3 held by the OS sandbox | 5 | 2 | 0 |
+| MCP (13) | 10 | 1 | 0 | 0 |
+| obfuscation (8) | 8 | 6 | 3 | 0 |
+| persistence (5) | 5 | 1 | 0 | 0 |
+| self-protection (5) | 5 | 0 | 0 | 0 |
+| supply chain (3) | 2 | 1 | 0 | 1 |
+| **Stopped (deny or ask), of 48** | **39 (+3 sandbox)** | **17** | **8** | **5** |
+| Misses answered `allow` | 0 | 0 | 5 | 0 |
+| Benign scenarios not allowed through (of 8) | 0 | 0 | 0 | 0 |
+| Scenarios not answered as expected | 0 | 31 | 41 | 43 |
+
+OpenMoat's six remaining attack scenarios (one destructive, one exfiltration, three MCP,
+one supply chain) are deferred to Claude Code's own prompt by design; the scenarios
+expect that, so they are not misses. This run did not measure time per call; the times
+below are from 2026-10-23.
+
+### Earlier run: 2026-10-23, OpenMoat 0.10.0
 
 **Run:** 2026-10-23, macOS 12 (Intel), Node 24, every guard in its default configuration. (Earlier runs on 2026-10-19 with OpenMoat 0.7.0 and on 2026-10-21 with 0.9.0 caught the same steps for every guard; the times vary with the machine's load.)
 
@@ -293,11 +321,11 @@ npm install --prefix ./ba bash-authorize@0.9.9 --ignore-scripts
 npm install --prefix ./gh guardhook@0.2.0 --ignore-scripts
 ```
 
-Then score each hook command with MoatBench:
+Then score each hook command with MoatBench. Each hook runs with the scenario's throwaway project as its working directory, so give the paths below as absolute paths:
 
 | Guard | `--hook` |
 |---|---|
-| OpenMoat | `openmoat guard --host claude-code` (or run `openmoat bench` without `--hook`) |
+| OpenMoat | none: run `openmoat bench --host claude-code` (as `--hook`, `openmoat guard` finds no policy in the throwaway `HOME` and denies everything) |
 | cc-safety-net | `node ./ccsn/node_modules/cc-safety-net/dist/bin/cc-safety-net.js hook --claude-code` |
 | bash-authorize | `node ./ba/node_modules/bash-authorize/dist/bash-authorize-cli.js` |
 | guardhook | `node ./gh/node_modules/guardhook/dist/cli.js hook` |
