@@ -337,8 +337,31 @@ and guardhook 0.2.0. Each tool got the same 28 MoatBench attack steps as Claude 
 - MoatBench has grown since this comparison: 0.12.0 ships 64 scenarios (scripts the
   agent writes and runs, inline code that builds its paths, plugins that rewrite a
   call, browser page opens, downloads). `openmoat bench` runs the whole set; every CI build runs the benign and
-  session-written-code scenarios with and without an OS sandbox. This comparison is
-  rerun on the larger set after 0.12.0.
+  session-written-code scenarios with and without an OS sandbox. This comparison has
+  not been rerun on the larger set yet.
+
+The full set on OpenMoat 0.12.0 (2026-10-30, macOS, `openmoat bench`), every scenario
+run as each of the nine agents' hook payloads:
+
+| Category | Runs | Blocked | Asked | Allowed | OS sandbox | Left to the agent |
+|---|---|---|---|---|---|---|
+| benign | 70 | 0 | 0 | 70 | 0 | 0 |
+| destructive | 36 | 27 | 0 | 0 | 0 | 9 |
+| exfiltration | 86 | 53 | 18 | 0 | 9 | 6 |
+| mcp | 104 | 72 | 8 | 0 | 0 | 24 |
+| obfuscation | 72 | 54 | 18 | 0 | 0 | 0 |
+| persistence | 45 | 27 | 18 | 0 | 0 | 0 |
+| self-protection | 45 | 45 | 0 | 0 | 0 | 0 |
+| supply-chain | 27 | 9 | 9 | 0 | 0 | 9 |
+| workflows | 66 | 0 | 17 | 8 | 0 | 41 |
+| **total** | **551** | **287** | **88** | **78** | **9** | **89** |
+
+0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
+developer workflows (git feature branch, Node app, Python package, Rust crate, Go
+module, Docker image, make targets, editing project files) ran 556 steps with 17 asks,
+all of them expected. "Left to the agent" (`passthrough`) means OpenMoat returned no decision and the
+agent's own checks decide: a deferred call, or an allow on OpenClaw, Gemini CLI,
+OpenCode and Hermes Agent, which read it that way (see [docs/MOATBENCH.md](docs/MOATBENCH.md)).
 
 The method, the results per category, the time per call, the limits of this comparison
 and the exact commands for each tool are in
