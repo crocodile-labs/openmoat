@@ -233,23 +233,27 @@ fn an_approved_edit_in_the_agent_covers_later_edits_of_the_same_file() {
     let (verdict, reason) = tainted_edit(&sb, "s1", file, "a.c", "b.c");
     assert_eq!(verdict, "allow", "{reason}");
     assert!(reason.contains("an earlier write of"), "{reason}");
+    // the allowed edit ran: the file holds what it left, which the next call's
+    // check compares against (an edit the agent never applied covers nothing)
+    approved(&sb, file, "project(b)\nadd_executable(a b.c)\n");
     let (verdict, reason) = tainted_write_of(&sb, "s1", file, "project(c)\n");
     assert_eq!(
         verdict, "allow",
         "a write of the file is covered too: {reason}"
     );
+    approved(&sb, file, "project(c)\n");
 
     // `MultiEdit`, approved, covers as well
     fetch_untrusted(&sb, "s1");
     let proj = sb.project();
     let multi = json!({"file_path": proj.join(file).to_string_lossy(), "edits": [
-        {"old_string": "project(b)", "new_string": "project(c)"},
-        {"old_string": "a.c", "new_string": "c.c", "replace_all": true}
+        {"old_string": "project", "new_string": "library"},
+        {"old_string": "(c)", "new_string": "(c, d)", "replace_all": true}
     ]});
     let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "MultiEdit", &multi));
     assert_eq!(verdict, "ask", "a later read asks again: {reason}");
-    approved(&sb, file, "project(c)\nadd_executable(a c.c)\n");
-    let (verdict, reason) = tainted_edit(&sb, "s1", file, "c.c", "d.c");
+    approved(&sb, file, "library(c, d)\n");
+    let (verdict, reason) = tainted_edit(&sb, "s1", file, "library", "module");
     assert_eq!(verdict, "allow", "{reason}");
 
     // `old_string` twice without `replace_all`: Claude Code refuses the edit,
