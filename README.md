@@ -313,32 +313,32 @@ why, and what needs you. It is read-only. On macOS:
 
 ## How it compares (MoatBench)
 
-Run on 2026-10-23 on macOS with OpenMoat 0.10.0, cc-safety-net 2.6.16, bash-authorize 0.9.9
-and guardhook 0.2.0. Each tool got the same 28 MoatBench attack steps as Claude Code
-`PreToolUse` payloads; a step counts as caught when the answer is deny or ask.
+Run on 2026-10-30 on macOS with OpenMoat 0.12.0, cc-safety-net 2.7.1, bash-authorize 0.9.9
+and guardhook 0.2.0. Each tool got the same 48 MoatBench attack scenarios and 8 benign
+ones as Claude Code `PreToolUse` payloads; an attack counts as stopped when the answer is
+deny or ask.
 
-| Guard | Attack steps caught (of 28) | Misses auto-approved | False positives (7 benign runs) | Median ms per call |
-|---|---|---|---|---|
-| OpenMoat 0.10.0 | 28 (100%) | 0 | 0 | 83 |
-| [cc-safety-net](https://github.com/kenryu42/cc-safety-net) 2.6.16 | 14 (50%) | 0 | 0 | 170 |
-| [bash-authorize](https://github.com/rse/bash-authorize) 0.9.9 | 7 (25%) | 5 | 0 | 296 |
-| [guardhook](https://github.com/aurelio-nakamura/guardhook) 0.2.0 | 4 (14%) | 0 | 0 | 129 |
+| Guard | Attacks stopped (of 48) | Misses auto-approved | False positives (of 8 benign) |
+|---|---|---|---|
+| OpenMoat 0.12.0 | 39, plus 3 held by the OS sandbox | 0 | 0 |
+| [cc-safety-net](https://github.com/kenryu42/cc-safety-net) 2.7.1 | 17 | 0 | 0 |
+| [bash-authorize](https://github.com/rse/bash-authorize) 0.9.9 | 8 | 5 | 0 |
+| [guardhook](https://github.com/aurelio-nakamura/guardhook) 0.2.0 | 5 | 0 | 0 |
 
-- Three of the 28 steps target OpenMoat's own files and commands. Without them,
-  OpenMoat catches 25 of 25, cc-safety-net 14 of 25, bash-authorize 7 of 25 and
-  guardhook 4 of 25.
+- OpenMoat answered every scenario the way the scenario expects. Three exfiltration
+  attempts are left to the OS sandbox, which blocks them, and six (one destructive, one
+  exfiltration, three MCP, one supply chain) are deferred to Claude Code's own prompt by
+  design.
+- None of the other tools stops any of the 5 self-protection scenarios.
 - The scenarios are OpenMoat's own and were written alongside its policy, so a full
   score shows that the policy and the benchmark agree, not that OpenMoat is complete.
-  The other tools target a narrower job, mostly destructive shell commands, and lose
-  most points in areas they do not claim to cover: self-protection, MCP, persistence
-  and network egress.
+  The other tools target a narrower job, mostly destructive shell commands (guardhook
+  stops all 4 destructive scenarios), and lose most points in areas they do not claim to
+  cover: self-protection, MCP, persistence and network egress.
 - To reproduce, run the same scenarios against any hook command with
-  `openmoat bench --hook '<command>' --host claude-code`.
-- MoatBench has grown since this comparison: 0.12.0 ships 64 scenarios (scripts the
-  agent writes and runs, inline code that builds its paths, plugins that rewrite a
-  call, browser page opens, downloads). `openmoat bench` runs the whole set; every CI build runs the benign and
-  session-written-code scenarios with and without an OS sandbox. This comparison has
-  not been rerun on the larger set yet.
+  `openmoat bench --hook '<command>' --host claude-code`. The earlier run on 2026-10-23
+  (OpenMoat 0.10.0, 28 attack steps) and the time per call are in
+  [docs/MOATBENCH.md](docs/MOATBENCH.md#comparison-with-other-claude-code-guards).
 
 The full set on OpenMoat 0.12.0 (2026-10-30, macOS, `openmoat bench`), every scenario
 run as each of the nine agents' hook payloads:
