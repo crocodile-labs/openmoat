@@ -204,7 +204,7 @@ Then, in a terminal of your own:
    names what is left, if anything:
    - `hook entry for … is out of date (written by an older OpenMoat); run openmoat init`: the new
      release writes its hook entry differently (more tools, another timeout, a new event
-     such as Claude Code's `SessionStart`, which from the next release gives each session
+     such as Claude Code's `SessionStart`, which from 0.12.0 gives each session
      its credential for `openmoat proxy`, ADR-044).
      Run `openmoat init`. It keeps your policy, backs up the agent's file before it changes
      OpenMoat's own entry, and re-pins.
@@ -231,7 +231,7 @@ Read the [CHANGELOG](../CHANGELOG.md) entries since your version first; so far t
 kinds of change have happened:
 
 - **The audit log schema moves forward** (version 3 in 0.5.0, version 4 in 0.6.0,
-  version 5 in 0.11.0, version 6 from the next release). The
+  version 5 in 0.11.0, version 7 in 0.12.0). The
   new `openmoat` updates the log when it first opens it; an older `openmoat` then refuses to
   open it (`schema too new`), and its hook denies every call. Going back to an older
   release is not supported.

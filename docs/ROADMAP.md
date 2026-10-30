@@ -13,7 +13,7 @@ carries dates. Release stages and their exit criteria come from ADR-013.
 
 ## Where it is today
 
-The latest release is `0.11.0`, from GitHub Releases, the Homebrew tap and crates.io
+The latest release is `0.12.0`, from GitHub Releases, the Homebrew tap and crates.io
 ([INSTALL.md](INSTALL.md)).
 
 **Release stage:** 0.x, usable daily, before 1.0. ADR-013's first two stages are
@@ -78,7 +78,8 @@ What exists:
   MoatBench ([MOATBENCH.md](MOATBENCH.md)) and fuzz targets, all run in CI.
 - **SDK.** `openmoat-sdk` for Rust and `@openmoat/sdk` for JavaScript (the engine as
   WebAssembly): the same decisions inside your own agent product, which enforces them
-  (ADR-046, [SDK.md](SDK.md)). On `main`; not yet on crates.io or npm.
+  (ADR-046, [SDK.md](SDK.md)). `openmoat-sdk` is on crates.io from 0.12.0; the npm
+  package follows once its publishing is set up.
 
 What it does not do: confine every call. Only commands inside the host sandboxes or
 `openmoat run` are confined by the operating system. Elsewhere an allowed call runs with

@@ -334,11 +334,11 @@ and guardhook 0.2.0. Each tool got the same 28 MoatBench attack steps as Claude 
   and network egress.
 - To reproduce, run the same scenarios against any hook command with
   `openmoat bench --hook '<command>' --host claude-code`.
-- MoatBench has grown since this comparison: 0.11.0 ships 55 scenarios (scripts the
+- MoatBench has grown since this comparison: 0.12.0 ships 64 scenarios (scripts the
   agent writes and runs, inline code that builds its paths, plugins that rewrite a
-  call). `openmoat bench` runs the whole set; every CI build runs the benign and
+  call, browser page opens, downloads). `openmoat bench` runs the whole set; every CI build runs the benign and
   session-written-code scenarios with and without an OS sandbox. This comparison is
-  rerun on the larger set after 0.11.0.
+  rerun on the larger set after 0.12.0.
 
 The method, the results per category, the time per call, the limits of this comparison
 and the exact commands for each tool are in
@@ -433,14 +433,15 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 
 ## Status
 
-**Usable daily.** The latest release is `0.11.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.12.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What exists and what
 comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 To upgrade, update the binary the way you installed it, then run `openmoat doctor` and
 `openmoat policy upgrade` in your own terminal ([docs/INSTALL.md](docs/INSTALL.md#upgrading)).
-From 0.9.0, a default install needs nothing more for 0.11.0; each release's upgrading note
-is in the [CHANGELOG](CHANGELOG.md).
+From 0.9.0 to 0.11.0 a default install needed nothing more; 0.12.0 needs `openmoat init`
+once (Claude Code's `SessionStart` hook) and `openmoat policy upgrade` (new default rules).
+Each release's upgrading note is in the [CHANGELOG](CHANGELOG.md).
 
 ## Contributing
 
