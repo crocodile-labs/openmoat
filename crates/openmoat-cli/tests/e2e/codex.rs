@@ -49,7 +49,7 @@ fn status_and_doctor_only_warn_about_codex_trust_without_granting_it() {
     let approved = std::fs::read_to_string(&config).unwrap();
     let key = format!(
         "{}:pre_tool_use:0:0",
-        sb.home.join(".codex/hooks.json").display()
+        sb.home.join(".codex").join("hooks.json").display()
     );
     for (field, value) in [
         ("trusted_hash", toml_edit::value("sha256:old")),

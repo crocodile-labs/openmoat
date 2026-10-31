@@ -154,7 +154,8 @@ impl Sandbox {
     /// identity (discovery.rs), only in this throwaway home.
     pub fn trust_codex_hook(&self) {
         use sha2::Digest as _;
-        let path = self.home.join(".codex/hooks.json");
+        // Codex keys its trust state by the path it read, built with native separators.
+        let path = self.home.join(".codex").join("hooks.json");
         let root: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         let group = &root["hooks"]["PreToolUse"][0];
         let mut handler = group["hooks"][0].clone();
