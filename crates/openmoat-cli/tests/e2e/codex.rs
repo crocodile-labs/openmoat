@@ -296,7 +296,8 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     assert_eq!(allow.status.code(), Some(OK), "{}", stderr(&allow));
     let out = sb.guard("codex", &shell("codex-s1", command));
     assert_eq!(out.status.code(), Some(OK), "approved for the session");
-    assert_eq!(hook_output(&out)["permissionDecision"], "allow");
+    // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
+    assert!(stdout(&out).is_empty(), "{}", stdout(&out));
 
     // Claude Code can ask, so it still receives the `ask` itself.
     let claude = serde_json::json!({

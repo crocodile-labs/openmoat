@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use crate::common::{DENY, OK, Sandbox, hook_output, stderr, text, verdict};
+use crate::common::{DENY, OK, Sandbox, hook_output, stderr, stdout, text, verdict};
 
 fn patch(sb: &Sandbox, file: &str) -> String {
     serde_json::json!({
@@ -44,10 +44,10 @@ fn codex_apply_patch_ask_is_approved_with_allow_last() {
         "{shown}"
     );
     assert!(shown.contains("notes/plan.md"), "{shown}");
-    assert_eq!(
-        verdict(&sb.guard("codex", &patch(&sb, "../notes/plan.md"))),
-        "allow"
-    );
+    // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
+    let out = sb.guard("codex", &patch(&sb, "../notes/plan.md"));
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(stdout(&out).is_empty(), "{}", text(&out));
     assert_eq!(
         verdict(&sb.guard("codex", &patch(&sb, "../notes/other.md"))),
         "deny",
