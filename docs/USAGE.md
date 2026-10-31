@@ -589,8 +589,13 @@ these takes one command in your own terminal (agents are denied all of them):
   `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
   `openmoat allow --last` approves.
 - **Codex runs no checks**: Codex runs a new or changed hook only once you trust it. After
-  `openmoat init`, and after an upgrade that rewrites the entry, open `/hooks` in Codex and
-  trust OpenMoat's.
+  `openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook. Repeat after an
+  upgrade that rewrites the entry. `status` and `doctor` fail for an args-style legacy
+  hook (repair with `openmoat init`), and only warn about an installed but not trusted
+  hook: the internal hash mirror never blocks calls or commands. `policy
+  upgrade` and `sandbox sync` also repair existing entries after checking the lock.
+  Bare `openmoat` receiving hook JSON on piped stdin denies with exit 2 and a reason
+  on stderr, so a miswired hook cannot silently show the home screen and succeed.
 - **The `openmoat` binary is missing or broken**: Codex, Continue CLI and Claude Code before
   2.1.295 then run tool calls without the hook ("When the hook fails" in
   [THREAT_MODEL.md](THREAT_MODEL.md)), and Claude Code from 2.1.295, Cursor, OpenClaw,

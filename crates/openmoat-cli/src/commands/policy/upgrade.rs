@@ -31,7 +31,21 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let plan = Plan::for_home(&home)?;
     let mut out = Deferred::default();
     describe(&plan, &mut out)?;
+    let binary = crate::install::hook_binary()?;
+    let hook_upgrade = crate::install::migrate_hooks::needed(&home, &binary)?;
+    if hook_upgrade {
+        writeln!(
+            out,
+            "Hook update required; after upgrading, review and trust changed OpenMoat hooks in your agent"
+        )?;
+    }
     if plan.applicable() == 0 || args.dry_run {
+        if hook_upgrade && !args.dry_run {
+            person("openmoat policy upgrade")?;
+            integrity::refuse_drift(&home, "upgrade existing hooks")?;
+            crate::install::migrate_hooks::update(&home, &binary)?;
+            integrity::repin(&home, &binary, HookPins::Keep)?;
+        }
         if !args.dry_run && up_to_date_without_record(&plan) && crate::terminal::person() {
             // Recorded now so a later default is compared with this one, not 0.3.0.
             write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
@@ -161,7 +175,9 @@ fn apply(home: &Home, plan: &Plan, out: &mut Deferred) -> Result<()> {
     copy_or_remove(&home.policy_base_path(), &base_backup)?;
     write_private(&home.policy_path(), plan.merge.text.as_bytes())?;
     write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
-    let lock = integrity::repin(home, &crate::install::hook_binary()?, HookPins::Keep)?;
+    let binary = crate::install::hook_binary()?;
+    crate::install::migrate_hooks::update(home, &binary)?;
+    let lock = integrity::repin(home, &binary, HookPins::Keep)?;
     let count = plan.applicable();
     writeln!(
         out,

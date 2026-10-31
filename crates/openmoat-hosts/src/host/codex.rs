@@ -15,8 +15,10 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod advisories;
 mod doc;
+mod hook_file;
 mod mcp;
 mod project_settings;
+mod trust;
 
 /// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
 /// web search and hosted tools have no hook. Codex has no key that blocks a
@@ -52,7 +54,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: ".codex",
         config_file: "hooks.json",
         hooks: HOOKS,
-        hook_file: HookLayout::Entries(&crate::wire::hook_file::nested::Nested),
+        hook_file: HookLayout::Entries(&hook_file::Codex),
+        hook_trust: Some(&trust::Codex),
         // Codex runs a new or changed user hook only once the person trusts it
         // in `/hooks` (Codex's hooks documentation).
         trust_step: Some(

@@ -1,6 +1,6 @@
 //! The step a host needs from the person after `openmoat init` writes its
 //! hook, when the host keeps a trust record of its own that OpenMoat cannot
-//! see ([`InstallSpec::trust_step`](openmoat_hosts::InstallSpec::trust_step)).
+//! grant ([`InstallSpec::trust_step`](openmoat_hosts::InstallSpec::trust_step)).
 
 use openmoat_hosts::Host;
 

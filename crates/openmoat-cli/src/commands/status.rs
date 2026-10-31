@@ -33,6 +33,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
         render::json(&serde_json::json!({
             "agents": protection::report(&home, &binary)?,
             "plugins": crate::heartbeat::all(&home, &binary),
+            "hook_warnings": hook_warnings(&home, &binary)?,
             "policy_update": update,
             "lock_drift": drift,
             "mcp_changes": mcp_changes(&home, &binary).unwrap_or_default(),
@@ -72,6 +73,20 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     healthy &= audit(&mut out, &home)?;
 
     Ok(if healthy { Code::Ok } else { Code::Usage })
+}
+
+/// Advisory trust diagnostics, separate from protection levels and exit codes.
+fn hook_warnings(home: &Home, binary: &Path) -> Result<Vec<String>> {
+    let mut warnings = Vec::new();
+    for host in Host::ALL {
+        let config = HostConfig::for_host(home, host)?;
+        if config.set_up(binary)
+            && let Some(warning) = config.trust_warning()
+        {
+            warnings.push(format!("{}: {warning}", host.display_name()));
+        }
+    }
+    Ok(warnings)
 }
 
 /// One line per MCP server definition or held tool that waits for `moat mcp
@@ -339,6 +354,9 @@ fn hooks(
         )?;
         if let Some(advisory) = advisory {
             writeln!(out, "{:<16} ! {advisory}", host.display_name())?;
+        }
+        if installed && let Some(warning) = config.trust_warning() {
+            writeln!(out, "{:<16} ! {warning}", host.display_name())?;
         }
         // Whether the host loaded the plugin (ADR-042): a warning, like the
         // protection line it changes, that leaves `healthy` alone.

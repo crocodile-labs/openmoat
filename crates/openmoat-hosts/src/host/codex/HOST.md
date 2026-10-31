@@ -9,8 +9,31 @@ The Codex CLI. It sends `PreToolUse` in Claude Code's format. Every fact here co
 |---|---|---|
 | `PreToolUse` | `Bash\|apply_patch\|mcp__.*` | 600 s |
 
+Supported hook schema: Codex 0.160.1 through 0.166.0, checked at both endpoints.
+Codex ignores `args`: OpenMoat writes one POSIX shell-quoted `command`, plus
+`commandWindows` and `statusMessage: "OpenMoat"`. Both versions execute the string
+through `$SHELL -lc` (fallback `/bin/sh`), or `%COMSPEC% /C` (fallback `cmd.exe`).
+The Windows override invokes Windows PowerShell with a UTF-16 encoded command, so
+spaces, apostrophes, percent signs and other shell characters in paths survive cmd's
+expansion; PowerShell propagates the guard's exit code. Custom command shells must
+support the corresponding invocation.
+
 Codex runs a new or changed user hook only once the person trusts it: after
-`openmoat init`, open Codex and trust OpenMoat's hook in `/hooks`.
+`openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook.
+`openmoat init`, `openmoat policy upgrade` and `openmoat sandbox sync` replace legacy
+args-style entries and re-pin the lock; repeat the trust step after the replacement.
+`status` and `doctor` fail for legacy entries. They only warn about an installed but
+not trusted hook, leaving their exit code successful: the check mirrors Codex's
+internal hash and must never block a call, installation or upgrade. The Codex host
+module reads the parsed `[hooks.state]` from `config.toml`, checking the entry's
+source/index, enabled flag and normalised declaration hash; it never grants trust.
+Project or managed configuration overrides can still change the state Codex loads.
+
+Source: Codex [0.166 schema](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/protocol/src/hooks.rs#L140),
+[0.160.1 schema](https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/config/src/hook_config.rs#L161),
+[execution](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/command_runner.rs#L417),
+[older execution](https://github.com/openai/codex/blob/rust-v0.160.1/codex-rs/hooks/src/engine/command_runner.rs#L359)
+and [trust discovery](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/hooks/src/engine/discovery.rs).
 
 ## Tools OpenMoat sees
 

@@ -127,6 +127,12 @@ pub fn sync() -> Result<Code> {
     let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
     let (mut files, mut codex_configs) = (Vec::new(), Vec::new());
+    if crate::install::migrate_hooks::update(&home, &binary)? {
+        writeln!(
+            out,
+            "✔ existing hooks updated; review and trust changed OpenMoat hooks in your agent"
+        )?;
+    }
     for host in install::hosts() {
         let path = install::settings_path(&home, host)?;
         if !path.parent().is_some_and(std::path::Path::is_dir) {

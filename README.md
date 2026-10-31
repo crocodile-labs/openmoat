@@ -397,7 +397,9 @@ The main gaps:
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
-  2.1.295, run a call unchecked if `openmoat` is missing. GitHub Copilot CLI and Gemini
+  2.1.295, run a call unchecked if `openmoat` is missing. Codex also skips untrusted
+  hooks: after `openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook;
+  `status` and `doctor` report missing trust and broken legacy entries. GitHub Copilot CLI and Gemini
   CLI run a call whose hook times out. OpenClaw, pi and OpenCode run calls unchecked when
   they do not load OpenMoat's plugin or extension (OpenCode 1 with `--pure` or
   `OPENCODE_PURE`, OpenCode 2 with `-openmoat` in a project's `plugins`, or when the
