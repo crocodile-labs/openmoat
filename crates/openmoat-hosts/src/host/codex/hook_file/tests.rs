@@ -43,7 +43,7 @@ fn schema_has_only_codex_command_fields_and_round_trips_quoted_paths() {
 fn windows_encoding_preserves_utf16_and_padding() {
     assert_eq!(base64(b""), "");
     assert_eq!(base64(b"f"), "Zg==");
-    assert_eq!(base64(b"fo"), "Zm8=");
+    assert_eq!(base64(b"ab"), "YWI=");
     assert_eq!(base64(b"foo"), "Zm9v");
     assert_eq!(base64(&[b'A', 0]), "QQA=");
     assert_eq!(base64(b"foob"), "Zm9vYg==");

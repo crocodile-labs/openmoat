@@ -1,6 +1,6 @@
 use super::*;
 
-fn normalized_hash(bytes: &[u8]) -> String {
+fn normalised_hash(bytes: &[u8]) -> String {
     let command = if cfg!(windows) {
         "windows hook"
     } else {
@@ -39,7 +39,7 @@ fn digest(bytes: &[u8]) -> String {
         );
         value["hooks"][0]["command"] = json!("posix hook");
     }
-    normalized_hash(&serde_json::to_vec(&value).unwrap())
+    normalised_hash(&serde_json::to_vec(&value).unwrap())
 }
 
 #[test]
