@@ -14,6 +14,7 @@ mod consent;
 mod docs;
 mod heartbeat;
 mod hook_file;
+mod hook_trust;
 mod location;
 mod mcp;
 mod protect;
@@ -27,6 +28,7 @@ pub use consent::ConsentFile;
 pub use docs::{HostDocs, ToolRow};
 pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
 pub use hook_file::HookLayout;
+pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
 pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
@@ -233,8 +235,11 @@ pub struct InstallSpec {
     pub relaxed_keys: &'static [RelaxedKey],
     /// What the person must do in the host after `moat init` writes or changes
     /// its hook entry before the host runs it, when the host keeps a record
-    /// of its own that OpenMoat cannot see; `moat doctor` repeats it.
+    /// of its own that OpenMoat cannot grant; `moat doctor` repeats it.
     pub trust_step: Option<&'static str>,
+    /// An advisory inspection of the host's own trust record. Never used to
+    /// decide a call or gate installation, since the host owns this format.
+    pub hook_trust: Option<&'static dyn HookTrust>,
     /// How the CLI finds the directory and the file.
     pub location: Location,
     /// The form of the file, read as JSON5 (as YAML for a

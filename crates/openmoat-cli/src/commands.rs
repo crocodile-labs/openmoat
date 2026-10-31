@@ -10,6 +10,7 @@ mod edit;
 mod guard;
 mod init;
 mod mcp;
+mod miswired_hook;
 mod overview;
 mod policy;
 mod proxy;
@@ -35,6 +36,10 @@ use crate::exit::Code;
 
 pub fn run(cli: Cli) -> Result<Code> {
     let Some(command) = cli.command else {
+        if miswired_hook::detected() {
+            eprintln!("openmoat was run as a hook without `guard --host <agent>`; denying");
+            return Ok(Code::Deny);
+        }
         return overview::run();
     };
     match command {

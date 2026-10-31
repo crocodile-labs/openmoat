@@ -44,6 +44,7 @@ impl InstallSpec {
         hook_file: HookLayout::Entries(&Nested),
         relaxed_keys: &[],
         trust_step: None,
+        hook_trust: None,
         location: super::Location::OneDir,
         pinned_form: None,
         extra_files: &[],

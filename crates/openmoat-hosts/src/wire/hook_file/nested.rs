@@ -1,5 +1,5 @@
-//! The nested layout Claude Code (`settings.json`) and Codex (`hooks.json`)
-//! share: `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{type, command,
+//! Claude Code's exec-form layout (`settings.json`):
+//! `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{type, command,
 //! args, timeout}]}]}}`. Our entries are recognised by their `args`
 //! (`guard --host <id>`).
 
@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use super::HookFile;
 use crate::HookSpec;
 
-/// Claude Code's `settings.json` and Codex's `hooks.json` entries.
+/// Claude Code's `settings.json` entries; also recognises legacy Codex entries.
 #[derive(Debug)]
 pub(crate) struct Nested;
 

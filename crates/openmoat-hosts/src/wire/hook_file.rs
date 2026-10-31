@@ -19,6 +19,12 @@ pub mod yaml;
 
 /// How one host's hook file lays out an entry of OpenMoat's.
 pub trait HookFile: Sync + std::fmt::Debug {
+    /// Whether policy upgrade and sandbox sync should refresh existing
+    /// entries of this layout, after the CLI checks the lock and terminal.
+    fn refresh_on_upgrade(&self) -> bool {
+        false
+    }
+
     /// The entry for `spec` that runs `binary` as `guard --host <id>`; with
     /// `block`, one that asks the host to block the call when the guard fails
     /// (only where [`Self::knows_on_failure`]).

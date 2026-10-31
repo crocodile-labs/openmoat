@@ -5,8 +5,10 @@ mod claude_version;
 pub mod consent;
 mod dirs;
 mod hook_file;
+mod hook_trust;
 pub mod host_version;
 pub mod location;
+pub mod migrate_hooks;
 pub mod openclaw;
 pub mod owned;
 pub mod self_paths;
@@ -251,6 +253,12 @@ impl HostConfig {
 
     pub fn state(&self, binary: &std::path::Path) -> HookState {
         hook_file::state(self, binary)
+    }
+
+    /// Advisory only: a host's internal trust hash must never gate a call or
+    /// a command's exit code. Used only by status and doctor.
+    pub fn trust_warning(&self) -> Option<String> {
+        hook_trust::warning(self)
     }
 
     /// Whether the host is set up: OpenMoat's hook for `binary` is installed

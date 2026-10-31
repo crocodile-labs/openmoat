@@ -150,6 +150,35 @@ impl Sandbox {
         self.moat_stdin(&["guard", "--host", host], payload)
     }
 
+    /// Simulate the person's /hooks approval using Codex 0.166's normalised
+    /// identity (discovery.rs), only in this throwaway home.
+    pub fn trust_codex_hook(&self) {
+        use sha2::Digest as _;
+        // Codex keys its trust state by the path it read, built with native separators.
+        let path = self.home.join(".codex").join("hooks.json");
+        let root: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let group = &root["hooks"]["PreToolUse"][0];
+        let mut handler = group["hooks"][0].clone();
+        if cfg!(windows) {
+            handler["command"] = handler["commandWindows"].clone();
+        }
+        handler.as_object_mut().unwrap().remove("commandWindows");
+        handler["async"] = Value::Bool(false);
+        let identity = serde_json::json!({"event_name":"pre_tool_use", "matcher":group["matcher"], "hooks":[handler]});
+        let digest = sha2::Sha256::digest(serde_json::to_vec(&identity).unwrap());
+        let hash = digest.iter().fold(String::new(), |mut out, byte| {
+            use std::fmt::Write as _;
+            write!(out, "{byte:02x}").unwrap();
+            out
+        });
+        let config = self.home.join(".codex/config.toml");
+        let mut doc: toml_edit::DocumentMut =
+            std::fs::read_to_string(&config).unwrap().parse().unwrap();
+        let key = format!("{}:pre_tool_use:0:0", path.display());
+        doc["hooks"]["state"][&key]["trusted_hash"] = toml_edit::value(format!("sha256:{hash}"));
+        std::fs::write(config, doc.to_string()).unwrap();
+    }
+
     /// The verdict and reason the Claude Code hook gives one Bash `command` in `cwd`.
     pub fn guard_bash(&self, session: &str, cwd: &Path, command: &str) -> (String, String) {
         verdict_and_reason(&self.guard("claude-code", &bash_payload(session, cwd, command)))

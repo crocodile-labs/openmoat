@@ -590,6 +590,14 @@ something OpenMoat claims to stop.
   row at once and then one per 10 seconds with the count, written when the next
   connection arrives after that time, so the count of a burst's end can be missing
   until then.
+- **A miswired command can skip the guard.** Codex 0.160.1–0.166.0 ignores `args`
+  in command hooks. OpenMoat writes the guard arguments in `command` and supplies
+  `commandWindows`; `init`, `policy upgrade` and `sandbox sync` repair legacy entries.
+  Bare `openmoat` denies hook JSON on non-terminal stdin with exit 2 and stderr.
+  This does not protect a missing binary or an untrusted hook: Codex skips those.
+  `status` and `doctor` reject the legacy shape but only warn about the user's
+  stored trust hash: the advisory hash mirror never gates calls or commands;
+  the person must trust the new OpenMoat hook in Codex's `/hooks` screen.
 - **When the hook fails, most hosts run the call.** The host rows below come from
   each host's documentation or source as of 2026-10-07 ([Claude Code hooks][cc-hooks],
   [Codex hooks][codex-hooks] and [`pre_tool_use.rs`][codex-pre],

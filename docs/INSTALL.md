@@ -143,6 +143,14 @@ confinement, run Claude Code and `openmoat` inside WSL2. Codex's sandbox is set 
 other systems; Cursor's `sandbox.json` is not written, because Cursor documents its
 sandbox for macOS and Linux only.
 
+For Codex 0.160.1–0.166.0, after `openmoat init`, open Codex, run `/hooks` and trust
+the OpenMoat hook. Existing args-style entries are broken: `init`, `policy upgrade`
+and `sandbox sync` rewrite them as one command string and re-pin the lock. Trust the
+replacement again. `status` and `doctor` report an args-style entry as a failure
+(`openmoat init` repairs it), and read Codex's separate trust record to report an
+installed but not trusted hook as an advisory warning. This hash mirror never blocks
+calls or commands. See [Codex's host contract](../crates/openmoat-hosts/src/host/codex/HOST.md).
+
 | Agent | What is hooked | Hook file |
 |---|---|---|
 | Claude Code | `PreToolUse`: `Bash`, `Monitor`, `PowerShell` (never parsed: `unparseable`), `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Glob`, `Grep`, `LSP`, `SendFile`, `Artifact` and `ArtifactData` (the local files they upload or save), `WebFetch` (as `fetch`), `WebSearch` (as `web.search`), `ReadMcpResourceTool` (a `file:` URI as a read, any other as its host), `EnterWorktree` (an existing worktree's `path` as a read; a new worktree, and `Skill`, are left to Claude Code), MCP tools. `ConfigChange`: user, project and local settings. `SessionStart`: each session's credential for `openmoat proxy` (ADR-044) | `~/.claude/settings.json` |
