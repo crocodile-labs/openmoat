@@ -34,7 +34,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: bubblewrap for the isolated tier
         if: runner.os == 'Linux'
         # `moat run --isolate` (#174). Ubuntu 24.04's AppArmor blocks the
@@ -73,7 +73,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: linux sandbox prerequisites
         if: runner.os == 'Linux'
         # Both sandboxes use bubblewrap; Claude Code's proxy relay is socat. Ubuntu
@@ -103,7 +103,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo build --locked -p openmoat-core --target wasm32-unknown-unknown
 
   # The JavaScript plugins OpenMoat installs into OpenClaw, pi and OpenCode are
@@ -133,7 +133,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: node --version
       - run: scripts/ci/sdk-js.sh
 
@@ -155,7 +155,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo build --locked --release -p openmoat
       - run: python3 scripts/ci/guard-latency.py target/release/openmoat 100
       - run: python3 scripts/ci/guard-session-latency.py target/release/openmoat 50
@@ -174,7 +174,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: bash --version
       - run: cargo test --locked -p openmoat-core --test lexer_vs_bash -- --ignored --nocapture
 
@@ -191,7 +191,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo package --locked --workspace
       - name: release version strings agree
         run: python3 scripts/ci/check-versions.py
@@ -207,7 +207,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # cargo-machete rather than cargo-shear: shear 1.14 needs rustc 1.98,
       # newer than the pinned toolchain.
       - run: cargo install cargo-machete --version 0.9.2 --locked
@@ -230,7 +230,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo install cargo-semver-checks --version 0.51.0 --locked
       - name: this pull request against its base
         # Blocking, unless the PR is labelled `breaking`: an intended break
@@ -272,7 +272,7 @@ jobs:
       - name: rust toolchain
         # The channel, components and targets come from rust-toolchain.toml.
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo install cargo-deny --version 0.20.2 --locked
       - run: cargo deny --locked check
 
@@ -291,7 +291,7 @@ jobs:
         # The nightly the fuzz workspace pins in fuzz/rust-toolchain.toml.
         working-directory: fuzz
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: fuzz
       - name: clippy on the fuzz targets
