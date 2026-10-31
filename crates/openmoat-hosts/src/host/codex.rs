@@ -20,6 +20,9 @@ mod mcp;
 mod project_settings;
 mod trust;
 
+#[cfg(test)]
+mod tests;
+
 /// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
 /// web search and hosted tools have no hook. Codex has no key that blocks a
 /// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
@@ -137,6 +140,14 @@ impl HostAdapter for Adapter {
     }
 
     fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
+        // Codex accepts `permissionDecision: "allow"` only with `updatedInput`;
+        // a bare allow is "unsupported", reported as a failed hook (rust-v0.163.0
+        // and rust-v0.166.0 hooks/src/engine/output_parser.rs). No output is
+        // Codex's "no objection": its own approval flow then runs, as it would
+        // after an allow, which cannot skip it.
+        if decision.verdict == Verdict::Allow {
+            return String::new();
+        }
         pre_tool_use::render(decision)
     }
 
@@ -166,10 +177,12 @@ impl HostAdapter for Adapter {
         bench::read_reply(exit, false)
     }
 
-    /// Codex cannot ask, so an `ask` has to arrive as a blocking `deny`.
+    /// Codex cannot ask, so an `ask` has to arrive as a blocking `deny`; an
+    /// `allow` is no output, which Codex reads as no objection.
     fn seen(&self, _call: &Call, verdict: Verdict) -> Answer {
         match verdict {
             Verdict::Ask => Answer::Deny,
+            Verdict::Allow => Answer::Passthrough,
             other => other.into(),
         }
     }
