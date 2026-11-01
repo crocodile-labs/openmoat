@@ -54,7 +54,7 @@ Windows), and reads each reply by that host's hook protocol
 
 | Answer | Claude Code | Codex | Cursor | OpenClaw |
 |---|---|---|---|---|
-| `allow` | exit 0, `permissionDecision: allow` (or `decision: approve`) | same | exit 0, `permission: allow` | none: exit 0 with `decision: allow` is read as `passthrough` |
+| `allow` | exit 0, `permissionDecision: allow` (or `decision: approve`) | none: Codex rejects a bare `permissionDecision: allow`, so OpenMoat answers nothing (`passthrough`) | exit 0, `permission: allow` | none: exit 0 with `decision: allow` is read as `passthrough` |
 | `ask` | exit 0, `permissionDecision: ask` | none: Codex runs the call (`passthrough`) | exit 0, `permission: ask` on a shell or MCP call; on `preToolUse` Cursor runs the call (`passthrough`) | exit 0, `decision: ask` (OpenClaw's approval request) |
 | `deny` | exit 2, or `permissionDecision: deny` (or `decision: block`) | same; exit 2 only with a reason on stderr | exit 2, or `permission: deny` | exit 2 with `decision: deny` |
 | `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none | exit 0 with no output, or `decision: allow`: OpenClaw's own checks decide |

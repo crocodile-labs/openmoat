@@ -147,7 +147,8 @@ fn codex_receives_a_taint_ask_as_a_deny() {
         "mcp__github__get_issue",
         &json!({"issue_number": 1}),
     );
-    assert_eq!(decide(&sb, "codex", &mcp).0, "allow");
+    // Codex's allow is no output, which `hook_output` reads as `defer`.
+    assert_eq!(decide(&sb, "codex", &mcp).0, "defer");
     let (verdict, reason) = instructions("k1");
     assert_eq!(verdict, "deny", "{reason}");
     assert!(reason.contains("[session-taint]"), "{reason}");
@@ -155,7 +156,7 @@ fn codex_receives_a_taint_ask_as_a_deny() {
     let key = json!({"path": sb.home.join(".ssh/id_rsa").to_string_lossy()});
     let refused = call("k2", &proj, "mcp__filesystem__read_file", &key);
     assert_eq!(decide(&sb, "codex", &refused).0, "deny");
-    assert_eq!(instructions("k2").0, "allow", "the refused call never ran");
+    assert_eq!(instructions("k2").0, "defer", "the refused call never ran");
 
     // ADR-025: a deferred call may run (Codex's own approval decides), so its
     // result taints the session like an allowed one.

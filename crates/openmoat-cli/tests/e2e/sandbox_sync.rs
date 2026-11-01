@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::common::{DENY, OK, Sandbox, USAGE, fixture, stdout, text, verdict};
+use crate::common::{DENY, OK, Sandbox, USAGE, fixture, stdout, text};
 
 fn claude_settings(sb: &Sandbox) -> PathBuf {
     sb.home.join(".claude/settings.json")
@@ -165,7 +165,9 @@ fn codex_may_edit_its_own_keys_but_not_the_moat_profile() {
         fs::read_to_string(&path).unwrap() + "\n[projects.\"/w\"]\ntrust_level = \"trusted\"\n";
     fs::write(&path, trusted).unwrap();
     let out = sb.guard("codex", &codex_shell("ls"));
-    assert_eq!(verdict(&out), "allow", "{}", text(&out));
+    // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(stdout(&out).is_empty(), "{}", text(&out));
 
     let weakened = fs::read_to_string(&path).unwrap().replace(
         "default_permissions = \"moat\"",
@@ -215,7 +217,7 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
     assert_eq!(permissions.keys().collect::<Vec<_>>(), ["deny"], "{claude}");
     assert!(claude["hooks"]["PreToolUse"].is_array(), "{claude}");
     let read = sb.guard("claude-code", &fixture("claude-code/read.json"));
-    assert_eq!(verdict(&read), "allow", "{}", text(&read));
+    assert_eq!(crate::common::verdict(&read), "allow", "{}", text(&read));
     let codex = fs::read_to_string(codex_config(&sb)).unwrap();
     assert!(codex.contains("default_permissions = \"moat\""), "{codex}");
 
