@@ -13,7 +13,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.12.0"
+version = "0.12.1"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
@@ -24,11 +24,11 @@ keywords = ["ai-agents", "security", "policy", "mcp", "guardrails"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
-openmoat-core = { path = "crates/openmoat-core", version = "0.12.0" }
-openmoat-hosts = { path = "crates/openmoat-hosts", version = "0.12.0" }
-openmoat-audit = { path = "crates/openmoat-audit", version = "0.12.0" }
-openmoat-proxy = { path = "crates/openmoat-proxy", version = "0.12.0" }
-openmoat-sdk = { path = "crates/openmoat-sdk", version = "0.12.0" }
+openmoat-core = { path = "crates/openmoat-core", version = "0.12.1" }
+openmoat-hosts = { path = "crates/openmoat-hosts", version = "0.12.1" }
+openmoat-audit = { path = "crates/openmoat-audit", version = "0.12.1" }
+openmoat-proxy = { path = "crates/openmoat-proxy", version = "0.12.1" }
+openmoat-sdk = { path = "crates/openmoat-sdk", version = "0.12.1" }
 serde = { version = "1", features = ["derive"] }
 serde-saphyr = { version = "2.0", default-features = false, features = ["deserialize", "serialize"] }
 # `float_roundtrip`: a number OpenMoat reads from a host's config file and
