@@ -13,7 +13,7 @@ carries dates. Release stages and their exit criteria come from ADR-013.
 
 ## Where it is today
 
-The latest release is `0.12.0`, from GitHub Releases, the Homebrew tap and crates.io
+The latest release is `0.12.1`, from GitHub Releases, the Homebrew tap and crates.io
 ([INSTALL.md](INSTALL.md)).
 
 **Release stage:** 0.x, usable daily, before 1.0. ADR-013's first two stages are

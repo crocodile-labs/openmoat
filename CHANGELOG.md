@@ -8,6 +8,16 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-31
+
+**Upgrading:** Codex users: OpenMoat did not check Codex's tool calls in 0.12.0 and earlier with current Codex releases (the hook ran `openmoat` without its arguments and every call went through). After upgrading, run `openmoat init` once in your own terminal, then open Codex, run `/hooks` and trust the OpenMoat hook; `openmoat status` says when it is not trusted yet. Nothing else changes.
+
+### Security
+- Codex hooks now invoke `guard --host codex` in one command string instead of ignored `args`, with safe quoting on POSIX and Windows. Existing hooks are repaired by `init`, `policy upgrade` and `sandbox sync`; status and doctor report broken or untrusted hooks, and bare OpenMoat denies hook input ([#705](https://github.com/crocodile-labs/openmoat/pull/705)).
+
+### Fixed
+- Codex: an allowed call is answered with no output instead of `permissionDecision: allow`, which Codex accepts only together with `updatedInput` and otherwise reports as a failed hook ([#706](https://github.com/crocodile-labs/openmoat/pull/706)).
+
 ## [0.12.0] - 2026-10-29
 
 **Upgrading:** run `openmoat init` once in your own terminal, so Claude Code gets the `SessionStart` hook that gives each session its credential for `openmoat proxy`, then `openmoat policy upgrade` to take the new default rules (`encoded-egress`, the proxy key and certificate authority under `kernel-self`, the `destructive-recoverable` ask group, the `openmoat-readonly` allow group and the new `env-poison` names), and restart your agents. The audit log moves to schema 7 the first time the new `openmoat` writes to it; an older `openmoat` then refuses to open it. Library crates: `openmoat-hosts` adds `HookRequest.edits`, `HookRequest.mcp_arguments` and `Replacement`; `openmoat-core` adds `Action::McpTool.opens`; `openmoat-sdk` and `@openmoat/sdk` ship for the first time (ADR-046).
@@ -938,7 +948,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/crocodile-labs/openmoat/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/crocodile-labs/openmoat/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/crocodile-labs/openmoat/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/crocodile-labs/openmoat/compare/v0.10.0...v0.10.1
