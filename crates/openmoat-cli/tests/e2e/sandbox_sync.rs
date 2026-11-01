@@ -217,7 +217,7 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
     assert_eq!(permissions.keys().collect::<Vec<_>>(), ["deny"], "{claude}");
     assert!(claude["hooks"]["PreToolUse"].is_array(), "{claude}");
     let read = sb.guard("claude-code", &fixture("claude-code/read.json"));
-    assert_eq!(verdict(&read), "allow", "{}", text(&read));
+    assert_eq!(crate::common::verdict(&read), "allow", "{}", text(&read));
     let codex = fs::read_to_string(codex_config(&sb)).unwrap();
     assert!(codex.contains("default_permissions = \"moat\""), "{codex}");
 
