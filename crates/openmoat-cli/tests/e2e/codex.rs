@@ -97,7 +97,8 @@ fn codex_windows_command_forwards_stdin_and_preserves_guard_exit_codes() {
     };
     for (session, action, code, verdict) in [
         ("windows-deny", "cat ~/.ssh/id_rsa", DENY, "deny"),
-        ("windows-allow", "ls -la", OK, "allow"),
+        // Codex's allow is no output, which `hook_output` reads as `defer`.
+        ("windows-allow", "ls -la", OK, "defer"),
     ] {
         let out = run(command, &shell(session, action));
         assert_eq!(
