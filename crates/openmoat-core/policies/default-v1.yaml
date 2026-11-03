@@ -169,6 +169,10 @@ deny:
       # (`agent/file_safety.py`; its `.env` is `secrets-paths`'), in its home and
       # in each profile; its terminal tool reaches them, which this rule closes
       - "~/.hermes/{auth.json,auth.lock,.anthropic_oauth.json,webhook_subscriptions.json,auth/google_oauth.json,cache/bws_cache.json,mcp-tokens,mcp-tokens/**,vault,vault/**,webapp,webapp/**,browser-profile,browser-profile/**,profiles/*/auth.json,profiles/*/.anthropic_oauth.json,profiles/*/webhook_subscriptions.json,profiles/*/auth/google_oauth.json,profiles/*/cache/bws_cache.json,profiles/*/mcp-tokens,profiles/*/mcp-tokens/**,profiles/*/vault,profiles/*/vault/**,profiles/*/webapp,profiles/*/webapp/**,profiles/*/browser-profile,profiles/*/browser-profile/**}"
+      # Cline: the provider keys the CLI stores and its connectors' credentials
+      # (`resolveProviderSettingsPath`, `resolveConnectorsDbPath` in
+      # `sdk/packages/shared/src/storage/paths.ts`)
+      - "~/.cline/data/{settings/providers.json,db/connectors.db}"
     fs.write: *agent-credentials
     # the agents' commands that print a stored key or token: pi's, and OpenCode
     # 2's export of every stored credential
@@ -399,6 +403,16 @@ deny:
       - "~/.hermes/agent-hooks"
       - "~/.hermes/agent-hooks/**"
       - "~/.hermes/profiles"
+      # Cline: its configuration directory, the hooks directories it runs every
+      # file of (OpenMoat's `PreToolUse` among them) and its plugins, which run in
+      # its own process (`CLINE_DIR` moves `~/.cline`)
+      - "~/.cline"
+      - "~/.cline/hooks"
+      - "~/.cline/hooks/**"
+      - "~/.cline/plugins"
+      - "~/.cline/plugins/**"
+      - "~/Documents/Cline/Hooks"
+      - "~/Documents/Cline/Hooks/**"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it

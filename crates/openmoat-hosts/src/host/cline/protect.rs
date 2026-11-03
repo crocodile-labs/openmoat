@@ -1,0 +1,48 @@
+//! Cline's files the default policy and the taint list protect, and its
+//! processes.
+
+use crate::contract::{Paths, ProcessSpec, Protect};
+
+pub(super) const PROTECT: Protect = Protect {
+    self_paths: &[Paths::new(
+        "Cline: its configuration directory, the hooks directories it runs every\n\
+         file of (OpenMoat's `PreToolUse` among them) and its plugins, which run in\n\
+         its own process (`CLINE_DIR` moves `~/.cline`)",
+        &[
+            "~/.cline",
+            "~/.cline/hooks",
+            "~/.cline/hooks/**",
+            "~/.cline/plugins",
+            "~/.cline/plugins/**",
+            "~/Documents/Cline/Hooks",
+            "~/Documents/Cline/Hooks/**",
+        ],
+    )],
+    taint: &[Paths::new(
+        "Cline: its directory (settings, MCP servers, hooks, plugins), the\n\
+         rules, workflows and hooks in `Documents/Cline`, and a project's `.cline`\n\
+         and `.clinerules` (hooks, plugins, rules)",
+        &[
+            "**/.cline/**",
+            "**/Documents/Cline/**",
+            "**/.clinerules",
+            "**/.clinerules/**",
+        ],
+    )],
+    credentials: &[Paths::new(
+        "Cline: the provider keys the CLI stores and its connectors' credentials\n\
+         (`resolveProviderSettingsPath`, `resolveConnectorsDbPath` in\n\
+         `sdk/packages/shared/src/storage/paths.ts`)",
+        &[
+            "~/.cline/data/settings/providers.json",
+            "~/.cline/data/db/connectors.db",
+        ],
+    )],
+};
+
+/// The CLI is the `cline` bin of `@cline/cli`, run by Node.
+pub(super) const PROCESS: ProcessSpec = ProcessSpec {
+    names: &["cline"],
+    package_dirs: &[&["@cline", "cli"]],
+    helper: None,
+};

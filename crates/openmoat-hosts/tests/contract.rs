@@ -122,11 +122,11 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 /// blocks the call wherever the host has a key for it: Claude Code's
 /// `onFailure` on its tool hook, Cursor's `failClosed` and Hermes Agent's
 /// `fail_closed` (set on every entry of their layouts), OpenClaw's plugin, pi's
-/// extension, OpenCode's plugin. Codex and Gemini CLI have no
+/// extension, OpenCode's plugin, Cline's script. Codex and Gemini CLI have no
 /// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, &str, &[&str]); 9] = [
+    let expected: [(Host, &str, &[&str]); 10] = [
         (Host::ClaudeCode, "Entries(Nested)", &["PreToolUse"]),
         (Host::Codex, "Entries(Codex)", &[]),
         (Host::Cursor, "Entries(Cursor)", &[]),
@@ -136,6 +136,7 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
         (Host::GeminiCli, "Entries(Gemini)", &[]),
         (Host::OpenCode, "Owned(OwnedFile(OpenCode plugin))", &[]),
         (Host::Hermes, "Yaml(Hermes)", &[]),
+        (Host::Cline, "Script(OwnedFile(Cline hook script))", &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, layout, blocking) in expected {
@@ -175,7 +176,7 @@ fn every_plugin_reports_that_it_loaded() {
         let install = host.spec().install.as_ref().unwrap();
         let plugin = match install.hook_file {
             HookLayout::Owned(file) | HookLayout::Plugin(file) => Some(file),
-            HookLayout::Entries(_) | HookLayout::Yaml(_) => None,
+            HookLayout::Entries(_) | HookLayout::Yaml(_) | HookLayout::Script(_) => None,
         };
         assert_eq!(install.heartbeat.is_some(), plugin.is_some(), "{host:?}");
         let (Some(file), Some(heartbeat)) = (plugin, &install.heartbeat) else {
@@ -275,6 +276,6 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // fetch), OpenClaw 6, GitHub Copilot CLI 5 (its payload names no MCP
     // server), pi 5 (no fetch), Gemini CLI 6 (5 on Windows, whose PowerShell
     // commands OpenMoat leaves to Gemini CLI), OpenCode 6 (5 on Windows, whose
-    // shell OpenMoat leaves to OpenCode), Hermes Agent 6
-    assert_eq!(checked, 49 - 2 * usize::from(cfg!(windows)));
+    // shell OpenMoat leaves to OpenCode), Hermes Agent 6, Cline 6
+    assert_eq!(checked, 55 - 2 * usize::from(cfg!(windows)));
 }

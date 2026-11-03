@@ -1,0 +1,35 @@
+{
+  "clineVersion": "3.0.74",
+  "timestamp": "2026-11-03T10:15:00.000Z",
+  "taskId": "sess_01JBX0CLINE0000000000000",
+  "sessionContext": {
+    "rootSessionId": "sess_01JBX0CLINE0000000000000"
+  },
+  "workspaceRoots": [
+    "/p"
+  ],
+  "userId": "me",
+  "agent_id": "agent_01",
+  "parent_agent_id": null,
+  "hookName": "tool_call",
+  "iteration": 1,
+  "tool_call": {
+    "id": "toolu_0001",
+    "name": "read_files",
+    "input": {
+      "files": [
+        {
+          "path": "/Users/me/.aws/credentials",
+          "start_line": null,
+          "end_line": null
+        }
+      ]
+    }
+  },
+  "preToolUse": {
+    "toolName": "read_files",
+    "parameters": {
+      "files": "[{\"path\":\"/Users/me/.aws/credentials\",\"start_line\":null,\"end_line\":null}]"
+    }
+  }
+}

@@ -31,7 +31,7 @@ use crate::contract::{
     Asks, ExtraFile, GUARD_BUDGET_S, Heartbeat, HookLayout, HookSpec, HostAdapter, HostSpec,
     InstallSpec, Location, McpFile, McpSpec, wrong_event,
 };
-use crate::wire::owned_file::OwnedFile;
+use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 /// OpenMoat's plugin, which `moat init` writes to
@@ -40,6 +40,7 @@ static PLUGIN: OwnedFile = OwnedFile {
     name: "OpenClaw plugin",
     source: include_str!("openclaw/integration/openmoat.mjs"),
     first_line: "// OpenMoat for OpenClaw.",
+    syntax: Syntax::JavaScript,
 };
 
 /// Seconds OpenClaw waits for OpenMoat's `before_tool_call` handler

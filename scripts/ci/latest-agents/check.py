@@ -70,11 +70,19 @@ def expand(text):
 
 def pointer(doc, path, value=None, set_value=False):
     """Read (or set) a JSON pointer; a string that holds a JSON object is entered
-    as that object (Copilot CLI's `toolArgs`) and written back as a string."""
+    as that object (Copilot CLI's `toolArgs`) and written back as a string, and a
+    list is entered by index (Cline's `commands/0`)."""
     parts = [p.replace("~1", "/").replace("~0", "~") for p in path.split("/")[1:]]
     if not parts:
         return doc
     head, rest = parts[0], "/" + "/".join(parts[1:]) if len(parts) > 1 else ""
+    if isinstance(doc, list) and head.isdigit() and int(head) < len(doc):
+        if not rest:
+            if set_value:
+                doc[int(head)] = value
+                return value
+            return doc[int(head)]
+        return pointer(doc[int(head)], rest, value, set_value)
     if not isinstance(doc, dict) or head not in doc:
         if set_value and isinstance(doc, dict) and not rest:
             doc[head] = value
@@ -218,6 +226,11 @@ def verdict_of(agent, reply):
         if "block" in (reply.get("decision"), reply.get("action")):
             return "deny"
         return "ask" if reply.get("action") == "approve" else "allow"
+    if at == "cline":
+        # Cline: `cancel: true` stops the call; `{}` is no decision, its allow.
+        if not isinstance(reply, dict):
+            return ""
+        return "deny" if reply.get("cancel") is True else "allow"
     try:
         return pointer(reply, at)
     except KeyError:

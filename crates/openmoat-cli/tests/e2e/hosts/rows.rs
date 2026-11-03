@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use crate::common::Sandbox;
 
 mod claude_code;
+mod cline;
 mod codex;
 mod continue_cli;
 mod copilot_cli;
@@ -161,6 +162,7 @@ pub fn rows() -> Vec<Row> {
         gemini_cli::row(),
         opencode::row(),
         hermes::row(),
+        cline::row(),
     ]
 }
 

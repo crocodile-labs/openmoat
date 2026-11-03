@@ -27,7 +27,7 @@ use crate::contract::{
     Activity, Asks, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HostAdapter,
     HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, ProjectSettingsSpec, wrong_event,
 };
-use crate::wire::owned_file::OwnedFile;
+use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod advisories;
@@ -57,6 +57,7 @@ static EXTENSION: OwnedFile = OwnedFile {
     name: "pi extension",
     source: include_str!("pi/integration/openmoat.js"),
     first_line: "// OpenMoat for pi.",
+    syntax: Syntax::JavaScript,
 };
 
 /// pi asks through the extension's dialog where it has a screen (`ctx.hasUI`:

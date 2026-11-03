@@ -194,7 +194,8 @@ mod tests {
                 "pi",
                 "gemini-cli",
                 "opencode",
-                "hermes"
+                "hermes",
+                "cline"
             ]
         );
         let installs: Vec<Host> = Host::EVERY

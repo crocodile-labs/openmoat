@@ -23,12 +23,13 @@ use serde_json::{Value, json};
 
 mod attacks;
 mod payloads;
+mod routes;
 mod unknown;
 
 use payloads::{
-    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, opencode2,
-    opencode2_path, pi, under_cwd,
+    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, pi, under_cwd,
 };
+use routes::{cline_route, opencode2_route};
 
 /// The part of a conformance fixture this suite reads. A fixture with its own
 /// context, session, repository policy, links or resolver is not a plain
@@ -98,9 +99,11 @@ enum Route {
     OpenCode2,
     /// Hermes Agent `pre_tool_call`.
     Hermes,
+    /// The Cline CLI `PreToolUse` file hook, through OpenMoat's script.
+    Cline,
 }
 
-const ROUTES: [Route; 13] = [
+const ROUTES: [Route; 14] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -114,6 +117,7 @@ const ROUTES: [Route; 13] = [
     Route::OpenCode,
     Route::OpenCode2,
     Route::Hermes,
+    Route::Cline,
 ];
 
 impl Route {
@@ -128,6 +132,7 @@ impl Route {
             Self::GeminiCli => Host::GeminiCli,
             Self::OpenCode | Self::OpenCode2 => Host::OpenCode,
             Self::Hermes => Host::Hermes,
+            Self::Cline => Host::Cline,
         }
     }
 }
@@ -144,8 +149,11 @@ fn received(route: Route, expected: Verdict) -> Verdict {
         // Claude Code in `bypassPermissions` or `dontAsk`, which puts no question
         // to a person; there a `defer` stays Claude Code's own
         // (`HookEvent::PreToolUseNoAsk`).
-        // OpenCode 1 gives plugins no way to ask either.
-        (Route::Codex | Route::ClaudeCodeNoPrompt | Route::OpenCode, Verdict::Ask) => Verdict::Deny,
+        // OpenCode 1 gives plugins no way to ask either, nor does Cline its hooks.
+        (
+            Route::Codex | Route::ClaudeCodeNoPrompt | Route::OpenCode | Route::Cline,
+            Verdict::Ask,
+        ) => Verdict::Deny,
         // Cursor does not enforce `ask` on `preToolUse` or `beforeReadFile`: it is
         // sent as a deny. Those file tools have no flow of their own for a
         // `defer` either, so OpenMoat asks itself, which is again a deny there
@@ -154,37 +162,6 @@ fn received(route: Route, expected: Verdict) -> Verdict {
             Verdict::Deny
         }
         (_, verdict) => verdict,
-    }
-}
-
-/// [`payload`] for OpenCode 2, which expands a leading `~`, so a path is sent
-/// as written.
-fn opencode2_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
-    match intent {
-        Intent::Shell(_) if cfg!(windows) => Err("OpenCode's shell on Windows is not read"),
-        Intent::Shell(c) => Ok((
-            opencode2("shell", &json!({ "command": c })),
-            Action::Shell { command: c.clone() },
-        )),
-        Intent::Read(p) => Ok((
-            opencode2("read", &json!({ "path": opencode2_path(p) })),
-            Action::FsRead {
-                path: opencode2_path(p),
-            },
-        )),
-        Intent::Write(p) => Ok((
-            opencode2(
-                "edit",
-                &json!({ "path": opencode2_path(p), "oldString": "old", "newString": "new" }),
-            ),
-            Action::FsWrite {
-                path: opencode2_path(p),
-            },
-        )),
-        Intent::Fetch(u) => Ok((
-            opencode2("webfetch", &json!({ "url": u, "format": "markdown" })),
-            Action::Fetch { url: u.clone() },
-        )),
     }
 }
 
@@ -389,6 +366,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             hermes("web_extract", &json!({ "urls": [u] })),
             Action::Fetch { url: u.clone() },
         )),
+        (Route::Cline, _) => cline_route(intent),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -539,6 +517,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::OpenCode, &read, HookEvent::PreToolUseNoAsk),
         (Route::OpenCode2, &read, HookEvent::PreToolUse),
         (Route::Hermes, &shell, HookEvent::PreToolUse),
+        (Route::Cline, &read, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

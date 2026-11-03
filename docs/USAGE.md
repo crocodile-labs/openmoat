@@ -143,7 +143,7 @@ exit code as the text:
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
-| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
+| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent and the Cline CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
 | `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or its entry lacks the agent's fail-closed key (`fail_closed: true` for Hermes Agent, `failClosed: true` for Cursor: the agent would run a call whose hook failed; run `openmoat init`), or the agent ran without loading OpenMoat's plugin (below), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
 Agents that are not set up or not found keep their `·` line. `openmoat status --format
@@ -603,6 +603,13 @@ these takes one command in your own terminal (agents are denied all of them):
   Hermes gives each hook at most `plugins.hook_callback_timeout` (30 s by default) and
   then blocks the call, as the guard does after its own 30 s; `openmoat init` leaves
   that setting as it is.
+- **Cline CLI**: `openmoat init --hosts cline` writes OpenMoat's hook script to
+  `~/.cline/hooks/PreToolUse` (`$CLINE_DIR/hooks/` when that is set); Cline runs it before
+  every tool call from its next session. Cline's hooks cannot ask, so an `ask` is a deny
+  that ends Cline's run: approve it with `openmoat allow --last` and continue the
+  session. `--yolo` runs no hooks. The Cline VS Code extension does not read this file
+  and is not protected. Any change to the script denies every call until you run
+  `openmoat doctor --accept`.
 - **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
   file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). An
   `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
