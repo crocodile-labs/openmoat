@@ -470,7 +470,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 
 ## Status
 
-**Usable daily.** The latest release is `0.12.1`. The policy format and the commands can
+**Usable daily.** The latest release is `0.13.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What exists and what
 comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -478,7 +478,8 @@ To upgrade, update the binary the way you installed it, then run `openmoat docto
 `openmoat policy upgrade` in your own terminal ([docs/INSTALL.md](docs/INSTALL.md#upgrading)).
 From 0.9.0 to 0.11.0 a default install needed nothing more; 0.12.0 needs `openmoat init`
 once (Claude Code's `SessionStart` hook) and `openmoat policy upgrade` (new default rules);
-0.12.1 needs `openmoat init` once more for Codex, then trusting the OpenMoat hook in Codex's `/hooks`.
+0.12.1 needs `openmoat init` once more for Codex, then trusting the OpenMoat hook in Codex's `/hooks`;
+0.13.0 starts a wrapped MCP server only once `openmoat mcp accept` has accepted its definition.
 Each release's upgrading note is in the [CHANGELOG](CHANGELOG.md).
 
 ## Contributing

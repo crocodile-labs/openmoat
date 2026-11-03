@@ -8,6 +8,22 @@ view at the end of the file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-03
+
+**Upgrading:** wrapped MCP servers (`openmoat mcp wrap`, `openmoat init --mcp-proxy`) now start only from a definition a person accepted: a wrapped server whose definition is new or changed does not start until you run `openmoat mcp accept <server>` in your own terminal, and a wrapped server does not start inside `openmoat run`. Re-wrapping with `openmoat mcp wrap` turns the sandbox on for servers on macOS 13 or later and Linux; `--no-sandbox` keeps one unsandboxed. Building from source needs Rust 1.99. Library crates: `openmoat-hosts` adds `McpSpec::auto_start` (`McpAutoStart`).
+
+### Security
+- `openmoat mcp proxy` now checks its own command line against the MCP server definitions a person accepted (the pin `openmoat mcp accept` writes) before it starts anything: a new or changed wrapped server never runs its command; the agent gets an error naming `openmoat mcp accept <server>`, and the refusal is recorded (rule `mcp-server-changed`, host `mcp-proxy`). A drifted lock or an unreadable policy starts no wrapped server ([#712](https://github.com/crocodile-labs/openmoat/pull/712)).
+- `openmoat status` and `openmoat doctor` warn about MCP servers that start outside OpenMoat: stdio servers that are not wrapped, wrapped ones without the sandbox, and project servers Claude Code starts without asking (`enableAllProjectMcpServers`, `enabledMcpjsonServers`) ([#712](https://github.com/crocodile-labs/openmoat/pull/712)).
+
+### Changed
+- `openmoat mcp wrap` and `openmoat init --mcp-proxy` start servers under `openmoat run`'s sandbox by default wherever it can sandbox (macOS 13 or later, Linux); `--no-sandbox` (`--mcp-no-sandbox` for `init`) opts out, and wrapping an already wrapped server keeps its choice unless a flag is given ([#712](https://github.com/crocodile-labs/openmoat/pull/712)).
+- `openmoat mcp proxy` started by hand, or by a client whose configuration OpenMoat does not read, no longer starts the server ([#712](https://github.com/crocodile-labs/openmoat/pull/712)).
+- Building OpenMoat from source (`cargo install openmoat`, or a clone) now needs Rust 1.99 or later (was 1.95); the release binaries and Homebrew are unaffected ([#713](https://github.com/crocodile-labs/openmoat/pull/713)).
+
+### Fixed
+- A guard that gives up after its 30 s budget now waits up to 2 s (was 200 ms) for its line in `~/.moat/guard-hangs.log` before it exits, so `openmoat doctor` no longer misses hangs when several guards give up at once on a slow disk; the deny still reaches every agent well before its hook timeout ([#708](https://github.com/crocodile-labs/openmoat/pull/708)).
+
 ## [0.12.1] - 2026-10-31
 
 **Upgrading:** Codex users: OpenMoat did not check Codex's tool calls in 0.12.0 and earlier with current Codex releases (the hook ran `openmoat` without its arguments and every call went through). After upgrading, run `openmoat init` once in your own terminal, then open Codex, run `/hooks` and trust the OpenMoat hook; `openmoat status` says when it is not trusted yet. Nothing else changes.
@@ -948,7 +964,8 @@ First beta and first release that is not a GitHub pre-release.
 - Windows: canonical slash-separated paths keep `C:/` and UNC roots.
 - Documentation restructured for the decide-only alpha (#94). New `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/THREAT_MODEL.md` and an ADR index (`docs/adr/README.md`). `docs/OVERVIEW.md`, `DESIGN.md`, `STRENGTH.md`, `PROGRESS.md`, `TECH_STACK.md` and `REPO_STRUCTURE.md` are retired; what was still true moved into the new documents. README: `git clone` install step, `CLAUDE_CONFIG_DIR`, examples checked against the default policy. SECURITY.md: supported versions (latest alpha only). `moat --help` says what the operating system does and does not enforce.
 
-[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/crocodile-labs/openmoat/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/crocodile-labs/openmoat/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/crocodile-labs/openmoat/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/crocodile-labs/openmoat/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/crocodile-labs/openmoat/compare/v0.10.1...v0.11.0
