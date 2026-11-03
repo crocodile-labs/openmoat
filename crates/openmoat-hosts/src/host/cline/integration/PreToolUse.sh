@@ -24,5 +24,5 @@ case $status in
     fi
     ;;
 esac
-printf '{"cancel": true, "errorMessage": "moat: deny [hook-failure] openmoat guard exited %s without an answer, so the call is blocked; run `openmoat doctor`"}\n' "$status"
+printf '{"cancel": true, "errorMessage": "moat: deny [hook-failure] openmoat guard exited %s without an answer, so the call is blocked; run openmoat doctor in a terminal"}\n' "$status"
 exit 0
