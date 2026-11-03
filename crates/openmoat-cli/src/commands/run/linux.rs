@@ -191,6 +191,12 @@ pub fn confine(
     }
 }
 
+/// None: `moat run` sandboxes on Linux, and refuses at start where the kernel
+/// lacks what it needs, so nothing runs unconfined.
+pub fn unavailable() -> Option<String> {
+    None
+}
+
 /// Why `moat run` here would restrict the network by port only, for `moat doctor`.
 pub fn port_only_network() -> Option<String> {
     netns::doctor_warning()

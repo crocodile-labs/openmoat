@@ -30,7 +30,9 @@ pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
 pub use hook_file::HookLayout;
 pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
-pub use mcp::{McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax};
+pub use mcp::{
+    AutoStart, McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax,
+};
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use protect::{Helper, Paths, ProcessSpec, Protect};
 pub use relaxed::{KeyShape, RelaxedKey};

@@ -63,6 +63,17 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
             ),
         );
     }
+    // Warnings: the person decides whether to wrap them (ADR-049).
+    match mcp::outside::report(home, binary, cwd.as_deref()) {
+        Ok(found) => {
+            for outside in &found {
+                report.warn(&format!("mcp servers      {}", outside.describe()));
+            }
+        }
+        Err(e) => report.warn(&format!(
+            "mcp servers      cannot list the servers that start outside OpenMoat: {e:#}"
+        )),
+    }
     match tools::all(home) {
         Ok(all) => {
             for (_, pins) in all.iter().filter(|(_, p)| !p.held.is_empty()) {

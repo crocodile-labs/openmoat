@@ -129,6 +129,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::OpenClawJson,
         project_files: &[],
         tool_names: &mcp::OpenClawNames,
+        auto_start: None,
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,

@@ -35,7 +35,7 @@ fn wrapping_re_pins_what_it_wrote_and_nothing_else_drifts() {
         binary,
         &[Host::ClaudeCode],
         &names,
-        false,
+        Some(false),
         false,
         &mut out,
     )

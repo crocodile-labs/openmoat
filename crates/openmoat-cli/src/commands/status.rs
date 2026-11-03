@@ -37,6 +37,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
             "policy_update": update,
             "lock_drift": drift,
             "mcp_changes": mcp_changes(&home, &binary).unwrap_or_default(),
+            "mcp_outside": mcp_outside(&home, &binary),
             "project_settings": crate::project_settings::warnings_here(&home)
                 .into_iter()
                 .map(|warning| warning.text)
@@ -56,6 +57,11 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     }
     healthy &= lock(&mut out, &home, &binary)?;
     healthy &= mcp_line(&mut out, &home, &binary)?;
+    // Warnings that leave `healthy` alone: servers that start outside what
+    // OpenMoat checks are the person's choice to wrap (ADR-049).
+    for line in mcp_outside(&home, &binary) {
+        writeln!(out, "mcp servers      ! {line}")?;
+    }
     healthy &= approvals(&mut out, &home)?;
     let recorded = Recorded::load(&home).unwrap_or_default();
     healthy &= hooks(&mut out, &home, &binary, &recorded)?;
@@ -129,6 +135,21 @@ fn mcp_changes(home: &Home, binary: &Path) -> Result<Vec<String>> {
         }
     }
     Ok(lines)
+}
+
+/// One line per MCP server that starts outside what OpenMoat checks
+/// (`mcp/outside.rs`), or why they cannot be listed.
+fn mcp_outside(home: &Home, binary: &Path) -> Vec<String> {
+    let cwd = std::env::current_dir().ok();
+    match crate::mcp::outside::report(home, binary, cwd.as_deref()) {
+        Ok(found) => found
+            .iter()
+            .map(crate::mcp::outside::Outside::describe)
+            .collect(),
+        Err(e) => vec![format!(
+            "cannot list the servers that start outside OpenMoat: {e:#}"
+        )],
+    }
 }
 
 /// The MCP line; `false` when something waits for `moat mcp accept`.

@@ -164,10 +164,31 @@ pub struct InitArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    #[command(flatten)]
+    pub mcp: InitMcpArgs,
+}
+
+/// `init`'s MCP proxy flags.
+#[derive(Debug, Args)]
+pub struct InitMcpArgs {
     /// Also run every stdio MCP server in the agents' user configuration through
-    /// `openmoat mcp proxy` (`openmoat mcp wrap`), which pins its tool descriptions.
+    /// `openmoat mcp proxy` (`openmoat mcp wrap`), which starts only an accepted
+    /// definition, pins its tool descriptions and, wherever `openmoat run` can sandbox,
+    /// starts it in that sandbox.
     #[arg(long)]
     pub mcp_proxy: bool,
+
+    /// With --mcp-proxy: start the servers without `openmoat run`'s sandbox
+    /// (`openmoat mcp wrap --no-sandbox`).
+    #[arg(long, requires = "mcp_proxy")]
+    pub mcp_no_sandbox: bool,
+}
+
+impl InitMcpArgs {
+    /// The sandbox choice for `--mcp-proxy`: `None` is the default.
+    pub fn sandbox(&self) -> Option<bool> {
+        self.mcp_no_sandbox.then_some(false)
+    }
 }
 
 #[derive(Debug, Args)]

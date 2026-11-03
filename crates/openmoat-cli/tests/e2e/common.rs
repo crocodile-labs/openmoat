@@ -150,6 +150,32 @@ impl Sandbox {
         self.moat_stdin(&["guard", "--host", host], payload)
     }
 
+    #[cfg(unix)]
+    /// Write MCP server `name` into Claude Code's `~/.claude.json` as `moat mcp
+    /// wrap` writes it: this binary with `proxy` (everything after `mcp proxy`).
+    /// Nothing is accepted: `openmoat mcp proxy` starts it only after
+    /// [`Sandbox::accept_mcp`] (ADR-049).
+    pub fn define_wrapped(&self, name: &str, proxy: &[&str]) {
+        let path = self.home.join(".claude.json");
+        let mut root: Value = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        let mut args = vec!["mcp", "proxy"];
+        args.extend(proxy);
+        root["mcpServers"][name] =
+            serde_json::json!({"command": env!("CARGO_BIN_EXE_openmoat"), "args": args});
+        std::fs::write(&path, root.to_string()).unwrap();
+    }
+
+    #[cfg(unix)]
+    /// Accept every pending MCP definition and held tool, as a person would.
+    pub fn accept_mcp(&self) {
+        let out = self.moat_approving(&["mcp", "accept"]);
+        assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+        assert!(text(&out).contains("accepted"), "{}", text(&out));
+    }
+
     /// Simulate the person's /hooks approval using Codex 0.166's normalised
     /// identity (discovery.rs), only in this throwaway home.
     pub fn trust_codex_hook(&self) {

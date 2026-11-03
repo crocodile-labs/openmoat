@@ -130,6 +130,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::McpServersYaml,
         project_files: &[],
         tool_names: &mcp::HermesNames,
+        auto_start: None,
     }),
     protect: protect::PROTECT,
     process: protect::PROCESS,

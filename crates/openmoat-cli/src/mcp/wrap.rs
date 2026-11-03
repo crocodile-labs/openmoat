@@ -104,6 +104,69 @@ pub fn wrapped(entry: &Value, binary: &Path, name: &str, sandbox: bool) -> Optio
     Some(out)
 }
 
+/// The arguments `entry` gives `moat mcp proxy` (`mcp`, `proxy`, its flags,
+/// `--` and the server's command); `None` when it is not wrapped.
+pub fn proxy_args(entry: &Value) -> Option<Vec<String>> {
+    let (command, args) = stdio(entry)?;
+    original(&command, &args)?;
+    Some(args)
+}
+
+/// Whether wrapped `entry` starts its server in `moat run`'s sandbox; `None`
+/// when it is not wrapped.
+pub fn sandboxed(entry: &Value) -> Option<bool> {
+    let args = proxy_args(entry)?;
+    let split = args.iter().position(|a| a == "--")?;
+    Some(args[..split].iter().any(|a| a == "--sandbox"))
+}
+
+/// Wrapped `entry` with its sandbox switched to `on`; `None` when it is not
+/// wrapped or already so. Turning it off drops `--write`, which only the
+/// sandbox reads.
+pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
+    if sandboxed(entry)? == on {
+        return None;
+    }
+    let args = proxy_args(entry)?;
+    let split = args.iter().position(|a| a == "--")?;
+    let (flags, rest) = args.split_at(split);
+    let mut kept: Vec<String> = Vec::new();
+    let mut flags = flags.iter();
+    while let Some(flag) = flags.next() {
+        match flag.as_str() {
+            "--sandbox" => {}
+            "--write" if !on => {
+                flags.next();
+            }
+            f if !on && f.starts_with("--write=") => {}
+            _ => kept.push(flag.clone()),
+        }
+    }
+    if on {
+        kept.push("--sandbox".to_owned());
+    }
+    kept.extend(rest.iter().cloned());
+    let mut out = entry.clone();
+    out["args"] = Value::from(kept);
+    Some(out)
+}
+
+/// Whether `entry` starts a local process: a `command` (a string, or a list
+/// as OpenCode writes it) and no remote `type`. Such a server runs its
+/// command when the host starts, before any tool call reaches a hook.
+pub fn starts_process(entry: &Value) -> bool {
+    let local = entry
+        .get("type")
+        .and_then(Value::as_str)
+        .is_none_or(|t| matches!(t, "stdio" | "local"));
+    let command = match entry.get("command") {
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(items)) => !items.is_empty(),
+        _ => false,
+    };
+    local && command
+}
+
 /// `entry` as it was before [`wrapped`]; `None` when it is not wrapped.
 pub fn unwrapped(entry: &Value) -> Option<Value> {
     let (command, args) = stdio(entry)?;
@@ -304,6 +367,66 @@ mod tests {
         assert!(
             unwrapped(&json!({"command": "npx", "args": ["mcp", "proxy", "--", "x"]})).is_none()
         );
+    }
+
+    #[test]
+    fn the_sandbox_choice_is_read_and_switched_in_place() {
+        let bin = Path::new("/b/openmoat");
+        let plain = json!({"command": "npx", "args": ["pkg", "--sandbox"], "env": {"A": "1"}});
+        assert_eq!(sandboxed(&plain), None, "not wrapped");
+        let off = wrapped(&plain, bin, "gh", false).unwrap();
+        assert_eq!(
+            sandboxed(&off),
+            Some(false),
+            "a `--sandbox` after `--` is the server's"
+        );
+        assert!(with_sandbox(&off, false).is_none(), "already off");
+        let on = with_sandbox(&off, true).unwrap();
+        assert_eq!(
+            on["args"],
+            json!([
+                "mcp",
+                "proxy",
+                "--server",
+                "gh",
+                "--sandbox",
+                "--",
+                "npx",
+                "pkg",
+                "--sandbox"
+            ])
+        );
+        assert_eq!(on["env"], json!({"A": "1"}));
+        assert_eq!(on, wrapped(&plain, bin, "gh", true).unwrap());
+        let mut writes = on.clone();
+        writes["args"] = json!([
+            "mcp",
+            "proxy",
+            "--server",
+            "gh",
+            "--sandbox",
+            "--write",
+            "/w",
+            "--write=/v",
+            "--",
+            "npx"
+        ]);
+        assert_eq!(
+            with_sandbox(&writes, false).unwrap()["args"],
+            json!(["mcp", "proxy", "--server", "gh", "--", "npx"])
+        );
+        assert_eq!(unwrapped(&on).unwrap(), unwrapped(&off).unwrap());
+    }
+
+    #[test]
+    fn a_local_command_starts_a_process_and_a_url_does_not() {
+        assert!(starts_process(&json!({"command": "npx"})));
+        assert!(starts_process(
+            &json!({"type": "local", "command": ["npx", "x"]})
+        ));
+        assert!(!starts_process(&json!({"url": "https://x"})));
+        assert!(!starts_process(&json!({"type": "http", "command": "x"})));
+        assert!(!starts_process(&json!({"command": ""})));
     }
 
     #[test]

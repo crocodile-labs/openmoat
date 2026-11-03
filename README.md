@@ -174,7 +174,9 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   starting a server's sign-in through an agent's own command (`claude mcp add`,
   `codex mcp login`, …) asks first.
 - **MCP gateway.** `openmoat mcp wrap` (or `openmoat init --mcp-proxy`) runs your stdio
-  MCP servers through `openmoat mcp proxy`. It pins each tool's description and schemas,
+  MCP servers through `openmoat mcp proxy`. It starts a server only when its definition is
+  the one you accepted, in `openmoat run`'s sandbox where it can sandbox, pins each tool's
+  description and schemas,
   hides a changed tool until you accept it, and passes a call to the server only when
   the policy does not deny it as the server receives it and the agent's hook decided
   exactly that call (`mcp-unattributed` otherwise), so a server cannot answer a call
@@ -400,10 +402,12 @@ The main gaps:
   a file or link that changes between the check and the command running, and hard
   links that already exist, are not seen. Inside `openmoat run` the OS sandbox still
   holds ([THREAT_MODEL](docs/THREAT_MODEL.md), ADR-009).
-- **MCP servers start before any call is checked.** An agent starts its MCP servers when
-  a session begins, outside every sandbox; a changed or new server's tool calls are
-  denied, but its command has already run once. `openmoat mcp proxy --sandbox` or
-  `openmoat run` confines it.
+- **Unwrapped MCP servers start before any call is checked.** An agent starts its MCP
+  servers when a session begins; for a server not wrapped with `openmoat mcp wrap`, a
+  changed or new server's tool calls are denied, but its command has already run once,
+  with your permissions. A wrapped server starts only from a definition you accepted, in
+  `openmoat run`'s sandbox where it can sandbox. `openmoat status` lists the servers that
+  start outside OpenMoat.
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
   2.1.295, run a call unchecked if `openmoat` is missing. Codex also skips untrusted
   hooks: after `openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook;

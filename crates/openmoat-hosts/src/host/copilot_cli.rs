@@ -85,6 +85,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             (".github/mcp.json", &mcp::JsonOrBare),
         ],
         tool_names: &mcp::Dashed,
+        auto_start: None,
     }),
     // A repository's settings are merged over the user's, and
     // `disableAllHooks: true` there skips the user hook files too. Its

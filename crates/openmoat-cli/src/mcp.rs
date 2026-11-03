@@ -22,9 +22,11 @@ use crate::home::Home;
 use crate::install::HostConfig;
 use crate::integrity::Lock;
 
+pub mod outside;
 pub mod pins;
 pub mod relay;
 pub mod servers;
+pub mod startup;
 pub mod tools;
 pub mod wrap;
 

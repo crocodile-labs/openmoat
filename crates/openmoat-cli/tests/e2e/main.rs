@@ -43,6 +43,7 @@ mod lock;
 mod lock_settings;
 mod mcp;
 mod mcp_gateway;
+mod mcp_startup;
 mod moatbench;
 mod openclaw;
 mod opencode;

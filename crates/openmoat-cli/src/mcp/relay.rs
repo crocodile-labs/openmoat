@@ -47,7 +47,7 @@ mod frame;
 mod host;
 mod server;
 
-pub use frame::{pump_host, pump_server};
+pub use frame::{pump_host, pump_server, refuse_all};
 
 /// JSON-RPC "invalid params", which MCP uses for an unknown tool.
 const UNKNOWN_TOOL: i64 = -32602;

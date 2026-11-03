@@ -34,6 +34,18 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
     bail!("only `openmoat run --isolate` on Linux starts this")
 }
 
+/// Why `moat run` cannot sandbox here: there is no sandbox OpenMoat can generate.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "macOS and Linux decide at run time; every platform file shares the signature"
+)]
+pub fn unavailable() -> Option<String> {
+    Some(format!(
+        "`openmoat run` has no sandbox OpenMoat can generate on {}",
+        std::env::consts::OS
+    ))
+}
+
 /// None: `moat run` refuses here.
 pub fn port_only_network() -> Option<String> {
     None
