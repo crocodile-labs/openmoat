@@ -29,7 +29,7 @@ fn session_after_returns_only_later_events_of_that_session() {
     };
     assert_eq!(ids(EventId(0)), [first.0, second.0]);
     assert_eq!(ids(first), [second.0]);
-    assert!(ids(second).is_empty());
+    assert_eq!(ids(second), Vec::<i64>::new());
 }
 
 #[test]

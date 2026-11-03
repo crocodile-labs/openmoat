@@ -92,10 +92,9 @@ fn proxy_credentials_are_kept_for_the_proxy_and_never_forwarded() {
     assert!(!format!("{req:?}").contains("c2Vzczp0b2s"));
     let tunnel = ok("CONNECT example.com:443 HTTP/1.1\r\nProxy-Authorization: Basic eDp5\r\n\r\n");
     assert_eq!(tunnel.credentials.len(), 1);
-    assert!(
-        ok("CONNECT example.com:443 HTTP/1.1\r\n\r\n")
-            .credentials
-            .is_empty()
+    assert_eq!(
+        ok("CONNECT example.com:443 HTTP/1.1\r\n\r\n").credentials,
+        Vec::<ProxyCredential>::new()
     );
 }
 

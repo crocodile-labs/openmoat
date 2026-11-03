@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use openmoat_core::Action;
 
 use super::*;
-use crate::approvals::{Grants, Overlay, Scope};
+use crate::approvals::{Grant, Grants, Overlay, Scope};
 use crate::environment::Snapshot;
 use crate::home::write_private;
 use crate::install::Recorded;
@@ -127,7 +127,7 @@ fn every_state_file_the_guard_uses_is_the_one_checked() {
         Recorded::load(&home).unwrap().dirs["claude-code"],
         PathBuf::from("/disk")
     );
-    assert!(Grants::load_in(&home).unwrap().entries.is_empty());
+    assert_eq!(Grants::load_in(&home).unwrap().entries, Vec::<Grant>::new());
 }
 
 #[test]

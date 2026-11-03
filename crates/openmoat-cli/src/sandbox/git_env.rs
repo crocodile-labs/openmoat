@@ -199,7 +199,7 @@ mod tests {
             ("GIT_CONFIG_VALUE_0", "me"),
         ]);
         assert_eq!(map, expected);
-        assert!(remove(&|k| map.get(k).cloned()).is_empty());
+        assert_eq!(remove(&|k| map.get(k).cloned()), Vec::<Change>::new());
     }
 
     #[test]

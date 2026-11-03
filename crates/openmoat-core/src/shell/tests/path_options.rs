@@ -45,7 +45,10 @@ fn options_that_load_code_are_unparseable() {
             "{cmd}: {outcome:?}"
         );
     }
-    assert!(!parsed("pytest -p no:cacheprovider").is_empty());
+    assert_ne!(
+        parsed("pytest -p no:cacheprovider"),
+        Vec::<AtomicAction>::new()
+    );
 }
 
 #[test]

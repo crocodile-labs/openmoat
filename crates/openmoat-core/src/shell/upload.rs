@@ -163,13 +163,13 @@ mod tests {
         assert_eq!(files(Value::Form, "f=<.env"), [".env"]);
         assert_eq!(files(Value::Form, "f=@\"a;b\";type=x"), ["a;b"]);
         assert_eq!(files(Value::Form, "f=@a,b"), ["a,b", "a", "b"]);
-        assert!(files(Value::Form, "f=text").is_empty());
-        assert!(files(Value::Form, "f=@-").is_empty());
+        assert_eq!(files(Value::Form, "f=text"), Vec::<&str>::new());
+        assert_eq!(files(Value::Form, "f=@-"), Vec::<&str>::new());
         assert_eq!(files(Value::Data, "@body.json"), ["body.json"]);
-        assert!(files(Value::Data, "a=1").is_empty());
+        assert_eq!(files(Value::Data, "a=1"), Vec::<&str>::new());
         assert_eq!(files(Value::Urlencode, "key@.env"), [".env"]);
         assert_eq!(files(Value::Urlencode, "@.env"), [".env"]);
-        assert!(files(Value::Urlencode, "q=a@b.com").is_empty());
+        assert_eq!(files(Value::Urlencode, "q=a@b.com"), Vec::<&str>::new());
     }
 
     #[test]

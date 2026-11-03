@@ -15,7 +15,7 @@ exclude = ["fuzz"]
 [workspace.package]
 version = "0.12.1"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.99"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crocodile-labs/openmoat"
 homepage = "https://github.com/crocodile-labs/openmoat"

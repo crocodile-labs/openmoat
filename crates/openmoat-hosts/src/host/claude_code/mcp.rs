@@ -91,7 +91,7 @@ mod tests {
             ]
         );
         let off = json!({"enableAllProjectMcpServers": false});
-        assert!(AutoStartSettings.settings(off.as_object().unwrap()).is_empty());
+        assert_eq!(AutoStartSettings.settings(off.as_object().unwrap()), Vec::<AutoStart>::new());
         let doc = json!({"projects": {"/p": {"enabledMcpjsonServers": ["db"]}}});
         assert!(AutoStartSettings.project_entry(&doc, "/p").is_some());
         assert!(AutoStartSettings.project_entry(&doc, "/q").is_none());

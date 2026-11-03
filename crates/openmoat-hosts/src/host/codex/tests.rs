@@ -19,6 +19,6 @@ fn an_allow_is_no_output_and_every_stop_is_a_deny_with_a_reason() {
             serde_json::from_str(&Host::Codex.render_response(&event, &answer)).unwrap();
         let out = &doc["hookSpecificOutput"];
         assert_eq!(out["permissionDecision"], "deny", "{verdict:?}");
-        assert!(!out["permissionDecisionReason"].as_str().unwrap().trim().is_empty());
+        assert_ne!(out["permissionDecisionReason"].as_str().unwrap().trim(), "");
     }
 }

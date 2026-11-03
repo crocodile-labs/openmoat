@@ -155,7 +155,7 @@ mod tests {
             decide(&p, "git status"),
             (Verdict::Deny, vec!["repo:no-status".into()])
         );
-        assert!(p.repo_ask.is_empty());
+        assert_eq!(p.repo_ask, Vec::<RuleGroup>::new());
         assert_eq!(p.allow, user.allow);
         assert_eq!(decide(&p, "make deploy").0, Verdict::Ask);
     }

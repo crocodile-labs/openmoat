@@ -169,7 +169,7 @@ mod tests {
         let d = Decision::single(Verdict::Deny, "kernel-error", "no lock");
         assert_eq!(d.rules, ["kernel-error"]);
         assert_eq!(d.reasons, ["no lock"]);
-        assert!(d.context.is_empty());
+        assert_eq!(d.context, Vec::<String>::new());
     }
 
     fn decided(verdict: Verdict, rule: &str) -> Decision {
@@ -204,7 +204,7 @@ mod tests {
         d.merge(decided(Verdict::Ask, "push"));
         assert_eq!(d.rules, ["installs", "push"]);
         assert_eq!(d.reasons.len(), 2);
-        assert!(d.context.is_empty());
+        assert_eq!(d.context, Vec::<String>::new());
     }
 
     #[test]

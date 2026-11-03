@@ -1,4 +1,4 @@
-use super::merge::merge;
+use super::merge::{Change, merge};
 use super::{DEFAULT_V0_3_0, line_endings_of};
 use crate::integrity::sha256_hex;
 
@@ -57,7 +57,7 @@ fn a_change_already_made_is_not_offered() {
     let merged = merge(BASE, &new, &new);
     assert_eq!(merged.text, new);
     assert_eq!(merged.base, new);
-    assert!(merged.changes.is_empty());
+    assert_eq!(merged.changes, Vec::<Change>::new());
     assert_eq!(merged.kept, merged.base_lines);
 }
 

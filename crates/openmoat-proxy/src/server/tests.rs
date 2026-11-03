@@ -96,7 +96,7 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
     let (mut opened, _) = upstream.accept().unwrap();
     let mut forwarded = Vec::new();
     opened.read_to_end(&mut forwarded).unwrap();
-    assert!(forwarded.is_empty());
+    assert_eq!(forwarded, Vec::<u8>::new());
 }
 
 /// Answers `served` to a connection that starts with its prefix.

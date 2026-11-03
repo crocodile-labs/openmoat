@@ -1,5 +1,5 @@
 use openmoat_audit::NewEvent;
-use openmoat_core::{Action, Decision};
+use openmoat_core::{Action, Decision, TaintSecret};
 
 use super::*;
 
@@ -55,13 +55,19 @@ fn a_session_is_tainted_by_its_own_secret_read_only() {
     issued(&home, "s-a", &project);
     issued(&home, "s-b", &project);
     let lookup = IssuedTaint::new(Home::at(home.root().to_path_buf()));
-    assert!(lookup.taint("s-a").unwrap().secrets.is_empty());
+    assert_eq!(
+        lookup.taint("s-a").unwrap().secrets,
+        Vec::<TaintSecret>::new()
+    );
     let before = lookup.version();
     read(&home, "s-a", &format!("{project}/secret.txt"), &project);
     assert_ne!(lookup.version(), before, "a new event changes the version");
     // Read on from where the last lookup got.
     assert_eq!(lookup.taint("s-a").unwrap().secrets.len(), 1);
-    assert!(lookup.taint("s-b").unwrap().secrets.is_empty());
+    assert_eq!(
+        lookup.taint("s-b").unwrap().secrets,
+        Vec::<TaintSecret>::new()
+    );
 }
 
 /// Without the row its credential was issued with, the proxy knows neither

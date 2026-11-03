@@ -37,7 +37,7 @@ fn versions_below_the_oldest_are_unsupported_and_others_name_their_hook() {
         .as_ref()
         .and_then(|i| i.versions.as_ref())
         .unwrap();
-    assert!(!gate.older.is_empty());
+    assert_ne!(gate.older, "");
     let hook = |text| gate.hook_of(parse(text).unwrap());
     assert_eq!(hook("1.3.3"), None);
     assert_eq!(hook("1.0.0"), None);

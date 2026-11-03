@@ -316,7 +316,7 @@ mod tests {
             "gh",
             json!({"env": {"B": "2", "A": "1"}, "args": ["gh"], "command": "npx"}),
         );
-        assert!(changes(&pins, &scan(vec![b])).is_empty());
+        assert_eq!(changes(&pins, &scan(vec![b])), Vec::<Change>::new());
     }
 
     #[test]
@@ -355,12 +355,12 @@ mod tests {
         assert!(found[0].blocks() && !found[1].blocks());
         apply(&mut pins, &found);
         assert_eq!(pins.len(), 1);
-        assert!(
+        assert_eq!(
             changes(
                 &pins,
                 &scan(vec![server("new", json!({"url": "https://mcp.example"}))])
-            )
-            .is_empty()
+            ),
+            Vec::<Change>::new()
         );
     }
 
@@ -371,7 +371,7 @@ mod tests {
             scanned: vec![PathBuf::from("/p/.mcp.json")],
             ..Scan::default()
         };
-        assert!(changes(&pins, &elsewhere).is_empty());
+        assert_eq!(changes(&pins, &elsewhere), Vec::<Change>::new());
     }
 
     #[test]

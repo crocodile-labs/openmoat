@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn nothing_listed_names_nothing() {
         let mut e = Expansion::new(&NoResolver);
-        assert!(e.paths("/p/.en?", true).is_empty());
+        assert_eq!(e.paths("/p/.en?", true), Vec::<String>::new());
         assert_eq!(e.overflow(), None);
     }
 

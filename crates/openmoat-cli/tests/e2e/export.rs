@@ -57,7 +57,7 @@ fn export_filters_by_session_host_and_window() {
     let beta = export(&sb, &["--session", "beta"]);
     assert_eq!(beta.len(), 1);
     assert_eq!(beta[0]["session_id"], "beta");
-    assert!(export(&sb, &["--host", "cursor"]).is_empty());
+    assert_eq!(export(&sb, &["--host", "cursor"]), Vec::<Value>::new());
     assert_eq!(
         export(&sb, &["--since", "today", "--host", "claude-code"]).len(),
         3

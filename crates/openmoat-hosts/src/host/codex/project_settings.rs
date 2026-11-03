@@ -102,6 +102,6 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(all.len(), 6, "{all:?}");
-        assert!(findings(json!({"model": "x", "hooks": {}}).as_object().unwrap()).is_empty());
+        assert_eq!(findings(json!({"model": "x", "hooks": {}}).as_object().unwrap()), Vec::<String>::new());
     }
 }

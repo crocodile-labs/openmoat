@@ -402,7 +402,7 @@ mod tests {
         let out = generated("version: 1\nsandbox:\n  proxy_port: 18555\n");
         let mut root = json!({});
         apply(&mut root, &out, &mut owned).unwrap();
-        assert!(weaknesses(&root, false, Some(18555)).is_empty());
+        assert_eq!(weaknesses(&root, false, Some(18555)), Vec::<String>::new());
         root["sandbox"]["network"]["httpProxyPort"] = json!(8080);
         let network = root["sandbox"]["network"].as_object_mut().unwrap();
         network.remove("socksProxyPort");

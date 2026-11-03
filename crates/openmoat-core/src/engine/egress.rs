@@ -253,7 +253,10 @@ mod tests {
             allow: Vec::new(),
         }];
         let fetch = |url: &str| atoms(&Action::Fetch { url: url.into() }, &[], &secrets);
-        assert!(fetch("https://api.github.com/?t=moat-secret:gh:placeholder").is_empty());
+        assert_eq!(
+            fetch("https://api.github.com/?t=moat-secret:gh:placeholder"),
+            Vec::<AtomicAction>::new()
+        );
         assert_eq!(
             fetch("https://uploads.github.com/?t=moat-secret:gh:placeholder"),
             [AtomicAction::Shell {
@@ -301,6 +304,9 @@ mod tests {
             placeholders("a=moat-secret:gh-api:placeholder b=MOAT-SECRET:x:PLACEHOLDER"),
             ["gh-api", "x"]
         );
-        assert!(placeholders("moat-secret::placeholder moat-secret:gh").is_empty());
+        assert_eq!(
+            placeholders("moat-secret::placeholder moat-secret:gh"),
+            Vec::<String>::new()
+        );
     }
 }

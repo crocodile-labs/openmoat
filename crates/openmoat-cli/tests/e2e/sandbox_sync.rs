@@ -315,7 +315,10 @@ fn sync_leaves_agents_init_left_out_untouched() {
         assert!(shown.contains(line), "{line}: {shown}");
     }
     assert_eq!(fs::read_to_string(codex_config(&sb)).unwrap(), mine);
-    assert!(sandbox_backups(&sb.home.join(".codex")).is_empty());
+    assert_eq!(
+        sandbox_backups(&sb.home.join(".codex")),
+        Vec::<String>::new()
+    );
     assert!(!sb.home.join(".cursor/sandbox.json").exists());
     let lock = fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap();
     assert!(!lock.contains(".codex"), "{lock}");

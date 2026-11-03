@@ -269,7 +269,7 @@ fn a_forged_reply_is_a_deny() {
         assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
         assert!(text(&out).contains("did not decide"), "{}", text(&out));
     }
-    assert!(rows(&sb, "forged").is_empty());
+    assert_eq!(rows(&sb, "forged"), Vec::<Value>::new());
 }
 
 /// Half the settings, an address off this machine or one nothing listens on:
@@ -299,5 +299,5 @@ fn a_guard_with_broken_relay_settings_denies() {
         assert_eq!(out.status.code(), Some(DENY), "{env:?}: {}", text(&out));
         assert!(text(&out).contains("did not decide"), "{}", text(&out));
     }
-    assert!(rows(&sb, "broken").is_empty());
+    assert_eq!(rows(&sb, "broken"), Vec::<Value>::new());
 }

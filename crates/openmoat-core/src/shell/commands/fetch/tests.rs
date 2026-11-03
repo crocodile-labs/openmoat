@@ -138,9 +138,18 @@ fn only_output_words_may_expand() {
     );
     assert_eq!(outputs("wget -P $D https://x.test/a", Client::Wget), [2]);
     // the URL, a flag and `-d`'s value are never output words
-    assert!(outputs("curl -sS https://$H/x", Client::Curl).is_empty());
-    assert!(outputs("curl $OPTS https://x.test", Client::Curl).is_empty());
-    assert!(outputs("curl -d $BODY https://x.test", Client::Curl).is_empty());
+    assert_eq!(
+        outputs("curl -sS https://$H/x", Client::Curl),
+        Vec::<usize>::new()
+    );
+    assert_eq!(
+        outputs("curl $OPTS https://x.test", Client::Curl),
+        Vec::<usize>::new()
+    );
+    assert_eq!(
+        outputs("curl -d $BODY https://x.test", Client::Curl),
+        Vec::<usize>::new()
+    );
 }
 
 #[test]

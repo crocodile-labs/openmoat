@@ -54,7 +54,10 @@ fn only_shell_commands_run_files() {
     let read = Action::FsRead {
         path: "/p/x.py".to_owned(),
     };
-    assert!(compiled.executed(&read, &NoResolver).is_empty());
-    assert!(compiled.executed(&shell("ls -la"), &NoResolver).is_empty());
+    assert_eq!(compiled.executed(&read, &NoResolver), Vec::<String>::new());
+    assert_eq!(
+        compiled.executed(&shell("ls -la"), &NoResolver),
+        Vec::<String>::new()
+    );
     assert_eq!(compiled.executed(&shell("./x"), &NoResolver), ["/p/x"]);
 }

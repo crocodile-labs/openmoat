@@ -44,8 +44,11 @@ fn hermes_profiles_are_found_and_recorded() {
         found,
         [hermes.join("profiles/play"), hermes.join("profiles/work")]
     );
-    assert!(also_dirs(Host::Hermes, &dir.path().join("none")).is_empty());
-    assert!(also_dirs(Host::Codex, &hermes).is_empty());
+    assert_eq!(
+        also_dirs(Host::Hermes, &dir.path().join("none")),
+        Vec::<PathBuf>::new()
+    );
+    assert_eq!(also_dirs(Host::Codex, &hermes), Vec::<PathBuf>::new());
 
     let state = Home::at(dir.path().join("state"));
     let mut recorded = Recorded::default();
@@ -53,7 +56,7 @@ fn hermes_profiles_are_found_and_recorded() {
     recorded.save(&state).unwrap();
     let loaded = Recorded::load(&state).unwrap();
     assert_eq!(loaded.also(Host::Hermes), found.as_slice());
-    assert!(loaded.also(Host::Codex).is_empty());
+    assert_eq!(loaded.also(Host::Codex), Vec::<PathBuf>::new());
     // A record without them reads as before, and is written as before.
     let text = r#"{"version":1,"dirs":{"codex":"/cfg/codex"}}"#;
     let old = Recorded::parse(text, Path::new("hosts.json")).unwrap();

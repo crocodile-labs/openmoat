@@ -171,12 +171,14 @@ mod tests {
         names.sort();
         assert_eq!(names, ["s", "src"]);
         assert_eq!(FsPathResolver.read_dir(&format!("{p}/s")), ["id_rsa"]);
-        assert!(
-            FsPathResolver
-                .read_dir(&format!("{h}/.ssh/id_rsa"))
-                .is_empty()
+        assert_eq!(
+            FsPathResolver.read_dir(&format!("{h}/.ssh/id_rsa")),
+            Vec::<String>::new()
         );
-        assert!(FsPathResolver.read_dir(&format!("{p}/missing")).is_empty());
+        assert_eq!(
+            FsPathResolver.read_dir(&format!("{p}/missing")),
+            Vec::<String>::new()
+        );
     }
 
     #[cfg(unix)]

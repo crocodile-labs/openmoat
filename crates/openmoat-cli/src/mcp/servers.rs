@@ -311,7 +311,10 @@ mod tests {
         let text = r#"{"mcpServers": {"a": {"url": "https://x"}}, "projects": {"/p": {"mcpServers": {"b": {}}}}}"#;
         let servers = parse(&source(layout::json()), text).unwrap();
         assert_eq!(servers.len(), 1);
-        assert!(parse(&source(layout::json()), "  ").unwrap().is_empty());
+        assert_eq!(
+            parse(&source(layout::json()), "  ").unwrap(),
+            Vec::<Server>::new()
+        );
         assert!(parse(&source(layout::json()), "{").is_err());
     }
 
@@ -345,8 +348,11 @@ mod tests {
         );
         assert_eq!(servers[0].name, "my/docs");
         assert_eq!(servers[0].entry["transport"], "streamable-http");
-        assert!(parse(&openclaw, "").unwrap().is_empty());
-        assert!(parse(&openclaw, "{ gateway: {} }").unwrap().is_empty());
+        assert_eq!(parse(&openclaw, "").unwrap(), Vec::<Server>::new());
+        assert_eq!(
+            parse(&openclaw, "{ gateway: {} }").unwrap(),
+            Vec::<Server>::new()
+        );
         for include in [
             r#"{"$include": "./more.json5"}"#,
             r#"{"mcp": {"servers": {"$include": ["./a.json5"]}}}"#,
@@ -376,7 +382,7 @@ mod tests {
         };
         assert_eq!(ids(wrapped), ["/p/.mcp.json#/mcpServers/gh"]);
         assert_eq!(ids(bare), ["/p/.mcp.json#/gh", "/p/.mcp.json#/web"]);
-        assert!(parse(&copilot, "").unwrap().is_empty());
+        assert_eq!(parse(&copilot, "").unwrap(), Vec::<Server>::new());
         assert!(parse(&copilot, "[").is_err());
     }
 
@@ -394,7 +400,7 @@ mod tests {
             })
             .collect();
         let found = scan(&sources);
-        assert!(found.servers.is_empty());
+        assert_eq!(found.servers, Vec::<Server>::new());
         assert_eq!(found.scanned.len(), 2);
         assert_eq!(found.unreadable.len(), 1);
         assert_eq!(found.unreadable[0].0, broken);

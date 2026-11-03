@@ -192,7 +192,10 @@ mod tests {
         }
         let none = MapResolver::default();
         let plain = MapPathResolver::default();
-        assert!(aliases(&[shell(&["/tmp/x", "allow"])], &ctx(false), &none, &plain).is_empty());
+        assert_eq!(
+            aliases(&[shell(&["/tmp/x", "allow"])], &ctx(false), &none, &plain),
+            Vec::<AtomicAction>::new()
+        );
     }
 
     #[test]
@@ -233,6 +236,9 @@ mod tests {
             path,
             [shell(&["/usr/local/bin/openmoat", "proxy", "uninstall"])]
         );
-        assert!(aliases(&[shell(&["OpenMoat", "allow"])], &ctx(false), &none, &plain).is_empty());
+        assert_eq!(
+            aliases(&[shell(&["OpenMoat", "allow"])], &ctx(false), &none, &plain),
+            Vec::<AtomicAction>::new()
+        );
     }
 }

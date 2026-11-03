@@ -238,7 +238,10 @@ fn a_listing_the_relay_asked_for_is_paged_and_one_never_answered_is_given_up() {
     );
     assert_eq!(to_host(&out), changed.to_string(), "the host is told too");
     // A second notice while the relay waits asks nothing more.
-    assert!(to_server(&relay.server_line(&changed.to_string())).is_empty());
+    assert_eq!(
+        to_server(&relay.server_line(&changed.to_string())),
+        Vec::<String>::new()
+    );
 
     let page = json!({"jsonrpc": "2.0", "id": "openmoat-relay-1",
         "result": {"tools": tools(&[("search", "Accepted.")]), "nextCursor": "c2"}});
@@ -288,7 +291,7 @@ fn an_error_for_the_relays_listing_lets_the_pins_decide() {
     refused(&relay.host_line(&call(1, "search")));
     let error =
         r#"{"jsonrpc":"2.0","id":"openmoat-relay-1","error":{"code":-32601,"message":"no"}}"#;
-    assert!(relay.server_line(error).is_empty());
+    assert_eq!(relay.server_line(error), Vec::<Routed>::new());
     assert_eq!(
         to_server(&relay.host_line(&call(2, "search"))),
         [call(2, "search")]

@@ -4,7 +4,6 @@
 //! request and answer checks in depth are the unit tests in
 //! `src/exchange/tests`; these prove the wiring.
 
-use std::io::{Read as _, Write as _};
 use std::sync::Arc;
 
 use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};

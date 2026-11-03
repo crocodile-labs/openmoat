@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn no_headers_means_no_files() {
-        assert!(writes("just text").is_empty());
-        assert!(writes("*** Add File:   \n").is_empty());
+        assert_eq!(writes("just text"), Vec::<String>::new());
+        assert_eq!(writes("*** Add File:   \n"), Vec::<String>::new());
     }
 }
