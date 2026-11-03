@@ -35,6 +35,10 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
 }
 
 /// Why `moat run` cannot sandbox here: there is no sandbox OpenMoat can generate.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "macOS and Linux decide at run time; every platform file shares the signature"
+)]
 pub fn unavailable() -> Option<String> {
     Some(format!(
         "`openmoat run` has no sandbox OpenMoat can generate on {}",
