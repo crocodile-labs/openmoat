@@ -51,9 +51,14 @@ pub fn dir_of(host: Host) -> String {
 }
 
 /// The file `moat init` writes `host`'s hook into, under the home's default
-/// directory for it.
+/// directory for it, or where the host's own rules put it (goose's plugin is
+/// outside its configuration directory).
 fn hook_file(sb: &Sandbox, host: Host) -> PathBuf {
-    sb.home.join(dir_of(host)).join(install(host).config_file)
+    let install = install(host);
+    match install.location {
+        Location::Custom(locate) => locate.default_for(&sb.home).config,
+        Location::OneDir => sb.home.join(dir_of(host)).join(install.config_file),
+    }
 }
 
 /// `moat guard` for `row`'s hook, as its host runs it, with `payload`.

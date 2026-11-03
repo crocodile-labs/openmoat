@@ -195,7 +195,8 @@ mod tests {
                 "gemini-cli",
                 "opencode",
                 "hermes",
-                "cline"
+                "cline",
+                "goose"
             ]
         );
         let installs: Vec<Host> = Host::EVERY

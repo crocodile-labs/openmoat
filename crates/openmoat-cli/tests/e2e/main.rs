@@ -30,6 +30,7 @@ mod edit;
 mod escapes;
 mod export;
 mod gemini_cli;
+mod goose;
 mod guard;
 mod heartbeat;
 mod hermes;

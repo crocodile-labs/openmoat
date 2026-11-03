@@ -7,7 +7,7 @@ use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 use serde_json::{Value, json};
 
-use super::payloads::{cline, copilot, cursor_tool, gemini, hermes, openclaw, opencode, pi};
+use super::payloads::{cline, copilot, cursor_tool, gemini, goose, hermes, openclaw, opencode, pi};
 use super::{Route, decide, pre_tool_use};
 
 /// The payload `host` sends for its tool `tool` with arguments `input`, and
@@ -26,6 +26,7 @@ fn unknown_tool(host: Host, tool: &str, input: &Value) -> (Value, bool) {
         Host::OpenCode => (opencode(tool, input), true),
         Host::Hermes => (hermes(tool, input), true),
         Host::Cline => (cline(tool, input), true),
+        Host::Goose => (goose(tool, input), true),
         Host::Continue => panic!("the Continue CLI sends Claude Code's payload"),
     }
 }

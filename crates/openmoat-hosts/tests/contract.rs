@@ -121,12 +121,13 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 /// host receives the guard's own deny rather than a timeout; and a failed hook
 /// blocks the call wherever the host has a key for it: Claude Code's
 /// `onFailure` on its tool hook, Cursor's `failClosed` and Hermes Agent's
-/// `fail_closed` (set on every entry of their layouts), OpenClaw's plugin, pi's
-/// extension, OpenCode's plugin, Cline's script. Codex and Gemini CLI have no
+/// `fail_closed` and goose's `on_failure: block` (set on every entry of their
+/// layouts), OpenClaw's plugin, pi's extension, OpenCode's plugin, Cline's script.
+/// Codex and Gemini CLI have no
 /// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, &str, &[&str]); 10] = [
+    let expected: [(Host, &str, &[&str]); 11] = [
         (Host::ClaudeCode, "Entries(Nested)", &["PreToolUse"]),
         (Host::Codex, "Entries(Codex)", &[]),
         (Host::Cursor, "Entries(Cursor)", &[]),
@@ -137,6 +138,7 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
         (Host::OpenCode, "Owned(OwnedFile(OpenCode plugin))", &[]),
         (Host::Hermes, "Yaml(Hermes)", &[]),
         (Host::Cline, "Script(OwnedFile(Cline hook script))", &[]),
+        (Host::Goose, "Entries(Goose)", &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, layout, blocking) in expected {
@@ -277,6 +279,7 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // server), pi 5 (no fetch), Gemini CLI 6 (5 on Windows, whose PowerShell
     // commands OpenMoat leaves to Gemini CLI), OpenCode 6 (5 on Windows, whose
     // shell OpenMoat leaves to OpenCode), Hermes Agent 6, Cline 6 (5 on Windows,
-    // whose PowerShell commands OpenMoat leaves to Cline)
-    assert_eq!(checked, 55 - 3 * usize::from(cfg!(windows)));
+    // whose PowerShell commands OpenMoat leaves to Cline), goose 4 (no read or fetch
+    // tool; 3 on Windows, whose `cmd` OpenMoat leaves to goose)
+    assert_eq!(checked, 59 - 4 * usize::from(cfg!(windows)));
 }

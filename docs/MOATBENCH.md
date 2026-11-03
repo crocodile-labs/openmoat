@@ -23,9 +23,10 @@ openmoat bench --hook '<command>' --host claude-code    # against any hook comma
 `openmoat bench` creates a throwaway home under the system temporary directory, runs
 `openmoat init --yes` there, and for each scenario and each host that has a tool for
 every step (Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode,
-Hermes Agent, the Cline CLI;
-Copilot's payload does not name an MCP tool's server and pi has no fetch tool, so
-scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell
+Hermes Agent, the Cline CLI, goose;
+Copilot's payload does not name an MCP tool's server, pi has no fetch tool and goose has
+no file read or fetch tool, so
+scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell, goose's `cmd`,
 OpenCode's may be Git Bash, PowerShell or `cmd`, and Cline's is PowerShell, which OpenMoat leaves to them,
 so their shell steps are skipped there)
 sends the steps to `openmoat guard --host <host>`
@@ -48,6 +49,10 @@ log and checks:
   `passthrough`, since it has no allow that skips its own checks. The Cline CLI reads only
   stdout: `cancel: true` is a deny; `{}` and no output are `passthrough`, since it has no allow
   that skips its own approval; it cannot ask, so an `ask` must arrive as a deny.
+  goose reads exit 2 and `decision: block` (whatever the exit code) as a deny; it cannot
+  ask, so an `ask` must arrive as a `deny`; `decision: allow` and no output are
+  `passthrough`, since goose asked for its own approval before the hook ran; anything else
+  is `error`, which OpenMoat's `on_failure: block` turns into a block.
 
 `--hook <command> --host <host>` sends the same payloads on stdin to any hook command
 instead, run through the system shell the way hosts run hooks (`sh -c`, `cmd /C` on

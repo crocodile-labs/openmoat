@@ -144,7 +144,7 @@ exit code as the text:
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
-| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent and the Cline CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
+| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
 | `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or its entry lacks the agent's fail-closed key (`fail_closed: true` for Hermes Agent, `failClosed: true` for Cursor: the agent would run a call whose hook failed; run `openmoat init`), or the agent ran without loading OpenMoat's plugin (below), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
 Agents that are not set up or not found keep their `·` line. `openmoat status --format
@@ -208,8 +208,8 @@ openmoat allow --last --always   # or a permanent rule in ~/.moat/policy.d/appro
 ```
 
 On an agent without an OS sandbox from OpenMoat (OpenClaw, GitHub Copilot CLI, pi,
-Gemini CLI, OpenCode, Hermes Agent, and Claude Code and Cursor on native Windows or with
-their sandbox not in place), running a script the same session wrote asks
+Gemini CLI, OpenCode, Hermes Agent, goose, and Claude Code and Cursor on native Windows or
+with their sandbox not in place), running a script the same session wrote asks
 (`session-written-code`: `moat: ask [session-written-code] — runs code this session
 wrote, with no OS sandbox below the hook: /p/x.py`). Look at the script, then approve
 it: `openmoat allow --last` covers that command until the agent writes the file again.
@@ -618,6 +618,13 @@ these takes one command in your own terminal (agents are denied all of them):
   session. `--yolo` runs no hooks. The Cline VS Code extension does not read this file
   and is not protected. Any change to the script denies every call until you run
   `openmoat doctor --accept`.
+- **goose**: `openmoat init --hosts goose` writes OpenMoat's plugin,
+  `~/.agents/plugins/openmoat/hooks/hooks.json`, with one `PreToolUse` entry that sets
+  `on_failure: block`; restart goose (the CLI or the desktop app) so it loads the
+  plugin. goose hooks cannot ask: an `ask` is a block you approve with
+  `openmoat allow --last`. A `disabledPlugins` list naming `openmoat` in
+  `~/.config/goose/settings.json`, or in a project's `.config/goose/`, turns it off, and
+  `openmoat status` reports goose as not protected.
 - **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
   file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). An
   `ask` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
@@ -633,7 +640,7 @@ these takes one command in your own terminal (agents are denied all of them):
 - **The `openmoat` binary is missing or broken**: Codex, Continue CLI and Claude Code before
   2.1.295 then run tool calls without the hook ("When the hook fails" in
   [THREAT_MODEL.md](THREAT_MODEL.md)), and Claude Code from 2.1.295, Cursor, OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI, OpenCode and Hermes Agent block them.
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent and goose block them.
  Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `openmoat uninstall` if you want it off.
 
