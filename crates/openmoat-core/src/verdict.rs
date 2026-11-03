@@ -133,7 +133,7 @@ impl Decision {
     /// side are demoted to `context`.
     pub(crate) fn merge(&mut self, other: Decision) {
         if other.verdict > self.verdict {
-            let demoted: Vec<String> = self.reasons.drain(..).collect();
+            let demoted: Vec<String> = std::mem::take(&mut self.reasons);
             self.rules.clear();
             self.context.extend(demoted);
             self.verdict = other.verdict;
