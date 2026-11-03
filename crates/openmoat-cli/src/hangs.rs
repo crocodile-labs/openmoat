@@ -26,8 +26,11 @@ use crate::home::{self, Home};
 /// the disk; 64 KiB holds a few thousand lines.
 const MAX_BYTES: u64 = 64 * 1024;
 
-/// How long the watchdog waits for its line before it exits anyway.
-const WRITE_WAIT: Duration = Duration::from_millis(200);
+/// How long the watchdog waits for its line before it exits anyway. The host
+/// sees the deny's exit code only when the guard exits, so the budget plus this
+/// wait stays below every host's hook timeout (the test below). 200 ms lost
+/// lines on Windows runners when several guards gave up at once.
+const WRITE_WAIT: Duration = Duration::from_secs(2);
 
 /// The step `moat guard` is in, in the order it takes them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -208,6 +211,42 @@ fn parse(line: &str) -> Option<(i64, Option<Phase>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_budget_and_the_write_wait_end_before_any_host_times_out() {
+        let deadline = Duration::from_secs(openmoat_hosts::GUARD_BUDGET_S) + WRITE_WAIT;
+        for host in Host::ALL {
+            let Some(install) = host.spec().install.as_ref() else {
+                continue;
+            };
+            for hook in install.hooks {
+                assert!(
+                    Duration::from_secs(hook.timeout) > deadline + Duration::from_secs(5),
+                    "{host:?} {}: {} s leaves no margin after {deadline:?}",
+                    hook.event,
+                    hook.timeout
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn concurrent_writers_lose_no_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("guard-hangs.log");
+        let writers: Vec<_> = (0..16)
+            .map(|i| {
+                let path = path.clone();
+                thread::spawn(move || append(&path, &format!("{i} codex stdin 30000\n")).unwrap())
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(text.lines().count(), 16, "{text}");
+        assert!(text.lines().all(|l| l.split(' ').count() == 4), "{text}");
+    }
 
     #[test]
     fn lines_are_counted_from_a_time_on() {
