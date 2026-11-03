@@ -182,7 +182,7 @@ fn tighten(mut decision: Decision, verdict: Verdict, rule: &str, reason: String)
         return decision;
     }
     if decision.verdict < verdict {
-        let earlier: Vec<String> = decision.reasons.drain(..).collect();
+        let earlier: Vec<String> = std::mem::take(&mut decision.reasons);
         decision.context.extend(earlier);
         decision.rules.clear();
         decision.verdict = verdict;

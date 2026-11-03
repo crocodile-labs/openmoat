@@ -489,7 +489,7 @@ git config core.hooksPath .githooks        # runs the quality gate before every 
 scripts/ci/quality-gate.sh                 # fmt, clippy -D warnings, doc, tests, policy lint
 ```
 
-Rust 1.95, pinned in `rust-toolchain.toml`. No other tooling is required.
+Rust 1.99, pinned in `rust-toolchain.toml`. No other tooling is required.
 
 | You want to | Go to |
 |---|---|

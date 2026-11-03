@@ -29,7 +29,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/crocodile-labs/openmoat
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/crocodile-labs/openmoat/releases/latest/download/openmoat-installer.ps1 | iex"
 
-# From crates.io (Rust 1.95)
+# From crates.io (Rust 1.99)
 cargo install openmoat --locked
 ```
 
@@ -72,7 +72,7 @@ Then run `openmoat init` ([below](#set-up-with-openmoat-init)).
 > [Upgrading](#upgrading)): after `brew uninstall openmoat`, run `openmoat init`
 > once so the hooks point to the new binary.
 
-To build from a clone instead (Rust 1.95, pinned by `rust-toolchain.toml`):
+To build from a clone instead (Rust 1.99, pinned by `rust-toolchain.toml`):
 
 ```bash
 git clone https://github.com/crocodile-labs/openmoat && cd openmoat

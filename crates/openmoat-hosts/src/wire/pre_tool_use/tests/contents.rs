@@ -1,6 +1,6 @@
 //! What a `Write` and an `Edit` carry: the content, or the replacements.
 
-use crate::Host;
+use crate::{Host, Replacement};
 
 /// File provenance (ADR-029) hashes what `Write` writes; a partial edit has
 /// no whole content to hash.
@@ -59,6 +59,9 @@ fn a_partial_edit_carries_its_replacements() {
         [replacement("a", "b", false), replacement("c", "d", true)]
     );
     let write = serde_json::json!({"file_path": "/p/x.md", "content": "a"});
-    assert!(parse("Write", write).is_empty());
-    assert!(parse("Bash", serde_json::json!({"command": "ls"})).is_empty());
+    assert_eq!(parse("Write", write), Vec::<Replacement>::new());
+    assert_eq!(
+        parse("Bash", serde_json::json!({"command": "ls"})),
+        Vec::<Replacement>::new()
+    );
 }

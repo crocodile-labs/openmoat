@@ -334,7 +334,7 @@ mod tests {
             folders_above("**/.github/copilot/settings.json"),
             [".github", ".github/copilot"]
         );
-        assert!(folders_above("**/.mcp.json").is_empty());
+        assert_eq!(folders_above("**/.mcp.json"), Vec::<String>::new());
         assert_eq!(
             agent_config_folders("/__moat_project__/**/.pi/extensions/**"),
             ["/__moat_project__/.pi"]
@@ -343,7 +343,13 @@ mod tests {
             agent_config_folders("/w/lib/**/.openclaw/extensions/**"),
             ["/w/lib/.openclaw"]
         );
-        assert!(agent_config_folders("/__moat_project__/**/.mcp.json").is_empty());
-        assert!(agent_config_folders("/__moat_project__/**/.husky/**").is_empty());
+        assert_eq!(
+            agent_config_folders("/__moat_project__/**/.mcp.json"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            agent_config_folders("/__moat_project__/**/.husky/**"),
+            Vec::<String>::new()
+        );
     }
 }

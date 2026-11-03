@@ -1,7 +1,7 @@
 //! The relay's protocol, each way it denies, and the service's two answers.
 //! Over Unix socket pairs, so no port is bound.
 
-use std::io::{Cursor, Read as _};
+use std::io::Cursor;
 use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;

@@ -190,7 +190,10 @@ fn a_new_server_has_every_tool_held_and_its_calls_refused() {
     assert_eq!(code, -32602);
     assert!(message.contains("openmoat mcp accept docs"), "{message}");
 
-    assert!(listed(&relay, 2, &[("search", "Search."), ("read", "Read.")]).is_empty());
+    assert_eq!(
+        listed(&relay, 2, &[("search", "Search."), ("read", "Read.")]),
+        Vec::<String>::new()
+    );
     let pins = saved
         .lock()
         .unwrap()

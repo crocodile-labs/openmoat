@@ -98,7 +98,7 @@ fn a_connection_that_cannot_be_recorded_is_refused() {
     assert_eq!(reply, "");
     // the upstream connection is opened before the record, but gets no bytes
     while let Ok(bytes) = h.received.recv_timeout(Duration::from_millis(300)) {
-        assert!(bytes.is_empty());
+        assert_eq!(bytes, Vec::<u8>::new());
     }
     // each failure is reported to the recorder, away from the failed log
     assert_eq!(

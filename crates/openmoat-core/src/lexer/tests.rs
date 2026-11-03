@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use super::{LexError, MAX_COMMAND_BYTES, Token, Word, lex};
 
 fn words(input: &str) -> Vec<String> {
@@ -49,12 +51,12 @@ fn single_quoted_spans_are_recorded() {
     };
     assert_eq!(spans("x'$p'").split_first(), Some((&(1..3), &[][..])));
     assert_eq!(spans("a'$b'\"$c\"'$d'"), [1..3, 5..7]);
-    assert!(spans("\"'$x'\"").is_empty());
+    assert_eq!(spans("\"'$x'\""), Vec::<Range<usize>>::new());
     assert!(
         spans("$'$x'").is_empty(),
         "ANSI-C quoting is not marked literal"
     );
-    assert!(spans("''").is_empty());
+    assert_eq!(spans("''"), Vec::<Range<usize>>::new());
 }
 
 #[test]

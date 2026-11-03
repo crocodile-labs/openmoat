@@ -131,7 +131,7 @@ fn a_path_the_server_could_read_as_another_is_refused() {
         ("/repos/%2", PathRefusal::Malformed),
     ] {
         assert_eq!(RequestPath::parse(target), Err(why.clone()), "{target}");
-        assert!(!why.to_string().is_empty());
+        assert_ne!(why.to_string(), "");
     }
 }
 

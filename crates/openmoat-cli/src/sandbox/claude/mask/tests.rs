@@ -94,7 +94,7 @@ fn a_keychain_source_is_skipped_with_its_loss() {
 #[test]
 fn a_hand_set_plaintext_inject_beside_our_secrets_is_a_weakness() {
     let (_, out, mut root) = synced(SECRETS);
-    assert!(weaknesses(&root, &out).is_empty());
+    assert_eq!(weaknesses(&root, &out), Vec::<String>::new());
     root["sandbox"]["credentials"]["allowPlaintextInject"] = json!(true);
     let found = weaknesses(&root, &out).join("\n");
     assert!(found.contains("allowPlaintextInject"), "{found}");
@@ -110,7 +110,7 @@ fn a_hand_set_plaintext_inject_beside_our_secrets_is_a_weakness() {
             .is_none(),
         "{root}"
     );
-    assert!(weaknesses(&root, &out).is_empty());
+    assert_eq!(weaknesses(&root, &out), Vec::<String>::new());
 
     let none = generated("version: 1\n");
     let user = json!({ "sandbox": { "credentials": { "allowPlaintextInject": true } } });

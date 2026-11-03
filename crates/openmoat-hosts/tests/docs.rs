@@ -287,8 +287,11 @@ fn arm_literals_reads_the_patterns_of_an_arm() {
         ["open", "x"]
     );
     assert_eq!(arm_literals(r#"  "" => cd,"#), Vec::<&str>::new());
-    assert!(arm_literals(r#"  let a = "b";"#).is_empty());
-    assert!(arm_literals(r#"  name if name == "x" => y"#).is_empty());
+    assert_eq!(arm_literals(r#"  let a = "b";"#), Vec::<&str>::new());
+    assert_eq!(
+        arm_literals(r#"  name if name == "x" => y"#),
+        Vec::<&str>::new()
+    );
 }
 
 #[test]

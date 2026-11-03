@@ -264,7 +264,7 @@ mod tests {
             found(json!({"extensions": ["./tools.ts"], "packages": ["npm:x"]})).len(),
             2
         );
-        assert!(found(json!({"extensions": ["-builtin:mcp"], "packages": []})).is_empty());
+        assert_eq!(found(json!({"extensions": ["-builtin:mcp"], "packages": []})), Vec::<String>::new());
     }
 
     #[test]

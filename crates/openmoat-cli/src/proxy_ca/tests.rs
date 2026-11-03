@@ -46,7 +46,7 @@ fn terminated_hosts_are_sorted_once_each_and_plain_secrets_left_out() {
         terminated_hosts(&policy(&["b.test", "a.test", "b.test"])),
         ["a.test", "b.test"]
     );
-    assert!(terminated_hosts(&policy(&[])).is_empty());
+    assert_eq!(terminated_hosts(&policy(&[])), Vec::<String>::new());
 }
 
 #[test]

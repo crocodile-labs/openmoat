@@ -271,7 +271,7 @@ fn recent_and_session_queries() {
     assert_eq!(recent.len(), 2);
     assert!(recent[0].id.0 > recent[1].id.0);
     assert_eq!(store.session("s1").unwrap().len(), 2);
-    assert!(store.session("none").unwrap().is_empty());
+    assert_eq!(store.session("none").unwrap(), Vec::<Event>::new());
 }
 
 #[test]

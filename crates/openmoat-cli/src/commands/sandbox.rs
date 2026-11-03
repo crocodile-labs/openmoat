@@ -333,7 +333,7 @@ mod tests {
         let policy = Policy::parse("version: 1\n").unwrap();
         let mut out = Vec::new();
         write_hook_only(&mut out, &policy).unwrap();
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<u8>::new());
         assert_eq!(hook_only_json(&policy), serde_json::json!([]));
     }
 }

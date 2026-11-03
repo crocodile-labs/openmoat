@@ -123,7 +123,7 @@ fn a_missing_header_is_added_and_other_hosts_get_nothing() {
             .inject("api.github.com", Channel::Plain(80), head)
             .is_none()
     );
-    assert!(b.withheld("api.github.com", 80).is_empty());
+    assert_eq!(b.withheld("api.github.com", 80), Vec::<String>::new());
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn without_plain_http_the_owner_head_is_left_alone() {
         b.withheld("api.github.com", 80),
         ["secret `gh` not injected: plain HTTP needs `plain_http: true`"]
     );
-    assert!(b.withheld("github.com", 80).is_empty());
+    assert_eq!(b.withheld("github.com", 80), Vec::<String>::new());
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn only_the_secrets_port_gets_the_value() {
             .inject("api.github.com", Channel::Plain(80), head)
             .is_none()
     );
-    assert!(named.withheld("api.github.com", 8080).is_empty());
+    assert_eq!(named.withheld("api.github.com", 8080), Vec::<String>::new());
 }
 
 fn routed(extra: &str) -> Broker {
@@ -297,27 +297,27 @@ fn a_request_the_rules_do_not_name_is_refused_before_the_value_goes_in() {
     }
     // Another channel, another host: the secret does not go in, so no rule applies.
     let other = head("DELETE /x HTTP/1.1", "");
-    assert!(
+    assert_eq!(
         plain
             .admit("api.github.com", Channel::Plain(8080), other.as_bytes())
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<String>::new()
     );
-    assert!(
+    assert_eq!(
         plain
             .admit("api.github.com", Channel::Terminated, other.as_bytes())
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<String>::new()
     );
-    assert!(
+    assert_eq!(
         tls.admit("api.github.com", Channel::Plain(80), other.as_bytes())
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<String>::new()
     );
-    assert!(
+    assert_eq!(
         tls.admit("github.com", Channel::Terminated, other.as_bytes())
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<String>::new()
     );
 }
 

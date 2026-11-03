@@ -205,7 +205,10 @@ mod tests {
                 [path_string(&link), bin, release, path_string(&target)]
             );
         }
-        assert!(protected_paths(&real.join("a[1]/moat")).is_empty());
+        assert_eq!(
+            protected_paths(&real.join("a[1]/moat")),
+            Vec::<String>::new()
+        );
         let refused = refuse_writable(&real.join("a*/moat"), &[]).unwrap_err();
         assert!(refused.to_string().contains("glob characters"), "{refused}");
     }

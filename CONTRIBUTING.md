@@ -24,12 +24,12 @@ git config core.hooksPath .githooks        # runs the quality gate before every 
 scripts/ci/quality-gate.sh                 # fmt, clippy -D warnings, doc, tests, policy lint
 ```
 
-Rust 1.95 (pinned in `rust-toolchain.toml`). No other tooling is required.
+Rust 1.99 (pinned in `rust-toolchain.toml`). No other tooling is required.
 
 ## Toolchain and MSRV
 
 The minimum supported Rust version (MSRV) is the pinned toolchain: `rust-version =
-"1.95"` in `Cargo.toml`, `channel = "1.95"` in `rust-toolchain.toml`. It is raised on
+"1.99"` in `Cargo.toml`, `channel = "1.99"` in `rust-toolchain.toml`. It is raised on
 purpose and only in a minor release (0.2.x → 0.3.0), with a `### Changed` line in
 `CHANGELOG.md`, never in a patch release. The `weekly` workflow
 (`.github/workflows/weekly.yml`, also runnable by hand) runs clippy and the tests on

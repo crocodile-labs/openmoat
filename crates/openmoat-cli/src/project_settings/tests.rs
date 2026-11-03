@@ -37,8 +37,8 @@ fn gemini_and_pi_project_settings_and_extensions_are_named() {
     .unwrap();
     fs::write(project.join(".pi/settings.json"), r#"{"theme": "dark"}"#).unwrap();
     fs::write(project.join(".pi/extensions/notes.md"), "not code").unwrap();
-    assert!(gemini().is_empty());
-    assert!(pi().is_empty());
+    assert_eq!(gemini(), Vec::<String>::new());
+    assert_eq!(pi(), Vec::<String>::new());
 
     fs::write(
         project.join(".gemini/settings.json"),
@@ -156,8 +156,8 @@ fn codex_and_cursor_project_hooks_are_named() {
         r#"{"version": 1, "hooks": {}}"#,
     )
     .unwrap();
-    assert!(rows(Host::Codex).is_empty());
-    assert!(rows(Host::Cursor).is_empty());
+    assert_eq!(rows(Host::Codex), Vec::<String>::new());
+    assert_eq!(rows(Host::Cursor), Vec::<String>::new());
     fs::write(
         project.join(".codex/config.toml"),
         "[features]\nhooks = false\n",
@@ -196,7 +196,7 @@ fn copilot_repository_settings_and_hook_files_are_named() {
     fs::create_dir_all(project.join(".github/hooks")).unwrap();
     let ours = user_home.join(".copilot/hooks/openmoat.json");
     let copilot = || super::warnings(&project, &user_home, Host::CopilotCli, &ours);
-    assert!(copilot().is_empty());
+    assert_eq!(copilot(), Vec::<String>::new());
     fs::write(
         project.join(".github/copilot/settings.json"),
         r#"{"model": "gpt-5"}"#,
@@ -288,7 +288,7 @@ fn warns_for_the_session_directory_and_its_project_root_not_the_home() {
         r#"{"hooks": {"Stop": [{}]}}"#,
     )
     .unwrap();
-    assert!(warnings(&sub, &user_home).is_empty());
+    assert_eq!(warnings(&sub, &user_home), Vec::<String>::new());
     assert!(warnings(&user_home, &user_home).is_empty(), "user settings");
 
     fs::write(

@@ -1,5 +1,5 @@
 # The fuzz workspace needs nightly (sanitizers, -Z flags); without this file the
-# repository-wide 1.95 pin applies here too and `cargo fuzz` fails.
+# repository-wide 1.99 pin applies here too and `cargo fuzz` fails.
 [toolchain]
 channel = "nightly-2026-10-04"
 components = ["clippy"]

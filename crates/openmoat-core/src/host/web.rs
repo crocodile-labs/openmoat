@@ -370,7 +370,13 @@ mod tests {
             embedded_hosts("https://a.test/r?u=http%253A%252F%252F10.0.0.1%252F"),
             hosts(&["10.0.0.1"])
         );
-        assert!(embedded_hosts("https://docs.rs/http/latest/http/").is_empty());
-        assert!(embedded_hosts("https://docs.rs/serde?q=https").is_empty());
+        assert_eq!(
+            embedded_hosts("https://docs.rs/http/latest/http/"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            embedded_hosts("https://docs.rs/serde?q=https"),
+            Vec::<String>::new()
+        );
     }
 }

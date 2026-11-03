@@ -292,7 +292,7 @@ mod tests {
             json!({"sourcePath": "/h/key", "output-dir": "/tmp/o", "baseUrl": "https://x.test"});
         let (reads, writes, hosts) = parts(ok("mcp__fs__stat", &input));
         assert_eq!(reads, ["/tmp/o", "/h/key"], "keys in sorted order");
-        assert!(writes.is_empty());
+        assert_eq!(writes, Vec::<String>::new());
         assert_eq!(hosts, ["https://x.test"]);
         let (_, writes, _) = parts(ok("mcp__fs__file_write", &json!({"targetFile": "/h/rc"})));
         assert_eq!(writes, ["/h/rc"]);
@@ -460,7 +460,7 @@ mod tests {
         );
         assert_eq!(unchecked(&a), Some("nested deeper than 8 levels"));
         let (reads, _, hosts) = parts(a);
-        assert!(reads.is_empty());
+        assert_eq!(reads, Vec::<String>::new());
         assert_eq!(
             hosts,
             ["https://evil.com"],

@@ -80,7 +80,7 @@ fn assert_relaxed(checked: &Checked) {
 fn assert_denied(checked: &Checked) {
     let deny = checked.deny.as_ref().expect("drift must deny");
     assert_eq!(deny.rules, [super::super::INTEGRITY_RULE]);
-    assert!(checked.relaxed.is_empty());
+    assert_eq!(checked.relaxed, Vec::<Drift>::new());
 }
 
 #[test]

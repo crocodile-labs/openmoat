@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn leaves_permissions_and_empty_or_switched_off_values_alone() {
-        assert!(
+        assert_eq!(
             found(&json!({
                 "permissions": {"allow": ["Bash"], "defaultMode": "acceptEdits"},
                 "disableAllHooks": false, "hooks": {}, "env": {}, "apiKeyHelper": "",
@@ -163,8 +163,7 @@ mod tests {
                 "sandbox": {"enabled": true}, "model": "opus",
                 "enableAllProjectMcpServers": false, "enabledMcpjsonServers": [],
                 "extraKnownMarketplaces": {}, "disabledMcpjsonServers": ["db"],
-            }))
-            .is_empty()
+            })), Vec::<String>::new()
         );
     }
 }

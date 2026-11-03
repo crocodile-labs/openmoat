@@ -115,7 +115,7 @@ mod tests {
         assert!(!o.covers(&asked));
         let rule = o.allow_files(&["/p/notes.md".to_owned()], &[]).unwrap();
         assert_eq!(rule.fs_read, ["/p/notes.md"]);
-        assert!(rule.fs_write.is_empty());
+        assert_eq!(rule.fs_write, Vec::<String>::new());
         assert!(o.covers(&asked) && !o.covers(&write));
         assert!(o.allow_files(&[], &["/p/*.md".to_owned()]).is_err());
     }

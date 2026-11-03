@@ -161,12 +161,12 @@ fn a_session_that_read_a_secret_cannot_reach_another_host() {
     let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 0);
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
     assert!(reply.contains("session-taint"), "{reply}");
-    assert!(forwarded.is_empty());
+    assert_eq!(forwarded, Vec::<u8>::new());
     assert_eq!(rows[0].0.as_deref(), Some("run-a"));
     assert_eq!(rows[0].1, ["session-taint"]);
     // Session B's own clean history still lets it through.
     let (_, forwarded, rows) = exchange(&lookup, Some(&header("run-b", token_b())), 0);
-    assert!(!forwarded.is_empty());
+    assert_ne!(forwarded, Vec::<u8>::new());
     assert_eq!(rows[0].0.as_deref(), Some("run-b"));
 }
 
@@ -176,7 +176,7 @@ fn a_session_whose_history_cannot_be_read_is_refused() {
     let lookup = Fixed(HashMap::new());
     let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 0);
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
-    assert!(forwarded.is_empty());
+    assert_eq!(forwarded, Vec::<u8>::new());
     assert_eq!(rows[0].1, [RULE_SESSION]);
 }
 
@@ -189,7 +189,7 @@ fn a_session_holding_half_the_slots_gets_503() {
     // `max_connections` is 4: run-a already holds its 2.
     let (reply, forwarded, rows) = exchange(&lookup, Some(&header("run-a", token_a())), 2);
     assert!(reply.starts_with("HTTP/1.1 503"), "{reply}");
-    assert!(forwarded.is_empty());
+    assert_eq!(forwarded, Vec::<u8>::new());
     assert_eq!(
         (rows[0].0.as_deref(), rows[0].1.as_slice()),
         (Some("run-a"), &[RULE_SESSION.to_owned()][..])
@@ -209,14 +209,14 @@ fn an_issued_credential_is_served_as_its_session_and_others_get_407() {
     let a = Issued::new("claude-a");
     let sessions = Sessions::issued(&a, &lookup);
     let (_, forwarded, rows) = exchange_with(&sessions, Some(&header(&a.user, &a.password)), 0);
-    assert!(!forwarded.is_empty());
+    assert_ne!(forwarded, Vec::<u8>::new());
     assert_eq!(rows[0].0.as_deref(), Some("claude-a"));
     assert!(!rows[0].2.contains(&a.password));
     // No credential, or a password the verifier does not accept: 407.
     for credential in [None, Some(header(&a.user, &fresh_token()))] {
         let (reply, forwarded, rows) = exchange_with(&sessions, credential.as_deref(), 0);
         assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
-        assert!(forwarded.is_empty());
+        assert_eq!(forwarded, Vec::<u8>::new());
         assert_eq!(rows[0].1, [RULE_SESSION]);
     }
     // A tainted session's own credential carries its taint.
@@ -224,7 +224,7 @@ fn an_issued_credential_is_served_as_its_session_and_others_get_407() {
     let sessions = Sessions::issued(&b, &lookup);
     let (reply, forwarded, _) = exchange_with(&sessions, Some(&header(&b.user, &b.password)), 0);
     assert!(reply.contains("session-taint"), "{reply}");
-    assert!(forwarded.is_empty());
+    assert_eq!(forwarded, Vec::<u8>::new());
 }
 
 /// `sandbox.proxy_serve_without_credential`: a request with no credential is
@@ -244,7 +244,7 @@ fn serving_without_a_credential_serves_none_and_still_refuses_a_wrong_one() {
     let wrong = fresh_token();
     let (reply, forwarded, _) = exchange_with(&sessions, Some(&header(&a.user, &wrong)), 0);
     assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
-    assert!(forwarded.is_empty());
+    assert_eq!(forwarded, Vec::<u8>::new());
     // The tainted session's own credential is still refused at egress.
     let (reply, _, _) = exchange_with(&sessions, Some(&header(&a.user, &a.password)), 0);
     assert!(reply.contains("session-taint"), "{reply}");

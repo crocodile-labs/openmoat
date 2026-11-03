@@ -55,12 +55,21 @@ fn every_spelling_of_an_output_is_a_write() {
         assert_eq!(writes(line), [file], "{line}");
     }
     // a value-taking letter ends the cluster: `-do` sends `o`, writes nothing
-    assert!(writes("curl -do https://x.test").is_empty());
-    assert!(writes("curl -o - https://x.test").is_empty());
-    assert!(writes("curl -o /dev/null https://x.test").is_empty());
-    assert!(writes("curl -sSo /dev/stdout https://x.test").is_empty());
-    assert!(writes("wget -O /dev/stdout https://x.test/a").is_empty());
-    assert!(writes("wget -qO- https://x.test/a").is_empty());
+    assert_eq!(writes("curl -do https://x.test"), Vec::<String>::new());
+    assert_eq!(writes("curl -o - https://x.test"), Vec::<String>::new());
+    assert_eq!(
+        writes("curl -o /dev/null https://x.test"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        writes("curl -sSo /dev/stdout https://x.test"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        writes("wget -O /dev/stdout https://x.test/a"),
+        Vec::<String>::new()
+    );
+    assert_eq!(writes("wget -qO- https://x.test/a"), Vec::<String>::new());
 }
 
 #[test]
@@ -103,8 +112,11 @@ fn remote_names_are_writes() {
     assert_eq!(writes("curl -O https://x.test"), ["curl_response"]);
     assert_eq!(writes("curl --url https://x.test/u -O"), ["u"]);
     assert_eq!(writes("wget https://x.test/"), ["index.html"]);
-    assert!(writes("wget --spider https://x.test/a").is_empty());
-    assert!(writes("curl https://x.test/a").is_empty());
+    assert_eq!(
+        writes("wget --spider https://x.test/a"),
+        Vec::<String>::new()
+    );
+    assert_eq!(writes("curl https://x.test/a"), Vec::<String>::new());
 }
 
 #[test]

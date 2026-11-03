@@ -295,7 +295,7 @@ fn a_held_pin_still_drops_removed_servers() {
     accept_all(&home);
     fs::write(&file, r#"{"mcpServers": {}}"#).unwrap();
     let held = pin(&home, &[Host::ClaudeCode], None, true).unwrap();
-    assert!(held.held.is_empty());
+    assert_eq!(held.held, Vec::<Change>::new());
     assert_eq!(held.count, 0);
 }
 
@@ -312,7 +312,7 @@ fn a_held_pin_over_a_lock_without_mcp_pins_starts_them_empty() {
 fn an_unheld_pin_pins_everything() {
     let (_dir, home, _) = setup(r#"{"mcpServers": {"gh": {"command": "npx"}}}"#);
     let pinned = pin(&home, &[Host::ClaudeCode], None, false).unwrap();
-    assert!(pinned.held.is_empty());
+    assert_eq!(pinned.held, Vec::<Change>::new());
     assert_eq!(pinned.count, 1);
     assert!(denied(&home, "mcp__gh__search").is_none());
 }

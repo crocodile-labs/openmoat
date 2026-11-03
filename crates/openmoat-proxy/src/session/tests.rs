@@ -340,14 +340,14 @@ fn a_recent_taint_is_looked_up_again_once_an_event_is_recorded() {
         &lookup,
     );
     let long = Duration::from_hours(1);
-    assert!(sessions.taint("run-a").unwrap().secrets.is_empty());
+    assert_eq!(
+        sessions.taint("run-a").unwrap().secrets,
+        Vec::<TaintSecret>::new()
+    );
     // nothing new: the recent taint stands
-    assert!(
-        sessions
-            .taint_within("run-a", long)
-            .unwrap()
-            .secrets
-            .is_empty()
+    assert_eq!(
+        sessions.taint_within("run-a", long).unwrap().secrets,
+        Vec::<TaintSecret>::new()
     );
     // the session read a secret: well within `max_age`, the taint is new
     lookup.version.store(1, std::sync::atomic::Ordering::SeqCst);
@@ -378,7 +378,10 @@ fn without_a_version_a_recent_taint_is_looked_up_again() {
         &lookup,
     );
     let long = Duration::from_hours(1);
-    assert!(sessions.taint("run-a").unwrap().secrets.is_empty());
+    assert_eq!(
+        sessions.taint("run-a").unwrap().secrets,
+        Vec::<TaintSecret>::new()
+    );
     *lookup.0.lock().unwrap() = Ok(Taint {
         secrets: vec![TaintSecret {
             source: "read ~/.ssh/id_rsa".to_owned(),

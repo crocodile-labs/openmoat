@@ -84,7 +84,7 @@ fn paths_lists_what_a_call_reads_and_writes() {
         e.paths(&Action::shell("cp ./a ~/b && cat ./a")),
         ["/h/b", "/p/a"]
     );
-    assert!(e.paths(&Action::net("example.com")).is_empty());
+    assert_eq!(e.paths(&Action::net("example.com")), Vec::<String>::new());
 }
 
 #[test]

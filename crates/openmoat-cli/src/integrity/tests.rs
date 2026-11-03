@@ -1,4 +1,5 @@
 use super::*;
+use crate::approvals::Grant;
 
 fn write(dir: &Path, name: &str, contents: &str) -> PathBuf {
     let path = dir.join(name);
@@ -20,7 +21,7 @@ fn pin_verify_and_detect_drift() {
     .unwrap();
     assert_eq!(lock.entries.len(), 2, "absent files are not pinned");
     assert!(lock.entries.keys().any(|k| k.ends_with("policy.yaml")));
-    assert!(lock.verify().is_empty());
+    assert_eq!(lock.verify(), Vec::<Drift>::new());
 
     fs::write(&policy, "version: 1\nallow: []\n").unwrap();
     fs::remove_file(&hook).unwrap();
@@ -87,7 +88,7 @@ fn the_policy_bytes_checked_are_the_bytes_parsed() {
     let policy = write(dir.path(), "policy.yaml", pinned);
     let lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&policy)).unwrap();
     let (drift, kept) = lock.verify_keeping(std::slice::from_ref(&policy), &[]);
-    assert!(drift.is_empty());
+    assert_eq!(drift, Vec::<Drift>::new());
     let kept = kept
         .get(&policy)
         .expect("an intact pinned file keeps the bytes it was checked by")
@@ -126,7 +127,7 @@ fn the_files_of_a_named_directory_are_kept_under_its_path() {
     let elsewhere = write(dir.path(), "team.yaml", "version: 1\n");
     let lock = Lock::pin(Path::new("/x/moat"), &[pack.clone(), elsewhere.clone()]).unwrap();
     let (drift, kept) = lock.verify_keeping(&[], std::slice::from_ref(&packs));
-    assert!(drift.is_empty());
+    assert_eq!(drift, Vec::<Drift>::new());
     fs::write(&pack, "version: 1\ndeny: []\n").unwrap();
     assert_eq!(kept.get(&pack), Some(b"version: 1\n".as_slice()));
     assert_eq!(
@@ -175,11 +176,9 @@ fn a_state_file_missing_at_a_re_pin_cannot_be_planted_later() {
     fs::remove_dir(home.overlay_path().parent().unwrap()).unwrap();
     let (drift, kept) = verify_state(&home, &lock);
     assert!(drift.is_empty(), "{drift:?}");
-    assert!(
-        crate::approvals::Grants::load_in(&kept)
-            .unwrap()
-            .entries
-            .is_empty()
+    assert_eq!(
+        crate::approvals::Grants::load_in(&kept).unwrap().entries,
+        Vec::<Grant>::new()
     );
 }
 

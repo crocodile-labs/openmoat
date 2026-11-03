@@ -393,7 +393,7 @@ mod tests {
             warn("version: 1\napproval:\n  channel: telegram\nscope:\n  project_roots: ['.']\n");
         assert_eq!(w.len(), 2, "{w:?}");
         assert!(w[0].contains("`approval` is reserved") && w[1].contains("`scope` is reserved"));
-        assert!(warn("version: 1\n").is_empty());
+        assert_eq!(warn("version: 1\n"), Vec::<String>::new());
     }
 
     #[test]
@@ -401,7 +401,7 @@ mod tests {
         let w = warn("version: 1\ndefaults: { network: deny, net: deny, '*': ask }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("`network`"));
-        assert!(warn("version: 1\ndefaults: allow\n").is_empty());
+        assert_eq!(warn("version: 1\ndefaults: allow\n"), Vec::<String>::new());
     }
 
     #[test]
@@ -440,7 +440,10 @@ mod tests {
         let w = warn("version: 1\nsandbox: { proxy_allow_ech: true }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("ECH"), "{w:?}");
-        assert!(warn("version: 1\nsandbox: { proxy_allow_ech: false }\n").is_empty());
+        assert_eq!(
+            warn("version: 1\nsandbox: { proxy_allow_ech: false }\n"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -448,8 +451,9 @@ mod tests {
         let w = warn("version: 1\nsandbox: { proxy_serve_without_credential: true }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("escapes its taint"), "{w:?}");
-        assert!(
-            warn("version: 1\nsandbox: { proxy_serve_without_credential: false }\n").is_empty()
+        assert_eq!(
+            warn("version: 1\nsandbox: { proxy_serve_without_credential: false }\n"),
+            Vec::<String>::new()
         );
     }
 
@@ -458,7 +462,10 @@ mod tests {
         let w = warn("version: 1\nmcp: { trust_first_sight: true }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("mcp.trust_first_sight"), "{w:?}");
-        assert!(warn("version: 1\nmcp: { trust_first_sight: false }\n").is_empty());
+        assert_eq!(
+            warn("version: 1\nmcp: { trust_first_sight: false }\n"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -504,7 +511,7 @@ mod tests {
                  tls: terminate\n"
             )
         };
-        assert!(warn(&policy("api.example.com")).is_empty());
+        assert_eq!(warn(&policy("api.example.com")), Vec::<String>::new());
         let w = warn(&policy("api.localhost"));
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(

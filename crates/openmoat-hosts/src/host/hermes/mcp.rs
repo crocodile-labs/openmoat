@@ -65,7 +65,7 @@ mod tests {
         let servers = McpServersYaml.servers(&doc).unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].pointer, "/mcp_servers/files");
-        assert!(McpServersYaml.servers(&json!({})).unwrap().is_empty());
+        assert_eq!(McpServersYaml.servers(&json!({})).unwrap(), Vec::<McpServer>::new());
         assert!(McpServersYaml.servers(&json!({ "mcp_servers": [1] })).is_err());
     }
 

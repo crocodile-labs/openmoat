@@ -1,6 +1,6 @@
 use crate::policy::{Policy, PolicyError};
 
-use super::Source;
+use super::{Secret, Source};
 
 fn parse(secrets: &str) -> Result<Policy, PolicyError> {
     Policy::parse(&format!("version: 1\nsecrets:\n{secrets}"))
@@ -30,7 +30,10 @@ fn parses_every_source() {
     );
     assert!(matches!(&p.secrets[2].source, Source::Keychain { service, .. } if service == "moat"));
     assert_eq!(p.secrets[0].placeholder(), "moat-secret:gh:placeholder");
-    assert!(Policy::parse("version: 1\n").unwrap().secrets.is_empty());
+    assert_eq!(
+        Policy::parse("version: 1\n").unwrap().secrets,
+        Vec::<Secret>::new()
+    );
 }
 
 #[test]

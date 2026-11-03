@@ -178,7 +178,7 @@ fn project_rules_need_a_project_and_cover_every_spelling() {
         },
     )
     .unwrap();
-    assert!(none.fs.read.allow.is_empty());
+    assert_eq!(none.fs.read.allow, Vec::<Rule>::new());
     let linked = lower(
         &policy,
         &EvalContext {
@@ -232,7 +232,7 @@ fn hook_only_deny_groups_are_left_to_the_hook() {
          \x20   fs.write: ['/h/.m2/settings.xml']\n",
     );
     assert_eq!(ids(&ir.fs.read.deny), ["s"]);
-    assert!(ir.fs.write.deny.is_empty());
+    assert_eq!(ir.fs.write.deny, Vec::<Rule>::new());
     let check = ir.checker().unwrap();
     assert_eq!(
         check.check_os(&read("/h/.m2/settings.xml")),
@@ -336,8 +336,11 @@ fn read_roots_are_an_allowance_that_deny_rules_still_beat() {
 
 #[test]
 fn a_policy_without_read_roots_has_no_allowance() {
-    assert!(lowered("version: 1\nsandbox: {}\n").allowances.is_empty());
-    assert!(lowered("version: 1\n").allowances.is_empty());
+    assert_eq!(
+        lowered("version: 1\nsandbox: {}\n").allowances,
+        Vec::<Allowance>::new()
+    );
+    assert_eq!(lowered("version: 1\n").allowances, Vec::<Allowance>::new());
 }
 
 /// #167: the policy's `secrets:` list lowers into `ir.secrets` field-for-field,

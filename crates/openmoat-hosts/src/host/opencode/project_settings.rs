@@ -222,9 +222,9 @@ mod tests {
 
     #[test]
     fn a_plain_project_file_is_not_named() {
-        assert!(of(&json!({"$schema": "https://opencode.ai/config.json", "model": "x/y"})).is_empty());
-        assert!(of(&json!({"plugin": []})).is_empty());
-        assert!(off(&json!({"plugins": ["opencode-helper", "-other", "-open*", "-openmoat2"]})).is_empty());
+        assert_eq!(of(&json!({"$schema": "https://opencode.ai/config.json", "model": "x/y"})), Vec::<String>::new());
+        assert_eq!(of(&json!({"plugin": []})), Vec::<String>::new());
+        assert_eq!(off(&json!({"plugins": ["opencode-helper", "-other", "-open*", "-openmoat2"]})), Vec::<String>::new());
     }
 
     /// OpenCode 2 removes a plugin by its id, `*` or `<prefix>.*`, in either

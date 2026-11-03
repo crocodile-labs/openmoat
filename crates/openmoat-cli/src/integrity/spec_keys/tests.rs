@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use super::listed;
 use crate::home::Home;
-use crate::integrity::{INTEGRITY_RULE, Lock, check};
+use crate::integrity::{Drift, INTEGRITY_RULE, Lock, check};
 
 struct Setup {
     _dir: tempfile::TempDir,
@@ -72,7 +72,7 @@ fn decided(setup: &Setup) -> bool {
     let checked = check(&setup.home).unwrap().checked;
     if let Some(deny) = checked.deny {
         assert_eq!(deny.rules, [INTEGRITY_RULE]);
-        assert!(checked.relaxed.is_empty());
+        assert_eq!(checked.relaxed, Vec::<Drift>::new());
         false
     } else {
         assert_eq!(checked.relaxed.len(), 1, "{:?}", checked.relaxed);
