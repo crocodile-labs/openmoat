@@ -396,6 +396,14 @@ The main gaps:
   later pages do not.
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).
+- **The check and the call are two moments.** OpenMoat decides on what the call names;
+  a file or link that changes between the check and the command running, and hard
+  links that already exist, are not seen. Inside `openmoat run` the OS sandbox still
+  holds ([THREAT_MODEL](docs/THREAT_MODEL.md), ADR-009).
+- **MCP servers start before any call is checked.** An agent starts its MCP servers when
+  a session begins, outside every sandbox; a changed or new server's tool calls are
+  denied, but its command has already run once. `openmoat mcp proxy --sandbox` or
+  `openmoat run` confines it.
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
   2.1.295, run a call unchecked if `openmoat` is missing. Codex also skips untrusted
   hooks: after `openmoat init`, open Codex, run `/hooks` and trust the OpenMoat hook;
