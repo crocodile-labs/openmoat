@@ -21,7 +21,7 @@
     "checked": {"version": "0.160.1", "source": "scripts/ci/host-binaries.sh"},
     "config": [["{CODEX_HOME}/hooks.json", "json"]],
     "payload": {"fixture": "codex/fixtures/pretooluse-shell.json", "command": "/tool_input/command",
-                "verdict": "/hookSpecificOutput/permissionDecision"},
+                "verdict": "/hookSpecificOutput/permissionDecision", "allow_is_silent": true},
     "runners": ["ubuntu-latest", "macos-15"]
   },
   "opencode-1": {

@@ -231,6 +231,9 @@ def cmd_reply(agent, which, code, path):
     except ValueError:
         fail(f"{agent}: guard's reply is not JSON: {text[:300]!r}")
     got = verdict_of(agent, reply) if reply is not None else ""
+    # Codex rejects a bare `permissionDecision: allow`, so its allow is no output.
+    if which == "allow" and reply is None and record(agent)["payload"].get("allow_is_silent"):
+        got = "allow"
     want_code = 2 if which == "deny" else 0
     if int(code) != want_code or got != which:
         fail(f"{agent}: the {which} payload got exit {code} and verdict {got!r}, "

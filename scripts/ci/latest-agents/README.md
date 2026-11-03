@@ -34,7 +34,9 @@ Every agent but the Continue CLI also gets: the installed version beside the one
 adapter was checked against (`checked` in `agents.json`; newer is reported, not
 failed); `status` and `doctor` calling it protected by its hook, with doctor healthy;
 its configuration files parsing (JSON; JavaScript with `node --check`; OpenClaw's
-`config validate`; Hermes Agent's own `hooks list`); and the two payloads.
+`config validate`; Hermes Agent's own `hooks list`); and the two payloads. An agent
+whose `payload` sets `allow_is_silent` (Codex, which rejects a bare
+`permissionDecision: allow`) passes the allow payload with exit 0 and no output.
 
 ## When it fails
 
