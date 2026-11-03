@@ -38,6 +38,14 @@ impl Gateway {
         let sb = Sandbox::installed(&[".claude"]);
         let record = sb.home.join("record.jsonl");
         let gateway = Self { sb, record };
+        // `openmoat mcp proxy` starts only a definition a person accepted
+        // (ADR-049): one per mode, each starting the proxy as `docs`.
+        for mode in ["answer", "silent", "rug"] {
+            let line = gateway.proxy_line(mode);
+            let args: Vec<&str> = line.iter().map(String::as_str).collect();
+            gateway.sb.define_wrapped(&format!("docs-{mode}"), &args);
+        }
+        gateway.sb.accept_mcp();
         let listed = gateway.session("answer", &[list(1)]);
         assert!(
             listed.contains(r#""tools":[]"#),
@@ -51,13 +59,18 @@ impl Gateway {
         gateway
     }
 
+    /// What follows `mcp proxy` to start the server in `mode`.
+    fn proxy_line(&self, mode: &str) -> Vec<String> {
+        let script = server_script().to_string_lossy().into_owned();
+        let record = self.record.to_string_lossy().into_owned();
+        ["--server", "docs", "--", "python3", &script, &record, mode]
+            .map(str::to_owned)
+            .to_vec()
+    }
+
     fn proxy(&self, mode: &str) -> std::process::Command {
         let mut command = self.sb.command();
-        command
-            .args(["mcp", "proxy", "--server", "docs", "--", "python3"])
-            .arg(server_script())
-            .arg(&self.record)
-            .arg(mode);
+        command.args(["mcp", "proxy"]).args(self.proxy_line(mode));
         command
     }
 

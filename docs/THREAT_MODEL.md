@@ -80,9 +80,18 @@ These hold for the current code. Each is a design consequence or a tracked gap, 
 something OpenMoat claims to stop.
 
 - **MCP servers start before OpenMoat sees a call.** A host starts its MCP servers when
-  a session begins, outside every sandbox. When a definition changed or was added and
-  no person accepted it, OpenMoat denies that server's tool calls, but the command has
-  already run once. Only `openmoat mcp proxy --sandbox` or `openmoat run` confines it. Without
+  a session begins, outside every sandbox. For a server not run through `openmoat mcp
+  proxy`, when a definition changed or was added and no person accepted it, OpenMoat
+  denies that server's tool calls, but the command has already run once; `openmoat status`
+  and `openmoat doctor` list these servers, and the project servers an agent starts
+  without asking (Claude Code's `enableAllProjectMcpServers`, `enabledMcpjsonServers`).
+  A wrapped server starts only when the proxy's command line is the one a definition a
+  person accepted gives; otherwise nothing runs and the agent gets an error naming
+  `openmoat mcp accept` (ADR-049). The check reads project definitions from the proxy's
+  working directory, and does not cover environment variables an agent sets for every
+  server outside the definition. Wrapped servers run under `openmoat run` by default where
+  it can sandbox (`--no-sandbox` opts out); others are confined only by `openmoat run`
+  around the agent. Without
   `openmoat mcp proxy`, a server can change its tool descriptions unseen, and a call reaches
   it whenever the agent's own hook let it, or the agent ran no hook. With it, every
   tool waits for a person's `openmoat mcp accept`, the first listing of a new server too

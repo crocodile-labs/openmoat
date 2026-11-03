@@ -79,8 +79,9 @@ pub fn run(args: &InitArgs) -> Result<Code> {
 
     if dry_run {
         writeln!(out, "would lock             {}", home.lock_path().display())?;
-        if args.mcp_proxy {
-            super::mcp::wrap_servers(&home, &binary, &hosts, &[], false, true, &mut out)?;
+        if args.mcp.mcp_proxy {
+            let sandbox = args.mcp.sandbox();
+            super::mcp::wrap_servers(&home, &binary, &hosts, &[], sandbox, true, &mut out)?;
         }
         writeln!(out, "dry run: nothing was written")?;
     } else {
@@ -91,7 +92,10 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             home.lock_path().display(),
             lock.entries.len()
         )?;
-        mcp::servers(&home, &binary, args.mcp_proxy, &hosts, unattended, &mut out)?;
+        let proxy = args.mcp.mcp_proxy.then(|| mcp::Proxy {
+            sandbox: args.mcp.sandbox(),
+        });
+        mcp::servers(&home, &binary, proxy, &hosts, unattended, &mut out)?;
         if !hosts.is_empty() {
             backups(&home, &hosts, &mut out)?;
         }

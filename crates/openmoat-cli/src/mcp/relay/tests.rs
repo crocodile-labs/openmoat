@@ -486,3 +486,29 @@ fn resources_and_prompts_go_to_the_gate_and_completions_do_not() {
         ]
     );
 }
+
+#[test]
+fn a_server_that_may_not_start_answers_every_request_with_the_reason() {
+    let input = [
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string(),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}).to_string(),
+        "not json".to_owned(),
+        json!({"jsonrpc": "2.0", "id": "a", "method": "tools/list"}).to_string(),
+    ]
+    .join("\n");
+    let host = Mutex::new(Some(Vec::new()));
+    refuse_all(Cursor::new(input), &host, "run `openmoat mcp accept gh`").unwrap();
+    let sent = String::from_utf8(host.lock().unwrap().take().unwrap()).unwrap();
+    let answers: Vec<Value> = sent
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(answers.len(), 2, "{sent}");
+    assert_eq!(answers[0]["id"], 1);
+    assert_eq!(answers[1]["id"], "a");
+    assert_eq!(answers[0]["error"]["code"], REFUSED);
+    assert_eq!(
+        answers[0]["error"]["message"],
+        "run `openmoat mcp accept gh`"
+    );
+}

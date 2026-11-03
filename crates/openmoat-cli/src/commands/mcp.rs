@@ -139,7 +139,7 @@ pub fn wrap(args: &McpWrapArgs) -> Result<Code> {
         &binary,
         &hosts,
         &args.servers,
-        args.sandbox,
+        args.sandbox_choice(),
         args.dry_run,
         &mut out,
     )?;
@@ -152,22 +152,29 @@ pub fn wrap(args: &McpWrapArgs) -> Result<Code> {
 
 /// Wrap the stdio servers named in `names` (all when empty) in the user
 /// configuration of `hosts`; returns how many. `moat init --mcp-proxy` uses it.
+/// `sandbox` is the person's choice: `None` starts a newly wrapped server in
+/// `moat run`'s sandbox wherever that can sandbox, and leaves a wrapped one as
+/// it is; `Some` also switches a wrapped one (ADR-049).
 pub(super) fn wrap_servers(
     home: &Home,
     binary: &Path,
     hosts: &[Host],
     names: &[String],
-    sandbox: bool,
+    sandbox: Option<bool>,
     dry_run: bool,
     out: &mut Deferred,
 ) -> Result<usize> {
     let pending = pending_ids(home, hosts)?;
+    let unavailable = super::run::unavailable();
+    let new_sandbox = sandbox.unwrap_or(unavailable.is_none());
     let mut edits = Vec::new();
     for (source, server) in wrap::user_servers(home, hosts)? {
         if !names.is_empty() && !names.contains(&server.name) {
             continue;
         }
-        let Some(entry) = wrap::wrapped(&server.entry, binary, &server.name, sandbox) else {
+        let entry = wrap::wrapped(&server.entry, binary, &server.name, new_sandbox)
+            .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, on)));
+        let Some(entry) = entry else {
             continue;
         };
         if pending.contains(&server.id) {
@@ -177,8 +184,46 @@ pub(super) fn wrap_servers(
         edits.push((source, Done { server, entry }));
     }
     let done = finish_edits(home, hosts, &edits, dry_run, true, out)?;
+    let unavailable = unavailable.filter(|_| sandbox.is_none_or(|on| on));
+    sandbox_note(&edits, unavailable.as_deref(), out)?;
     first_sight_note(home, &edits, out)?;
     Ok(done)
+}
+
+/// One line naming the servers just written to start without the sandbox,
+/// with why (`unavailable`, unless the person chose `--no-sandbox`), and,
+/// when the sandbox was asked for where `moat run` cannot sandbox, why they
+/// will not start.
+fn sandbox_note(
+    edits: &[(crate::mcp::servers::Source, Done)],
+    unavailable: Option<&str>,
+    out: &mut Deferred,
+) -> Result<()> {
+    let names = |on: bool| -> Vec<String> {
+        edits
+            .iter()
+            .filter(|(_, d)| wrap::sandboxed(&d.entry) == Some(on))
+            .map(|(_, d)| format!("`{}`", d.server.name))
+            .collect()
+    };
+    let (unconfined, confined) = (names(false), names(true));
+    if !unconfined.is_empty() {
+        let why =
+            unavailable.map_or_else(|| " (--no-sandbox)".to_owned(), |why| format!(": {why}"));
+        writeln!(
+            out,
+            "! {} run without `openmoat run`'s sandbox, with your permissions{why}",
+            unconfined.join(", ")
+        )?;
+    }
+    if let (Some(why), false) = (unavailable, confined.is_empty()) {
+        writeln!(
+            out,
+            "! {} cannot start in `openmoat run`'s sandbox here ({why}); run              `openmoat mcp wrap --no-sandbox` to start them unconfined",
+            confined.join(", ")
+        )?;
+    }
+    Ok(())
 }
 
 /// One line on what a wrapped server with no tool pins yet does first: the

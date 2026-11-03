@@ -21,6 +21,52 @@ pub struct McpSpec {
     pub project_files: &'static [(&'static str, &'static dyn McpReader)],
     /// How the host names a server's tools in its hook payloads.
     pub tool_names: &'static dyn McpNames,
+    /// Which settings make the host start a project's servers without asking
+    /// the person first; `None` for a host OpenMoat knows no such setting of.
+    pub auto_start: Option<&'static dyn McpAutoStart>,
+}
+
+/// The settings that make a host start servers a project's own MCP files
+/// define as soon as a session opens the project, without asking the person.
+/// A started server has run its command before any tool call reaches a hook.
+pub trait McpAutoStart: Sync + Debug {
+    /// What a settings file whose top-level object is `root` (the person's
+    /// own, or a project's) says about starting a project's servers.
+    fn settings(&self, root: &Map<String, Value>) -> Vec<AutoStart>;
+
+    /// The object of `doc`, the host's user-level MCP file parsed as JSON,
+    /// that holds the host's settings for the project in directory `dir`;
+    /// `None` when the file keeps none for it.
+    fn project_entry<'a>(&self, doc: &'a Value, dir: &str) -> Option<&'a Map<String, Value>> {
+        let _ = (doc, dir);
+        None
+    }
+}
+
+/// One setting about starting a project's MCP servers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AutoStart {
+    /// Every server of the project's files starts; setting `key` says so.
+    All {
+        /// The setting.
+        key: &'static str,
+    },
+    /// Server `name` starts; setting `key` lists it.
+    Named {
+        /// The setting.
+        key: &'static str,
+        /// The server's name.
+        name: String,
+    },
+    /// Server `name` does not start, whatever else says so; setting `key`
+    /// lists it.
+    Off {
+        /// The setting.
+        key: &'static str,
+        /// The server's name.
+        name: String,
+    },
 }
 
 /// Where a host's user-level MCP server file is.

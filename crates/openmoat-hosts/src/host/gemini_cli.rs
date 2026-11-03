@@ -84,6 +84,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[(".gemini/settings.json", &McpServersJson)],
         tool_names: &Prefixed,
+        auto_start: None,
     }),
     // A trusted folder's `.gemini/settings.json` is merged over the user's:
     // `hooksConfig.disabled` lists are joined, and its `BeforeTool` hooks run

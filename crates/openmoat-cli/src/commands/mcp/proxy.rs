@@ -2,6 +2,12 @@
 //! and relay its stdio through [`Relay`], the MCP gateway (ADR-045), which
 //! passes on only what [`Gateway`] lets through.
 //!
+//! Before anything starts, the command line it was given must be the one a
+//! definition a person accepted gives (`mcp/startup.rs`, ADR-049). When it is
+//! not, nothing starts: every request the agent sends is answered with an
+//! error naming `openmoat mcp accept`, the refusal is recorded and printed on
+//! standard error, and the proxy exits 1 once the agent closes its input.
+//!
 //! The server's standard error, working directory and environment are the
 //! proxy's own, which the agent host set from the definition. With `--sandbox`
 //! the server is started as `moat run -- <command…>`, so it runs in the sandbox
@@ -18,10 +24,15 @@ use crate::cli::McpProxyArgs;
 use crate::exit::Code;
 use crate::home::Home;
 use crate::mcp::relay::{self, Relay, Save};
+use crate::mcp::startup::{self, Launch, Startup};
 use crate::mcp::tools::{self, ToolPins};
 
 pub fn run(args: &McpProxyArgs) -> Result<Code> {
     let home = Home::locate()?;
+    let cwd = std::env::current_dir().ok();
+    if let Startup::Refuse(why) = startup::check(&home, &Launch::of(args), cwd.as_deref()) {
+        return refuse(home, args, &why);
+    }
     let path = tools::path(&home, &args.server);
     let pins = ToolPins::load(&path)?;
     // A policy that cannot be read, or one the lock no longer matches, trusts
@@ -90,6 +101,22 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
     } else {
         Code::Failed
     })
+}
+
+/// Start nothing: record and print `why`, and answer the agent with it until
+/// it closes the proxy's input.
+fn refuse(home: Home, args: &McpProxyArgs, why: &str) -> Result<Code> {
+    let message = format!("OpenMoat did not start MCP server `{}`: {why}", args.server);
+    note(&message);
+    let recorded = Gateway::new(home, &args.server).and_then(|g| g.refused_start(&message));
+    if let Err(e) = recorded {
+        note(&format!(
+            "the refusal could not be recorded in the audit log: {e:#}"
+        ));
+    }
+    let host = Mutex::new(Some(io::stdout()));
+    relay::refuse_all(io::stdin().lock(), &host, &crate::render::clean(&message))?;
+    Ok(Code::Failed)
 }
 
 /// Why the relay dropped something, on the proxy's standard error, which the

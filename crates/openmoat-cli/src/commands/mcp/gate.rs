@@ -202,6 +202,26 @@ impl Gateway {
         }
     }
 
+    /// Record that the server was not started (ADR-049): a deny with the rule
+    /// `moat guard` gives the tool calls of a server whose definition is not
+    /// the accepted one, under the server's name.
+    pub fn refused_start(&self, why: &str) -> Result<()> {
+        let store = self.store()?.with_secrets(self.known());
+        let name = format!("mcp__{}", self.server);
+        let decision = Decision::single(Verdict::Deny, crate::mcp::SERVER_RULE, why);
+        store.record(&NewEvent {
+            host: AUDIT_HOST,
+            session_id: &self.session,
+            call_id: None,
+            cwd: self.cwd.to_str(),
+            tool: &name,
+            action: Some(&Action::mcp(name.clone())),
+            decision: &decision,
+            latency_us: 0,
+        })?;
+        Ok(())
+    }
+
     /// The audit log.
     fn store(&self) -> Result<Store> {
         Store::open_existing(&self.home.audit_path()).context("audit log unavailable")

@@ -264,6 +264,13 @@ fn resolved(path: &Path) -> String {
     path_string(resolved.as_deref().unwrap_or(path))
 }
 
+/// Why `moat run` cannot sandbox on this machine (no backend, or a macOS
+/// older than its floor); `None` when it can. `moat mcp wrap` starts servers
+/// in it by default only where it can.
+pub fn unavailable() -> Option<String> {
+    platform::unavailable()
+}
+
 /// Why `moat run` here would restrict the agent's network by port only, if it
 /// would (Linux without a usable bubblewrap), for `moat doctor`.
 pub fn port_only_network() -> Option<String> {

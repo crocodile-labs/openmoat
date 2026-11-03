@@ -76,6 +76,11 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
     bail!("only `openmoat run --isolate` on Linux starts this")
 }
 
+/// Why `moat run` cannot sandbox on this Mac; `None` when it can.
+pub fn unavailable() -> Option<String> {
+    os_version::run_floor(os_version::macos().as_deref()).map(|reason| refusal(&reason))
+}
+
 /// None: Seatbelt names the proxy's address, not only its port.
 pub fn port_only_network() -> Option<String> {
     None

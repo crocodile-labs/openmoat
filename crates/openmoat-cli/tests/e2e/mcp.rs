@@ -225,7 +225,7 @@ fn doctor_accept_shows_and_accepts_a_new_server() {
 #[test]
 fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
     let sb = installed_with(SERVERS);
-    let out = sb.moat_as_person(&["mcp", "wrap", "gh"]);
+    let out = sb.moat_as_person(&["mcp", "wrap", "--no-sandbox", "gh"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
         text(&out).contains("tools of `gh` wait for `openmoat mcp accept"),
@@ -273,19 +273,38 @@ fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
     );
 }
 
+/// The stand-in server's command line after `mcp proxy`: it answers
+/// `tools/list` with what `MOAT_TEST_LISTING` holds, and nothing else.
+#[cfg(unix)]
+const DOCS_SERVER: [&str; 6] = [
+    "--server",
+    "docs",
+    "--",
+    "sh",
+    "-c",
+    r#"while read -r line; do case "$line" in *tools/list*) printf '%s\n' "$MOAT_TEST_LISTING";; esac; done"#,
+];
+
+/// [`installed_with`] plus the stand-in server `docs`, its definition accepted.
+#[cfg(unix)]
+fn installed_with_docs() -> Sandbox {
+    let sb = installed_with(SERVERS);
+    sb.define_wrapped("docs", &DOCS_SERVER);
+    sb.accept_mcp();
+    sb
+}
+
 /// A stand-in stdio server: it answers `tools/list` with one tool described as
 /// `description`, and nothing else.
 #[cfg(unix)]
 fn proxy_session(sb: &Sandbox, description: &str, input: &str) -> String {
     let response = json!({"jsonrpc": "2.0", "id": 1, "result": {"tools": [
         {"name": "search", "description": description, "inputSchema": {"type": "object"}}]}});
-    let script = format!(
-        "while read -r line; do case \"$line\" in *tools/list*) echo '{response}';; esac; done"
-    );
     let out = output(
         sb.command()
-            .args(["mcp", "proxy", "--server", "docs", "--", "sh", "-c"])
-            .arg(script),
+            .args(["mcp", "proxy"])
+            .args(DOCS_SERVER)
+            .env("MOAT_TEST_LISTING", response.to_string()),
         Some(input),
     );
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -295,7 +314,7 @@ fn proxy_session(sb: &Sandbox, description: &str, input: &str) -> String {
 #[cfg(unix)]
 #[test]
 fn the_proxy_hides_a_tool_whose_description_changed_until_accepted() {
-    let sb = installed_with(SERVERS);
+    let sb = installed_with_docs();
     let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).to_string() + "\n";
     let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
         "params": {"name": "search", "arguments": {}}})
@@ -352,7 +371,7 @@ fn the_proxy_hides_a_tool_whose_description_changed_until_accepted() {
 #[cfg(unix)]
 #[test]
 fn the_proxy_holds_a_new_servers_tools_until_accepted() {
-    let sb = installed_with(SERVERS);
+    let sb = installed_with_docs();
     let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).to_string() + "\n";
     let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
         "params": {"name": "search", "arguments": {}}})

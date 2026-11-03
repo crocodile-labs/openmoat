@@ -71,6 +71,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &mcp::ConfigToml,
         project_files: &[(".codex/config.toml", &mcp::ConfigToml)],
         tool_names: &Prefixed,
+        auto_start: None,
     }),
     sandbox: Some(SandboxSpec {
         format: SandboxFormat::CodexProfile,

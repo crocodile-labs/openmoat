@@ -462,7 +462,26 @@ openmoat mcp accept github        # after the agent first starts it: read each t
 
 `openmoat mcp wrap` changes only that server's `command` and `args` in the agent's user
 configuration (backed up first); `openmoat mcp unwrap github` and `openmoat uninstall` put
-them back. With `--sandbox` the server itself runs under `openmoat run`.
+them back. The server itself runs under `openmoat run` (`--sandbox`) wherever that can
+sandbox (macOS 13 or later, Linux); `--no-sandbox` starts it with your permissions
+(`openmoat init --mcp-proxy --mcp-no-sandbox` for every server). Wrapping a wrapped server
+again keeps its choice unless you give one of the flags.
+
+Before it starts anything, the proxy checks that its command line is the one a definition
+you accepted gives ([ADR-049](adr/ADR-049-mcp-startup-gate.md)). A new or changed
+definition never runs: the agent's MCP list shows the server failed, with an error like
+
+```text
+OpenMoat did not start MCP server `github`: MCP server `github` in ~/.claude.json changed
+    command: "npx" → "sh"; OpenMoat starts it only once a person has reviewed it: run
+    `openmoat mcp accept github` in a terminal
+```
+
+and the refusal is in the audit log (rule `mcp-server-changed`, host `mcp-proxy`). Run
+`openmoat mcp accept github`, then restart the agent's session. A drifted lock or an
+unreadable policy starts no wrapped server. `openmoat status` and `openmoat doctor` warn
+about servers that start outside OpenMoat: stdio servers that are not wrapped (a project's
+too), wrapped ones without the sandbox, and project servers an agent starts without asking.
 
 Through the gateway:
 
@@ -621,7 +640,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 |---|---|
 | `openmoat` | see which agents are protected and today's decisions; answer drift, a policy update or the last ask (terminal only) |
 | `openmoat demo [--format json]` | see what your policy (or the default one) decides for a fixed list of example agent calls; nothing runs, no hook or file is touched |
-| `openmoat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions). Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
+| `openmoat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy [--mcp-no-sandbox]]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions). Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
 | `openmoat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists where each sandbox is stricter or wider than the policy) |
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |
@@ -643,8 +662,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat secret list [--format json]` | each brokered secret's host, header and where its value is read from (never the value), and whether a deny rule keeps the agent from reading it there |
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
-| `openmoat mcp wrap [<server>…] [--sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included (`--sandbox` also starts the server under `openmoat run`) · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
-| `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not |
+| `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
+| `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
 | `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them); signatures are made with `ssh-keygen -Y sign -n openmoat-pack` for a pack and `-n openmoat-repo-policy` for a repository policy |

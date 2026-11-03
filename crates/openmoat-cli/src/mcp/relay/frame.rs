@@ -81,6 +81,31 @@ pub fn pump_host<S: Write, H: Write>(
     Ok(())
 }
 
+/// Answer each request the host sends on `input` with error `REFUSED` and
+/// `message`, until it ends: what the proxy does in place of a server it may
+/// not start, so the agent shows why. Notifications and lines that are not a
+/// request get no answer, as a server gives none.
+pub fn refuse_all<H: Write>(
+    mut input: impl BufRead,
+    host: &Mutex<Option<H>>,
+    message: &str,
+) -> Result<()> {
+    while let Some(line) = read_line(&mut input)? {
+        let Ok(serde_json::Value::Object(request)) = serde_json::from_str(&line) else {
+            continue;
+        };
+        let (Some(id), true) = (request.get("id"), request.contains_key("method")) else {
+            continue;
+        };
+        if id.is_null() {
+            continue;
+        }
+        send(host, &super::error(id, super::REFUSED, message).to_string())
+            .context("writing to the agent")?;
+    }
+    Ok(())
+}
+
 /// Relay the server's messages from `input` until it ends: to `host`, or, for
 /// what the relay asks the server itself, to `server`.
 pub fn pump_server<S: Write, H: Write>(

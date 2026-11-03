@@ -614,7 +614,7 @@ These appear in responses and in `openmoat show` alongside the ids from `policy.
 | `executables` | deny | the command's program resolves to a path other than its pin (§8.1) |
 | `kernel-integrity` | deny | a file pinned by `policy.lock` changed, disappeared or was replaced by a symlink (§8); every call is denied until a person re-pins |
 | `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
-| `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept` |
+| `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept`. Also the audit row (host `mcp-proxy`, tool `mcp__<server>`) of a wrapped server `openmoat mcp proxy` did not start because its command line is not the one an accepted definition gives (ADR-049) |
 | `mcp-proxy`, `mcp-tool-held`, `mcp-unattributed`, `mcp-server-request` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`, with the session and call id of the hook's decision it matched): a call passed to the server; refused because the tool's definition (title, description, input or output schema, annotations) is not the one a person accepted; refused because no hook decision names that exact call (ADR-045); a request the server sent the agent (`sampling/createMessage`, `elicitation/create`, …). A call the policy denies at the proxy carries the policy's rules (§8) |
 | `kernel-error` | deny | `openmoat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
@@ -930,7 +930,9 @@ Both show what changed (never the value of an `env` variable or header) and ask.
 that cannot be parsed holds back every MCP call of its agent. `openmoat init` pins what it
 finds. The other re-pinning commands keep the MCP pins as they are.
 
-`openmoat mcp proxy` (opt-in per server with `openmoat mcp wrap`) pins each tool's name,
+`openmoat mcp proxy` (opt-in per server with `openmoat mcp wrap`) starts the server only
+when its command line is the one a definition a person accepted gives, the pin above
+(ADR-049); `mcp.trust_first_sight` does not change that. It pins each tool's name,
 title, description, input schema, output schema and annotations in `~/.moat/mcp/`: what
 an agent shows the model, and the hints (`readOnlyHint`, `destructiveHint`) an agent may
 read to run a call without asking, and every other field of the entry (`_meta`,

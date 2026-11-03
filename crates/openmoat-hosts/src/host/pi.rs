@@ -110,6 +110,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         user_reader: &McpServersJson,
         project_files: &[(".pi/mcp.json", &McpServersJson)],
         tool_names: &mcp::Underscored,
+        auto_start: None,
     }),
     // A trusted project's `.pi/settings.json` can turn the user's extensions
     // off and add packages, and its `.pi/extensions/` load with the agent's
