@@ -320,6 +320,14 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Cline CLI | `ask_question`, `submit_and_exit` | — | none: `ungoverned` |
 | Cline CLI | any other tool (`skills`, subagent and team tools, a plugin's) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 | Cline CLI | `web_search` (the provider's) | — | not hooked: the provider runs it |
+| goose | `shell` | `command`, in the session's `working_dir`; `cmd` (or `GOOSE_SHELL`) on Windows | `Shell`; `ForeignShell` on Windows |
+| goose | `write`, `edit` / `tree`, `analyze` | `path` (`write` `content`, `edit` `before` and `after` for provenance); a relative path is the session's `working_dir`'s | `FsWrite` / `FsRead` |
+| goose | `read_image` | `source`: an http(s) URL goose downloads, else a path | `Fetch`; `FsRead` |
+| goose | `execute_javascript` (Code Mode) | the arguments, and an ask: the tools the script calls do not reach the hook | `Unchecked` `UnknownTool` |
+| goose | `load`, `delegate` (its subagent's calls fire the hook), `load_skill` | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| goose | extension tool (`<extension>__<tool>`), the built-in ones (`todo__…`, `extensionmanager__…`) included | tool name and `tool_input`, recorded as `mcp__<extension>__<tool>` | `McpTool` |
+| goose | `list_functions`, `get_function_details` | — | none: `ungoverned` |
+| goose | any other unprefixed tool | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 <!-- /generated -->
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`,

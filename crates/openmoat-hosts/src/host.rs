@@ -34,4 +34,6 @@ crate::registry::hosts! {
     Hermes => hermes,
     /// The Cline CLI (`cline`), through OpenMoat's `PreToolUse` hook script.
     Cline => cline,
+    /// Block's goose (`PreToolUse` hook in OpenMoat's plugin).
+    Goose => goose,
 }

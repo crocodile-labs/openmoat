@@ -231,6 +231,11 @@ def verdict_of(agent, reply):
         if not isinstance(reply, dict):
             return ""
         return "deny" if reply.get("cancel") is True else "allow"
+    if at == "goose":
+        # goose: `decision: block` denies, `decision: allow` (or no output) allows.
+        if not isinstance(reply, dict):
+            return ""
+        return {"block": "deny", "allow": "allow"}.get(reply.get("decision"), "")
     try:
         return pointer(reply, at)
     except KeyError:

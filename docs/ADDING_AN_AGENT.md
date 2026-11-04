@@ -8,7 +8,7 @@
 **On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
-Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent and the Cline CLI are maintained by the project; other agents come from contributors and are
+Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of
 this guide; this file explains each step.
 
@@ -40,6 +40,7 @@ gaps and the sandbox it gets. Start from the one closest to your agent:
 [OpenCode](../crates/openmoat-hosts/src/host/opencode/HOST.md) ·
 [Hermes Agent](../crates/openmoat-hosts/src/host/hermes/HOST.md) ·
 [Cline CLI](../crates/openmoat-hosts/src/host/cline/HOST.md) ·
+[goose](../crates/openmoat-hosts/src/host/goose/HOST.md) ·
 [Continue CLI](../crates/openmoat-hosts/src/host/continue_cli/HOST.md).
 
 ## What an adapter is

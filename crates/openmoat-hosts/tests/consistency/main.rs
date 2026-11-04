@@ -27,7 +27,8 @@ mod routes;
 mod unknown;
 
 use payloads::{
-    copilot, cursor, cursor_tool, gemini, hermes, openclaw, opencode, opencode_path, pi, under_cwd,
+    copilot, cursor, cursor_tool, gemini, goose_route, hermes, openclaw, opencode, opencode_path,
+    pi, under_cwd,
 };
 use routes::{cline_route, opencode2_route};
 
@@ -101,9 +102,11 @@ enum Route {
     Hermes,
     /// The Cline CLI `PreToolUse` file hook, through OpenMoat's script.
     Cline,
+    /// goose `PreToolUse`.
+    Goose,
 }
 
-const ROUTES: [Route; 14] = [
+const ROUTES: [Route; 15] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -118,6 +121,7 @@ const ROUTES: [Route; 14] = [
     Route::OpenCode2,
     Route::Hermes,
     Route::Cline,
+    Route::Goose,
 ];
 
 impl Route {
@@ -133,6 +137,7 @@ impl Route {
             Self::OpenCode | Self::OpenCode2 => Host::OpenCode,
             Self::Hermes => Host::Hermes,
             Self::Cline => Host::Cline,
+            Self::Goose => Host::Goose,
         }
     }
 }
@@ -149,9 +154,13 @@ fn received(route: Route, expected: Verdict) -> Verdict {
         // Claude Code in `bypassPermissions` or `dontAsk`, which puts no question
         // to a person; there a `defer` stays Claude Code's own
         // (`HookEvent::PreToolUseNoAsk`).
-        // OpenCode 1 gives plugins no way to ask either, nor does Cline its hooks.
+        // OpenCode 1 gives plugins no way to ask either, nor do Cline and goose their hooks.
         (
-            Route::Codex | Route::ClaudeCodeNoPrompt | Route::OpenCode | Route::Cline,
+            Route::Codex
+            | Route::ClaudeCodeNoPrompt
+            | Route::OpenCode
+            | Route::Cline
+            | Route::Goose,
             Verdict::Ask,
         ) => Verdict::Deny,
         // Cursor does not enforce `ask` on `preToolUse` or `beforeReadFile`: it is
@@ -367,6 +376,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             Action::Fetch { url: u.clone() },
         )),
         (Route::Cline, _) => cline_route(intent),
+        (Route::Goose, _) => goose_route(intent),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -499,6 +509,7 @@ fn check(id: &str) {
 fn routes_use_the_events_the_translation_assumes() {
     let read = Intent::Read("/p/x".into());
     let shell = Intent::Shell("true".into());
+    let write = Intent::Write("/p/x".into());
     for (route, intent, event) in [
         (Route::ClaudeCode, &shell, HookEvent::PreToolUse),
         (
@@ -518,6 +529,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::OpenCode2, &read, HookEvent::PreToolUse),
         (Route::Hermes, &shell, HookEvent::PreToolUse),
         (Route::Cline, &read, HookEvent::PreToolUse),
+        (Route::Goose, &write, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

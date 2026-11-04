@@ -173,6 +173,9 @@ deny:
       # (`resolveProviderSettingsPath`, `resolveConnectorsDbPath` in
       # `sdk/packages/shared/src/storage/paths.ts`)
       - "~/.cline/data/{settings/providers.json,db/connectors.db}"
+      # goose: the provider keys it keeps in a file when the keyring is off
+      # (`GOOSE_DISABLE_KEYRING`; `config/base.rs`)
+      - "~/.config/goose/secrets.yaml"
     fs.write: *agent-credentials
     # the agents' commands that print a stored key or token: pi's, and OpenCode
     # 2's export of every stored credential
@@ -413,6 +416,19 @@ deny:
       - "~/.cline/plugins/**"
       - "~/Documents/Cline/Hooks"
       - "~/Documents/Cline/Hooks/**"
+      # goose: its configuration (`config.yaml` turns plugins and extensions on
+      # and off), the plugin settings that can turn OpenMoat's plugin off, and
+      # the plugin directories whose `hooks/hooks.json` it runs: the person's,
+      # with OpenMoat's own, and a project's, which can replace it
+      - "~/.config/goose"
+      - "~/.config/goose/config.yaml"
+      - "~/.config/goose/settings.json"
+      - "**/.config/goose/settings.json"
+      - "**/.config/goose/settings.local.json"
+      - "~/.agents/plugins"
+      - "~/.agents/plugins/**"
+      - "**/.agents/plugins"
+      - "**/.agents/plugins/**"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it

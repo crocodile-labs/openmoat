@@ -1,9 +1,10 @@
 //! The payload each host sends for one tool call, in the shapes of
 //! `crates/openmoat-hosts/src/host/<module>/fixtures/`, for the consistency suite.
 
+use openmoat_core::Action;
 use serde_json::{Value, json};
 
-use super::{CWD, HOME};
+use super::{CWD, HOME, Intent};
 
 /// Gemini CLI `BeforeTool` (`crates/openmoat-hosts/src/host/gemini_cli/fixtures`).
 pub(super) fn gemini(tool: &str, input: &Value) -> Value {
@@ -71,6 +72,33 @@ pub(super) fn cline(tool: &str, input: &Value) -> Value {
         "userId": "me", "iteration": 1,
         "tool_call": { "id": "call-1", "name": tool, "input": input },
     })
+}
+
+/// goose `PreToolUse` (`crates/openmoat-hosts/src/host/goose/fixtures`).
+pub(super) fn goose(tool: &str, input: &Value) -> Value {
+    json!({
+        "event": "PreToolUse", "session_id": "goose-1", "matcher_context": tool,
+        "tool_call_id": "call-1", "tool_name": tool, "tool_input": input, "working_dir": CWD,
+    })
+}
+
+/// The payload goose sends for `intent` and the action its adapter must read
+/// from it, or why goose has no tool for it.
+pub(super) fn goose_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
+    match intent {
+        // On Windows goose runs `cmd`, which is never classified.
+        Intent::Shell(_) if cfg!(windows) => Err("goose runs cmd on Windows"),
+        Intent::Shell(c) => Ok((
+            goose("shell", &json!({ "command": c })),
+            Action::Shell { command: c.clone() },
+        )),
+        Intent::Read(_) => Err("goose reads files through its shell"),
+        Intent::Write(p) => Ok((
+            goose("write", &json!({ "path": p, "content": "new" })),
+            Action::FsWrite { path: p.clone() },
+        )),
+        Intent::Fetch(_) => Err("goose has no fetch tool"),
+    }
 }
 
 /// `path` with a relative one placed in the working directory.

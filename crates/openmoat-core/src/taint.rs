@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 130] = [
+const PROTECTED_WRITES: [&str; 136] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -180,6 +180,14 @@ const PROTECTED_WRITES: [&str; 130] = [
     "**/Documents/Cline/**",
     "**/.clinerules",
     "**/.clinerules/**",
+    // goose: the hints it loads into every session, its configuration, saved
+    // recipes and plugin settings, and the plugins whose hooks it runs
+    "**/.goosehints",
+    "~/.config/goose",
+    "~/.config/goose/**",
+    "**/.config/goose/**",
+    "**/.agents/plugins",
+    "**/.agents/plugins/**",
     // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",

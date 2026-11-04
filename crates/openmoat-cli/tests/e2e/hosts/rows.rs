@@ -14,6 +14,7 @@ mod continue_cli;
 mod copilot_cli;
 mod cursor;
 mod gemini_cli;
+mod goose;
 mod hermes;
 mod openclaw;
 mod opencode;
@@ -163,6 +164,7 @@ pub fn rows() -> Vec<Row> {
         opencode::row(),
         hermes::row(),
         cline::row(),
+        goose::row(),
     ]
 }
 

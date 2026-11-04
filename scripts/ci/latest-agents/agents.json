@@ -121,6 +121,17 @@
                 "verdict": "cline"},
     "runners": ["ubuntu-latest", "macos-15"]
   },
+  "goose": {
+    "host": "goose",
+    "name": "goose",
+    "install": "goose-release",
+    "binary": "goose",
+    "checked": {"version": "1.57.0", "source": "crates/openmoat-hosts/src/host/goose/HOST.md"},
+    "config": [["{HOME}/.agents/plugins/openmoat/hooks/hooks.json", "json"]],
+    "payload": {"fixture": "goose/fixtures/shell.json", "command": "/tool_input/command",
+                "verdict": "goose", "allow_is_silent": true},
+    "runners": ["ubuntu-latest", "macos-15"]
+  },
   "cursor": {
     "host": "cursor",
     "name": "Cursor",
