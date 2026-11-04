@@ -150,7 +150,8 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   `agent-credentials`); a glob, a brace spelling or a symlink to one gets the same verdict.
 - **Network.** Commands reach only the hosts the policy lists; cloud metadata services
   are refused; known token formats sent to the wrong host are denied, and so is a URL
-  carrying a long encoded value once the session has read a secret (`encoded-egress`).
+  carrying a long encoded value once the session has read a secret (`encoded-egress`)
+  and a payment card number sent off the machine (`card-egress`).
 - **Packages.** A package name one typo away from a popular npm, PyPI, crates.io,
   RubyGems or Go module name asks (`package-near-miss`): `pip install reqeusts` is
   stopped before it runs. Inside `openmoat run`, npm and uv skip versions published in

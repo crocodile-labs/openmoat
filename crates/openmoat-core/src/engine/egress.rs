@@ -10,11 +10,18 @@
 //! proxy puts the secret in, becomes an atom the default policy denies:
 //! `@token-egress <service> <host>` and `@placeholder-egress <id> <host>`. The
 //! token itself is never put in an atom, so it never reaches a reason.
+//!
+//! The same text is scanned for personal data ([`crate::personal`], ADR-052):
+//! a payment card number or a list of mail addresses going to a host other
+//! than this machine becomes `@pii-egress <class> <host>` (`card`, `emails`).
+//! Those atoms count only where a policy rule names them ([`is_personal`]), so
+//! a policy without such a rule decides as it did before; the default policy
+//! denies `card` (`card-egress`) and names no rule for `emails`.
 
 use crate::action::{Action, AtomicAction};
 use crate::host::web;
 use crate::secret::Secret;
-use crate::{host, shell, token};
+use crate::{host, personal, shell, token};
 
 mod encoded;
 
@@ -24,6 +31,8 @@ pub(super) use encoded::atoms as encoded_atoms;
 const TOKEN_ATOM: &str = "@token-egress";
 /// First word of an atom for a placeholder sent where the broker does not map it.
 const PLACEHOLDER_ATOM: &str = "@placeholder-egress";
+/// First word of an atom for personal data sent off this machine.
+const PERSONAL_ATOM: &str = "@pii-egress";
 /// The host of an atom when what is sent names no host the classifier can read.
 const UNKNOWN_HOST: &str = "(unknown-host)";
 /// The host of an atom for a web search query: the host's search provider.
@@ -38,8 +47,9 @@ struct Send<'a> {
     hosts: Vec<String>,
 }
 
-/// The `@token-egress` and `@placeholder-egress` atoms of `action`, whose
-/// classified atoms are `atoms`; `secrets` are the policy's brokered secrets.
+/// The `@token-egress`, `@placeholder-egress` and `@pii-egress` atoms of
+/// `action`, whose classified atoms are `atoms`; `secrets` are the policy's
+/// brokered secrets.
 pub(super) fn atoms(
     action: &Action,
     atoms: &[AtomicAction],
@@ -52,6 +62,11 @@ pub(super) fn atoms(
         } else {
             send.hosts
         };
+        for class in personal::classes_in(&send.texts) {
+            for host in hosts.iter().filter(|h| !host::is_loopback(h)) {
+                push(&mut out, PERSONAL_ATOM, class.id(), host);
+            }
+        }
         for text in send.texts {
             for shape in token::shapes_in(text) {
                 for host in hosts.iter().filter(|h| !shape.owns(h)) {
@@ -67,6 +82,12 @@ pub(super) fn atoms(
         }
     }
     out
+}
+
+/// Whether `atom` is a `@pii-egress` atom: it carries a verdict only where a
+/// rule names it, never the policy's defaults.
+pub(super) fn is_personal(atom: &AtomicAction) -> bool {
+    matches!(atom, AtomicAction::Shell { argv } if argv.first().is_some_and(|w| w == PERSONAL_ATOM))
 }
 
 fn push(out: &mut Vec<AtomicAction>, first: &str, what: &str, host: &str) {

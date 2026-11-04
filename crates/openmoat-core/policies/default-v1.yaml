@@ -578,6 +578,14 @@ deny:
     # fetch, browser or MCP tool opens that carries 80 or more characters of base64 or
     # hex (POLICY.md §4.1, ADR-047)
     shell: ["@encoded-egress *"]
+  - id: card-egress
+    reason: sends a payment card number to a host off this machine
+    # `@pii-egress card <host>` atoms: 13 to 19 digits with a card brand's prefix and
+    # length that pass the Luhn check, in the places `token-egress` reads; loopback
+    # hosts and processors' published test numbers are left out (POLICY.md §4.4,
+    # ADR-052). `@pii-egress emails <host>` (ten or more distinct mail addresses in
+    # one send) has no default rule: add one to deny or ask
+    shell: ["@pii-egress card *"]
 
 allow:
   - id: project-fs

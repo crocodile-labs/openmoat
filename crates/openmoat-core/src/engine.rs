@@ -293,14 +293,17 @@ impl CompiledPolicy<'_> {
     }
 
     /// [`checked_atoms`] and the atoms of any token or placeholder they send
-    /// where it does not belong ([`egress`]).
+    /// where it does not belong ([`egress`]), and of personal data they send
+    /// that a rule of this policy names (ADR-052).
     fn all_atoms(
         &self,
         action: &Action,
         paths: &dyn PathResolver,
     ) -> (Vec<AtomicAction>, Option<crate::shell::Unparsed>) {
         let (mut atoms, unparsed) = checked_atoms(action, &self.ctx, self.opens_as(), paths);
-        let egress = egress::atoms(action, &atoms, &self.policy.secrets);
+        let egress = egress::atoms(action, &atoms, &self.policy.secrets)
+            .into_iter()
+            .filter(|atom| !egress::is_personal(atom) || self.matched_rules(atom).is_some());
         atoms.extend(egress);
         (atoms, unparsed)
     }

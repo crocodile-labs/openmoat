@@ -34,6 +34,19 @@ pub(crate) fn fetchable(host: &str) -> bool {
             .is_some_and(|tld| tld.chars().all(|c| c.is_ascii_alphabetic()))
 }
 
+/// Whether `host`, as this module reports one, is this machine: `localhost`, a
+/// name under it, `127.0.0.0/8` or `::1`. Any other spelling of a loopback
+/// address (`2130706433`, `0x7f000001`) is not recognised, so it is treated as
+/// leaving the machine.
+pub(crate) fn is_loopback(host: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host
+            .parse::<core::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
 /// Longest DNS name in text form, without the trailing dot (RFC 1035 §2.3.4).
 pub const MAX_DNS_NAME_LEN: usize = 253;
 
