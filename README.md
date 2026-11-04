@@ -63,6 +63,42 @@ covers what they leave out:
 
 ![Normal work is allowed; a prompt injection asking Claude Code and Codex to upload the SSH key is blocked, also in base64 and through a shell variable; a package install goes to the agent's own prompt; switching OpenMoat off is blocked; every decision is in the log](docs/assets/demo.gif)
 
+## Features
+
+- **One policy for every agent.** Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
+  pi, Gemini CLI, OpenCode, Hermes Agent and the Cline CLI, set up with `openmoat init`.
+- **Secrets stay put.** SSH keys, `.env`, cloud credentials and each agent's own login
+  files are denied, however the path is spelt.
+- **Nothing sensitive leaves.** Known tokens sent to the wrong host, encoded secrets after
+  a secret was read, and payment card numbers are denied.
+- **Shell commands read like a shell reads them.** Variables, quoting, base64, `$(…)`,
+  `bash -c` and `ssh` commands are resolved before the decision.
+- **Risky installs and scripts.** Typo-squatted package names, scripts the session wrote,
+  and inline code that builds its own targets are held for the person.
+- **What runs later.** CI workflows, git hooks, login items and `PATH` folders are held;
+  shell startup files are denied.
+- **MCP servers.** Tool calls are checked by their paths and URLs; server definitions and
+  tool descriptions are pinned; `openmoat mcp wrap` starts only accepted servers, in a
+  sandbox.
+- **OS sandboxes.** The same policy writes Claude Code's, Codex's and Cursor's sandbox
+  settings; `openmoat run` sandboxes any agent on macOS and Linux.
+- **Tokens the agent never sees.** `openmoat secret add` gives the agent a placeholder; the
+  proxy adds the real token for one host only.
+- **The agent cannot switch it off.** The policy and hooks are locked; the agent cannot
+  edit them, approve its own blocked call or uninstall OpenMoat.
+- **Audit log.** Every decision in a local, hash-chained log: `openmoat show`, `report`,
+  `audit export`, `audit anchor`.
+- **Team rules.** A committed `.moat/policy.yaml`, or a policy pack signed with an SSH key.
+- **Pull request check.** `openmoat policy check-diff` and a GitHub Action flag a change to
+  CI, git hooks, agent settings, the policy or secret files before it is merged
+  ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
+- **In your own agent.** The Rust and JavaScript SDKs give your product the same
+  decisions ([docs/SDK.md](docs/SDK.md)).
+- **Measured.** MoatBench runs attack scenarios against OpenMoat and other tools
+  ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
+
+Details of each check are under [What it checks](#what-it-checks).
+
 ## Quick start
 
 <!-- ci:quickstart run: the clean-install workflow runs the commands of each block so marked, as written -->
@@ -306,6 +342,7 @@ Run these in your own terminal. Agents are denied all of them.
 | Keep a token from the agent | `openmoat secret add gh` |
 | Change any rule (checked, and the diff shown before it applies) | `openmoat edit` |
 | Get new default rules after an upgrade | `openmoat policy upgrade` |
+| Check a pull request's changes before merge | `openmoat policy check-diff --base main` |
 | Share rules with your team | commit `.moat/policy.yaml`, then `openmoat trust` |
 | Install a team's signed policy pack | `openmoat policy trust-key <key.pub> --name <who>` · `openmoat policy install <pack.yaml>` |
 | Turn OpenMoat off | `openmoat uninstall` |
@@ -468,6 +505,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 | [Policy](docs/POLICY.md) | The rule format, pattern syntax, evaluation order and the policy lock |
 | [Sandboxes](docs/SANDBOX.md) | The agents' own sandboxes, `openmoat run` and `openmoat run --isolate` |
 | [SDK](docs/SDK.md) | OpenMoat's decisions in your own agent product, from Rust or JavaScript |
+| [Merge check](docs/MERGE_CHECK.md) | Checking a pull request before merge: `openmoat policy check-diff` and the GitHub Action |
 | [Threat model](docs/THREAT_MODEL.md) | What is defended, and what is not |
 | [MoatBench](docs/MOATBENCH.md), [coverage](docs/COVERAGE.md), [evidence](docs/EVIDENCE.md) | Attack scenarios, conformance fixtures per threat, what the OS layer stops |
 | [Architecture](docs/ARCHITECTURE.md), [decisions](docs/adr/README.md) | How the code is built and why |
