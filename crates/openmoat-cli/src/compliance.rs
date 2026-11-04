@@ -154,13 +154,13 @@ impl Group {
     }
 }
 
-/// The map. Each rule id is in at most one group; every `deny` and `ask` rule
+/// The map. Each rule id is in at most one group; every `deny` and `review` rule
 /// of the default policy is in one (tested).
 pub const GROUPS: &[Group] = &[
     Group {
         id: "secrets",
         title: "Secrets and credentials",
-        does: "deny or ask the agent's reads of key files, credential stores, secret \
+        does: "deny or hold for review the agent's reads of key files, credential stores, secret \
                environment variables and folders that hold them",
         covers: Covers::Rules(&[
             "secrets-paths",
@@ -182,7 +182,7 @@ pub const GROUPS: &[Group] = &[
         title: "Secrets and personal data leaving the machine",
         does: "deny a known token or a brokered secret sent to a host that is not its own, \
                a payment card number sent off the machine, a push that publishes a \
-               secret, and ask before a session that read secret material sends data out",
+               secret, and hold for review what a session that read secret material sends out",
         covers: Covers::Rules(&[
             "token-egress",
             "placeholder-egress",
@@ -217,7 +217,7 @@ pub const GROUPS: &[Group] = &[
         id: "code-execution",
         title: "Running code the agent did not show",
         does: "deny piping downloaded or decoded content into a shell and a program that \
-               resolves to another path than its pin; ask before running opaque code or a \
+               resolves to another path than its pin; hold for review running opaque code or a \
                file the session wrote",
         covers: Covers::Rules(&[
             "pipe-to-shell",
@@ -230,14 +230,14 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "packages",
         title: "Package installs",
-        does: "ask before installing a package whose name is one typo away from a popular one",
+        does: "hold for review installing a package whose name is one typo away from a popular one",
         covers: Covers::Rules(&["package-near-miss"]),
         controls: &[&LLM03, &CC6_8, &A8_19],
     },
     Group {
         id: "runs-later",
         title: "Code that runs later",
-        does: "deny or ask writes to files that git, CI, the login shell, a scheduler or the \
+        does: "deny or hold for review writes to files that git, CI, the login shell, a scheduler or the \
                agent host run later, outside any sandbox",
         covers: Covers::Rules(&[
             "runs-later",
@@ -281,7 +281,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "destructive",
         title: "Destructive commands",
-        does: "deny irreversible deletions and history rewrites; ask before deleting local \
+        does: "deny irreversible deletions and history rewrites; hold for review deleting local \
                work git can still recover",
         covers: Covers::Rules(&["destructive", "destructive-recoverable"]),
         controls: &[&LLM06],

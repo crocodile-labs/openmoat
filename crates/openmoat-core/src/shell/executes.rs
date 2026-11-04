@@ -4,7 +4,7 @@
 //! ./setup.js`), a program named by a path (`./x`, `bin/x`, `/p/bin/x`), and a
 //! file a shell or interpreter reads its program from (`sh < x.sh`).
 //!
-//! `moat guard` asks before such a file runs when the same session wrote it and
+//! `moat guard` holds for review a run of such a file when the same session wrote it and
 //! no OS sandbox holds the command. Finding the files is the classifier's work,
 //! so every spelling it reads (`env python3 x.py`, `time ./x`, `bash -c 'node
 //! x.js'`, `cd sub && python x.py`) is found the same way. A test runner, a

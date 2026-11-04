@@ -97,7 +97,7 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
 
 /// The decision on MCP call `request`, recorded as `event`, for the proxy to
 /// match; nothing for another call, or one the host is told is denied (an
-/// `ask` where no person sees it included).
+/// `review` where no person sees it included).
 fn mcp_ticket(
     store: &Store,
     event: EventId,

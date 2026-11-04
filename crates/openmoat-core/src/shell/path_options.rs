@@ -5,7 +5,7 @@
 //! per tool, the options whose value (the next word, after `=`, or attached to a
 //! single letter: `-B dir`, `--outDir=dir`, `-Bdir`) is a file it reads, a
 //! directory it writes, or code it loads; the last leaves the command unparseable,
-//! so it asks whatever the policy allows. For every program, a short option with a
+//! so it needs review whatever the policy allows. For every program, a short option with a
 //! path attached (`-X/…`, `-X~/…`, `-X./…`, `-X../…`) is read and written, since
 //! the classifier cannot tell which.
 

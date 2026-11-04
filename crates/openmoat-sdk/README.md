@@ -14,7 +14,7 @@ let decision = engine.decide(&Action::shell("cat ~/.ssh/id_rsa"));
 assert_eq!(decision.verdict, Verdict::Deny);
 ```
 
-**The SDK decides; your code enforces.** A denied call must not run, and an `ask` must
+**The SDK decides; your code enforces.** A denied call must not run, and a `review` must
 not run until a person approves that exact call. It is not a sandbox. Pure: no I/O
 (except `Policy::read` with the `fs` feature), no network, no telemetry.
 

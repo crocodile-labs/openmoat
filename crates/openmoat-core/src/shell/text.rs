@@ -7,7 +7,7 @@
 //! them: an option value is data, never a file operand, and a file the command
 //! writes becomes an `fs.write`. Anything the classifier does not know to be
 //! harmless becomes a `<program> @<argument>` shell atom; the default policy's
-//! `text-tools` rule excludes those, so the command asks.
+//! `text-tools` rule excludes those, so the command needs review.
 
 use super::{ClassifyError, ShellContext, Sink, awk, sed};
 use crate::action::AtomicAction;

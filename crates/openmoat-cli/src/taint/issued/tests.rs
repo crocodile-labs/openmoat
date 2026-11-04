@@ -3,7 +3,7 @@ use openmoat_core::{Action, Decision, TaintSecret};
 
 use super::*;
 
-/// A home whose policy makes reading `<project>/secret.txt` ask, an empty
+/// A home whose policy makes reading `<project>/secret.txt` need review, an empty
 /// audit log, and the project directory.
 fn home() -> (tempfile::TempDir, Home, String) {
     let dir = tempfile::tempdir().unwrap();
@@ -13,7 +13,7 @@ fn home() -> (tempfile::TempDir, Home, String) {
     std::fs::create_dir_all(&project).unwrap();
     let project = context::path_string(&project);
     let policy = format!(
-        "version: 1\ndefaults: {{ \"*\": allow }}\nask:\n  - {{ id: secrets-paths, fs.read: [\"{project}/secret.txt\"] }}\n"
+        "version: 1\ndefaults: {{ \"*\": allow }}\nreview:\n  - {{ id: secrets-paths, fs.read: [\"{project}/secret.txt\"] }}\n"
     );
     std::fs::write(home.policy_path(), policy).unwrap();
     Store::open(&home.audit_path()).unwrap();

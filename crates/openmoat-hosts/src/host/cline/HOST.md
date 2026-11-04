@@ -43,7 +43,7 @@ Input is `hookName` (`tool_call`), `clineVersion`, `timestamp`, `taskId`,
 |---|---|
 | `allow` | `{}` |
 | `defer` | nothing |
-| `ask` | as `deny`, with how to approve it: Cline's hooks cannot ask |
+| `review` | as `deny`, with how to approve it: Cline's hooks cannot prompt |
 | `deny`, and every adapter error | `{"cancel": true, "errorMessage"}` |
 
 Cline reads stdout only, never the exit code. It has no "allow" that skips its own
@@ -57,7 +57,7 @@ before it runs and ends Cline's run with `errorMessage` as the reason
   `{command, args}` entry runs without a shell and is checked as its quoted words.
   Several commands are decided together, each in a subshell of its own; a command that
   cannot be read alone (an open quote, a trailing `\`) could hide the next one when put
-  together, so then the call asks (`Unchecked`). On Windows Cline runs them in
+  together, so then the call needs review (`Unchecked`). On Windows Cline runs them in
   PowerShell (`ForeignShell`).
 - `read_files` (`FsRead`, `ReadFiles`), `editor` (`FsWrite`), `apply_patch` (`Patch`),
   `search_codebase` (`FsRead` of the workspace).
@@ -99,11 +99,11 @@ malformed (a deny). The full table is in
 - No OS sandbox from OpenMoat (`openmoat run` sandboxes the whole agent).
 - `--yolo` runs no hooks; `--config`, `--hooks-dir` or a moved `CLINE_DIR` that OpenMoat
   did not install into skip OpenMoat's script.
-- Asks become denies, and a deny ends Cline's run; the person approves with
+- Reviews become denies, and a deny ends Cline's run; the person approves with
   `openmoat allow --last` and continues the session.
 - Cline approves calls on its own by default (`--auto-approve`, default `true`), so a
   call OpenMoat defers usually runs.
 - Another `PreToolUse` file or a plugin can rewrite a call's input (`overrideInput`)
   after OpenMoat checked it. A workspace's `.cline/hooks` and `.clinerules/hooks` run
-  with the agent's rights; writes to them ask (session taint).
+  with the agent's rights; writes to them need review (session taint).
 - The VS Code extension, and native Windows, are not covered.

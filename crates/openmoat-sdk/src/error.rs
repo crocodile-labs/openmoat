@@ -1,5 +1,5 @@
 //! Why a policy or an engine could not be built. A decision itself never fails:
-//! what the engine cannot understand is decided `ask` or `defer`, never `allow`.
+//! what the engine cannot understand is decided `review` or `defer`, never `allow`.
 
 /// An input the SDK cannot use. Whatever the variant, decide nothing with it:
 /// a caller without an engine must not run the call.

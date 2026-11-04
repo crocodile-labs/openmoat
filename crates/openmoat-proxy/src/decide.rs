@@ -3,7 +3,7 @@
 //! A host is decided exactly as `moat guard` decides a fetch tool's URL: one
 //! `fetch` atom through openmoat-core's [`CompiledPolicy`], so `fetch` and `net`
 //! lists both apply and deny rules come first. The proxy cannot prompt, so an
-//! `ask` is refused. Cloud metadata and link-local addresses are refused
+//! `review` is refused. Cloud metadata and link-local addresses are refused
 //! whatever the policy says, by name and again after DNS resolution. Private
 //! and CGNAT addresses are refused unless an allow rule names the address.
 //! Every resolved address is also checked against the deny rules, so a deny
@@ -98,11 +98,11 @@ pub fn host(policy: &CompiledPolicy<'_>, host: &str) -> Decision {
     });
     // A deferred host (ADR-025) is refused too: the agent's permission flow never sees
     // the proxy's connections.
-    if matches!(decision.verdict, Verdict::Ask | Verdict::Defer) {
+    if matches!(decision.verdict, Verdict::Review | Verdict::Defer) {
         decision.verdict = Verdict::Deny;
         decision
             .reasons
-            .push("the proxy cannot ask, so a host the hook would ask for or leave to the agent is refused".to_owned());
+            .push("the proxy cannot prompt, so a host the hook would hold for review or leave to the agent is refused".to_owned());
     }
     decision
 }
@@ -124,7 +124,7 @@ fn metadata(host: &str) -> Option<Decision> {
 /// The refusal for a request to `host:port` from a session with `taint`, if
 /// any (ADR-027). The core's taint rules decide (POLICY.md §4.1): after the
 /// session read secret material, network to every host but that secret's own
-/// asks. The proxy cannot ask, so that ask is refused. Untrusted content alone
+/// needs review. The proxy cannot prompt, so that review is refused. Untrusted content alone
 /// changes nothing here: its taint protects writes.
 #[must_use]
 pub fn tainted(
@@ -152,7 +152,7 @@ pub fn tainted(
     }
     decision.verdict = Verdict::Deny;
     decision.reasons.push(
-        "the proxy cannot ask, so a session that read secret material reaches only that \
+        "the proxy cannot prompt, so a session that read secret material reaches only that \
          secret's own host until it ends; `openmoat allow` does not answer a secret's taint, \
          so start a new session"
             .to_owned(),
@@ -283,7 +283,7 @@ fn tunnelled_v4(ip: Ipv6Addr) -> impl Iterator<Item = Ipv4Addr> {
 /// the allow rules' `net` and `fetch` patterns that name an address: a pattern
 /// starting with a digit or containing `:`, not starting with a glob
 /// metacharacter, and made only of what an address's text and a glob use.
-/// Anything else is left undecided (`ask`), which neither opens a
+/// Anything else is left undecided (`review`), which neither opens a
 /// [`Forbidden::Private`] address ([`named`]) nor refuses one ([`denied`]), so
 /// a wildcard such as `*` or `*.example`, or a name such as
 /// `db.internal:5432`, never reaches the local network by DNS. Exclusions are
@@ -314,10 +314,10 @@ pub fn address_policy(policy: &Policy) -> Policy {
         .collect();
     // Not `deny`: only a deny rule may refuse an address the host check passed.
     Policy {
-        defaults: Defaults::All(Verdict::Ask),
+        defaults: Defaults::All(Verdict::Review),
         deny: policy.deny.clone(),
         allow,
-        ask: Vec::new(),
+        review: Vec::new(),
         ..policy.clone()
     }
 }

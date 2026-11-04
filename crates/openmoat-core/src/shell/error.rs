@@ -3,7 +3,7 @@
 use super::{MAX_ATOMS, MAX_DEPTH, MAX_DIRS};
 use crate::lexer::LexError;
 
-/// Why a command line could not be classified safely; the engine turns it into `ask`.
+/// Why a command line could not be classified safely; the engine turns it into `review`.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ClassifyError {
     #[error(transparent)]
@@ -33,10 +33,10 @@ pub(crate) enum ClassifyError {
 impl ClassifyError {
     /// The line could not be read in full, or a limit of the classifier was
     /// reached: what follows may be missing from the atoms, and any line can
-    /// be padded to get here, so the call asks instead of taking the policy's
+    /// be padded to get here, so the call needs review instead of taking the policy's
     /// catch-all. The other errors are one part the classifier cannot model;
     /// the rest of the line is classified around it.
-    pub(crate) fn asks(&self) -> bool {
+    pub(crate) fn needs_review(&self) -> bool {
         matches!(
             self,
             Self::Lex(_)

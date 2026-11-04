@@ -24,8 +24,8 @@
 //! `{"cancel": true, "errorMessage"}` stops the call before it runs and ends
 //! the run with `errorMessage` as its reason (`beforeToolResultFromControl`,
 //! then `applyStopControl` throws `ControlledStopError`); `{}` or nothing is
-//! no decision, and Cline's own approval (`requestToolApproval`) runs. `review`
-//! is read but ignored for a tool call, so a hook cannot ask. A hook that
+//! no decision, and Cline's own approval (`requestToolApproval`) runs. Cline's
+//! `review` field is read but ignored for a tool call, so a hook cannot prompt. A hook that
 //! cannot start, prints something that is not JSON, or is killed after
 //! 120 s (`toolCallTimeoutMs ?? 120000`) is logged and the call runs: there is
 //! no setting that blocks instead. So OpenMoat's script
@@ -38,7 +38,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
+    Reviews, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
     McpServersJson, McpSpec, wrong_event,
 };
 use crate::wire::owned_file::{OwnedFile, Syntax};
@@ -55,7 +55,7 @@ pub(crate) const EVENT: &str = "tool_call";
 
 /// Seconds Cline waits for a `PreToolUse` file before it kills it and runs the
 /// call (`toolCallTimeoutMs ?? 120000` in `hook-file-hooks.ts`; nothing sets
-/// it). Cline cannot ask, so the hook never waits on a person.
+/// it). Cline cannot prompt, so the hook never waits on a person.
 pub(crate) const HOOK_TIMEOUT_S: u64 = 120;
 const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 
@@ -71,13 +71,13 @@ static SCRIPT: OwnedFile = OwnedFile {
     syntax: Syntax::PosixShell,
 };
 
-/// Cline's hooks cannot ask: an `ask` reaches it as a deny.
+/// Cline's hooks cannot prompt: a `review` reaches it as a deny.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "cline",
     display_name: "Cline CLI",
-    asks: Asks {
-        on_pre_tool_use: Some("Cline's hooks cannot ask (it ignores `review` on a tool call)"),
-        ..Asks::BASE
+    reviews: Reviews {
+        on_pre_tool_use: Some("Cline's hooks cannot prompt (Cline ignores a hook's `review` field)"),
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when `openmoat` is missing, crashes or answers nothing \
          (OpenMoat's hook script prints Cline's `cancel` itself); runs the call when the \
@@ -87,7 +87,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     gaps: "the Cline VS Code extension is not covered (it reads hooks only from \
          `~/Documents/Cline/Hooks` and a workspace's `.clinerules/hooks`); no OS sandbox \
          from OpenMoat; `--yolo` runs no hooks, and `--config`, `--hooks-dir` or a moved \
-         `CLINE_DIR` that OpenMoat did not install into skip the hook; asks become denies, \
+         `CLINE_DIR` that OpenMoat did not install into skip the hook; reviews become denies, \
          and a deny ends Cline's run; Cline approves calls on its own by default \
          (`--auto-approve`), so a call OpenMoat defers usually runs; another `PreToolUse` \
          file or plugin can rewrite a call's input (`overrideInput`) after OpenMoat checked \
@@ -258,7 +258,7 @@ pub(crate) fn render(decision: &Decision) -> String {
     match decision.verdict {
         Verdict::Defer => String::new(),
         Verdict::Allow => "{}".to_owned(),
-        // `Deny`, an `ask` (which `Host::answer` has already made a deny) and
+        // `Deny`, a `review` (which `Host::answer` has already made a deny) and
         // any verdict added to the core later stop the call.
         _ => serde_json::json!({
             "cancel": true,

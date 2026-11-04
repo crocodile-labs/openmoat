@@ -89,7 +89,7 @@ const HOSTS: &[&str] = &[
     "example.com",
 ];
 
-const VERDICTS: &[&str] = &["allow", "ask", "deny"];
+const VERDICTS: &[&str] = &["allow", "review", "deny"];
 
 fn list(rng: &mut Rng, key: &str, vocabulary: &[&str]) -> String {
     if rng.below(2) == 0 {
@@ -110,7 +110,7 @@ fn policy(rng: &mut Rng) -> Policy {
         rng.pick(VERDICTS),
     );
     let mut id = 0;
-    for section in ["deny", "allow", "ask"] {
+    for section in ["deny", "allow", "review"] {
         let mut groups = String::new();
         for _ in 0..rng.below(4) {
             id += 1;

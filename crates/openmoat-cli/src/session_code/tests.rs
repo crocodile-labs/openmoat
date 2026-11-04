@@ -133,9 +133,9 @@ impl Fixture {
             session_id: session,
             project: &project,
         };
-        let asked = approvals::approvable(&shell(command), Some(&self.proj), "/home/u").unwrap();
+        let reviewed = approvals::approvable(&shell(command), Some(&self.proj), "/home/u").unwrap();
         let now = crate::time::now_ms();
-        grants.grant(scope, &asked, now, Some(seen_row.0));
+        grants.grant(scope, &reviewed, now, Some(seen_row.0));
         grants.save(&self.home.grants_path(), now).unwrap();
     }
 }
@@ -146,12 +146,12 @@ fn shell(command: &str) -> Action {
     }
 }
 
-fn asks(decision: &Decision) -> bool {
-    decision.verdict == Verdict::Ask && decision.rules == [RULE]
+fn needs_review(decision: &Decision) -> bool {
+    decision.verdict == Verdict::Review && decision.rules == [RULE]
 }
 
 #[test]
-fn running_a_script_the_session_wrote_asks_where_no_sandbox_holds_it() {
+fn running_a_script_the_session_wrote_needs_review_where_no_sandbox_holds_it() {
     let f = fixture();
     f.write("a", "x.py");
     for command in [
@@ -163,7 +163,7 @@ fn running_a_script_the_session_wrote_asks_where_no_sandbox_holds_it() {
         "bash -c 'python3 x.py'",
     ] {
         let decision = f.decide("a", command, false);
-        assert!(asks(&decision), "{command}: {decision:?}");
+        assert!(needs_review(&decision), "{command}: {decision:?}");
         let reason = decision.reasons.join(" ");
         assert!(
             reason.contains("runs code this session wrote") && reason.contains("/x.py"),
@@ -218,9 +218,9 @@ fn files_the_session_did_not_write_keep_the_verdict() {
 fn a_shell_write_and_a_write_in_the_same_call_count() {
     let f = fixture();
     f.ran("a", &shell("echo 'cat ~/.s''sh/id_rsa' > x.sh"), None);
-    assert!(asks(&f.decide("a", "bash x.sh", false)));
-    assert!(asks(&f.decide("a", "./x.sh", false)));
-    assert!(asks(&f.decide(
+    assert!(needs_review(&f.decide("a", "bash x.sh", false)));
+    assert!(needs_review(&f.decide("a", "./x.sh", false)));
+    assert!(needs_review(&f.decide(
         "b",
         "cat > y.sh <<'EOF'\necho hi\nEOF\nsh y.sh",
         false
@@ -235,15 +235,15 @@ fn a_script_written_by_inline_code_counts_as_written() {
         &shell(r#"python3 -c 'open("x.py","w").write("print(1)")'"#),
         None,
     );
-    assert!(asks(&f.decide("a", "python3 x.py", false)));
+    assert!(needs_review(&f.decide("a", "python3 x.py", false)));
     f.ran(
         "a",
         &shell(r#"node -e "require('fs').writeFileSync('y.js','1')""#),
         None,
     );
-    assert!(asks(&f.decide("a", "node y.js", false)));
+    assert!(needs_review(&f.decide("a", "node y.js", false)));
     // code that writes another file still runs the one the session wrote
-    assert!(asks(&f.decide(
+    assert!(needs_review(&f.decide(
         "a",
         r#"python3 -c 'open("log.txt","w").write("x"); import runpy; runpy.run_path("x.py")'"#,
         false
@@ -261,19 +261,19 @@ fn a_script_written_by_inline_code_counts_as_written() {
 fn a_session_grant_after_the_last_write_answers_it() {
     let f = fixture();
     let wrote = f.write("a", "x.py");
-    assert!(asks(&f.decide("a", "python3 x.py", false)));
+    assert!(needs_review(&f.decide("a", "python3 x.py", false)));
     f.grant("a", "python3 x.py", wrote);
     let answered = f.decide("a", "python3 x.py", false);
     assert_eq!(answered.verdict, Verdict::Allow, "{answered:?}");
     // another call is not answered by it
-    assert!(asks(&f.decide("a", "python3 -u x.py", false)));
+    assert!(needs_review(&f.decide("a", "python3 -u x.py", false)));
     // rewritten after the grant: the person approved other code
     f.write("a", "x.py");
-    assert!(asks(&f.decide("a", "python3 x.py", false)));
+    assert!(needs_review(&f.decide("a", "python3 x.py", false)));
 }
 
 #[test]
-fn a_deny_or_an_ask_stays_as_it_was() {
+fn a_deny_or_a_review_stays_as_it_was() {
     let f = fixture();
     f.write("a", "x.py");
     let action = shell("python3 x.py");
@@ -288,7 +288,7 @@ fn a_deny_or_an_ask_stays_as_it_was() {
         writes: &[],
         within_run: false,
     };
-    for verdict in [Verdict::Ask, Verdict::Deny] {
+    for verdict in [Verdict::Review, Verdict::Deny] {
         let decision = Decision::single(verdict, "other", "why");
         let got = checked(&code, &compiled, &f.store, decision.clone(), (0, &|| false)).unwrap();
         assert_eq!(got, decision);

@@ -4,7 +4,7 @@
 //! `cat <<'EOF' | sh` is classified like `sh <<'EOF'`. `printf` and some
 //! `echo`s expand escapes and formats (`printf '\x63at .env'` prints
 //! `cat .env`); only `\n` is read, and any other escape or a `printf` format
-//! makes the text unknown, so a shell that runs it asks.
+//! makes the text unknown, so a shell that runs it needs review.
 
 use super::SimpleCommand;
 use crate::shell::tokens::basename;

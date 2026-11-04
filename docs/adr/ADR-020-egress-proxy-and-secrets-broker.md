@@ -35,9 +35,9 @@ Status: accepted · Date: 2026-10-06 · Decided by the maintainer
     recorded.
 - **Session taint**, the minimal form for the beta:
   - Once a session has read secret material (a `secrets-paths` read the user approved, or a
-    brokered secret used), later network to hosts outside that secret's own host asks.
+    brokered secret used), later network to hosts outside that secret's own host needs review.
   - Once it has fetched untrusted content (`fetch`, an MCP result), later writes to protected
-    paths ask.
+    paths need review.
 - **Reuse before writing:**
   - Evaluate the Apache-2.0 `codex-network-proxy` (Rust) and Anthropic's `sandbox-runtime`
     proxy as the base, with a license and maintenance review.

@@ -13,7 +13,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-/// Why what a push would publish could not be checked; the push then asks.
+/// Why what a push would publish could not be checked; the push then needs review.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unchecked(pub String);
 

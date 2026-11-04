@@ -83,11 +83,11 @@ fn writes_to_pis_own_files_are_denied() {
     }
 }
 
-/// In pi's terminal UI an `ask` is a dialog (the shared suite); without
+/// In pi's terminal UI a `review` is a dialog (the shared suite); without
 /// one it is a deny that says how to approve.
 #[test]
-fn an_ask_without_the_ui_is_a_deny() {
-    let sb = Sandbox::installed_asking(&[AGENT_DIR]);
+fn a_review_without_the_ui_is_a_deny() {
+    let sb = Sandbox::installed_with_review(&[AGENT_DIR]);
     let outside = json!({"path": sb.home.join("notes/todo.txt")});
     let (code, reply) = guard(&sb, &payload_ui(&sb, "read", &outside, false));
     assert_eq!(code, Some(DENY), "{reply}");

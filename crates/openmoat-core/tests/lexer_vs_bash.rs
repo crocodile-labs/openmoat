@@ -331,6 +331,6 @@ fn write_divergence(report: &mut String, line: &str, lexer: &Commands, bash: &Ou
     };
     let _ = writeln!(
         report,
-        "fixture:\n- id: lexer-bash-TODO\n  action: {{ shell: {quoted} }}\n  expect: {{ verdict: ask }}\n"
+        "fixture:\n- id: lexer-bash-TODO\n  action: {{ shell: {quoted} }}\n  expect: {{ verdict: review }}\n"
     );
 }

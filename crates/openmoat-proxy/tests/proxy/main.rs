@@ -14,7 +14,7 @@ use openmoat_proxy::{Broker, Connection, Limits, Proxy, RecordError, Recorder, R
 
 const POLICY: &str = r#"
 version: 1
-defaults: { "*": deny, fetch: ask }
+defaults: { "*": deny, fetch: review }
 deny:
   - id: no-doc-net
     net: ["203.0.113.7", "2001:db8::*"]

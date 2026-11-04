@@ -38,7 +38,7 @@ pub fn run(args: &CheckDiffArgs) -> Result<Code> {
     output::write(args.format.unwrap_or_else(default_format), &report)?;
     Ok(match output::worst(&findings) {
         Some(Level::Deny) => Code::Deny,
-        Some(Level::Review) => Code::Ask,
+        Some(Level::Review) => Code::Review,
         None => Code::Ok,
     })
 }

@@ -88,7 +88,7 @@ fn a_secret_upload_is_denied() {
 
 /// `dir_path` is where Gemini CLI runs a command, chosen by the model; it never
 /// decides which directory is the project. A session in the home folder that
-/// writes a launch agent with `dir_path` there still asks (`persistence`)
+/// writes a launch agent with `dir_path` there still needs review (`persistence`)
 /// instead of being allowed as a write in its own "project".
 #[test]
 fn dir_path_never_makes_a_directory_the_project() {
@@ -113,7 +113,7 @@ fn dir_path_never_makes_a_directory_the_project() {
 }
 
 #[test]
-fn allow_ask_and_no_decision_reach_gemini_as_its_own_shapes() {
+fn allow_review_and_no_decision_reach_gemini_as_its_own_shapes() {
     let sb = Sandbox::installed(&[".gemini"]);
     let file = sb.project().join("src/main.rs");
     let write = payload(
@@ -125,14 +125,14 @@ fn allow_ask_and_no_decision_reach_gemini_as_its_own_shapes() {
     assert_eq!(code, Some(OK));
     assert_eq!(reply, json!({ "decision": "allow" }));
 
-    // still an `ask` under ADR-025: a pager is a program git runs later;
+    // still a `review` under ADR-025: a pager is a program git runs later;
     // Gemini CLI puts the question to the person itself
-    let ask = payload(
+    let review = payload(
         &sb,
         "run_shell_command",
         &json!({ "command": "git config core.pager less" }),
     );
-    let (code, reply) = guard(&sb, &ask);
+    let (code, reply) = guard(&sb, &review);
     assert_eq!(code, Some(OK), "{reply}");
     // PowerShell on Windows: left to Gemini CLI unparsed, as above
     if !cfg!(windows) {

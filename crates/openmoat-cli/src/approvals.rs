@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::home::{Home, write_private};
 use crate::time;
 
-mod asked;
-pub use asked::{approvable, describe, files};
+mod reviewed;
+pub use reviewed::{approvable, describe, files};
 
 /// Version 2 grants an [`Action`]; version 1 granted only a `command` string.
 const GRANTS_VERSION: u32 = 2;
@@ -45,7 +45,7 @@ pub struct Grant {
     /// grant written by an older build has none and is ordered by time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_row: Option<i64>,
-    /// Also answers every other session-taint ask of this host session that
+    /// Also answers every other session-taint review of this host session that
     /// comes from untrusted content, until the session reads untrusted content
     /// again (`moat allow --last`, answer `s`). Never a secret taint. A build
     /// that does not know the field reads it as a grant for `action` alone.
@@ -60,7 +60,7 @@ pub struct Grant {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     /// Where its files resolved when approved (empty: each was itself); it holds
-    /// only while they still do, so a file swapped for a symlink is asked again.
+    /// only while they still do, so a file swapped for a symlink needs review again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub real: Vec<String>,
 }
@@ -225,7 +225,7 @@ impl Grants {
             project: Some(scope.project.to_owned()),
             // Unresolvable now: recorded as itself, but no lookup matches
             // while it stays unresolvable ([`Grants::newest`]).
-            real: asked::real_files(action).unwrap_or_default(),
+            real: reviewed::real_files(action).unwrap_or_default(),
         });
     }
 
@@ -251,7 +251,7 @@ impl Grants {
         if openmoat_hosts::is_unknown_session(scope.session_id) {
             return None;
         }
-        let real = asked::real_files(action)?;
+        let real = reviewed::real_files(action)?;
         self.active(now_ms)
             .filter(|g| scope.owns(g) && g.action == *action && g.applies_in(scope.project))
             .filter(|g| g.real == real)
@@ -259,7 +259,7 @@ impl Grants {
     }
 
     /// Make the grant for `action` in this host session also answer the
-    /// session's other taint asks from untrusted content ([`Grant::covers_taint`]).
+    /// session's other taint reviews from untrusted content ([`Grant::covers_taint`]).
     pub fn cover_taint(&mut self, scope: Scope<'_>, action: &Action) {
         for g in &mut self.entries {
             if scope.owns(g) && g.action == *action && g.project.as_deref() == Some(scope.project) {
@@ -268,7 +268,7 @@ impl Grants {
         }
     }
 
-    /// The newest grant of this host session that answers its taint asks from
+    /// The newest grant of this host session that answers its taint reviews from
     /// untrusted content in the scope's project, if one is still valid at `now_ms`.
     #[must_use]
     pub fn covering_taint(&self, scope: Scope<'_>, now_ms: i64) -> Option<&Grant> {
@@ -373,8 +373,8 @@ impl Overlay {
     /// characters in the command are not wildcards in the rule. Shell rules are
     /// prefixes, so extra arguments after the approved command are accepted.
     /// An install of a name close to a popular package also gets its
-    /// `@package-near-miss` atom, which `package-near-miss` asks for on its
-    /// own: approving the command answers that ask too.
+    /// `@package-near-miss` atom, which `package-near-miss` holds for review on its
+    /// own: approving the command answers that review too.
     pub fn allow_command(&mut self, command: &str) -> Result<&RuleGroup> {
         let mut patterns = Vec::new();
         for line in
@@ -445,7 +445,7 @@ impl Overlay {
     /// `project-fs` leaves out the project's: git runs what its hooks and config
     /// name later, outside any sandbox, so such a write is not allowed by this rule.
     /// So are the files CI, a commit-hook manager or the editor runs later
-    /// ([`RUNS_LATER`](crate::sandbox::RUNS_LATER)), which `runs-later` asks for.
+    /// ([`RUNS_LATER`](crate::sandbox::RUNS_LATER)), which `runs-later` holds for review.
     pub fn allow_dir(&mut self, spellings: &[String]) -> &RuleGroup {
         let patterns: Vec<String> = spellings
             .iter()

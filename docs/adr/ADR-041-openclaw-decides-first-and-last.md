@@ -41,7 +41,7 @@ the merged parameters.
   as ADR-033 says. At `Number.MIN_SAFE_INTEGER` it returns `{ params }`, the call's
   parameters as it came, which are the ones the first handler decided on.
 - A deny is a block, which OpenClaw keeps whatever later handlers return and which stops
-  the run, so no plugin sees a denied call. An ask is the first approval request, after
+  the run, so no plugin sees a denied call. A review is the first approval request, after
   which OpenClaw keeps the parameters as they were, so no plugin can change the call the
   person approves. On an allow or a defer the last handler's `params` replace whatever a
   plugin in between returned, so the call that runs is the one OpenMoat checked.
@@ -53,7 +53,7 @@ the merged parameters.
 
 - **Register only at the lowest priority.** The last handler sees the call as it came,
   not as the others changed it, so it could not decide on the change either; and its
-  ask would come after any other plugin's, whose approval request (and parameters)
+  review would come after any other plugin's, whose approval request (and parameters)
   OpenClaw keeps instead.
 - **Block when the parameters changed.** No handler can see another's result, so the
   plugin cannot tell.

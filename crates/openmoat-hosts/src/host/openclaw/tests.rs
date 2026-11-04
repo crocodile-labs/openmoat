@@ -480,13 +480,14 @@ fn the_answer_is_nothing_for_defer_and_a_decision_otherwise() {
     let event = HookEvent::PreToolUse;
     let defer = Decision::new(Verdict::Defer);
     assert_eq!(Host::OpenClaw.render_response(&event, &defer), "");
-    for verdict in [Verdict::Allow, Verdict::Ask, Verdict::Deny] {
-        // OpenClaw asks through `requireApproval`, so an ask stays an ask.
+    for verdict in [Verdict::Allow, Verdict::Review, Verdict::Deny] {
+        // OpenClaw asks through `requireApproval`, so a review stays a review.
         let answer = Host::OpenClaw.answer(&event, &Decision::new(verdict));
         assert_eq!(answer.verdict, verdict);
         let doc: Value =
             serde_json::from_str(&Host::OpenClaw.render_response(&event, &answer)).unwrap();
-        assert_eq!(doc["decision"], verdict.as_str());
+        // The plugin reads the host word: `review` arrives as "ask".
+        assert_eq!(doc["decision"], crate::wire::host_verdict(verdict));
         assert!(doc["reason"].as_str().unwrap().starts_with("moat: "));
     }
 }

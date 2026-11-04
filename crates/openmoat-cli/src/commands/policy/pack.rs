@@ -144,7 +144,7 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     // pack this one replaces taken out.
     let mut policy = home.load_policy()?;
     let own = format!("{}{name}:", packs::PACK_RULE_PREFIX);
-    for groups in [&mut policy.deny, &mut policy.repo_ask, &mut policy.allow] {
+    for groups in [&mut policy.deny, &mut policy.repo_review, &mut policy.allow] {
         groups.retain(|g| !g.id.starts_with(&own));
     }
     packs::apply(&mut policy, &name, &pack)?;
@@ -166,7 +166,7 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     let mut out = Deferred::default();
     for (verb, groups) in [
         ("deny", &pack.deny),
-        ("ask", &pack.ask),
+        ("review", &pack.review),
         ("allow", &pack.allow),
     ] {
         for group in groups {
@@ -185,9 +185,9 @@ pub fn install(args: &InstallArgs) -> Result<Code> {
     };
     writeln!(
         out,
-        "✔ {how} policy pack `{name}` signed by {signer}: {} deny, {} ask, {} allow rule(s)",
+        "✔ {how} policy pack `{name}` signed by {signer}: {} deny, {} review, {} allow rule(s)",
         pack.deny.len(),
-        pack.ask.len(),
+        pack.review.len(),
         pack.allow.len()
     )?;
     writeln!(out, "✔ lock re-pinned ({pinned} files)")?;

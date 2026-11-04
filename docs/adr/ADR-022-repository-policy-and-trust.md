@@ -11,18 +11,18 @@ did not write: a cloned project, a pull request branch or a dependency can carry
 against, and a file it could write, or a file a stranger committed, must never be
 able to loosen the person's own policy. The issue says the repository policy "can
 only tighten the user policy unless the user trusts it". The evaluation order is
-`deny → allow → ask` (ADR-002), so an `ask` rule merged into the user's `ask` list
+`deny → allow → review` (ADR-002), so a `review` rule merged into the user's `review` list
 could never tighten an action the user allows.
 
 ## Decision
 
 - The repository policy is `<project>/.moat/policy.yaml`, where the project is the
-  git root `${project}` names. It may hold `version`, `deny`, `ask` and `allow`
+  git root `${project}` names. It may hold `version`, `deny`, `review` and `allow`
   rule groups, nothing else: `defaults`, `executables` and `sandbox` stay the
   user's, and any other key is a parse error.
 - Without trust it only tightens. Its `deny` groups join the user's deny list. Its
-  `ask` groups are tried after the user's deny rules and before the user's allow
-  rules, so they make an action the user allows ask but never soften a user deny.
+  `review` groups are tried after the user's deny rules and before the user's allow
+  rules, so they make an action the user allows need review but never soften a user deny.
   Its `allow` groups are ignored. The result is the strictest of the two policies
   for every atom, and no repository content can produce a wider verdict.
 - `moat trust [<repo>]` lets its `allow` groups in. It records the SHA-256 of the
@@ -53,7 +53,7 @@ could never tighten an action the user allows.
 
 ## Consequences
 
-- A team can deny and ask for anything in its repository without any member doing
+- A team can deny anything or hold it for review in its repository without any member doing
   more than cloning it. Turning that off means editing a file in the repository,
   which `kernel-self` denies to agents (`**/.moat/**`).
 - Allowing something on top of a person's policy takes one deliberate step per file

@@ -1,7 +1,7 @@
 //! The MCP gateway (ADR-045) through the real binary: `openmoat mcp proxy`
 //! in front of a server that records every byte it receives
 //! (`mcp_gateway/recording_server.py`). A call OpenMoat denies, a call the hook
-//! never decided, a call a host that cannot ask was refused, a held tool's
+//! never decided, a call a host that cannot prompt was refused, a held tool's
 //! call and a changed tool's call leave nothing in the record; an allowed call
 //! arrives unchanged, once, and its audit row names the hook's session. The
 //! relay's fixtures (`mcp_gateway/fixtures.json`) run here too, host side.
@@ -262,16 +262,16 @@ fn a_call_the_policy_denies_never_reaches_the_server() {
 }
 
 #[test]
-fn a_call_asked_after_a_secret_read_and_refused_never_reaches_the_server() {
+fn a_call_held_for_review_after_a_secret_read_and_refused_never_reaches_the_server() {
     let gw = Gateway::new();
     // The default policy denies secret reads, so none runs and none taints a
-    // session. This one asks for them instead (as `taint.rs` does): an asked
-    // read the host may run counts as the session reading the secret. Its
-    // catch-all defers, so an MCP call asks only because of the taint.
+    // session. This one holds them for review instead (as `taint.rs` does): a
+    // reviewed read the host may run counts as the session reading the secret. Its
+    // catch-all defers, so an MCP call needs review only because of the taint.
     std::fs::write(
         gw.sb.home.join(".moat/policy.yaml"),
         "version: 1\ndefaults: { '*': defer, net: deny }\n\
-         ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
+         review:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
     )
     .unwrap();
     // A person re-pins the edited policy and brings the host sandbox in line.
@@ -289,16 +289,20 @@ fn a_call_asked_after_a_secret_read_and_refused_never_reaches_the_server() {
     let read = json!({"file_path": gw.sb.home.join(".ssh/id_rsa").to_string_lossy()});
     let payload = json!({"session_id": "k1", "cwd": gw.sb.project().to_string_lossy(),
         "hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": read, "tool_use_id": "r1"});
-    let asked = gw.sb.guard("claude-code", &payload.to_string());
-    assert!(stdout(&asked).contains(r#""ask""#), "{}", text(&asked));
+    let reviewed = gw.sb.guard("claude-code", &payload.to_string());
+    assert!(
+        stdout(&reviewed).contains(r#""ask""#),
+        "{}",
+        text(&reviewed)
+    );
     let search = json!({"q": "anything"});
-    // The session read a secret, so its MCP calls ask; in a mode where no
-    // person sees the question the ask is a deny, which no call gets past.
+    // The session read a secret, so its MCP calls need review; in a mode where no
+    // person sees the question the review is a deny, which no call gets past.
     assert_eq!(
         gw.hook_in("claude-code", "k1", "search", &search, "dontAsk"),
         "deny"
     );
-    // Asked in another session it is a question the person refuses: the host
+    // Reviewed in another session it is a question the person refuses: the host
     // then sends nothing, and the clean session is still allowed.
     let clean = json!({"q": "clean"});
     assert_ne!(gw.hook("claude-code", "k2", "search", &clean), "deny");

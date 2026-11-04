@@ -25,9 +25,9 @@ pub(crate) fn payload(tool: &str, input: &Value, at: &Place<'_>) -> String {
 }
 
 /// `permissionDecision`, or the older top-level `decision`; anything else on
-/// exit 0 is no decision. Exit 2 blocks. `can_ask` is false for a host that
-/// rejects `ask` as unsupported and runs the call.
-pub(crate) fn read_reply(exit: &Exit<'_>, can_ask: bool) -> Answer {
+/// exit 0 is no decision. Exit 2 blocks. `can_prompt` is false for a host that
+/// rejects `"ask"` as unsupported and runs the call.
+pub(crate) fn read_reply(exit: &Exit<'_>, can_prompt: bool) -> Answer {
     match exit.code {
         Some(2) => Answer::Deny,
         Some(0) => {
@@ -38,7 +38,7 @@ pub(crate) fn read_reply(exit: &Exit<'_>, can_ask: bool) -> Answer {
             match decision {
                 Some("allow" | "approve") => Answer::Allow,
                 Some("deny" | "block") => Answer::Deny,
-                Some("ask") if can_ask => Answer::Ask,
+                Some("ask") if can_prompt => Answer::Review,
                 _ => Answer::Passthrough,
             }
         }

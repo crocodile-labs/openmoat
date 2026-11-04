@@ -3,9 +3,9 @@ use openmoat_core::{Action, Decision, Verdict};
 use super::*;
 
 fn record(store: &Store, host: &str, session: &str, command: &str, ts_ms: i64) {
-    let mut decision = Decision::new(Verdict::Ask);
+    let mut decision = Decision::new(Verdict::Review);
     decision.rules.push("installs".to_owned());
-    decision.reasons.push(format!("asked about {command}"));
+    decision.reasons.push(format!("review {command}"));
     let action = Action::Shell {
         command: command.to_owned(),
     };
@@ -176,7 +176,7 @@ fn an_edited_line_is_named() {
     let text = export_text(&seeded(), &ExportFilter::default());
     for (from, to) in [
         ("npm install b", "npm install x"),
-        (r#""verdict":"ask""#, r#""verdict":"allow""#),
+        (r#""verdict":"review""#, r#""verdict":"allow""#),
         (r#"{"shell":{"#, r#"{"shell": {"#),
     ] {
         let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();

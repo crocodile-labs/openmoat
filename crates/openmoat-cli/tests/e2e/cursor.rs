@@ -161,12 +161,12 @@ fn pre_tool_use_unlisted_editing_tool_is_checked_as_a_write() {
     );
 }
 
-/// A tool that names no path OpenMoat can check asks (`tool.unknown`), which
+/// A tool that names no path OpenMoat can check needs review (`tool.unknown`), which
 /// Cursor's `preToolUse` receives as a deny, instead of passing as ungoverned;
 /// a to-do update (`TodoWrite`) stays ungoverned.
 /// A policy that sets `tool.unknown: allow` lets it run.
 #[test]
-fn pre_tool_use_unknown_tool_without_a_path_asks() {
+fn pre_tool_use_unknown_tool_without_a_path_needs_review() {
     let sb = sandbox();
     let (code, doc) = guard(&sb, &fixture("preToolUse-unknown.json"));
     assert_eq!(code, Some(DENY), "{doc}");
@@ -190,7 +190,7 @@ fn pre_tool_use_unknown_tool_without_a_path_asks() {
 
     std::fs::write(
         sb.home.join(".moat/policy.yaml"),
-        "version: 1\ndefaults: { '*': ask, tool.unknown: allow }\n",
+        "version: 1\ndefaults: { '*': review, tool.unknown: allow }\n",
     )
     .unwrap();
     let accept = sb.moat_as_person(&["doctor", "--accept"]);
@@ -212,12 +212,12 @@ fn write_payload(sb: &Sandbox, path: &std::path::Path) -> String {
     .to_string()
 }
 
-/// Cursor runs a `preToolUse` call answered `ask` ("accepted by the schema but
+/// Cursor runs a `preToolUse` call answered `"ask"` ("accepted by the schema but
 /// not enforced"), so moat sends a deny that says how to approve it, and records
-/// the `ask`; `moat allow --last` then approves that exact file for the
+/// the `review`; `moat allow --last` then approves that exact file for the
 /// conversation.
 #[test]
-fn pre_tool_use_ask_is_denied_and_allow_last_approves_the_file() {
+fn pre_tool_use_review_is_denied_and_allow_last_approves_the_file() {
     let sb = sandbox();
     let notes = sb.home.join("notes").join("todo.md");
     let (code, doc) = guard(&sb, &write_payload(&sb, &notes));
@@ -227,7 +227,7 @@ fn pre_tool_use_ask_is_denied_and_allow_last_approves_the_file() {
     assert!(message.contains("run `openmoat`"), "{doc}");
     assert!(message.contains("openmoat allow --last"), "{doc}");
     let log = text(&sb.moat(&["audit", "export"]));
-    assert!(log.contains("\"verdict\":\"ask\""), "{log}");
+    assert!(log.contains("\"verdict\":\"review\""), "{log}");
 
     let allow = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(allow.status.code(), Some(OK), "{}", text(&allow));
@@ -240,10 +240,10 @@ fn pre_tool_use_ask_is_denied_and_allow_last_approves_the_file() {
     assert_eq!(code, Some(DENY), "only the approved file");
 }
 
-/// Cursor prompts on a `beforeShellExecution` `ask`, so it keeps the `ask`, and
+/// Cursor prompts on a `beforeShellExecution` `"ask"`, so it keeps the `review`, and
 /// `moat allow --last` approves the command for the conversation.
 #[test]
-fn shell_ask_stays_an_ask_and_allow_last_approves_it() {
+fn shell_review_stays_a_review_and_allow_last_approves_it() {
     let sb = sandbox();
     let project = sb.project();
     let payload = serde_json::json!({

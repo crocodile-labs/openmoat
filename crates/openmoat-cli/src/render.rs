@@ -220,14 +220,14 @@ pub fn replay(sessions: &[SessionSummary]) -> Result<()> {
             writeln!(out)?;
         }
         let header = format!(
-            "{} UTC  {}  {}  {}  {} decisions ({} denied, {} asked)",
+            "{} UTC  {}  {}  {}  {} decisions ({} denied, {} reviewed)",
             clock(session.first_ms),
             session.session_id,
             session.host,
             session.cwd.as_deref().unwrap_or("-"),
             session.events.len(),
             session.count(Verdict::Deny),
-            session.count(Verdict::Ask),
+            session.count(Verdict::Review),
         );
         line(&mut out, &header)?;
         let last = session.events.len().saturating_sub(1);
@@ -252,19 +252,19 @@ pub fn report(summary: &Summary, window: &str) -> Result<()> {
     writeln!(
         out,
         "since {window} ({}): {} decisions in {} sessions — {} allowed, {} left to the agent, \
-         {} asked, {} denied",
+         {} reviewed, {} denied",
         timestamp(summary.since_ms),
         summary.total,
         summary.sessions,
         summary.allowed,
         summary.deferred,
-        summary.asked,
+        summary.reviewed,
         summary.denied,
     )?;
-    let centi = summary.asks_per_active_hour_centi();
+    let centi = summary.reviews_per_active_hour_centi();
     writeln!(
         out,
-        "asks per active hour: {}.{:02}  ({} active hours)",
+        "reviews per active hour: {}.{:02}  ({} active hours)",
         centi / 100,
         centi % 100,
         summary.active_hours
@@ -278,7 +278,7 @@ pub fn report(summary: &Summary, window: &str) -> Result<()> {
         line(&mut out, &format!("hosts: {}", hosts.join(" · ")))?;
     }
     if !summary.top_rules.is_empty() {
-        writeln!(out, "top rules (ask + deny):")?;
+        writeln!(out, "top rules (review + deny):")?;
         for (rule, n) in &summary.top_rules {
             line(&mut out, &format!("  {n:>5}  {rule}"))?;
         }
@@ -290,7 +290,7 @@ fn verdict_glyph(verdict: Verdict) -> &'static str {
     match verdict {
         Verdict::Allow => "✔",
         Verdict::Defer => "→",
-        Verdict::Ask => "❓",
+        Verdict::Review => "❓",
         // `Deny`, and any verdict added to the core later.
         _ => "⛔",
     }
@@ -337,7 +337,7 @@ fn verdict_mark(verdict: Verdict) -> &'static str {
     match verdict {
         Verdict::Allow => "✔ allow",
         Verdict::Defer => "→ defer",
-        Verdict::Ask => "❓ ask",
+        Verdict::Review => "❓ review",
         Verdict::Deny => "⛔ deny",
         _ => "⛔ unknown",
     }

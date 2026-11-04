@@ -21,8 +21,8 @@ pub const OK: i32 = 0;
 pub const FAILED: i32 = 1;
 /// Verdict `deny`; also every error in `moat guard`.
 pub const DENY: i32 = 2;
-/// Verdict `ask` that `moat policy check` could not resolve.
-pub const ASK: i32 = 3;
+/// Verdict `review` that `moat policy check` could not resolve.
+pub const REVIEW: i32 = 3;
 /// Usage or configuration error from a command a person ran.
 pub const USAGE: i32 = 64;
 
@@ -59,15 +59,19 @@ impl Sandbox {
         Self::installed_in(&std::env::temp_dir(), host_dirs)
     }
 
-    /// [`Sandbox::installed`] with the policy's catch-all set back to `ask`, re-pinned
+    /// [`Sandbox::installed`] with the policy's catch-all set back to `review`, re-pinned
     /// as a person would: the strict choice ADR-025 keeps, under which a call no rule
-    /// matches asks. The approval tests use it to reach `moat allow` and the home screen.
-    pub fn installed_asking(host_dirs: &[&str]) -> Self {
+    /// matches needs review. The approval tests use it to reach `moat allow` and the home screen.
+    pub fn installed_with_review(host_dirs: &[&str]) -> Self {
         let sb = Self::installed(host_dirs);
         let policy = sb.home.join(".moat/policy.yaml");
         let text_now = std::fs::read_to_string(&policy).unwrap();
         assert!(text_now.contains("\"*\": defer"), "{text_now}");
-        std::fs::write(&policy, text_now.replacen("\"*\": defer", "\"*\": ask", 1)).unwrap();
+        std::fs::write(
+            &policy,
+            text_now.replacen("\"*\": defer", "\"*\": review", 1),
+        )
+        .unwrap();
         let out = sb.moat_as_person(&["doctor", "--accept"]);
         assert!(text(&out).contains("re-pinned"), "{}", text(&out));
         sb

@@ -58,12 +58,12 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
     }
 }
 
-/// Cline has no allow that skips its own approval, and cannot ask: an allow
-/// arrives as a passthrough, an ask as a deny.
+/// Cline has no allow that skips its own approval, and cannot prompt: an allow
+/// arrives as a passthrough, a review as a deny.
 pub(super) fn seen(verdict: Verdict) -> Answer {
     match verdict {
         Verdict::Allow => Answer::Passthrough,
-        Verdict::Ask => Answer::Deny,
+        Verdict::Review => Answer::Deny,
         other => other.into(),
     }
 }

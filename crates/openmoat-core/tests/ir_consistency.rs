@@ -2,7 +2,7 @@
 //!
 //! For every conformance fixture that is a file read, file write, network or
 //! fetch action, the lowered IR's verdict on the atoms the engine evaluates
-//! must be the engine's verdict with `ask` and `defer` read as `deny`. A wider IR verdict
+//! must be the engine's verdict with `review` and `defer` read as `deny`. A wider IR verdict
 //! (an allow the engine would not give) is a bypass of every OS layer; a
 //! narrower one would be allowed by ADR-019 but must then be reported as a
 //! loss, and the default policy has none on these fixtures.
@@ -114,7 +114,7 @@ fn ir_verdicts_match_the_engine_on_every_lowerable_fixture() {
         let ir = lower(&policy, &ctx).unwrap().checker().unwrap();
         let hook_allows =
             engine.decide_with(&action, &NoResolver, &links).verdict == Verdict::Allow;
-        // An action without a host is unparseable: the hook asks, and no OS
+        // An action without a host is unparseable: the hook holds it for review, and no OS
         // layer ever sees a connection to judge.
         let (atoms, None) = engine.atoms(&action, &links) else {
             assert!(!hook_allows, "{}", fixture.id);

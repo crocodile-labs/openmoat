@@ -1,4 +1,4 @@
-# ADR-038: Reading or writing a folder that holds denied paths asks (`protected-contents`)
+# ADR-038: Reading or writing a folder that holds denied paths needs review (`protected-contents`)
 
 Status: accepted · Date: 2026-10-26 · Refines ADR-002 and ADR-013
 
@@ -34,12 +34,12 @@ if any, names files below it.
   no such folder, or only a filesystem root (`**/.env`, `**/.claude/settings.json`, `/`),
   adds nothing.
 - An `fs.read` of a folder that is one of those read folders or an ancestor of one, and
-  an `fs.write` of a folder that is or holds one of the write folders, adds an **ask**
+  an `fs.write` of a folder that is or holds one of the write folders, adds a **review**
   with the engine rule id `protected-contents` and a reason naming the folder and the
   rules (`reads a folder that holds paths `agent-credentials` denies: /Users/me/.codex`).
   It is merged like every other atom's decision: strictest wins, so a deny on the folder
   itself stays a deny, and it never allows anything.
-- The ask is added whatever allows the folder: a user rule allowing `~` or `~/**` no
+- The review is added whatever allows the folder: a user rule allowing `~` or `~/**` no
   longer allows `cp -r ~ /backup` silently.
 - The classifier also models destinations it used to read: `tar -x … -C DIR` and `unzip
   … -d DIR` write `DIR` (the working directory without one), and `git checkout
@@ -47,10 +47,10 @@ if any, names files below it.
   plain `fs.write` atoms the existing rules (`kernel-self`, `git-internals`,
   `runs-later`) decide.
 
-Ask, not deny. Copying `~/.codex` to a backup disk, or listing `~/.gemini` to see which
+Review, not deny. Copying `~/.codex` to a backup disk, or listing `~/.gemini` to see which
 version is installed, is a legitimate thing for a person to do; the person sees the
 whole command and answers it, and `openmoat allow --last` answers it for the session.
-A host that cannot ask (Codex, OpenCode 1) already turns an ask into a deny that names
+A host that cannot prompt (Codex, OpenCode 1) already turns a review into a deny that names
 `openmoat allow --last` (ADR-025), so there the copy is refused until a person approves
 it. The files themselves stay denied whatever the answer: `cat ~/.codex/auth.json` is
 still `agent-credentials`.
@@ -60,7 +60,7 @@ still `agent-credentials`.
 - **List each folder in the deny rules** (`~/.codex`, `~/.gemini`, …). Closes the
   observed commands only for the folders someone remembered, makes `ls ~/.codex` a deny
   no person can approve, and every new agent or secret file needs the same care.
-- **Deny instead of ask.** Strictest, but a person's backup or inspection of an agent
+- **Deny instead of review.** Strictest, but a person's backup or inspection of an agent
   folder would have no way through but editing the policy.
 - **A recursive flag in the classifier**, so only `cp -r`/`grep -r`/`tar c` of the
   folder would count. Tells `ls ~/.codex` from `cp -r ~/.codex`, but it needs a new atom
@@ -70,16 +70,16 @@ still `agent-credentials`.
 
 ## Consequences
 
-- Every command above asks, in every spelling of the folder (`~/.CODEX` on macOS, a
+- Every command above needs review, in every spelling of the folder (`~/.CODEX` on macOS, a
   moved `CODEX_HOME`). `tar xf e.tar -C ~/.claude` and `unzip e.zip -d ~/.moat` are
-  denied by `kernel-self`; `git checkout main -- .github/workflows/ci.yml` asks
+  denied by `kernel-self`; `git checkout main -- .github/workflows/ci.yml` needs review
   (`runs-later`).
-- Common commands that now ask: `ls ~/.codex`, `ls ~/.claude`, `ls ~/.gemini`,
+- Common commands that now need review: `ls ~/.codex`, `ls ~/.claude`, `ls ~/.gemini`,
   `ls ~/Library` (`~/Library/Keychains/**`), `ls ~/.cargo` and `du -sh ~/.cargo`
   (`~/.cargo/credentials`) and `ls ~/.m2`. The home folder and the folders above it
   (`/`, `/Users`) are left out: they hold every protected path, so `ls /`,
   `find / -name x` and a word that is the bare path `/` (`tr '/' '_'`) keep their
-  verdict, a read of `~` still asks (`home-sweep`) and a write of it is still denied
+  verdict, a read of `~` still needs review (`home-sweep`) and a write of it is still denied
   (`destructive`). `tar xf e.tar` run in `~` and
   `tar xf e.tar -C ~` are denied by `destructive`, which denies writing `~` itself.
   Folders below the literal one (`ls ~/.codex/sessions`, `ls ~/.cargo/registry`) keep
@@ -87,9 +87,9 @@ still `agent-credentials`.
 - Inside a project nothing changes with the default policy: its deny rules name project
   files only through `**` patterns, so `grep -r TODO .` stays allowed even when the
   project holds a `.env`. A repository policy's deny on `${project}/secrets/**` makes a
-  recursive read of the project ask, which is what it asks for.
-- `openmoat allow --always` does not answer this ask: the permanent rule it writes is an
-  allow, and the ask is added whatever allows the folder. A session grant does.
+  recursive read of the project need review, which is what it asks for.
+- `openmoat allow --always` does not answer this review: the permanent rule it writes is an
+  allow, and the review is added whatever allows the folder. A session grant does.
 - Performance: the folders are collected once per compiled policy (a few hundred short
   strings for the default policy); an `fs` atom is a prefix scan over them. Compile time
   (about 6.4 ms) and the decision time of a mixed set of commands were unchanged within

@@ -12,7 +12,7 @@
 //! (`tools/file_tools_paths.py`: the directory the session's terminal last
 //! moved to, or the workspace a Desktop, TUI or ACP session registered), which
 //! the hook payload does not send: its `cwd` is the Hermes process's. A file
-//! tool's relative path is therefore checked against that `cwd` and asks.
+//! tool's relative path is therefore checked against that `cwd` and needs review.
 
 use openmoat_core::Action;
 use serde_json::Value;
@@ -73,7 +73,7 @@ pub(super) fn action(tool: &str, args: &Value) -> Result<Option<Action>, HostErr
         "process_manage" => match field("action")?.as_str() {
             read if PROCESS_READS.contains(&read) => return Ok(None),
             // Typed into a process the agent started earlier, which joins it
-            // to what came before: checked as a command, and it asks.
+            // to what came before: checked as a command, and it needs review.
             _ => Action::unchecked(
                 Action::Shell {
                     command: field("data")?,
@@ -94,7 +94,7 @@ pub(super) fn action(tool: &str, args: &Value) -> Result<Option<Action>, HostErr
         // `memory` changes the notes Hermes puts into every later session's
         // prompt (`memories/` in its home), `skill_manage` a skill it loads
         // into later sessions (`skills/`): writes there, which the taint list
-        // and `runs-later` ask about. Named under the default home, whose
+        // and `runs-later` hold for review. Named under the default home, whose
         // patterns cover a moved one.
         "memory" => Action::FsWrite {
             path: MEMORIES.to_owned(),
@@ -155,7 +155,7 @@ fn skill_name(operation: &Value) -> Option<String> {
 /// `terminal` runs `command` in the session's persistent bash (Git Bash on
 /// Windows), in `workdir` when given: written as a `cd` before the command.
 /// The shell stays where a `cd` leaves it for the session's later commands,
-/// so a command that leaves it where OpenMoat cannot know asks
+/// so a command that leaves it where OpenMoat cannot know needs review
 /// ([`openmoat_core::leaves_unknown_directory`]), as does one with a relative
 /// `workdir`.
 fn terminal(command: String, workdir: Option<&Value>) -> Action {
@@ -197,7 +197,7 @@ fn rooted(path: &str) -> bool {
         || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
 }
 
-/// A file tool's action, asking when its path is relative.
+/// A file tool's action, needing review when its path is relative.
 fn checked(action: Action) -> Action {
     let relative = match &action {
         Action::FsRead { path } | Action::FsWrite { path } => !rooted(path),

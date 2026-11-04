@@ -67,19 +67,19 @@ error and goes on).
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-OpenCode 2: an `ask` is OpenCode's own permission prompt. The plugin calls
+OpenCode 2: a `review` is OpenCode's own permission prompt. The plugin calls
 `ctx.permission.assert` with the action `openmoat`, the tool's name as the resource,
 OpenMoat's reason as the message and the call's id as its source, and its `permission`
-`evaluate` hook makes that request an ask even when OpenCode's rules would allow it. A
-configured deny, a rejection, or `opencode run` (which rejects every ask unless `--auto`)
+`evaluate` hook gives that request OpenCode's `ask` effect even when OpenCode's rules would allow it. A
+configured deny, a rejection, or `opencode run` (which rejects every permission prompt unless `--auto`)
 blocks the call. `--auto` (and the hidden `--yolo` and `--dangerously-skip-permissions`)
-approves OpenMoat's ask as it approves OpenCode's own, and the plugin cannot tell. "Always"
+approves OpenMoat's review as it approves OpenCode's own prompts, and the plugin cannot tell. "Always"
 saves nothing: approve a call for good with `openmoat allow --last --always`.
 
-OpenCode 1 gives plugins no way to ask the person: its `permission.ask` hook is declared
-but has not been called since 1.3.0. An `ask` arrives as a deny that says how to approve
+OpenCode 1 gives plugins no way to prompt the person: its `permission.ask` hook is declared
+but has not been called since 1.3.0. A `review` arrives as a deny that says how to approve
 the call (`openmoat`, or `openmoat allow --last`, then retry).
 
 A call OpenMoat defers is left to OpenCode's own permission rules, which allow most tools
@@ -106,7 +106,7 @@ by default.
   and `opencode auth export` (OpenCode 2), which prints them; `XDG_DATA_HOME` moving
   that directory is not followed.
 - The agent running `opencode mcp add`, `opencode mcp auth` or `opencode mcp debug`
-  asks (`runs-later`): they save a server, or start its OAuth sign-in, in which
+  needs review (`runs-later`): they save a server, or start its OAuth sign-in, in which
   OpenCode 1.0.137 to 1.18.32 on Windows and WSL ran a command from the server's
   sign-in address. `openmoat status` and `openmoat doctor` warn when the `opencode` on
   the search path is a version with a published advisory (`advisories.rs`).
@@ -131,7 +131,7 @@ turns it back on. A `policies` statement denying `integration.use` of
 - The person's own `opencode.json` and `opencode.jsonc`: `kernel-self` denies the agent
   writing them; `openmoat status` and `openmoat doctor` report OpenCode as not protected
   while one removes the plugin, and name the file and entry.
-- A project's `opencode.json[c]` and `.opencode/opencode.json[c]`: writes ask
+- A project's `opencode.json[c]` and `.opencode/opencode.json[c]`: writes need review
   (`runs-later`); `openmoat status` and `openmoat doctor` warn that OpenCode 2 sessions
   started there are not protected. Only the directory they run in and its project root
   are read, not the parent directories OpenCode 2 also reads.
@@ -166,8 +166,8 @@ without the plugin from one that has not run: the note stays a note.
 
 ## Known gaps
 
-No OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a deny that says
-how to approve it; OpenCode 2's `--auto` approves OpenMoat's asks unseen; OpenCode before
+No OS sandbox from OpenMoat; OpenCode 1 plugins cannot prompt, so a review is a deny that says
+how to approve it; OpenCode 2's `--auto` approves OpenMoat's reviews unseen; OpenCode before
 1.3.4 is not supported; other plugins and custom tools run in OpenCode's process with the
 agent's rights and can change what OpenMoat's plugin does, and a project's load at start
 with no prompt: a plugin that rewrites a call OpenMoat checked makes that call fail, but

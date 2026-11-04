@@ -307,7 +307,7 @@ fn a_credential_replayed_after_it_expired_gets_407() {
 fn a_session_that_read_a_secret_cannot_send_through_the_proxy() {
     let (sb, port, project) = setup();
     // An untrusted repository policy may tighten: it makes this file a secret
-    // whose read asks, and an asked read may have run.
+    // whose read needs review, and a reviewed read may have run.
     std::fs::create_dir_all(project.join(".moat")).unwrap();
     std::fs::write(
         project.join(".moat/policy.yaml"),

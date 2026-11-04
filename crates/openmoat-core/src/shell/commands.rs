@@ -377,7 +377,7 @@ fn classify_as_written(
             return Ok(());
         }
         // The shell runs text the line does not show: `<shell> @stdin`, which no
-        // allow rule names, so a rule can ask for it (`opaque-code`).
+        // allow rule names, so a rule can hold it for review (`opaque-code`).
         sink.push(AtomicAction::Shell {
             argv: vec![program.to_owned(), "@stdin".to_owned()],
         })?;

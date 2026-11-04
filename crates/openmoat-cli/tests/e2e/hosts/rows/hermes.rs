@@ -11,7 +11,7 @@ use super::{Edit, Mcp, Row};
 use crate::common::fixture;
 
 /// The verdict a Hermes reply means: `block` (as `decision` or `action`) is a
-/// deny, `action: approve` an ask, any other object an allow.
+/// deny, `action: approve` a review, any other object an allow.
 fn read_verdict(reply: &Value) -> &'static str {
     if ["/decision", "/action"]
         .iter()
@@ -19,6 +19,7 @@ fn read_verdict(reply: &Value) -> &'static str {
     {
         "deny"
     } else if reply.pointer("/action") == Some(&json!("approve")) {
+        // The word the other rows read from their host's reply for a review.
         "ask"
     } else if reply.is_object() {
         "allow"
@@ -53,7 +54,7 @@ pub fn row() -> Row {
         }),
         ungoverned: &[|sb| crate::hermes::payload(sb, "todo_list", &json!({ "todos": [] }))],
         malformed: Some((|_| fixture("hermes/read_file-malformed.json"), Some("path"))),
-        ask: Some(|sb| {
+        review: Some(|sb| {
             let outside = sb.home.join("notes").join("todo.txt");
             crate::hermes::payload(sb, "read_file", &json!({ "path": outside }))
         }),

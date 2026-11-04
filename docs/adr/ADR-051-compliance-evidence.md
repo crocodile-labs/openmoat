@@ -28,7 +28,7 @@ in the log at all.
    the ones the code adds (`docs/POLICY.md` §5.1). A control is listed only where the rule
    restricts or records the thing the control is about; controls the rules do not serve
    are left out (for example LLM01 Prompt Injection, which OpenMoat does not detect).
-2. **The map is tested against the policy.** Every `deny` and `ask` rule of the default
+2. **The map is tested against the policy.** Every `deny` and `review` rule of the default
    policy is in exactly one group; no `allow` or `defer` rule is in any (a rule that lets a
    call run is no evidence of a restriction); every other id is documented in POLICY.md
    §5.1; control ids are well formed and none repeats. A new restrictive rule fails the
@@ -41,7 +41,7 @@ in the log at all.
    events an export of the window holds, and it verifies the whole chain. For each control
    and rule group it gives decisions by verdict, each event counted once however many of
    the group's rules it names, and sample events as stored (already redacted; denies and
-   asks first, newest first). Rules that fired and map to no control are listed so every
+   reviews first, newest first). Rules that fired and map to no control are listed so every
    decision is accounted for. It adds the policy file's SHA-256 and whether it is the
    shipped default, each mapped default rule the policy in force lacks ("cannot fire"), the
    lock's state and last pin time, and each agent's protection level (`protection.rs`).

@@ -15,11 +15,11 @@ the released `cn` runs no hooks yet, so OpenMoat does not check its calls.
 When `cn` runs the hook, its tool calls are Claude Code's and are mapped by Claude Code's
 rows in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
 `cn`'s hook runner blocks only on exit 2, `decision: "block"` or
-`permissionDecision: "deny"`; an `ask` lets the call run. So `guard` tells a `cn` call
-from a Claude Code one and answers `cn`'s asks as denies.
+`permissionDecision: "deny"`; an `"ask"` lets the call run. So `guard` tells a `cn` call
+from a Claude Code one and sends `cn` every review as a deny.
 
 ## Configuration and MCP files
 
@@ -30,7 +30,7 @@ from a Claude Code one and answers `cn`'s asks as denies.
 Credentials: the hub login older releases kept in `~/.continue/auth.json` and the MCP
 sign-ins `mcp-remote` keeps in `~/.mcp-auth/` are `agent-credentials`' (`~/.continue/.env`
 is `secrets-paths`'); `CONTINUE_GLOBAL_DIR` moving the directory is not followed. A write
-of `~/.continue/config.yaml`, whose MCP servers `cn` starts, asks (`runs-later`).
+of `~/.continue/config.yaml`, whose MCP servers `cn` starts, needs review (`runs-later`).
 
 ## When the hook fails
 

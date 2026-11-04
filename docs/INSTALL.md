@@ -251,6 +251,9 @@ kinds of change have happened:
 - **The default policy changes.** In 0.5.0, calls no rule names moved from `ask` to
   `defer` (the agent's own prompt decides, ADR-025). Your policy keeps its own rules
   until you run `openmoat policy upgrade`.
+- **Policy names change.** In 0.14.0 the verdict `ask` became `review`, and the rule
+  group `ask:` became `review:` (ADR-053). A policy that still says `ask` works as before;
+  `openmoat policy lint` warns and `openmoat policy upgrade` renames it.
 - **Hook entries change.** `openmoat doctor` then says the hook is out of date, and
   `openmoat init` rewrites it (step 1).
 - **The library crates' API** (`openmoat-core`, `openmoat-hosts`, `openmoat-audit`,

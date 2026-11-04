@@ -102,23 +102,23 @@ fn a_brokered_value_or_a_token_in_a_message_denies() {
 }
 
 #[test]
-fn a_workflow_change_asks_only_in_a_tainted_session() {
+fn a_workflow_change_needs_review_only_in_a_tainted_session() {
     let repo = Repo::new();
     repo.commit(".github/workflows/ci.yml", "on: push\n", "ci");
     assert_eq!(checked(&repo, false), allowed());
     let d = checked(&repo, true);
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
     assert_eq!(d.rules, [RUNS_LATER_RULE]);
     assert!(d.reasons[0].contains(".github/workflows/ci.yml"), "{d:?}");
 }
 
 #[test]
-fn a_push_too_large_to_read_or_in_an_unknown_place_asks() {
+fn a_push_too_large_to_read_or_in_an_unknown_place_needs_review() {
     let repo = Repo::new();
     let line = "abcdefghij".repeat(10) + "\n";
     repo.commit("big.txt", &line.repeat(90_000), "big");
     let d = checked(&repo, false);
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
     assert_eq!(d.rules, [UNCHECKED_RULE]);
     assert!(d.reasons[0].contains("more than 8 MiB"), "{d:?}");
 
@@ -127,7 +127,7 @@ fn a_push_too_large_to_read_or_in_an_unknown_place_asks() {
         dirs: vec![None],
     }];
     let d = check(&unknown, &KnownSecrets::default(), false, allowed());
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
     assert_eq!(d.rules, [UNCHECKED_RULE]);
 }
 
@@ -135,7 +135,7 @@ fn a_push_too_large_to_read_or_in_an_unknown_place_asks() {
 /// pins by an absolute path: never one found through the hook's `PATH`,
 /// whose relative entries name directories of the repository pushed from.
 #[test]
-fn a_push_asks_when_the_snapshot_pins_no_absolute_git() {
+fn a_push_needs_review_when_the_snapshot_pins_no_absolute_git() {
     let pushes = vec![Push {
         argv: vec!["git".into(), "push".into()],
         dirs: vec![Some("/code/app".into())],
@@ -154,7 +154,7 @@ fn a_push_asks_when_the_snapshot_pins_no_absolute_git() {
         false,
         allowed(),
     );
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
     assert_eq!(d.rules, [UNCHECKED_RULE]);
 }
 

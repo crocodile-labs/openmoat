@@ -16,19 +16,19 @@ const TOOLS: &[ToolRow] = &[
         "`terminal`",
         "`command`, after a `cd` to `workdir`; the project stays the payload's `cwd` (the \
          Hermes process's); a relative `workdir`, or a command that leaves the session's \
-         shell where OpenMoat cannot know, asks",
+         shell where OpenMoat cannot know, needs review",
         "`Shell`; `Unchecked`",
     ),
     ToolRow::new(
         "`read_file` / `write_file`, `patch`",
         "`path` (`write_file` `content` for provenance); `patch` with `mode: patch`: every \
-         file its V4A `patch` names; a relative path asks, since Hermes resolves it against \
+         file its V4A `patch` names; a relative path needs review, since Hermes resolves it against \
          the session's directory, which the payload does not send",
         "`FsRead` / `FsWrite`, `Patch`; `Unchecked`",
     ),
     ToolRow::new(
         "`search_files`",
-        "`path`, else the session's directory (an ask); for `target: files`, also where a \
+        "`path`, else the session's directory (a review); for `target: files`, also where a \
          relative `pattern` climbs to",
         "`FsRead`, `ReadFiles`; `Unchecked`",
     ),
@@ -56,13 +56,13 @@ const TOOLS: &[ToolRow] = &[
     ToolRow::new(
         "`cronjob_manage`",
         "`list`: ungoverned; any other action: the arguments, `script` as a command, and an \
-         ask, since the job runs the agent later, unattended",
+         need review, since the job runs the agent later, unattended",
         "none; `Unchecked` `UnknownTool`",
     ),
     ToolRow::new(
         "`memory` / `skill_manage`",
         "a write of the notes Hermes puts into later sessions (`memories/` in its home) / \
-         of each skill its `operations` name in its `skills/`; a skill write asks \
+         of each skill its `operations` name in its `skills/`; a skill write needs review \
          (`runs-later`), a memory write once the session read untrusted content (taint)",
         "`FsWrite` / `FsWrite`, `Patch`",
     ),

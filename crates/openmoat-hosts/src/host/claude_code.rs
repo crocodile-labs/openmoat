@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Asks, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
+    Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
     McpSpec, McpServersJson, Prefixed, ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
@@ -46,20 +46,20 @@ const HOOKS: &[HookSpec] = &[
     ),
 ];
 
-/// Claude Code asks on `PreToolUse`, except in a permission mode that puts no
+/// Claude Code prompts on `PreToolUse`, except in a permission mode that puts no
 /// question to a person (`bypassPermissions`, `dontAsk`).
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "claude-code",
     display_name: "Claude Code",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: Some("Claude Code's permission mode does not ask"),
-        defer_is_ask_on_no_ask: false,
+        on_no_prompt: Some("Claude Code's permission mode does not prompt"),
+        defer_is_review_on_no_prompt: false,
         allow_last_hint: true,
         // `bypassPermissions` skips its prompts and `dontAsk` denies whatever
         // would prompt.
         prompt_free_modes: &["bypassPermissions", "dontAsk"],
-        ..Asks::BASE
+        ..Reviews::BASE
     },
     resume_hint: Some("`claude --continue` resumes this one"),
     on_hook_failure: "before 2.1.295 runs the call when the hook is missing, cannot start, \
@@ -175,7 +175,7 @@ impl HostAdapter for Adapter {
 
     fn render(&self, event: &HookEvent, decision: &Decision) -> String {
         match event {
-            HookEvent::PreToolUse | HookEvent::PreToolUseNoAsk => pre_tool_use::render(decision),
+            HookEvent::PreToolUse | HookEvent::PreToolUseNoPrompt => pre_tool_use::render(decision),
             HookEvent::ConfigChange { .. } => config_change::render(decision),
             HookEvent::SessionStart { .. } => session_start::render(decision),
         }

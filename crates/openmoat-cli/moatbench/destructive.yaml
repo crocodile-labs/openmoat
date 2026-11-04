@@ -24,7 +24,7 @@
   steps:
     - { shell: "rm -rf ~/", expect: deny, rule: destructive }
 
-- id: recursive-delete-of-project-root-asks
+- id: recursive-delete-of-project-root-needs-review
   threat: T4
   why: >-
     Deleting a build directory is an ordinary project write and is allowed, but

@@ -1,7 +1,7 @@
 //! What earlier calls of one agent session brought into it (session taint,
-//! ADR-020): after a secret read, network to any other host asks; after
+//! ADR-020): after a secret read, network to any other host needs review; after
 //! untrusted content (a fetch, a web search, an MCP result), a write to a
-//! protected path asks. Taint only ever makes a decision stricter.
+//! protected path needs review. Taint only ever makes a decision stricter.
 
 use serde::{Deserialize, Serialize};
 
@@ -30,7 +30,7 @@ impl Session {
     }
 
     /// Note that `action` ran, as decided by `engine` with `facts`. Record only
-    /// calls that really ran (a person may have approved an `ask`); a denied
+    /// calls that really ran (a person may have approved a `review`); a denied
     /// call that did not run exposed nothing.
     pub fn record(&mut self, engine: &Engine, action: &Action, facts: &Facts) {
         self.taint.absorb(engine.exposure(action, facts));

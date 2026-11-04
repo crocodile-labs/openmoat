@@ -375,7 +375,7 @@ fn deny_patterns(ir: &Enforcement) -> impl Iterator<Item = &str> {
 }
 
 /// The deny rules and allow exceptions of `access`, except the files run later
-/// (`runs-later`), which the hook asks about: masking them would make them
+/// (`runs-later`), which the hook holds for review: masking them would make them
 /// unreadable and fail installs that write them.
 fn denials(access: &Access) -> impl Iterator<Item = &str> {
     let denied = access.deny.iter().flat_map(|r| split(&r.patterns).0);

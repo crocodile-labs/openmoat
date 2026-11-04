@@ -9,8 +9,8 @@
 //!
 //! The rules the loop keeps (docs/SDK.md):
 //! - `deny`: the call does not run; the model is told why.
-//! - `ask`: the call runs only if a person approves this exact call.
-//! - `defer`: this product has no permission flow of its own, so it asks too.
+//! - `review`: the call runs only if a person approves this exact call.
+//! - `defer`: this product has no permission flow of its own, so it holds the call for review too.
 //! - `allow`: the call runs, exactly as decided, never a value rebuilt from it.
 
 use std::path::{Path, PathBuf};
@@ -41,7 +41,7 @@ enum Outcome {
     Refused { verdict: Verdict, reason: String },
 }
 
-/// The person who answers `ask`: in a real product, a prompt in your UI.
+/// The person who answers `review`: in a real product, a prompt in your UI.
 type Approver<'a> = &'a dyn Fn(&ToolCall, &str) -> bool;
 
 struct Agent {
@@ -81,7 +81,7 @@ impl Agent {
         let decision = self.engine.decide_with(&action, &facts, &self.session);
         let may_run = match decision.verdict {
             Verdict::Allow => true,
-            Verdict::Ask | Verdict::Defer => approve(call, &decision.reason()),
+            Verdict::Review | Verdict::Defer => approve(call, &decision.reason()),
             // `Deny`, and any verdict this example does not know: never run.
             _ => false,
         };
@@ -225,7 +225,7 @@ mod tests {
         let h = dirs();
         let mut agent = Agent::new(&h.home, &h.project).unwrap();
         // A write outside the project: no rule allows it, so the policy's
-        // catch-all leaves it to this product's own flow, which asks.
+        // catch-all leaves it to this product's own flow, which prompts the person.
         let outside = h.home.join("todo.txt");
         let call = ToolCall::WriteFile {
             path: slash(&outside),

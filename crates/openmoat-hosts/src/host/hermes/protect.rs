@@ -9,7 +9,7 @@ pub(super) const PROTECT: Protect = Protect {
          hook allowlist without which a gateway, cron or ACP session skips it, the\n\
          `.env` that can set `HERMES_SAFE_MODE`, the sticky profile, the plugins and\n\
          hooks it runs in its own process, and the folder of its profiles (another\n\
-         profile's files ask, `runs-later`; `HERMES_HOME` moves these to the one in use)",
+         profile's files need review, `runs-later`; `HERMES_HOME` moves these to the one in use)",
         &[
             "~/.hermes",
             "~/.hermes/config.yaml",

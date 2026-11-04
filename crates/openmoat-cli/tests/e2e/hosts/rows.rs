@@ -103,8 +103,8 @@ pub struct Row {
     pub ungoverned: &'static [Payload],
     /// A payload whose arguments cannot be checked, and what its reason says.
     pub malformed: Option<(Payload, Option<&'static str>)>,
-    /// A call the policy asks about once its catch-all is `ask`.
-    pub ask: Option<Payload>,
+    /// A call the policy holds for review once its catch-all is `review`.
+    pub review: Option<Payload>,
     /// MCP servers whose change holds back their tools.
     pub mcp: Option<Mcp>,
     /// A setting that turns OpenMoat's hook off.
@@ -131,7 +131,7 @@ const BASE: Row = Row {
     benign: None,
     ungoverned: &[],
     malformed: None,
-    ask: None,
+    review: None,
     mcp: None,
     hooks_off: None,
 };

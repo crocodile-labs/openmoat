@@ -33,7 +33,7 @@ these paths by which a call or a listing still went past it unchecked:
    (`sampling/createMessage`, `elicitation/create`) passed unrecorded.
 7. **Who made the call.** The proxy's audit rows carried a session of its own
    (`mcp-<server>-<pid>-<ms>`): nothing tied a relayed call to the agent session, its taint
-   or the person's answer to an `ask`.
+   or the person's answer to a `review`.
 
 ## Decision
 
@@ -68,7 +68,7 @@ these paths by which a call or a listing still went past it unchecked:
    whose scheme connects somewhere (`https:`, `ws:`, …) as a host; any other URI names what
    only the server resolves. `prompts/get` and the server's requests are recorded.
 7. **A call passes only on a hook decision for exactly that call.** Each time `openmoat
-   guard` decides an MCP call it does not deny (an `ask` where no person can see it counts
+   guard` decides an MCP call it does not deny (a `review` where no person can see it counts
    as a deny), it adds a row to the audit database's `mcp_tickets` table: the event, the
    host, session and call id, the tool name and the SHA-256 of the arguments in canonical
    form (keys sorted, `{}` for none). The proxy passes a `tools/call` on only when it can
@@ -82,7 +82,7 @@ these paths by which a call or a listing still went past it unchecked:
 
 ## Consequences
 
-- The hook stays where the person's answer, the session's taint (every MCP call asks after
+- The hook stays where the person's answer, the session's taint (every MCP call needs review after
   the session read a secret, ADR-020), `openmoat allow` grants and the repository policy
   are known. The proxy enforces that decision for the exact call that reaches the server,
   and enforces the policy's denies again on what the server receives, so a host that skips
@@ -94,7 +94,7 @@ these paths by which a call or a listing still went past it unchecked:
   call except through the decision it matches. Two sessions sending the same tool the same
   arguments are told apart only by which decision each takes; one decision still lets only
   one call through.
-- An `ask` is honoured as the host reports it: after the host asked and the person said
+- A `review` is honoured as the host reports it: after the host asked and the person said
   no, the host sends nothing, and the decision row expires unused. A host that sent the
   call anyway would find that row. Hosts are trusted to honour their own answers, as they
   are without the proxy.

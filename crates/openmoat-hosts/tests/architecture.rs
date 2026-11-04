@@ -146,7 +146,7 @@ fn the_host_list_names_every_host_once_with_its_module() {
 /// [`ALLOWED`] does.
 const ALLOWED_NAMES: &[(&str, usize)] = &[
     // A test record's host.
-    ("openmoat-cli/src/approvals/asked.rs", 1),
+    ("openmoat-cli/src/approvals/reviewed.rs", 1),
     // Inline tests of each host's MCP reader.
     ("openmoat-cli/src/mcp/servers.rs", 5),
     // A test record's host.

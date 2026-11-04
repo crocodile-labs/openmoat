@@ -1,6 +1,6 @@
 //! Every host's verdict shapes: what reaches the host for a secret read, an
 //! allowed call, a tool OpenMoat does not govern, arguments that cannot be
-//! checked and an ask, in the host's own reply format.
+//! checked and a review, in the host's own reply format.
 
 use openmoat_core::Verdict;
 use openmoat_hosts::Host;
@@ -35,7 +35,7 @@ fn a_benign_call_is_allowed() {
     }
 }
 
-/// A tool OpenMoat does not govern is left to the host (`Asks::ungoverned`):
+/// A tool OpenMoat does not govern is left to the host (`Reviews::ungoverned`):
 /// no output where the host's hooks have a "no decision", else an `allow`
 /// that names the rule.
 #[test]
@@ -46,7 +46,7 @@ fn an_ungoverned_tool_is_left_to_the_host() {
             continue;
         }
         let sb = Sandbox::installed(&[&dir_of(host)]);
-        let ungoverned = host.spec().asks.ungoverned;
+        let ungoverned = host.spec().reviews.ungoverned;
         for payload in row.ungoverned {
             let out = guard(&row, &sb, &payload(&sb));
             assert_eq!(out.status.code(), Some(OK), "{}: {}", row.id, text(&out));
@@ -79,22 +79,23 @@ fn arguments_that_cannot_be_checked_are_denied() {
     }
 }
 
-/// Where the host puts a question to the person (`Asks::on_pre_tool_use`), an
-/// `ask` reaches it as one; where it cannot, as a deny that says how to approve.
+/// Where the host puts a question to the person (`Reviews::on_pre_tool_use`), a
+/// `review` reaches it as its own prompt (`"ask"`); where it cannot, as a deny that
+/// says how to approve.
 #[test]
-fn an_ask_reaches_the_host_as_its_spec_says() {
+fn a_review_reaches_the_host_as_its_spec_says() {
     for host in Host::ALL {
         let row = row(host.id());
-        let Some(ask) = row.ask else { continue };
-        let sb = Sandbox::installed_asking(&[&dir_of(host)]);
-        let out = guard(&row, &sb, &ask(&sb));
-        if host.spec().asks.on_pre_tool_use.is_none() {
+        let Some(review) = row.review else { continue };
+        let sb = Sandbox::installed_with_review(&[&dir_of(host)]);
+        let out = guard(&row, &sb, &review(&sb));
+        if host.spec().reviews.on_pre_tool_use.is_none() {
             assert_eq!(out.status.code(), Some(OK), "{}: {}", row.id, text(&out));
             assert_eq!(verdict(&row, &out), "ask", "{}: {}", row.id, text(&out));
         } else {
             assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
             assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
-            assert_reason(&row, &out, "openmoat allow --last", "ask");
+            assert_reason(&row, &out, "openmoat allow --last", "review");
         }
     }
 }

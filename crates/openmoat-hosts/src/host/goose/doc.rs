@@ -30,7 +30,7 @@ const TOOLS: &[ToolRow] = &[
     ),
     ToolRow::new(
         "`execute_javascript` (Code Mode)",
-        "the arguments, and an ask: the tools the script calls do not reach the hook",
+        "the arguments, and a review: the tools the script calls do not reach the hook",
         "`Unchecked` `UnknownTool`",
     ),
     ToolRow::new(

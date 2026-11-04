@@ -49,15 +49,15 @@ pub struct Summary {
     /// Events left to the agent's own permission prompt (ADR-025).
     #[serde(default)]
     pub deferred: u64,
-    /// Events that asked.
-    pub asked: u64,
+    /// Events held for review.
+    pub reviewed: u64,
     /// Events that were denied.
     pub denied: u64,
     /// Distinct sessions in the window.
     pub sessions: u64,
     /// Events per host id.
     pub by_host: BTreeMap<String, u64>,
-    /// Rule id → times it decided an `ask` or `deny`, most frequent first.
+    /// Rule id → times it decided a `review` or `deny`, most frequent first.
     pub top_rules: Vec<(String, u64)>,
     /// Distinct clock hours with at least one event.
     pub active_hours: u64,
@@ -65,13 +65,13 @@ pub struct Summary {
 
 impl Summary {
     /// Prompts per hour of agent activity, in hundredths; the prompt-fatigue
-    /// metric `moat report` shows (`250` means 2.50 asks per active hour).
+    /// metric `moat report` shows (`250` means 2.50 reviews per active hour).
     #[must_use]
-    pub fn asks_per_active_hour_centi(&self) -> u64 {
+    pub fn reviews_per_active_hour_centi(&self) -> u64 {
         if self.active_hours == 0 {
             return 0;
         }
-        self.asked * 100 / self.active_hours
+        self.reviewed * 100 / self.active_hours
     }
 }
 
@@ -126,7 +126,7 @@ impl Store {
 
 impl Summary {
     /// Aggregate `events` for a window starting at `since_ms`. Rules are counted
-    /// only for `ask` and `deny` outcomes, which is what a policy author wants to tune.
+    /// only for `review` and `deny` outcomes, which is what a policy author wants to tune.
     #[must_use]
     pub fn of(since_ms: i64, events: &[Event]) -> Self {
         let mut summary = Self {
@@ -134,7 +134,7 @@ impl Summary {
             total: 0,
             allowed: 0,
             deferred: 0,
-            asked: 0,
+            reviewed: 0,
             denied: 0,
             sessions: 0,
             by_host: BTreeMap::new(),
@@ -150,14 +150,14 @@ impl Summary {
             match event.verdict {
                 Verdict::Allow => summary.allowed += 1,
                 Verdict::Defer => summary.deferred += 1,
-                Verdict::Ask => summary.asked += 1,
+                Verdict::Review => summary.reviewed += 1,
                 // `Deny`, and any verdict added to the core later.
                 _ => summary.denied += 1,
             }
             *summary.by_host.entry(event.host.clone()).or_insert(0) += 1;
             sessions.insert((event.host.clone(), event.session_id.clone()));
             hours.insert(event.ts_ms.div_euclid(MS_PER_HOUR));
-            if matches!(event.verdict, Verdict::Ask | Verdict::Deny) {
+            if matches!(event.verdict, Verdict::Review | Verdict::Deny) {
                 for rule in &event.rules {
                     *rules.entry(rule.clone()).or_insert(0) += 1;
                 }
@@ -188,7 +188,7 @@ mod tests {
 
     fn seed(store: &Store) {
         let allow = decision(Verdict::Allow, &["dev-shell"]);
-        let ask = decision(Verdict::Ask, &["installs"]);
+        let review = decision(Verdict::Review, &["installs"]);
         let deny = decision(Verdict::Deny, &["secrets-paths", "default.net"]);
         let action = Action::Shell {
             command: "x".into(),
@@ -196,10 +196,10 @@ mod tests {
         let rows: [(&str, &str, &Decision, i64); 6] = [
             ("claude-code", "s1", &allow, 1_000),
             ("claude-code", "s1", &deny, 2_000),
-            ("claude-code", "s2", &ask, MS_PER_HOUR + 1_000),
+            ("claude-code", "s2", &review, MS_PER_HOUR + 1_000),
             ("cursor", "c1", &deny, MS_PER_HOUR + 2_000),
             ("cursor", "c1", &allow, 2 * MS_PER_HOUR),
-            ("codex", "k1", &ask, 3 * MS_PER_HOUR),
+            ("codex", "k1", &review, 3 * MS_PER_HOUR),
         ];
         for (host, session, d, ts) in rows {
             store
@@ -249,7 +249,7 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         seed(&store);
         let s = store.summary(0, None).unwrap();
-        assert_eq!((s.total, s.allowed, s.asked, s.denied), (6, 2, 2, 2));
+        assert_eq!((s.total, s.allowed, s.reviewed, s.denied), (6, 2, 2, 2));
         assert_eq!(s.sessions, 4);
         assert_eq!(s.by_host["claude-code"], 3);
         assert_eq!(s.top_rules[0], ("default.net".to_owned(), 2));
@@ -258,11 +258,11 @@ mod tests {
             "allow rules are not counted"
         );
         assert_eq!(s.active_hours, 4);
-        assert_eq!(s.asks_per_active_hour_centi(), 50);
+        assert_eq!(s.reviews_per_active_hour_centi(), 50);
         let cursor = store.summary(0, Some("cursor")).unwrap();
         assert_eq!(cursor.total, 2);
         assert_eq!(cursor.by_host.len(), 1);
         let empty = Store::open_in_memory().unwrap().summary(0, None).unwrap();
-        assert_eq!(empty.asks_per_active_hour_centi(), 0);
+        assert_eq!(empty.reviews_per_active_hour_centi(), 0);
     }
 }

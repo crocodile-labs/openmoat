@@ -4,6 +4,7 @@ mod mcp_tickets;
 mod provenance;
 mod session_cache;
 mod session_writes;
+mod verdict_names;
 
 use super::*;
 
@@ -314,13 +315,13 @@ fn event_ids_are_hex() {
 fn file_store_round_trip_and_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.db");
-    let d = decision(Verdict::Ask, "installs", "new dependency");
+    let d = decision(Verdict::Review, "installs", "new dependency");
     let a = Action::Shell {
         command: "npm install x".into(),
     };
     let id = Store::open(&path).unwrap().record(&sample(&d, &a)).unwrap();
     let reopened = Store::open_read_only(&path).unwrap();
-    assert_eq!(reopened.get(id).unwrap().unwrap().verdict, Verdict::Ask);
+    assert_eq!(reopened.get(id).unwrap().unwrap().verdict, Verdict::Review);
 }
 
 #[test]

@@ -1,12 +1,12 @@
 //! OpenMoat's pi extension (`pi/integration/openmoat.js`, harness `pi.mjs`):
 //! a deny blocks with the guard's reason, an allow or no answer lets the call
-//! run, an ask is put to the person where pi has a screen and blocks where it
+//! run, a review is put to the person where pi has a screen and blocks where it
 //! has none, every other outcome blocks, and the extension reports loading.
 
 use super::{assert_one_heartbeat, entry, report};
 
 #[test]
-fn the_pi_extension_blocks_on_everything_but_allow_no_answer_and_an_approved_ask() {
+fn the_pi_extension_blocks_on_everything_but_allow_no_answer_and_an_approved_review() {
     let Some(report) = report("pi", "pi/integration/openmoat.js") else {
         return;
     };
@@ -31,15 +31,15 @@ fn the_pi_extension_blocks_on_everything_but_allow_no_answer_and_an_approved_ask
     assert_eq!(outcome("allow"), "ran");
     assert_eq!(outcome("defer"), "ran");
 
-    // An ask is the person's to answer, in pi's dialog, with the guard's reason.
+    // A review is the person's to answer, in pi's dialog, with the guard's reason.
     assert_eq!(outcome("ask-approved"), "ran");
     assert_eq!(
         result("ask-approved")["asked"][0]["message"],
-        "moat: ask [runs-later]"
+        "moat: review [runs-later]"
     );
     assert_eq!(
         outcome("ask-declined"),
-        "blocked: not approved: moat: ask [runs-later]"
+        "blocked: not approved: moat: review [runs-later]"
     );
     // Without a screen nobody is asked, and the call is blocked.
     assert_eq!(result("ask-no-screen")["asked"], serde_json::json!([]));

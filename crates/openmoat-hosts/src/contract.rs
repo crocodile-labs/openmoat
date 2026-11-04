@@ -1,5 +1,5 @@
 //! What every host adapter declares: the facts about a host as data
-//! ([`HostSpec`]), and the one place an `ask` or `defer` is turned into what
+//! ([`HostSpec`]), and the one place a `review` or `defer` is turned into what
 //! the host can act on ([`answer`], [`decided`]).
 
 use openmoat_core::{Decision, Verdict};
@@ -8,7 +8,6 @@ use crate::bench::{Answer, Call, Exit, Place};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod advisory;
-mod asks;
 mod base;
 mod consent;
 mod docs;
@@ -19,11 +18,10 @@ mod location;
 mod mcp;
 mod protect;
 mod relaxed;
+mod reviews;
 mod settings;
 
 pub use advisory::{Advisories, Advisory, Platform, Version};
-pub use asks::{Asks, Unseen};
-pub(crate) use asks::{answer, decided};
 pub use consent::ConsentFile;
 pub use docs::{HostDocs, ToolRow};
 pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
@@ -36,6 +34,8 @@ pub use mcp::{
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use protect::{Helper, Paths, ProcessSpec, Protect};
 pub use relaxed::{KeyShape, RelaxedKey};
+pub use reviews::{Reviews, Unseen};
+pub(crate) use reviews::{answer, decided};
 pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
 
@@ -94,8 +94,8 @@ pub struct HostSpec {
     /// The host whose hook format this host sends, when it is another host's
     /// (`cn` sends Claude Code's).
     pub speaks: Option<Host>,
-    /// What the host does with an `ask` on each kind of tool hook.
-    pub asks: Asks,
+    /// What the host does with a `review` on each kind of tool hook.
+    pub reviews: Reviews,
     /// What the host does when its hook is missing, crashes or times out, as
     /// `docs/THREAT_MODEL.md` §5 ("When the hook fails") says; change them together.
     pub on_hook_failure: &'static str,
@@ -121,7 +121,7 @@ pub struct HostSpec {
     /// install, so `moat status` and `moat doctor` can name its [`Self::gaps`].
     pub detect: Option<Detect>,
     /// How the person resumes an agent session after `moat allow` granted it
-    /// something, which `moat allow` adds after "a new session asks again".
+    /// something, which `moat allow` adds after "a new session needs review again".
     pub resume_hint: Option<&'static str>,
     /// The host's own files the default policy's `kernel-self` and
     /// `agent-credentials` rules and the taint list protect, in their
@@ -349,7 +349,7 @@ impl InstallSpec {
 pub const GUARD_BUDGET_S: u64 = 30;
 
 /// Seconds a host waits for a tool-call hook. Long enough for a person to
-/// answer an `ask` prompted by the host; Claude Code and Codex default to 600.
+/// answer a `review` prompted by the host; Claude Code and Codex default to 600.
 pub(crate) const TOOL_HOOK_TIMEOUT_S: u64 = 600;
 /// Seconds for the settings-change veto, which never waits for a person.
 pub(crate) const CONFIG_HOOK_TIMEOUT_S: u64 = 60;

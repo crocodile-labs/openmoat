@@ -1,5 +1,5 @@
 # OpenMoat default policy, schema v1 (docs/POLICY.md).
-# Evaluation: deny → allow → ask → defer → defaults. Strictest verdict wins across
+# Evaluation: deny → allow → review → defer → defaults. Strictest verdict wins across
 # the atomic actions of one tool call. `${project}` is the trusted project root.
 # `defer` leaves the call to the agent's own permission prompt (ADR-025): OpenMoat
 # denies what must never happen and stays quiet about the rest.
@@ -10,7 +10,7 @@ defaults:
   "*": defer         # no rule matched: the agent's own permission prompt decides (ADR-025)
   net: deny          # outbound network: only hosts listed under allow
   fetch: defer       # a host fetch tool (WebFetch) reading an unlisted URL: no request body (ADR-017)
-  web.search: allow  # a host search tool (WebSearch): recorded; asks after a secret read (session taint)
+  web.search: allow  # a host search tool (WebSearch): recorded; needs review after a secret read (session taint)
   tool.unknown: defer  # a host tool OpenMoat cannot classify; what its arguments name is checked too
 
 deny:
@@ -352,7 +352,7 @@ deny:
       - "**/.github/copilot/settings.local.json"
       # pi: the agent directory, OpenMoat's extension in it, the settings that
       # can turn the extension off and the trust decisions that load a project's
-      # own extensions; other extensions ask (`runs-later`)
+      # own extensions; other extensions need review (`runs-later`)
       - "~/.pi"
       - "~/.pi/agent"
       - "~/.pi/agent/extensions"
@@ -371,7 +371,7 @@ deny:
       # folders around it, the configuration files whose `plugin` list loads
       # plugins and whose `-openmoat` removes OpenMoat's (`config` is the old TOML
       # one OpenCode moves into `config.json`), and OpenCode 2's background service
-      # settings, whose `env` it starts with; other plugins ask (`runs-later`)
+      # settings, whose `env` it starts with; other plugins need review (`runs-later`)
       - "~/.config/opencode"
       - "~/.config/opencode/plugins"
       - "~/.config/opencode/plugins/openmoat.js"
@@ -393,7 +393,7 @@ deny:
       # hook allowlist without which a gateway, cron or ACP session skips it, the
       # `.env` that can set `HERMES_SAFE_MODE`, the sticky profile, the plugins and
       # hooks it runs in its own process, and the folder of its profiles (another
-      # profile's files ask, `runs-later`; `HERMES_HOME` moves these to the one in use)
+      # profile's files need review, `runs-later`; `HERMES_HOME` moves these to the one in use)
       - "~/.hermes"
       - "~/.hermes/config.yaml"
       - "~/.hermes/shell-hooks-allowlist.json"
@@ -502,8 +502,8 @@ deny:
       - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
       - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve an
-      # ask) under the same wrappers; patterns are prefixes, so these deny any command
+      # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve a
+      # review) under the same wrappers; patterns are prefixes, so these deny any command
       # of either name run in them
       - "{script,*/script,unbuffer,*/unbuffer,tmux,*/tmux,screen,*/screen} * {moat,*/moat,openmoat,*/openmoat}"
       - "{script,*/script,tmux,*/tmux,screen,*/screen} * '{moat,*/moat,openmoat,*/openmoat}'*"
@@ -600,7 +600,7 @@ deny:
     # length that pass the Luhn check, in the places `token-egress` reads; loopback
     # hosts and processors' published test numbers are left out (POLICY.md §4.4,
     # ADR-052). `@pii-egress emails <host>` (ten or more distinct mail addresses in
-    # one send) has no default rule: add one to deny or ask
+    # one send) has no default rule: add one to deny or review
     shell: ["@pii-egress card *"]
 
 allow:
@@ -608,14 +608,14 @@ allow:
     # the root itself too: a search with no path reads the whole project
     fs.read: ["${project}", "${project}/**"]
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted
-    # directory), so writing one asks like the root's own `.git`
+    # directory), so writing one needs review like the root's own `.git`
     fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
-      # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` asks)
+      # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` needs review)
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
       "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
       "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json",
-      # the folders above them, which a rename moves with everything inside (`runs-later` asks)
+      # the folders above them, which a rename moves with everything inside (`runs-later` needs review)
       "!${project}/**/.github/hooks", "!${project}/**/.pi", "!${project}/**/.pi/extensions",
       "!${project}/**/.gemini/policies/**", "!${project}/**/.gemini/commands/**", "!${project}/**/.gemini/agents/**",
       "!${project}/**/.github/agents/**", "!${project}/**/.claude/agents/**", "!${project}/**/.claude/skills/**",
@@ -648,7 +648,7 @@ allow:
       - "git pull*"
       - "git rebase *"
       - "git merge *"
-      # each path is an fs.write atom, so `.git`, `.moat` and hook settings ask or deny
+      # each path is an fs.write atom, so `.git`, `.moat` and hook settings need review or are denied
       - "git restore *"
       - "git stash*"
       # read-only subcommands; only the forms that print are listed
@@ -701,7 +701,7 @@ allow:
       - "true"
       - "jq *"
       # moving around and everyday file operations; every path operand is also an
-      # fs atom (resolved through cd and symlinks), so outside the project these ask
+      # fs atom (resolved through cd and symlinks), so outside the project these need review
       - "cd"
       - "cd *"
       - "pushd *"
@@ -743,10 +743,10 @@ allow:
       - "pytest*"
       - "python -m pytest*"
       - "python3 -m pytest*"
-      # the directory operands are fs.write atoms, so outside the project these ask
+      # the directory operands are fs.write atoms, so outside the project these need review
       - "python -m venv *"
       - "python3 -m venv *"
-      # the project's own virtual environment, as written: any other spelling or file asks
+      # the project's own virtual environment, as written: any other spelling or file needs review
       - "source .venv/bin/activate $"
       - ". .venv/bin/activate $"
       - "source venv/bin/activate $"
@@ -758,7 +758,7 @@ allow:
       - "make lint*"
       # other ecosystems' build and test commands run the project's own code, like
       # `cargo test`; paths in their arguments are fs atoms, so outside the project
-      # these ask
+      # these need review
       - "mvn {test,compile,package,verify}"
       - "{./gradlew,gradle} {test,build,check}"
       - "dotnet {build,test,run}"
@@ -787,10 +787,10 @@ allow:
       - "docker build *"
       # options that run another program or write outside the command's own output (ADR-012)
       # a recursive removal is judged by the paths it writes: a project subdirectory is
-      # allowed, `.git`, `~` and anything outside ask or deny. `project-fs` also allows
-      # the root itself, so a recursive removal asks for every spelling that may name
+      # allowed, `.git`, `~` and anything outside need review or are denied. `project-fs` also allows
+      # the root itself, so a recursive removal holds for review every spelling that may name
       # it: `.`, an absolute or home path, a variable, `..`, and an unexpanded `*` or
-      # `.*` (every entry). Checkouts that discard uncommitted work stay at ask
+      # `.*` (every entry). Checkouts that discard uncommitted work stay at review
       - "!rm * -*[rR]* * {.,./,/*,~*,$*,*..*,[*],./[*],.[*],./.[*]}"
       - "!rm * {.,./,/*,~*,$*,*..*,[*],./[*],.[*],./.[*]} * -*[rR]*"
       - "!git restore * {.,./,[*],:*}"
@@ -856,7 +856,7 @@ allow:
       - "!git merge * --str*"
       - "!git merge * -s*"
       - "!git merge * -[!-]*s*"
-      # deleting a branch by force drops commits only the reflog keeps: `destructive-recoverable` asks
+      # deleting a branch by force drops commits only the reflog keeps: `destructive-recoverable` needs review
       - "!git branch -D *"
       - "!git branch --delete --force *"
       - "!git branch --force --delete *"
@@ -884,13 +884,13 @@ allow:
       - "wc *"
       - "diff *"
       - "tree*"
-      # their operands are fs.read atoms, so outside the project these ask
+      # their operands are fs.read atoms, so outside the project these need review
       - "file *"
       - "stat *"
       - "du *"
       - "fd *"
       - "uname"
-      # printing the date; setting the clock (`date -s`, `date MMDDhhmm`) asks
+      # printing the date; setting the clock (`date -s`, `date MMDDhhmm`) needs review
       - "date $"
       - "date +* $"
       - "date {-u,--utc} $"
@@ -898,7 +898,7 @@ allow:
       - "brew {list,ls,info,search,config,--version}"
       - "java {-version,--version} $"
       # a toolchain's version, the first thing an agent checks; only these names, so a
-      # program the agent wrote (`./tool --version`) still asks
+      # program the agent wrote (`./tool --version`) still needs review
       - "{git,node,npm,pnpm,yarn,deno,bun,python,python3,pip,pip3,uv,ruby,gem,bundle,cargo,rustc,rustup,go,gcc,g++,clang,cmake,make,docker,kubectl,terraform,dotnet,mvn,gradle,swift,php,composer,perl} {--version,-V} $"
       - "{node,npm,pnpm,yarn,deno,bun} -v $"
       - "{git,go,docker,dotnet} version $"
@@ -994,10 +994,10 @@ allow:
   - id: safe-mcp
     mcp: ["mcp__github__search_*", "mcp__github__get_*", "mcp__filesystem__read_*", "mcp__filesystem__list_*"]
 
-# OpenMoat asks itself only where the effect outlives the sandbox or the session:
+# OpenMoat holds calls for review itself only where the effect outlives the sandbox or the session:
 # what git, the login session or a build runs later, outside any sandbox, and reads
 # that sweep up secrets. Normal work never meets these (ADR-025).
-ask:
+review:
   - id: git-internals
     reason: git runs what its config, hooks and refs name, later and outside any sandbox
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted directory)
@@ -1009,7 +1009,7 @@ ask:
     shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*",
       "git init --template=?*", "git init --template ?*", "git init * --template=?*", "git init * --template ?*"]
   # deleting a local branch loses nothing the reflog does not keep for weeks, so it
-  # asks where a force push or `reset --hard` is denied
+  # needs review where a force push or `reset --hard` is denied
   - id: destructive-recoverable
     reason: deletes local work that the reflog still holds for a while
     shell: ["git branch -D *", "git branch --delete --force *", "git branch --force --delete *",
@@ -1017,7 +1017,7 @@ ask:
   # CI configuration runs with the repository's secrets once a branch is pushed, and
   # commit-hook managers and editor tasks run on this machine outside any sandbox;
   # so do the agent hosts' hook scripts, MCP server lists and Codex's project config,
-  # in the next session. `project-fs` leaves them out, so a write asks wherever it is.
+  # in the next session. `project-fs` leaves them out, so a write needs review wherever it is.
   # Hook only: the OS sandboxes list them as writable (`sandbox/patterns.rs`), and the
   # home files are the hosts' own state, which `moat run --write` may grant
   - id: runs-later

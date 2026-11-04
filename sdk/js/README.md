@@ -21,7 +21,7 @@ if (d.verdict === "allow") {
 }
 ```
 
-**The SDK decides; your code enforces.** A `deny` must not run; an `ask` (and a `defer`,
+**The SDK decides; your code enforces.** A `deny` must not run; a `review` (and a `defer`,
 if your product has no permission flow of its own) runs only after a person approves
 that exact call. It is not a sandbox.
 

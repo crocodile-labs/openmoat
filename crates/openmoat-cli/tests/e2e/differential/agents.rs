@@ -199,7 +199,7 @@ fn has_rule(row: &Value, rule: &str) -> bool {
         .is_some_and(|rules| rules.iter().any(|r| r == rule))
 }
 
-/// `row`'s verdict (`allow`, `defer`, `ask`, `deny`).
+/// `row`'s verdict (`allow`, `defer`, `review`, `deny`).
 fn decided_verdict(row: &Value) -> &str {
     row["verdict"].as_str().unwrap_or_default()
 }

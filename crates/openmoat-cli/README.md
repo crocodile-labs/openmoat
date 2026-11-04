@@ -3,7 +3,7 @@
 The command-line tool of [OpenMoat](https://github.com/crocodile-labs/openmoat):
 it checks the tool calls Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi,
 Gemini CLI, OpenCode and Hermes Agent report through their hooks
-against one policy (allow, defer to the agent's own prompt, ask, or deny), configures Claude Code's, Codex's and Cursor's own sandboxes from
+against one policy (allow, defer to the agent's own prompt, review, or deny), configures Claude Code's, Codex's and Cursor's own sandboxes from
 that policy, and keeps a local, tamper-evident audit log. This crate owns all I/O: files,
 environment, terminal, host configuration. Decisions come from `openmoat-core`.
 
@@ -18,12 +18,12 @@ Installers, Homebrew and the full guide: the
 
 | Command | Purpose |
 |---|---|
-| `openmoat` | which agents are protected, today's decisions; answer a drifted policy or the last ask (terminal only) |
+| `openmoat` | which agents are protected, today's decisions; answer a drifted policy or the last review (terminal only) |
 | `openmoat init [--hosts …] [--yes] [--dry-run]` | create `~/.moat`, write the default policy, create the audit log, install hooks idempotently, configure the host sandboxes |
 | `openmoat uninstall [--hosts …] [--purge]` | remove the hooks and sandbox settings, restoring the backups (terminal only) |
 | `openmoat status` · `openmoat doctor [--accept]` | installation health and each agent's protection level (exit 64 when unhealthy) · verify and re-pin (terminal only) |
 | `openmoat show [<id> \| --session <id> \| --since … \| --recent N]` | inspect audit events |
-| `openmoat replay` · `openmoat report` | per-session timeline · verdict totals, hosts, top rules, asks per active hour |
+| `openmoat replay` · `openmoat report` | per-session timeline · verdict totals, hosts, top rules, reviews per active hour |
 | `openmoat audit export \| verify \| report \| anchor` | export the log as JSON Lines with chain hashes, verify an export, report over several machines, record the log's head in a git repository or file you keep (anchor: terminal only) |
 | `openmoat allow [--last \| <command> --host … --session …] [--always]` | grant one command to a session, or add a permanent allow rule (terminal only) |
 | `openmoat allow --site <host> \| --dir <path> \| --remove <id>` · `openmoat edit` | allow a site or a directory, or take such a rule out · edit the policy with a diff before applying (terminal only) |
@@ -39,7 +39,7 @@ Installers, Homebrew and the full guide: the
 | `openmoat guard --host <id>` | hook entry point: payload on stdin, decision on stdout; fail-closed |
 
 Exit codes are a contract (ADR-004): 0 allow, defer or ok, 1 the agent `openmoat run` started
-exited non-zero, 2 deny, 3 unresolved ask, 64 usage or configuration error.
+exited non-zero, 2 deny, 3 unresolved review, 64 usage or configuration error.
 
 Environment: `MOAT_HOME` (state directory, default `~/.moat`), `CLAUDE_CONFIG_DIR`,
 `CODEX_HOME`, `CURSOR_CONFIG_DIR`, `GEMINI_CLI_HOME`, `COPILOT_HOME`, `PI_CODING_AGENT_DIR`

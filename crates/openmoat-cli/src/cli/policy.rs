@@ -39,7 +39,7 @@ pub enum PolicyCommand {
 
 #[derive(Debug, Args)]
 pub struct InstallArgs {
-    /// The pack: a policy file with only `version`, `deny`, `ask` and `allow`.
+    /// The pack: a policy file with only `version`, `deny`, `review` and `allow`.
     pub pack: PathBuf,
 
     /// Its detached signature (`ssh-keygen -Y sign -n openmoat-pack`). Defaults
@@ -116,7 +116,7 @@ pub struct CheckDiffArgs {
     /// Policy to check against. Defaults to the shipped default policy, so every machine
     /// gives the same answer. With --base, a relative path is a file of the repository,
     /// read as --base has it. The repository's own `.moat/policy.yaml` at --base adds its
-    /// deny and ask rules.
+    /// deny and review rules.
     #[arg(long, short)]
     pub policy: Option<PathBuf>,
 

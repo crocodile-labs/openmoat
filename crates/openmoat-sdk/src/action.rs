@@ -68,7 +68,7 @@ pub enum Action {
     /// A tool the caller cannot describe as any of the above.
     UnknownTool(UnknownToolCall),
     /// A call the caller sees only in part: `action` is decided as usual and the
-    /// call is at least `ask` (rule `unchecked`), since `reason` names what the
+    /// call is at least `review` (rule `unchecked`), since `reason` names what the
     /// caller cannot see.
     Unchecked {
         /// What the caller sees of the call.
@@ -107,7 +107,7 @@ pub struct McpCall {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub opens: Vec<String>,
     /// Why the arguments were not searched in full (a depth or size limit);
-    /// the call is then at least `ask`.
+    /// the call is then at least `review`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unchecked: Option<String>,
 }
@@ -174,7 +174,7 @@ impl Action {
         Self::McpTool(call)
     }
 
-    /// `action`, seen only in part: at least `ask` because of `reason`.
+    /// `action`, seen only in part: at least `review` because of `reason`.
     #[must_use]
     pub fn unchecked(action: Self, reason: impl Into<String>) -> Self {
         Self::Unchecked {

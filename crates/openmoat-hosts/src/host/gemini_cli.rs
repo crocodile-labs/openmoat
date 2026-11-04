@@ -25,7 +25,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
     ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -47,15 +47,15 @@ pub(crate) const EVENT: &str = "BeforeTool";
 /// installer converts ([`hook_file::Gemini`]).
 const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "*", TOOL_HOOK_TIMEOUT_S, false)];
 
-/// Gemini CLI puts an `ask` to the person itself.
+/// Gemini CLI puts a `review` to the person itself.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "gemini-cli",
     display_name: "Gemini CLI",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: None,
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+        on_no_prompt: None,
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "runs the call when the hook times out, is killed by a signal or exits 1 \
          (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits \
@@ -210,14 +210,15 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
 pub(crate) fn render(decision: &Decision) -> String {
     // `defer` (ADR-025): no output, so Gemini CLI's own policy decides, as
     // without OpenMoat. `allow` changes nothing there either: Gemini CLI reads
-    // only `deny` (or `block`) and `ask` from a `BeforeTool` hook.
+    // only `deny` (or `block`) and `"ask"` from a `BeforeTool` hook.
     if decision.verdict == Verdict::Defer {
         return String::new();
     }
     let line = crate::reason_line(decision);
-    let mut reply = serde_json::json!({ "decision": decision.verdict.as_str() });
+    // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+    let mut reply = serde_json::json!({ "decision": crate::wire::host_verdict(decision.verdict) });
     // `reason` goes to the model with a deny; `systemMessage` is shown to the
-    // person, beside the confirmation for an `ask`.
+    // person, beside the confirmation for a `review`.
     if decision.verdict != Verdict::Allow {
         reply["reason"] = Value::from(line.as_str());
         reply["systemMessage"] = Value::from(line);

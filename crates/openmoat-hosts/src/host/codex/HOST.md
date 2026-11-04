@@ -42,10 +42,10 @@ and [trust discovery](https://github.com/openai/codex/blob/rust-v0.166.0/codex-r
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-Codex hooks cannot ask: Codex rejects `permissionDecision: "ask"` and then runs the call,
-so an ask is sent as a deny that the person approves with `openmoat allow --last`.
+Codex hooks cannot prompt: Codex rejects `permissionDecision: "ask"` and then runs the call,
+so a review is sent as a deny that the person approves with `openmoat allow --last`.
 
 ## Configuration and MCP files
 
@@ -62,7 +62,7 @@ Credentials: `auth.json` (the ChatGPT tokens or API key, the default store) and
 `agent-credentials`': the agent's own tools may not read them (`kernel-self` already
 denies every write there). The keyring entries (`Codex Auth`, `Codex MCP Credentials`)
 are read by `security find-generic-password -w` or `secret-tool lookup`, which
-`secrets-paths` denies. `codex mcp add` and `codex mcp login` ask (`runs-later`);
+`secrets-paths` denies. `codex mcp add` and `codex mcp login` need review (`runs-later`);
 `codex mcp add --url` starts the server's OAuth sign-in at once. `openmoat status` and
 `openmoat doctor` warn when the `codex` on the search path is a version with a
 published advisory (`advisories.rs`).
@@ -74,7 +74,7 @@ Codex runs the call when the hook is missing, cannot start, exits non-zero other
 
 ## Known gaps
 
-Web search and hosted tools are not hooked; asks become denies; Codex skips a new or
+Web search and hosted tools are not hooked; reviews become denies; Codex skips a new or
 changed hook until the person trusts it in `/hooks`, and `[features] hooks = false` turns
 hooks off (`openmoat status` and `doctor` report that); calls run unchecked if the hook
 binary is missing or crashes.

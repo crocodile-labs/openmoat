@@ -128,7 +128,7 @@ pub fn generate(ir: &Enforcement, proxy_port: Option<u16>, linux: bool) -> Resul
             Kind::FsRead,
             "default",
             "Claude Code's file tools refuse reads outside the working directories \
-             (permissions.blockReadsOutsideWorkingDirectories) where the hook would ask; \
+             (permissions.blockReadsOutsideWorkingDirectories) where the hook would hold the read for review; \
              `/add-dir` adds a directory"
                 .into(),
         );

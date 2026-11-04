@@ -33,7 +33,7 @@ const PATH_KEYS: &[&str] = &[
 /// edit the file and Cursor's file tools run outside its sandbox. A
 /// tool that names no such path is an [`Action::UnknownTool`] with whatever
 /// else its arguments name ([`crate::wire::unknown`]), which the policy
-/// decides (`ask` on this hook) instead of passing it unseen.
+/// decides (`"ask"` on this hook) instead of passing it unseen.
 pub(super) fn pre_tool_action(
     tool: &str,
     input: &Value,

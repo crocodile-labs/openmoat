@@ -6,11 +6,11 @@ use crate::realpath::MapPathResolver;
 
 /// An unquoted glob operand is checked as every file it matches as well as
 /// literally; a quoted or escaped one only literally; one that names too much
-/// asks without hiding a deny (docs/POLICY.md §3.2).
+/// needs review without hiding a deny (docs/POLICY.md §3.2).
 #[test]
 fn glob_operands_are_checked_as_the_files_they_match() {
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: secret\n    \
+        "version: 1\ndefaults: review\ndeny:\n  - id: secret\n    \
          fs.read: ['**/.env', '~/.ssh/**']\n    fs.write: ['**/.env']\n\
          allow:\n  - id: proj\n    fs.read: ['${project}/**']\n    \
          fs.write: ['${project}/**']\n  - id: cat\n    shell: ['cat *', 'echo *', 'timeout *']\n",
@@ -48,7 +48,7 @@ fn glob_operands_are_checked_as_the_files_they_match() {
     fs.files
         .extend((0..MAX_MATCHES).map(|n| format!("/p/f{n}")));
     let (verdict, rules) = decide(&fs, "cat *");
-    assert_eq!(verdict, Verdict::Ask);
+    assert_eq!(verdict, Verdict::Review);
     assert!(rules.contains(&"unparseable".to_owned()), "{rules:?}");
     assert_eq!(
         decide(&fs, "cat * .env"),

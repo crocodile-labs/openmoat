@@ -11,7 +11,7 @@ request that changes what runs or decides (a CI workflow, a commit hook, a packa
 install script, an agent's settings or MCP servers, OpenMoat's own policy) or adds a
 token does its harm once it is merged, or as soon as CI runs it. The policy already
 names these files: the `deny` groups (`kernel-self`, `secrets-paths`, `agent-folders`),
-the `ask` groups (`runs-later`, `git-internals`) and the paths session taint protects
+the `review` groups (`runs-later`, `git-internals`) and the paths session taint protects
 (`taint.rs`, `taint.protected_writes`). The push check (POLICY.md §4.2) already searches
 added lines for known token formats. Nothing applied them to a change under review.
 
@@ -23,7 +23,7 @@ added lines for known token formats. Nothing applied them to a change under revi
    the change writes (added, edited, deleted, renamed or copied from or to) is decided by
    `CompiledPolicy` as an `fs.write` inside a project, with session taint set as after
    reading untrusted content: a change under review is content nobody on the checking
-   machine wrote. A `deny` is reported as `deny`, an `ask` (from an `ask` group or from
+   machine wrote. A `deny` is reported as `deny`, a `review` (from a `review` group or from
    taint) as `review`; `allow` and `defer` are not reported. The command holds no path
    list of its own.
 2. **Strictest spelling.** Paths are compared without letter case, since the change may
@@ -43,7 +43,7 @@ added lines for known token formats. Nothing applied them to a change under revi
    (exit 64), never a clean result.
 4. **The change cannot loosen its own check.** With `--base`, the policy files are read
    from the base revision with git (`--policy` when it is a relative path, and the
-   repository's `.moat/policy.yaml`, merged untrusted as ADR-022 does: its deny and ask
+   repository's `.moat/policy.yaml`, merged untrusted as ADR-022 does: its deny and review
    rules only). A change to any of them is reported (`diff-policy`), on top of what the
    policy says about the file (`kernel-self` denies `.moat/policy.yaml`). Without
    `--policy`, the shipped default policy is used, not the installed one, so every

@@ -27,9 +27,9 @@ fn assert_clean(what: &str, out: &Output) {
 #[test]
 fn logged_escapes_are_shown_as_question_marks() {
     let sb = Sandbox::installed(&[".claude"]);
-    let ask = format!("npm install left-pad{ESCAPES}");
+    let review = format!("npm install left-pad{ESCAPES}");
     let deny = format!("cat ~/.ssh/id_rsa{ESCAPES}");
-    for command in [&ask, &deny] {
+    for command in [&review, &deny] {
         let guard = sb.guard("claude-code", &bash_payload("s1", &sb.project(), command));
         assert_clean("openmoat guard", &guard);
     }
@@ -46,7 +46,7 @@ fn logged_escapes_are_shown_as_question_marks() {
         &["show", "2"],
         &["status"],
         &["replay"],
-        &["policy", "check", &ask],
+        &["policy", "check", &review],
         &["policy", "check", &deny],
     ] {
         assert_clean(&format!("openmoat {}", args[0]), &sb.moat(args));

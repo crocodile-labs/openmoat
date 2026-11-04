@@ -3,7 +3,7 @@
 //! A URL in a tool's arguments is a `net` connection to every host a client
 //! may read it as reaching ([`web::readings`]); a `file:` URL is a read of the
 //! file it names; a URL whose scheme names no network address
-//! (`javascript:`, `data:`, `chrome:`) asks, since nothing a rule names can
+//! (`javascript:`, `data:`, `chrome:`) needs review, since nothing a rule names can
 //! be read from it; `about:blank` is nothing. A call that only opens one page
 //! ([`Action::McpTool`]'s `opens`) is a `fetch` of a plain web page instead,
 //! with the hosts of the URLs inside it, which a browser follows on a
@@ -38,7 +38,7 @@ pub(super) fn named(
                 }
                 None => Some(Unparsed {
                     reason: format!("file URL without an absolute path in {what} argument `{url}`"),
-                    asks: true,
+                    needs_review: true,
                 }),
             }
         }
@@ -48,11 +48,11 @@ pub(super) fn named(
                 "a `{scheme}:` URL in {what} argument names no network address: it runs code \
                  or shows content or browser pages no rule can name"
             ),
-            asks: true,
+            needs_review: true,
         }),
         web::Target::Unreadable => Some(Unparsed {
             reason: format!("no host in {what} argument `{url}`"),
-            asks: false,
+            needs_review: false,
         }),
     }
 }
@@ -114,7 +114,7 @@ mod tests {
     fn open(url: &str, as_fetch: bool) -> (Vec<AtomicAction>, Option<bool>) {
         let mut atoms = Vec::new();
         let why = opened(url, as_fetch, &ctx(), &mut atoms);
-        (atoms, why.map(|u| u.asks))
+        (atoms, why.map(|u| u.needs_review))
     }
 
     #[test]
@@ -163,7 +163,7 @@ mod tests {
         assert_eq!(atoms, [net("github.com"), net("evil.com")]);
         let mut atoms = Vec::new();
         let why = named("file:relative", "mcp", &ctx(), &mut atoms).unwrap();
-        assert!(why.asks, "{}", why.reason);
+        assert!(why.needs_review, "{}", why.reason);
         let mut atoms = Vec::new();
         assert!(named("file://evil.com/share/x", "mcp", &ctx(), &mut atoms).is_none());
         assert_eq!(atoms[0], net("evil.com"));

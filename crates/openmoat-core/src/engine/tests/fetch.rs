@@ -16,10 +16,10 @@ fn verdict_and_rules(p: &Policy, action: &Action) -> (Verdict, Vec<String>) {
 #[test]
 fn fetch_is_a_narrower_kind_of_net() {
     let p = policy(
-        "version: 1\ndefaults: { net: deny, fetch: ask }\n\
+        "version: 1\ndefaults: { net: deny, fetch: review }\n\
          deny:\n  - id: metadata\n    net: ['169.254.169.254']\n\
          allow:\n  - id: registries\n    net: ['crates.io']\n  - id: docs\n    fetch: ['docs.rs']\n\
-         ask:\n  - id: local\n    net: ['localhost']\n",
+         review:\n  - id: local\n    net: ['localhost']\n",
     );
     let cases = [
         (
@@ -29,23 +29,23 @@ fn fetch_is_a_narrower_kind_of_net() {
         ),
         (fetch("https://CRATES.io/x"), Verdict::Allow, "registries"),
         (fetch("https://docs.rs/serde"), Verdict::Allow, "docs"),
-        (fetch("http://localhost:3000/"), Verdict::Ask, "local"),
+        (fetch("http://localhost:3000/"), Verdict::Review, "local"),
         (
             fetch("https://unknown.example/"),
-            Verdict::Ask,
+            Verdict::Review,
             "default.fetch",
         ),
         // a curl that sends nothing is a fetch (ADR-035); one that can send data is `net`
         // the fetch allow covers the host; the command itself takes this policy's default
         (
             shell("curl -q https://docs.rs/serde"),
-            Verdict::Ask,
+            Verdict::Review,
             "default",
         ),
         // a download is that fetch plus the write of the file it saves
         (
             shell("curl -sSL -o serde.html https://docs.rs/serde"),
-            Verdict::Ask,
+            Verdict::Review,
             "default",
         ),
         (

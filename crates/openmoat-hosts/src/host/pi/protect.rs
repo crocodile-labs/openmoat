@@ -7,7 +7,7 @@ pub(super) const PROTECT: Protect = Protect {
     self_paths: &[Paths::new(
         "pi: the agent directory, OpenMoat's extension in it, the settings that\n\
          can turn the extension off and the trust decisions that load a project's\n\
-         own extensions; other extensions ask (`runs-later`)",
+         own extensions; other extensions need review (`runs-later`)",
         &[
             "~/.pi",
             "~/.pi/agent",

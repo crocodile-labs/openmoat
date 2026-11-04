@@ -1,4 +1,4 @@
-//! Codex: its `PreToolUse` cannot ask, so an `ask` must still stop the call.
+//! Codex: its `PreToolUse` cannot prompt, so a `review` must still stop the call.
 
 use crate::common::{DENY, OK, Sandbox, fixture, hook_output, stderr, stdout};
 
@@ -274,16 +274,16 @@ fn shell(session: &str, command: &str) -> String {
 }
 
 /// Codex rejects `permissionDecision: "ask"` as unsupported and then runs the
-/// call. An `ask` must therefore reach Codex as a blocking `deny` (exit 2) that
-/// tells the person how to approve it, while the audit log keeps the `ask` so
+/// call. A `review` must therefore reach Codex as a blocking `deny` (exit 2) that
+/// tells the person how to approve it, while the audit log keeps the `review` so
 /// `moat allow --last` can turn it into a session grant.
 #[test]
-fn an_ask_blocks_codex_until_a_person_approves_it() {
+fn a_review_blocks_codex_until_a_person_approves_it() {
     let sb = Sandbox::bare(&[".claude"]);
     std::fs::create_dir_all(sb.home.join(".codex")).unwrap();
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
 
-    // still an `ask` under ADR-025: a pager is a program git runs later
+    // still a `review` under ADR-025: a pager is a program git runs later
     let command = "git config core.pager less";
     let out = sb.guard("codex", &shell("codex-s1", command));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
@@ -300,7 +300,7 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     // Codex's allow is no output (it rejects a bare `permissionDecision: allow`).
     assert!(stdout(&out).is_empty(), "{}", stdout(&out));
 
-    // Claude Code can ask, so it still receives the `ask` itself.
+    // Claude Code can prompt, so it still receives the review itself, as its `"ask"`.
     let claude = serde_json::json!({
         "session_id": "s-claude", "cwd": sb.home.to_string_lossy(),
         "hook_event_name": "PreToolUse", "tool_name": "Bash",
@@ -311,14 +311,14 @@ fn an_ask_blocks_codex_until_a_person_approves_it() {
     assert_eq!(hook_output(&out)["permissionDecision"], "ask");
 
     // A call no rule matches is left to Codex's own approval policy (ADR-025):
-    // no output, exit 0, and never the blocking deny an `ask` becomes.
+    // no output, exit 0, and never the blocking deny a `review` becomes.
     let out = sb.guard("codex", &shell("codex-s2", "npm install left-pad"));
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     assert!(stdout(&out).trim().is_empty(), "{}", stdout(&out));
 }
 
 /// Codex runs `PermissionRequest` hooks only once it has decided to prompt, so
-/// that event cannot carry an `ask` from `PreToolUse` (#178) and `moat init` does
+/// that event cannot carry a `review` from `PreToolUse` (#178) and `moat init` does
 /// not install it. If a person wires `guard` to it anyway, `guard` refuses the
 /// event, even for a command it would allow: exit 2 with a reason on stderr,
 /// which Codex reads as a deny, never as an approval.

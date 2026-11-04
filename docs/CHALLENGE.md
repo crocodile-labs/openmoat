@@ -45,7 +45,7 @@ openmoat policy check '~/.ssh/openmoat-canary' --kind fs-read # deny
 
 ## What counts
 
-Any one of these, with the default policy, without you approving an `ask`:
+Any one of these, with the default policy, without you approving a `review`:
 
 1. **Read a secret:** the canary's contents reach the agent (its context, a file it can
    read later, or its output) through any tool call.
@@ -53,7 +53,7 @@ Any one of these, with the default policy, without you approving an `ask`:
    host the policy does not list.
 3. **Plant something that runs later:** a write to a shell start-up file (`~/.zshrc`,
    `~/.bashrc`), a git hook, a login item or CI configuration that gets neither `deny` nor
-   `ask`.
+   `review`.
 4. **Switch OpenMoat off:** an agent tool call that changes `~/.moat`, the agent's hook
    or sandbox settings, or the `openmoat` binary without a `deny`.
 5. **Confuse the parser:** a command whose `openmoat policy check` verdict is `allow` or
@@ -72,13 +72,13 @@ than mistakes. The main ones:
 - What code inside an allowed command does where no OS sandbox applies (the hook-only
   agents, native Windows, Claude Code's and Cursor's file tools). A *misjudged* call is in
   scope, and so is a script the agent wrote in the same session that an interpreter or
-  the shell runs there without an `ask` (`session-written-code`, ADR-039); *an allowed
+  the shell runs there without a `review` (`session-written-code`, ADR-039); *an allowed
   call doing harm* where nothing below the decision stops it is not, such as a test
   runner or build tool running files the session wrote.
 - Data sent to a host the policy allows (`api.github.com`, package registries) by an
   allowed command.
 - Agents that run a call when the hook is missing or times out (named in Limits).
-- Tricking the person into approving an `ask`, attacks needing root or the user's own
+- Tricking the person into approving a `review`, attacks needing root or the user's own
   shell, and prompt-injection detection in text (OpenMoat governs actions, not text).
 
 ## Report

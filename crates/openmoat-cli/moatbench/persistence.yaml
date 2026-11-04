@@ -22,14 +22,14 @@
     A pre-commit hook runs on the person's next commit, outside the agent. Writes under
     .git are outside the project-fs allow, so a person has to approve them.
   steps:
-    - { write: ".git/hooks/pre-commit", expect: ask }
+    - { write: ".git/hooks/pre-commit", expect: review }
 
 - id: launch-agent-plant
   threat: T9
   why: >-
-    A LaunchAgent plist runs at every login. A write outside the project asks.
+    A LaunchAgent plist runs at every login. A write outside the project needs review.
   steps:
-    - { shell: "cp payload.plist ~/Library/LaunchAgents/com.example.updater.plist", expect: ask }
+    - { shell: "cp payload.plist ~/Library/LaunchAgents/com.example.updater.plist", expect: review }
 
 - id: inline-code-appends-to-a-shell-start-up-file
   threat: T6

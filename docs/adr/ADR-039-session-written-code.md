@@ -1,4 +1,4 @@
-# ADR-039: Running code the session wrote asks where no OS sandbox holds the command (`session-written-code`)
+# ADR-039: Running code the session wrote needs review where no OS sandbox holds the command (`session-written-code`)
 
 Status: accepted · Date: 2026-10-27 · Refines ADR-013, ADR-018 and ADR-029
 
@@ -64,30 +64,30 @@ both one `fs.read` of `x.py`.
 3. **The guard tightens** (`session_code.rs`), after the session grant and taint and
    before the push check: when the decision is `allow` or `defer` and the call runs a
    file the same host session wrote (recorded, or written by the same command line), and
-   no OS sandbox from OpenMoat holds the call, the verdict becomes `ask` with rule
+   no OS sandbox from OpenMoat holds the call, the verdict becomes `review` with rule
    `session-written-code` and a reason naming the files. "Holds the call" means the call
    came through `openmoat run` (its relay starts the deciding guard with `--relayed`, an
    argument, so no host setting can claim it for a hook outside the run), or the host's
    spec has an OpenMoat sandbox, it applies on this OS, and its settings are in place and
    match the policy and the lock: exactly what `openmoat status` reports as `hook + OS
    sandbox` (`protection::os_sandboxed`). No `Host::<Variant>` branch is involved, and
-   the sandbox state is read only when such a file runs. A host that cannot ask denies
-   with the `openmoat allow --last` hint, as for every ask (ADR-025).
+   the sandbox state is read only when such a file runs. A host that cannot prompt denies
+   with the `openmoat allow --last` hint, as for every review (ADR-025).
 4. **A session grant answers it** for the exact call, when it was made after the
    session last wrote each file (by audit row, else by time): a rewrite after the grant
-   asks again, since the person approved other code. A file written by the same command
+   needs review again, since the person approved other code. A file written by the same command
    line is shown by it, so a grant for that line answers it. A permanent rule does not:
    the check applies whatever allows the command, and `openmoat allow --last --always`
    says so instead of writing a rule that would change nothing.
 5. **Inline code whose names are built is opaque** (`payload/opaque.rs`): code that uses
    a file, network, environment or process API and builds the text it hands them (strings
    joined, interpolated, decoded or formatted, or such a call given a variable) is the
-   atom `@opaque-code <interpreter>`, which the default `opaque-code` group asks for. It
+   atom `@opaque-code <interpreter>`, which the default `opaque-code` group holds for review. It
    is in the core, not the session-code step: like the other `opaque-code` atoms it is
    about what the classifier cannot read, whatever runs below it, and a here-document fed
    to an interpreter is scanned the same way as `-c`, so the respelling does not escape.
 
-Ask, not deny: writing a helper script and running it is ordinary work, and a person can
+Review, not deny: writing a helper script and running it is ordinary work, and a person can
 see the script before approving it. A file the session did not write keeps its verdict:
 `python manage.py`, a checked-out tool, a file a person wrote. Test runners, build tools
 and package scripts (`pytest`, `npm test`, `cargo test`, `make`, `go run .`) run the
@@ -106,27 +106,27 @@ too.
   executed files, but every rule list, the policy compiler and the OS layers would have
   to learn it, which the parser freeze (ADR-013) rules out for a check that only
   tightens.
-- **Ask on every host.** Where the OS sandbox holds the command it already refuses what
-  the script could do beyond the policy; an ask there adds prompts to the most common
+- **Review on every host.** Where the OS sandbox holds the command it already refuses what
+  the script could do beyond the policy; a review there adds prompts to the most common
   workflow (write a helper, run it) without adding protection, against ADR-025.
 - **Deny.** No way through but editing the policy, for work a person often wants.
 - **Read the script and classify it.** A script is a program in any language; reading
   it is the same scan the inline check does, and it would miss what it does not
-  recognise. The session-code ask does not depend on understanding the script.
+  recognise. The session-code review does not depend on understanding the script.
 
 ## Consequences
 
 - On hook-only hosts: `write x.py` then `python3 x.py`, `python x.py`, `python3 -u
   x.py`, `node x.js`/`x.mjs`, `go run x.go` (allowed before) and `bash x.sh`, `sh x.sh`,
-  `ruby x.rb`, `perl x.pl` (deferred before) ask; `echo … > x.sh` then `bash x.sh` asks;
-  `cat > y.sh <<EOF … EOF; sh y.sh` asks; OpenCode 1 denies them with the hint. On
+  `ruby x.rb`, `perl x.pl` (deferred before) need review; `echo … > x.sh` then `bash x.sh` needs review;
+  `cat > y.sh <<EOF … EOF; sh y.sh` needs review; OpenCode 1 denies them with the hint. On
   Claude Code, Codex and Cursor with their sandbox in place on macOS and Linux, and inside
-  `openmoat run`, nothing changes. On native Windows Claude Code and Cursor ask, as
+  `openmoat run`, nothing changes. On native Windows Claude Code and Cursor prompt, as
   hook-only hosts.
-- The three inline commands of the review ask (`opaque-code`); `python3 -c
+- The three inline commands that review found need review (`opaque-code`); `python3 -c
   'print(1+1)'`, `node -e 'console.log(2)'`, `python3 -c 'import json,sys;
   json.load(sys.stdin)'` and code that hands those APIs literal text keep their verdict.
-  A here-document script that opens files through variables now asks too, on every host;
+  A here-document script that opens files through variables now needs review too, on every host;
   `openmoat allow --last` answers it for the session.
 - Not covered (THREAT_MODEL.md §5): test runners, build tools and package scripts
   running files the session wrote; files another session or a person wrote; files

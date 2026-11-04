@@ -33,9 +33,9 @@ exit 2 blocks; no output, or `"allow"`, leaves the call to Gemini CLI's own poli
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-`"ask"` makes Gemini CLI confirm the call with the person even where its own policy would
+A `review`, sent as `"ask"`, makes Gemini CLI confirm the call with the person even where its own policy would
 not (YOLO and auto-edit included).
 
 ## Configuration and MCP files
@@ -55,7 +55,7 @@ the agent could derive) are `agent-credentials`': the agent's own tools may neit
 read nor write them, under `GEMINI_CLI_HOME` too; its `.env` is `secrets-paths`'. The
 keychain entries (`gemini-cli-oauth`, `gemini-cli-api-key`) are read by `security
 find-generic-password -w` or `secret-tool lookup`, which `secrets-paths` denies.
-`gemini mcp add`, `gemini mcp enable` and `gemini extensions install`/`link` ask
+`gemini mcp add`, `gemini mcp enable` and `gemini extensions install`/`link` need review
 (`runs-later`). `openmoat status` and `openmoat doctor` warn when the `gemini` on the
 search path is a version with a published advisory (`advisories.rs`).
 

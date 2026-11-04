@@ -233,11 +233,11 @@ fn response_uses_cursor_permission_format() {
             .contains("secrets-paths")
     );
     assert_eq!(out["agent_message"], out["user_message"]);
-    let ask: Value = serde_json::from_str(
-        &Host::Cursor.render_response(&HookEvent::PreToolUse, &Decision::new(Verdict::Ask)),
+    let review: Value = serde_json::from_str(
+        &Host::Cursor.render_response(&HookEvent::PreToolUse, &Decision::new(Verdict::Review)),
     )
     .unwrap();
-    assert_eq!(ask["permission"], "ask");
+    assert_eq!(review["permission"], "ask");
 }
 
 #[test]
@@ -251,15 +251,15 @@ fn response_bytes_are_exact_and_escaped() {
     );
 }
 
-/// ADR-025: `defer` is Cursor's own prompt where Cursor can ask. File tools run
-/// outside Cursor's sandbox and cannot prompt, so there OpenMoat asks itself.
+/// ADR-025: `defer` is Cursor's own prompt where Cursor can prompt. File tools run
+/// outside Cursor's sandbox and cannot prompt, so there OpenMoat holds them for review.
 #[test]
-fn defer_is_cursors_own_prompt_or_openmoats_ask() {
+fn defer_is_cursors_own_prompt_or_openmoats_review() {
     for (name, recorded, permission) in [
         ("beforeShellExecution", Verdict::Defer, "ask"),
         ("beforeMCPExecution", Verdict::Defer, "ask"),
-        ("beforeReadFile", Verdict::Ask, "deny"),
-        ("preToolUse-write", Verdict::Ask, "deny"),
+        ("beforeReadFile", Verdict::Review, "deny"),
+        ("preToolUse-write", Verdict::Review, "deny"),
     ] {
         let event = Host::Cursor.parse_request(&fixture(name)).unwrap().event;
         let decided = Host::Cursor.decided(&event, Decision::new(Verdict::Defer));
@@ -272,16 +272,16 @@ fn defer_is_cursors_own_prompt_or_openmoats_ask() {
 }
 
 #[test]
-fn ask_is_a_deny_where_cursor_does_not_prompt() {
-    let ask = Decision::new(Verdict::Ask);
+fn review_is_a_deny_where_cursor_does_not_prompt() {
+    let review = Decision::new(Verdict::Review);
     for (name, verdict) in [
-        ("beforeShellExecution", Verdict::Ask),
-        ("beforeMCPExecution", Verdict::Ask),
+        ("beforeShellExecution", Verdict::Review),
+        ("beforeMCPExecution", Verdict::Review),
         ("beforeReadFile", Verdict::Deny),
         ("preToolUse-write", Verdict::Deny),
     ] {
         let event = Host::Cursor.parse_request(&fixture(name)).unwrap().event;
-        let answer = Host::Cursor.answer(&event, &ask);
+        let answer = Host::Cursor.answer(&event, &review);
         assert_eq!(answer.verdict, verdict, "{name}");
         assert_eq!(
             answer

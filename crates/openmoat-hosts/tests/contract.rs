@@ -236,7 +236,7 @@ fn guard(host: Host, payload: &str, verdict: Verdict) -> (i32, String, String) {
 }
 
 /// Every call a host sends parses, and every verdict reaches the host as what
-/// it must end up doing: a deny blocks everywhere, and an ask the host cannot
+/// it must end up doing: a deny blocks everywhere, and a review the host cannot
 /// put to a person blocks too.
 #[test]
 fn every_verdict_reaches_the_host_as_it_must() {
@@ -255,7 +255,12 @@ fn every_verdict_reaches_the_host_as_it_must() {
                 continue;
             };
             checked += 1;
-            for verdict in [Verdict::Allow, Verdict::Defer, Verdict::Ask, Verdict::Deny] {
+            for verdict in [
+                Verdict::Allow,
+                Verdict::Defer,
+                Verdict::Review,
+                Verdict::Deny,
+            ] {
                 let (code, stdout, stderr) = guard(host, &payload, verdict);
                 let exit = Exit {
                     code: Some(code),

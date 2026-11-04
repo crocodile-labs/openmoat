@@ -10,7 +10,7 @@ use crate::paths;
 
 /// At most this many pushes are listed for one command line; one more is
 /// listed with an unknown directory, so the caller checks what it can and
-/// asks for the rest.
+/// holds the rest for review.
 const MAX_PUSHES: usize = 16;
 
 /// Environment variables that make git use another repository or other refs

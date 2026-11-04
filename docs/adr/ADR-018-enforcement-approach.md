@@ -52,7 +52,7 @@ Three tiers, all generated from the one policy (ADR-019):
 - The generated files are pinned in `policy.lock` (ADR-006), so drift is `kernel-integrity`.
   `moat doctor` flags any weakened setting.
 - moat's hooks remain the per-call decision layer for everything the host sandbox does not
-  cover: file tools, web fetch, MCP, `ask`, shell semantics.
+  cover: file tools, web fetch, MCP, `review`, shell semantics.
 
 **Isolated: `moat run --isolate -- <agent>`.**
 - The agent runs in a Linux guest: a rootless container on Linux (Podman, or Docker), and a
@@ -76,12 +76,12 @@ Cursor until verified).
 - `shell` semantics (destructive git, push, installs, `sudo`)
 - `mcp` rules
 - `executables` pins
-- `ask`
+- `review`
 - Claude Code's in-process tools, which only the hooks see (and the guest boundary, in
   Isolated)
 
 **Hooks are written so a host's parser cannot turn a block into a run:**
-- An `ask` that a host cannot express is sent as a deny. Codex is the case today: #166.
+- A `review` that a host cannot express is sent as a deny. Codex is the case today: #166.
 - An `allow` never depends on the host accepting a document.
 
 ## Consequences

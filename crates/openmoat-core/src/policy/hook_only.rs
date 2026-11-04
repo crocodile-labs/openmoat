@@ -3,12 +3,16 @@
 use super::{Policy, PolicyError, RuleGroup};
 
 /// `hook_only` only narrows what OS layers deny, so it is valid on a `deny`
-/// group that names files. An allow, ask or defer group lowered without its
+/// group that names files. An allow, review or defer group lowered without its
 /// paths would make an OS layer stricter for no reason, and a `net` or `fetch`
 /// list left out would let every sandboxed command reach a host the hook denies.
 pub(super) fn check(policy: &Policy) -> Result<(), PolicyError> {
-    let others = policy.allow.iter().chain(&policy.ask).chain(&policy.defer);
-    if let Some(group) = others.chain(&policy.repo_ask).find(|g| g.hook_only) {
+    let others = policy
+        .allow
+        .iter()
+        .chain(&policy.review)
+        .chain(&policy.defer);
+    if let Some(group) = others.chain(&policy.repo_review).find(|g| g.hook_only) {
         return Err(problem(group, "`hook_only` applies to `deny` groups only"));
     }
     for group in policy.deny.iter().filter(|g| g.hook_only) {

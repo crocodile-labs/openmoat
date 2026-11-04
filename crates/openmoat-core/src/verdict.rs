@@ -1,6 +1,7 @@
 //! The outcome of a policy decision.
 //!
-//! [`Verdict`] is `allow`, `defer`, `ask` or `deny`, ordered by strictness.
+//! [`Verdict`] is `allow`, `defer`, `review` or `deny`, ordered by strictness.
+//! `review` was called `ask` before ADR-053; that name is still read, never written.
 //! [`Decision`] is a verdict plus the rule ids and reasons that produced it.
 //! When the atoms of one action are combined, the strictest verdict wins and
 //! the weaker matches are kept as `context`, not dropped (docs/POLICY.md §4).
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /// Outcome of evaluating one or more atomic actions.
 ///
-/// Ordering is by strictness: `Allow < Defer < Ask < Deny`. When several
+/// Ordering is by strictness: `Allow < Defer < Review < Deny`. When several
 /// atomic actions are combined, the strictest wins (docs/POLICY.md §4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -19,8 +20,10 @@ use serde::{Deserialize, Serialize};
 pub enum Verdict {
     /// The action may run.
     Allow,
-    /// A person must decide; the host prompts or blocks.
-    Ask,
+    /// A person must decide; the host prompts or blocks. Read from `ask`, its
+    /// name before ADR-053, in policies, audit rows and SDK input.
+    #[serde(alias = "ask")]
+    Review,
     /// The action is blocked.
     Deny,
     /// No objection and no approval: the agent's own permission flow decides
@@ -34,7 +37,7 @@ impl Verdict {
         match self {
             Self::Allow => 0,
             Self::Defer => 1,
-            Self::Ask => 2,
+            Self::Review => 2,
             Self::Deny => 3,
         }
     }
@@ -53,19 +56,24 @@ impl Ord for Verdict {
 }
 
 impl Verdict {
-    /// The lowercase name used in hook responses, the audit log and output.
+    /// The lowercase name used in the audit log, output and the SDK. Host hook
+    /// responses spell `review` as each host's protocol does (`openmoat-hosts`).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Allow => "allow",
-            Self::Ask => "ask",
+            Self::Review => "review",
             Self::Deny => "deny",
             Self::Defer => "defer",
         }
     }
 }
 
-/// A name that is not `allow`, `defer`, `ask` or `deny`.
+/// The name `review` had before ADR-053. Audit rows, policies and SDK callers
+/// written before then use it; it is read as `review` and never written.
+pub const OLD_REVIEW: &str = "ask";
+
+/// A name that is not `allow`, `defer`, `review` (or its old name `ask`) or `deny`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("unknown verdict `{0}`")]
 pub struct UnknownVerdict(pub String);
@@ -74,7 +82,10 @@ impl FromStr for Verdict {
     type Err = UnknownVerdict;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        [Self::Allow, Self::Defer, Self::Ask, Self::Deny]
+        if s == OLD_REVIEW {
+            return Ok(Self::Review);
+        }
+        [Self::Allow, Self::Defer, Self::Review, Self::Deny]
             .into_iter()
             .find(|v| v.as_str() == s)
             .ok_or_else(|| UnknownVerdict(s.to_owned()))
@@ -155,13 +166,38 @@ mod tests {
 
     #[test]
     fn verdict_names_round_trip() {
-        for v in [Verdict::Allow, Verdict::Defer, Verdict::Ask, Verdict::Deny] {
+        for v in [
+            Verdict::Allow,
+            Verdict::Defer,
+            Verdict::Review,
+            Verdict::Deny,
+        ] {
             assert_eq!(v.as_str().parse::<Verdict>(), Ok(v));
         }
         assert_eq!(
             "block".parse::<Verdict>(),
             Err(UnknownVerdict("block".into()))
         );
+    }
+
+    /// ADR-053: `ask`, the old name, still reads as `review` from text and
+    /// JSON (policies, audit rows, SDK callers), and only `review` is written.
+    #[test]
+    fn the_old_name_ask_reads_as_review_and_is_never_written() {
+        assert_eq!("ask".parse::<Verdict>(), Ok(Verdict::Review));
+        assert_eq!(
+            serde_json::from_str::<Verdict>("\"ask\"").unwrap(),
+            Verdict::Review
+        );
+        assert_eq!(
+            serde_json::to_string(&Verdict::Review).unwrap(),
+            "\"review\""
+        );
+        assert_eq!(Verdict::Review.as_str(), "review");
+        let d: Decision =
+            serde_json::from_str(r#"{"verdict":"ask","rules":["installs"],"reasons":["r"]}"#)
+                .unwrap();
+        assert_eq!(d.verdict, Verdict::Review);
     }
 
     #[test]
@@ -199,17 +235,17 @@ mod tests {
 
     #[test]
     fn equal_verdicts_union_rules_without_duplicates() {
-        let mut d = decided(Verdict::Ask, "installs");
-        d.merge(decided(Verdict::Ask, "installs"));
-        d.merge(decided(Verdict::Ask, "push"));
+        let mut d = decided(Verdict::Review, "installs");
+        d.merge(decided(Verdict::Review, "installs"));
+        d.merge(decided(Verdict::Review, "push"));
         assert_eq!(d.rules, ["installs", "push"]);
         assert_eq!(d.reasons.len(), 2);
         assert_eq!(d.context, Vec::<String>::new());
     }
 
     #[test]
-    fn verdict_order_is_allow_defer_ask_deny() {
+    fn verdict_order_is_allow_defer_review_deny() {
         assert!(Verdict::Allow < Verdict::Defer);
-        assert!(Verdict::Defer < Verdict::Ask && Verdict::Ask < Verdict::Deny);
+        assert!(Verdict::Defer < Verdict::Review && Verdict::Review < Verdict::Deny);
     }
 }

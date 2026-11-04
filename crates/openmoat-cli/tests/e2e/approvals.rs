@@ -48,7 +48,7 @@ const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
 #[test]
 fn session_grants_expire_and_are_pruned_on_write() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let command = "npm install left-pad-pro";
     let mut person = sb.command();
     person.env("MOAT_ASSUME_TTY", "1");
@@ -115,7 +115,7 @@ fn session_grants_expire_and_are_pruned_on_write() {
 
 #[test]
 fn init_pins_grants_and_overlay() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let lock: Value =
         serde_json::from_str(&std::fs::read_to_string(sb.home.join(".moat/policy.lock")).unwrap())
             .unwrap();
@@ -136,8 +136,8 @@ fn init_pins_grants_and_overlay() {
 }
 
 #[test]
-fn session_grant_turns_ask_into_allow_for_that_session_only() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+fn session_grant_turns_review_into_allow_for_that_session_only() {
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     assert_eq!(
         decide(&sb, "s1", "npm install left-pad-pro")["permissionDecision"],
         "ask"
@@ -186,7 +186,7 @@ fn session_grant_turns_ask_into_allow_for_that_session_only() {
 
 #[test]
 fn permanent_overlay_rules_merge_into_the_policy() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     write_state(
         &sb,
         "policy.d/approved.yaml",
@@ -223,7 +223,7 @@ fn permanent_overlay_rules_merge_into_the_policy() {
 
 #[test]
 fn allow_requires_a_terminal() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let out = sb.moat(&["allow", "npm install x", "--always"]);
     assert_eq!(out.status.code(), Some(USAGE));
     assert!(text(&out).contains("must be run by a person in a terminal"));
@@ -237,7 +237,7 @@ fn allow_requires_a_terminal() {
 
 #[test]
 fn a_command_grant_from_an_earlier_release_stops_applying_and_status_names_it() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let command = "npm install left-pad-pro";
     // As an earlier release wrote it: no project.
     let grant = serde_json::json!({"host": "claude-code", "session_id": "s1",

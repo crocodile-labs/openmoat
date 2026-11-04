@@ -157,7 +157,7 @@ const EVERY_WORKSPACE_DIRECTORY: &str = "without a `dir_path` Gemini CLI searche
      workspace directory, and the hook names only the working directory";
 
 /// A search with no `dir_path`, which reads the working directory and every
-/// other workspace directory the payload does not name: at least an `ask`.
+/// other workspace directory the payload does not name: at least a `review`.
 fn workspace_wide(input: &Value, action: Action) -> Action {
     let named = input
         .get("dir_path")

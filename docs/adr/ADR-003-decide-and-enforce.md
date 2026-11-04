@@ -16,7 +16,7 @@ decide-only release would be a regex firewall and would not survive scrutiny.
   Landlock+seccomp profile derived from the same policy, with a kernel-controlled
   environment.
 - An egress proxy enforces `net` rules; a minimal session taint rule makes any
-  network action after a secret read an `ask`.
+  network action after a secret read a `review`.
 - The parser remains the first layer and the source of explanations, but a parser
   bug is a usability bug, not a security bug, once enforcement is on.
 - Windows ships decide-only in v0.1, labelled as such in the coverage matrix.

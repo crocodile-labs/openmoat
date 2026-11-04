@@ -359,7 +359,7 @@ fn tilde_user_words_name_home_directories() {
     // `~<otheruser>` cannot be placed from the pure core (#400): the
     // parent-of-home heuristic guessed one home layout and judged a path the OS
     // may not read. The shell token is unparseable, as `~-` already was; the
-    // engine turns it into `ask` (rule `unparseable`).
+    // engine turns it into `review` (rule `unparseable`).
     for input in [
         "cat ~-/.ssh/id_rsa",
         "echo x > ~-/f",

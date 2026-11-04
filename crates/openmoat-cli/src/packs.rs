@@ -5,9 +5,9 @@
 //! signature, under `~/.moat/policy.d/packs/`, recorded with its SHA-256 and
 //! signer in `~/.moat/packs.json`. All three are pinned by the lock, so a pack
 //! changed after install is drift and the guard denies. A pack has the shape of
-//! a repository policy (only `version`, `deny`, `ask`, `allow`) and merges like
+//! a repository policy (only `version`, `deny`, `review`, `allow`) and merges like
 //! a trusted one: its rule ids get the `pack:<name>:` prefix, its deny rules join
-//! the user's, its ask rules are tried before the user's allow rules, and its
+//! the user's, its review rules are tried before the user's allow rules, and its
 //! allow rules widen the policy, never past a deny.
 
 use std::collections::BTreeMap;
@@ -129,8 +129,9 @@ pub fn installed_files(home: &Home) -> Vec<PathBuf> {
 
 /// Parse a pack's text: a repository policy's shape, linted the same way.
 pub fn parse(text: &str) -> Result<RepoPolicy> {
-    RepoPolicy::parse(text)
-        .context("not a policy pack: a pack holds only `version`, `deny`, `ask` and `allow` rules")
+    RepoPolicy::parse(text).context(
+        "not a policy pack: a pack holds only `version`, `deny`, `review` and `allow` rules",
+    )
 }
 
 /// `policy` with `pack`'s rules merged in under `pack:<name>:` ids.
@@ -145,7 +146,7 @@ pub fn apply(policy: &mut Policy, name: &str, pack: &RepoPolicy) -> Result<()> {
             .collect()
     };
     policy.deny.extend(prefixed(&pack.deny));
-    policy.repo_ask.extend(prefixed(&pack.ask));
+    policy.repo_review.extend(prefixed(&pack.review));
     policy.allow.extend(prefixed(&pack.allow));
     policy
         .lint()

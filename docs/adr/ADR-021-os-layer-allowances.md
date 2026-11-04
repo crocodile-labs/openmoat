@@ -7,8 +7,8 @@ Status: accepted · Date: 2026-10-06 · Refines ADR-019
 ADR-019 says a backend narrows what it cannot express and never widens. The Standard
 tier (ADR-018) showed where that cannot hold:
 
-- The default policy asks for every read outside the project (`"*": ask`). Lowered to
-  an OS layer, an `ask` is a deny, so every read of a toolchain (`~/.cargo`,
+- The default policy holds every read outside the project for review (`"*": review`). Lowered to
+  an OS layer, a `review` is a deny, so every read of a toolchain (`~/.cargo`,
   `~/.rustup`), a system directory or the temp directory would be denied, and no build
   would run.
 - The hosts need grants of their own: Codex's `:minimal` platform reads and a
@@ -31,7 +31,7 @@ tier (ADR-018) showed where that cannot hold:
   stricter and the existing consistency tests keep proving it. `Checker::check_os`
   applies it after the deny rules: a deny rule still wins inside a root in every layer.
 - The hook ignores allowances: a read under a root keeps the verdict the rules give
-  it (ask by default).
+  it (review by default).
 - Writes get no policy allowance. A host's own write grants (temp, working
   directories) are listed as allowances of that backend.
 
@@ -72,5 +72,5 @@ Residual risk: a sandboxed script can rewrite refs and objects (history tamperin
 which `git log`, signatures and review can detect), write a rebase todo that a person
 later continues, and write a `.git` file (`gitdir: …`) below the project, which the
 hook allows too. It cannot install hooks or change config. The hook is unchanged: it
-still asks for file-tool writes to the project's `.git`. Codex keeps `.git` read-only
+still holds file-tool writes for review to the project's `.git`. Codex keeps `.git` read-only
 by its own design, and that stays a listed loss.

@@ -98,7 +98,7 @@ fn data_piped_into_a_shell_is_its_program() {
         assert!(has_read(&parsed(cmd), ssh), "{cmd}");
     }
     // Not a shell reading stdin, not a pipe, or not data the line shows: the
-    // text stays data (the shell itself still asks).
+    // text stays data (the shell itself still needs review).
     for cmd in [
         "echo 'cat ~/.ssh/id_rsa' | grep cat",
         "echo 'cat ~/.ssh/id_rsa' | sh x.sh",
@@ -128,7 +128,7 @@ fn piped_text_the_line_does_not_show_is_unparseable() {
 }
 
 /// The output of any other program is text the line does not show either: a shell
-/// reading it runs `<shell> @stdin`, which `opaque-code` asks for.
+/// reading it runs `<shell> @stdin`, which `opaque-code` holds for review.
 #[test]
 fn another_programs_output_piped_into_a_shell_is_hidden_stdin() {
     for (cmd, shell) in [

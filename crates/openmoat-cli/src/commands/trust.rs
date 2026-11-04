@@ -2,7 +2,7 @@
 //!
 //! Person-only, like `moat allow`: trust widens the policy, so it needs a
 //! terminal and an intact lock, and the default policy denies it to agents.
-//! It shows the file it would trust (path, digest, what it allows, asks and
+//! It shows the file it would trust (path, digest, what it allows, reviews and
 //! denies next to the person's own policy) and writes the record only on an
 //! explicit yes: an agent may have edited the file just before.
 
@@ -93,7 +93,7 @@ pub fn run(args: &TrustArgs) -> Result<Code> {
 
 /// What trusting `found` changes, for the person to read before answering:
 /// the file and its digest, the allow rules trust adds (and which of them a
-/// deny rule of the person's policy makes moot), and the ask and deny rules
+/// deny rule of the person's policy makes moot), and the review and deny rules
 /// that apply trusted or not. `before` is the digest trusted until now.
 fn show(
     out: &mut impl std::io::Write,
@@ -135,11 +135,11 @@ fn show(
     }
     writeln!(
         out,
-        "  its {} ask and {} deny rule(s) apply trusted or not:",
-        p.ask.len(),
+        "  its {} review and {} deny rule(s) apply trusted or not:",
+        p.review.len(),
         p.deny.len()
     )?;
-    for (verdict, groups) in [("ask", &p.ask), ("deny", &p.deny)] {
+    for (verdict, groups) in [("review", &p.review), ("deny", &p.deny)] {
         for group in groups {
             let id = format!("{REPO_RULE_PREFIX}{}", group.id);
             render::line(out, &format!("    {verdict} {id}: {}", patterns(group)))?;
@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn the_question_names_the_file_its_digest_and_every_rule() {
         let yaml = "version: 1\nallow:\n  - id: deploy\n    shell: ['make deploy']\n  \
-                    - id: keys\n    fs.read: ['~/.ssh/**']\nask:\n  - id: rel\n    \
+                    - id: keys\n    fs.read: ['~/.ssh/**']\nreview:\n  - id: rel\n    \
                     shell: ['make release']\ndeny:\n  - id: no-push\n    shell: ['git push']\n";
         let user = Policy::parse(
             "version: 1\ndeny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n\
@@ -200,8 +200,8 @@ mod tests {
             "adds 2 allow rule(s) to your policy; your deny rules still win",
             "    allow repo:deploy: shell: make deploy\n",
             "    allow repo:keys: fs.read: ~/.ssh/** (a deny rule covers some or all of it",
-            "its 1 ask and 1 deny rule(s) apply trusted or not",
-            "    ask repo:rel: shell: make release\n",
+            "its 1 review and 1 deny rule(s) apply trusted or not",
+            "    review repo:rel: shell: make release\n",
             "    deny repo:no-push: shell: git push\n",
         ] {
             assert!(shown.contains(part), "{part}: {shown}");

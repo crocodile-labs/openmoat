@@ -1,7 +1,7 @@
 //! Code a session wrote, run with no OS sandbox below the hook (ADR-039),
 //! through the real binary: on an agent with only a hook, a script the same
-//! session wrote asks before it runs (a deny naming `openmoat allow --last`
-//! where the agent cannot ask); where OpenMoat's OS sandbox holds the command,
+//! session wrote needs review before it runs (a deny naming `openmoat allow --last`
+//! where the agent cannot prompt); where OpenMoat's OS sandbox holds the command,
 //! and for files the session did not write, the verdict is unchanged.
 
 use serde_json::{Value, json};
@@ -50,12 +50,12 @@ fn gemini_run(sb: &Sandbox, session: &str, command: &str) -> (Option<i32>, Value
     )
 }
 
-fn asks_for_session_code(reply: &Value) -> bool {
+fn held_for_session_code(reply: &Value) -> bool {
     reply["decision"] == "ask" && reply.to_string().contains("session-written-code")
 }
 
 #[test]
-fn a_script_a_hook_only_session_wrote_asks_and_a_session_grant_answers_it() {
+fn a_script_a_hook_only_session_wrote_needs_review_and_a_session_grant_answers_it() {
     // Gemini CLI's shell is PowerShell on Windows, which OpenMoat leaves to it.
     if cfg!(windows) {
         return;
@@ -65,29 +65,29 @@ fn a_script_a_hook_only_session_wrote_asks_and_a_session_grant_answers_it() {
     for command in ["python3 x.py", "python x.py", "env python3 -u x.py"] {
         let (code, reply) = gemini_run(&sb, "g1", command);
         assert_eq!(code, Some(OK), "{command}: {reply}");
-        assert!(asks_for_session_code(&reply), "{command}: {reply}");
+        assert!(held_for_session_code(&reply), "{command}: {reply}");
         assert!(reply.to_string().contains("x.py"), "{reply}");
     }
 
     // another session, and a file that was there before: unchanged
     let (_, other) = gemini_run(&sb, "g2", "python3 x.py");
-    assert!(!asks_for_session_code(&other), "{other}");
+    assert!(!held_for_session_code(&other), "{other}");
     std::fs::write(sb.project().join("manage.py"), "print(1)\n").unwrap();
     let (_, before) = gemini_run(&sb, "g1", "python manage.py");
-    assert!(!asks_for_session_code(&before), "{before}");
+    assert!(!held_for_session_code(&before), "{before}");
 
-    // the person approves the last ask for this session
-    let (_, asked) = gemini_run(&sb, "g1", "python3 x.py");
-    assert!(asks_for_session_code(&asked), "{asked}");
+    // the person approves the last review for this session
+    let (_, reviewed) = gemini_run(&sb, "g1", "python3 x.py");
+    assert!(held_for_session_code(&reviewed), "{reviewed}");
     let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let (code, answered) = gemini_run(&sb, "g1", "python3 x.py");
     assert_eq!(code, Some(OK), "{answered}");
-    assert!(!asks_for_session_code(&answered), "{answered}");
+    assert!(!held_for_session_code(&answered), "{answered}");
 
     // a permanent rule does not answer it
     let (_, again) = gemini_run(&sb, "g1", "python3 -B x.py");
-    assert!(asks_for_session_code(&again), "{again}");
+    assert!(held_for_session_code(&again), "{again}");
     let out = sb.moat_approving(&["allow", "--last", "--always"]);
     assert_ne!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(text(&out).contains("without --always"), "{}", text(&out));
@@ -95,11 +95,11 @@ fn a_script_a_hook_only_session_wrote_asks_and_a_session_grant_answers_it() {
     // rewritten after the grant: the person approved other code
     gemini_write(&sb, "g1", "x.py");
     let (_, rewritten) = gemini_run(&sb, "g1", "python3 x.py");
-    assert!(asks_for_session_code(&rewritten), "{rewritten}");
+    assert!(held_for_session_code(&rewritten), "{rewritten}");
 }
 
 #[test]
-fn a_script_written_through_the_shell_asks_too() {
+fn a_script_written_through_the_shell_needs_review_too() {
     if cfg!(windows) {
         return;
     }
@@ -109,7 +109,7 @@ fn a_script_written_through_the_shell_asks_too() {
     std::fs::write(sb.project().join("x.sh"), "echo hi\n").unwrap();
     for command in ["bash x.sh", "sh x.sh", "./x.sh", "source x.sh"] {
         let (_, reply) = gemini_run(&sb, "g1", command);
-        assert!(asks_for_session_code(&reply), "{command}: {reply}");
+        assert!(held_for_session_code(&reply), "{command}: {reply}");
     }
     // written by inline code, then run
     let (_, wrote) = gemini_run(
@@ -117,21 +117,21 @@ fn a_script_written_through_the_shell_asks_too() {
         "g1",
         "python3 -c 'open(\"z.py\",\"w\").write(\"print(1)\")'",
     );
-    assert!(!asks_for_session_code(&wrote), "{wrote}");
+    assert!(!held_for_session_code(&wrote), "{wrote}");
     std::fs::write(sb.project().join("z.py"), "print(1)\n").unwrap();
     let (_, inline) = gemini_run(&sb, "g1", "python3 z.py");
-    assert!(asks_for_session_code(&inline), "{inline}");
+    assert!(held_for_session_code(&inline), "{inline}");
     // written and run by one command
     let (_, same) = gemini_run(&sb, "g3", "cat > y.sh <<'EOF'\necho hi\nEOF\nsh y.sh");
-    assert!(asks_for_session_code(&same), "{same}");
+    assert!(held_for_session_code(&same), "{same}");
     // a test runner runs the project's code by design: unchanged
     gemini_write(&sb, "g1", "test_x.py");
     let (_, tests) = gemini_run(&sb, "g1", "pytest test_x.py");
-    assert!(!asks_for_session_code(&tests), "{tests}");
+    assert!(!held_for_session_code(&tests), "{tests}");
 }
 
 #[test]
-fn opencode_cannot_ask_so_it_is_a_deny_that_says_how_to_approve() {
+fn opencode_cannot_prompt_so_it_is_a_deny_that_says_how_to_approve() {
     if cfg!(windows) {
         return;
     }

@@ -18,7 +18,12 @@ pub const STATEMENT: &str = "Evidence, not a certification. This report lists wh
      make anyone compliant.";
 
 /// The verdicts every count lists, least strict first.
-pub const VERDICTS: [Verdict; 4] = [Verdict::Allow, Verdict::Defer, Verdict::Ask, Verdict::Deny];
+pub const VERDICTS: [Verdict; 4] = [
+    Verdict::Allow,
+    Verdict::Defer,
+    Verdict::Review,
+    Verdict::Deny,
+];
 
 /// Decisions, and decisions by verdict (keyed by the verdict's own name).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -148,7 +153,7 @@ pub struct Inputs<'a> {
     pub chain: ChainReport,
     /// The rule ids of the policy in force, `None` when it cannot be read.
     pub in_force: Option<&'a BTreeSet<String>>,
-    /// The `deny` and `ask` rule ids of the shipped default policy.
+    /// The `deny` and `review` rule ids of the shipped default policy.
     pub default_ids: &'a BTreeSet<String>,
     pub samples: usize,
 }
@@ -268,7 +273,7 @@ fn counted(events: &[&Event]) -> Counts {
     counts
 }
 
-/// Up to `n` events, newest first, denies and asks before the rest: they show
+/// Up to `n` events, newest first, denies and reviews before the rest: they show
 /// a control stopping something, an allow only that the call was recorded.
 fn samples(events: &[&Event], n: usize) -> Vec<Sample> {
     let mut picked: Vec<&Event> = events.to_vec();

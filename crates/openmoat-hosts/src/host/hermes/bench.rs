@@ -53,7 +53,7 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
     if blocks {
         Answer::Deny
     } else if document["action"] == "approve" {
-        Answer::Ask
+        Answer::Review
     } else if code == 0 && (stdout.is_empty() || document.is_object()) {
         Answer::Passthrough
     } else {

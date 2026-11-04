@@ -111,7 +111,7 @@ fn a_token_in_an_older_commit_of_the_push_denies_it() {
 }
 
 #[test]
-fn a_tainted_session_pushing_a_workflow_change_asks() {
+fn a_tainted_session_pushing_a_workflow_change_needs_review() {
     let sb = Sandbox::installed(&[".claude"]);
     let work = repo(&sb);
     commit(&work, ".github/workflows/ci.yml", "on: push\n", "ci");
@@ -157,7 +157,7 @@ fn without_an_upstream_the_default_branch_is_the_base() {
 }
 
 #[test]
-fn a_push_not_checked_in_time_or_too_large_asks() {
+fn a_push_not_checked_in_time_or_too_large_needs_review() {
     let sb = Sandbox::installed(&[".claude"]);
     let work = repo(&sb);
     commit(&work, "src/lib.rs", "pub fn f() {}\n", "code");

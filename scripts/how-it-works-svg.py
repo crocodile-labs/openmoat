@@ -14,11 +14,11 @@ MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 THEMES = {
     "light": dict(bg="#fafaf9", dot="#dcdcd7", card="#ffffff", line="#dad8d3", text="#171717",
                   muted="#525252", chip="#f1f0ec", arrow="#a3a3a3",
-                  allow="#1f7a3c", defer="#2457c5", ask="#9a6400", deny="#b42318",
+                  allow="#1f7a3c", defer="#2457c5", review="#9a6400", deny="#b42318",
                   accent="#2A4525"),
     "dark": dict(bg="#111111", dot="#1c1c1c", card="#171717", line="#262626", text="#ededed",
                  muted="#a3a3a3", chip="#222222", arrow="#5c5c5c",
-                 allow="#7fd88f", defer="#8ab4f8", ask="#f2c14e", deny="#ff8a7a",
+                 allow="#7fd88f", defer="#8ab4f8", review="#f2c14e", deny="#ff8a7a",
                  accent="#95B670"),
 }
 
@@ -85,7 +85,7 @@ def build():
         ("allow", ["npm test", "git status"], ["runs as normal"]),
         ("defer", ["npm install left-pad", "git push origin main"],
          ["no rule: your agent's", "own prompt decides"]),
-        ("ask", ["> .git/hooks/pre-commit", "core.hooksPath"],
+        ("review", ["> .git/hooks/pre-commit", "core.hooksPath"],
          ["outlives the session:", "you decide, reason shown"]),
         ("deny", ["cat ~/.ssh/id_rsa", "git reset --hard"],
          ["never runs; the agent is", "told the rule and why"]),
@@ -141,7 +141,7 @@ def render(theme):
     body = build().format(**c)
     label = ("An AI coding agent wants to run a tool call. Through the agent's own hook, OpenMoat "
              "checks it against one local policy before it runs: npm test is allowed, a call with "
-             "no rule is left to the agent's own prompt, a git hook write asks you, and reading "
+             "no rule is left to the agent's own prompt, a git hook write is held for your review, and reading "
              "~/.ssh/id_rsa is denied. Allowed code still runs inside the OS sandbox and the "
              "egress proxy, and every decision goes into a local hash-chained audit log.")
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="{escape(label)}">

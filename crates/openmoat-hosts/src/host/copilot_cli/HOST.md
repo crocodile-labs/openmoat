@@ -28,9 +28,9 @@ Empty output leaves the call to Copilot's own permission flow (`defer`).
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-`ask` prompts in an interactive session; autopilot and the cloud agent turn it into a deny.
+A `review`, sent as `"ask"`, prompts in an interactive session; autopilot and the cloud agent turn it into a deny.
 
 ## Configuration and MCP files
 
@@ -47,7 +47,7 @@ Credentials: `config.json` (where the login goes when there is no keychain),
 agent's own tools may not read them (`kernel-self` already denies writing
 `config.json`). The keychain entry `copilot-cli` is read by `security
 find-generic-password -w` or `secret-tool lookup`, which `secrets-paths` denies.
-`copilot mcp add` and `copilot mcp enable` ask (`runs-later`). `openmoat status` and
+`copilot mcp add` and `copilot mcp enable` need review (`runs-later`). `openmoat status` and
 `openmoat doctor` warn when the `copilot` on the search path is a version with a
 published advisory (`advisories.rs`).
 
@@ -62,7 +62,7 @@ gone.
 A hook that times out lets the call run; `disableAllHooks` in Copilot's user or a
 repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it);
 MCP tools are told apart from built-in ones only by name, so a changed server is traced by
-its `<server>-` prefix; asks become denies in autopilot; no OS sandbox is configured.
+its `<server>-` prefix; reviews become denies in autopilot; no OS sandbox is configured.
 
 ## Sandbox
 

@@ -3,7 +3,7 @@
 //! goose reads `{"decision": "block" | "allow", "reason"}`; an unknown tool
 //! is `tool.unknown`. Its hook file is OpenMoat's plugin's `hooks.json`,
 //! outside its configuration directory. The entry's `on_failure: block`, an
-//! ask arriving as a block and `uninstall`: `goose.rs`.
+//! review arriving as a block and `uninstall`: `goose.rs`.
 
 use serde_json::{Value, json};
 

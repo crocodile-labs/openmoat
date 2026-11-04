@@ -1,12 +1,12 @@
-//! Whether the host would approve an `ask` without a person seeing it, from
-//! what the hook's process can see ([`openmoat_hosts::Asks::unseen`]): Hermes
+//! Whether the host would approve a `review` without a person seeing it, from
+//! what the hook's process can see ([`openmoat_hosts::Reviews::unseen`]): Hermes
 //! Agent in YOLO mode (`HERMES_YOLO_MODE`, which `--yolo` sets) or with
-//! `approvals.mode: off`. A call there is [`HookEvent::PreToolUseNoAsk`], so
-//! its `ask` reaches the host as a deny that says how to approve it.
+//! `approvals.mode: off`. A call there is [`HookEvent::PreToolUseNoPrompt`], so
+//! its `review` reaches the host as a deny that says how to approve it.
 //!
 //! The settings are read from the hook file `moat init` set up and from the
 //! one this hook's environment names (the profile the host runs it for); one
-//! that cannot be read counts as approving unseen, so an ask is never let
+//! that cannot be read counts as approving unseen, so a review is never let
 //! through on a guess.
 
 use anyhow::Result;
@@ -16,18 +16,18 @@ use serde_json::Value;
 use crate::home::Home;
 use crate::install::HostConfig;
 
-/// Mark `request` as a call whose `ask` no person would see, where `host`
+/// Mark `request` as a call whose `review` no person would see, where `host`
 /// would approve it unseen.
 pub(super) fn mark(host: Host, request: &mut HookRequest) {
     if request.event != HookEvent::PreToolUse {
         return;
     }
-    let Some(unseen) = &host.spec().asks.unseen else {
+    let Some(unseen) = &host.spec().reviews.unseen else {
         return;
     };
     let get = |name: &str| std::env::var(name).ok();
     if approves(unseen, &get, &configs(host)) {
-        request.event = HookEvent::PreToolUseNoAsk;
+        request.event = HookEvent::PreToolUseNoPrompt;
     }
 }
 
@@ -72,7 +72,7 @@ mod tests {
     fn hermes_unseen() -> &'static Unseen {
         Host::ALL
             .into_iter()
-            .find_map(|h| h.spec().asks.unseen.as_ref())
+            .find_map(|h| h.spec().reviews.unseen.as_ref())
             .unwrap()
     }
 

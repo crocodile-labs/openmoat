@@ -30,6 +30,6 @@ program names).
 - Reads and writes through symlinks are checked at their target; fixture class T11.
 - Resolution happens at decision time. A link swapped between the check and the command
   running (TOCTOU), hard links, and a link created by the same command that uses it are
-  not visible; the last one still asks because creating the link is an `ask` action.
+  not visible; the last one still needs review because creating the link is a `review` action.
   OS enforcement (`moat exec`) is the complete answer.
 - Core purity holds; the engine gains one parameter and no dependency.

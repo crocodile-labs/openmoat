@@ -25,10 +25,10 @@ Anthropic's Claude Code. Its `PreToolUse` format is also what the Continue CLI s
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-Claude Code asks the person on `PreToolUse`, except in a permission mode that asks no one
-(`bypassPermissions`, `dontAsk`). `claude --continue` resumes a session.
+OpenMoat's `review` is sent as Claude Code's `"ask"`, which Claude Code puts to the person on
+`PreToolUse`, except in a permission mode that prompts no one (`bypassPermissions`, `dontAsk`). `claude --continue` resumes a session.
 
 ## Configuration and MCP files
 
@@ -44,8 +44,8 @@ configuration directory on Linux and Windows, and on macOS when the Keychain ref
 it) and the Anthropic profiles in `~/.config/anthropic` are `agent-credentials`': the
 agent's own tools may neither read nor write them, under `CLAUDE_CONFIG_DIR` too. The
 macOS Keychain entry is read by `security find-generic-password -w`, which
-`secrets-paths` denies. `claude setup-token`, which prints a new long-lived token, asks
-(`agent-token`); `claude mcp add`, `add-json`, `login` and `claude plugin install` ask
+`secrets-paths` denies. `claude setup-token`, which prints a new long-lived token, needs review
+(`agent-token`); `claude mcp add`, `add-json`, `login` and `claude plugin install` need review
 (`runs-later`). `openmoat status` and `openmoat doctor` warn when the `claude` on the
 search path is a version with a published advisory (`advisories.rs`).
 

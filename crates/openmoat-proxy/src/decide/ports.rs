@@ -20,7 +20,7 @@ pub const RULE_PORT: &str = "proxy-port";
 pub const DEFAULT_PORTS: [u16; 2] = [443, 80];
 
 /// The part of `policy` that decides a host and its port, as
-/// [`host_port`] uses it: every deny and repository ask rule as written, and
+/// [`host_port`] uses it: every deny and repository review rule as written, and
 /// the allow rules' `host:port` patterns only, so that a pattern without a
 /// port (`*`, `example.com`) never opens another port. Every exclusion
 /// without a port (`!evil.example.com`) also excludes the host on every port.
@@ -42,9 +42,9 @@ pub fn port_policy(policy: &Policy) -> Policy {
     Policy {
         defaults: Defaults::All(Verdict::Defer),
         deny: lists(&policy.deny, false),
-        repo_ask: lists(&policy.repo_ask, false),
+        repo_review: lists(&policy.repo_review, false),
         allow: lists(&policy.allow, true),
-        ask: Vec::new(),
+        review: Vec::new(),
         defer: Vec::new(),
         ..policy.clone()
     }
@@ -75,7 +75,7 @@ fn ported(host: &str, port: u16) -> Option<String> {
 /// [`port_policy`] of `policy`'s policy. Only an `allow` lets the connection
 /// proceed:
 ///
-/// - a deny or repository ask rule naming the host, or `host:port`, refuses;
+/// - a deny or repository review rule naming the host, or `host:port`, refuses;
 /// - an allow rule naming `host:port` allows;
 /// - otherwise the host is decided as [`host`](super::host) decides it, and an
 ///   allowed host passes on [`DEFAULT_PORTS`] only: any other port is refused
@@ -88,17 +88,17 @@ pub fn host_port(
     port: u16,
 ) -> Decision {
     let decide = |subject: String| ports.evaluate_atomic(&AtomicAction::Fetch { host: subject });
-    let refused = |d: &Decision| matches!(d.verdict, Verdict::Deny | Verdict::Ask);
+    let refused = |d: &Decision| matches!(d.verdict, Verdict::Deny | Verdict::Review);
     if super::metadata(host).is_some() || decide(host.to_owned()).is_some_and(|d| refused(&d)) {
         return super::host(policy, host);
     }
     match ported(host, port).and_then(decide) {
         Some(d) if d.verdict == Verdict::Allow => return d,
         Some(mut d) if refused(&d) => {
-            if d.verdict == Verdict::Ask {
+            if d.verdict == Verdict::Review {
                 d.verdict = Verdict::Deny;
                 d.reasons.push(
-                    "the proxy cannot ask, so a host and port it would ask for is refused"
+                    "the proxy cannot prompt, so a host and port it would hold for review is refused"
                         .to_owned(),
                 );
             }

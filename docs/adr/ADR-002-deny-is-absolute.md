@@ -11,7 +11,7 @@ turns policy review into whole-file reasoning.
 
 ## Decision
 
-- Evaluation order is `deny → allow → ask → defaults`; the first list with a match wins.
+- Evaluation order is `deny → allow → review → defaults`; the first list with a match wins.
 - An allow rule can never override a deny rule.
 - "Deny by default for a kind" is written as `defaults: {net: deny}` plus allow
   rules. `defaults` is a single verdict or a map from action kind to verdict; the

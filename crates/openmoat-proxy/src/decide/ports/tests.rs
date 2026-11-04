@@ -26,7 +26,7 @@ fn decide(policy: &Policy, host: &str, port: u16) -> (Verdict, String) {
     (d.verdict, d.rules[0].clone())
 }
 
-const POLICY: &str = "version: 1\ndefaults: { '*': deny, fetch: ask }\n\
+const POLICY: &str = "version: 1\ndefaults: { '*': deny, fetch: review }\n\
     deny:\n  - id: no-ssh\n    net: ['*:22', 'blocked.example.com']\n\
     allow:\n  - id: web\n    net: [example.com, '*.cdn.test', '!evil.cdn.test', 'fe80::1']\n\
     \x20 - id: alt\n    net: ['alt.example.com:8443', '*.svc.test:9000', '!bad.svc.test:9000']\n\
@@ -169,7 +169,7 @@ fn a_repository_deny_holds_at_the_proxy_and_its_allow_does_not() {
 #[test]
 fn a_host_port_allow_is_no_host_glob() {
     let policy = Policy::parse(
-        "version: 1\ndefaults: { '*': deny, fetch: ask }\n\
+        "version: 1\ndefaults: { '*': deny, fetch: review }\n\
          allow:\n  - id: alt\n    net: ['*:8443', '*:443']\n",
     )
     .unwrap();

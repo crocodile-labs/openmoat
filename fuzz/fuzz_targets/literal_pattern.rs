@@ -33,16 +33,17 @@ fuzz_target!(|data: &[u8]| {
             shell: vec![pattern.clone()],
             ..RuleGroup::default()
         }],
-        ask: Vec::new(),
+        review: Vec::new(),
         defer: Vec::new(),
         approval: None,
         executables: BTreeMap::new(),
         sandbox: None,
         secrets: Vec::new(),
-        repo_ask: Vec::new(),
+        repo_review: Vec::new(),
         taint: None,
         require_signed_repo_policy: false,
         mcp: None,
+        old_names: openmoat_core::OldNames::default(),
     };
     if let Err(e) = policy.lint() {
         panic!("pattern {pattern:?} for {command:?} does not lint: {e}");
@@ -74,8 +75,8 @@ fuzz_target!(|data: &[u8]| {
             .split_whitespace()
             .find(|w| !["do", "then", "else", "elif", "if", "while", "until", "!", "{"].contains(w))
             .is_some_and(|w| !w.contains('=') && w != "for");
-    // A command the classifier cannot parse asks before any rule is consulted
-    // (unparseable ⇒ ask), so its approval cannot take part (`sh -ee.a`).
+    // A command the classifier cannot parse needs review before any rule is consulted
+    // (unparseable ⇒ review), so its approval cannot take part (`sh -ee.a`).
     let unparseable = decision.rules.iter().any(|r| r == "unparseable");
     if plain && !unparseable {
         let mentioned = decision

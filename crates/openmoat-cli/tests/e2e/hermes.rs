@@ -1,7 +1,7 @@
 //! Hermes Agent end to end: `init` adds one `pre_tool_call` entry to
 //! `config.yaml`, keeping the rest of the file and its comments, and approves
 //! its command in `shell-hooks-allowlist.json`; `guard --host hermes` answers
-//! in Hermes's own reply format; an ask Hermes would approve unseen reaches it
+//! in Hermes's own reply format; a review Hermes would approve unseen reaches it
 //! as a deny; `uninstall` gives both files back.
 //!
 //! The payloads follow the source of `NousResearch/hermes-agent` v0.22.5
@@ -166,17 +166,17 @@ fn replies_are_in_hermes_format() {
     assert_eq!(doc["decision"], "block");
 }
 
-/// An `ask` goes to Hermes's own approval prompt with a key of its own, so
-/// Hermes's "always" approves that ask again, not the whole tool.
+/// A `review` goes to Hermes's own approval prompt with a key of its own, so
+/// Hermes's "always" approves that review again, not the whole tool.
 #[test]
-fn an_ask_goes_to_hermes_approval_with_its_own_rule_key() {
-    let sb = Sandbox::installed_asking(&[&crate::hosts::dir_of(Host::Hermes)]);
+fn a_review_goes_to_hermes_approval_with_its_own_rule_key() {
+    let sb = Sandbox::installed_with_review(&[&crate::hosts::dir_of(Host::Hermes)]);
     let outside = sb.home.join("notes").join("todo.txt");
     let (code, doc) = guard(&sb, &payload(&sb, "read_file", &json!({ "path": outside })));
     assert_eq!(code, Some(OK), "{doc}");
     assert_eq!(doc["action"], "approve");
     assert!(
-        doc["message"].as_str().unwrap().starts_with("moat: ask"),
+        doc["message"].as_str().unwrap().starts_with("moat: review"),
         "{doc}"
     );
     assert!(
@@ -185,11 +185,11 @@ fn an_ask_goes_to_hermes_approval_with_its_own_rule_key() {
     );
 }
 
-/// In YOLO mode Hermes would approve the ask without a person, so it is a
-/// deny that says how to approve it; the audit log keeps the ask.
+/// In YOLO mode Hermes would approve the review without a person, so it is a
+/// deny that says how to approve it; the audit log keeps the review.
 #[test]
-fn an_ask_in_yolo_mode_is_a_deny() {
-    let sb = Sandbox::installed_asking(&[&crate::hosts::dir_of(Host::Hermes)]);
+fn a_review_in_yolo_mode_is_a_deny() {
+    let sb = Sandbox::installed_with_review(&[&crate::hosts::dir_of(Host::Hermes)]);
     let outside = sb.home.join("notes").join("todo.txt");
     let call = payload(&sb, "read_file", &json!({ "path": outside }));
     let mut cmd = sb.command();
@@ -204,14 +204,14 @@ fn an_ask_in_yolo_mode_is_a_deny() {
 }
 
 /// `approvals.mode: off` (the Desktop's "Approvals: off") makes Hermes approve
-/// every ask unseen, so an ask is a deny there too.
+/// every prompt unseen, so a review is a deny there too.
 #[test]
-fn an_ask_with_approvals_off_is_a_deny() {
+fn a_review_with_approvals_off_is_a_deny() {
     let sb = bare(Some("approvals:\n  mode: off\n"));
     init(&sb);
     let policy = sb.home.join(".moat/policy.yaml");
     let now = fs::read_to_string(&policy).unwrap();
-    fs::write(&policy, now.replacen("\"*\": defer", "\"*\": ask", 1)).unwrap();
+    fs::write(&policy, now.replacen("\"*\": defer", "\"*\": review", 1)).unwrap();
     let accepted = sb.moat_as_person(&["doctor", "--accept"]);
     assert!(text(&accepted).contains("re-pinned"), "{}", text(&accepted));
     let outside = sb.home.join("notes").join("todo.txt");
@@ -333,7 +333,7 @@ fn uninstall_gives_back_both_files() {
 }
 
 /// A profile `init` finds gets the protection of the home: another profile's
-/// `config.yaml`, which asked before, is `kernel-self`'s now, and its login
+/// `config.yaml`, which needed review before, is `kernel-self`'s now, and its login
 /// is `agent-credentials`'.
 #[test]
 fn a_profile_init_found_is_protected_like_the_home() {
@@ -351,10 +351,10 @@ fn a_profile_init_found_is_protected_like_the_home() {
     assert!(reply.to_string().contains("agent-credentials"), "{reply}");
 }
 
-/// `skill_manage` writes a skill Hermes loads into later sessions: it asks,
+/// `skill_manage` writes a skill Hermes loads into later sessions: it needs review,
 /// which reaches Hermes as its own approval prompt (exit 0, `approve`).
 #[test]
-fn skill_manage_asks() {
+fn skill_manage_needs_review() {
     let sb = bare(Some(ORIGINAL));
     init(&sb);
     let ops = json!({"operations": [{"action": "create", "name": "deploy", "content": "x"}]});

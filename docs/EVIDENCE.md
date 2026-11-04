@@ -55,7 +55,7 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 - `script-writes-project-env` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .env stays writable (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
 - `script-plants-envrc` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .envrc can be created (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
 - `script-writes-project-policy` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .moat can be written (THREAT_MODEL §5); the hook still denies it for the agent's own tool calls
-- `script-plants-git-hook` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still asks for the agent's own writes there
+- `script-plants-git-hook` under `openmoat run`, Linux (Landlock + seccomp) (#174): Landlock only grants: a deny inside the granted project tree cannot be enforced, so .git/hooks stays writable (THREAT_MODEL §5); the hook still holds the agent's own writes there for review
 
 ## Layers
 

@@ -1,7 +1,7 @@
 //! The row for `cline`.
 //!
 //! Cline reads `cancel: true` as a deny and any other object, or nothing, as no
-//! decision (`{}` for an allow); its hooks cannot ask, so an ask arrives as a
+//! decision (`{}` for an allow); its hooks cannot prompt, so a review arrives as a
 //! deny. The hook file is OpenMoat's script, owned whole; how it answers when
 //! run as Cline runs it is `cline.rs`'s. Cline has no setting that turns hooks
 //! off besides `--yolo`, a command-line flag.
@@ -58,7 +58,7 @@ pub fn row() -> Row {
             )
         }],
         malformed: Some((|_| fixture("cline/read_files-malformed.json"), Some("path"))),
-        ask: Some(|sb| {
+        review: Some(|sb| {
             let outside = sb.home.join("notes").join("todo.txt");
             crate::cline::payload(sb, "read_files", &json!({ "files": [outside] }))
         }),

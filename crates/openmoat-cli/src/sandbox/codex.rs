@@ -223,7 +223,7 @@ impl Filesystem {
             Kind::FsWrite,
             "codex.tmpdir",
             vec![":tmpdir".into()],
-            "commands may write the temp directory; the hook asks",
+            "commands may write the temp directory; the hook holds them for review",
         );
         for rule in &ir.fs.read.deny {
             let (positive, excluded) = split(&rule.patterns);
@@ -461,11 +461,11 @@ fn nested_git(report: &mut Report) {
         vec![ANY_GIT.to_owned()],
         "a profile glob can only deny, which would also block reading every `.git`, so \
          sandboxed commands may write a `.git` file (`gitdir: …`) or directory below a \
-         workspace root; Codex keeps the root's own `.git` read-only, and the hook asks",
+         workspace root; Codex keeps the root's own `.git` read-only, and the hook holds those writes for review",
     );
 }
 
-/// The hook asks before the agent writes a [`RUNS_LATER`] file; a profile glob
+/// The hook holds the agent's writes of a [`RUNS_LATER`] file for review; a profile glob
 /// could only deny it, reads included, so sandboxed commands may write one.
 fn runs_later(report: &mut Report) {
     report.allowance(
@@ -474,7 +474,7 @@ fn runs_later(report: &mut Report) {
         RUNS_LATER.iter().map(|f| (*f).to_owned()).collect(),
         "a profile glob can only deny, which would also block reading them, so sandboxed \
          commands may write CI configuration, commit-hook managers' files and editor tasks; \
-         the hook asks (`runs-later`)",
+         the hook holds them for review (`runs-later`)",
     );
 }
 

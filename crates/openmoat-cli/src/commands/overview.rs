@@ -70,21 +70,21 @@ pub fn run() -> Result<Code> {
         return Ok(code);
     }
 
-    let Some((event, host, action)) = pending_ask(&home, &store, today, now)? else {
+    let Some((event, host, action)) = pending_review(&home, &store, today, now)? else {
         if update.is_none() {
             println!("Nothing needs you.");
         }
         println!("`openmoat show` lists recent decisions; `openmoat --help` lists every command.");
         return Ok(Code::Ok);
     };
-    let asked = format!(
+    let reviewed = format!(
         "{} asked to {} (rule {}, session {})",
         host.display_name(),
         approvals::describe(&action),
         event.rules.join(", "),
         event.session_id
     );
-    println!("{}", render::clean(&asked));
+    println!("{}", render::clean(&reviewed));
     if !person {
         println!("A person can allow it at a terminal: `openmoat allow --last` for this session,");
         println!("`openmoat allow --last --always` for good.");
@@ -98,7 +98,7 @@ pub fn run() -> Result<Code> {
             return Ok(Code::Ok);
         }
     };
-    // The exact ask shown, not `--last`: a newer ask may have arrived meanwhile.
+    // The exact review shown, not `--last`: a newer review may have arrived meanwhile.
     super::allow::run_for(&event, &action, always)
 }
 
@@ -137,28 +137,28 @@ fn health(home: &Home, today: &[Event]) -> Result<String> {
     };
     let count = |v: Verdict| today.iter().filter(|e| e.verdict == v).count();
     Ok(format!(
-        "{agents} · today: {} decision{}, {} denied, {} asked",
+        "{agents} · today: {} decision{}, {} denied, {} reviewed",
         today.len(),
         if today.len() == 1 { "" } else { "s" },
         count(Verdict::Deny),
-        count(Verdict::Ask)
+        count(Verdict::Review)
     ))
 }
 
-/// The ask `moat allow --last` would take, if it is from today and no grant or
+/// The review `moat allow --last` would take, if it is from today and no grant or
 /// permanent rule already covers it.
-fn pending_ask(
+fn pending_review(
     home: &Home,
     store: &openmoat_audit::Store,
     today: i64,
     now: i64,
 ) -> Result<Option<(Event, Host, Action)>> {
-    let Some(event) = super::allow::newest_ask(store)?.filter(|e| e.ts_ms >= today) else {
+    let Some(event) = super::allow::newest_review(store)?.filter(|e| e.ts_ms >= today) else {
         return Ok(None);
     };
-    let action = super::allow::asked(&event)?;
+    let action = super::allow::reviewed(&event)?;
     let host: Host = event.host.parse()?;
-    // As `moat allow` binds it: an ask recorded without a working directory
+    // As `moat allow` binds it: a review recorded without a working directory
     // is approved in the current one.
     let cwd = match event.cwd.as_deref() {
         Some(cwd) => crate::context::absolute(std::path::Path::new(cwd))?,

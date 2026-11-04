@@ -16,7 +16,7 @@ use crate::shell::{ClassifyError, ShellContext, Sink, mailbox};
 /// not shell, so it is scanned rather than parsed. Code that writes a file
 /// writes every file name it shows (`writes.rs`). Code `program` runs that
 /// reaches files, the network, the environment or other programs through text
-/// it builds at run time is `@opaque-code <program>`, which `opaque-code` asks
+/// it builds at run time is `@opaque-code <program>`, which `opaque-code` holds
 /// for: what it opens is not on the command line.
 pub(super) fn scan_payload(
     payload: &str,

@@ -1,7 +1,7 @@
 //! A long encoded value in a URL once the session read secret material
 //! (ADR-047, `encoded-egress`).
 //!
-//! After a secret read every network call already asks (session taint). A
+//! After a secret read every network call already needs review (session taint). A
 //! person can judge a short URL in that prompt, but not a few hundred
 //! characters of base64 or hex: that is what a secret looks like on its way
 //! out through a GET. So once the session holds secret material, a URL that

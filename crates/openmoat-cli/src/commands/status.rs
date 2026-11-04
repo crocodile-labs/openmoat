@@ -187,10 +187,10 @@ fn policies(out: &mut impl io::Write, home: &Home) -> Result<bool> {
         Ok(policy) => {
             let bytes = fs::read(&policy_path)?;
             let digest = crate::integrity::sha256_hex(&bytes);
-            let (deny, allow, ask) = policy.rule_count();
+            let (deny, allow, review) = policy.rule_count();
             writeln!(
                 out,
-                "policy           {}  sha256:{digest}  ({deny} deny, {allow} allow, {ask} ask)",
+                "policy           {}  sha256:{digest}  ({deny} deny, {allow} allow, {review} review)",
                 policy_path.display()
             )?;
         }
@@ -290,7 +290,7 @@ fn approvals(out: &mut impl io::Write, home: &Home) -> Result<bool> {
             out,
             &format!(
                 "approvals        ! {} session {}: {} needs approving again: it names no \
-                 project, so it no longer applies (`openmoat allow --last` after its next ask)",
+                 project, so it no longer applies (`openmoat allow --last` after its next review)",
                 grant.host,
                 grant.session_id,
                 approvals::describe(&grant.action)

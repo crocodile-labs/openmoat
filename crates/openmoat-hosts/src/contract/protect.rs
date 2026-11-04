@@ -12,7 +12,7 @@
 pub struct Protect {
     /// `kernel-self`'s `fs.write` globs: what an agent may never change.
     pub self_paths: &'static [Paths],
-    /// The writes that ask once the session read untrusted content.
+    /// The writes that need review once the session read untrusted content.
     pub taint: &'static [Paths],
     /// `agent-credentials`' globs: the files where the host keeps its login,
     /// provider keys and OAuth tokens, which the agent's own tools may neither

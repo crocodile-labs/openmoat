@@ -226,22 +226,22 @@ fn malformed_input_is_an_error() {
     ));
 }
 
-/// Without a screen (print or JSON mode) pi cannot ask: an `ask` arrives as a
+/// Without a screen (print or JSON mode) pi cannot prompt: a `review` arrives as a
 /// deny that says how to approve it, and a `defer` stays no decision.
 #[test]
-fn print_mode_cannot_ask() {
+fn print_mode_cannot_prompt() {
     let request = fixture("print-mode");
-    assert_eq!(request.event, HookEvent::PreToolUseNoAsk);
-    let ask = Host::Pi.answer(&request.event, &Decision::new(Verdict::Ask));
-    assert_eq!(ask.verdict, Verdict::Deny);
+    assert_eq!(request.event, HookEvent::PreToolUseNoPrompt);
+    let review = Host::Pi.answer(&request.event, &Decision::new(Verdict::Review));
+    assert_eq!(review.verdict, Verdict::Deny);
     assert!(
-        ask.reasons.concat().contains("openmoat allow --last"),
-        "{ask:?}"
+        review.reasons.concat().contains("openmoat allow --last"),
+        "{review:?}"
     );
     let defer = Host::Pi.decided(&request.event, Decision::new(Verdict::Defer));
     assert_eq!(defer.verdict, Verdict::Defer);
-    let ui = Host::Pi.answer(&HookEvent::PreToolUse, &Decision::new(Verdict::Ask));
-    assert_eq!(ui.verdict, Verdict::Ask);
+    let ui = Host::Pi.answer(&HookEvent::PreToolUse, &Decision::new(Verdict::Review));
+    assert_eq!(ui.verdict, Verdict::Review);
 }
 
 #[test]
@@ -251,10 +251,11 @@ fn render_prints_nothing_for_defer_and_the_decision_otherwise() {
         Host::Pi.render_response(&event, &Decision::new(Verdict::Defer)),
         ""
     );
-    for verdict in [Verdict::Allow, Verdict::Ask, Verdict::Deny] {
+    for verdict in [Verdict::Allow, Verdict::Review, Verdict::Deny] {
         let text = Host::Pi.render_response(&event, &Decision::new(verdict));
         let reply: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(reply["decision"], verdict.as_str());
+        // The extension reads the host word: `review` arrives as "ask".
+        assert_eq!(reply["decision"], crate::wire::host_verdict(verdict));
         assert!(reply["reason"].as_str().unwrap().starts_with("moat: "));
     }
 }

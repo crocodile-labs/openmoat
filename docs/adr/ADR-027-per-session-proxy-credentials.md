@@ -8,7 +8,7 @@ ADR-020 put a default-deny proxy between the agent and the network. It records e
 connection but cannot tell who made it. That leaves three gaps (#558, #555):
 
 1. **Taint stops at the hook.** Session taint (POLICY.md §4.1) follows the host's tool
-   calls: after a session reads secret material, the hook asks before its network calls.
+   calls: after a session reads secret material, the hook holds its network calls for review.
    A script the hook never sees (`npm test`) can still post that material to an allowed
    host through the proxy, because the proxy's connections carry no session.
 2. **Any local process can use the proxy.** It listens on loopback and asks for nothing,
@@ -100,16 +100,16 @@ The decision at egress reuses the core (`CompiledPolicy::with_taint`), so it can
 drift from the hook's. `decide::tainted` asks it about `net` to the request's host:
 
 - **After a secret read:** a CONNECT or plain-HTTP request to any host but that secret's
-  own would ask. The proxy cannot ask, so it refuses (`session-taint`). The reason says
+  own would hold for review. The proxy cannot prompt, so it refuses (`session-taint`). The reason says
   why, that `moat allow` does not answer a secret's taint (POLICY.md §4.1), and to start
   a new session.
 - **Registries:** these hosts are refused too. They are the relays the taint exists
-  for (`npm publish`, a gist), and the hook asks for them as well.
+  for (`npm publish`, a gist), and the hook holds them for review as well.
 - **After untrusted content alone:** nothing changes at egress; that taint protects
   writes.
 
 With the default policy `secrets-paths` denies, so no secret read runs and no session is
-tainted. Only a policy that moves those reads to `ask` sees a change.
+tainted. Only a policy that moves those reads to `review` sees a change.
 
 ### Connection shares (#555)
 

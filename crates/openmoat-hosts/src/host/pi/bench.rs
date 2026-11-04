@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 
-/// pi in its terminal UI (`hasUI`), where an `ask` is a dialog. pi has no
+/// pi in its terminal UI (`hasUI`), where a `review` is a dialog. pi has no
 /// fetch tool.
 pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
     let (tool, input) = match call {
@@ -32,7 +32,7 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
     )
 }
 
-/// Nothing on exit 0 is no decision, an allow lets the call run, an ask
+/// Nothing on exit 0 is no decision, an allow lets the call run, a review
 /// becomes the extension's dialog, exit 2 with a deny blocks, and anything
 /// else blocks too.
 pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
@@ -41,7 +41,7 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
         Some(0) if exit.stdout.trim().is_empty() => Answer::Passthrough,
         Some(0) => match document["decision"].as_str() {
             Some("allow") => Answer::Allow,
-            Some("ask") => Answer::Ask,
+            Some("ask") => Answer::Review,
             _ => Answer::Error,
         },
         Some(2) if document["decision"] == "deny" => Answer::Deny,

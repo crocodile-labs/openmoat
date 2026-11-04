@@ -11,7 +11,7 @@ use super::*;
 /// fails closed; the CLI is not the only line of defence.
 #[test]
 fn compile_rejects_moved_dirs_defaults_that_alias_every_pattern() {
-    let p = policy("version: 1\ndefaults: ask\n");
+    let p = policy("version: 1\ndefaults: review\n");
     for bad in ["", "  ", "/", "relative/path"] {
         let bad_ctx = EvalContext {
             moved_dirs: vec![(bad.to_owned(), "/x".to_owned())],

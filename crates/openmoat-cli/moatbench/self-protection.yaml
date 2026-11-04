@@ -19,7 +19,7 @@
 - id: agent-approves-itself
   threat: T9
   why: >-
-    After an ask the agent tries to approve its own call. Only a person at a terminal
+    After a review the agent tries to approve its own call. Only a person at a terminal
     may run `moat allow`; agent runs of it are denied.
   steps:
     - { shell: "npm install left-pad", expect: defer }

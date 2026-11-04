@@ -1,7 +1,7 @@
 //! OpenMoat's OpenCode plugin (`src/host/opencode/integration/openmoat.js`)
 //! run under Node against a stand-in for `openmoat guard` (`opencode.mjs`),
 //! as OpenCode 1 and as OpenCode 2 load it: a deny throws the guard's reason,
-//! an allow or no answer lets the call run, an ask is a block on OpenCode 1
+//! an allow or no answer lets the call run, a review is a block on OpenCode 1
 //! and OpenCode's own prompt on OpenCode 2, every other outcome throws, the
 //! checked call cannot change afterwards, not by a plugin that runs later
 //! either, and each way of loading it reports loading (ADR-042).
@@ -87,7 +87,7 @@ fn the_opencode_plugin_reports_loading_from_both_apis() {
 }
 
 #[test]
-fn on_opencode_2_the_plugin_checks_asks_and_pins_the_call() {
+fn on_opencode_2_the_plugin_checks_reviews_and_pins_the_call() {
     let Some(report) = opencode() else {
         return;
     };
@@ -136,13 +136,13 @@ fn on_opencode_2_the_plugin_checks_asks_and_pins_the_call() {
         assert_eq!(result["frozen"], true, "{result}");
     }
 
-    asks_reach_the_person(v2);
+    reviews_reach_the_person(v2);
     later_plugins_cannot_change_the_call(&v2["later"]);
 }
 
-/// An ask is put to the person as OpenCode's `openmoat` permission, made an
-/// ask whatever the rules say (here they allow), with OpenMoat's reason.
-fn asks_reach_the_person(v2: &Value) {
+/// A review is put to the person as OpenCode's `openmoat` permission, given the
+/// `ask` effect whatever the rules say (here they allow), with OpenMoat's reason.
+fn reviews_reach_the_person(v2: &Value) {
     let asked = v2["asked"].as_array().unwrap();
     assert_eq!(asked.len(), 2, "{asked:?}");
     for ask in asked {

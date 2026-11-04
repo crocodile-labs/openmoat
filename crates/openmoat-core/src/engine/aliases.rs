@@ -11,7 +11,7 @@
 //!   on macOS): the program word, and every word naming `moat` in any case
 //!   (after `script`, inside `tmux new '…'`), are read lowercase.
 //!
-//! Each such spelling is one extra shell atom. Only a deny or ask rule it
+//! Each such spelling is one extra shell atom. Only a deny or review rule it
 //! matches counts ([`super::CompiledPolicy::decide_with`]), so it can make a
 //! call stricter, never change what else the call is allowed.
 

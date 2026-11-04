@@ -43,7 +43,7 @@ fn write(path: &str) -> Option<Action> {
     Some(Action::FsWrite { path: path.into() })
 }
 
-/// Keys typed into a running shell are checked on their own and ask at
+/// Keys typed into a running shell are checked on their own and need review at
 /// least: the shell joins them to what came before.
 #[expect(clippy::unnecessary_wraps, reason = "compared with an `Option`")]
 fn typed(input: Action) -> Option<Action> {
@@ -55,7 +55,7 @@ fn typed(input: Action) -> Option<Action> {
 }
 
 #[test]
-fn shell_tools_are_commands_and_typed_input_asks() {
+fn shell_tools_are_commands_and_typed_input_needs_review() {
     let bash = fixture("bash");
     assert_eq!(bash.session_id, "sess-1");
     assert_eq!(bash.cwd.as_deref(), Some("/p"));
@@ -87,10 +87,10 @@ fn shell_tools_are_commands_and_typed_input_asks() {
 
 /// Copilot's shells outlive the call and the payload names only the
 /// session's directory: a command that leaves its shell somewhere OpenMoat
-/// cannot know asks, one that moves to a written-out directory or not at all
+/// cannot know needs review, one that moves to a written-out directory or not at all
 /// is a plain command.
 #[test]
-fn a_shell_left_in_an_unknown_directory_asks() {
+fn a_shell_left_in_an_unknown_directory_needs_review() {
     for command in ["cd \"$HOME/.ssh\"", "cd -", "eval \"$X\"", "popd"] {
         let got = action("bash", json!({"command": command}));
         assert!(
@@ -264,13 +264,13 @@ fn replies_are_copilot_permission_decisions_and_defer_is_silent() {
         deny["permissionDecisionReason"],
         "moat: deny [secrets-paths]"
     );
-    let ask: Value = serde_json::from_str(&render(Verdict::Ask)).unwrap();
-    assert_eq!(ask["permissionDecision"], "ask");
+    let review: Value = serde_json::from_str(&render(Verdict::Review)).unwrap();
+    assert_eq!(review["permissionDecision"], "ask");
     assert_eq!(render(Verdict::Defer), "");
-    let ask = Decision::new(Verdict::Ask);
+    let review = Decision::new(Verdict::Review);
     assert_eq!(
-        Host::CopilotCli.answer(&HookEvent::PreToolUse, &ask),
-        ask,
+        Host::CopilotCli.answer(&HookEvent::PreToolUse, &review),
+        review,
         "an interactive Copilot session puts the question to the person"
     );
 }

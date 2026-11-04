@@ -30,9 +30,9 @@ exit 2 also denies.
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-Only the shell and MCP events prompt on `ask`; on the others an ask is sent as a deny
+Only the shell and MCP events prompt on `"ask"`; on the others a review is sent as a deny
 ("Cursor does not prompt for this hook").
 
 ## Configuration and MCP files
@@ -53,7 +53,7 @@ back.
 
 Commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier
 approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined;
-file-tool asks become denies; Task and tools that name no path are not hooked; a failed
+file-tool reviews become denies; Task and tools that name no path are not hooked; a failed
 hook blocks the call.
 
 ## Sandbox

@@ -1,6 +1,6 @@
 //! The row for `codex`.
 //!
-//! Uninstall: `uninstall.rs`; an ask: `codex.rs`.
+//! Uninstall: `uninstall.rs`; a review: `codex.rs`.
 
 use super::{HooksOff, PRE_TOOL_USE, Row, post_tool_use, pre_tool_use};
 

@@ -30,7 +30,7 @@ fn every_mapped_rule_is_a_default_policy_rule_or_a_documented_built_in() {
     let policy = default_policy();
     let restrictive: BTreeSet<String> = policy_ids(&policy.deny)
         .into_iter()
-        .chain(policy_ids(&policy.ask))
+        .chain(policy_ids(&policy.review))
         .collect();
     let permissive: BTreeSet<String> = policy_ids(&policy.allow)
         .into_iter()
@@ -51,7 +51,7 @@ fn every_mapped_rule_is_a_default_policy_rule_or_a_documented_built_in() {
                     .is_some_and(|kind| Kind::from_str(kind).is_ok());
             assert!(
                 documented,
-                "{}: `{id}` is neither a deny or ask rule of the default policy nor in POLICY.md §5.1",
+                "{}: `{id}` is neither a deny or review rule of the default policy nor in POLICY.md §5.1",
                 group.id
             );
         }
@@ -61,7 +61,7 @@ fn every_mapped_rule_is_a_default_policy_rule_or_a_documented_built_in() {
 #[test]
 fn every_deny_and_ask_rule_of_the_default_policy_is_mapped() {
     let policy = default_policy();
-    for rule in policy.deny.iter().chain(&policy.ask) {
+    for rule in policy.deny.iter().chain(&policy.review) {
         assert!(
             group_of(&rule.id).is_some(),
             "default rule `{}` is in no group of compliance.rs",

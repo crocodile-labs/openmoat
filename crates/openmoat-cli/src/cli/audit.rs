@@ -14,7 +14,7 @@ pub enum AuditCommand {
     /// Check an export's hash chain without the database and print its head hash;
     /// or, with --against, check the log against the anchors recorded earlier.
     Verify(VerifyArgs),
-    /// Report over exports from several machines: per host, per rule, top asks and
+    /// Report over exports from several machines: per host, per rule, top reviews and
     /// denies, false-positive candidates. Every file must verify first.
     Report(TeamReportArgs),
     /// Evidence for a time window, per control of OWASP Top 10 for LLM Applications

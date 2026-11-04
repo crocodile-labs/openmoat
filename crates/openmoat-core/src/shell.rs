@@ -33,9 +33,9 @@
 //!
 //! Classification is conservative by design: when the input cannot be parsed
 //! safely the result is [`ParseOutcome::Unparseable`], which the engine maps to
-//! `ask`, never `allow`. A simple command (or a path in it) that cannot be
+//! `review`, never `allow`. A simple command (or a path in it) that cannot be
 //! classified does not stop the others: their atoms are kept, so a `deny` among
-//! them still wins over the `ask`. `<<<` here-strings and here-document bodies are data,
+//! them still wins over the `review`. `<<<` here-strings and here-document bodies are data,
 //! except that the substitutions and variables the shell expands in them are
 //! classified and a shell or interpreter reading stdin runs them as its program.
 //!
@@ -92,13 +92,13 @@ use crate::paths;
 pub enum ParseOutcome {
     Parsed(Vec<AtomicAction>),
     /// Some part could not be classified (`reason`); `atoms` are the parts that
-    /// were, still decided so that a `deny` among them is not lost. `asks` when
+    /// were, still decided so that a `deny` among them is not lost. `reviews` when
     /// the line could not be read in full or a classifier limit was reached
-    /// ([`ClassifyError::asks`]).
+    /// ([`ClassifyError::needs_review`]).
     Unparseable {
         reason: String,
         atoms: Vec<AtomicAction>,
-        asks: bool,
+        needs_review: bool,
     },
 }
 
@@ -106,10 +106,10 @@ pub enum ParseOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unparsed {
     pub reason: String,
-    /// The engine asks, whatever the policy's catch-all says: the atoms of the
+    /// The engine needs review, whatever the policy's catch-all says: the atoms of the
     /// rest of the line may be missing, so a deny among them must not become
     /// a `defer` (padding a command until the classifier gives up).
-    pub asks: bool,
+    pub needs_review: bool,
 }
 
 impl ParseOutcome {
@@ -121,8 +121,14 @@ impl ParseOutcome {
             Self::Unparseable {
                 reason,
                 atoms,
-                asks,
-            } => (atoms, Some(Unparsed { reason, asks })),
+                needs_review,
+            } => (
+                atoms,
+                Some(Unparsed {
+                    reason,
+                    needs_review,
+                }),
+            ),
         }
     }
 }
@@ -158,7 +164,7 @@ pub struct ShellContext<'a> {
 impl ShellContext<'_> {
     /// Every canonical path a shell word may name: one per possible working
     /// directory for a relative word. An error when one of them is not known
-    /// (`~-`, or a relative word after `cd "$X"`), which makes the command `ask`.
+    /// (`~-`, or a relative word after `cd "$X"`), which makes the command `review`.
     pub(crate) fn paths(&self, word: &str) -> Result<Vec<String>, ClassifyError> {
         if let Some(path) = paths::resolve(word, self.home, WORD_PROJECT, None) {
             return Ok(vec![path]);
@@ -220,17 +226,18 @@ pub fn classify_globs(
         let again = commands::classify_into(&split, ctx, &mut sink, 0).err();
         stopped = stopped.or(again);
     }
-    let asks = sink.asks || stopped.as_ref().is_some_and(ClassifyError::asks);
+    let needs_review =
+        sink.needs_review || stopped.as_ref().is_some_and(ClassifyError::needs_review);
     let outcome = match sink.skipped.or(stopped) {
         Some(e) => ParseOutcome::Unparseable {
             reason: e.to_string(),
             atoms: sink.atoms,
-            asks,
+            needs_review,
         },
         None if sink.atoms.is_empty() => ParseOutcome::Unparseable {
             reason: "no command found".to_owned(),
             atoms: Vec::new(),
-            asks: false,
+            needs_review: false,
         },
         None => ParseOutcome::Parsed(sink.atoms),
     };
@@ -255,8 +262,8 @@ pub(crate) struct Sink {
     atoms: Vec<AtomicAction>,
     /// The first part classification went past without understanding it.
     skipped: Option<ClassifyError>,
-    /// Whether any part skipped was one that asks ([`ClassifyError::asks`]).
-    asks: bool,
+    /// Whether any part skipped was one that needs review ([`ClassifyError::needs_review`]).
+    needs_review: bool,
     /// Words of the command line, nested commands included, that the shell
     /// expands as globs ([`crate::lexer::Word::glob`]).
     glob_words: Vec<String>,
@@ -338,9 +345,9 @@ impl Sink {
     }
 
     /// Note a part that could not be classified and carry on with the rest:
-    /// the command still asks, and what else it does is still decided.
+    /// the command still needs review, and what else it does is still decided.
     pub(crate) fn skip(&mut self, error: ClassifyError) {
-        self.asks |= error.asks();
+        self.needs_review |= error.needs_review();
         self.skipped.get_or_insert(error);
     }
 
@@ -370,7 +377,7 @@ impl Sink {
         if (paths::has_unexpanded_variable(word) || self.overrides_a_known_name(word))
             && self.dollar_words.iter().any(|w| w.contains(word))
         {
-            // `@unknown-path <word>`: a rule can ask for a secret's file name in a
+            // `@unknown-path <word>`: a rule can hold a secret's file name for review in a
             // directory OpenMoat cannot place (`secret-names`)
             let atom = AtomicAction::Shell {
                 argv: vec!["@unknown-path".to_owned(), word.to_owned()],
@@ -382,7 +389,7 @@ impl Sink {
         }
         ctx.paths(word).unwrap_or_else(|e| {
             // Another user's home cannot be placed, and it may hold that user's
-            // secrets: `@other-home <word>`, which the `other-home` rule asks for.
+            // secrets: `@other-home <word>`, which the `other-home` rule holds for review.
             if paths::other_user_home(word, ctx.home) {
                 let atom = AtomicAction::Shell {
                     argv: vec!["@other-home".to_owned(), word.to_owned()],
@@ -423,7 +430,7 @@ impl Sink {
 
     /// Note that the command runs the file `word` names as code
     /// ([`executes`]), in every directory it may run in. A word whose value is
-    /// not known names no file; the classifier asks or defers for it already.
+    /// not known names no file; the classifier holds it for review or defers it already.
     pub(crate) fn execute(&mut self, ctx: &ShellContext<'_>, word: &str) {
         if word.is_empty() || word.contains(['$', '`']) || self.executed.len() >= MAX_ATOMS {
             return;

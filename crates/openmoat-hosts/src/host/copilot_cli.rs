@@ -13,8 +13,8 @@
 //! permission flow, and exit 2 denies whatever stdout says. Any other non-zero
 //! exit denies too ("hook errored", since 1.0.57), but a hook that outlives its
 //! `timeoutSec` is killed and the call goes on: timeouts fail open for every
-//! event. `ask` prompts in an interactive session; autopilot and the cloud
-//! agent turn it into a deny.
+//! event. `"ask"` (OpenMoat's `review`) prompts in an interactive session;
+//! autopilot and the cloud agent turn it into a deny.
 //!
 //! The user hook files are every `*.json` in `~/.copilot/hooks/` (or
 //! `$COPILOT_HOME/hooks/`), so OpenMoat's entry lives in a file of its own.
@@ -25,7 +25,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
+    Reviews, HookDir, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, 
     McpSpec, McpServersJson, ProjectSettingsSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -51,11 +51,11 @@ const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", TOOL_HOOK_TIMEOUT_S, false
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "copilot-cli",
     display_name: "GitHub Copilot CLI",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: None,
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+        on_no_prompt: None,
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when the hook cannot start, crashes or exits non-zero; \
          runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) \
@@ -63,7 +63,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     gaps: "a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a \
          repository's `settings.json` turns the hook off (`openmoat status` and `doctor` \
          report it); MCP tools are told apart from built-in ones only by name, so a changed \
-         server is traced by its `<server>-` prefix; asks become denies in autopilot; no OS \
+         server is traced by its `<server>-` prefix; reviews become denies in autopilot; no OS \
          sandbox is configured",
     install: Some(InstallSpec {
         dir_variable: "COPILOT_HOME",
@@ -215,7 +215,8 @@ fn render(decision: &Decision) -> String {
         return String::new();
     }
     serde_json::json!({
-        "permissionDecision": decision.verdict.as_str(),
+        // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+        "permissionDecision": crate::wire::host_verdict(decision.verdict),
         "permissionDecisionReason": crate::reason_line(decision),
     })
     .to_string()

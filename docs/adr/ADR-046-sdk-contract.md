@@ -6,7 +6,7 @@ Status: accepted · Date: 2026-10-28
 
 People building their own agent products want OpenMoat's policy decisions without the
 `openmoat` binary and its hooks: their agent loop already knows each tool call before it
-runs, and can ask. `openmoat-core` is pure (no I/O, no `unsafe`, four dependencies) and
+runs, and can prompt. `openmoat-core` is pure (no I/O, no `unsafe`, four dependencies) and
 already builds for `wasm32-unknown-unknown`, so the decision engine can be embedded as is.
 What is missing is a surface we can keep stable while the core keeps changing: the core's
 `Action` has host-specific variants, `CompiledPolicy` borrows its policy, and nothing says
@@ -26,8 +26,8 @@ The caller's agent loop is the enforcement point, and the contract it must keep 
 | Verdict | The caller |
 |---|---|
 | `deny` | does not run the call. No approval, setting or retry may lift a deny (ADR-002). |
-| `ask` | runs the call only after a person approves *that exact call* |
-| `defer` | applies its own permission flow; OpenMoat neither objects nor vouches (ADR-025). A product without one treats `defer` as `ask` |
+| `review` | runs the call only after a person approves *that exact call* |
+| `defer` | applies its own permission flow; OpenMoat neither objects nor vouches (ADR-025). A product without one treats `defer` as `review` |
 | `allow` | may run the call |
 
 A caller that holds no decision for a call (an error building the engine, a malformed
@@ -37,7 +37,7 @@ than its arguments show), the caller adds one: `openmoat run`, a container, a VM
 
 ### 2. Approvals differ from denials
 
-An `ask` is a request for a person, not a soft deny and not a default allow:
+A `review` is a request for a person, not a soft deny and not a default allow:
 
 - The approval binds to the action decided, byte for byte. A changed argument is a new
   call and is decided again.
@@ -45,7 +45,7 @@ An `ask` is a request for a person, not a soft deny and not a default allow:
   ("always allow `npm test` here") owns that store and must scope it at least as tightly
   as the CLI's grants (one rule id, one project).
 - A `deny` is never offered for approval. The approver is not asked.
-- The approver is a person. An agent, a model or a script answering its own `ask` is no
+- The approver is a person. An agent, a model or a script answering its own `review` is no
   approval.
 
 ### 3. Time of check and time of use
@@ -80,7 +80,7 @@ Within a major version of the SDK, these keep their meaning and shape:
   `fs_read`, `fs_write`, `read_files`, `patch`, `net`, `fetch`, `web_search`, `mcp_tool`,
   `unknown_tool`, `unchecked`. New kinds may be added (the Rust enum is
   `#[non_exhaustive]`); existing ones do not change. Unknown fields are errors.
-- The verdicts `allow`, `defer`, `ask`, `deny` and their strictness order. A verdict an
+- The verdicts `allow`, `defer`, `review`, `deny` and their strictness order. A verdict an
   older caller does not know must be handled as `deny` (the Rust enum is
   `#[non_exhaustive]` for this reason).
 - The decision shape `{verdict, rules, reasons, context}`. `rules` holds the ids of the

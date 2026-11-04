@@ -16,11 +16,11 @@ mod registry;
 mod wire;
 
 pub use contract::{
-    Activity, Advisories, Advisory, AlsoDir, Asks, AutoStart, ConsentFile, Detect, ExtraFile,
+    Activity, Advisories, Advisory, AlsoDir, AutoStart, ConsentFile, Detect, ExtraFile,
     GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookTrust,
     HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location,
     McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, Paths, Platform,
-    ProcessSpec, ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, SandboxFormat,
+    ProcessSpec, ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, Reviews, SandboxFormat,
     SandboxSpec, SettingsFile, SettingsReader, ToolRow, Unseen, Version,
 };
 pub use host::claude_code::config_change::proposal_target;
@@ -221,15 +221,15 @@ impl Host {
     }
 
     /// The decision to record and answer for `event` (ADR-025): a `defer` where
-    /// the host has no flow that decides by itself is an `ask`
-    /// ([`Asks::defer_is_ask_on_no_ask`]).
+    /// the host has no flow that decides by itself is a `review`
+    /// ([`Reviews::defer_is_review_on_no_prompt`]).
     #[must_use]
     pub fn decided(self, event: &HookEvent, decision: Decision) -> Decision {
         contract::decided(self.spec(), event, decision)
     }
 
-    /// The decision as this host has to receive it: where the host cannot ask
-    /// ([`HostSpec::asks`]), an `ask` reaches it as a `deny` that says how to
+    /// The decision as this host has to receive it: where the host cannot prompt
+    /// ([`HostSpec::reviews`]), a `review` reaches it as a `deny` that says how to
     /// approve it.
     #[must_use]
     pub fn answer(self, event: &HookEvent, decision: &Decision) -> Decision {
@@ -257,7 +257,7 @@ impl Host {
     }
 
     /// What this host must end up doing when OpenMoat decides `verdict` on
-    /// `call`: where it cannot ask, an `ask` arrives as a blocking `deny`.
+    /// `call`: where it cannot prompt, a `review` arrives as a blocking `deny`.
     #[must_use]
     pub fn seen(self, call: &bench::Call, verdict: Verdict) -> bench::Answer {
         registry::adapter(self).seen(call, verdict)
@@ -288,12 +288,12 @@ pub enum HookEvent {
     /// A tool is about to run.
     #[default]
     PreToolUse,
-    /// A tool is about to run under a hook that ignores `ask`: Cursor `preToolUse`
+    /// A tool is about to run under a hook that ignores `"ask"`: Cursor `preToolUse`
     /// accepts it but runs the call, and `beforeReadFile` takes only allow or deny.
     /// Claude Code in a permission mode that puts no question to a person
     /// (`bypassPermissions`, `dontAsk`) sends this too; there a `defer` stays a
-    /// `defer` ([`Host::decided`] turns it into an `ask` for Cursor only).
-    PreToolUseNoAsk,
+    /// `defer` ([`Host::decided`] turns it into a `review` for Cursor only).
+    PreToolUseNoPrompt,
     /// A host settings file changed on disk (Claude Code only).
     ConfigChange {
         /// Which settings scope changed (`user_settings`, `project_settings`, …).
@@ -445,7 +445,7 @@ mod tests {
     }
 
     /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
-    /// run their own permission flow; hosts that cannot ask do not turn it into a deny.
+    /// run their own permission flow; hosts that cannot prompt do not turn it into a deny.
     #[test]
     fn defer_is_no_decision_for_every_pre_tool_use_host() {
         let defer = Decision::new(Verdict::Defer);

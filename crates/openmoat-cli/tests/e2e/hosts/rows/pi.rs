@@ -28,7 +28,7 @@ pub fn row() -> Row {
         benign: Some(|sb| crate::pi::payload(sb, "bash", &json!({"command": "git status"}))),
         ungoverned: &[|sb| crate::pi::payload(sb, "codemode", &json!({"code": "1"}))],
         malformed: Some((|_| fixture("pi/read-malformed.json"), None)),
-        ask: Some(|sb| {
+        review: Some(|sb| {
             let outside = json!({"path": sb.home.join("notes/todo.txt")});
             crate::pi::payload(sb, "read", &outside)
         }),

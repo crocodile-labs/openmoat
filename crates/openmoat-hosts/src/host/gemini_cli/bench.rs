@@ -56,7 +56,7 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
 }
 
 /// Gemini CLI parses stdout as JSON whatever the exit code: `deny` (or
-/// `block`) blocks, `ask` makes it confirm with the person, anything else is
+/// `block`) blocks, `"ask"` makes it confirm with the person, anything else is
 /// no decision. Without a document, any exit code but 0 and 1 blocks when
 /// the hook printed something (stdout, else stderr, becomes the reason); a
 /// silent hook, a signal or exit 1 is a warning and the call runs.
@@ -64,7 +64,7 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
     let document = exit.document();
     match document["decision"].as_str() {
         Some("deny" | "block") => return Answer::Deny,
-        Some("ask") => return Answer::Ask,
+        Some("ask") => return Answer::Review,
         Some(_) => return Answer::Passthrough,
         None => {}
     }

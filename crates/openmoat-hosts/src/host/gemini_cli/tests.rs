@@ -44,7 +44,7 @@ fn command(command: &str) -> Option<Action> {
 }
 
 /// A search Gemini CLI runs over every workspace directory, which the
-/// payload does not name: what it shows is checked, and it asks at least.
+/// payload does not name: what it shows is checked, and it needs review at least.
 #[expect(clippy::unnecessary_wraps, reason = "compared with an `Option`")]
 fn workspace_wide(action: Action) -> Option<Action> {
     Some(Action::unchecked(
@@ -325,9 +325,9 @@ fn replies_are_gemini_decisions() {
     assert_eq!(doc["decision"], "deny");
     assert_eq!(doc["reason"], "moat: deny [secrets-paths]");
     assert_eq!(doc["systemMessage"], doc["reason"]);
-    // Gemini CLI asks the person itself, so an `ask` stays an `ask`.
-    let ask = host.answer(&event, &Decision::new(Verdict::Ask));
-    assert_eq!(ask.verdict, Verdict::Ask);
-    let doc: Value = serde_json::from_str(&host.render_response(&event, &ask)).unwrap();
+    // Gemini CLI prompts the person itself, so a `review` stays a `review`.
+    let review = host.answer(&event, &Decision::new(Verdict::Review));
+    assert_eq!(review.verdict, Verdict::Review);
+    let doc: Value = serde_json::from_str(&host.render_response(&event, &review)).unwrap();
     assert_eq!(doc["decision"], "ask");
 }

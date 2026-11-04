@@ -40,7 +40,7 @@ HEADER = """\
 # Source: {source}, fetched on {date} by scripts/refresh-top-packages.py.
 # A name is "popular" here only for the near-miss check: an install of a name
 # that is not on this list but is one typo or a common trick away from one
-# that is asks (`package-near-miss`).
+# that is, needs review (`package-near-miss`).
 """
 
 

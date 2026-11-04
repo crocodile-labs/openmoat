@@ -35,7 +35,7 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
     .to_string()
 }
 
-/// Nothing on exit 0 is no decision, an ask becomes OpenClaw's approval
+/// Nothing on exit 0 is no decision, a review becomes OpenClaw's approval
 /// request, exit 2 with a deny blocks, and anything else blocks too.
 pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
     let document = exit.document();
@@ -43,7 +43,7 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
         Some(0) if exit.stdout.trim().is_empty() => Answer::Passthrough,
         Some(0) => match document["decision"].as_str() {
             Some("allow") => Answer::Passthrough,
-            Some("ask") => Answer::Ask,
+            Some("ask") => Answer::Review,
             _ => Answer::Error,
         },
         Some(2) if document["decision"] == "deny" => Answer::Deny,

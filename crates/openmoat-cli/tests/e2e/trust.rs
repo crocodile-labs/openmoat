@@ -51,7 +51,7 @@ fn trust_shows_what_it_trusts_and_writes_nothing_without_a_yes() {
         "adds 2 allow rule(s)",
         "allow repo:deploy: shell: make deploy",
         "allow repo:keys: fs.read: ~/.ssh/**",
-        "its 0 ask and 1 deny rule(s) apply trusted or not",
+        "its 0 review and 1 deny rule(s) apply trusted or not",
         "deny repo:no-push: shell: git push",
         "Trust this file? [y/N]",
         "nothing trusted",
@@ -198,7 +198,7 @@ fn status_and_doctor_say_which_form_applies() {
     }
     assert_eq!(trust(&sb, &[&dir]).status.code(), Some(OK));
     for (_, out) in reports(&sb, &project) {
-        assert!(out.contains("trusted (0 deny, 0 ask, 1 allow)"), "{out}");
+        assert!(out.contains("trusted (0 deny, 0 review, 1 allow)"), "{out}");
     }
     write_policy(&project, &format!("{DEPLOY}# edited\n"));
     for (_, out) in reports(&sb, &project) {

@@ -81,19 +81,29 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
         Base::Unrelated => {
             writeln!(
                 out,
-                "This policy was not made from OpenMoat's default, so no change is offered; \
-                 compare it with `openmoat policy lint` and the default in docs/POLICY.md."
+                "This policy was not made from OpenMoat's default, so no change of the default \
+                 is offered; compare it with `openmoat policy lint` and the default in docs/POLICY.md."
             )?;
-            return Ok(());
+            if !plan.renamed {
+                return Ok(());
+            }
         }
     }
     let count = plan.applicable();
     if count > 0 {
+        let from_default = count - usize::from(plan.renamed);
         writeln!(
             out,
-            "Policy update available: {count} change{} from the OpenMoat {VERSION} default",
-            plural(count)
+            "Policy update available: {from_default} change{} from the OpenMoat {VERSION} default",
+            plural(from_default)
         )?;
+        if plan.renamed {
+            writeln!(
+                out,
+                "and 1 rename: `ask` is now `review` (the rule list `ask:` and the verdict `ask`, \
+                 read the same until you rename them)"
+            )?;
+        }
         let diff = unified_diff(
             Algorithm::Myers,
             &plan.current,
@@ -174,7 +184,12 @@ fn apply(home: &Home, plan: &Plan, out: &mut Deferred) -> Result<()> {
     write_private(&policy_backup, plan.current.as_bytes())?;
     copy_or_remove(&home.policy_base_path(), &base_backup)?;
     write_private(&home.policy_path(), plan.merge.text.as_bytes())?;
-    write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
+    // A policy not made from the default takes only the rename (ADR-053); recording
+    // the assumed 0.3.0 default as its base would make the next upgrade merge the
+    // default into it as if the person had edited every line.
+    if plan.base != Base::Unrelated {
+        write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
+    }
     let binary = crate::install::hook_binary()?;
     crate::install::migrate_hooks::update(home, &binary)?;
     let lock = integrity::repin(home, &binary, HookPins::Keep)?;

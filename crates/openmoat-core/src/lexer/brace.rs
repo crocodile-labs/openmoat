@@ -17,7 +17,7 @@
 //!
 //! A word that would make more than [`MAX_BRACE_WORDS`] words, nest deeper, or
 //! take more than [`MAX_SCAN`] steps is kept as written and reported, so the
-//! command asks. A here-string is not brace-expanded.
+//! command needs review. A here-string is not brace-expanded.
 
 use std::ops::Range;
 
@@ -338,7 +338,7 @@ mod tests {
         tokens.iter().map(ToString::to_string).collect()
     }
 
-    /// The words of `input` after brace expansion, or `None` when it asks.
+    /// The words of `input` after brace expansion, or `None` when it needs review.
     fn argv(input: &str) -> Option<Vec<String>> {
         let (tokens, error) = expand_braces(lex(input).unwrap());
         error.is_none().then(|| texts(&tokens))

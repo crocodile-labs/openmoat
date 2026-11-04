@@ -24,8 +24,8 @@ function home() {
 
 test("allowed calls run; a denied one never reaches the approver or the tool", { skip: !posix }, async () => {
   const h = home();
-  const asked = [];
-  const agent = createAgent({ openmoat, ...h, approve: (call) => (asked.push(call), true) });
+  const offered = [];
+  const agent = createAgent({ openmoat, ...h, approve: (call) => (offered.push(call), true) });
 
   const greet = await agent.step({ name: "shell", input: { command: "echo hello > g.txt && cat g.txt" } });
   assert.deepEqual([greet.ran, greet.output], [true, "hello\n"]);
@@ -33,7 +33,7 @@ test("allowed calls run; a denied one never reaches the approver or the tool", {
   const key = await agent.step({ name: "shell", input: { command: "cat ~/.ssh/id_ed25519" } });
   assert.deepEqual([key.ran, key.verdict], [false, "deny"]);
   assert.match(key.reason, /secret material/);
-  assert.deepEqual(asked, [], "a deny is never offered for approval");
+  assert.deepEqual(offered, [], "a deny is never offered for approval");
 
   const notes = join(h.project, "NOTES.md");
   const wrote = await agent.step({ name: "write_file", input: { path: notes, contents: "hi" } });

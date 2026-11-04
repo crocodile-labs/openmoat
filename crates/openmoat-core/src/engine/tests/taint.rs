@@ -4,12 +4,12 @@ use super::*;
 use crate::realpath::MapPathResolver;
 use crate::repo::RepoPolicy;
 
-const POLICY: &str = "version: 1\ndefaults: { '*': ask, net: deny }\n\
+const POLICY: &str = "version: 1\ndefaults: { '*': review, net: deny }\n\
      deny:\n  - id: metadata\n    net: ['169.254.*']\n\
      allow:\n  - id: project-fs\n    fs.write: ['${project}/**']\n\
      \x20 - id: registries\n    net: ['api.github.com']\n\
      \x20 - id: mcp\n    mcp: ['mcp__github__*']\n\
-     ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n";
+     review:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n";
 
 fn taint_of(c: &CompiledPolicy<'_>, history: &[Action]) -> Taint {
     let mut taint = Taint::default();
@@ -51,25 +51,25 @@ fn fetch(url: &str) -> Action {
 }
 
 #[test]
-fn a_secret_read_makes_allowed_network_ask() {
+fn a_secret_read_makes_allowed_network_need_review() {
     let d = decide_after(
         &[read("~/.ssh/id_rsa")],
         &net("https://api.github.com/gists"),
     );
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
     assert_eq!(d.rules, ["session-taint"]);
     assert!(d.reasons[0].contains("read /h/.ssh/id_rsa"), "{d:?}");
     assert!(d.context.iter().any(|c| c.contains("api.github.com")));
 }
 
 #[test]
-fn a_secret_read_makes_mcp_calls_and_fetches_ask() {
+fn a_secret_read_makes_mcp_calls_and_fetches_need_review() {
     let history = [read("/h/.ssh/config")];
     for action in [
         Action::mcp("mcp__github__create_gist"),
         fetch("https://api.github.com/x"),
     ] {
-        assert_eq!(decide_after(&history, &action).verdict, Verdict::Ask);
+        assert_eq!(decide_after(&history, &action).verdict, Verdict::Review);
     }
 }
 
@@ -109,11 +109,11 @@ fn a_brokered_secret_may_still_go_to_its_own_host() {
         host: None,
     });
     let d = c.with_taint(c.decide(&own), &own, &NoResolver, &taint);
-    assert_eq!(d.verdict, Verdict::Ask, "a second secret has no host");
+    assert_eq!(d.verdict, Verdict::Review, "a second secret has no host");
 }
 
 #[test]
-fn untrusted_content_makes_protected_writes_ask() {
+fn untrusted_content_makes_protected_writes_need_review() {
     for source in [
         fetch("https://evil.example/readme"),
         Action::mcp("mcp__x__y"),
@@ -124,7 +124,7 @@ fn untrusted_content_makes_protected_writes_ask() {
             "/p/web/package.json",
         ] {
             let d = decide_after(std::slice::from_ref(&source), &write(path));
-            assert_eq!(d.verdict, Verdict::Ask, "{path}");
+            assert_eq!(d.verdict, Verdict::Review, "{path}");
             assert_eq!(d.rules, ["session-taint"]);
             assert!(d.reasons[0].contains("untrusted content"), "{d:?}");
         }
@@ -133,7 +133,7 @@ fn untrusted_content_makes_protected_writes_ask() {
 
 /// The build and test definitions of every ecosystem the default policy runs.
 #[test]
-fn untrusted_content_makes_build_definitions_of_every_ecosystem_ask() {
+fn untrusted_content_makes_build_definitions_of_every_ecosystem_need_review() {
     let history = [fetch("https://evil.example/readme")];
     for path in [
         "/p/CMakeLists.txt",
@@ -160,7 +160,7 @@ fn untrusted_content_makes_build_definitions_of_every_ecosystem_ask() {
         "/p/.yarnrc.yml",
     ] {
         let d = decide_after(&history, &write(path));
-        assert_eq!(d.verdict, Verdict::Ask, "{path}");
+        assert_eq!(d.verdict, Verdict::Review, "{path}");
         assert_eq!(d.rules, ["session-taint"], "{path}");
         assert_eq!(
             decide_after(&[], &write(path)).verdict,
@@ -208,12 +208,15 @@ fn a_policy_adds_protected_writes_and_keeps_the_built_in_ones() {
     let taint = taint_of(&c, &history);
     let after = |action: &Action| c.with_taint(c.decide(action), action, &NoResolver, &taint);
     let d = after(&deploy);
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
     assert_eq!(d.rules, ["session-taint"]);
-    assert_eq!(after(&write("/p/web/package.json")).verdict, Verdict::Ask);
+    assert_eq!(
+        after(&write("/p/web/package.json")).verdict,
+        Verdict::Review
+    );
     assert_eq!(after(&write("/p/src/main.rs")).verdict, Verdict::Allow);
     let clean = c.with_taint(c.decide(&deploy), &deploy, &NoResolver, &Taint::default());
-    assert_eq!(clean.verdict, Verdict::Allow, "no taint, no ask");
+    assert_eq!(clean.verdict, Verdict::Allow, "no taint, no review");
 }
 
 #[test]
@@ -222,7 +225,7 @@ fn shell_writes_and_patches_are_writes_too() {
     let patch = Action::Patch {
         writes: vec!["/p/src/lib.rs".into(), "/p/build.rs".into()],
     };
-    assert_eq!(decide_after(&history, &patch).verdict, Verdict::Ask);
+    assert_eq!(decide_after(&history, &patch).verdict, Verdict::Review);
     let d = decide_after(&history, &shell("echo x > .husky/pre-commit"));
     assert!(d.rules.contains(&"session-taint".to_owned()), "{d:?}");
 }
@@ -267,12 +270,12 @@ fn exposure_follows_a_link_into_secret_material() {
 #[test]
 fn a_repo_policy_secrets_paths_rule_taints_the_session() {
     let user = policy(
-        "version: 1\ndefaults: { '*': ask, net: deny }\n\
-         ask:\n  - id: project-reads\n    fs.read: ['${project}/**']\n\
+        "version: 1\ndefaults: { '*': review, net: deny }\n\
+         review:\n  - id: project-reads\n    fs.read: ['${project}/**']\n\
          allow:\n  - id: registries\n    net: ['api.github.com']\n",
     );
     let repo = RepoPolicy::parse(
-        "version: 1\nask:\n  - id: secrets-paths\n    fs.read: ['/p/secrets/**']\n",
+        "version: 1\nreview:\n  - id: secrets-paths\n    fs.read: ['/p/secrets/**']\n",
     )
     .unwrap();
     let merged = repo.merge(&user, false).unwrap();
@@ -289,7 +292,7 @@ fn a_repo_policy_secrets_paths_rule_taints_the_session() {
         &NoResolver,
         &taint,
     );
-    assert_eq!(after.verdict, Verdict::Ask);
+    assert_eq!(after.verdict, Verdict::Review);
     assert_eq!(after.rules, ["session-taint"]);
 }
 

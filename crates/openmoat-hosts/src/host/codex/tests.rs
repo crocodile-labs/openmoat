@@ -12,8 +12,8 @@ fn an_allow_is_no_output_and_every_stop_is_a_deny_with_a_reason() {
         let answer = Host::Codex.answer(&event, &Decision::new(verdict));
         assert_eq!(Host::Codex.render_response(&event, &answer), "", "{verdict:?}");
     }
-    // Codex cannot ask, and a deny needs a non-empty reason.
-    for verdict in [Verdict::Ask, Verdict::Deny] {
+    // Codex cannot prompt, and a deny needs a non-empty reason.
+    for verdict in [Verdict::Review, Verdict::Deny] {
         let answer = Host::Codex.answer(&event, &Decision::new(verdict));
         let doc: Value =
             serde_json::from_str(&Host::Codex.render_response(&event, &answer)).unwrap();

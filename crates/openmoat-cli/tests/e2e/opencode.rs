@@ -4,7 +4,7 @@
 //! OpenCode before 1.3.4 is not set up, `status` and `doctor` name the hook a
 //! version runs through, and a project's plugins, configuration and removal
 //! of OpenMoat's plugin are warned about. What every host shares (uninstall,
-//! the lock, MCP pins, asks, the person's own file turning the plugin off) is
+//! the lock, MCP pins, reviews, the person's own file turning the plugin off) is
 //! the suite in `hosts/`.
 //!
 //! The payloads follow the hooks and tool arguments of the OpenCode 1.19.4 and
@@ -104,7 +104,7 @@ fn writes_to_opencodes_own_files_are_denied() {
     }
 }
 
-/// OpenCode 1 cannot ask: a project plugin write asks, which reaches OpenCode
+/// OpenCode 1 cannot prompt: a project plugin write needs review, which reaches OpenCode
 /// as a deny that says how to approve it.
 #[test]
 fn a_project_plugin_write_is_a_deny_that_says_how_to_approve() {
@@ -268,10 +268,10 @@ pub(crate) fn payload2(sb: &Sandbox, tool: &str, input: &Value) -> String {
 
 /// OpenCode 2's tools: its own files and the ways to switch OpenMoat off are
 /// denied, a secret named with `~` (which OpenCode 2 expands) is denied, a
-/// project file is allowed, and an ask stays an ask the plugin puts to the
+/// project file is allowed, and a review stays a review the plugin puts to the
 /// person.
 #[test]
-fn opencode_2_calls_are_decided_and_asks_reach_the_person() {
+fn opencode_2_calls_are_decided_and_reviews_reach_the_person() {
     let sb = sandbox();
     let dir = sb.home.join(CONFIG_DIR);
     let mut denied = vec![

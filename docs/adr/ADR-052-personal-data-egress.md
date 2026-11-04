@@ -46,7 +46,7 @@ for `wasm32`.
    in one send. One to a few addresses are everyday work; ten distinct people in one
    request is a list of people. That still is not near-certain exfiltration (a CODEOWNERS
    sync, a mailing-list tool, test fixtures), so **the default policy names no rule for
-   it** and it changes no decision unless a person adds one (`ask` or `deny`).
+   it** and it changes no decision unless a person adds one (`review` or `deny`).
 4. **An atom counts only where a rule names it.** The engine drops a `@pii-egress` atom
    that no rule of the policy matches, instead of giving it the catch-all verdict like
    other atoms. So the classes are configured with ordinary shell rules (on: a rule in any

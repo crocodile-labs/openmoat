@@ -2,12 +2,12 @@
 //! session that ran, folded into the [`Taint`] the core tightens the next call
 //! with. The log is OpenMoat's, not the agent's, so the agent cannot reset it.
 //!
-//! A person can answer a taint ask: a grant for that exact call, made with
+//! A person can answer a taint review: a grant for that exact call, made with
 //! `moat allow` after the session last read untrusted content, stands for it
 //! ([`answered`]) until the session reads more. So does their answer in the
 //! agent to an earlier write of the same file, once the file shows that write
 //! ran (ADR-048). A grant made before that read, or a taint from a secret the
-//! session read, still asks.
+//! session read, still needs review.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -267,14 +267,14 @@ pub struct Call<'a> {
 }
 
 /// `tainted` is `untainted` tightened by the session's taint. When it is a
-/// taint ask a person can answer, and they did: a grant for this exact call,
+/// taint review a person can answer, and they did: a grant for this exact call,
 /// made after the session last read untrusted content, gives `untainted` back;
 /// so does an earlier write of the same files in this session that the person
 /// let run after that read ([`earlier_write_ran`], ADR-048). Taint from a
 /// secret the session read is never answered this way, and a grant or write
 /// from before the latest untrusted read did not see that content.
 ///
-/// A taint ask that a grant could answer, and has not, says how to give one.
+/// A taint review that a grant could answer, and has not, says how to give one.
 pub fn answered(
     call: &Call<'_>,
     policy: &CompiledPolicy<'_>,
@@ -286,11 +286,11 @@ pub fn answered(
     let Some(last_read) = session.untrusted_last_ms else {
         return Ok(tainted);
     };
-    if tainted.verdict != Verdict::Ask || !tainted.rules.iter().any(|r| r == TAINT_RULE) {
+    if tainted.verdict != Verdict::Review || !tainted.rules.iter().any(|r| r == TAINT_RULE) {
         return Ok(tainted);
     }
     // Only untrusted content may be answered: the secrets alone must not make
-    // this call ask.
+    // this call need review.
     let secrets_only = Taint {
         secrets: session.taint.secrets.clone(),
         untrusted: None,
@@ -318,7 +318,7 @@ pub fn answered(
         project: &project,
     };
     let exact = approvals::approvable(call.action, Some(call.cwd), call.user_home)
-        .and_then(|asked| grants.newest(scope, &asked, now_ms).cloned());
+        .and_then(|reviewed| grants.newest(scope, &reviewed, now_ms).cloned());
     if exact.as_ref().is_some_and(|g| fresh(&g)) {
         let mut decision = untainted;
         decision.reasons.push(
@@ -345,10 +345,10 @@ pub fn answered(
         return Ok(decision);
     }
     let mut decision = tainted;
-    // Hosts that cannot ask are told how already (`Host::answer`).
-    if call.host.spec().asks.allow_last_hint {
+    // Hosts that cannot prompt are told how already (`Host::answer`).
+    if call.host.spec().reviews.allow_last_hint {
         decision.reasons.push(
-            "to stop asking for this in this session, run `openmoat allow --last` in a terminal"
+            "to stop these reviews in this session, run `openmoat allow --last` in a terminal"
                 .to_owned(),
         );
     }
@@ -360,7 +360,7 @@ pub fn answered(
 /// (ADR-048): the session's newest write of the file (ADR-039's record) was
 /// recorded after that read, sent the whole file, would change it, and the
 /// file holds that content now. A write to a protected path after untrusted
-/// content runs only when a person approves its ask (or granted it), so their
+/// content runs only when a person approves its review (or granted it), so their
 /// answer stands for this write of the same file too. The reason to show when
 /// it does; `None` when it does not.
 ///
@@ -424,9 +424,9 @@ fn after_read(granted_ms: i64, seen_row: Option<i64>, read_ms: i64, read_row: Op
     }
 }
 
-/// Whether a call decided `verdict` may have run: it was allowed, or it asked
-/// a host that can ask (Codex turns an ask into a deny). A person may have
-/// declined an ask; that is not recorded, so it counts as run.
+/// Whether a call decided `verdict` may have run: it was allowed, or it was held
+/// for review by a host that can prompt (Codex turns a review into a deny). A person may have
+/// declined a review; that is not recorded, so it counts as run.
 pub(crate) fn ran(host: Host, verdict: Verdict) -> bool {
     host.answer(&HookEvent::PreToolUse, &Decision::new(verdict))
         .verdict

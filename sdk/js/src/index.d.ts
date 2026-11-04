@@ -1,12 +1,12 @@
 // Types of @openmoat/sdk (docs/SDK.md, ADR-046). The shapes are the JSON forms
 // of the Rust crate openmoat-sdk; an unknown field is an error, never ignored.
 
-/** `allow < defer < ask < deny`.
+/** `allow < defer < review < deny`.
  * - `deny`: the call must not run; no approval can lift it.
- * - `ask`: it runs only after a person approves this exact call.
+ * - `review` (called `ask` before 0.14.0, ADR-053): it runs only after a person approves this exact call.
  * - `defer`: your own permission flow decides; OpenMoat neither objects nor vouches.
  * - `allow`: it may run. */
-export type Verdict = "allow" | "defer" | "ask" | "deny";
+export type Verdict = "allow" | "defer" | "review" | "deny";
 
 /** Arguments of an MCP or unknown tool call that name files, hosts or commands,
  * so the usual rules apply to them too. */

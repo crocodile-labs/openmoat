@@ -1,5 +1,5 @@
 use super::merge::{Change, merge};
-use super::{DEFAULT_V0_3_0, line_endings_of};
+use super::{DEFAULT_V0_3_0, line_endings_of, rename};
 use crate::integrity::sha256_hex;
 
 const BASE: &str = "defaults:\n  net: deny\n\nallow:\n  - id: a\n    fs.write: [x]\n  - id: b\n";
@@ -96,13 +96,29 @@ fn one_upgrade_leaves_only_the_persons_conflicts() {
     let fs_write = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**"]"#;
     let mine = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**", "!${project}/keys/**"]"#;
     let rule = "  - id: my-rule\n    shell: [\"make deploy\"]\n";
+    // The 0.3.0 default says `ask:`; `Plan` renames both sides before merging.
     let edited = DEFAULT_V0_3_0
         .replace(fs_write, mine)
         .replace("ask:\n", &format!("ask:\n{rule}"));
-    let first = merge(DEFAULT_V0_3_0, &edited, openmoat_core::DEFAULT_POLICY);
+    let (base, base_renamed) = rename::old_names(DEFAULT_V0_3_0);
+    let (edited, renamed) = rename::old_names(&edited);
+    assert!(base_renamed && renamed);
+    let first = merge(&base, &edited, openmoat_core::DEFAULT_POLICY);
     assert!(first.text.contains(mine) && first.text.contains(rule));
     assert!(first.conflicts().count() > 0);
     let again = merge(&first.base, &first.text, openmoat_core::DEFAULT_POLICY);
     assert_eq!(again.applied().count(), 0);
     assert_eq!(again.text, first.text);
+}
+
+/// ADR-053: a 0.3.0 policy the person never changed upgrades to the current
+/// default exactly, `ask:` renamed with the rest, nothing left to offer.
+#[test]
+fn an_untouched_old_default_upgrades_to_the_new_one_renamed() {
+    let (base, _) = rename::old_names(DEFAULT_V0_3_0);
+    let merged = merge(&base, &base, openmoat_core::DEFAULT_POLICY);
+    assert_eq!(merged.conflicts().count(), 0);
+    assert_eq!(merged.text, openmoat_core::DEFAULT_POLICY);
+    let p = openmoat_core::Policy::parse(&merged.text).unwrap();
+    assert!(!p.old_names.any());
 }

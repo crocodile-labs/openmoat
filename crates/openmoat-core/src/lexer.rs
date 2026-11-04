@@ -22,7 +22,7 @@
 //!   attached to the containing word so it can be classified as its own command.
 //!
 //! Anything the lexer cannot make sense of is an error; the engine maps lexer
-//! errors to `ask`, never to `allow`. Brace expansion (`brace.rs`) is a separate
+//! errors to `review`, never to `allow`. Brace expansion (`brace.rs`) is a separate
 //! step the classifier runs on the tokens, so policy patterns are lexed as written.
 
 mod ansi_c;
@@ -135,7 +135,7 @@ pub enum Token {
     },
 }
 
-/// Why a command line could not be tokenised. Any of these makes the action `ask`.
+/// Why a command line could not be tokenised. Any of these makes the action `review`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum LexError {
@@ -159,7 +159,7 @@ pub enum LexError {
     AnsiC,
 }
 
-/// Upper bound on input size; larger commands are refused (and therefore `ask`).
+/// Upper bound on input size; larger commands are refused (and therefore `review`).
 pub const MAX_COMMAND_BYTES: usize = 64 * 1024;
 
 /// Tokenise a command line.

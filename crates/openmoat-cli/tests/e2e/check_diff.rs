@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common::{ASK, DENY, OK, Sandbox, USAGE, json, output, stdout, text};
+use crate::common::{DENY, OK, REVIEW, Sandbox, USAGE, json, output, stdout, text};
 
 fn workflow_edit() -> String {
     "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n\
@@ -22,7 +22,7 @@ fn a_diff_on_stdin_reports_each_level_with_its_exit_code() {
         sb.moat_stdin(&["policy", "check-diff", "--format", format], diff)
     };
     let out = check(&workflow_edit(), "text");
-    assert_eq!(out.status.code(), Some(ASK), "{}", text(&out));
+    assert_eq!(out.status.code(), Some(REVIEW), "{}", text(&out));
     assert!(
         stdout(&out).starts_with("review  .github/workflows/ci.yml"),
         "{}",

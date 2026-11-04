@@ -132,7 +132,7 @@ fn a_shell_grant_applies_only_in_the_project_it_was_approved_in() {
     };
     assert!(g.matches(from, &read, NOW));
 
-    // Unless it also answers the session's taint asks: that is project-bound.
+    // Unless it also answers the session's taint reviews: that is project-bound.
     g.cover_taint(at("cursor", "c1"), &read);
     assert!(g.covering_taint(at("cursor", "c1"), NOW).is_some());
     assert!(g.covering_taint(from, NOW).is_none());
@@ -367,10 +367,10 @@ fn an_approved_near_miss_install_also_allows_its_near_miss_atom() {
 }
 
 /// A file grant holds only while its file resolves where it did when approved:
-/// a granted file replaced by a symlink to another file is asked about again.
+/// a granted file replaced by a symlink to another file needs review again.
 #[cfg(unix)]
 #[test]
-fn a_granted_file_swapped_for_a_symlink_is_asked_again() {
+fn a_granted_file_swapped_for_a_symlink_needs_review_again() {
     let dir = tempfile::tempdir().unwrap();
     let root = crate::context::path_string(&fs::canonicalize(dir.path()).unwrap());
     let (file, elsewhere) = (format!("{root}/notes.txt"), format!("{root}/bashrc"));
@@ -393,10 +393,10 @@ fn a_granted_file_swapped_for_a_symlink_is_asked_again() {
 }
 
 /// A directory on the way to a granted file swapped for a symlink
-/// (`proj/sub` → `~/.ssh`) is asked about again too.
+/// (`proj/sub` → `~/.ssh`) needs review again too.
 #[cfg(unix)]
 #[test]
-fn a_granted_file_whose_directory_is_swapped_for_a_symlink_is_asked_again() {
+fn a_granted_file_whose_directory_is_swapped_for_a_symlink_needs_review_again() {
     let dir = tempfile::tempdir().unwrap();
     let root = crate::context::path_string(&fs::canonicalize(dir.path()).unwrap());
     let (sub, ssh) = (format!("{root}/proj/sub"), format!("{root}/.ssh"));
@@ -421,7 +421,7 @@ fn a_granted_file_whose_directory_is_swapped_for_a_symlink_is_asked_again() {
 /// "the file itself".
 #[cfg(unix)]
 #[test]
-fn a_granted_file_that_no_longer_resolves_is_asked_again() {
+fn a_granted_file_that_no_longer_resolves_needs_review_again() {
     let dir = tempfile::tempdir().unwrap();
     let root = crate::context::path_string(&fs::canonicalize(dir.path()).unwrap());
     let file = format!("{root}/notes.txt");

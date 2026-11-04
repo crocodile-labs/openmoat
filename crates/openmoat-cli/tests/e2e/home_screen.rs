@@ -1,4 +1,4 @@
-//! `moat` with no subcommand: health, then drift and asks answered at a terminal.
+//! `moat` with no subcommand: health, then drift and reviews answered at a terminal.
 
 use std::fs;
 
@@ -30,7 +30,7 @@ fn lock(sb: &Sandbox) -> String {
 
 #[test]
 fn nothing_needs_a_person() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let out = output(&mut sb.command(), Some(""));
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = text(&out);
@@ -41,7 +41,7 @@ fn nothing_needs_a_person() {
 
 #[test]
 fn drift_accepted_with_y_repins() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     edit_policy(&sb);
     let shown = home_as_person(&sb, "y\n");
     assert!(shown.contains("policy.yaml"), "{shown}");
@@ -53,7 +53,7 @@ fn drift_accepted_with_y_repins() {
 
 #[test]
 fn drift_declined_changes_nothing() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     edit_policy(&sb);
     let before = lock(&sb);
     let shown = home_as_person(&sb, "n\n");
@@ -63,8 +63,8 @@ fn drift_declined_changes_nothing() {
 }
 
 #[test]
-fn ask_allowed_once_grants_the_session() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+fn review_allowed_once_grants_the_session() {
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     assert_eq!(verdict(&sb, "s1"), "ask");
     let shown = home_as_person(&sb, "o\n");
     assert!(
@@ -78,15 +78,15 @@ fn ask_allowed_once_grants_the_session() {
     assert!(shown.contains("`claude --continue` resumes"), "{shown}");
     assert_eq!(verdict(&sb, "s1"), "allow");
     assert_eq!(verdict(&sb, "s2"), "ask", "grants are per session");
-    // Answered: s2's ask is the newest now, so it is the one shown.
+    // Answered: s2's review is the newest now, so it is the one shown.
     assert!(home_as_person(&sb, "n\n").contains("session s2"));
 }
 
 /// `[a]lways` says what the permanent rule will match before writing it: a shell
 /// rule also matches extra arguments, a file rule only the exact path.
 #[test]
-fn ask_allowed_always_shows_what_the_rule_matches() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+fn review_allowed_always_shows_what_the_rule_matches() {
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     assert_eq!(verdict(&sb, "s1"), "ask");
     let shown = home_as_person(&sb, "a\n");
     assert!(
@@ -124,7 +124,7 @@ fn ask_allowed_always_shows_what_the_rule_matches() {
 
 #[test]
 fn without_a_terminal_nothing_changes() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     assert_eq!(verdict(&sb, "s1"), "ask");
     let out = output(&mut sb.command(), Some("o\n"));
     let shown = text(&out);
@@ -145,8 +145,8 @@ fn without_a_terminal_nothing_changes() {
 }
 
 #[test]
-fn file_ask_is_shown_and_allowed_once() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+fn file_review_is_shown_and_allowed_once() {
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let notes = sb.home.join("notes.md");
     let payload = serde_json::json!({
         "session_id": "s1", "cwd": sb.project().to_string_lossy(),
@@ -158,7 +158,7 @@ fn file_ask_is_shown_and_allowed_once() {
     assert_eq!(read(), "ask");
     let shown = home_as_person(&sb, "o\n");
     assert!(
-        shown.contains("today: 1 decision, 0 denied, 1 asked"),
+        shown.contains("today: 1 decision, 0 denied, 1 reviewed"),
         "{shown}"
     );
     assert!(shown.contains("Claude Code asked to read"), "{shown}");

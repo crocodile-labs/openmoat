@@ -31,7 +31,7 @@ pub fn lint(args: &LintArgs) -> Result<Code> {
     for warning in &warnings {
         writeln!(out, "warning: {warning}")?;
     }
-    let (deny, allow, ask) = policy.rule_count();
+    let (deny, allow, review) = policy.rule_count();
     let suffix = match warnings.len() {
         0 => String::new(),
         1 => ", 1 warning".to_owned(),
@@ -39,7 +39,7 @@ pub fn lint(args: &LintArgs) -> Result<Code> {
     };
     writeln!(
         out,
-        "ok: {} ({deny} deny, {allow} allow, {ask} ask groups{suffix})",
+        "ok: {} ({deny} deny, {allow} allow, {review} review groups{suffix})",
         path.display()
     )?;
     Ok(Code::Ok)

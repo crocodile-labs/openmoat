@@ -6,7 +6,7 @@
 //! `NAME`, or matching it as a regular expression with `-r`. A policy pattern
 //! cannot read a regular expression, so the classifier does: for each of
 //! OpenMoat's own process names the pattern could match, it emits
-//! `@kills <name>`, which the `stops-openmoat` rule asks for.
+//! `@kills <name>`, which the `stops-openmoat` rule holds for review.
 //!
 //! A pattern cannot match a name when one of its literal runs (the text
 //! between metacharacters, less a character a quantifier makes optional) is
@@ -33,7 +33,7 @@ pub(super) fn note(argv: &[String], program: &str, sink: &mut Sink) -> Result<()
         return Ok(());
     }
     // Every word that is not an option is read as a pattern, option values
-    // included (`-u me`): a value that could match the names only adds an ask.
+    // included (`-u me`): a value that could match the names only adds a review.
     let patterns = argv[1..].iter().filter(|w| !w.starts_with('-'));
     for name in OWN_NAMES {
         if patterns.clone().any(|p| could_match(p, name)) {

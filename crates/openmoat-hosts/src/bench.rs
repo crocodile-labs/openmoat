@@ -105,8 +105,8 @@ pub enum Answer {
     /// protocol); what the host then does is its failure behaviour
     /// ([`HostSpec::on_hook_failure`](crate::HostSpec::on_hook_failure)).
     Error,
-    /// The host asks the person.
-    Ask,
+    /// The host puts the call to the person for review.
+    Review,
     /// The host blocks the call.
     Deny,
 }
@@ -117,7 +117,7 @@ impl From<Verdict> for Answer {
             Verdict::Allow => Self::Allow,
             // ADR-025: no decision, the host's own permission flow runs.
             Verdict::Defer => Self::Passthrough,
-            Verdict::Ask => Self::Ask,
+            Verdict::Review => Self::Review,
             // `Deny`, and any verdict added to the core later: the strictest.
             _ => Self::Deny,
         }
@@ -132,7 +132,7 @@ impl Answer {
             Self::Allow => "allow",
             Self::Passthrough => "passthrough",
             Self::Error => "error",
-            Self::Ask => "ask",
+            Self::Review => "review",
             Self::Deny => "deny",
         }
     }

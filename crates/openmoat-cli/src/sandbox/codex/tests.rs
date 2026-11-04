@@ -238,7 +238,7 @@ fn network_lists_domains_and_keeps_addresses_unlisted() {
     );
     assert!(
         net["domains"].get("localhost").is_none(),
-        "an ask is a deny"
+        "a review is a deny"
     );
     let text = render(&out);
     assert!(!text.contains("169.254"), "{text}");
@@ -425,7 +425,7 @@ fn git_safe_bare_repository_follows_the_users_entries_and_is_pinned() {
 }
 
 /// Files run later (`runs-later`) get no deny glob, which would make them
-/// unreadable; the hook asks, and the profile lists them.
+/// unreadable; the hook holds them for review, and the profile lists them.
 #[test]
 fn files_run_later_are_no_deny_glob() {
     let out = generated(DEFAULT_POLICY);

@@ -4,7 +4,7 @@
 //! decided by the core engine as an `fs.write` inside a project, with session
 //! taint set as after reading untrusted content: a pull request is content
 //! nobody on this machine wrote. So the default policy's `deny` rules
-//! (`kernel-self`, `secrets-paths`) give `deny`, and its `ask` rules and the
+//! (`kernel-self`, `secrets-paths`) give `deny`, and its `review` rules and the
 //! files session taint protects (CI, hooks, build and package files, agent
 //! settings) give `review`. No path list lives here.
 //!
@@ -44,7 +44,7 @@ const SUBMODULE_MODE: &str = "160000";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
-    /// A person should look before it is merged: the policy asks for it.
+    /// A person should look before it is merged: the policy holds it for review.
     Review,
     /// The policy denies it.
     Deny,
@@ -61,7 +61,7 @@ impl Level {
     fn of(verdict: Verdict) -> Option<Self> {
         match verdict {
             Verdict::Deny => Some(Self::Deny),
-            Verdict::Ask => Some(Self::Review),
+            Verdict::Review => Some(Self::Review),
             _ => None,
         }
     }

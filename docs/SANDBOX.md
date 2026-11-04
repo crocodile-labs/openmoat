@@ -207,7 +207,7 @@ on Linux only in the working directory's own repository, `info/attributes` and
 submodules aside (above).
 Codex keeps `.git` read-only: commit outside its sandbox (Codex asks to).
 A `.git` file or directory below the project root (`sub/.git` holding `gitdir: …`)
-is a repository git follows, so the hook asks before writing one. No host sandbox
+is a repository git follows, so the hook holds a write of one for review. No host sandbox
 can deny it without also denying the root's `.git`, so it stays writable for sandboxed
 commands under Claude Code (on macOS its hooks and config aside), Codex
 (`codex.nested-git`) and Cursor. `openmoat run` keeps it unwritable on macOS, and
@@ -284,8 +284,8 @@ openmoat run --write ~/.claude --write ~/.claude.json -- claude
 The two `--write` paths are Claude Code's own state, which it must write to run. They
 also hold what Claude Code starts in its next session, outside any sandbox (MCP servers
 in `~/.claude.json`, plugins in `~/.claude/plugins/`), and in this tier every command the
-agent runs shares that grant. The hook asks before the agent's own tools write one
-(`runs-later`); a script it runs is not asked. Where the agent's own sandbox is
+agent runs shares that grant. The hook holds the agent's own tools' writes of one for review
+(`runs-later`); a script it runs is not held. Where the agent's own sandbox is
 available, the Standard tier keeps its commands out of the home altogether. On Linux
 without a network namespace (below) `openmoat run` refuses every `--write` path
 outside the project, `~/.claude` included, which holds `settings.json`: install
@@ -349,14 +349,14 @@ bubblewrap.
   `.pi/mcp.json`, `.pi/settings.json`, OpenCode's `opencode.json[c]` and its
   `.opencode/` plugins, tools and `opencode.json[c]`, at any depth. On macOS Seatbelt denies them
   after every grant, in either case on a case-insensitive disk (`.MCP.json` too), so
-  this holds inside a `--write` path too, and also for a write the hook asked about
+  this holds inside a `--write` path too, and also for a write the hook held for review
   and the person allowed: change one outside `openmoat run`. The folders that hold
   them directly in the project (`.github`, `.pi`, `.openclaw`, `.opencode`, besides `.claude`,
   `.codex` and `.cursor`) cannot be created, renamed or removed there either, since a
   folder renamed away and back would carry a hook written under the other name; create
   a missing `.github` outside `openmoat run`. CI files and commit-hook managers' files
   (`.github/workflows/`, `.husky/`, …) stay writable, since installs write them; the
-  hook asks before the agent's own tools write one (`runs-later`). On Linux, where the
+  hook holds the agent's own tools' writes of them for review (`runs-later`). On Linux, where the
   agent gets a network namespace, each of them that exists directly in the project
   when the agent starts is bound read-only for the session, as are the agents' hook
   settings there (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`,

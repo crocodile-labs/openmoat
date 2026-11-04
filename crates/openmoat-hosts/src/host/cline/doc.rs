@@ -14,7 +14,7 @@ const TOOLS: &[ToolRow] = &[
     ToolRow::new(
         "`run_commands`",
         "`commands` (lines, or `{command, args}` run without a shell), in every shape Cline \
-         accepts; several are decided together, each in a subshell, and asked about when one \
+         accepts; several are decided together, each in a subshell, and held for review when one \
          cannot be read alone",
         "`Shell` (`ForeignShell` for PowerShell on Windows)",
     ),
