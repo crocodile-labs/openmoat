@@ -95,7 +95,7 @@ pub const CC7_2: Control = control(
     "CC7.2",
     "Monitors system components for anomalies that indicate malicious acts",
 );
-pub const CC8_1: Control = control(Soc2, "CC8.1", "Authorizes and approves changes");
+pub const CC8_1: Control = control(Soc2, "CC8.1", "Authorises and approves changes");
 pub const A5_14: Control = control(Iso27001, "A.5.14", "Information transfer");
 pub const A5_17: Control = control(Iso27001, "A.5.17", "Authentication information");
 pub const A8_3: Control = control(Iso27001, "A.8.3", "Information access restriction");
