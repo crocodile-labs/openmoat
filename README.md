@@ -23,7 +23,7 @@ or `deny` from what the call actually opens, runs and connects to, and records e
 decision in a local, hash-chained audit log.
 
 It is for developers who let Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
-pi, Gemini CLI, OpenCode or Hermes Agent run commands on their own machine and want one set of rules across
+pi, Gemini CLI, OpenCode, Hermes Agent or the Cline CLI run commands on their own machine and want one set of rules across
 them. It is one Rust binary (`openmoat`) for macOS, Linux and Windows. No AI model
 decides, and nothing leaves your machine unless you export it.
 
@@ -51,6 +51,7 @@ covers what they leave out:
   <a href="#supported-agents"><img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini CLI"></a>
   <a href="#supported-agents"><img src="https://img.shields.io/badge/OpenCode-211E1E?style=flat-square" alt="OpenCode"></a>
   <a href="#supported-agents"><img src="https://img.shields.io/badge/Hermes_Agent-3D2B6B?style=flat-square" alt="Hermes Agent"></a>
+  <a href="#supported-agents"><img src="https://img.shields.io/badge/Cline_CLI-1F6FEB?style=flat-square" alt="Cline CLI"></a>
   <br>
   <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS"></a>
   <a href="docs/INSTALL.md"><img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux"></a>
@@ -122,6 +123,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 | Gemini CLI | `BeforeTool` hook in `settings.json` | hook only | `gemini-cli` |
 | OpenCode | OpenMoat's plugin on OpenCode 1's `tool.execute.before` (1.3.4 and later) and OpenCode 2's `execute.before` hook | hook only | `opencode` |
 | Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
+| Cline CLI | OpenMoat's `PreToolUse` hook script in `~/.cline/hooks` | hook only | `cline` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 
@@ -377,8 +379,8 @@ The main gaps:
 - **A deferred call runs if your agent lets it.** In auto-approve modes
   (`--dangerously-skip-permissions`, Run Everything) only `deny` and `ask` stop a call.
 - **Outside an OS sandbox, the hook decides alone.** For hook-only agents (OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, and Claude Code and Cursor on native
-  Windows), an
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, and Claude Code and
+  Cursor on native Windows), an
   allowed call runs with your permissions, so a classifier mistake is a bypass. Claude
   Code's sandbox covers only `Bash`, `PowerShell` and `Monitor`; its file tools,
   `WebFetch` and MCP servers run outside it. Cursor runs some commands outside its

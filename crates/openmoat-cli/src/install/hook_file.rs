@@ -63,7 +63,9 @@ pub fn unless_fails_open(
 pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -> Result<Outcome> {
     // A file OpenMoat owns whole is not JSON, nor is a YAML one.
     match config.layout {
-        HookLayout::Owned(file) => return owned::install(home, config, file, binary, dry_run),
+        HookLayout::Owned(file) | HookLayout::Script(file) => {
+            return owned::install(home, config, file, binary, dry_run);
+        }
         HookLayout::Yaml(layout) => return yaml::install(home, config, layout, binary, dry_run),
         HookLayout::Entries(_) | HookLayout::Plugin(_) => {}
     }
@@ -72,7 +74,10 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
     let edited = upsert_all(&mut root, config, binary)?;
     let plugin = match config.layout {
         HookLayout::Plugin(plugin) => Some(plugin),
-        HookLayout::Entries(_) | HookLayout::Yaml(_) | HookLayout::Owned(_) => None,
+        HookLayout::Entries(_)
+        | HookLayout::Yaml(_)
+        | HookLayout::Owned(_)
+        | HookLayout::Script(_) => None,
     };
     if edited != Outcome::Unchanged && plugin.is_some() {
         openclaw::read_for_edit(path)?;
@@ -103,7 +108,9 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
 /// would not change. Writes nothing.
 pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Option<String>> {
     match config.layout {
-        HookLayout::Owned(file) => return owned::render(file, binary, current),
+        HookLayout::Owned(file) | HookLayout::Script(file) => {
+            return owned::render(file, binary, current);
+        }
         HookLayout::Yaml(layout) => return yaml::render(config, layout, binary, current),
         HookLayout::Entries(_) | HookLayout::Plugin(_) => {}
     }
@@ -170,7 +177,9 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
         return HookState::Missing;
     }
     match config.layout {
-        HookLayout::Owned(file) => return owned::state(config, file, binary),
+        HookLayout::Owned(file) | HookLayout::Script(file) => {
+            return owned::state(config, file, binary);
+        }
         HookLayout::Yaml(layout) => return yaml::state(config, layout, binary),
         HookLayout::Entries(_) | HookLayout::Plugin(_) => {}
     }
@@ -180,7 +189,9 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
     };
     let layout = match config.layout {
         HookLayout::Plugin(plugin) => return openclaw::state(config, plugin, binary, &root),
-        HookLayout::Owned(_) | HookLayout::Yaml(_) => return HookState::Missing,
+        HookLayout::Owned(_) | HookLayout::Script(_) | HookLayout::Yaml(_) => {
+            return HookState::Missing;
+        }
         HookLayout::Entries(layout) => layout,
     };
     let id = config.host.id();
@@ -214,7 +225,7 @@ pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
         HookLayout::Entries(layout) | HookLayout::Yaml(layout) => {
             layout.remove(root, config.host.id())
         }
-        HookLayout::Owned(_) => false,
+        HookLayout::Owned(_) | HookLayout::Script(_) => false,
     }
 }
 
@@ -224,7 +235,9 @@ pub fn read_host(config: &HostConfig) -> Result<Value> {
     match config.layout {
         HookLayout::Plugin(_) => openclaw::read(&config.settings_path),
         HookLayout::Yaml(_) => yaml::read(&config.settings_path),
-        HookLayout::Entries(_) | HookLayout::Owned(_) => read_or_empty(&config.settings_path),
+        HookLayout::Entries(_) | HookLayout::Owned(_) | HookLayout::Script(_) => {
+            read_or_empty(&config.settings_path)
+        }
     }
 }
 

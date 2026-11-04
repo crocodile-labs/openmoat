@@ -32,4 +32,6 @@ crate::registry::hosts! {
     OpenCode => opencode,
     /// Nous Research's Hermes Agent (`pre_tool_call` shell hook).
     Hermes => hermes,
+    /// The Cline CLI (`cline`), through OpenMoat's `PreToolUse` hook script.
+    Cline => cline,
 }

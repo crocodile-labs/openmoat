@@ -62,6 +62,17 @@ pub(super) fn hermes(tool: &str, input: &Value) -> Value {
     })
 }
 
+/// Cline `tool_call`, from its `PreToolUse` file hook
+/// (`crates/openmoat-hosts/src/host/cline/fixtures`).
+pub(super) fn cline(tool: &str, input: &Value) -> Value {
+    json!({
+        "hookName": "tool_call", "clineVersion": "3.0.74", "taskId": "cline-1",
+        "sessionContext": { "rootSessionId": "cline-1" }, "workspaceRoots": [CWD],
+        "userId": "me", "iteration": 1,
+        "tool_call": { "id": "call-1", "name": tool, "input": input },
+    })
+}
+
 /// `path` with a relative one placed in the working directory.
 pub(super) fn under_cwd(path: &str) -> String {
     if path.starts_with(['/', '~']) {

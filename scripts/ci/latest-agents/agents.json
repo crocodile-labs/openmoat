@@ -109,6 +109,18 @@
                 "verdict": "hermes"},
     "runners": ["ubuntu-latest", "macos-15"]
   },
+  "cline": {
+    "host": "cline",
+    "name": "Cline CLI",
+    "install": "npm",
+    "package": "@cline/cli",
+    "binary": "node_modules/.bin/cline",
+    "checked": {"version": "3.0.74", "source": "crates/openmoat-hosts/src/host/cline/HOST.md"},
+    "config": [["{CLINE_DIR}/hooks/PreToolUse", "shell"]],
+    "payload": {"fixture": "cline/fixtures/run_commands.json", "command": "/tool_call/input/commands/0",
+                "verdict": "cline"},
+    "runners": ["ubuntu-latest", "macos-15"]
+  },
   "cursor": {
     "host": "cursor",
     "name": "Cursor",

@@ -111,6 +111,7 @@ export COPILOT_HOME="$HOME/.copilot" COPILOT_CACHE_HOME="$root/copilot-cache"
 export CURSOR_CONFIG_DIR="$HOME/.cursor"
 export HERMES_HOME="$HOME/.hermes"
 export OPENCLAW_STATE_DIR="$HOME/.openclaw"
+export CLINE_DIR="$HOME/.cline"
 # No agent may update itself or report home in the middle of the check.
 export DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 COPILOT_AUTO_UPDATE=false
 export PI_OFFLINE=1 PI_TELEMETRY=0 GEMINI_FORCE_FILE_STORAGE=true OPENCODE_DISABLE_AUTOUPDATE=1
@@ -128,6 +129,7 @@ copilot-cli) mkdir -p "$COPILOT_HOME" ;;
 cursor) mkdir -p "$CURSOR_CONFIG_DIR" ;;
 openclaw) mkdir -p "$OPENCLAW_STATE_DIR" ;;
 opencode) mkdir -p "$XDG_CONFIG_HOME/opencode" ;;
+cline) mkdir -p "$CLINE_DIR" ;;
 esac
 throwaway_refuse
 
@@ -430,6 +432,10 @@ while IFS=$'\t' read -r file format; do
         node --check "$file"
         echo "ok    $file parses as JavaScript"
         ;;
+    shell)
+        sh -n "$file"
+        echo "ok    $file parses as a POSIX shell script"
+        ;;
     openclaw)
         # OpenClaw reads openclaw.json as JSON5; its own validator is the judge.
         "$bin" config validate --json </dev/null >"$out/openclaw-validate.json" \
@@ -629,6 +635,27 @@ hermes)
         echo "FAIL  hermes hooks test did not get OpenMoat's block"
         exit 1
     }
+    expect_denied "$out/agent.txt"
+    ;;
+cline)
+    # Cline lists the hook files it found; then one headless run against the
+    # fake API (its `openai-compatible` provider) must have its
+    # `run_commands` call cancelled by OpenMoat's script.
+    "$bin" config hooks --json </dev/null >"$out/cline-hooks.json" 2>&1 || true
+    cat "$out/cline-hooks.json"
+    grep -q "$CLINE_DIR/hooks/PreToolUse" "$out/cline-hooks.json" || {
+        echo "FAIL  cline config hooks does not list OpenMoat's PreToolUse"
+        exit 1
+    }
+    start_fake "$out/fake-api.log" python3 -I "$lib/fake_openai.py" \
+        --call run_commands="{\"commands\": [\"$denied\"]}"
+    "$bin" auth -p openai-compatible -k fake-key -m fake-model \
+        -b "http://127.0.0.1:$fake_port/v1" </dev/null >"$out/cline-auth.txt" 2>&1 || {
+        cat "$out/cline-auth.txt"
+        exit 1
+    }
+    (cd "$project" && bounded 180 "$bin" --json "run it") </dev/null >"$out/agent.txt" 2>&1 || true
+    cat "$out/agent.txt"
     expect_denied "$out/agent.txt"
     ;;
 cursor)

@@ -1,4 +1,5 @@
-//! A hook file OpenMoat owns whole ([`HookLayout::Owned`]: pi's extension, OpenCode's plugin).
+//! A hook file OpenMoat owns whole ([`HookLayout::Owned`]: pi's extension, OpenCode's plugin;
+//! [`HookLayout::Script`]: Cline's hook script, run for every call).
 //!
 //! pi has no command hook; it loads every `.js` and `.ts` file in the
 //! `extensions/` of its agent directory on start (pi 1.3.0
@@ -9,6 +10,7 @@
 //! backed up first and given back by `moat uninstall`.
 //!
 //! [`HookLayout::Owned`]: openmoat_hosts::HookLayout::Owned
+//! [`HookLayout::Script`]: openmoat_hosts::HookLayout::Script
 
 use std::fs;
 use std::path::Path;

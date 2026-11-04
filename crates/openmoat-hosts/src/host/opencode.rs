@@ -39,7 +39,7 @@ use crate::contract::{
     HostAdapter,
     HostSpec, InstallSpec, Location, McpFile, McpSpec, ProjectSettingsSpec, wrong_event,
 };
-use crate::wire::owned_file::OwnedFile;
+use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod advisories;
@@ -81,6 +81,7 @@ static PLUGIN: OwnedFile = OwnedFile {
     name: "OpenCode plugin",
     source: include_str!("opencode/integration/openmoat.js"),
     first_line: "// OpenMoat for OpenCode.",
+    syntax: Syntax::JavaScript,
 };
 
 /// OpenCode 1 reads a default export `{ id, server }` from 1.3.4 on

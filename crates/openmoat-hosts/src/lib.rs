@@ -36,7 +36,7 @@ pub use wire::mcp_call::{
     canonical_json, mcp_call_action, mcp_call_arguments, mcp_resource_action,
     mcp_tools_list_request,
 };
-pub use wire::owned_file::{OwnedFile, OwnedFileError};
+pub use wire::owned_file::{OwnedFile, OwnedFileError, Syntax};
 
 use std::fmt;
 use std::str::FromStr;
@@ -440,7 +440,7 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
-             copilot-cli, pi, gemini-cli, opencode, hermes"
+             copilot-cli, pi, gemini-cli, opencode, hermes, cline"
         );
     }
 

@@ -30,6 +30,8 @@ fn a_changed_mcp_server_holds_back_only_its_tools() {
         let dir = dir.as_str();
         let sb = Sandbox::bare(&[dir]);
         let file = sb.home.join(dir).join(mcp.file);
+        // Cline's is in a folder of its directory (`data/settings`).
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, (mcp.servers)(mcp.command)).unwrap();
         let out = sb.moat(&["init", "--yes", "--hosts", id]);
         assert_eq!(out.status.code(), Some(OK), "{id}: {}", text(&out));

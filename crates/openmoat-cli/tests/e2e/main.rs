@@ -16,6 +16,7 @@ mod audit;
 mod binary_path;
 mod canary;
 mod cli;
+mod cline;
 mod closed_pipe;
 mod codex;
 mod config_change;
