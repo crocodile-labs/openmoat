@@ -8,6 +8,7 @@ mod anchor;
 mod approvals;
 mod cli;
 mod commands;
+mod compliance;
 mod context;
 mod environment;
 mod exit;

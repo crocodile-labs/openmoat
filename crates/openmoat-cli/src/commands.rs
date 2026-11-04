@@ -72,6 +72,7 @@ pub fn run(cli: Cli) -> Result<Code> {
             AuditCommand::Export(args) => audit::export(&args),
             AuditCommand::Verify(args) => audit::verify(&args),
             AuditCommand::Report(args) => team::run(&args),
+            AuditCommand::Evidence(args) => audit::evidence(&args),
             AuditCommand::Anchor(args) => audit::anchor(&args),
         },
         Command::Run(args) => run::run(&args),

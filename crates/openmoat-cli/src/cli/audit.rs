@@ -17,6 +17,11 @@ pub enum AuditCommand {
     /// Report over exports from several machines: per host, per rule, top asks and
     /// denies, false-positive candidates. Every file must verify first.
     Report(TeamReportArgs),
+    /// Evidence for a time window, per control of OWASP Top 10 for LLM Applications
+    /// 2025, SOC 2 and ISO/IEC 27001:2022 Annex A: which rules fired, decisions by
+    /// verdict, sample events (stored redacted), the audit chain, and the policy, lock
+    /// and protections in force now. Evidence, not a certification.
+    Evidence(EvidenceArgs),
     /// Record the log's current head (event, hash, time) outside the log: as a commit
     /// on `refs/moat/anchors` in a git repository you name, or as a line appended to a
     /// file. Nothing is sent anywhere; push the ref yourself. Refused unless run from an
@@ -31,6 +36,30 @@ pub struct TeamReportArgs {
     pub files: Vec<PathBuf>,
 
     /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct EvidenceArgs {
+    /// Window start: all, today, yesterday, 12h, 7d, 2w or YYYY-MM-DD (UTC).
+    #[arg(long, default_value = "all")]
+    pub since: String,
+
+    /// Window end, not included, in the same forms (`2026-11-01` ends before that
+    /// day); default now.
+    #[arg(long)]
+    pub until: Option<String>,
+
+    /// Only this host.
+    #[arg(long, value_parser = parse_host())]
+    pub host: Option<Host>,
+
+    /// Sample events per rule group and control, 0 to 50.
+    #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u8).range(0..=50))]
+    pub samples: u8,
+
+    /// Output format: text is Markdown.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
 }
