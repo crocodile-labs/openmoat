@@ -1,4 +1,4 @@
-//! `moat allow`: turn an `ask` (a shell command or a file action) into a session
+//! `moat allow`: turn a `review` (a shell command or a file action) into a session
 //! grant or a permanent rule, allow a site or a directory permanently, or remove a
 //! permanent rule.
 
@@ -18,7 +18,7 @@ use crate::integrity::{self, HookPins};
 use crate::realpath::FsPathResolver;
 use crate::render::{self, Deferred};
 
-/// How many recent events `--last` searches for the newest `ask` it can approve.
+/// How many recent events `--last` searches for the newest `review` it can approve.
 const LAST_ASK_SEARCH: usize = 200;
 
 pub fn run(args: &AllowArgs) -> Result<Code> {
@@ -41,11 +41,11 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             },
         ),
         (None, true) => {
-            let event = newest_ask(&home.open_audit()?)?
-                .context("no recent `ask` for a shell command or a file in the audit log")?;
-            let action = asked(&event)?;
+            let event = newest_review(&home.open_audit()?)?
+                .context("no recent `review` for a shell command or a file in the audit log")?;
+            let action = reviewed(&event)?;
             let last = format!(
-                "last ask: {} on {} (session {}), {} ago, wanted to {}",
+                "last review: {} on {} (session {}), {} ago, wanted to {}",
                 event.id,
                 event.host,
                 event.session_id,
@@ -53,22 +53,22 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
                 approvals::describe(&action)
             );
             render::line(&mut out, &last)?;
-            // A permanent rule is an allow, and code the session wrote asks
+            // A permanent rule is an allow, and code the session wrote needs review
             // whatever allows the command (ADR-039): only a session grant answers it.
             if args.always && event.rules.iter().any(|r| r == crate::session_code::RULE) {
                 out.finish()?;
                 bail!(
-                    "it runs code this session wrote, which asks whatever a rule allows; run \
+                    "it runs code this session wrote, which needs review whatever a rule allows; run \
                      `openmoat allow --last` without --always to approve it for this session"
                 );
             }
-            // The newest ask of any agent session: say which one before approving
+            // The newest review of any agent session: say which one before approving
             // it, so a person never approves a call they did not see.
             let taint = !args.always && event.rules.iter().any(|r| r == TAINT_RULE);
             let answer = if taint {
                 writeln!(
                     out,
-                    "  it asks because the session read untrusted content earlier; `s` \
+                    "  it needs review because the session read untrusted content earlier; `s` \
                      approves every protected write of this session until it reads \
                      untrusted content again"
                 )?;
@@ -88,12 +88,12 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             let who = Who::of(&event)?;
             return approve(&home, who, &action, args.always, covers_taint, out);
         }
-        _ => bail!("give a command, or --last to take the most recent ask"),
+        _ => bail!("give a command, or --last to take the most recent review"),
     };
     approve(&home, who, &action, args.always, false, out)
 }
 
-/// Approve exactly `action` (from [`asked`]) of `event` for its host session,
+/// Approve exactly `action` (from [`reviewed`]) of `event` for its host session,
 /// or for good with `always`: the home screen's answer, with the same checks as
 /// `run`.
 pub(super) fn run_for(event: &Event, action: &Action, always: bool) -> Result<Code> {
@@ -111,8 +111,8 @@ struct Who {
 }
 
 impl Who {
-    /// The session of an asked call, in the project of its working
-    /// directory; a call recorded without one is taken as asked in the
+    /// The session of a call held for review, in the project of its working
+    /// directory; a call recorded without one is taken as held for review in the
     /// current directory, where the person approves it.
     fn of(event: &Event) -> Result<Self> {
         Ok(Self {
@@ -159,7 +159,7 @@ fn checked_home() -> Result<Home> {
 /// Write the session grant, or with `always` the permanent rule, then re-pin;
 /// a permanent file rule also updates the agents' sandboxes. With
 /// `covers_taint` the session grant also answers the session's other taint
-/// asks from untrusted content ([`approvals::Grant::covers_taint`]).
+/// reviews from untrusted content ([`approvals::Grant::covers_taint`]).
 fn approve(
     home: &Home,
     who: Who,
@@ -216,7 +216,7 @@ fn approve(
         let path = home.grants_path();
         let mut grants = Grants::load(&path)?;
         let now = crate::time::now_ms();
-        // The newest event so far: a taint ask is answered only if the session
+        // The newest event so far: a taint review is answered only if the session
         // read nothing untrusted after it, whatever the clock says.
         let seen = home.open_audit()?.latest_id()?.map_or(0, |id| id.0);
         grants.grant(scope, action, now, Some(seen));
@@ -244,12 +244,15 @@ fn approve(
             .unwrap_or_default();
         writeln!(
             out,
-            "  only in this agent session: a new session asks again{resume}"
+            "  only in this agent session: a new session needs review again{resume}"
         )?;
         if matches!(action, Action::Shell { .. }) || covers_taint {
             render::line(
                 &mut out,
-                &format!("  only in project {}: elsewhere it asks again", who.project),
+                &format!(
+                    "  only in project {}: elsewhere it needs review again",
+                    who.project
+                ),
             )?;
         }
     }
@@ -303,7 +306,7 @@ fn will_allow(rule: &RuleGroup) -> String {
     format!("will allow: {what}; deny rules still win")
 }
 
-/// Each path as asked and with its symlinks resolved, since the hook checks a
+/// Each path as held for review and with its symlinks resolved, since the hook checks a
 /// path both ways and the stricter answer wins.
 fn spellings(paths: &[String]) -> Vec<String> {
     let mut out = paths.to_vec();
@@ -419,8 +422,8 @@ fn warn_if_shadowed(home: &Home, id: &str, out: &mut Deferred) -> Result<()> {
     Ok(())
 }
 
-/// The action an ask named, as a grant or rule approves it ([`approvals::approvable`]).
-pub(super) fn asked(event: &Event) -> Result<Action> {
+/// The action a review named, as a grant or rule approves it ([`approvals::approvable`]).
+pub(super) fn reviewed(event: &Event) -> Result<Action> {
     let cwd = match event.cwd.as_deref() {
         Some(cwd) => Some(path_string(&absolute(Path::new(cwd))?)),
         None => None,
@@ -432,17 +435,17 @@ pub(super) fn asked(event: &Event) -> Result<Action> {
         .and_then(|a| approvals::approvable(a, cwd.as_deref(), &home))
         .with_context(|| {
             format!(
-                "ask {} names no file `openmoat allow` can approve (none, or a relative path \
+                "review {} names no file `openmoat allow` can approve (none, or a relative path \
                  without a working directory); allow it with `openmoat edit` instead",
                 event.id
             )
         })
 }
 
-/// The most recent `ask` for a shell command or a file: what `--last` takes.
-pub(super) fn newest_ask(store: &openmoat_audit::Store) -> Result<Option<Event>> {
+/// The most recent `review` for a shell command or a file: what `--last` takes.
+pub(super) fn newest_review(store: &openmoat_audit::Store) -> Result<Option<Event>> {
     Ok(store.recent(LAST_ASK_SEARCH)?.into_iter().find(|e| {
-        e.verdict == Verdict::Ask
+        e.verdict == Verdict::Review
             && matches!(
                 e.action,
                 Some(

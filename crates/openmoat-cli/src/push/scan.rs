@@ -13,7 +13,7 @@ use super::git::{Git, Unchecked};
 use crate::sandbox::RUNS_LATER;
 
 /// At most this much of the commits' diffs is read; a push that changes more
-/// asks instead of being checked in part.
+/// needs review instead of being checked in part.
 pub const MAX_DIFF_BYTES: usize = 8 * 1024 * 1024;
 /// At most this much of the commit messages and of the changed file names.
 const MAX_LIST_BYTES: usize = 1024 * 1024;

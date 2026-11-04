@@ -11,7 +11,7 @@
 //!   (<https://docs.openclaw.ai/tools/mcp>, "Server definitions live under
 //!   `mcp.servers`"). The lock pins the rest of that file whole
 //!   (`integrity/digest.rs`). Plugin bundles bring their own `.mcp.json`; they
-//!   are plugin code, which `runs-later` asks before an agent writes.
+//!   are plugin code, which `runs-later` holds for review before an agent writes.
 //! - GitHub Copilot CLI: `mcp-config.json` in its configuration directory, and a
 //!   project's `.mcp.json` and `.github/mcp.json`, wrapped in `mcpServers` or bare.
 //! - pi: `mcp.json` in its agent directory, and a project's `.pi/mcp.json`.

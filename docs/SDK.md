@@ -11,12 +11,12 @@
 
 The SDK is OpenMoat's decision engine as a library: you compile a policy once, then pass
 it each tool call your agent wants to make (a shell command, a file read or write, a
-network host, an MCP tool call). It answers `allow`, `defer`, `ask` or `deny`, with the
+network host, an MCP tool call). It answers `allow`, `defer`, `review` or `deny`, with the
 rule ids and reasons that decided. It makes the same decision `openmoat guard` makes for
 the same policy, from the same code (`openmoat-core`).
 
 **The SDK decides; you enforce.** It starts, stops and confines nothing; it is not a
-sandbox. A call it denies must not run, and a call it asks about must not run until a
+sandbox. A call it denies must not run, and a call it holds for review must not run until a
 person approves that exact call. If your code runs a call anyway, nothing stops it. Where
 you need an operating-system boundary as well (a project script you do not trust, a tool
 that does more than its arguments show), run the agent under `openmoat run`, a container
@@ -87,13 +87,15 @@ node sdk/js/examples/agent-loop.js          # after a build
 | Verdict | What your loop does |
 |---|---|
 | `deny` | Does not run the call, and tells the model why (`reason`). Never offers it for approval: no person, setting or retry lifts a deny. |
-| `ask` | Shows a person the call and `reason`, and runs it only if they approve *this* call. A changed argument is a new call, decided again. |
-| `defer` | Runs its own permission flow. OpenMoat neither objects nor vouches. A product without one treats `defer` as `ask`. |
+| `review` | Shows a person the call and `reason`, and runs it only if they approve *this* call. A changed argument is a new call, decided again. |
+| `defer` | Runs its own permission flow. OpenMoat neither objects nor vouches. A product without one treats `defer` as `review`. |
 | `allow` | Runs the call. |
 
 An approval is for one call; the SDK stores none. If your product remembers approvals,
 scope each to one rule id and one project. The approver must be a person: a model
-answering its own `ask` is no approval. A verdict your code does not know is a `deny`.
+answering its own `review` is no approval. A verdict your code does not know is a `deny`.
+Before 0.14.0 `review` was named `ask`: the SDK still reads `"ask"` in a policy or a
+decision as `review`, and writes `"review"` (ADR-053).
 
 Errors (`Error` in Rust, `OpenMoatError` in JavaScript) are never verdicts: a call you
 hold no decision for does not run.
@@ -117,7 +119,7 @@ unknown field is an error, so a misspelt key never decides an empty call.
 | `mcp_tool` | `name` (`mcp__<server>__<tool>`), `reads`, `writes`, `hosts`, `commands`, `opens`, `unchecked` | `Action::mcp(McpCall::new(name).reads(…))` |
 | `unknown_tool` | `host`, `tool`, `reads`, `writes`, `hosts`, `commands` | `Action::UnknownTool(UnknownToolCall::new(host, tool))` |
 | `foreign_shell` | `shell`, `command`: a shell OpenMoat cannot read, never `allow` | `Action::ForeignShell { shell, command }` |
-| `unchecked` | `action`, `reason`: a call you see only in part, at least `ask` | `Action::unchecked(action, reason)` |
+| `unchecked` | `action`, `reason`: a call you see only in part, at least `review` | `Action::unchecked(action, reason)` |
 
 For an MCP or unknown tool, list in `reads`, `writes`, `hosts` and `commands` what its
 arguments name, so the file, network and shell rules apply to them too. An MCP call
@@ -156,9 +158,9 @@ and report the ones that differ in `links`. Both examples do this.
 
 ## Sessions
 
-After a session reads secret material, network to any other host asks; after it reads
+After a session reads secret material, network to any other host needs review; after it reads
 untrusted content (a fetch, a web search, an MCP result), a write to a protected path
-asks (session taint, [POLICY.md](POLICY.md)). Record each call after it ran and pass the
+needs review (session taint, [POLICY.md](POLICY.md)). Record each call after it ran and pass the
 session to the next decision. Taint only ever makes a decision stricter.
 
 ```js
@@ -171,7 +173,7 @@ const saved = session.save();        // opaque text; new Session(saved) continue
 
 ## Repository policies
 
-A project's `.moat/policy.yaml` can only add restrictions: its deny and ask rules always
+A project's `.moat/policy.yaml` can only add restrictions: its deny and review rules always
 apply, under `repo:` ids; its allow rules only when a person trusted that exact file
 ([POLICY.md](POLICY.md)). Read the file yourself and merge it:
 

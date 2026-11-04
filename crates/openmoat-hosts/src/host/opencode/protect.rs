@@ -10,7 +10,7 @@ pub(super) const PROTECT: Protect = Protect {
              folders around it, the configuration files whose `plugin` list loads\n\
              plugins and whose `-openmoat` removes OpenMoat's (`config` is the old TOML\n\
              one OpenCode moves into `config.json`), and OpenCode 2's background service\n\
-             settings, whose `env` it starts with; other plugins ask (`runs-later`)",
+             settings, whose `env` it starts with; other plugins need review (`runs-later`)",
             &[
                 "~/.config/opencode",
                 "~/.config/opencode/plugins",

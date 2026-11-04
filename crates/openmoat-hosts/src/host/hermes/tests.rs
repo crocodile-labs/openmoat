@@ -64,7 +64,7 @@ fn the_payload_gives_session_call_and_working_directory() {
 }
 
 #[test]
-fn a_terminal_command_runs_in_its_workdir_and_a_lost_shell_asks() {
+fn a_terminal_command_runs_in_its_workdir_and_a_lost_shell_needs_review() {
     assert_eq!(action("terminal-workdir"), Some(shell("cd '/p/app' && cargo test")));
     assert_eq!(action("terminal-background"), Some(shell("npm run dev")));
     let home = call("terminal", json!({ "command": "ls", "workdir": "~/it's" })).unwrap();
@@ -82,7 +82,7 @@ fn a_terminal_command_runs_in_its_workdir_and_a_lost_shell_asks() {
 }
 
 #[test]
-fn file_tools_name_their_paths_and_a_relative_one_asks() {
+fn file_tools_name_their_paths_and_a_relative_one_needs_review() {
     assert_eq!(
         action("read_file"),
         Some(Action::FsRead {
@@ -120,7 +120,7 @@ fn file_tools_name_their_paths_and_a_relative_one_asks() {
 }
 
 #[test]
-fn a_search_reads_its_path_or_asks_for_the_sessions_directory() {
+fn a_search_reads_its_path_or_needs_review_for_the_sessions_directory() {
     assert_eq!(
         action("search_files"),
         Some(Action::FsRead {
@@ -301,35 +301,35 @@ fn each_verdict_is_rendered_as_hermes_reads_it() {
     let deny: Value = serde_json::from_str(&render(Verdict::Deny)).unwrap();
     assert_eq!(deny["decision"], "block");
     assert!(deny["reason"].as_str().unwrap().contains("secrets-paths"));
-    let ask: Value = serde_json::from_str(&render(Verdict::Ask)).unwrap();
-    assert_eq!(ask["action"], "approve");
-    assert!(ask["message"].as_str().unwrap().starts_with("moat: ask"));
-    let key = ask["rule_key"].as_str().unwrap();
+    let review: Value = serde_json::from_str(&render(Verdict::Review)).unwrap();
+    assert_eq!(review["action"], "approve");
+    assert!(review["message"].as_str().unwrap().starts_with("moat: review"));
+    let key = review["rule_key"].as_str().unwrap();
     assert!(key.starts_with("openmoat:") && key.len() == "openmoat:".len() + 16, "{key}");
-    // The same ask keeps its key; another ask has its own, so Hermes's
+    // The same review keeps its key; another review has its own, so Hermes's
     // "always" never approves the whole tool.
-    assert_eq!(render(Verdict::Ask), render(Verdict::Ask));
-    let other = Decision::single(Verdict::Ask, "unchecked", "the payload shows part");
+    assert_eq!(render(Verdict::Review), render(Verdict::Review));
+    let other = Decision::single(Verdict::Review, "unchecked", "the payload shows part");
     let other: Value = serde_json::from_str(
         &Host::Hermes.render_response(&HookEvent::PreToolUse, &other),
     )
     .unwrap();
-    assert_ne!(other["rule_key"], ask["rule_key"]);
+    assert_ne!(other["rule_key"], review["rule_key"]);
 }
 
-/// Where Hermes would approve an ask unseen, OpenMoat's ask reaches it as a
+/// Where Hermes would approve a review unseen, OpenMoat's review reaches it as a
 /// deny that says how to approve it.
 #[test]
-fn an_ask_hermes_would_approve_unseen_is_a_deny() {
-    let no_ask = Host::Hermes.answer(&HookEvent::PreToolUseNoAsk, &decision(Verdict::Ask));
-    assert_eq!(no_ask.verdict, Verdict::Deny);
+fn a_review_hermes_would_approve_unseen_is_a_deny() {
+    let no_prompt = Host::Hermes.answer(&HookEvent::PreToolUseNoPrompt, &decision(Verdict::Review));
+    assert_eq!(no_prompt.verdict, Verdict::Deny);
     assert!(
-        no_ask.reasons.last().unwrap().contains("openmoat allow --last"),
-        "{no_ask:?}"
+        no_prompt.reasons.last().unwrap().contains("openmoat allow --last"),
+        "{no_prompt:?}"
     );
-    let asks = Host::Hermes.answer(&HookEvent::PreToolUse, &decision(Verdict::Ask));
-    assert_eq!(asks.verdict, Verdict::Ask);
-    let unseen = Host::Hermes.spec().asks.unseen.as_ref().unwrap();
+    let reviews = Host::Hermes.answer(&HookEvent::PreToolUse, &decision(Verdict::Review));
+    assert_eq!(reviews.verdict, Verdict::Review);
+    let unseen = Host::Hermes.spec().reviews.unseen.as_ref().unwrap();
     assert_eq!(unseen.env, ["HERMES_YOLO_MODE"]);
     assert!((unseen.config)(&json!({ "approvals": { "mode": "off" } })).is_some());
 }

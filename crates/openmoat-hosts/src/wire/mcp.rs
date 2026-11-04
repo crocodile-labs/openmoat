@@ -8,7 +8,7 @@
 //! instead, which the engine decides as a fetch (ADR-047). Adding resources can only make a
 //! verdict stricter, so arguments that cannot be read are an error (the guard
 //! fails closed) rather than silently ignored, and arguments nested past
-//! `MAX_DEPTH` are reported in `unchecked` so the call is decided at least `ask`.
+//! `MAX_DEPTH` are reported in `unchecked` so the call is decided at least `review`.
 
 use openmoat_core::Action;
 use serde_json::Value;

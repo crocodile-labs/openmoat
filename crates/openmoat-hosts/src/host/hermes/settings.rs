@@ -1,6 +1,6 @@
 //! What OpenMoat reads in Hermes Agent's `config.yaml` beyond its hook: the
 //! form the lock pins ([`pinned_form`]) and the settings that make Hermes
-//! approve an `ask` without a person seeing it ([`approves_unseen`]).
+//! approve a `review` without a person seeing it ([`approves_unseen`]).
 
 use serde_json::Value;
 
@@ -33,7 +33,7 @@ pub(super) fn pinned_form(mut value: Value) -> Option<Value> {
 const UNATTENDED_MODES: &[&str] = &["cron_mode", "single_query_mode", "unattended_mode"];
 
 /// The setting of `config` (`config.yaml`, parsed) under which Hermes
-/// approves an `ask` unseen (`_run_approval_gate` in `tools/approval.py`):
+/// approves a `review` unseen (`_run_approval_gate` in `tools/approval.py`):
 /// `approvals.mode: off`, which the Desktop's "Approvals: off" writes, or an
 /// unattended mode Hermes reads as `approve` (`approve`, `off`, `allow` or
 /// `yes`, `_binary_approval_mode` in `tools/approval_context.py`).
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn asks_are_approved_unseen_when_approvals_are_off_or_unattended_approve() {
+    fn reviews_are_approved_unseen_when_approvals_are_off_or_unattended_approve() {
         for config in [
             json!({ "approvals": { "mode": "off" } }),
             json!({ "approvals": { "mode": " OFF " } }),

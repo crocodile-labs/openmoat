@@ -1,4 +1,4 @@
-//! The `MoatBench` scorecard: answers per category, asks per developer workflow,
+//! The `MoatBench` scorecard: answers per category, reviews per developer workflow,
 //! false positives, known gaps and mismatches.
 
 use std::collections::BTreeMap;
@@ -13,14 +13,14 @@ use super::hosts::Answer;
 const BENIGN: &str = "benign";
 
 /// Everyday development step by step: each step is allowed unless it expects the
-/// ask the policy intends (installs, push), and asks are counted per workflow.
+/// review the policy intends (installs, push), and reviews are counted per workflow.
 const WORKFLOWS: &str = "workflows";
 
 /// One step of a run.
 pub struct StepResult {
     pub got: Answer,
-    /// The step's `expect` was an ask.
-    pub expects_ask: bool,
+    /// The step's `expect` was a review.
+    pub expects_review: bool,
     /// `got` meets the expectation.
     pub ok: bool,
     /// The step carries a gap marker.
@@ -48,7 +48,7 @@ pub enum Outcome {
 struct Row {
     runs: usize,
     blocked: usize,
-    asked: usize,
+    reviewed: usize,
     allowed: usize,
     /// Allowed or passed through by the hook where OpenMoat's OS sandbox holds
     /// the step, as the scenario expects there (`sandboxed:`).
@@ -63,7 +63,7 @@ impl Row {
         self.runs += 1;
         *match strictest {
             Answer::Deny => &mut self.blocked,
-            Answer::Ask => &mut self.asked,
+            Answer::Review => &mut self.reviewed,
             Answer::Allow | Answer::Passthrough if held => &mut self.sandboxed,
             Answer::Allow => &mut self.allowed,
             Answer::Passthrough => &mut self.passthrough,
@@ -74,7 +74,7 @@ impl Row {
     fn add(&mut self, other: &Self) {
         self.runs += other.runs;
         self.blocked += other.blocked;
-        self.asked += other.asked;
+        self.reviewed += other.reviewed;
         self.allowed += other.allowed;
         self.sandboxed += other.sandboxed;
         self.passthrough += other.passthrough;
@@ -86,8 +86,8 @@ impl Row {
 #[derive(Default, Clone, Copy, Serialize)]
 struct Tally {
     steps: usize,
-    asks: usize,
-    expected_asks: usize,
+    reviews: usize,
+    expected_reviews: usize,
     /// Steps that miss their `expect` without a gap marker.
     unexpected: usize,
     /// Steps that miss their `expect` under a gap marker.
@@ -98,8 +98,8 @@ impl Tally {
     fn add(&mut self, steps: &[StepResult]) {
         for step in steps {
             self.steps += 1;
-            self.asks += usize::from(step.got == Answer::Ask);
-            self.expected_asks += usize::from(step.expects_ask);
+            self.reviews += usize::from(step.got == Answer::Review);
+            self.expected_reviews += usize::from(step.expects_review);
             self.unexpected += usize::from(!step.ok && !step.gap);
             self.expected_failures += usize::from(!step.ok && step.gap);
         }
@@ -108,8 +108,8 @@ impl Tally {
     fn total<'a>(all: impl Iterator<Item = &'a Self>) -> Self {
         all.fold(Self::default(), |t, a| Self {
             steps: t.steps + a.steps,
-            asks: t.asks + a.asks,
-            expected_asks: t.expected_asks + a.expected_asks,
+            reviews: t.reviews + a.reviews,
+            expected_reviews: t.expected_reviews + a.expected_reviews,
             unexpected: t.unexpected + a.unexpected,
             expected_failures: t.expected_failures + a.expected_failures,
         })
@@ -120,8 +120,12 @@ impl fmt::Display for Tally {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} steps, {} asks (expected {}), {} unexpected, {} expected failures",
-            self.steps, self.asks, self.expected_asks, self.unexpected, self.expected_failures
+            "{} steps, {} reviews (expected {}), {} unexpected, {} expected failures",
+            self.steps,
+            self.reviews,
+            self.expected_reviews,
+            self.unexpected,
+            self.expected_failures
         )
     }
 }
@@ -203,13 +207,20 @@ impl fmt::Display for Scorecard {
             writeln!(
                 f,
                 "{name:<16} {:>5} {:>8} {:>6} {:>8} {:>10} {:>12} {:>6}",
-                r.runs, r.blocked, r.asked, r.allowed, r.sandboxed, r.passthrough, r.error
+                r.runs, r.blocked, r.reviewed, r.allowed, r.sandboxed, r.passthrough, r.error
             )
         };
         writeln!(
             f,
             "{:<16} {:>5} {:>8} {:>6} {:>8} {:>10} {:>12} {:>6}",
-            "category", "runs", "blocked", "asked", "allowed", "sandboxed", "passthrough", "error"
+            "category",
+            "runs",
+            "blocked",
+            "reviewed",
+            "allowed",
+            "sandboxed",
+            "passthrough",
+            "error"
         )?;
         let mut total = Row::default();
         for (category, row) in &self.categories {

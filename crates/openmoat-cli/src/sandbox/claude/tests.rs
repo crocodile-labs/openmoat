@@ -196,7 +196,7 @@ fn network_lists_domains_and_keeps_addresses_denied() {
     assert!(allowed.contains(&"registry.npmjs.org".to_owned()));
     assert!(
         !allowed.iter().any(|h| h == "localhost"),
-        "an ask is a deny"
+        "a review is a deny"
     );
     let denied = list(&out, "/network/deniedDomains");
     assert!(denied.contains(&"metadata.google.internal".to_owned()));

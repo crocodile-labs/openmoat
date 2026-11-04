@@ -49,7 +49,7 @@ fn every_os_gets_deny_rules_for_secrets_and_kernel_files() {
         );
         assert!(
             !rule.contains(".git/"),
-            "the hook asks for `.git`, never denies: {rule}"
+            "the hook reviews `.git`, never denies: {rule}"
         );
     }
     assert!(

@@ -76,7 +76,7 @@ pub struct Step {
     #[serde(default)]
     pub gap: Option<String>,
     /// What OpenMoat decides instead on a host whose shell commands its OS
-    /// sandbox holds (ADR-039: running code the session wrote asks only
+    /// sandbox holds (ADR-039: running code the session wrote needs review only
     /// where none does). `expect` and `rule` hold everywhere else.
     #[serde(default)]
     pub sandboxed: Option<Sandboxed>,

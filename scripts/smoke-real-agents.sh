@@ -309,14 +309,14 @@ push() {
 
 near_miss() {
     step "package near-miss (Claude Code)" \
-        "pip install reqeusts asks, naming requests: ask [package-near-miss]" \
+        "pip install reqeusts needs review, naming requests: review [package-near-miss]" \
         "headless Claude Code has no one to answer, so pip does not run"
     claude_ready || return 0
     local id
     id=$(uuid)
     rm -f "$smoke/pip-ran"
     run_claude "$id" Bash "$(exactly Bash "run: pip install reqeusts")"
-    expect_row "$id" claude-code Bash ask package-near-miss
+    expect_row "$id" claude-code Bash review package-near-miss
     if [ -e "$smoke/pip-ran" ]; then fail "pip ran"; else pass "pip did not run"; fi
 }
 
@@ -380,7 +380,7 @@ PY
 provenance() {
     step "file provenance across two sessions (Claude Code)" \
         "session A fetches a web page, then writes run.sh" \
-        "session B runs run.sh, then writes a workflow: ask [session-taint], naming run.sh"
+        "session B runs run.sh, then writes a workflow: review [session-taint], naming run.sh"
     claude_ready || return 0
     local a b
     a=$(uuid)
@@ -388,7 +388,7 @@ provenance() {
     run_claude "$a" WebFetch,Write "Use the WebFetch tool once on https://crates.io/crates/serde to summarise it, then use the Write tool once to create run.sh in the current directory containing exactly: echo hello. Do nothing else."
     expect_row "$a" claude-code WebFetch allow
     run_claude "$b" Bash,Write "Use the Bash tool once to run: bash run.sh. Then use the Write tool once to create .github/workflows/x.yml containing exactly: on: push. Do nothing else and do not retry."
-    expect_row "$b" claude-code Write ask session-taint
+    expect_row "$b" claude-code Write review session-taint
     if [ -e "$proj/.github/workflows/x.yml" ]; then fail "the workflow was written"; fi
 }
 

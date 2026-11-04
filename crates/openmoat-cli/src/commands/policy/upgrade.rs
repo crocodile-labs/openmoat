@@ -81,19 +81,29 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
         Base::Unrelated => {
             writeln!(
                 out,
-                "This policy was not made from OpenMoat's default, so no change is offered; \
-                 compare it with `openmoat policy lint` and the default in docs/POLICY.md."
+                "This policy was not made from OpenMoat's default, so no change of the default \
+                 is offered; compare it with `openmoat policy lint` and the default in docs/POLICY.md."
             )?;
-            return Ok(());
+            if !plan.renamed {
+                return Ok(());
+            }
         }
     }
     let count = plan.applicable();
     if count > 0 {
+        let from_default = count - usize::from(plan.renamed);
         writeln!(
             out,
-            "Policy update available: {count} change{} from the OpenMoat {VERSION} default",
-            plural(count)
+            "Policy update available: {from_default} change{} from the OpenMoat {VERSION} default",
+            plural(from_default)
         )?;
+        if plan.renamed {
+            writeln!(
+                out,
+                "and 1 rename: `ask` is now `review` (the rule list `ask:` and the verdict `ask`, \
+                 read the same until you rename them)"
+            )?;
+        }
         let diff = unified_diff(
             Algorithm::Myers,
             &plan.current,

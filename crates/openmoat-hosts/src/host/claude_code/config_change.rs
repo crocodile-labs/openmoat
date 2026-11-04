@@ -80,7 +80,7 @@ pub fn proposal_target(path: &str) -> Option<String> {
 pub(crate) fn render(decision: &Decision) -> String {
     match decision.verdict {
         Verdict::Allow => "{}".to_owned(),
-        // `Ask`, `Deny` and any verdict added to the core later block the
+        // `Review`, `Deny` and any verdict added to the core later block the
         // change. A `Value` always renders, unlike serializing a struct; its
         // keys sort, and these are already in order.
         _ => serde_json::json!({

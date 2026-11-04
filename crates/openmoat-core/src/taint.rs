@@ -197,7 +197,7 @@ const PROTECTED_WRITES: [&str; 136] = [
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaintSettings {
-    /// Path globs a write to asks once the session read untrusted content, in
+    /// Path globs whose writes need review once the session read untrusted content, in
     /// addition to the built-in list, which a policy cannot shorten. No `!`
     /// exclusions, for the same reason.
     #[serde(default)]
@@ -297,7 +297,7 @@ mod tests {
         path.replace('*', "v1")
     }
 
-    /// One list of "files that run later": every file `runs-later` asks for and
+    /// One list of "files that run later": every file `runs-later` holds for review and
     /// every OpenMoat or host config file `kernel-self` denies is also a write
     /// session taint protects. (`sandbox/patterns.rs` `RUNS_LATER` is checked
     /// against `runs-later` in the CLI.)
@@ -311,7 +311,7 @@ mod tests {
         let rule = |groups: &[crate::RuleGroup], id: &str| {
             groups.iter().find(|g| g.id == id).unwrap().fs_write.clone()
         };
-        let mut files = rule(&policy.ask, "runs-later");
+        let mut files = rule(&policy.review, "runs-later");
         // the binary is not a file that runs later as configuration does
         files.extend(rule(&policy.deny, "kernel-self").into_iter().filter(|p| {
             !["/bin/moat", "apps/moat", "/bin/openmoat", "apps/openmoat"]

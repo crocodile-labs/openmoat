@@ -1,7 +1,7 @@
 //! Policy warnings: valid policies that probably do not mean what they say.
 //!
 //! Errors (`Policy::lint`) make a policy unusable; warnings do not. Evaluation
-//! is `deny → allow → ask` per atomic action, so a pattern in a later list that
+//! is `deny → allow → review` per atomic action, so a pattern in a later list that
 //! an earlier list already matches can never decide anything. The checks are
 //! conservative: a warning means the shadowing was shown from the patterns
 //! alone; silence does not prove a rule is reachable.
@@ -15,6 +15,26 @@ use crate::paths;
 use crate::pattern::{self, GlobPattern, ShellPattern};
 use crate::policy::{Defaults, Policy, RuleGroup};
 use crate::secret::{SECRET_RULE_PREFIX, Source as SecretSource};
+
+/// `ask`, the name `review` had before ADR-053: still read, but the person
+/// should know, and `openmoat policy upgrade` renames it.
+fn old_names(policy: &Policy, out: &mut Vec<Warning>) {
+    let upgrade = "`openmoat policy upgrade` renames it";
+    if policy.old_names.ask_list {
+        out.push(Warning {
+            rule: "ask".to_owned(),
+            message: format!("`ask:` is the old name of `review:` and is read as it; {upgrade}"),
+        });
+    }
+    if policy.old_names.ask_default {
+        out.push(Warning {
+            rule: "defaults".to_owned(),
+            message: format!(
+                "`ask` is the old name of the `review` verdict and is read as it; {upgrade}"
+            ),
+        });
+    }
+}
 
 /// Placeholders so `~` and `${project}` compare equal on both sides without
 /// `{…}` being read as glob alternation.
@@ -40,6 +60,7 @@ impl fmt::Display for Warning {
 #[must_use]
 pub fn warnings(policy: &Policy) -> Vec<Warning> {
     let mut out = unknown_default_kinds(&policy.defaults);
+    old_names(policy, &mut out);
     for (key, present) in [
         ("approval", policy.approval.is_some()),
         ("scope", policy.scope.is_some()),
@@ -54,14 +75,14 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
             });
         }
     }
-    shadowed(&policy.ask, &policy.allow, "ask", "allow", &mut out);
+    shadowed(&policy.review, &policy.allow, "review", "allow", &mut out);
     shadowed(&policy.defer, &policy.allow, "defer", "allow", &mut out);
     shadowed(&policy.allow, &policy.deny, "allow", "deny", &mut out);
     for group in policy
         .deny
         .iter()
         .chain(&policy.allow)
-        .chain(&policy.ask)
+        .chain(&policy.review)
         .chain(&policy.defer)
     {
         excluded_positives(group, &mut out);
@@ -308,10 +329,10 @@ mod tests {
     }
 
     #[test]
-    fn ask_shadowed_by_allow_shell_prefix() {
+    fn review_shadowed_by_allow_shell_prefix() {
         let w = warn(
             "version: 1\nallow:\n  - id: dev\n    shell: ['cargo *']\n\
-             ask:\n  - id: push\n    shell: ['cargo publish*', 'git push*']\n",
+             review:\n  - id: push\n    shell: ['cargo publish*', 'git push*']\n",
         );
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("rule `push`") && w[0].contains("`cargo publish*`"));
@@ -332,11 +353,11 @@ mod tests {
     fn net_patterns_shadow_fetch_patterns_but_not_the_reverse() {
         let w = warn(
             "version: 1\nallow:\n  - id: reg\n    net: ['*.crates.io']\n    fetch: ['docs.rs']\n\
-             ask:\n  - id: web\n    fetch: ['static.crates.io']\n    net: ['docs.rs']\n",
+             review:\n  - id: web\n    fetch: ['static.crates.io']\n    net: ['docs.rs']\n",
         );
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(
-            w[0].contains("ask fetch pattern `static.crates.io`"),
+            w[0].contains("review fetch pattern `static.crates.io`"),
             "{w:?}"
         );
         assert!(
@@ -349,7 +370,7 @@ mod tests {
     fn negated_lists_are_not_assumed_to_cover() {
         let w = warn(
             "version: 1\nallow:\n  - id: proj\n    fs.write: ['${project}/**', '!${project}/.git/**']\n\
-             ask:\n  - id: git\n    fs.write: ['${project}/.git/**']\n",
+             review:\n  - id: git\n    fs.write: ['${project}/.git/**']\n",
         );
         assert!(w.is_empty(), "{w:?}");
     }
@@ -398,7 +419,7 @@ mod tests {
 
     #[test]
     fn unknown_default_kinds() {
-        let w = warn("version: 1\ndefaults: { network: deny, net: deny, '*': ask }\n");
+        let w = warn("version: 1\ndefaults: { network: deny, net: deny, '*': review }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("`network`"));
         assert_eq!(warn("version: 1\ndefaults: allow\n"), Vec::<String>::new());

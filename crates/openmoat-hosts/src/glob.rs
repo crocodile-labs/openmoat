@@ -81,7 +81,7 @@ pub(crate) fn reach_unknown(pattern: &str) -> bool {
     false
 }
 
-/// `action`, asking at least when one of `patterns` reaches where OpenMoat
+/// `action`, needing review at least when one of `patterns` reaches where OpenMoat
 /// cannot work out ([`reach_unknown`]): what it reads is then not all checked.
 pub(crate) fn bounded<'a>(action: Action, patterns: impl IntoIterator<Item = &'a str>) -> Action {
     let mut patterns = patterns.into_iter();

@@ -58,7 +58,7 @@ fn default_policy_lowers_paths_and_hosts() {
     );
     assert!(
         (ir.fs.write.allow[0].patterns.iter()).any(|p| p == "!/p/**/.github/workflows/**"),
-        "what `runs-later` asks for is left out"
+        "what `runs-later` holds for review is left out"
     );
     assert_eq!(
         ids(&ir.fs.write.deny),
@@ -78,7 +78,7 @@ fn default_policy_lowers_paths_and_hosts() {
     assert_eq!(
         ir.egress.fetch.default,
         Effect::Deny,
-        "fetch: ask lowers to deny"
+        "fetch: review lowers to deny"
     );
     assert!(ir.secrets.is_empty() && ir.limits.is_empty());
     let kinds: Vec<&str> = ir.decide_only.iter().map(|d| d.kind.as_str()).collect();
@@ -100,11 +100,11 @@ fn every_deferred_kind_is_reported_as_a_loss() {
         format!("fetch `default.fetch`: no rule matches: {agent}, OS layers deny"),
         format!("net `local-net`: {agent}; OS layers deny unless an allow rule matches"),
         format!("fetch `local-net`: {agent}; OS layers deny unless an allow rule matches"),
-        "fs.read `home-sweep`: the hook asks; OS layers deny unless an allow rule matches".into(),
-        "fs.write `git-internals`: the hook asks; OS layers deny unless an allow rule matches"
+        "fs.read `home-sweep`: the hook holds it for review; OS layers deny unless an allow rule matches".into(),
+        "fs.write `git-internals`: the hook holds it for review; OS layers deny unless an allow rule matches"
             .into(),
-        "fs.write `persistence`: the hook asks; OS layers deny unless an allow rule matches".into(),
-        "fs.write `runs-later`: the hook asks; OS layers deny unless an allow rule matches".into(),
+        "fs.write `persistence`: the hook holds it for review; OS layers deny unless an allow rule matches".into(),
+        "fs.write `runs-later`: the hook holds it for review; OS layers deny unless an allow rule matches".into(),
     ] {
         assert!(losses.contains(&expected), "{losses:#?}");
     }
@@ -112,10 +112,10 @@ fn every_deferred_kind_is_reported_as_a_loss() {
 }
 
 #[test]
-fn ask_under_an_allow_default_becomes_a_deny_rule() {
+fn review_under_an_allow_default_becomes_a_deny_rule() {
     let ir = lowered(
         "version: 1\ndefaults: allow\nallow:\n  - id: a\n    fs.read: ['/x/**']\n\
-         ask:\n  - id: q\n    fs.read: ['/x/secret']\n",
+         review:\n  - id: q\n    fs.read: ['/x/secret']\n",
     );
     assert_eq!(ir.fs.read.default, Effect::Allow);
     assert_eq!(ids(&ir.fs.read.deny), ["q"]);

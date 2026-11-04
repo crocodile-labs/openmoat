@@ -21,7 +21,7 @@ cannot tell the build tool's read from a script's.
   lists the group under `decide_only` for those kinds. Every backend is generated from
   the IR, so none denies the paths; OS layers treat them as if the group were absent
   (the default, read roots and allow rules decide).
-- `policy lint` rejects `hook_only` on `allow`, `ask` and `defer` groups, with `net` or
+- `policy lint` rejects `hook_only` on `allow`, `review` and `defer` groups, with `net` or
   `fetch` patterns (sandboxed commands would reach hosts the hook denies), and on a
   group without file patterns.
 - The default policy adds the group `build-credentials` with the three files, read and

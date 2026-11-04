@@ -1,4 +1,4 @@
-//! Token egress, the push check, the package near-miss ask, MCP server pinning
+//! Token egress, the push check, the package near-miss review, MCP server pinning
 //! and file provenance, each driven through the real Claude Code. The same
 //! calls also replay through `moat guard` alone
 //! (`the_scenario_calls_get_these_verdicts_from_the_hook`), which runs
@@ -103,8 +103,8 @@ fn real_claude_push_of_a_committed_token_is_denied() {
 }
 
 #[test]
-fn real_claude_package_near_miss_asks_and_does_not_install() {
-    let Some(agent) = Agent::find("the package near-miss ask") else {
+fn real_claude_package_near_miss_needs_review_and_does_not_install() {
+    let Some(agent) = Agent::find("the package near-miss review") else {
         return;
     };
     let home = Home::installed(&agent, |_| {});
@@ -116,9 +116,9 @@ fn real_claude_package_near_miss_asks_and_does_not_install() {
     let id = session(3);
     let said = home.claude(&agent, &id, &near_miss_calls(), "Bash");
     let row = home.decided(&id, "Bash", &said);
-    // An ask in `claude -p` has no one to answer it: Claude Code does not run
+    // A review in `claude -p` has no one to answer it: Claude Code does not run
     // the call, `--allowedTools Bash` or not.
-    assert_eq!(decided_verdict(&row), "ask", "{row}\n{}", text(&said));
+    assert_eq!(decided_verdict(&row), "review", "{row}\n{}", text(&said));
     assert!(has_rule(&row, "package-near-miss"), "{row}");
     assert!(reasons(&row).contains("requests"), "{row}");
     assert!(!text(&said).contains(RAN), "pip ran: {}", text(&said));
@@ -195,11 +195,11 @@ fn real_claude_file_provenance_taints_the_next_session() {
         text(&said)
     );
 
-    // Session B runs that script, then writes a workflow: the write asks.
+    // Session B runs that script, then writes a workflow: the write needs review.
     let b = session(7);
     let said = home.claude(&agent, &b, &provenance_b(&home.project), "Bash,Write");
     let row = home.decided(&b, "Write", &said);
-    assert_eq!(decided_verdict(&row), "ask", "{row}\n{}", text(&said));
+    assert_eq!(decided_verdict(&row), "review", "{row}\n{}", text(&said));
     assert!(has_rule(&row, "session-taint"), "{row}");
     let why = reasons(&row);
     assert!(why.contains("run.sh") && why.contains(&a), "{row}");

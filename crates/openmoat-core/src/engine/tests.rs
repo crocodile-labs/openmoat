@@ -69,7 +69,7 @@ fn per_kind_defaults_apply_with_synthetic_ids() {
 #[test]
 fn project_patterns_match_nothing_without_a_project() {
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n\
+        "version: 1\ndefaults: review\ndeny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n\
          allow:\n  - id: proj\n    fs.read: ['${project}/**', '!${project}/.env']\n",
     );
     let read = |path: &str| Action::FsRead {
@@ -84,7 +84,7 @@ fn project_patterns_match_nothing_without_a_project() {
         let d = evaluate(&p, &home, &read(path)).unwrap();
         assert_eq!(
             (d.verdict, d.rules),
-            (Verdict::Ask, vec!["default".to_owned()]),
+            (Verdict::Review, vec!["default".to_owned()]),
             "{path}"
         );
     }
@@ -100,7 +100,7 @@ fn project_patterns_match_nothing_without_a_project() {
 #[test]
 fn negated_allow_patterns_fall_through_to_default() {
     let p = policy(
-        "version: 1\ndefaults: ask\nallow:\n  - id: proj\n    \
+        "version: 1\ndefaults: review\nallow:\n  - id: proj\n    \
          fs.write: ['${project}/**', '!${project}/.git/**']\n",
     );
     let write = |path: &str| Action::FsWrite {
@@ -114,13 +114,13 @@ fn negated_allow_patterns_fall_through_to_default() {
     let excluded = evaluate(&p, &ctx(), &write("/p/.git/HEAD")).unwrap();
     assert_eq!(
         (excluded.verdict, excluded.rules),
-        (Verdict::Ask, vec!["default".to_owned()]),
+        (Verdict::Review, vec!["default".to_owned()]),
         "the exclusion falls through to the default, not to another rule"
     );
 }
 
-/// A part that cannot be parsed asks without hiding the other parts' decisions:
-/// next to a secret read it still denies, alone it asks (#345).
+/// A part that cannot be parsed needs review without hiding the other parts' decisions:
+/// next to a secret read it still denies, alone it needs review (#345).
 #[test]
 fn an_unparseable_part_never_softens_a_deny() {
     let p =
@@ -140,15 +140,15 @@ fn an_unparseable_part_never_softens_a_deny() {
         (d.verdict, d.rules)
     };
     let deny = (Verdict::Deny, vec!["keys".to_owned()]);
-    let ask = (Verdict::Defer, vec!["unparseable".to_owned()]);
+    let review = (Verdict::Defer, vec!["unparseable".to_owned()]);
     assert_eq!(verdict(&mcp(&["~/.ssh/id_rsa"])), deny);
-    assert_eq!(verdict(&mcp(&["/p/notes"])), ask);
+    assert_eq!(verdict(&mcp(&["/p/notes"])), review);
     for (command, expected) in [
         ("cd \"$X\" && cat notes ~/.ssh/id_rsa", &deny),
-        ("cd \"$X\" && cat notes /p/a", &ask),
+        ("cd \"$X\" && cat notes /p/a", &review),
         ("sh -ee.a; cat ~/.ssh/id_rsa", &deny),
         ("echo $(sh -ee.a) $(cat ~/.ssh/id_rsa)", &deny),
-        ("echo $(sh -ee.a) $(cat /p/a)", &ask),
+        ("echo $(sh -ee.a) $(cat /p/a)", &review),
     ] {
         assert_eq!(&verdict(&shell(command)), expected, "{command}");
     }
@@ -156,9 +156,9 @@ fn an_unparseable_part_never_softens_a_deny() {
 
 /// An approval cannot make an unparseable command run: `sh -ee.a` has an option
 /// cluster the shell grammar does not know, so even a literal allow of exactly
-/// that command asks (found by the `literal_pattern` fuzz target).
+/// that command needs review (found by the `literal_pattern` fuzz target).
 #[test]
-fn an_approved_unparseable_command_still_asks() {
+fn an_approved_unparseable_command_still_needs_review() {
     let pattern = crate::literal_shell_pattern("sh -ee.a").unwrap();
     let p = policy(&format!(
         "version: 1\ndefaults: deny\nallow:\n  - id: approved\n    shell: [\"{pattern}\"]\n"
@@ -166,7 +166,7 @@ fn an_approved_unparseable_command_still_asks() {
     let d = evaluate(&p, &ctx(), &shell("sh -ee.a")).unwrap();
     assert_eq!(
         (d.verdict, d.rules),
-        (Verdict::Ask, vec!["unparseable".to_owned()])
+        (Verdict::Review, vec!["unparseable".to_owned()])
     );
 }
 
@@ -205,7 +205,7 @@ fn symlinked_paths_are_checked_at_both_locations() {
     use crate::realpath::MapPathResolver;
     use std::collections::BTreeMap;
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: secret\n    \
+        "version: 1\ndefaults: review\ndeny:\n  - id: secret\n    \
          fs.read: ['~/.ssh/**']\n    fs.write: ['~/.ssh/**']\n\
          allow:\n  - id: proj\n    fs.read: ['${project}/**']\n    \
          fs.write: ['${project}/**']\n  - id: cat\n    shell: ['cat *', 'echo *']\n",
@@ -243,9 +243,9 @@ fn symlinked_paths_are_checked_at_both_locations() {
 }
 
 #[test]
-fn patches_write_every_file_and_ask_when_empty() {
+fn patches_write_every_file_and_need_review_when_empty() {
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: rc\n    fs.write: ['~/.zshrc']\n\
+        "version: 1\ndefaults: review\ndeny:\n  - id: rc\n    fs.write: ['~/.zshrc']\n\
          allow:\n  - id: proj\n    fs.write: ['${project}/**']\n",
     );
     let patch = |w: &[&str]| Action::Patch {
@@ -261,14 +261,14 @@ fn patches_write_every_file_and_ask_when_empty() {
     let d = evaluate(&p, &ctx(), &patch(&[])).unwrap();
     assert_eq!(
         (d.verdict, d.rules.as_slice()),
-        (Verdict::Ask, &["unparseable".to_owned()][..])
+        (Verdict::Review, &["unparseable".to_owned()][..])
     );
 }
 
 #[test]
-fn read_files_reads_every_file_and_asks_when_empty() {
+fn read_files_reads_every_file_and_needs_review_when_empty() {
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: ssh\n    fs.read: ['~/.ssh/**']\n\
+        "version: 1\ndefaults: review\ndeny:\n  - id: ssh\n    fs.read: ['~/.ssh/**']\n\
          allow:\n  - id: proj\n    fs.read: ['${project}/**']\n",
     );
     let read = |r: &[&str]| Action::ReadFiles {
@@ -282,12 +282,12 @@ fn read_files_reads_every_file_and_asks_when_empty() {
         (Verdict::Deny, &["ssh".to_owned()][..])
     );
     let d = evaluate(&p, &ctx(), &read(&[])).unwrap();
-    assert_eq!(d.verdict, Verdict::Ask);
+    assert_eq!(d.verdict, Verdict::Review);
 }
 
 #[test]
 fn compiled_policy_is_reusable() {
-    let p = policy("version: 1\ndefaults: ask\nallow:\n  - id: ls\n    shell: ['ls*']\n");
+    let p = policy("version: 1\ndefaults: review\nallow:\n  - id: ls\n    shell: ['ls*']\n");
     let compiled = CompiledPolicy::compile(&p, &ctx()).unwrap();
     for _ in 0..3 {
         assert_eq!(compiled.decide(&shell("ls -la")).verdict, Verdict::Allow);
@@ -317,7 +317,7 @@ fn path_case_sensitivity_comes_from_the_context() {
 #[test]
 fn reads_after_cd_are_checked_where_cd_went() {
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: secret\n    fs.read: ['~/.ssh/**', '~/.aws/**']\n\
+        "version: 1\ndefaults: review\ndeny:\n  - id: secret\n    fs.read: ['~/.ssh/**', '~/.aws/**']\n\
          allow:\n  - id: proj\n    fs.read: ['${project}/**']\n  - id: dev\n    \
          shell: ['cd *', 'cat *', 'head *', 'ls*', 'cargo test*']\n",
     );
@@ -345,7 +345,7 @@ fn reads_after_cd_are_checked_where_cd_went() {
             "{command}"
         );
     }
-    // The read in an unknown directory asks; the `$DIR` read is still decided.
+    // The read in an unknown directory needs review; the `$DIR` read is still decided.
     assert_eq!(
         compiled.decide(&shell("cd \"$DIR\" && cat id_rsa")).rules,
         ["default", "unparseable"]
@@ -360,7 +360,7 @@ fn roots_match_under_their_resolved_spelling_too() {
     use crate::realpath::MapPathResolver;
 
     let p = policy(
-        "version: 1\ndefaults: ask\ndeny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n\
+        "version: 1\ndefaults: review\ndeny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n\
          allow:\n  - id: proj\n    fs.read: ['${project}/**']\n\
          \x20   fs.write: ['${project}/**', '!${project}/.git/**']\n",
     );
@@ -393,17 +393,20 @@ fn roots_match_under_their_resolved_spelling_too() {
         decide(write("/private/p/a")),
         verdict(Verdict::Allow, "proj")
     );
-    let git = verdict(Verdict::Ask, "default");
+    let git = verdict(Verdict::Review, "default");
     assert_eq!(decide(write("/private/p/.git/config")), git);
     assert_eq!(decide(write("/p/.git/config")), git);
     let keys = verdict(Verdict::Deny, "keys");
     assert_eq!(decide(read("/vol/h/.ssh/id_rsa")), keys);
     assert_eq!(decide(read("/h/.ssh/id_rsa")), keys);
-    assert_eq!(decide(read("/p/e/hosts")), verdict(Verdict::Ask, "default"));
+    assert_eq!(
+        decide(read("/p/e/hosts")),
+        verdict(Verdict::Review, "default")
+    );
     let unlinked = CompiledPolicy::compile(&p, &ctx()).unwrap();
     assert_eq!(
         unlinked.decide(&read("/private/p/a")).verdict,
-        Verdict::Ask,
+        Verdict::Review,
         "the resolved spelling is a fact the caller supplies"
     );
 }

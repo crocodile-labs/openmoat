@@ -124,7 +124,7 @@ mod tests {
             (Verdict::Deny, "secrets-paths"),
             (Verdict::Deny, "secrets-paths"),
             (Verdict::Deny, "pipe-to-shell"),
-            (Verdict::Ask, "package-near-miss"),
+            (Verdict::Review, "package-near-miss"),
             (Verdict::Defer, "default"),
             (Verdict::Deny, "kernel-self"),
         ];

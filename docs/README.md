@@ -18,7 +18,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 
 | Document | What it covers |
 |---|---|
-| [USAGE.md](USAGE.md) | Handling a deny or an ask, reviewing what the agent did, changing the policy, team rules; every command and exit code |
+| [USAGE.md](USAGE.md) | Handling a deny or a review, reviewing what the agent did, changing the policy, team rules; every command and exit code |
 | [POLICY.md](POLICY.md) | The policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy, the lock |
 | [SANDBOX.md](SANDBOX.md) | The OS sandboxes: the agents' own (Standard tier), `openmoat run` (Lightweight) and `openmoat run --isolate` (Isolated) |
 | [MERGE_CHECK.md](MERGE_CHECK.md) | Checking pull requests before merge: `openmoat policy check-diff` and the GitHub Action, with an example workflow, output and limits |

@@ -13,9 +13,9 @@ deliberate block must never be read as a crash.
 
 | Code | Meaning |
 |---|---|
-| 0 | allow, or ask (the host prompts the user), or success of a non-guard command |
+| 0 | allow, or review (called `ask` before ADR-053; the host prompts the user), or success of a non-guard command |
 | 2 | deny |
-| 3 | unresolved ask from `moat policy check` (adapters treat as deny) |
+| 3 | unresolved review from `moat policy check` (adapters treat as deny) |
 | 64 | usage or configuration error; adapters fail closed |
 
 `main` parses arguments explicitly so clap's usage errors map to 64. `moat guard`

@@ -12,8 +12,8 @@ runs `moat guard --host pi`. Every fact here comes from [`pi.rs`](../pi.rs) and
 | `tool_call` (through the extension) | 45 s |
 
 The extension sends pi's `toolName`, `input`, `toolCallId` and `parentToolCallId`, and
-adds `sessionId`, `cwd`, `hasUI` and `platform`. It returns nothing for `allow`, asks with
-`ctx.ui.confirm` for `ask` and blocks for `deny`; anything it cannot read blocks the call.
+adds `sessionId`, `cwd`, `hasUI` and `platform`. It returns nothing for `allow`, prompts with
+`ctx.ui.confirm` for `review` (which `openmoat guard` sends it as `"ask"`) and blocks for `deny`; anything it cannot read blocks the call.
 When pi loads it, the extension runs `moat guard --heartbeat --host pi`
 ([ADR-042](../../../../../docs/adr/ADR-042-plugins-report-loading.md)).
 
@@ -37,9 +37,9 @@ gaps).
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-pi asks through the extension's dialog where it has a screen (`ctx.hasUI`: the terminal UI
+pi puts a review to the person through the extension's dialog where it has a screen (`ctx.hasUI`: the terminal UI
 and RPC mode); print and JSON modes have none. pi has no approval step of its own, so a
 call OpenMoat defers runs.
 
@@ -59,7 +59,7 @@ Credentials: `auth.json` (provider keys and OAuth tokens), `models.json` (which 
 hold API keys) and `mcp-auth.json` (MCP sign-ins) in `PI_CODING_AGENT_DIR` are
 `agent-credentials`': the agent's own tools may neither read nor write them, and `pi
 auth print-api-key` and `pi auth print-bearer-token`, which print a stored key, are
-denied. `pi mcp add` and `pi mcp login` ask (`runs-later`). `openmoat status` and
+denied. `pi mcp add` and `pi mcp login` need review (`runs-later`). `openmoat status` and
 `openmoat doctor` warn when the `pi` on the search path is a version with a published
 advisory (`advisories.rs`), such as the `auth.json` write race before 0.78.1.
 

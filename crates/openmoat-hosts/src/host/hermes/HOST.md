@@ -38,7 +38,7 @@ session's.
 |---|---|---|
 | `allow` | `{}` | 0 |
 | `defer` | nothing | 0 |
-| `ask` | `{"action": "approve", "message", "rule_key": "openmoat:<hash>"}` | 0 |
+| `review` | `{"action": "approve", "message", "rule_key": "openmoat:<hash>"}` | 0 |
 | `deny`, and every adapter error | `{"decision": "block", "reason"}` | 2 |
 
 Hermes has no "allow" that skips its own checks, so `allow` and `defer` both leave the
@@ -50,7 +50,7 @@ call to them.
   relative `workdir` or a command that leaves the session's shell where OpenMoat cannot
   know).
 - `read_file` (`FsRead`); `write_file`, `patch` (`FsWrite`; `Patch` for a V4A
-  `mode: patch`); `search_files` (`FsRead`, `ReadFiles`). A relative path asks
+  `mode: patch`); `search_files` (`FsRead`, `ReadFiles`). A relative path needs review
   (`Unchecked`): Hermes resolves it against the session's directory, which the payload
   does not send.
 - `web_search` (`WebSearch`), `web_extract` (`Fetch` for one URL, `UnknownTool` for
@@ -61,7 +61,7 @@ call to them.
   `list` (`Unchecked` `UnknownTool`, its `script` read as a command).
 - `memory` (`FsWrite` of `memories/` in the Hermes home) and `skill_manage`
   (`FsWrite` of `skills/<name>` for each skill its `operations` name, `Patch` for
-  several): the notes and skills Hermes loads into later sessions. A skill write asks (`runs-later`); a memory write asks once the session
+  several): the notes and skills Hermes loads into later sessions. A skill write needs review (`runs-later`); a memory write needs review once the session
   has read untrusted content (session taint).
 - MCP tools `mcp__<server>__<tool>` (`McpTool`).
 - Any other tool (`skill_view`, the other `browser_*` tools,
@@ -75,21 +75,21 @@ The Tool Search bridge's `tool_call` is unwrapped by Hermes before the hook, so 
 sees the tool that runs. The full table is in
 [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-An ask goes to Hermes's own approval prompt (the terminal, or the gateway's buttons on
+A review goes to Hermes's own approval prompt (the terminal, or the gateway's buttons on
 Telegram, Slack and the others), which blocks the call on a denial, a timeout or when no
 one can answer. Its `rule_key` is a hash of OpenMoat's reason, so Hermes's "always"
-approves that ask again, never the whole tool.
+approves that review again, never the whole tool.
 
-Hermes approves an ask without a person seeing it in YOLO mode and with
+Hermes approves a review without a person seeing it in YOLO mode and with
 `approvals.mode: off` (the Desktop's "Approvals: off"), and in cron, `hermes chat -q` and
 webhook sessions whose `approvals.cron_mode`, `single_query_mode` or `unattended_mode` is
-`approve`. Where OpenMoat can see that, the ask is a deny that says how to approve it
+`approve`. Where OpenMoat can see that, the review is a deny that says how to approve it
 (`openmoat`, or `openmoat allow --last`): `HERMES_YOLO_MODE` in the hook's environment
 (`--yolo` sets it), or one of those settings in the `config.yaml` `openmoat init` set up
 or the one `HERMES_HOME` names for the hook. It cannot see the in-session `/yolo` toggle
-or a `hermes -z` one-shot run, which approve asks unseen.
+or a `hermes -z` one-shot run, which approve reviews unseen.
 
 ## Configuration and MCP files
 
@@ -112,7 +112,7 @@ or a `hermes -z` one-shot run, which approve asks unseen.
   `vault/`, `webapp/`, `browser-profile/`, …), in the home and each profile, which its
   terminal tool still reaches; `agent-credentials` denies the agent's own tools reading
   or writing them (its `.env` is `secrets-paths`'). `hermes mcp` (the picker), `hermes
-  mcp add`, `install`, `configure`, `login` and `reauth` ask (`runs-later`).
+  mcp add`, `install`, `configure`, `login` and `reauth` need review (`runs-later`).
 - MCP servers: `mcp_servers` in `config.yaml`, pinned one by one; tools are named
   `mcp__<server>__<tool>`, each part with every character but ASCII letters, digits and
   `_` as `_`, a name longer than 64 characters cut and hashed. Hermes reads no project
@@ -129,11 +129,11 @@ itself, its `config.yaml`, `shell-hooks-allowlist.json`, `.env`, `active_profile
 `HERMES_SAFE_MODE`; and `hermes config set hooks…`, `approvals…`, `plugins…` or
 `HERMES_SAFE_MODE`,
 `hermes hooks revoke` and `hermes profile use`; for a profile `openmoat init` found,
-the same files of that profile. `runs-later` asks before writes to `cron/`, `skills/`
+the same files of that profile. `runs-later` holds for review the writes to `cron/`, `skills/`
 (the `skill_manage` tool's too), another profile's configuration, allowlist, `.env`,
 plugins, hooks, skills and cron jobs, and a project's `.hermes/plugins/`. Once a session
 has read untrusted content, writes to `memories/` (the `memory` tool's too), `SOUL.md`,
-a project's `.hermes.md` and `.hermes/` ask too (`session-taint`). `openmoat status`
+a project's `.hermes.md` and `.hermes/` need review too (`session-taint`). `openmoat status`
 and `openmoat doctor` warn when the `hermes` on the search path is a version with a
 published advisory (`advisories.rs`).
 
@@ -177,8 +177,8 @@ hook can see or stop it.
   singularity, vercel) are checked as if they ran locally.
 - Relative paths of terminal commands are checked against the Hermes process's directory,
   which differs from the session's after a `cd` in an earlier call, and in Desktop, TUI
-  and ACP sessions, which register a workspace of their own; relative file-tool paths ask.
-- The in-session `/yolo` toggle and `hermes -z` approve an ask unseen.
+  and ACP sessions, which register a workspace of their own; relative file-tool paths need review.
+- The in-session `/yolo` toggle and `hermes -z` approve a review unseen.
 - A changed `config.yaml` is caught on the next tool call (Hermes has no
   settings-change hook); a gateway drops a hook removed from it within about 30 s.
 - `HERMES_SAFE_MODE=1`, another profile, or Hermes's private safe-worker mode runs no

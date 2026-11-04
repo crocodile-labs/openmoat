@@ -39,7 +39,7 @@ pub fn row() -> Row {
             |_| fixture("openclaw/read-malformed.json"),
             Some("cannot be checked"),
         )),
-        ask: Some(|sb| {
+        review: Some(|sb| {
             let outside = sb.home.join("notes/todo.txt");
             crate::openclaw::payload(sb, "read", &json!({"path": outside}))
         }),

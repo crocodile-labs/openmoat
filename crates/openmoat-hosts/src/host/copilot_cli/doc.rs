@@ -13,13 +13,13 @@ pub(super) const DOCS: HostDocs = HostDocs {
 const TOOLS: &[ToolRow] = &[
     ToolRow::new(
         "`bash`, `local_shell` / `write_bash`",
-        "`command` (asks when it leaves the shell in a directory OpenMoat cannot know) / `input` \
-         (typed into a running shell: asks); `toolArgs` is parsed when it is a JSON string",
+        "`command` (needs review when it leaves the shell in a directory OpenMoat cannot know) / `input` \
+         (typed into a running shell: needs review); `toolArgs` is parsed when it is a JSON string",
         "`Shell` / `Unchecked`",
     ),
     ToolRow::new(
         "`powershell` / `write_powershell`",
-        "`command` / `input` (asks)",
+        "`command` / `input` (needs review)",
         "`ForeignShell` / `Unchecked`",
     ),
     ToolRow::new(

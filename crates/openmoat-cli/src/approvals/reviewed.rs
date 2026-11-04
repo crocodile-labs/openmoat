@@ -1,10 +1,10 @@
-//! What `moat allow` approves of an asked action, and how it is shown.
+//! What `moat allow` approves of an action held for review, and how it is shown.
 
 use openmoat_core::Action;
 
 use crate::realpath::{FsPathResolver, Resolution};
 
-/// An asked action as a grant or `--always` rule names it: a shell command
+/// An action held for review, as a grant or `--always` rule names it: a shell command
 /// trimmed, or files with each path made absolute against `cwd` (`~` expanded,
 /// `.` and `..` collapsed) the way the engine reads it. `None` for what `moat
 /// allow` cannot approve (MCP tools, sites, a foreign shell, a patch naming no
@@ -12,7 +12,7 @@ use crate::realpath::{FsPathResolver, Resolution};
 #[must_use]
 pub fn approvable(action: &Action, cwd: Option<&str>, home: &str) -> Option<Action> {
     let absolute = |p: &String| openmoat_core::resolve_path(p, home, None, cwd);
-    // A patch naming no file is unparseable, and stays an `ask`.
+    // A patch naming no file is unparseable, and stays a `review`.
     let all = |paths: &[String]| {
         let all: Vec<String> = paths.iter().map(absolute).collect::<Option<_>>()?;
         (!all.is_empty()).then_some(all)
@@ -93,8 +93,8 @@ mod tests {
             };
             approvable(&action, cwd, "/h")
         };
-        let asked = read("src/../notes.md", Some("/p")).unwrap();
-        assert_eq!(describe(&asked), "read /p/notes.md");
+        let reviewed = read("src/../notes.md", Some("/p")).unwrap();
+        assert_eq!(describe(&reviewed), "read /p/notes.md");
         assert_eq!(read("~/notes.md", None), read("/h/notes.md", None));
         assert_eq!(read("notes.md", None), None, "relative without a cwd");
         let mut g = Grants::default();
@@ -103,7 +103,7 @@ mod tests {
             session_id: "c1",
             project: "/p",
         };
-        g.grant(c1, &asked, NOW, None);
+        g.grant(c1, &reviewed, NOW, None);
         assert!(g.matches(c1, &read("/p/notes.md", None).unwrap(), NOW));
         assert!(!g.matches(c1, &read("/p/other.md", None).unwrap(), NOW));
         let write = Action::FsWrite {
@@ -112,11 +112,11 @@ mod tests {
         assert!(!g.matches(c1, &write, NOW), "a read is not a write");
 
         let mut o = Overlay::default();
-        assert!(!o.covers(&asked));
+        assert!(!o.covers(&reviewed));
         let rule = o.allow_files(&["/p/notes.md".to_owned()], &[]).unwrap();
         assert_eq!(rule.fs_read, ["/p/notes.md"]);
         assert_eq!(rule.fs_write, Vec::<String>::new());
-        assert!(o.covers(&asked) && !o.covers(&write));
+        assert!(o.covers(&reviewed) && !o.covers(&write));
         assert!(o.allow_files(&[], &["/p/*.md".to_owned()]).is_err());
     }
 }

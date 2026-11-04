@@ -54,12 +54,12 @@ impl Filesystem {
              run code or follow another repository (hooks, config, config.worktree, \
              info/attributes, a linked worktree's commondir, the same in submodules); a script \
              can still rewrite history or create a `.git` file (`gitdir: …`) in a subdirectory, \
-             and the hook still asks for file-tool writes to any `.git`",
+             and the hook still holds file-tool writes to any `.git` for review",
         );
     }
 }
 
-/// The hook asks before the agent writes a [`RUNS_LATER`] file; the sandbox is
+/// The hook holds the agent's writes of a [`RUNS_LATER`] file for review; the sandbox is
 /// not asked to deny it, so sandboxed commands may still write one.
 pub(super) fn runs_later(report: &mut Report, rule: &str) {
     if report.allowances.iter().any(|a| a.rule == rule) {
@@ -70,6 +70,6 @@ pub(super) fn runs_later(report: &mut Report, rule: &str) {
         rule,
         RUNS_LATER.iter().map(|f| (*f).to_owned()).collect(),
         "sandboxed commands may write CI configuration, commit-hook managers' files and \
-         editor tasks; the hook asks before the agent writes one (`runs-later`)",
+         editor tasks; the hook holds the agent's writes of one for review (`runs-later`)",
     );
 }

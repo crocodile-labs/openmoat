@@ -27,7 +27,7 @@ openmoat-wasm ──► openmoat-sdk ─────┘    (the SDK, for other a
 | Crate | Role | Rules |
 |---|---|---|
 | `openmoat-core` | Policy model and lint, POSIX lexer (`lexer/`), shell classifier (`shell/`), URL host parser (`host.rs`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists and near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), the Codex `apply_patch` file list (`patch.rs`), `ProgramResolver` and `PathResolver` traits | Pure: no I/O, no `unsafe`, depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Builds for `wasm32-unknown-unknown` in CI; `tests/architecture.rs` enforces the dependency allowlist and the 500-line file budget |
-| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`, `host/pi.rs` with `pi/tools.rs`, `host/gemini_cli.rs` with `gemini_cli/tools.rs` and `gemini_cli/settings.rs`, `host/opencode.rs` with `opencode/tools.rs` (`tools/v1.rs`, `tools/v2.rs`) and `opencode/location.rs`, `host/hermes.rs` with `hermes/tools.rs`, `hermes/consent.rs` and `hermes/settings.rs` for Hermes Agent `pre_tool_call`, `host/cline.rs` with `cline/tools.rs` for the Cline CLI `PreToolUse` file hook), `host/<module>/doc.rs` per host (its README row and tool mapping rows), `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, `HostDocs`, the `HostAdapter` trait), `host.rs` (the one list of hosts: each line declares a host's module and `Host` variant), `registry.rs` (the `hosts!` macro that expands the list into `Host`, `Host::EVERY`, `Host::ALL` and each host's spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `wire/unknown.rs` (the one rule for a tool an adapter does not map), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
+| `openmoat-hosts` | Host adapters: `host/<id>.rs` per host with its `HostSpec` and adapter (`host/claude_code.rs` with `claude_code/config_change.rs` for Claude Code `ConfigChange`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs` with `cursor/pre_tool.rs`, `host/openclaw.rs` with `openclaw/tools.rs`, `host/copilot_cli.rs` with `copilot_cli/tools.rs` for GitHub Copilot CLI `preToolUse`, `host/pi.rs` with `pi/tools.rs`, `host/gemini_cli.rs` with `gemini_cli/tools.rs` and `gemini_cli/settings.rs`, `host/opencode.rs` with `opencode/tools.rs` (`tools/v1.rs`, `tools/v2.rs`) and `opencode/location.rs`, `host/hermes.rs` with `hermes/tools.rs`, `hermes/consent.rs` and `hermes/settings.rs` for Hermes Agent `pre_tool_call`, `host/cline.rs` with `cline/tools.rs` for the Cline CLI `PreToolUse` file hook), `host/<module>/doc.rs` per host (its README row and tool mapping rows), `contract.rs` (`HostSpec`, `Reviews`, `InstallSpec`, `HostDocs`, the `HostAdapter` trait), `host.rs` (the one list of hosts: each line declares a host's module and `Host` variant), `registry.rs` (the `hosts!` macro that expands the list into `Host`, `Host::EVERY`, `Host::ALL` and each host's spec and adapter), `wire/pre_tool_use.rs` (the `PreToolUse` format Claude Code, Codex and the Continue CLI send), `wire/mcp.rs` (MCP arguments to paths and URLs), `wire/unknown.rs` (the one rule for a tool an adapter does not map), `bench.rs` (what `openmoat bench` needs from a host); the Codex `apply_patch` file list is `openmoat-core`'s `patch.rs` | Translate payload to `Action` and `Decision` to response. Never decide |
 | `openmoat-audit` | SQLite store, time-window and session queries, redaction | Redact before persisting. Typed `thiserror` errors |
 | `openmoat-proxy` | The egress proxy behind `openmoat proxy` (§12): request and `ClientHello` parsers, host decisions through openmoat-core, the address guard, connection relay, the `Recorder` trait the CLI implements over `openmoat-audit` | Network I/O only through `std::net`; no async runtime; no storage. Depends on `openmoat-core`, `httparse`, `thiserror`, `zeroize`, and for TLS termination (ADR-043) `rustls` (`ring`), `rcgen` and `rustls-native-certs` |
 | `openmoat` (`crates/openmoat-cli`) | The `openmoat` binary, and `moat` (`src/bin/moat.rs`), the old name kept for a few releases, which starts the `openmoat` beside it: commands, hook installation, the policy lock and its MCP server pins, `openmoat mcp proxy`, the MCP gateway (`mcp/relay.rs`, its decisions in `commands/mcp/gate.rs`, tool pins in `mcp/tools.rs`), approvals, the repository policy file, the environment snapshot, the filesystem resolvers, the sandbox backends generated from the IR (§13, §14), rendering, exit codes | The only crate that touches files (besides `openmoat-sdk`'s opt-in `Policy::read`), the environment and the terminal; the only one that starts processes |
@@ -46,12 +46,12 @@ host payload (stdin)
               └─► load policy + overlay    ~/.moat/policy.yaml + policy.d/approved.yaml
                     + repository policy    <project>/.moat/policy.yaml, tightening only
                     └─► classify (openmoat-core)  Action ⇒ atomic actions
-                          └─► engine            per atom: deny → allow → ask → defer → defaults
+                          └─► engine            per atom: deny → allow → review → defer → defaults
                                 └─► combine     strictest wins ⇒ Decision
-                                      └─► session grant   ask or defer on a granted call ⇒ allow
-                                            └─► session taint     earlier calls in the audit log ⇒ allow or defer may become ask
-                                                  └─► session code      runs a file this session wrote, no OS sandbox ⇒ allow or defer may become ask
-                                                        └─► push check        git push / gh pr create: what it publishes ⇒ may become deny or ask
+                                      └─► session grant   review or defer on a granted call ⇒ allow
+                                            └─► session taint     earlier calls in the audit log ⇒ allow or defer may become review
+                                                  └─► session code      runs a file this session wrote, no OS sandbox ⇒ allow or defer may become review
+                                                        └─► push check        git push / gh pr create: what it publishes ⇒ may become deny or review
                                                               └─► audit record      failure ⇒ deny [kernel-error]
                                                                     └─► hook response (stdout) + exit code
 ```
@@ -92,7 +92,7 @@ exits. There is no daemon.
    `policy.d/approved.yaml` are appended to `allow` and the result is linted again.
    When the project has a repository policy (`<project>/.moat/policy.yaml`, ADR-022),
    `repo.rs` reads it and `openmoat_core::RepoPolicy::merge`, a pure function, merges it:
-   its deny groups join `deny`, its ask groups go into `repo_ask`, which the engine tries
+   its deny groups join `deny`, its review groups go into `repo_review`, which the engine tries
    between `deny` and `allow`. Its allow groups are appended to `allow` only when
    `~/.moat/trust.json` is pinned by the lock and records the SHA-256 of these exact
    bytes for this project root (symlinks resolved); otherwise they are dropped. Its
@@ -100,25 +100,25 @@ exits. There is no daemon.
    cannot be read or does not parse is a `kernel-error` deny.
 7. **Decide.** `CompiledPolicy::compile(policy, ctx).decide_with(action, snapshot,
    FsPathResolver)` classifies and evaluates (§3, §4).
-8. **Grant.** An `ask` or `defer` for a call whose exact text was granted for this host
+8. **Grant.** A `review` or `defer` for a call whose exact text was granted for this host
    session with `openmoat allow` becomes `allow` with rule `approved-session`. A grant
    never touches a `deny` and expires 24 h after it was given; expired grants are
    ignored and pruned.
 9. **Taint.** `taint::of_session` (`taint.rs`) reads this host session's earlier events
    from the audit log. It folds `CompiledPolicy::exposure` over the calls that may have
-   run: allowed and deferred calls, and asks on a host that can ask. Each call is resolved from its
+   run: allowed and deferred calls, and reviews on a host that can prompt. Each call is resolved from its
    own recorded working directory. `CompiledPolicy::with_taint` then tightens the
    decision (POLICY.md §4.1). This runs after the grant, so a grant cannot lift a taint
-   ask, with one exception (`taint::answered`): a grant for this exact call made after
-   the session last read untrusted content answers that content's ask; a later read
-   asks again. A taint from a
+   review, with one exception (`taint::answered`): a grant for this exact call made after
+   the session last read untrusted content answers that content's review; a later read
+   needs review again. A taint from a
    secret the session read is never answered this way. A log or session event that cannot be read is a `kernel-error` deny. An edited
    or deleted event is found by the hash chain (`openmoat doctor`), not on every call.
     **Session code.** `CompiledPolicy::executed` lists the files the shell command runs
     as code (core `shell/executes.rs`). When the decision is `allow` or `defer` and the
     session wrote one of them (`session_writes` in the audit log, or this very call),
     and no OS sandbox from OpenMoat holds the call (`protection::os_sandboxed`, or
-    `openmoat run`'s `--relayed`), `session_code.rs` asks (`session-written-code`,
+    `openmoat run`'s `--relayed`), `session_code.rs` holds it for review (`session-written-code`,
     ADR-039, POLICY.md §4.3); a session grant made after the session last wrote the file
     answers it. Every call that may have run records the files it writes there, with
     its audit row.
@@ -126,7 +126,7 @@ exits. There is no daemon.
     `gh pr create`; core `shell/push.rs`) with the directories each may run in. Unless the
     call is already denied, `push.rs` runs git read-only there, within 10 s for the whole
     call, and tightens the decision: `push-secret` deny, `push-runs-later` or
-    `push-unchecked` ask (POLICY.md §4.2). With no finding the decision is unchanged.
+    `push-unchecked` review (POLICY.md §4.2). With no finding the decision is unchanged.
 11. **Record.** The event is appended to the audit log's hash chain (§7). If it cannot
    be written, the decision becomes a `kernel-error` deny: an unrecorded call is not
    allowed.
@@ -150,7 +150,7 @@ week and the phase most of them were in.
 ## 3. Classification
 
 `openmoat-core` turns an `Action` into atomic actions (`AtomicAction`): `Shell`,
-`Pipeline`, `FsRead`, `FsWrite`, `Net`, `NetWord`, `Fetch`, `WebSearch`, `UnknownTool`, `EnvRead`, `EnvSet`, `McpTool`. An `Action::Unchecked` wraps another action and adds an `unchecked` ask.
+`Pipeline`, `FsRead`, `FsWrite`, `Net`, `NetWord`, `Fetch`, `WebSearch`, `UnknownTool`, `EnvRead`, `EnvSet`, `McpTool`. An `Action::Unchecked` wraps another action and adds an `unchecked` review.
 
 - **Shell** (ADR-005). The lexer (`lexer/`) reads words, quotes, escapes, operators,
   redirections, `$( … )`, backticks, here-documents and here-strings, up to 64 KB, and
@@ -181,7 +181,7 @@ week and the phase most of them were in.
   and URL-shaped arguments found down to 8 levels of nesting (`openmoat-hosts/src/wire/mcp.rs`),
   and, for a GitHub Copilot CLI tool that may be its own, the atoms of the shell commands
   its arguments name. A `file:` URL is an `fs.read` of its path, and a URL that names no
-  network address (`javascript:`, `data:`) is `unparseable` and asks. A call that only
+  network address (`javascript:`, `data:`) is `unparseable` and needs review. A call that only
   opens one web page (`wire/mcp/browser.rs`) names it in `opens`, which is a `fetch` atom
   of each host of a plain web page, `net` otherwise or under `mcp.browser_open: net`, plus
   the hosts of the URLs inside it (ADR-047).
@@ -197,15 +197,15 @@ week and the phase most of them were in.
   key or by look, and the atoms of every shell command under a command key
   (`openmoat-hosts/src/wire/unknown.rs`, shared by every adapter); strictest wins.
   Cursor's `preToolUse` cannot prompt, so `Host::decided` records and answers a
-  `defer` there as `ask` (§5).
+  `defer` there as `review` (§5).
 - **Unchecked** (a call the payload shows only in part: GitHub Copilot CLI typed
   shell input or a shell left in an unknown directory, a Gemini CLI search over every
   workspace directory, a glob whose brace group may climb further than computed).
-  The atoms of the action it wraps, and an `unchecked` decision that asks.
+  The atoms of the action it wraps, and an `unchecked` decision that needs review.
 
 Anything the lexer or classifier cannot make sense of is `unparseable`, never `allow`:
 the engine gives it `Defaults::unclassified`, which is `defer` when the catch-all
-(`"*"`) is `allow` or `defer`, as in the default policy, and `ask` when it is `ask` or
+(`"*"`) is `allow` or `defer`, as in the default policy, and `review` when it is `review` or
 `deny` (ADR-025). `ParseOutcome::Unparseable` carries the atoms classified around the
 part that failed (other simple commands, other MCP arguments), and the engine merges the
 `unparseable` verdict with their decisions, so the failing part cannot hide a deny.
@@ -265,8 +265,8 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | OpenClaw | `<server>__<tool>` | `mcp__<server>__<tool>` and `params` | `McpTool` |
 | OpenClaw | `ask_user`, `session_status`, `agents_list`, `agents_wait`, the goal tools, `progress_card`, `theme`, `screen`, `wait`, `tool_search`, `tool_describe`, `heartbeat_respond` | — | none: `ungoverned` |
 | OpenClaw | any other tool (`message`, `sessions_*`, a plugin's tool) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
-| GitHub Copilot CLI | `bash`, `local_shell` / `write_bash` | `command` (asks when it leaves the shell in a directory OpenMoat cannot know) / `input` (typed into a running shell: asks); `toolArgs` is parsed when it is a JSON string | `Shell` / `Unchecked` |
-| GitHub Copilot CLI | `powershell` / `write_powershell` | `command` / `input` (asks) | `ForeignShell` / `Unchecked` |
+| GitHub Copilot CLI | `bash`, `local_shell` / `write_bash` | `command` (needs review when it leaves the shell in a directory OpenMoat cannot know) / `input` (typed into a running shell: needs review); `toolArgs` is parsed when it is a JSON string | `Shell` / `Unchecked` |
+| GitHub Copilot CLI | `powershell` / `write_powershell` | `command` / `input` (needs review) | `ForeignShell` / `Unchecked` |
 | GitHub Copilot CLI | `view` / `create`, `edit`, `str_replace` | `path` (`create` `file_text` for provenance) | `FsRead` / `FsWrite` |
 | GitHub Copilot CLI | `str_replace_editor` | `path`; `command` `view` reads, any other command writes | `FsRead` / `FsWrite` |
 | GitHub Copilot CLI | `apply_patch` | the patch text: `toolArgs` itself, or its `input` or `patch` | `Patch` |
@@ -282,8 +282,8 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | pi | any other tool (an extension's) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 | Gemini CLI | `run_shell_command` | `command`, after a `cd` to `dir_path` (quoted whole: Gemini CLI expands no `~`); the project stays the session's; PowerShell on Windows | `Shell`; `ForeignShell` on Windows |
 | Gemini CLI | `read_file`, `list_directory` / `write_file`, `replace` | `file_path`, `dir_path` / `file_path` (`write_file` `content` for provenance) | `FsRead` / `FsWrite` |
-| Gemini CLI | `glob`, `grep_search` (`search_file_content`) | `dir_path`, else `cwd` and an ask, since Gemini CLI then searches every workspace directory; for `glob` also the directory `pattern` names before its first wildcard, for `grep_search` where `include_pattern` (`include` before 0.65) climbs to | `FsRead`, `ReadFiles`; `Unchecked` |
-| Gemini CLI | `read_many_files` | each `include`, up to its first wildcard, and an ask: it reads every workspace directory | `Unchecked` |
+| Gemini CLI | `glob`, `grep_search` (`search_file_content`) | `dir_path`, else `cwd` and a review, since Gemini CLI then searches every workspace directory; for `glob` also the directory `pattern` names before its first wildcard, for `grep_search` where `include_pattern` (`include` before 0.65) climbs to | `FsRead`, `ReadFiles`; `Unchecked` |
+| Gemini CLI | `read_many_files` | each `include`, up to its first wildcard, and a review: it reads every workspace directory | `Unchecked` |
 | Gemini CLI | `web_fetch` / `google_web_search` | the one URL in `prompt` (a `github.com` `blob` page as the `raw.githubusercontent.com` file Gemini CLI fetches; none or several is an adapter error) / `query` | `Fetch` / `WebSearch` |
 | Gemini CLI | `read_mcp_resource` | `uri`: a `file:` URI as its path; any other URI | `FsRead`; `UnknownTool` |
 | Gemini CLI | MCP tool (`mcp_<server>_<tool>`) | `mcp_context.server_name`, `mcp_context.tool_name` and `tool_input`; without `mcp_context` the name cannot be split | `McpTool` as `mcp__<server>__<tool>`; `UnknownTool` |
@@ -298,19 +298,19 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | OpenCode | `<server>_<tool>` of a server named under `mcp` (`mcp.servers` in 2); `read_mcp_resource` | decided as `mcp__<server>__<tool>`, the longest server name that begins it when several do, and its arguments; `server`, `uri` as for Claude Code's `ReadMcpResourceTool` | `McpTool` |
 | OpenCode | `task`, `invalid`, `list_mcp_resource_templates` (1); `subagent`, `opencode_session_rename`, `opencode_worktree_list`, `opencode_models` (2); `todowrite`, `skill`, `question`, `execute` (Code Mode), `list_mcp_resources` | — | none: `ungoverned` |
 | OpenCode | any other tool (a plugin's, a custom tool's, OpenCode 2's other `opencode_*` tools) | decided as an MCP tool of that name, every path, URL and command in its arguments checked | `McpTool` |
-| Hermes Agent | `terminal` | `command`, after a `cd` to `workdir`; the project stays the payload's `cwd` (the Hermes process's); a relative `workdir`, or a command that leaves the session's shell where OpenMoat cannot know, asks | `Shell`; `Unchecked` |
-| Hermes Agent | `read_file` / `write_file`, `patch` | `path` (`write_file` `content` for provenance); `patch` with `mode: patch`: every file its V4A `patch` names; a relative path asks, since Hermes resolves it against the session's directory, which the payload does not send | `FsRead` / `FsWrite`, `Patch`; `Unchecked` |
-| Hermes Agent | `search_files` | `path`, else the session's directory (an ask); for `target: files`, also where a relative `pattern` climbs to | `FsRead`, `ReadFiles`; `Unchecked` |
+| Hermes Agent | `terminal` | `command`, after a `cd` to `workdir`; the project stays the payload's `cwd` (the Hermes process's); a relative `workdir`, or a command that leaves the session's shell where OpenMoat cannot know, needs review | `Shell`; `Unchecked` |
+| Hermes Agent | `read_file` / `write_file`, `patch` | `path` (`write_file` `content` for provenance); `patch` with `mode: patch`: every file its V4A `patch` names; a relative path needs review, since Hermes resolves it against the session's directory, which the payload does not send | `FsRead` / `FsWrite`, `Patch`; `Unchecked` |
+| Hermes Agent | `search_files` | `path`, else the session's directory (a review); for `target: files`, also where a relative `pattern` climbs to | `FsRead`, `ReadFiles`; `Unchecked` |
 | Hermes Agent | `web_search` / `web_extract` | `query` / each of `urls`: one URL is a fetch, several an unknown tool with every URL | `WebSearch` / `Fetch`; `UnknownTool` |
 | Hermes Agent | `browser_navigate` | `url`: the browser loads the page and runs its scripts | `Net` |
 | Hermes Agent | `execute_code` | `code` (Python); the tools it calls through `hermes_tools` are checked one by one | `ForeignShell` (`unparseable`) |
 | Hermes Agent | `process_manage` | `list`, `poll`, `log`, `wait`, `kill`, `close`, `handoff`: ungoverned; `write`, `submit`: `data`, typed into a running process | none; `Unchecked` `Shell` |
-| Hermes Agent | `cronjob_manage` | `list`: ungoverned; any other action: the arguments, `script` as a command, and an ask, since the job runs the agent later, unattended | none; `Unchecked` `UnknownTool` |
-| Hermes Agent | `memory` / `skill_manage` | a write of the notes Hermes puts into later sessions (`memories/` in its home) / of each skill its `operations` name in its `skills/`; a skill write asks (`runs-later`), a memory write once the session read untrusted content (taint) | `FsWrite` / `FsWrite`, `Patch` |
+| Hermes Agent | `cronjob_manage` | `list`: ungoverned; any other action: the arguments, `script` as a command, and an need review, since the job runs the agent later, unattended | none; `Unchecked` `UnknownTool` |
+| Hermes Agent | `memory` / `skill_manage` | a write of the notes Hermes puts into later sessions (`memories/` in its home) / of each skill its `operations` name in its `skills/`; a skill write needs review (`runs-later`), a memory write once the session read untrusted content (taint) | `FsWrite` / `FsWrite`, `Patch` |
 | Hermes Agent | MCP tool (`mcp__<server>__<tool>`) | tool name and `tool_input`; a name cut to 64 characters is traced by the part kept | `McpTool` |
 | Hermes Agent | `todo_list`, `clarify`, `session_search`, `skills_list`, `delegate_task` (its subagents' calls fire the hook), `read_terminal`, `close_terminal` | — | none: `ungoverned` |
 | Hermes Agent | any other tool (`skill_view`, the other `browser_*` tools, `vision_analyze`, `computer_use`, the messaging tools, connectors, a plugin's tool, a `tool_call` Hermes did not unwrap) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
-| Cline CLI | `run_commands` | `commands` (lines, or `{command, args}` run without a shell), in every shape Cline accepts; several are decided together, each in a subshell, and asked about when one cannot be read alone | `Shell` (`ForeignShell` for PowerShell on Windows) |
+| Cline CLI | `run_commands` | `commands` (lines, or `{command, args}` run without a shell), in every shape Cline accepts; several are decided together, each in a subshell, and held for review when one cannot be read alone | `Shell` (`ForeignShell` for PowerShell on Windows) |
 | Cline CLI | `read_files` | every `path` (`file_path`, `filePath`) of `files`, `file_paths` or `paths` | `FsRead` / `ReadFiles` |
 | Cline CLI | `editor` | `path` | `FsWrite` |
 | Cline CLI | `apply_patch` | `input`: every file the patch touches | `Patch` |
@@ -323,7 +323,7 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | goose | `shell` | `command`, in the session's `working_dir`; `cmd` (or `GOOSE_SHELL`) on Windows | `Shell`; `ForeignShell` on Windows |
 | goose | `write`, `edit` / `tree`, `analyze` | `path` (`write` `content`, `edit` `before` and `after` for provenance); a relative path is the session's `working_dir`'s | `FsWrite` / `FsRead` |
 | goose | `read_image` | `source`: an http(s) URL goose downloads, else a path | `Fetch`; `FsRead` |
-| goose | `execute_javascript` (Code Mode) | the arguments, and an ask: the tools the script calls do not reach the hook | `Unchecked` `UnknownTool` |
+| goose | `execute_javascript` (Code Mode) | the arguments, and a review: the tools the script calls do not reach the hook | `Unchecked` `UnknownTool` |
 | goose | `load`, `delegate` (its subagent's calls fire the hook), `load_skill` | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 | goose | extension tool (`<extension>__<tool>`), the built-in ones (`todo__…`, `extensionmanager__…`) included | tool name and `tool_input`, recorded as `mcp__<extension>__<tool>` | `McpTool` |
 | goose | `list_functions`, `get_function_details` | — | none: `ungoverned` |
@@ -337,7 +337,7 @@ runs `openmoat guard --host openclaw` with the event, the context's session ids,
 workspace (`cwd`), the configuration path, the state directory and the platform on stdin
 (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` resolved as OpenClaw
 does, `openmoat-hosts/src/host/openclaw/location.rs`), and maps the answer:
-`deny` (exit 2) to `block`, `ask` to `requireApproval`, `allow` or nothing to no decision.
+`deny` (exit 2) to `block`, `review` (sent to the plugin as `"ask"`) to `requireApproval`, `allow` or nothing to no decision.
 Anything else (no `openmoat`, a crash, another exit code, an unreadable answer, no answer in 45 s)
 blocks the call (ADR-033). It registers that handler at the highest priority OpenClaw
 takes and a second one at the lowest, which returns the parameters the first decided on:
@@ -356,11 +356,11 @@ is pi's hook file: `openmoat init` writes it whole, with the binary's path, to
 it on start, and the lock pins it whole (`install/owned.rs`). Its `tool_call` handler runs
 `openmoat guard --host pi` with the event (`toolName`, `input`, `toolCallId`,
 `parentToolCallId`), the session id, `ctx.cwd`, `ctx.hasUI` and the platform on stdin, and maps
-the answer: `deny` (exit 2) to `{ block: true, reason }`, `ask` to pi's confirmation dialog,
+the answer: `deny` (exit 2) to `{ block: true, reason }`, `review` (sent to the extension as `"ask"`) to pi's confirmation dialog,
 `allow` or nothing to no result. Anything else (no `openmoat`, a crash, another exit code, an
 unreadable answer, no answer in 45 s) blocks the call, and pi blocks a call whose handler
-throws. Without a screen (`hasUI` false: print and JSON mode) the call is `PreToolUseNoAsk`, so
-an `ask` arrives as a deny that says how to approve it. `openmoat uninstall` deletes the file,
+throws. Without a screen (`hasUI` false: print and JSON mode) the call is `PreToolUseNoPrompt`, so
+a `review` arrives as a deny that says how to approve it. `openmoat uninstall` deletes the file,
 or gives back a file of the person's that `init` backed up.
 
 OpenCode has no command hook either (ADR-040). OpenMoat's plugin
@@ -378,10 +378,10 @@ checked name and a frozen copy (accessors that throw on assignment) and sends `t
 and `worktree`, the MCP server names and the platform, run `openmoat guard --host opencode`,
 and map the answer: `deny` (exit 2) to a thrown `Error` whose message is the reason, `allow` or
 nothing to a return. The adapter reads the event name (`tool.execute.before` or
-`execute.before`) as the API: OpenCode 1 cannot ask (`HookEvent::PreToolUseNoAsk`,
-`Asks::on_no_ask`), so there an `ask` arrives as a deny that says how to approve it; OpenCode 2
-receives the `ask` and puts it to the person through `ctx.permission.assert`, its own
-`permission` `evaluate` hook making the request an ask. Anything else (no `openmoat`, a crash,
+`execute.before`) as the API: OpenCode 1 cannot prompt (`HookEvent::PreToolUseNoPrompt`,
+`Reviews::on_no_prompt`), so there a `review` arrives as a deny that says how to approve it; OpenCode 2
+receives the `review` (as `"ask"`) and puts it to the person through `ctx.permission.assert`, its own
+`permission` `evaluate` hook giving the request OpenCode's `ask` effect. Anything else (no `openmoat`, a crash,
 another exit code, an unreadable answer, no answer in 45 s) throws too, which blocks the call.
 The spec's `InstallSpec::versions` names the oldest version that loads the plugin and the hook
 each major runs: `openmoat init` skips an older one, and `status` and `doctor` report it as not
@@ -414,13 +414,13 @@ third-party capture shows `Grep` and `Read` send `file_path`; the rest is unveri
 
 ## 4. Decision
 
-For each atomic action, the lists are tried in order `deny → allow → ask → defer`; the
-first list with a match decides that atom. A repository policy's ask groups (`repo_ask`)
+For each atomic action, the lists are tried in order `deny → allow → review → defer`; the
+first list with a match decides that atom. A repository policy's review groups (`repo_review`)
 are tried between `deny` and `allow`. If none matches, `defaults` decides (rule id
 `default.<kind>` or `default`). A `NetWord` atom (a word that only looks like a host,
 outside the programs that name hosts) is matched by `net` rules, but with no match the
 catch-all decides it, not `defaults.net` (ADR-025). The verdict for the tool call is the
-strictest across its atoms: `deny > ask > defer > allow`. `defer` means OpenMoat neither
+strictest across its atoms: `deny > review > defer > allow`. `defer` means OpenMoat neither
 objects nor vouches: the agent's own permission flow decides. Deny is absolute (ADR-002). A `fetch` atom also
 matches `net` patterns and falls back to the `net` default (ADR-017). The decision
 carries the rule ids that produced the final verdict and weaker matches as context.
@@ -477,14 +477,14 @@ through the engine (§12).
 Per access the IR applies deny rules, then allow rules, then the default.
 `ir::Checker` is that reference evaluation.
 
-**Lowering never widens.** `defer` lowers exactly like `ask` (ADR-025). An `ask` default lowers to deny. An `ask` rule disappears
+**Lowering never widens.** `defer` lowers exactly like `review` (ADR-025). A `review` default lowers to deny. A `review` rule disappears
 under a deny default, where the outcome is the same. Under an allow default it becomes a
 deny rule, which also denies where an allow matches. Each case is a loss.
 
 Two tests prove agreement with the engine:
 - `tests/ir_consistency.rs` checks every fs, net, fetch and patch conformance fixture.
   The IR verdict on the engine's own atoms (`CompiledPolicy::atoms`, symlinks included)
-  must equal the engine verdict, with `ask` and `defer` read as deny.
+  must equal the engine verdict, with `review` and `defer` read as deny.
 - `tests/ir_never_widens.rs` lowers generated policies and checks that an IR allow is
   always an engine allow.
 
@@ -506,48 +506,51 @@ name the path as an allowance; where it is narrower, it must report a loss.
 | GitHub Copilot CLI `preToolUse` | `{"permissionDecision":…,"permissionDecisionReason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | pi `tool_call` (OpenMoat's extension) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Gemini CLI `BeforeTool` | `{"decision":"allow"}`, or `{"decision":"ask"\|"deny","reason":…,"systemMessage":…}`; nothing for a `defer` | 0, or 2 on deny |
-| OpenCode 1 `tool.execute.before` (OpenMoat's plugin) | `{"decision":…,"reason":…}` (an `ask` as a deny); nothing for a `defer` | 0, or 2 on deny |
+| OpenCode 1 `tool.execute.before` (OpenMoat's plugin) | `{"decision":…,"reason":…}` (a `review` as a deny); nothing for a `defer` | 0, or 2 on deny |
 | OpenCode 2 `execute.before` (OpenMoat's plugin) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
 
+Every adapter sends OpenMoat's `review` as its host protocol's word (`"ask"`) through one
+function in `openmoat-hosts`, `wire::host_verdict`, so the verdict's name never reaches a host.
+
 A `defer` (ADR-025) writes no output for Claude Code, Codex and the Continue CLI and
 exits 0, so the host's own permission flow runs as it would without OpenMoat. Cursor's
-`beforeShellExecution` and `beforeMCPExecution` receive it as `ask`, which is Cursor's own
+`beforeShellExecution` and `beforeMCPExecution` receive it as `"ask"`, which is Cursor's own
 prompt; on `preToolUse` and `beforeReadFile`, which cannot prompt, `Host::decided`
-records and answers it as `ask` (below). `guard` prints no trace line for a `defer`.
+records and answers it as `review` (below). `guard` prints no trace line for a `defer`.
 
-`ask` is the host's own prompt; OpenMoat has no prompt of its own. Codex cannot ask:
+A `review` is put to the person by the host's own prompt; OpenMoat has no prompt of its own. Codex cannot prompt:
 its `PreToolUse` rejects `permissionDecision: "ask"` as unsupported and then runs the
-call. So for Codex an `ask` is sent as a `deny` (exit 2) whose reason says to approve
+call. So for Codex a `review` is sent as a `deny` (exit 2) whose reason says to approve
 it with `openmoat` or `openmoat allow --last`. Cursor's `preToolUse` and `beforeReadFile` get the
-same treatment. The audit log keeps the `ask`, which is what `--last` finds
+same treatment. The audit log keeps the `review`, which is what `--last` finds
 (`Host::answer`); it approves a shell command or the exact files of a file action.
 
-The Continue CLI (`cn`) cannot ask either. The released `cn` (1.5.47) loads hooks but
+The Continue CLI (`cn`) cannot prompt either. The released `cn` (1.5.47) loads hooks but
 fires no event (THREAT_MODEL, "The Continue CLI"), so this adapter is ready for a release that does: `cn` merges
 hooks from `~/.claude/settings.json` and `.claude/settings.json` with its own files.
 Its runner (`extensions/cli/src/hooks/hookRunner.ts` in continuedev/continue) blocks
-only on exit 2, `decision: "block"` or `permissionDecision: "deny"`, so an `ask` would
+only on exit 2, `decision: "block"` or `permissionDecision: "deny"`, so an `"ask"` would
 run the call. `guard --host claude-code` treats a call as host `continue` when
 `CONTINUE_PROJECT_DIR` is set (`cn` sets it for every command hook; Claude Code never
 does) or when the payload's `transcript_path` is empty (`cn` keeps no transcript file;
 Claude Code always sends a path). Either sign is enough, because a Claude Code call
-mistaken for `cn` only turns an ask into a deny. For `continue` an `ask` is sent as a
+mistaken for `cn` only turns a review into a deny. For `continue` a `review` is sent as a
 `deny` with the same `openmoat allow --last` instruction as for Codex, and the audit log
-records host `continue` with the `ask`. Everything else is decided as for Claude Code
+records host `continue` with the `review`. Everything else is decided as for Claude Code
 (`Host::sender`, `crates/openmoat-hosts/src/host/continue_cli/fixtures/`, built from `cn`'s hook source).
 `continue` is not in `Host::ALL`: it has no hook file of its own to install.
 
-Cursor prompts on `ask` for `beforeShellExecution` and `beforeMCPExecution` only
+Cursor prompts on `"ask"` for `beforeShellExecution` and `beforeMCPExecution` only
 (<https://cursor.com/docs/hooks>: `ask` is an output of both, and its shell example asks
 for permission with it). For `preToolUse` the same page says `ask` is "accepted by the
 schema but not enforced", so the call runs, and `beforeReadFile` takes only allow or
-deny. The Cursor adapter marks those two events `HookEvent::PreToolUseNoAsk`, and an
-`ask` there is sent as a `deny` (exit 2) whose reason says to approve it with `openmoat` or
-`openmoat allow --last`, which approve the exact file. The audit log keeps the `ask`.
+deny. The Cursor adapter marks those two events `HookEvent::PreToolUseNoPrompt`, and a
+`review` there is sent as a `deny` (exit 2) whose reason says to approve it with `openmoat` or
+`openmoat allow --last`, which approve the exact file. The audit log keeps the `review`.
 
 Gemini CLI reads only `deny` (or `block`) and `ask` from a `BeforeTool` hook
-(`packages/core/src/scheduler/hook-utils.ts`, `@google/gemini-cli` 0.65.0). An `ask`
+(`packages/core/src/scheduler/hook-utils.ts`, `@google/gemini-cli` 0.65.0). A `review`, sent as `"ask"`,
 forces its own confirmation, also where its policy, auto-edit or YOLO mode would run
 the call; `allow` and no output both leave the call to its policy, so an `allow` there
 skips none of Gemini CLI's confirmations and a `defer` writes nothing. Gemini CLI parses
@@ -569,34 +572,34 @@ lock pins it with the hook file, and `status` and `doctor` report a hook it does
 approve (`HookState::Unapproved`). The lock pins `config.yaml` in its host's pinned form
 (`pinned_forms`), read as YAML: without `mcp_servers` and the keys Hermes rewrites for a
 person's choice. The reply is `{"decision": "block", "reason"}` and exit 2 for a deny,
-`{"action": "approve", "message", "rule_key"}` for an ask, which Hermes puts to the
+`{"action": "approve", "message", "rule_key"}` for a review, which Hermes puts to the
 person in its own approval prompt, `{}` for an allow and nothing for a defer. Hermes
-approves an ask unseen in YOLO mode, with `approvals.mode: off` and in unattended modes
-set to `approve`; the spec's `Asks::unseen` names what shows that (`HERMES_YOLO_MODE`, the
+approves a review unseen in YOLO mode, with `approvals.mode: off` and in unattended modes
+set to `approve`; the spec's `Reviews::unseen` names what shows that (`HERMES_YOLO_MODE`, the
 settings in `config.yaml`), and `guard` (`commands/guard/unseen.rs`) then marks the call
-`HookEvent::PreToolUseNoAsk`, so its ask is a deny with the `openmoat allow --last`
+`HookEvent::PreToolUseNoPrompt`, so its review is a deny with the `openmoat allow --last`
 instruction. The payload's `cwd` is the Hermes process's, not the session's, so the
-adapter asks about a file tool's relative path (`unchecked`).
+adapter holds a file tool's relative path for review (`unchecked`).
 
 Claude Code sends its session's `permission_mode` with `PreToolUse`. Two modes put no
 question to a person: `bypassPermissions` skips Claude Code's prompts and `dontAsk`
 denies whatever would prompt. For these the adapter marks the call
-`HookEvent::PreToolUseNoAsk`, and an `ask` is sent as a `deny` with the same
-`openmoat allow --last` instruction; the audit log keeps the `ask`. A `defer` stays a
+`HookEvent::PreToolUseNoPrompt`, and a `review` is sent as a `deny` with the same
+`openmoat allow --last` instruction; the audit log keeps the `review`. A `defer` stays a
 `defer` (Claude Code decides it as its mode says). Every other mode, `auto` included,
-receives the `ask`.
+receives the `review` as `"ask"`.
 
 Codex's `PermissionRequest` hook does not change this (#178, checked against
 openai/codex `ff9ab4a` and codex-cli 0.160.1). Codex runs it only from
 `Session::request_approval` (`core/src/tools/approvals.rs`), after its own approval
 policy and sandbox have decided to prompt. The hook can answer allow, deny or nothing;
 nothing shows Codex's prompt. No hook can send a call into that path, so a `PreToolUse`
-`ask` that let the call through would run unprompted whenever Codex itself does not
+`"ask"` that let the call through would run unprompted whenever Codex itself does not
 prompt. `openmoat init` therefore does not install `PermissionRequest`. `guard` refuses that
 event as a wrong event (deny, exit 2, reason on stderr), which Codex reads as a deny
 (`crates/openmoat-hosts/src/host/codex/fixtures/permission-request-shell.json`, built from Codex's
 `permission-request.command.input.schema.json`). Exit codes follow
-ADR-004 and ADR-015: 0 allow, defer or ask, 2 deny, 3 unresolved ask from `openmoat policy
+ADR-004 and ADR-015: 0 allow, defer or review, 2 deny, 3 unresolved review from `openmoat policy
 check`, 64 usage or configuration error. `openmoat run` exits 1 when the agent it started
 exits non-zero; never 2 or 3. `guard` never exits 64: an argument it cannot
 parse is a deny with exit 2, because Claude Code and Codex proceed on any other
@@ -862,9 +865,9 @@ the chain must not break at or before it. The first anchor that fails is named
 It verifies every file first and refuses (exit 64) if one fails. Events with the
 same `hash` are counted once, so overlapping exports do not double-count. The report
 starts with the `openmoat report` summary (`Summary::of`), then shows each file's head,
-verdicts per host, asks and denies per rule, and the most frequent asked and denied
-actions. False-positive candidates are actions that asked and were also allowed by
-an `approved-…` rule (`openmoat allow`), which suggests the asking rule is too broad.
+verdicts per host, reviews and denies per rule, and the most frequent reviewed and denied
+actions. False-positive candidates are actions that needed review and were also allowed by
+an `approved-…` rule (`openmoat allow`), which suggests the review rule is too broad.
 `--format json` gives the same data.
 
 **Compliance evidence** (`openmoat audit evidence`, `commands/audit/evidence.rs`, ADR-051).
@@ -926,7 +929,7 @@ rules apply in the hook.
 ## 9. Invariants
 
 The full list, with the tests that hold each one, is AGENTS.md §3. In short: deny is
-absolute; strictest wins; unparseable is never `allow` (`ask`, or `defer` under an allow or defer catch-all); every error path in `guard` is a deny
+absolute; strictest wins; unparseable is never `allow` (`review`, or `defer` under an allow or defer catch-all); every error path in `guard` is a deny
 with exit 2; exit codes 2 and 3 mean nothing else; nothing persisted skips
 redaction; the core stays pure; `openmoat init` never overwrites a policy or duplicates a
 hook; the lock is checked before any decision.
@@ -953,7 +956,7 @@ crates/openmoat-sdk/           the SDK for other agent products; examples/agent_
 crates/openmoat-wasm/          the SDK as a WebAssembly module, for sdk/js
 sdk/js/                        @openmoat/sdk: the JavaScript package over that module;
                                examples/agent-loop.js, tests run with node --test
-tests/conformance/             attacks.yaml, ask.yaml, benign.yaml: one tool call each,
+tests/conformance/             attacks.yaml, review.yaml, benign.yaml: one tool call each,
                                with the verdict the default policy must give
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
@@ -977,15 +980,15 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 | Path | Contents |
 |---|---|
 | `crates/openmoat-core` | policy model (`policy.rs`, `lint.rs` with `lint/ports.rs` ports written as no port, `repo.rs` repository policy merge), popular-package lists and the near-miss check (`packages.rs`, data in `data/top-packages/`, ADR-030), lexer (`lexer/`), classifier (`shell/`; `shell/push.rs` the pushes a command makes, `shell/executes.rs` the files a command runs as code, with `executes/interpreters.rs` each interpreter's options and `executes/inline.rs` the modules inline code loads (ADR-039), `shell/commands/payload/opaque.rs` inline code that builds the names it opens, `shell/upload.rs` files curl and wget send, `shell/commands/fetch.rs` curl and wget calls that send nothing, decided like a fetch (ADR-035), `shell/options/transfer.rs` one reading of curl and wget options, shared by that check and the files they write, `shell/in_place.rs` files edited in place, `shell/installs.rs` package installs, `shell/kills.rs` the `pkill`/`killall` patterns that could match an OpenMoat process name, `shell/commands/filters.rs` the pipe consumers that keep only an environment listing's names, `shell/commands/pipelines.rs` pipeline atoms and the canonical `<stages> | <interpreter>` form of a consumer that runs its stdin, `shell/commands/wrappers/launchers.rs` launchers that run a command (`taskset`, `unshare`, `systemd-run`, `launchctl submit`, …), `shell/copy/links.rs` whether `ln` or `cp` makes hard links, `shell/extract.rs` where `tar -x` and `unzip` extract to, `shell/error.rs` why a line cannot be classified), patterns (`pattern/`; `pattern/sequence.rs` linear word matching), URL hosts (`host.rs`, with `host/web.rs`: a URL as a browser reads it, ADR-047), known token formats (`token.rs`), card numbers and mail address lists (`personal.rs`, ADR-052), brokered secrets (`secret.rs`: the policy's `secrets:` schema; `secret/route.rs` a secret's `allow` rules, `METHOD /path`, and the request paths they refuse instead of matching, ADR-043), paths, YAML reading (`yaml.rs`, ADR-024), engine (session taint in `engine/taint.rs`, tokens, placeholders and personal data sent off their service or the machine in `engine/egress.rs` (long encoded values after a secret read in `egress/encoded.rs`), the atoms of URLs a tool names or opens in `engine/atoms/urls.rs`, other spellings of a command that runs OpenMoat's own binary in `engine/aliases.rs`, the folder rule (`protected-contents`, ADR-038) in `engine/contents.rs`, the policy's `taint:` section in `taint.rs`), policy compiler (`ir/`), executable pins (`programs.rs`, `ProgramResolver`), symlink resolution and glob operand expansion (`realpath.rs`, `PathResolver`, `expand.rs`), the files a Codex `apply_patch` names (`patch.rs`), actions, verdict |
-| `crates/openmoat-hosts` | host adapters: `host/<id>.rs` per host with its `SPEC` (`host/claude_code.rs` with `claude_code/config_change.rs`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs`, `host/openclaw.rs` with `openclaw/tools.rs`: OpenClaw's `before_tool_call`, through OpenMoat's plugin, ADR-033; `host/copilot_cli.rs` with `copilot_cli/tools.rs`: GitHub Copilot CLI's `preToolUse`; `host/pi.rs` with `pi/tools.rs`: pi's `tool_call`, through OpenMoat's extension; `host/gemini_cli.rs` with `gemini_cli/tools.rs`: Gemini CLI's `BeforeTool`; `host/hermes.rs` with `hermes/tools.rs`, `hermes/hook_file.rs`, `hermes/consent.rs` (its `shell-hooks-allowlist.json`), `hermes/location.rs` and `hermes/settings.rs` (its pinned form, and the settings that approve an ask unseen): Hermes Agent's `pre_tool_call`; `host/opencode.rs` with `opencode/tools.rs` (`tools/v1.rs`, `tools/v2.rs`): OpenCode 1's `tool.execute.before` and OpenCode 2's `execute.before`, through OpenMoat's one plugin, ADR-040; `host/cline.rs` with `cline/tools.rs` and `cline/mcp.rs`: the Cline CLI's `PreToolUse` file hook, through OpenMoat's script; each host's `doc.rs`: its README row and tool mapping rows); `host.rs` (the one list of hosts); `registry.rs` (the `hosts!` macro: `Host`, `Host::EVERY`, `Host::ALL`, each host's spec and adapter); `contract.rs` (`HostSpec`, `Asks`, `InstallSpec`, `HookSpec`, `HookLayout`, `GUARD_BUDGET_S`, the `HostAdapter` trait, and what each host receives for `defer` and `ask`; `contract/docs.rs`: `HostDocs`, `ToolRow`; `tests/docs.rs` generates the host tables in README, INSTALL, ARCHITECTURE §3 and THREAT_MODEL from the specs; `contract/heartbeat.rs`: `Heartbeat`, how a plugin host's plugin reports loading, ADR-042; `tests/js_plugins/` runs each host's JavaScript plugin under Node against a stand-in for the host and the guard, and `jsconfig.json` type-checks them with `scripts/ci/check-js.sh`); `wire/pre_tool_use.rs` (the format Claude Code, Codex and the Continue CLI send), `wire/pre_tool_use/artifact.rs` (the files Claude Code's `Artifact` and `ArtifactData` upload or save), `wire/hook_file.rs` (the `HookFile` trait: OpenMoat's entries among the person's own in a hook file, as pure edits of the parsed document; `wire/hook_file/nested.rs` Claude Code's exec-form layout, `host/codex/hook_file.rs` Codex's shell-string layout, `wire/hook_file/yaml.rs` the same entries edited as text in a YAML file, each other layout in `host/<id>/hook_file.rs`), `contract/consent.rs` (the `ConsentFile` trait: a host's record of consent to a hook command), `wire/owned_file.rs` (files OpenMoat owns whole: `host/openclaw/integration/openmoat.mjs`, the plugin `openmoat init` installs for OpenClaw, `host/pi/integration/openmoat.js`, the extension it installs for pi, and `host/cline/integration/PreToolUse.sh`, the POSIX shell hook script it installs for the Cline CLI (`HookLayout::Script`, its binary line `Syntax::PosixShell`); no dependencies, all fail closed), `wire/mcp.rs` (MCP arguments; `wire/mcp/browser.rs` a call that only opens one web page, ADR-047), `wire/mcp_call.rs` (one MCP call as the hook and `openmoat mcp proxy` both read it, the same text for the same arguments, ADR-045), `wire/unknown.rs` (what the arguments of a tool an adapter does not map name, for every host), `glob.rs` (where a glob pattern's `..` climbs to, and whether a brace group makes that unknown); `bench.rs` (what `openmoat bench` needs from a host) |
+| `crates/openmoat-hosts` | host adapters: `host/<id>.rs` per host with its `SPEC` (`host/claude_code.rs` with `claude_code/config_change.rs`, `host/codex.rs`, `host/continue_cli.rs`, `host/cursor.rs`, `host/openclaw.rs` with `openclaw/tools.rs`: OpenClaw's `before_tool_call`, through OpenMoat's plugin, ADR-033; `host/copilot_cli.rs` with `copilot_cli/tools.rs`: GitHub Copilot CLI's `preToolUse`; `host/pi.rs` with `pi/tools.rs`: pi's `tool_call`, through OpenMoat's extension; `host/gemini_cli.rs` with `gemini_cli/tools.rs`: Gemini CLI's `BeforeTool`; `host/hermes.rs` with `hermes/tools.rs`, `hermes/hook_file.rs`, `hermes/consent.rs` (its `shell-hooks-allowlist.json`), `hermes/location.rs` and `hermes/settings.rs` (its pinned form, and the settings that approve a review unseen): Hermes Agent's `pre_tool_call`; `host/opencode.rs` with `opencode/tools.rs` (`tools/v1.rs`, `tools/v2.rs`): OpenCode 1's `tool.execute.before` and OpenCode 2's `execute.before`, through OpenMoat's one plugin, ADR-040; `host/cline.rs` with `cline/tools.rs` and `cline/mcp.rs`: the Cline CLI's `PreToolUse` file hook, through OpenMoat's script; each host's `doc.rs`: its README row and tool mapping rows); `host.rs` (the one list of hosts); `registry.rs` (the `hosts!` macro: `Host`, `Host::EVERY`, `Host::ALL`, each host's spec and adapter); `contract.rs` (`HostSpec`, `Reviews`, `InstallSpec`, `HookSpec`, `HookLayout`, `GUARD_BUDGET_S`, the `HostAdapter` trait, and what each host receives for `defer` and `review`; `contract/docs.rs`: `HostDocs`, `ToolRow`; `tests/docs.rs` generates the host tables in README, INSTALL, ARCHITECTURE §3 and THREAT_MODEL from the specs; `contract/heartbeat.rs`: `Heartbeat`, how a plugin host's plugin reports loading, ADR-042; `tests/js_plugins/` runs each host's JavaScript plugin under Node against a stand-in for the host and the guard, and `jsconfig.json` type-checks them with `scripts/ci/check-js.sh`); `wire/pre_tool_use.rs` (the format Claude Code, Codex and the Continue CLI send), `wire/pre_tool_use/artifact.rs` (the files Claude Code's `Artifact` and `ArtifactData` upload or save), `wire/hook_file.rs` (the `HookFile` trait: OpenMoat's entries among the person's own in a hook file, as pure edits of the parsed document; `wire/hook_file/nested.rs` Claude Code's exec-form layout, `host/codex/hook_file.rs` Codex's shell-string layout, `wire/hook_file/yaml.rs` the same entries edited as text in a YAML file, each other layout in `host/<id>/hook_file.rs`), `contract/consent.rs` (the `ConsentFile` trait: a host's record of consent to a hook command), `wire/owned_file.rs` (files OpenMoat owns whole: `host/openclaw/integration/openmoat.mjs`, the plugin `openmoat init` installs for OpenClaw, `host/pi/integration/openmoat.js`, the extension it installs for pi, and `host/cline/integration/PreToolUse.sh`, the POSIX shell hook script it installs for the Cline CLI (`HookLayout::Script`, its binary line `Syntax::PosixShell`); no dependencies, all fail closed), `wire/mcp.rs` (MCP arguments; `wire/mcp/browser.rs` a call that only opens one web page, ADR-047), `wire/mcp_call.rs` (one MCP call as the hook and `openmoat mcp proxy` both read it, the same text for the same arguments, ADR-045), `wire/unknown.rs` (what the arguments of a tool an adapter does not map name, for every host), `glob.rs` (where a glob pattern's `..` climbs to, and whether a brace group makes that unknown); `bench.rs` (what `openmoat bench` needs from a host) |
 | `crates/openmoat-audit` | SQLite store (`store/`: schema, hash chain, export, session cache, `provenance.rs` file provenance rows, `session_writes.rs` the files each session wrote, `mcp_tickets.rs` the MCP calls the hook let through, which `openmoat mcp proxy` matches (ADR-045), `seen.rs` a host's newest decision since a time), time-window and session queries (`query.rs`), redaction and token formats (`redact.rs`) |
 | `crates/openmoat-proxy` | egress proxy behind `openmoat proxy`: `request.rs` (HTTP head), `sni.rs` (ClientHello), `decide.rs` (host and address checks; `decide/ports.rs` which ports of a host), `upstream.rs` (DNS, connect), `server.rs` with `server/{wire,limits,capacity,recheck}.rs` (reading a head or ClientHello in time and answering a refusal; resource limits; recording refusals at accept; session taint at open and again while relaying), `tunnel.rs`, `audit.rs` (`Recorder` trait), `broker.rs` (secret injection and leak blocking; `broker/route.rs` a secret's `allow` rules at the proxy, `broker/echo.rs` a value coming back in an answer), `tls.rs` with `tls/{ca,date}.rs` (the CA and its leaves, upstream TLS, ADR-043), `exchange.rs` with `exchange/response.rs` (one request inside a terminated tunnel, and its answer), `request/origin.rs` (a request head inside a tunnel), `server/terminate.rs` (a CONNECT handed to `exchange.rs`), `session.rs` (per-session credentials and taint, the credentials it holds for `openmoat run` (ADR-027) and the `Verify` trait for those the standalone proxy checks (ADR-044)), `slots.rs` (each session's share of the connections), `local.rs` (`LocalService`: a service of the proxy's own process on its port, ADR-028) |
-| `crates/openmoat-cli` | the `openmoat` binary: `cli.rs` grammar (`cli/{mcp,policy,audit}.rs` for those command groups), `commands/{overview,init,uninstall,guard,show,status,doctor,allow,edit,secret,trust,mcp,replay,report,audit,team,policy,proxy,sandbox,run}.rs`, `commands/guard/{config_change,drift,session_start,unseen}.rs` (the ConfigChange decision; settings drift the guard decides through; Claude Code's SessionStart, which issues the session its `openmoat proxy` credential (ADR-044); whether the host would approve an ask unseen), `proxy_session.rs` with `proxy_session/hmac.rs` (the standalone proxy's signed session credentials and their key, ADR-044), `commands/proxy/ca.rs` (`openmoat proxy ca init`, ADR-043), `proxy_ca.rs` with `proxy_ca/trust.rs` (the proxy CA's files, pins and loading for `openmoat run`; the trust files and variables the agent gets), `commands/audit/anchor.rs` and `commands/policy/pack.rs` (`openmoat audit anchor`; `openmoat policy trust-key`, `install`, `remove`), `commands/policy/diff.rs` with `diff/{parse,gate,source,output}.rs` (`openmoat policy check-diff`, ADR-050: reading a unified diff, deciding each changed path with the engine, git read-only and the policy files at the base revision, text, JSON and workflow annotations), `compliance.rs` (the rule → control map, ADR-051) and `commands/audit/evidence.rs` with `evidence/{build,text}.rs` (`openmoat audit evidence`: the counts and samples, and the Markdown), `protection.rs` (each agent's protection level for `status`, `doctor` and the home screen), `commands/run/{macos,linux,unsupported}.rs` (`openmoat run` per OS), `commands/run/release_age.rs` (the npm and uv release-age variables `openmoat run` sets), `commands/run/linux/isolate.rs` (`openmoat run --isolate`, the Isolated tier on Linux), `commands/run/linux/netns.rs` (`openmoat run`'s network namespace on Linux: loopback and a relay to the proxy), `commands/demo.rs` (`openmoat demo`: verdicts for example calls, nothing runs), `commands/service/` (`openmoat proxy install`: `macos.rs` launchd agent from `plist.rs`, `linux.rs` systemd user unit from `unit.rs`, `unsupported.rs`), `commands/bench/` (`openmoat bench`: `hosts.rs` host payloads and how each host reads a hook reply, `hook.rs` the throwaway home and time limit, `scenario.rs` reads the bundled scenarios, `score.rs` the scorecard; scenarios in `moatbench/<category>.yaml`), `install.rs` with `install/{hook_file,binary,dirs,claude_version,openclaw,owned,yaml,consent}.rs` (`dirs.rs`: the recorded agent config directories; `claude_version.rs`: whether the Claude Code on PATH knows `onFailure`; `openclaw.rs`: OpenClaw's plugin file and `openclaw.json` entries; `owned.rs`: a hook file OpenMoat owns whole, pi's extension; `yaml.rs`: a YAML hook file edited as text, Hermes Agent's `config.yaml`; `consent.rs`: a host's record of consent to the hook, Hermes Agent's allowlist), `sandbox/` (backends from the IR, reached through `backend.rs`, one `SandboxBackend` per `SandboxFormat`: Standard tier `claude`, `codex`, `cursor` and `install.rs` file I/O, `claude/mask.rs` whether Claude Code's own broker masks each policy secret, `claude/nodes.rs` the directory nodes left out of `denyWrite` and the `Edit(./…)` rules that keep them in place, `claude/state_dir.rs` the state directory hidden whole on Linux; Lightweight tier `seatbelt` (`seatbelt/braces.rs` brace expansion, `seatbelt/filter.rs` globs as path filters, case-folded for denies on a case-insensitive disk), `landlock`, `seccomp`; Isolated tier `bwrap`; `patterns.rs` classifies IR patterns for hosts without a project of their own; `differential.rs` checks every backend against the IR's reference semantics; `exposure.rs` whether `openmoat run`'s grants hold or lie inside the state directory, which makes `openmoat run` on Linux refuse), `home.rs`, `context.rs`, `project.rs`, `repo.rs` (repository policy file and whether it is trusted), `project_settings.rs` (what a project's `.claude/settings*.json` turns off or runs: the ConfigChange veto and the doctor/status warning), `time.rs`, `os_version.rs` (the macOS version: `openmoat run`'s macOS 13 floor, `doctor`, the bug-report bundle), `environment.rs` (search-path snapshot), `realpath.rs` (symlink resolution), `integrity/` (policy lock; `digest.rs` what a file is pinned by, `forms.rs` which files the lock pins in a host's pinned form (`pinned_forms`), `kept.rs` the bytes the lock check read, which the rest of the call parses, `keys.rs` the top-level keys drift names, `relaxed.rs` the Claude Code settings drift the guard decides through), `mcp.rs` with `mcp/{servers,pins,tools,relay,wrap,startup,outside}.rs` (ADR-026: MCP server definitions pinned in the lock, the `openmoat mcp proxy` JSON-RPC relay and its tool pins, `openmoat mcp wrap`; ADR-032: a new server's tools are held until accepted; ADR-049: `startup.rs` whether the proxy may start the command line it was given, `outside.rs` the servers that start outside OpenMoat for `status` and `doctor`) and `mcp/relay/{host,server,frame}.rs` (ADR-045: what the relay does with each message from the host and from the server, and the stdio framing), `commands/mcp/gate.rs` (the gateway's decision on each call: the policy on its arguments, the hook's decision it matches, its audit row), `guard_relay.rs` with `guard_relay/{wire,client,service}.rs` (hook decisions inside `openmoat run`, ADR-028: framing, the sandboxed guard, the decision outside), `anchor.rs` with `anchor/git.rs` (audit anchors, ADR-031: the record, the file and `refs/moat/anchors` git plumbing, `verify --against`), `signing.rs` (OpenSSH signatures through the pinned `ssh-keygen`, namespace `openmoat-repo-policy` for repository policies and `openmoat-pack` for packs, ADR-037), `packs.rs` (signed policy packs: `packs.json`, `policy.d/packs/`, merged under `pack:<name>:`), `approvals.rs` (grants and overlay), `secrets/` (brokered secret sources), `taint.rs` (session taint from the audit log; `taint/run.rs` links an `openmoat run`'s agent sessions to the run so its proxy applies their taint, ADR-027; `taint/issued.rs` the taint of a session the standalone proxy serves, ADR-044; `taint/provenance.rs` taint that follows written files, ADR-029), `session_code.rs` (running a file the session wrote where no OS sandbox holds the command asks, ADR-039), `push.rs` with `push/{git,range,scan}.rs` (the push check: git run read-only, which commits a push sends, what they add), `trust.rs` (trusted repository policies), `upgrade.rs` (`openmoat policy upgrade`: the default a policy started from, `merge.rs` the three-way merge), `terminal.rs` (terminal check; `terminal/ancestry.rs` whether an agent is among the parent processes, `terminal/own_binary.rs` whether the running executable is the one the lock in `MOAT_HOME` and in `~/.moat` records, started as `openmoat` or `moat`), `install/trust_note.rs` (a host's trust step after `init` writes its hook), `hangs.rs` (the guard-hangs side file and the phase a slow call reached), `heartbeat.rs` (a plugin's report that its host loaded it, `guard --heartbeat`, and whether the host has loaded it since it last changed, for `status`, `doctor` and the protection level, ADR-042), `render.rs`, `exit.rs` |
+| `crates/openmoat-cli` | the `openmoat` binary: `cli.rs` grammar (`cli/{mcp,policy,audit}.rs` for those command groups), `commands/{overview,init,uninstall,guard,show,status,doctor,allow,edit,secret,trust,mcp,replay,report,audit,team,policy,proxy,sandbox,run}.rs`, `commands/guard/{config_change,drift,session_start,unseen}.rs` (the ConfigChange decision; settings drift the guard decides through; Claude Code's SessionStart, which issues the session its `openmoat proxy` credential (ADR-044); whether the host would approve a review unseen), `proxy_session.rs` with `proxy_session/hmac.rs` (the standalone proxy's signed session credentials and their key, ADR-044), `commands/proxy/ca.rs` (`openmoat proxy ca init`, ADR-043), `proxy_ca.rs` with `proxy_ca/trust.rs` (the proxy CA's files, pins and loading for `openmoat run`; the trust files and variables the agent gets), `commands/audit/anchor.rs` and `commands/policy/pack.rs` (`openmoat audit anchor`; `openmoat policy trust-key`, `install`, `remove`), `commands/policy/diff.rs` with `diff/{parse,gate,source,output}.rs` (`openmoat policy check-diff`, ADR-050: reading a unified diff, deciding each changed path with the engine, git read-only and the policy files at the base revision, text, JSON and workflow annotations), `compliance.rs` (the rule → control map, ADR-051) and `commands/audit/evidence.rs` with `evidence/{build,text}.rs` (`openmoat audit evidence`: the counts and samples, and the Markdown), `protection.rs` (each agent's protection level for `status`, `doctor` and the home screen), `commands/run/{macos,linux,unsupported}.rs` (`openmoat run` per OS), `commands/run/release_age.rs` (the npm and uv release-age variables `openmoat run` sets), `commands/run/linux/isolate.rs` (`openmoat run --isolate`, the Isolated tier on Linux), `commands/run/linux/netns.rs` (`openmoat run`'s network namespace on Linux: loopback and a relay to the proxy), `commands/demo.rs` (`openmoat demo`: verdicts for example calls, nothing runs), `commands/service/` (`openmoat proxy install`: `macos.rs` launchd agent from `plist.rs`, `linux.rs` systemd user unit from `unit.rs`, `unsupported.rs`), `commands/bench/` (`openmoat bench`: `hosts.rs` host payloads and how each host reads a hook reply, `hook.rs` the throwaway home and time limit, `scenario.rs` reads the bundled scenarios, `score.rs` the scorecard; scenarios in `moatbench/<category>.yaml`), `install.rs` with `install/{hook_file,binary,dirs,claude_version,openclaw,owned,yaml,consent}.rs` (`dirs.rs`: the recorded agent config directories; `claude_version.rs`: whether the Claude Code on PATH knows `onFailure`; `openclaw.rs`: OpenClaw's plugin file and `openclaw.json` entries; `owned.rs`: a hook file OpenMoat owns whole, pi's extension; `yaml.rs`: a YAML hook file edited as text, Hermes Agent's `config.yaml`; `consent.rs`: a host's record of consent to the hook, Hermes Agent's allowlist), `sandbox/` (backends from the IR, reached through `backend.rs`, one `SandboxBackend` per `SandboxFormat`: Standard tier `claude`, `codex`, `cursor` and `install.rs` file I/O, `claude/mask.rs` whether Claude Code's own broker masks each policy secret, `claude/nodes.rs` the directory nodes left out of `denyWrite` and the `Edit(./…)` rules that keep them in place, `claude/state_dir.rs` the state directory hidden whole on Linux; Lightweight tier `seatbelt` (`seatbelt/braces.rs` brace expansion, `seatbelt/filter.rs` globs as path filters, case-folded for denies on a case-insensitive disk), `landlock`, `seccomp`; Isolated tier `bwrap`; `patterns.rs` classifies IR patterns for hosts without a project of their own; `differential.rs` checks every backend against the IR's reference semantics; `exposure.rs` whether `openmoat run`'s grants hold or lie inside the state directory, which makes `openmoat run` on Linux refuse), `home.rs`, `context.rs`, `project.rs`, `repo.rs` (repository policy file and whether it is trusted), `project_settings.rs` (what a project's `.claude/settings*.json` turns off or runs: the ConfigChange veto and the doctor/status warning), `time.rs`, `os_version.rs` (the macOS version: `openmoat run`'s macOS 13 floor, `doctor`, the bug-report bundle), `environment.rs` (search-path snapshot), `realpath.rs` (symlink resolution), `integrity/` (policy lock; `digest.rs` what a file is pinned by, `forms.rs` which files the lock pins in a host's pinned form (`pinned_forms`), `kept.rs` the bytes the lock check read, which the rest of the call parses, `keys.rs` the top-level keys drift names, `relaxed.rs` the Claude Code settings drift the guard decides through), `mcp.rs` with `mcp/{servers,pins,tools,relay,wrap,startup,outside}.rs` (ADR-026: MCP server definitions pinned in the lock, the `openmoat mcp proxy` JSON-RPC relay and its tool pins, `openmoat mcp wrap`; ADR-032: a new server's tools are held until accepted; ADR-049: `startup.rs` whether the proxy may start the command line it was given, `outside.rs` the servers that start outside OpenMoat for `status` and `doctor`) and `mcp/relay/{host,server,frame}.rs` (ADR-045: what the relay does with each message from the host and from the server, and the stdio framing), `commands/mcp/gate.rs` (the gateway's decision on each call: the policy on its arguments, the hook's decision it matches, its audit row), `guard_relay.rs` with `guard_relay/{wire,client,service}.rs` (hook decisions inside `openmoat run`, ADR-028: framing, the sandboxed guard, the decision outside), `anchor.rs` with `anchor/git.rs` (audit anchors, ADR-031: the record, the file and `refs/moat/anchors` git plumbing, `verify --against`), `signing.rs` (OpenSSH signatures through the pinned `ssh-keygen`, namespace `openmoat-repo-policy` for repository policies and `openmoat-pack` for packs, ADR-037), `packs.rs` (signed policy packs: `packs.json`, `policy.d/packs/`, merged under `pack:<name>:`), `approvals.rs` (grants and overlay), `secrets/` (brokered secret sources), `taint.rs` (session taint from the audit log; `taint/run.rs` links an `openmoat run`'s agent sessions to the run so its proxy applies their taint, ADR-027; `taint/issued.rs` the taint of a session the standalone proxy serves, ADR-044; `taint/provenance.rs` taint that follows written files, ADR-029), `session_code.rs` (running a file the session wrote where no OS sandbox holds the command needs review, ADR-039), `push.rs` with `push/{git,range,scan}.rs` (the push check: git run read-only, which commits a push sends, what they add), `trust.rs` (trusted repository policies), `upgrade.rs` (`openmoat policy upgrade`: the default a policy started from, `merge.rs` the three-way merge), `terminal.rs` (terminal check; `terminal/ancestry.rs` whether an agent is among the parent processes, `terminal/own_binary.rs` whether the running executable is the one the lock in `MOAT_HOME` and in `~/.moat` records, started as `openmoat` or `moat`), `install/trust_note.rs` (a host's trust step after `init` writes its hook), `hangs.rs` (the guard-hangs side file and the phase a slow call reached), `heartbeat.rs` (a plugin's report that its host loaded it, `guard --heartbeat`, and whether the host has loaded it since it last changed, for `status`, `doctor` and the protection level, ADR-042), `render.rs`, `exit.rs` |
 | `crates/openmoat-sdk` | `lib.rs` (the public surface and versions), `action.rs` (the stable action shapes and their JSON form), `context.rs`, `facts.rs` (filesystem facts as the core's resolvers), `session.rs` (session taint), `policy.rs` (parse, repository merge), `engine.rs` (`Engine`: decide, `paths`), `decision.rs`, `error.rs`, `fs.rs` (`fs` feature); `tests/conformance.rs` (every fixture against the engine, and the vectors for the JS run); `examples/agent_loop.rs` |
 | `crates/openmoat-wasm` | `lib.rs` (exports), `buffers.rs`, `protocol.rs` (the requests, `ABI_VERSION`), `engines.rs`, `json.rs` |
 | `sdk/js` | `src/index.js` and `src/index.d.ts` (`load`, `OpenMoat`, `Engine`, `Session`, `OpenMoatError`), `test/` (API, conformance against the engine's vectors, the example), `examples/agent-loop.js`; `dist/` is built by `scripts/ci/sdk-js.sh` and not committed |
 | `crates/openmoat-core/policies/default-v1.yaml` | shipped default policy |
-| `tests/conformance/{attacks,benign,ask}.yaml` | executable security claims |
+| `tests/conformance/{attacks,benign,review}.yaml` | executable security claims |
 | `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `opencode`, `hermes`, `cline`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_files`, `anchor`, `edit`, `escapes`, `heartbeat`, `home_screen`, `hosts`, `human_only`, `listings`, `mcp`, `mcp_gateway`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `check_diff`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `proxy_ca`, `proxy_session`, `repo_policy`, `secret`, `session_code`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants |
@@ -1064,17 +1067,17 @@ terminate`, and only in `openmoat run` (step 4, ADR-043).
      Refuse (`proxy-secret`) a request whose head, or body bytes read with it, carries a
      brokered secret's placeholder or value when the host is not that secret's own.
   2. Decide the host as a `fetch` atom through `CompiledPolicy` (POLICY.md §4). Only
-     `allow` passes. An `ask` or a `defer` is refused, because the proxy cannot prompt.
+     `allow` passes. A `review` or a `defer` is refused, because the proxy cannot prompt.
      `metadata.google.internal` and `metadata.goog` are refused by name whatever the
      policy says. Then the port (`decide/ports.rs`): a host allowed by a pattern without
      a port passes on 443 and 80 only; `host:port` as a `fetch` atom, against a second
      policy compiled at start-up from the deny rules and the allow rules' `host:port`
      patterns, allows that port or refuses it; any other port is `proxy-port`.
      `openmoat run` decides with the user policy plus the project's repository deny rules
-     (`repo::with_repo_denies`), never its ask or allow rules. In session mode, the session's taint applies next
+     (`repo::with_repo_denies`), never its review or allow rules. In session mode, the session's taint applies next
      (`decide::tainted`, through `CompiledPolicy::with_taint`). After the session read
      secret material, a host other than that secret's own is refused (`session-taint`),
-     because the proxy cannot ask. The taint is the fold of every agent session linked to
+     because the proxy cannot prompt. The taint is the fold of every agent session linked to
      the run (§14), read through the `TaintLookup` the CLI passes in
      (`taint/run.rs`); at the standalone proxy, the fold of the session itself, with the
      effective policy of the directory its credential was issued in (`taint/issued.rs`).

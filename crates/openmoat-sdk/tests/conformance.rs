@@ -488,5 +488,5 @@ fn wire_forms_round_trip() {
             f.id
         );
     }
-    assert_eq!(Verdict::Ask.as_str(), "ask");
+    assert_eq!(Verdict::Review.as_str(), "review");
 }

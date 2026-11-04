@@ -1,4 +1,4 @@
-//! The release age `moat run` asks of new package versions (ADR-030): the
+//! The release age `moat run` requires of new package versions (ADR-030): the
 //! package managers the agent starts install no version published in the
 //! last `sandbox.package_min_release_age_days` days, so a malicious version
 //! that the registry takes down within days never reaches the machine.

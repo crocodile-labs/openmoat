@@ -23,11 +23,11 @@
 //!
 //! Output: nothing for `defer`, else `{"decision": "allow" | "ask" | "deny",
 //! "reason"}`. The plugin returns for `allow`, throws the reason for `deny`,
-//! and on OpenCode 2 puts an `ask` to the person through OpenCode's own
+//! and on OpenCode 2 puts a `review` to the person through OpenCode's own
 //! permission prompt; anything else it cannot read blocks the call. OpenCode 1
 //! has no way for a plugin to ask the person (`permission.ask` is declared but
-//! never called since 1.3.0), so there an `ask` arrives as a deny that says how
-//! to approve the call (`HookEvent::PreToolUseNoAsk`).
+//! never called since 1.3.0), so there a `review` arrives as a deny that says how
+//! to approve the call (`HookEvent::PreToolUseNoPrompt`).
 
 use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
@@ -35,7 +35,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    AlsoDir, Asks, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HookVersions,
+    AlsoDir, Reviews, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HookVersions,
     HostAdapter,
     HostSpec, InstallSpec, Location, McpFile, McpSpec, ProjectSettingsSpec, wrong_event,
 };
@@ -98,27 +98,27 @@ const VERSIONS: HookVersions = HookVersions {
     ],
 };
 
-/// OpenCode 2 can ask; OpenCode 1 cannot, so there an `ask` is a deny that
+/// OpenCode 2 can prompt; OpenCode 1 cannot, so there a `review` is a deny that
 /// says how to approve it.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "opencode",
     display_name: "OpenCode",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: Some("OpenCode 1 gives plugins no way to ask the person"),
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+        on_no_prompt: Some("OpenCode 1 gives plugins no way to ask the person"),
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when OpenMoat's plugin throws (OpenCode's \
          `tool.execute.before` and `execute.before` fail closed), and the plugin blocks \
          when `openmoat` is missing, crashes or does not answer within 45 s; runs the call \
          unchecked when OpenCode does not load the plugin (OpenCode 1's `--pure` or \
          `OPENCODE_PURE`, OpenCode 2's `-openmoat` in `plugins`, or an error loading it)",
-    gaps: "no OS sandbox from OpenMoat; OpenCode 1 plugins cannot ask, so an ask is a \
+    gaps: "no OS sandbox from OpenMoat; OpenCode 1 plugins cannot prompt, so a review is a \
          deny that says how to approve it; OpenCode before 1.3.4 is not supported; other \
          plugins and custom tools run in OpenCode's process with the agent's rights, and \
          a project's load at start with no prompt; a project's `-openmoat` turns \
-         OpenMoat off in OpenCode 2; OpenCode 2's `--auto` approves OpenMoat's asks; the \
+         OpenMoat off in OpenCode 2; OpenCode 2's `--auto` approves OpenMoat's reviews; the \
          person's `!` shell commands are not checked; calls run unchecked if OpenCode \
          does not load the plugin (`--pure`, `OPENCODE_PURE`, a load error; `openmoat \
          status` and `doctor` say when it has not reported loading since it or OpenCode \
@@ -178,7 +178,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // prompt. In OpenCode 2 a `-openmoat` (or `-*`) entry in `plugins`, or a
     // policy denying OpenMoat's plugin, turns it off: in a project's file the
     // warning says so, in the person's own the agent is not protected
-    // (`project_settings.rs`). Writes to these files ask (`runs-later`).
+    // (`project_settings.rs`). Writes to these files need review (`runs-later`).
     project_settings: Some(ProjectSettingsSpec {
         dir: "",
         shared: "opencode.json",
@@ -254,10 +254,10 @@ pub(super) enum Api {
     V2,
 }
 
-/// OpenCode 2 can put an `ask` to the person; OpenCode 1 cannot.
+/// OpenCode 2 can put a `review` to the person; OpenCode 1 cannot.
 fn hook_event(api: Api) -> HookEvent {
     match api {
-        Api::V1 => HookEvent::PreToolUseNoAsk,
+        Api::V1 => HookEvent::PreToolUseNoPrompt,
         Api::V2 => HookEvent::PreToolUse,
     }
 }
@@ -352,7 +352,8 @@ pub(crate) fn render(decision: &Decision) -> String {
         return String::new();
     }
     serde_json::json!({
-        "decision": decision.verdict.as_str(),
+        // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+        "decision": crate::wire::host_verdict(decision.verdict),
         "reason": crate::reason_line(decision),
     })
     .to_string()

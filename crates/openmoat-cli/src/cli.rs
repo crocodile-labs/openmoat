@@ -26,7 +26,7 @@ pub use policy::{
                   The hook decides each call; the operating system also bounds commands inside the\n\
                   agents' sandboxes `openmoat init` configures and under `openmoat run`. Outside them an\n\
                   allowed command runs with your permissions (`openmoat status` shows each agent's level).\n\
-                  Exit codes: 0 allow/ok, 1 the agent `run` started failed, 2 deny, 3 ask (unresolved),\n\
+                  Exit codes: 0 allow/ok, 1 the agent `run` started failed, 2 deny, 3 review (unresolved),\n\
                   64 usage or configuration error\n\
                   (`guard` exits 2 instead, so a broken hook blocks rather than fails open).\n\n\
                   Run `openmoat` alone to see what is protected and answer anything that needs you:\n\
@@ -69,12 +69,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SecretCommand,
     },
-    /// Let a repository's .moat/policy.yaml allow, not only deny and ask, until the file changes.
+    /// Let a repository's .moat/policy.yaml allow, not only deny and review, until the file changes.
     /// Refused unless run from an interactive terminal, and over a drifted lock.
     Trust(TrustArgs),
     /// Replay agent sessions as a timeline of decisions.
     Replay(ReplayArgs),
-    /// Summarise decisions over a window: verdicts, hosts, top rules, asks per hour.
+    /// Summarise decisions over a window: verdicts, hosts, top rules, reviews per hour.
     Report(ReportArgs),
     /// Run the default-deny egress proxy, or install/uninstall it as a user service
     /// so it stays up without a person running it (macOS launchd, Linux systemd user unit).
@@ -295,7 +295,7 @@ pub struct AllowArgs {
     #[arg(conflicts_with = "last")]
     pub command: Option<String>,
 
-    /// Take host, session and command from the most recent `ask` in the audit log.
+    /// Take host, session and command from the most recent `review` in the audit log.
     #[arg(long)]
     pub last: bool,
 

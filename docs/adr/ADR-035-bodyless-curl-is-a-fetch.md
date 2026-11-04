@@ -38,7 +38,7 @@ people to allow whole hosts or turn the `net` default off.
   tool; ADR-017's "without opening it to shell clients" holds only for clients that may
   send data.
 - A `curl` or `wget` to an allowed host now taints the session as untrusted content, so
-  a later write to a protected path asks.
+  a later write to a protected path needs review.
 - `curl -sSL` and a plain `wget` of an unlisted host stay denied, as before.
 - Residual risk, as for `WebFetch`: data the agent writes into the URL itself; a name
   that resolves to an internal address; a `~/.curlrc` or `~/.wgetrc` written earlier,

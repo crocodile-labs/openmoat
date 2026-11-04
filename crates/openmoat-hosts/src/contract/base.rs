@@ -1,12 +1,12 @@
 //! The defaults a host spec takes for the fields it does not name, so a new
 //! optional field is added once here rather than in every host's spec.
 
-use super::{Asks, HookLayout, HostDocs, HostSpec, InstallSpec, ProcessSpec, Protect};
+use super::{HookLayout, HostDocs, HostSpec, InstallSpec, ProcessSpec, Protect, Reviews};
 use crate::wire::hook_file::nested::Nested;
 
 impl HostSpec {
     /// The value a host spec takes for every field it does not name: `None`
-    /// for each optional part. A host spec names its id, display name, asks,
+    /// for each optional part. A host spec names its id, display name, reviews,
     /// hook-failure text and gaps, and ends with `..HostSpec::BASE`, so a new
     /// optional field is added here once; the registry's tests check that
     /// every host names the required ones.
@@ -14,7 +14,7 @@ impl HostSpec {
         id: "",
         display_name: "",
         speaks: None,
-        asks: Asks::BASE,
+        reviews: Reviews::BASE,
         on_hook_failure: "",
         gaps: "",
         install: None,

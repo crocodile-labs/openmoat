@@ -13,8 +13,8 @@ pub enum Code {
     Failed = 1,
     /// Verdict `deny`. Claude Code and Codex treat exit 2 as a blocking hook result.
     Deny = 2,
-    /// Verdict `ask` that was not resolved; adapters treat it as deny.
-    Ask = 3,
+    /// Verdict `review` that was not resolved; adapters treat it as deny.
+    Review = 3,
     /// Usage or configuration error from a command a person ran. `guard` never
     /// returns it, not even for arguments it cannot parse: Claude Code and Codex
     /// treat any exit other than 0 or 2 as a non-blocking hook failure, so
@@ -27,7 +27,7 @@ impl From<Verdict> for Code {
         match verdict {
             // `defer` (ADR-025): OpenMoat does not stop the call; the agent decides.
             Verdict::Allow | Verdict::Defer => Self::Ok,
-            Verdict::Ask => Self::Ask,
+            Verdict::Review => Self::Review,
             // `Deny`, and any verdict added to the core later: the strictest.
             _ => Self::Deny,
         }

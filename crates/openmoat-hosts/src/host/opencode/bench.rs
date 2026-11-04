@@ -1,8 +1,8 @@
 //! `moat bench` for OpenCode: what OpenMoat's plugin sends from OpenCode 1's
 //! `tool.execute.before`, and how it reads the reply
 //! (`host/opencode/integration/openmoat.js`). The bench scores OpenCode 1,
-//! the stricter of the two: it cannot ask, so an `ask` must arrive as a deny;
-//! OpenCode 2's payload and asks are covered by `opencode/tests.rs` and the
+//! the stricter of the two: it cannot prompt, so a `review` must arrive as a deny;
+//! OpenCode 2's payload and reviews are covered by `opencode/tests.rs` and the
 //! plugin's Node harness.
 
 use openmoat_core::Verdict;
@@ -51,7 +51,7 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
 }
 
 /// Nothing on exit 0 is no decision, an allow lets the call run, exit 2 with
-/// a deny blocks, and anything else blocks too: the plugin has no ask.
+/// a deny blocks, and anything else blocks too: the plugin has no prompt.
 pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
     let document = exit.document();
     match exit.code {
@@ -63,12 +63,12 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
 }
 
 /// The plugin returns no decision for an `allow`, so OpenCode's own rules
-/// still run: an allow is a passthrough there. OpenCode 1 cannot ask, so an
-/// `ask` has to arrive as a deny.
+/// still run: an allow is a passthrough there. OpenCode 1 cannot prompt, so a
+/// `review` has to arrive as a deny.
 pub(super) fn seen(verdict: Verdict) -> Answer {
     match verdict {
         Verdict::Allow => Answer::Passthrough,
-        Verdict::Ask => Answer::Deny,
+        Verdict::Review => Answer::Deny,
         other => other.into(),
     }
 }

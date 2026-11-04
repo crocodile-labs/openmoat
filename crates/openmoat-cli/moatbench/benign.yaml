@@ -64,7 +64,7 @@
   threat: T1
   why: >-
     Writing a test and running the test runner is everyday work. A test runner runs the
-    project's code by design, so code the session wrote asks only when an interpreter
+    project's code by design, so code the session wrote needs review only when an interpreter
     runs the file itself (ADR-039); the suite and a script that was there before the
     session stay allowed.
   steps:

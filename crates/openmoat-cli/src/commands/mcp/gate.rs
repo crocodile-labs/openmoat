@@ -8,7 +8,7 @@
 //! - the hook let exactly this call through: a decision for the same tool and
 //!   arguments, under an hour old and not used before (`mcp_tickets`). That
 //!   decision carries what only the hook knows (the session's taint, a grant,
-//!   the person's answer to an `ask`), and it names the session: the row this
+//!   the person's answer to a `review`), and it names the session: the row this
 //!   call leaves carries the hook's session and call id. A call no hook decided
 //!   (a host that skipped its hook, or arguments changed after it ran) is
 //!   refused.

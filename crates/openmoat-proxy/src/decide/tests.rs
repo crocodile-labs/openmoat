@@ -79,9 +79,9 @@ fn the_default_policy_allows_only_listed_hosts() {
         &[
             ("api.github.com", Verdict::Allow, "registries"),
             ("crates.io", Verdict::Allow, "registries"),
-            // unlisted: the fetch default (ask) is refused, never asked
+            // unlisted: the fetch default (review) is refused, never prompted
             ("evil.example", Verdict::Deny, "default.fetch"),
-            // local-net is an ask group: refused too
+            // local-net is a review group: refused too
             ("localhost", Verdict::Deny, "local-net"),
             ("169.254.169.254", Verdict::Deny, "cloud-metadata"),
             ("metadata.google.internal", Verdict::Deny, RULE_ADDRESS),
@@ -294,7 +294,7 @@ allow:
   - { id: wide, net: ["*", "*.example", "?0.0.0.1"] }
   - { id: lan, net: ["10.0.0.5", "192.168.1.*", "10.9.0.1", "fd12::*"] }
   - { id: docs, fetch: ["172.16.0.9"] }
-ask:
+review:
   - { id: lab, net: ["100.64.0.1"] }
 "#;
     let policy = Policy::parse(yaml).unwrap();

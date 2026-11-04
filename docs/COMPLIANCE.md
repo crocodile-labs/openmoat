@@ -73,7 +73,7 @@ Evidence, not a certification. This report lists what OpenMoat recorded about an
 
 - Window: 2026-10-01T00:00:00Z to 2026-11-01T00:00:00Z (UTC, end not included)
 - Generated: 2026-11-04T09:12:40Z
-- Decisions: 6 (allow 1 · defer 1 · ask 1 · deny 3)
+- Decisions: 6 (allow 1 · defer 1 · review 1 · deny 3)
 
 ## Audit log
 
@@ -84,7 +84,7 @@ Evidence, not a certification. This report lists what OpenMoat recorded about an
 
 ### OWASP Top 10 for LLM Applications 2025
 
-| Control | Rule groups | Decisions | allow | defer | ask | deny |
+| Control | Rule groups | Decisions | allow | defer | review | deny |
 |---|---|---|---|---|---|---|
 | LLM02:2025 Sensitive Information Disclosure | secrets, secret-egress | 2 | 0 | 0 | 0 | 2 |
 | LLM03:2025 Supply Chain | packages, mcp | 1 | 0 | 0 | 1 | 0 |
@@ -94,9 +94,9 @@ Evidence, not a certification. This report lists what OpenMoat recorded about an
 
 ### Secrets and credentials (`secrets`)
 
-The rules deny or ask the agent's reads of key files, credential stores, secret environment variables and folders that hold them. Controls: LLM02:2025, CC6.1, A.5.17, A.8.3.
+The rules deny or hold for review the agent's reads of key files, credential stores, secret environment variables and folders that hold them. Controls: LLM02:2025, CC6.1, A.5.17, A.8.3.
 
-| Rule | In the policy | allow | defer | ask | deny |
+| Rule | In the policy | allow | defer | review | deny |
 |---|---|---|---|---|---|
 | `secrets-paths` | yes | 0 | 0 | 0 | 2 |
 …
@@ -109,7 +109,7 @@ Samples (newest first, the strictest verdicts before the rest; stored redacted):
 ## The map
 
 The map is data in the code (`crates/openmoat-cli/src/compliance.rs`), tested against the
-default policy: every `deny` and `ask` rule of the default policy is in exactly one group,
+default policy: every `deny` and `review` rule of the default policy is in exactly one group,
 no `allow` rule is in any, and every other rule id is one the code adds itself
 ([POLICY.md](POLICY.md) §5.1). A control is listed only where the rule's decisions are
 records of that control operating on an agent's tool calls.

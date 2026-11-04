@@ -1,5 +1,5 @@
-//! `moat allow --last` for file actions: a session grant for the exact files an
-//! ask named, or with `--always` a permanent rule for exactly those paths.
+//! `moat allow --last` for file actions: a session grant for the exact files a
+//! review named, or with `--always` a permanent rule for exactly those paths.
 
 use std::path::Path;
 
@@ -25,11 +25,11 @@ fn read(sb: &Sandbox, session: &str, path: &Path) -> String {
     .to_string()
 }
 
-/// Codex cannot ask, so a patch that writes outside the project is denied with
+/// Codex cannot prompt, so a patch that writes outside the project is denied with
 /// how to approve it; `moat allow --last` grants that exact patch to the session.
 #[test]
-fn codex_apply_patch_ask_is_approved_with_allow_last() {
-    let sb = Sandbox::installed_asking(&[".codex"]);
+fn codex_apply_patch_review_is_approved_with_allow_last() {
+    let sb = Sandbox::installed_with_review(&[".codex"]);
     let out = sb.guard("codex", &patch(&sb, "../notes/plan.md"));
     assert_eq!(out.status.code(), Some(DENY), "{}", stderr(&out));
     let reason = hook_output(&out)["permissionDecisionReason"].to_string();
@@ -55,11 +55,11 @@ fn codex_apply_patch_ask_is_approved_with_allow_last() {
     );
 }
 
-/// `--always` writes an `fs.read` rule for exactly the asked path and prints how
+/// `--always` writes an `fs.read` rule for exactly the reviewed path and prints how
 /// to take it back; it then applies to every session, and to that path only.
 #[test]
-fn claude_code_read_ask_is_approved_for_good() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+fn claude_code_read_review_is_approved_for_good() {
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let notes = sb.home.join("notes");
     std::fs::create_dir_all(&notes).unwrap();
     std::fs::write(notes.join("plan.md"), "plan").unwrap();
@@ -95,7 +95,7 @@ fn claude_code_read_ask_is_approved_for_good() {
 #[cfg(unix)]
 #[test]
 fn an_approved_path_that_leads_into_ssh_is_still_denied() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let ssh = sb.home.join(".ssh");
     std::fs::create_dir_all(&ssh).unwrap();
     std::fs::write(ssh.join("id_rsa"), "key").unwrap();

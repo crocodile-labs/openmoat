@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn parses_minimal() {
     let p = Policy::parse("version: 1\ndeny:\n  - id: a\n    shell: ['sudo *']\n").unwrap();
-    assert_eq!(p.defaults, Defaults::All(Verdict::Ask));
+    assert_eq!(p.defaults, Defaults::All(Verdict::Review));
     assert_eq!(p.rule_count(), (1, 0, 0));
 }
 
@@ -28,23 +28,23 @@ fn rejects_duplicate_and_empty() {
 
 #[test]
 fn per_kind_defaults() {
-    let p = Policy::parse("version: 1\ndefaults: { net: deny, '*': ask }\n").unwrap();
+    let p = Policy::parse("version: 1\ndefaults: { net: deny, '*': review }\n").unwrap();
     assert_eq!(
         p.defaults.for_kind(Kind::Net),
         (Verdict::Deny, "default.net".to_owned())
     );
     assert_eq!(
         p.defaults.for_kind(Kind::Shell),
-        (Verdict::Ask, "default".to_owned())
+        (Verdict::Review, "default".to_owned())
     );
 }
 
 #[test]
 fn fetch_defaults_fall_back_to_net_then_star() {
-    let own = Policy::parse("version: 1\ndefaults: { net: deny, fetch: ask }\n").unwrap();
+    let own = Policy::parse("version: 1\ndefaults: { net: deny, fetch: review }\n").unwrap();
     assert_eq!(
         own.defaults.for_kind(Kind::Fetch),
-        (Verdict::Ask, "default.fetch".to_owned())
+        (Verdict::Review, "default.fetch".to_owned())
     );
     assert_eq!(
         own.defaults.for_kind(Kind::Net),
@@ -167,7 +167,7 @@ fn hook_only_is_for_deny_groups_that_name_files() {
         Err(PolicyError::Rule { rule, problem }) if rule == "b" => problem,
         other => panic!("{list}: {other:?}"),
     };
-    for list in ["allow", "ask", "defer"] {
+    for list in ["allow", "review", "defer"] {
         let message = problem(list, "    fs.read: ['/x']\n");
         assert!(message.contains("`deny` groups only"), "{message}");
     }

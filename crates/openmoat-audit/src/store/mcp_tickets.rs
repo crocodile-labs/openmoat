@@ -34,7 +34,7 @@ pub struct NewTicket<'a> {
     pub tool: &'a str,
     /// Lowercase hex SHA-256 of the call's arguments in canonical form.
     pub arguments_sha256: &'a str,
-    /// The hook's verdict (`allow`, `defer` or `ask`).
+    /// The hook's verdict (`allow`, `defer` or `review`).
     pub verdict: &'a str,
 }
 

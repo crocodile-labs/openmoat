@@ -3,7 +3,8 @@
 //!
 //! Input is JSON on stdin with per-event fields plus `workspace_roots`. Output is
 //! `{"permission": "allow" | "deny" | "ask", "user_message", "agent_message"}`;
-//! exit 2 also denies. Only the shell and MCP events prompt on `ask`; elsewhere
+//! exit 2 also denies. Only the shell and MCP events prompt on `"ask"` (OpenMoat's
+//! `review`); elsewhere
 //! [`Host::answer`] sends it as a deny. Cursor is fail-open unless the hook entry sets
 //! `failClosed`, which the installer does.
 
@@ -13,7 +14,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
+    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, Prefixed,
     ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
@@ -36,27 +37,27 @@ const HOOKS: &[HookSpec] = &[
     HookSpec::new("preToolUse", "", TOOL_HOOK_TIMEOUT_S, false),
 ];
 
-/// `preToolUse` accepts `ask` but runs the call, and `beforeReadFile` takes
+/// `preToolUse` accepts `review` but runs the call, and `beforeReadFile` takes
 /// only allow or deny; both run file tools outside Cursor's sandbox, so a
-/// `defer` there is an `ask`. Only file tools reach these hooks, and
+/// `defer` there is a `review`. Only file tools reach these hooks, and
 /// `moat allow --last` approves the exact file.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "cursor",
     display_name: "Cursor",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: Some("Cursor does not prompt for this hook"),
-        defer_is_ask_on_no_ask: true,
+        on_no_prompt: Some("Cursor does not prompt for this hook"),
+        defer_is_review_on_no_prompt: true,
         // Cursor's hooks have no "no decision"; the tools it sends ungoverned
         // are checked by their own hook events or name no path (`pre_tool.rs`).
         ungoverned: Verdict::Allow,
-        ..Asks::BASE
+        ..Reviews::BASE
     },
     on_hook_failure: "runs the call when the hook is missing, crashes or times out, unless \
          the hook entry sets `failClosed: true`; then it blocks the call",
     gaps: "commands Cursor runs outside its sandbox (a rerun or call its Auto-review \
          classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) \
-         are not confined; file-tool asks become denies; Task and tools that name no path \
+         are not confined; file-tool reviews become denies; Task and tools that name no path \
          are not hooked; a failed hook blocks the call",
     install: Some(InstallSpec {
         dir_variable: "CURSOR_CONFIG_DIR",
@@ -251,7 +252,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
 fn event_kind(event: &str) -> HookEvent {
     match event {
         "beforeShellExecution" | "beforeMCPExecution" => HookEvent::PreToolUse,
-        _ => HookEvent::PreToolUseNoAsk,
+        _ => HookEvent::PreToolUseNoPrompt,
     }
 }
 
@@ -259,12 +260,13 @@ pub(crate) fn render(decision: &Decision) -> String {
     // Cursor's hooks have no "no decision" (ADR-025): `defer` reaches only the shell
     // and MCP events ([`Host::decided`]), where it is Cursor's own prompt.
     let verdict = match decision.verdict {
-        Verdict::Defer => Verdict::Ask,
+        Verdict::Defer => Verdict::Review,
         verdict => verdict,
     };
     // Each `Value` always renders, unlike serializing a struct; the members
     // keep the order the hooks documentation shows.
-    let permission = Value::from(verdict.as_str());
+    // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+    let permission = Value::from(crate::wire::host_verdict(verdict));
     let message = Value::from(crate::reason_line(decision));
     format!(r#"{{"permission":{permission},"user_message":{message},"agent_message":{message}}}"#)
 }

@@ -36,7 +36,7 @@ fn fixture() -> Store {
         ),
         (
             3,
-            Verdict::Ask,
+            Verdict::Review,
             &["package-near-miss"],
             "npm install expresss".into(),
         ),
@@ -111,7 +111,7 @@ fn evidence_counts_each_rule_group_and_control_from_the_log() {
     assert_eq!(paths.counts.of(Verdict::Deny), 2);
     assert_eq!(paths.status, RuleStatus::Unknown);
     assert_eq!(group("secret-egress").counts.decisions, 1);
-    assert_eq!(group("packages").counts.of(Verdict::Ask), 1);
+    assert_eq!(group("packages").counts.of(Verdict::Review), 1);
     let integrity = group("integrity");
     assert_eq!(integrity.counts.decisions, 1);
     assert_eq!(integrity.rules[0].status, RuleStatus::BuiltIn);
@@ -126,7 +126,7 @@ fn evidence_counts_each_rule_group_and_control_from_the_log() {
     // The event that names both a secrets rule and an egress rule counts once.
     assert_eq!(control("LLM02:2025").counts.decisions, 2);
     assert_eq!(control("CC6.7").counts.decisions, 1);
-    assert_eq!(control("A.8.19").counts.of(Verdict::Ask), 1);
+    assert_eq!(control("A.8.19").counts.of(Verdict::Review), 1);
     assert_eq!(control("A.8.15").counts.decisions, 6);
     assert_eq!(control("LLM06:2025").counts.decisions, 0);
 
@@ -156,8 +156,8 @@ fn samples_are_newest_strictest_first_and_redacted() {
     );
     assert_eq!(
         every[1].verdict,
-        Verdict::Ask,
-        "an ask before a newer allow or defer"
+        Verdict::Review,
+        "a review before a newer allow or defer"
     );
     let secrets = &b.groups.iter().find(|g| g.id == "secrets").unwrap().samples;
     assert_eq!(secrets[0].rules, ["token-egress", "secrets-paths"]);

@@ -1,6 +1,6 @@
 //! OpenMoat's OpenClaw plugin (`openclaw/integration/openmoat.mjs`, harness
 //! `openclaw.mjs`, whose stand-in runs `before_tool_call` handlers as
-//! OpenClaw's `runBeforeToolCall` does): a deny blocks, an ask is OpenClaw's
+//! OpenClaw's `runBeforeToolCall` does): a deny blocks, a review is OpenClaw's
 //! approval request, an allow or no answer lets the call run, every other
 //! outcome blocks; the parameters that run are the ones OpenMoat decided on,
 //! whatever another plugin returned (ADR-041); and the plugin reports loading
@@ -43,11 +43,11 @@ fn the_openclaw_plugin_decides_first_and_has_the_last_word() {
         assert_eq!(rewrite(name)["checked"], json!(["git status"]), "{name}");
         assert_eq!(rewrite(name)["params"]["workdir"], ".", "{name}");
     }
-    // After OpenMoat's own ask OpenClaw keeps the parameters the person saw.
+    // After OpenMoat's own review OpenClaw keeps the parameters the person saw.
     assert_eq!(ran("rewrite-after-ask"), "git status");
     assert_eq!(
         rewrite("rewrite-after-ask")["asked"]["description"],
-        "moat: ask [runs-later]"
+        "moat: review [runs-later]"
     );
     // The call as it came is denied before any plugin can change it.
     assert_eq!(rewrite("secret")["outcome"], "blocked");
@@ -65,7 +65,7 @@ fn the_openclaw_plugin_decides_first_and_has_the_last_word() {
 }
 
 #[test]
-fn the_openclaw_plugin_blocks_on_everything_but_allow_ask_and_no_answer() {
+fn the_openclaw_plugin_blocks_on_everything_but_allow_review_and_no_answer() {
     let Some(report) = openclaw() else {
         return;
     };
@@ -97,7 +97,7 @@ fn the_openclaw_plugin_blocks_on_everything_but_allow_ask_and_no_answer() {
         assert!(mode(name).get("asked").is_none(), "{name}");
     }
     let asked = &mode("ask")["asked"];
-    assert_eq!(asked["description"], "moat: ask [runs-later]");
+    assert_eq!(asked["description"], "moat: review [runs-later]");
     assert_eq!(asked["allowedDecisions"], json!(["allow-once", "deny"]));
     for (name, why) in [
         ("crash", "exited 1: boom"),

@@ -27,7 +27,7 @@ need and should refuse rather than interpret.
 - Inline interpreter payloads (`python -c`, `node -e`, `pwsh -Command`, …) are not parsed;
   they are scanned for paths, hosts and variable names.
 - Anything the lexer or classifier cannot make sense of is `ParseOutcome::Unparseable`,
-  which the engine maps to `ask` (rule id `unparseable`), never `allow`.
+  which the engine maps to `review` (rule id `unparseable`), never `allow`.
 - Shell *patterns* are tokenised by the same lexer, so `a|b` and `a | b` mean the same on
   both sides of a match, and tokens are compared as written (no flag normalisation).
 
@@ -40,4 +40,4 @@ need and should refuse rather than interpret.
   from real `bash` is a finding; differential testing against `bash` is planned
   (`STRENGTH.md` §4.1).
 - PowerShell and `cmd` are not tokenised; such lines are lexed as POSIX and fall through
-  to the `ask` default.
+  to the `review` default.

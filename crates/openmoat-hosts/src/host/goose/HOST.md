@@ -33,7 +33,7 @@ other agents that read Open Plugins.
   `tree`, `analyze` (`FsRead`); `read_image` (`Fetch` for an http(s) URL, else `FsRead`).
   goose has no file read or fetch tool of its own: it reads through `shell`.
 - `execute_javascript` (Code Mode, off by default): the tools a script calls run without
-  the hook, so the call asks (`Unchecked`), which goose receives as a block.
+  the hook, so the call needs review (`Unchecked`), which goose receives as a block.
 - `load`, `delegate`, `load_skill`: `UnknownTool`, every path, URL and command they name
   checked. A `delegate` subagent's own calls fire the hook.
 - Extension tools, `<extension>__<tool>` (the built-in `todo__…`, `extensionmanager__…`
@@ -43,10 +43,10 @@ other agents that read Open Plugins.
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-goose hooks cannot ask. An `ask` reaches goose as a block whose reason says how to
-approve it (`openmoat`, or `openmoat allow --last`), and the audit log keeps the ask.
+goose hooks cannot prompt. A `review` reaches goose as a block whose reason says how to
+approve it (`openmoat`, or `openmoat allow --last`), and the audit log keeps the review.
 
 ## Configuration and MCP files
 
@@ -79,7 +79,7 @@ goose runs every call unchecked when it does not load OpenMoat's plugin: turned 
 
 ## Known gaps
 
-No OS sandbox from OpenMoat; Code Mode's `execute_javascript` asks, since its tool
+No OS sandbox from OpenMoat; Code Mode's `execute_javascript` needs review, since its tool
 calls skip the hook; a project's `.agents/plugins/` can add hooks or replace OpenMoat's
 plugin, which `openmoat status` and `doctor` do not report yet; the Windows shell is left
 to goose; with `GOOSE_PATH_ROOT` the moved plugin is pinned by the lock but not named in

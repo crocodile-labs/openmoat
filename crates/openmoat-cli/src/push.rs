@@ -5,9 +5,9 @@
 //!   brokered secret denies it (`push-secret`): CI or anyone who can read the
 //!   remote would get it.
 //! - In a session that read untrusted content or a secret, a push that
-//!   changes a `runs-later` file (a CI workflow, a hook manager's file) asks
+//!   changes a `runs-later` file (a CI workflow, a hook manager's file) needs review
 //!   (`push-runs-later`): CI runs that file with the repository's secrets.
-//! - What could not be checked in time, or past the size limit, asks
+//! - What could not be checked in time, or past the size limit, needs review
 //!   (`push-unchecked`).
 //! - Otherwise the decision stands as it was.
 //!
@@ -35,7 +35,7 @@ pub const UNCHECKED_RULE: &str = "push-unchecked";
 
 /// The time all git commands of one call may take together, well inside the
 /// guard's own budget (`install::GUARD_BUDGET_S`). Starting git can take
-/// seconds on Windows and under load, and a push that runs out asks.
+/// seconds on Windows and under load, and a push that runs out needs review.
 const BUDGET: Duration = Duration::from_secs(10);
 
 /// Debug builds take the budget from this variable, in milliseconds, so the
@@ -67,7 +67,7 @@ struct Findings {
 /// `tainted` is whether the session read untrusted content or a secret. A
 /// deny is returned as it is, without reading the repository. git is the one
 /// `snapshot`, the search path `openmoat init` recorded, finds; without one
-/// the push asks.
+/// the push needs review.
 pub fn check(
     pushes: &[Push],
     snapshot: &Snapshot,
@@ -81,7 +81,7 @@ pub fn check(
     let Some(git) = snapshot.program("git") else {
         return tighten(
             decision,
-            Verdict::Ask,
+            Verdict::Review,
             UNCHECKED_RULE,
             "what the push would publish was not checked: no git with an absolute path is in \
              the search path `openmoat init` recorded"
@@ -106,7 +106,7 @@ pub fn check(
     if tainted && !findings.runs_later.is_empty() {
         decision = tighten(
             decision,
-            Verdict::Ask,
+            Verdict::Review,
             RUNS_LATER_RULE,
             format!(
                 "the session read untrusted content or a secret, and the push changes {}, \
@@ -118,7 +118,7 @@ pub fn check(
     for why in findings.unchecked {
         decision = tighten(
             decision,
-            Verdict::Ask,
+            Verdict::Review,
             UNCHECKED_RULE,
             format!("what the push would publish was not checked: {why}"),
         );

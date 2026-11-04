@@ -7,10 +7,10 @@
 //! hook backend is the engine itself ([`crate::CompiledPolicy`]), compiled from
 //! the same policy and context.
 //!
-//! An OS layer can only allow or deny, so lowering never widens: a hook `ask`
+//! An OS layer can only allow or deny, so lowering never widens: a hook `review`
 //! becomes a deny, and whatever cannot be represented exactly is narrowed and
 //! recorded as a [`Loss`]. The IR's verdict on any read, write or host is
-//! therefore the engine's verdict with `ask` read as `deny`, or stricter,
+//! therefore the engine's verdict with `review` read as `deny`, or stricter,
 //! except on the paths of a `hook_only` deny group, which only the hook
 //! denies and [`Enforcement::decide_only`] lists (ADR-034).
 

@@ -104,7 +104,7 @@ fn typed_shell_input_never_passes_piece_by_piece() {
         let payload = copilot("write_bash", &json!({"shellId": "shell-1", "input": input}));
         let (verdict, rules) = received(Host::CopilotCli, &payload);
         assert!(
-            matches!(verdict, Verdict::Ask | Verdict::Deny),
+            matches!(verdict, Verdict::Review | Verdict::Deny),
             "{input}: {verdict:?} {rules:?}"
         );
         assert!(rules.iter().any(|r| r == "unchecked"), "{rules:?}");
@@ -117,13 +117,13 @@ fn typed_shell_input_never_passes_piece_by_piece() {
 }
 
 /// Copilot CLI's shells outlive a call: a `cd` there to a directory OpenMoat
-/// cannot know asks, and one to a written-out secret directory is denied as a
+/// cannot know needs review, and one to a written-out secret directory is denied as a
 /// read of it, so the later relative read is not the only check.
 #[test]
-fn a_persistent_shell_moved_out_of_sight_asks() {
+fn a_persistent_shell_moved_out_of_sight_needs_review() {
     let unknown = copilot("bash", &json!({"command": "cd \"$DIR\""}));
     let (verdict, rules) = received(Host::CopilotCli, &unknown);
-    assert_eq!(verdict, Verdict::Ask, "{rules:?}");
+    assert_eq!(verdict, Verdict::Review, "{rules:?}");
     assert!(rules.iter().any(|r| r == "unchecked"), "{rules:?}");
     for command in ["cd ~/.ssh", "cd \"$HOME/.ssh\""] {
         let written = copilot("bash", &json!({ "command": command }));
@@ -133,17 +133,17 @@ fn a_persistent_shell_moved_out_of_sight_asks() {
 }
 
 /// Gemini CLI searches every workspace directory when a search names no
-/// `dir_path`; the payload names only the working directory, so it asks.
+/// `dir_path`; the payload names only the working directory, so it needs review.
 /// A search of a secret directory is still denied.
 #[test]
-fn a_workspace_wide_search_asks_and_a_secret_one_is_denied() {
+fn a_workspace_wide_search_needs_review_and_a_secret_one_is_denied() {
     for (tool, input) in [
         ("grep_search", json!({"pattern": "password"})),
         ("glob", json!({"pattern": "**/*.pem"})),
         ("read_many_files", json!({"include": ["**/*.md"]})),
     ] {
         let (verdict, rules) = received(Host::GeminiCli, &gemini(tool, &input));
-        assert_eq!(verdict, Verdict::Ask, "{tool}: {rules:?}");
+        assert_eq!(verdict, Verdict::Review, "{tool}: {rules:?}");
         assert!(rules.iter().any(|r| r == "unchecked"), "{rules:?}");
     }
     let secret = gemini(
@@ -153,10 +153,10 @@ fn a_workspace_wide_search_asks_and_a_secret_one_is_denied() {
     assert_eq!(received(Host::GeminiCli, &secret).0, Verdict::Deny);
 }
 
-/// A glob whose brace group may climb further than OpenMoat works out asks
+/// A glob whose brace group may climb further than OpenMoat works out needs review
 /// on every host whose search tool takes a pattern.
 #[test]
-fn a_glob_whose_reach_is_unknown_asks() {
+fn a_glob_whose_reach_is_unknown_needs_review() {
     let pattern = "{src/../..,x}/Users/me/.ssh/*";
     for (host, payload) in [
         (
@@ -179,7 +179,7 @@ fn a_glob_whose_reach_is_unknown_asks() {
     ] {
         let (verdict, rules) = received(host, &payload);
         assert!(
-            matches!(verdict, Verdict::Ask | Verdict::Deny),
+            matches!(verdict, Verdict::Review | Verdict::Deny),
             "{host:?}: {verdict:?} {rules:?}"
         );
     }

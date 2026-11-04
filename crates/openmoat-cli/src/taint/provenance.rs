@@ -6,7 +6,7 @@
 //! row of every file the call reads or runs and the rows its writes add. The
 //! rows are appended with the call's audit event when the call may have run
 //! (`guard.rs`); [`super::of_session`] adds a session's tainted reads to its
-//! taint. Nothing here asks or denies on its own: the taint it adds tightens
+//! taint. Nothing here holds for review or denies on its own: the taint it adds tightens
 //! later calls as untrusted content does (`engine/taint.rs`).
 
 use std::collections::BTreeSet;

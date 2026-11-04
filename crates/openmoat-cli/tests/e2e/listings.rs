@@ -15,7 +15,7 @@ fn add_secret(sb: &Sandbox, args: &[&str]) -> Output {
 
 #[test]
 fn allowed_lists_rules_grants_and_trust_without_a_terminal() {
-    let sb = Sandbox::installed_asking(&[".claude"]);
+    let sb = Sandbox::installed_with_review(&[".claude"]);
     let empty = json(&sb.moat(&["allowed", "--format", "json"]));
     assert_eq!(empty["rules"], serde_json::json!([]));
     assert_eq!(empty["session_grants"], serde_json::json!([]));

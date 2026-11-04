@@ -7,7 +7,7 @@ Status: accepted · Date: 2026-10-21 · Amends ADR-031
 ADR-031 signs repository policies (`.moat/policy.yaml.sig`, checked when
 `require_signed_repo_policy` is on) and policy packs (`openmoat policy install`) in one
 `ssh-keygen` namespace, `openmoat-policy`. A pack has a repository policy's shape (only
-`version`, `deny`, `ask` and `allow`), so a pack and its signature, copied into a
+`version`, `deny`, `review` and `allow`), so a pack and its signature, copied into a
 project's `.moat/` as `policy.yaml` and `policy.yaml.sig`, verify as a signed repository
 policy: its allow rules then apply in that project, although its signer published it as
 a pack and the person may never have installed it. The reverse also held: a signed

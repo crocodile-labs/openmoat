@@ -3,7 +3,7 @@
 //!
 //! A repository is input the person did not write, so by itself its policy
 //! only makes the user policy stricter: its deny rules join the user's, and its
-//! ask rules are tried before the user's allow rules. Its allow rules widen the
+//! review rules are tried before the user's allow rules. Its allow rules widen the
 //! user policy only once a person has trusted that exact file (`moat trust`);
 //! the caller decides that and passes it to [`RepoPolicy::merge`].
 
@@ -29,9 +29,10 @@ pub struct RepoPolicy {
     /// Added to the user's allow rules, only when the file is trusted.
     #[serde(default)]
     pub allow: Vec<RuleGroup>,
-    /// Tried before the user's allow rules.
-    #[serde(default)]
-    pub ask: Vec<RuleGroup>,
+    /// Tried before the user's allow rules. Read from `ask:` too, its name
+    /// before ADR-053.
+    #[serde(default, alias = "ask")]
+    pub review: Vec<RuleGroup>,
 }
 
 impl RepoPolicy {
@@ -50,7 +51,7 @@ impl RepoPolicy {
     pub fn merge(&self, user: &Policy, trusted: bool) -> Result<Policy, PolicyError> {
         let mut merged = user.clone();
         merged.deny.extend(prefixed(&self.deny));
-        merged.repo_ask.extend(prefixed(&self.ask));
+        merged.repo_review.extend(prefixed(&self.review));
         if trusted {
             merged.allow.extend(prefixed(&self.allow));
         }
@@ -59,8 +60,8 @@ impl RepoPolicy {
     }
 
     /// `user` with only this policy's deny rules added: what `openmoat run`'s
-    /// proxy decides hosts with. Its ask rules are left out, since the proxy
-    /// cannot ask and a team's "ask before any network" would cut the run off,
+    /// proxy decides hosts with. Its review rules are left out, since the proxy
+    /// cannot prompt and a team's "review before any network" would cut the run off,
     /// and its allow rules too, trusted or not: they would widen the proxy.
     pub fn merge_deny(&self, user: &Policy) -> Result<Policy, PolicyError> {
         let mut merged = user.clone();
@@ -82,7 +83,7 @@ mod tests {
     use super::*;
     use crate::{Action, CompiledPolicy, EvalContext, Verdict};
 
-    const USER: &str = "version: 1\ndefaults: { '*': ask, net: deny }\n\
+    const USER: &str = "version: 1\ndefaults: { '*': review, net: deny }\n\
         deny:\n  - id: secrets\n    fs.read: ['~/.ssh/**']\n\
         allow:\n  - id: dev\n    shell: ['cargo *', 'git status']\n";
 
@@ -113,9 +114,9 @@ mod tests {
     }
 
     #[test]
-    fn deny_and_ask_tighten_what_the_user_allows() {
+    fn deny_and_review_tighten_what_the_user_allows() {
         let repo = "version: 1\ndeny:\n  - id: no-status\n    shell: ['git status']\n\
-            ask:\n  - id: publish\n    shell: ['cargo publish']\n";
+            review:\n  - id: publish\n    shell: ['cargo publish']\n";
         let p = merged(repo, false);
         assert_eq!(
             decide(&p, "git status"),
@@ -123,7 +124,7 @@ mod tests {
         );
         assert_eq!(
             decide(&p, "cargo publish"),
-            (Verdict::Ask, vec!["repo:publish".into()])
+            (Verdict::Review, vec!["repo:publish".into()])
         );
         assert_eq!(decide(&p, "cargo test").0, Verdict::Allow);
     }
@@ -132,7 +133,10 @@ mod tests {
     fn allow_rules_widen_only_when_trusted_and_never_past_a_deny() {
         let repo = "version: 1\nallow:\n  - id: wide\n    shell: ['make *', 'cat *']\n    \
             fs.read: ['~/.ssh/**']\n";
-        assert_eq!(decide(&merged(repo, false), "make deploy").0, Verdict::Ask);
+        assert_eq!(
+            decide(&merged(repo, false), "make deploy").0,
+            Verdict::Review
+        );
         let trusted = merged(repo, true);
         assert_eq!(
             decide(&trusted, "make deploy"),
@@ -145,9 +149,9 @@ mod tests {
     }
 
     #[test]
-    fn merging_denies_only_adds_no_ask_and_no_allow() {
+    fn merging_denies_only_adds_no_review_and_no_allow() {
         let repo = "version: 1\ndeny:\n  - id: no-status\n    shell: ['git status']\n\
-            ask:\n  - id: publish\n    shell: ['cargo publish']\n\
+            review:\n  - id: publish\n    shell: ['cargo publish']\n\
             allow:\n  - id: wide\n    shell: ['make *']\n";
         let user = Policy::parse(USER).unwrap();
         let p = RepoPolicy::parse(repo).unwrap().merge_deny(&user).unwrap();
@@ -155,14 +159,14 @@ mod tests {
             decide(&p, "git status"),
             (Verdict::Deny, vec!["repo:no-status".into()])
         );
-        assert_eq!(p.repo_ask, Vec::<RuleGroup>::new());
+        assert_eq!(p.repo_review, Vec::<RuleGroup>::new());
         assert_eq!(p.allow, user.allow);
-        assert_eq!(decide(&p, "make deploy").0, Verdict::Ask);
+        assert_eq!(decide(&p, "make deploy").0, Verdict::Review);
     }
 
     #[test]
-    fn a_repo_ask_still_loses_to_a_user_deny() {
-        let repo = "version: 1\nask:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n";
+    fn a_repo_review_still_loses_to_a_user_deny() {
+        let repo = "version: 1\nreview:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n";
         assert_eq!(
             decide(&merged(repo, false), "cat ~/.ssh/id_rsa"),
             (Verdict::Deny, vec!["secrets".into()])
@@ -184,10 +188,10 @@ mod tests {
             "version: 1\ndefaults: { net: allow }\n",
             "version: 1\nexecutables:\n  git: ['/tmp/git']\n",
             "version: 1\nsandbox:\n  read_roots: ['/etc']\n",
-            "version: 1\nrepo_ask: []\n",
+            "version: 1\nrepo_review: []\n",
             "version: 2\n",
             "version: 1\ndeny:\n  - id: a\n",
-            "version: 1\ndeny:\n  - id: a\n    shell: ['x']\nask:\n  - id: a\n    shell: ['y']\n",
+            "version: 1\ndeny:\n  - id: a\n    shell: ['x']\nreview:\n  - id: a\n    shell: ['y']\n",
             "deny: []\n",
         ] {
             assert!(RepoPolicy::parse(bad).is_err(), "{bad} must be rejected");

@@ -3,25 +3,26 @@
 //! `cn` merges hooks from `~/.claude/settings.json` and `.claude/settings.json`
 //! with its own files and pipes them the Claude Code `PreToolUse` document. Its
 //! runner (`extensions/cli/src/hooks/hookRunner.ts`) blocks only on exit 2,
-//! `decision: "block"` or `permissionDecision: "deny"`; an `ask` lets the call
-//! run. So `guard` has to tell a `cn` call from a Claude Code one and answer
-//! `cn`'s asks as denies ([`Host::answer`]).
+//! `decision: "block"` or `permissionDecision: "deny"`; `"ask"` (OpenMoat's
+//! `review`) lets the call run. So `guard` has to tell a `cn` call from a
+//! Claude Code one and answer
+//! `cn`'s reviews as denies ([`Host::answer`]).
 
 use serde::Deserialize;
 
 use crate::Host;
-use crate::contract::{Asks, Detect, HostDocs, HostSpec};
+use crate::contract::{Reviews, Detect, HostDocs, HostSpec};
 
-/// `cn` sends Claude Code's hooks, ignores `ask` and runs the call.
+/// `cn` sends Claude Code's hooks, ignores `"ask"` and runs the call.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "continue",
     display_name: "Continue CLI",
     speaks: Some(Host::ClaudeCode),
-    asks: Asks {
-        on_pre_tool_use: Some("the Continue CLI runs a call its hook asks about"),
-        on_no_ask: None,
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+    reviews: Reviews {
+        on_pre_tool_use: Some("the Continue CLI runs a call its hook holds for review"),
+        on_no_prompt: None,
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2, or times out (default 600 s)",
@@ -76,8 +77,8 @@ impl Host {
     /// Only the Claude Code hook is shared. `cn` is recognised by
     /// [`CONTINUE_ENV`] or by the empty `transcript_path` it sends (it keeps no
     /// transcript file), where Claude Code always sends a path. Either signal is
-    /// enough: a Claude Code call taken for `cn` has its ask turned into a deny,
-    /// while a `cn` call taken for Claude Code would run on an ask.
+    /// enough: a Claude Code call taken for `cn` has its review turned into a deny,
+    /// while a `cn` call taken for Claude Code would run on a review.
     #[must_use]
     pub fn sender(self, payload: &str, continue_env: bool) -> Self {
         if self == Self::ClaudeCode && (continue_env || has_empty_transcript(payload)) {
@@ -147,12 +148,12 @@ mod tests {
     }
 
     #[test]
-    fn cn_receives_an_ask_as_a_deny_that_says_how_to_approve() {
-        let mut ask = Decision::new(Verdict::Ask);
-        ask.rules.push("installs".into());
-        let cn = Host::Continue.answer(&HookEvent::PreToolUse, &ask);
+    fn cn_receives_a_review_as_a_deny_that_says_how_to_approve() {
+        let mut review = Decision::new(Verdict::Review);
+        review.rules.push("installs".into());
+        let cn = Host::Continue.answer(&HookEvent::PreToolUse, &review);
         assert_eq!(cn.verdict, Verdict::Deny);
-        assert_eq!(cn.rules, ask.rules);
+        assert_eq!(cn.rules, review.rules);
         assert!(crate::reason_line(&cn).contains("Continue CLI"));
         assert!(crate::reason_line(&cn).contains("openmoat allow --last"));
         let allow = Decision::new(Verdict::Allow);

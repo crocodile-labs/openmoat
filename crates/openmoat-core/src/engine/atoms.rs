@@ -40,14 +40,14 @@ fn classify_action(
         Action::ForeignShell { shell, .. } => ParseOutcome::Unparseable {
             reason: format!("{shell} commands are not parsed; only POSIX shell is classified"),
             atoms: Vec::new(),
-            asks: false,
+            needs_review: false,
         },
         Action::FsRead { path } => ParseOutcome::Parsed(file_atoms(path, ctx, read).collect()),
         Action::FsWrite { path } => ParseOutcome::Parsed(file_atoms(path, ctx, write).collect()),
         Action::Patch { writes } if writes.is_empty() => ParseOutcome::Unparseable {
             reason: "patch names no files".to_owned(),
             atoms: Vec::new(),
-            asks: false,
+            needs_review: false,
         },
         Action::Patch { writes } => ParseOutcome::Parsed(
             writes
@@ -58,7 +58,7 @@ fn classify_action(
         Action::ReadFiles { paths } if paths.is_empty() => ParseOutcome::Unparseable {
             reason: "read names no files".to_owned(),
             atoms: Vec::new(),
-            asks: false,
+            needs_review: false,
         },
         Action::ReadFiles { paths } => ParseOutcome::Parsed(
             paths
@@ -71,7 +71,7 @@ fn classify_action(
             hosts if hosts.is_empty() => ParseOutcome::Unparseable {
                 reason: format!("no host in url `{url}`"),
                 atoms: Vec::new(),
-                asks: false,
+                needs_review: false,
             },
             hosts => ParseOutcome::Parsed(
                 hosts
@@ -158,10 +158,10 @@ impl Named<'_> {
         atoms.extend(self.writes.iter().flat_map(|p| file_atoms(p, ctx, write)));
         let mut unparsed: Option<Unparsed> = None;
         let mut note = |why: Option<Unparsed>| {
-            // a URL that asks wins over one that only cannot be read
+            // a URL that needs review wins over one that only cannot be read
             if let Some(why) = why
-                && (why.asks || unparsed.is_none())
-                && !unparsed.as_ref().is_some_and(|u| u.asks)
+                && (why.needs_review || unparsed.is_none())
+                && !unparsed.as_ref().is_some_and(|u| u.needs_review)
             {
                 unparsed = Some(why);
             }
@@ -184,17 +184,24 @@ impl Named<'_> {
             let (found, why) = outcome.into_parts();
             atoms.extend(found);
             if let Some(why) = why {
-                // a line not read in full asks, whichever part said so
-                let asks = why.asks || unparsed.as_ref().is_some_and(|u| u.asks);
+                // a line not read in full needs review, whichever part said so
+                let needs_review =
+                    why.needs_review || unparsed.as_ref().is_some_and(|u| u.needs_review);
                 let reason = unparsed.take().map_or(why.reason, |u| u.reason);
-                unparsed = Some(Unparsed { reason, asks });
+                unparsed = Some(Unparsed {
+                    reason,
+                    needs_review,
+                });
             }
         }
         let outcome = match unparsed {
-            Some(Unparsed { reason, asks }) => ParseOutcome::Unparseable {
+            Some(Unparsed {
+                reason,
+                needs_review,
+            }) => ParseOutcome::Unparseable {
                 reason,
                 atoms,
-                asks,
+                needs_review,
             },
             None => ParseOutcome::Parsed(atoms),
         };
@@ -228,7 +235,7 @@ pub(super) fn checked_atoms(
     }
     let unexpanded = expansion.overflow().map(|reason| Unparsed {
         reason,
-        asks: false,
+        needs_review: false,
     });
     let atoms = with_environ_reads(with_resolved_paths(atoms, paths));
     (atoms, unparsed.or(unexpanded))

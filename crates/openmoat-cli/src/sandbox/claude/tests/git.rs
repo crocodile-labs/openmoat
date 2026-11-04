@@ -77,10 +77,10 @@ fn an_allowed_directory_keeps_git_writable_except_what_runs_code() {
     );
 }
 
-/// Files CI or a commit hook runs later (`runs-later`): the hook asks, the
+/// Files CI or a commit hook runs later (`runs-later`): the hook holds them for review, the
 /// sandbox denies none of them and lists them once.
 #[test]
-fn files_run_later_are_asked_by_the_hook_not_denied_by_the_sandbox() {
+fn files_run_later_are_held_for_review_by_the_hook_not_denied_by_the_sandbox() {
     let out = generated(DEFAULT_POLICY);
     let deny = list(&out, "/filesystem/denyWrite");
     // `.github/copilot/settings*.json` is `kernel-self`'s, denied everywhere.

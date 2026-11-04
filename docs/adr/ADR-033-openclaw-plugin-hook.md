@@ -22,7 +22,7 @@ the call (<https://docs.openclaw.ai/plugins/hooks/reference>). Plugins load from
 - OpenMoat ships a dependency-free plugin, `crates/openmoat-cli/integrations/openclaw/openmoat.mjs`.
   For every tool it runs `moat guard --host openclaw` with the event, the context's
   ids, the agent's workspace, the configuration path and the platform on stdin. It
-  maps exit 2 with a deny to `block`, an ask to `requireApproval` (allow once or
+  maps exit 2 with a deny to `block`, a review to `requireApproval` (allow once or
   deny), allow or no output to no decision, and everything else (no `moat`, a crash,
   another exit code, an unreadable answer, 45 s without one, a cancelled call) to
   `block`. It never rewrites params.
@@ -32,8 +32,8 @@ the call (<https://docs.openclaw.ai/plugins/hooks/reference>). Plugins load from
   to an existing `plugins.allow` and removes it from `plugins.deny`. It refuses a file
   that turns plugins off or is not plain JSON. Both files are pinned in the lock;
   `moat uninstall` restores `openclaw.json` and deletes the plugin.
-- `openmoat-hosts` reads the plugin's envelope as host `openclaw`. OpenClaw can ask,
-  so `Host::answer` keeps an `ask`. A `defer` is no decision, so OpenClaw's own exec
+- `openmoat-hosts` reads the plugin's envelope as host `openclaw`. OpenClaw can prompt,
+  so `Host::answer` keeps a `review`. A `defer` is no decision, so OpenClaw's own exec
   approvals and tool policy decide, as without OpenMoat. Tools that change what the
   Gateway loads (`plugins` install, enable, disable, uninstall, reload) are decided as
   a write to `openclaw.json`, which `kernel-self` denies.

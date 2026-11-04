@@ -48,7 +48,7 @@ fn lint_warns_about_unreachable_rules_without_failing() {
     std::fs::write(
         &file,
         "version: 1\ndefaults: { netw: deny }\nallow:\n  - id: dev\n    shell: ['cargo *']\n\
-         ask:\n  - id: push\n    shell: ['cargo publish*']\n",
+         review:\n  - id: push\n    shell: ['cargo publish*']\n",
     )
     .unwrap();
     let out = sb.moat(&["policy", "lint", file.to_str().unwrap()]);
@@ -59,7 +59,7 @@ fn lint_warns_about_unreachable_rules_without_failing() {
         "{text}"
     );
     assert!(
-        text.contains("warning: rule `push`: ask shell pattern `cargo publish*` is unreachable"),
+        text.contains("warning: rule `push`: review shell pattern `cargo publish*` is unreachable"),
         "{text}"
     );
     assert!(text.contains("2 warnings)"), "{text}");
@@ -259,7 +259,7 @@ fn unknown_kind_is_a_usage_error() {
 }
 
 /// `policy compile` prints the enforcement IR: paths expanded for the project,
-/// decide-only kinds, and every ask reported as a loss.
+/// decide-only kinds, and every review reported as a loss.
 #[test]
 fn compile_prints_the_enforcement_ir_and_its_losses() {
     let sb = Sandbox::bare(&[]);

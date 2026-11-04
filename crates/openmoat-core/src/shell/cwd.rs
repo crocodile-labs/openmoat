@@ -11,7 +11,7 @@
 //!
 //! A target that cannot be known (`cd "$DIR"`, `cd -`, `cd s*`, `popd`, and
 //! `eval` or `source`, which can run a `cd` of their own) adds an unknown
-//! directory: relative paths after it cannot be resolved and the command asks.
+//! directory: relative paths after it cannot be resolved and the command needs review.
 //! Entering a directory reads nothing, so `cd` adds no action of its own beyond
 //! what any argument gets (a path-looking target is still an `fs.read`, as
 //! before); what is read after it is checked at its resolved location.
@@ -98,7 +98,7 @@ fn knowable(word: &Word) -> bool {
 /// that cannot be known from the command alone: a `cd` or `pushd` to a target
 /// that is not written out (`cd "$X"`, `cd -`), `popd`, or `eval`, outside a
 /// subshell. `source` and `.` are not counted: what a sourced file runs is
-/// unchecked anyway, as any script's commands are, and counting them would ask
+/// unchecked anyway, as any script's commands are, and counting them would hold
 /// on every `source .venv/bin/activate`. A later command
 /// in that shell would then be checked against the wrong directory. A command
 /// line that cannot be read counts as such a move. A `cd` to a written-out

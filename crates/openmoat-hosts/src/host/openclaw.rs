@@ -13,8 +13,9 @@
 //!
 //! Output: nothing for `defer`, else `{"decision": "allow" | "ask" | "deny",
 //! "reason"}`. The plugin returns no decision for `allow`, `requireApproval`
-//! for `ask` (OpenClaw asks the person and blocks when no one can answer) and
-//! `block` for `deny`; anything else it cannot read blocks the call.
+//! for `"ask"`, OpenMoat's `review` (OpenClaw asks the person and blocks when no
+//! one can answer), and `block` for `deny`; anything else it cannot read blocks
+//! the call.
 //!
 //! OpenClaw runs the handlers in priority order and gives each the call as it
 //! came; the `params` the last handler returns run (`runBeforeToolCall` in
@@ -28,7 +29,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Asks, ExtraFile, GUARD_BUDGET_S, Heartbeat, HookLayout, HookSpec, HostAdapter, HostSpec,
+    Reviews, ExtraFile, GUARD_BUDGET_S, Heartbeat, HookLayout, HookSpec, HostAdapter, HostSpec,
     InstallSpec, Location, McpFile, McpSpec, wrong_event,
 };
 use crate::wire::owned_file::{OwnedFile, Syntax};
@@ -74,15 +75,15 @@ mod mcp;
 mod protect;
 mod tools;
 
-/// OpenClaw puts an `ask` to the person itself (`requireApproval`).
+/// OpenClaw puts a `review` to the person itself (`requireApproval`).
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "openclaw",
     display_name: "OpenClaw",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: None,
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+        on_no_prompt: None,
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when OpenMoat's plugin throws or times out (OpenClaw's \
          `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, \
@@ -265,7 +266,8 @@ pub(crate) fn render(decision: &Decision) -> String {
         return String::new();
     }
     serde_json::json!({
-        "decision": decision.verdict.as_str(),
+        // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+        "decision": crate::wire::host_verdict(decision.verdict),
         "reason": crate::reason_line(decision),
     })
     .to_string()

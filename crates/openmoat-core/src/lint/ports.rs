@@ -16,7 +16,7 @@ pub(super) fn malformed(policy: &Policy, out: &mut Vec<Warning>) {
         .deny
         .iter()
         .chain(&policy.allow)
-        .chain(&policy.ask)
+        .chain(&policy.review)
         .chain(&policy.defer);
     for group in groups {
         for kind in [Kind::Net, Kind::Fetch] {

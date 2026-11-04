@@ -9,7 +9,7 @@ Shell rules are token prefixes (`DESIGN.md` §6.2): `git status` also matches
 no arguments". `env`, `printenv`, `set`, `export -p` and `declare -x` print every variable,
 secrets included (T3), while `env FOO=1 cmd`, `set -e` and `printenv HOME` are ordinary.
 A deny rule `env` would also deny every `env FOO=1 …` wrapper; the default policy
-therefore only asked for the dumps (audit 2026-10-05).
+therefore only held the dumps for review (audit 2026-10-05).
 
 ## Decision
 

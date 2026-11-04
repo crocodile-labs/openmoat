@@ -1,7 +1,7 @@
 //! The row for `claude-code`.
 //!
 //! Uninstall: `uninstall.rs`; an edited hook file: `lock.rs`; a secret
-//! read and an ask: `guard.rs`.
+//! read and a review: `guard.rs`.
 
 use super::{PRE_TOOL_USE, Row, post_tool_use, pre_tool_use};
 use crate::common::fixture;

@@ -31,7 +31,7 @@ test("a denied call names its rule and reason", () => {
     action: { type: "fs_read", path: "/p/a" },
     reason: "stdin not shown",
   });
-  assert.equal(partial.verdict, "ask");
+  assert.equal(partial.verdict, "review");
 });
 
 test("the decision carries a frozen copy of exactly what was decided", () => {
@@ -95,7 +95,7 @@ test("bad input is an OpenMoatError, never a decision", () => {
 test("characters JSON allows raw and YAML does not still decide", () => {
   const d = engine.decide({ type: "shell", command: "echo \u007f\u0085﻿￿ é 😀" });
   assert.equal(d.action.command, "echo \u007f\u0085﻿￿ é 😀");
-  assert.ok(["allow", "defer", "ask", "deny"].includes(d.verdict));
+  assert.ok(["allow", "defer", "review", "deny"].includes(d.verdict));
 });
 
 test("a freed engine decides nothing", () => {

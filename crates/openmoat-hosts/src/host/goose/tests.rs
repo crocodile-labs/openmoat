@@ -173,9 +173,9 @@ fn every_verdict_is_rendered_as_goose_reads_it() {
     let deny: Value = serde_json::from_str(&render(Verdict::Deny)).unwrap();
     assert_eq!(deny["decision"], "block");
     assert!(deny["reason"].as_str().unwrap().starts_with("moat: deny"));
-    // goose cannot ask: an ask arrives as a deny saying how to approve it.
+    // goose cannot prompt: a review arrives as a deny saying how to approve it.
     let request = fixture("write").unwrap();
-    let answer = Host::Goose.answer(&request.event, &Decision::new(Verdict::Ask));
+    let answer = Host::Goose.answer(&request.event, &Decision::new(Verdict::Review));
     assert_eq!(answer.verdict, Verdict::Deny);
 }
 

@@ -26,7 +26,7 @@ pub enum Action {
         command: String,
     },
     /// A command for a shell the classifier cannot read (Claude Code `PowerShell`).
-    /// Never classified, so always `unparseable`: an `ask`, never an `allow`.
+    /// Never classified, so always `unparseable`: a `review`, never an `allow`.
     ForeignShell {
         /// The shell's name, for reasons and the audit log.
         shell: String,
@@ -89,7 +89,7 @@ pub enum Action {
     /// A call the hook payload shows only in part: input typed into a shell
     /// that is already running, or a search over directories the payload does
     /// not name. `action` is decided as usual and the call is at least an
-    /// `ask` (rule [`UNCHECKED_RULE`]), since `reason` names what OpenMoat
+    /// `review` (rule [`UNCHECKED_RULE`]), since `reason` names what OpenMoat
     /// cannot see.
     Unchecked {
         /// What the payload shows of the call.
@@ -137,7 +137,7 @@ pub enum Action {
         commands: Vec<String>,
         /// The limit that stopped the adapter searching the arguments (nesting
         /// depth, number of paths and URLs). What was not searched may name a
-        /// file or host, so the engine decides the call at least `ask`.
+        /// file or host, so the engine decides the call at least `review`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         unchecked: Option<String>,
     },
@@ -187,7 +187,7 @@ impl Action {
         }
     }
 
-    /// `action`, decided at least `ask` because `reason` names what the
+    /// `action`, decided at least `review` because `reason` names what the
     /// payload does not show ([`Action::Unchecked`]).
     #[must_use]
     pub fn unchecked(action: Self, reason: impl Into<String>) -> Self {
@@ -208,7 +208,7 @@ impl Action {
 }
 
 /// The rule id of a call the hook payload shows only in part
-/// ([`Action::Unchecked`]): it asks whatever else it is decided.
+/// ([`Action::Unchecked`]): it needs review whatever else it is decided.
 pub const UNCHECKED_RULE: &str = "unchecked";
 
 /// The primitive operations an [`Action`] decomposes into.

@@ -57,7 +57,7 @@ const COMMAND_KEYS: [(&str, &str); 7] = [
 /// Permission lists and modes are left out on purpose: they decide only
 /// whether Claude Code asks the person itself about a call the hook left to
 /// it, and Claude Code runs the `PreToolUse` hook in every mode, so OpenMoat's
-/// deny and ask stand whatever a project allows. The tool calls of MCP servers
+/// deny and review stand whatever a project allows. The tool calls of MCP servers
 /// a project adds are held by their own pins (ADR-026), but Claude Code starts
 /// a server it is told to enable when settings load, which runs its command,
 /// so turning project servers on is named.

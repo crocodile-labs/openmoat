@@ -48,7 +48,7 @@ process.stdin.on("end", () => {
     case "deny": return say('{"decision":"deny","reason":"moat: deny [secrets-paths] — secret material"}', 2);
     case "allow": return say('{"decision":"allow","reason":"moat: allow [dev-shell]"}', 0);
     case "defer": return say("", 0);
-    case "ask": return say('{"decision":"ask","reason":"moat: ask [runs-later] — loads code later"}', 0);
+    case "ask": return say('{"decision":"ask","reason":"moat: review [runs-later] — loads code later"}', 0);
     case "crash": process.stderr.write("boom\\n"); process.exitCode = 1; return;
     case "garbage": return say("not json", 0);
     case "deny-exit-0": return say('{"decision":"deny","reason":"x"}', 0);
@@ -118,7 +118,7 @@ async function callV1(hooks, mode, tool, args, label = mode) {
 // A stand-in for OpenCode 2's plugin context: hooks per name in registration
 // order, one event object through all of them (`hooks.ts` `trigger`), and a
 // permission service whose `assert` evaluates `rules` (here: allow), runs the
-// `evaluate` hooks and, on `ask`, answers as `answer` says.
+// `evaluate` hooks and, on its `ask` effect, answers as `answer` says.
 function context(directory) {
   const hooks = new Map();
   const asked = [];
@@ -321,7 +321,7 @@ try {
   await (await load(plugin(join(dir, "no-such-dir", "openmoat"), "missing2.mjs"))).setup(missingV2.ctx);
   second.results.push(await callV2(missingV2, "allow", "shell", { command: "ls" }, "missing-binary"));
   // A context with nothing but the tool hook: calls are still checked, and
-  // an ask, which it cannot put to the person, blocks.
+  // a review, which it cannot put to the person, blocks.
   const bareV2 = context(dir);
   const minimal = { location: bareV2.ctx.location, tool: bareV2.ctx.tool };
   await (await load(file)).setup(minimal);

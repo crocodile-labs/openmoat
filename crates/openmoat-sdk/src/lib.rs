@@ -16,7 +16,7 @@
 //! ```
 //!
 //! **The SDK decides; enforcement is yours.** A call it denies must not run, and
-//! a call it asks about must not run until a person approves that exact call.
+//! a call it holds for review must not run until a person approves that exact call.
 //! Nothing here starts, stops or confines a process: this is not a sandbox
 //! (docs/SDK.md, ADR-046). Run exactly the action you decided, never a value
 //! rebuilt from it afterwards.

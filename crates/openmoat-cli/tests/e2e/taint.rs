@@ -26,7 +26,7 @@ pub(crate) fn decide(sb: &Sandbox, host: &str, payload: &str) -> (String, String
 }
 
 #[test]
-fn fetched_content_makes_a_later_workflow_write_ask() {
+fn fetched_content_makes_a_later_workflow_write_need_review() {
     let sb = Sandbox::installed(&[".claude"]);
     let proj = sb.project();
     let workflow = proj.join(".github/workflows/ci.yml");
@@ -34,7 +34,7 @@ fn fetched_content_makes_a_later_workflow_write_ask() {
         let input = json!({"file_path": workflow.to_string_lossy(), "content": "on: push"});
         decide(&sb, "claude-code", &call(session, &proj, "Write", &input))
     };
-    // CI runs a workflow later with the repository's secrets: a write asks even in
+    // CI runs a workflow later with the repository's secrets: a write needs review even in
     // a clean session (`runs-later`), and the session's taint is added to it
     let (verdict, reason) = write("s1");
     assert_eq!(verdict, "ask", "{reason}");
@@ -63,9 +63,9 @@ fn fetched_content_makes_a_later_workflow_write_ask() {
     assert_eq!(verdict, "allow", "ordinary files stay allowed");
 }
 
-/// After untrusted content, the build definitions the allowed build commands run ask.
+/// After untrusted content, the build definitions the allowed build commands run need review.
 #[test]
-fn fetched_content_makes_later_build_definition_writes_ask() {
+fn fetched_content_makes_later_build_definition_writes_need_review() {
     let sb = Sandbox::installed(&[".claude"]);
     let proj = sb.project();
     let write = |session, file: &str| {
@@ -91,14 +91,14 @@ fn fetched_content_makes_later_build_definition_writes_ask() {
 }
 
 #[test]
-fn an_approved_secret_read_makes_later_network_ask() {
+fn an_approved_secret_read_makes_later_network_need_review() {
     let sb = Sandbox::installed(&[".claude"]);
-    // A policy that asks for secret reads instead of denying them, re-pinned by a person.
+    // A policy that holds secret reads for review instead of denying them, re-pinned by a person.
     std::fs::write(
         sb.home.join(".moat/policy.yaml"),
-        "version: 1\ndefaults: { '*': ask, net: deny }\n\
+        "version: 1\ndefaults: { '*': review, net: deny }\n\
          allow:\n  - id: registries\n    net: [api.github.com]\n\
-         ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
+         review:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
     )
     .unwrap();
     // `doctor --accept` re-pins the edited policy; the host sandbox it generated is
@@ -129,10 +129,10 @@ fn an_approved_secret_read_makes_later_network_ask() {
     assert_eq!(fetch("s2").0, "allow", "taint belongs to one session");
 }
 
-/// Codex cannot ask: a taint ask reaches it as a deny, and an ask Codex was
+/// Codex cannot prompt: a taint review reaches it as a deny, and a review Codex was
 /// refused never ran, so it taints nothing.
 #[test]
-fn codex_receives_a_taint_ask_as_a_deny() {
+fn codex_receives_a_taint_review_as_a_deny() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
     let proj = sb.project();
@@ -188,9 +188,9 @@ fn an_unreadable_session_history_fails_closed() {
 }
 
 /// Claude Code `WebSearch` runs and is recorded in a clean session, marks the
-/// session untrusted, and asks once the session read a secret.
+/// session untrusted, and needs review once the session read a secret.
 #[test]
-fn a_web_search_is_recorded_and_asks_after_a_secret_read() {
+fn a_web_search_is_recorded_and_needs_review_after_a_secret_read() {
     let sb = Sandbox::installed(&[".claude"]);
     let proj = sb.project();
     let search = |session| {
@@ -214,11 +214,11 @@ fn a_web_search_is_recorded_and_asks_after_a_secret_read() {
     assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains("web search"), "{reason}");
 
-    // A policy that asks for secret reads instead of denying them, re-pinned by a person.
+    // A policy that holds secret reads for review instead of denying them, re-pinned by a person.
     std::fs::write(
         sb.home.join(".moat/policy.yaml"),
-        "version: 1\ndefaults: { '*': ask, net: deny, web.search: allow }\n\
-         ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
+        "version: 1\ndefaults: { '*': review, net: deny, web.search: allow }\n\
+         review:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
     )
     .unwrap();
     let accept = sb.moat_as_person(&["doctor", "--accept"]);

@@ -39,7 +39,7 @@ impl Engine {
 
     /// Decide `action` with what the caller observed (`facts`) and what earlier
     /// calls of the same session brought in (`session`). Never fails: input the
-    /// engine cannot classify is `ask` or `defer` (rule `unparseable`), never
+    /// engine cannot classify is `review` or `defer` (rule `unparseable`), never
     /// `allow`.
     #[must_use]
     pub fn decide_with(&self, action: &Action, facts: &Facts, session: &Session) -> Decision {

@@ -156,8 +156,8 @@ fn entry(call: &Call<'_>, value: &Value) -> Result<Command, HostError> {
 /// line is decided as it is; several are decided together, each in a
 /// subshell of its own, so a `cd` in one does not move the next. A line that
 /// cannot be read on its own (an open quote, a trailing `\`) could hide the
-/// next one when they are put together, so then the call is at least asked
-/// about. On Windows the lines run in PowerShell, which OpenMoat cannot read.
+/// next one when they are put together, so then the call at least needs
+/// review. On Windows the lines run in PowerShell, which OpenMoat cannot read.
 fn commands(call: &Call<'_>) -> Result<Action, HostError> {
     let list = command_list(call)?;
     let lines: Vec<String> = list

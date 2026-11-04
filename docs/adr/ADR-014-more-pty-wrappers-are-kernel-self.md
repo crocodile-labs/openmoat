@@ -7,9 +7,9 @@ Status: accepted · Date: 2026-10-05 · Refines ADR-011
 ADR-011 denies `script`, `expect` and `unbuffer` running `moat allow|doctor|init|policy`, and
 lists other ways to get a pseudo-terminal as not matched. An audit on 2026-10-05 found that
 the gap was wider than those named exceptions: `/usr/bin/script -q /dev/null moat doctor
---accept` (the wrapper by absolute path) asked while `script …` was denied, and
+--accept` (the wrapper by absolute path) needed review while `script …` was denied, and
 `python3 -c 'import pty; pty.spawn(["moat","doctor","--accept"])'`, `tmux new -d 'moat
-allow …'` and `osascript -e 'tell app "Terminal" to do script "moat …"'` all asked.
+allow …'` and `osascript -e 'tell app "Terminal" to do script "moat …"'` all needed review.
 
 ## Decision
 
@@ -27,5 +27,5 @@ allow …'` and `osascript -e 'tell app "Terminal" to do script "moat …"'` all
 - These spellings are denied before they run, consistent with the plain forms.
 - It remains a pattern list. Splitting the command (`tmux send-keys moat Space allow`),
   building it at run time (`pty.spawn(["mo"+"at", …])`), `os.forkpty`, `socat … pty` or a
-  compiled helper still only ask. ADR-011's conclusion stands: the complete answer is OS
+  compiled helper still only need review. ADR-011's conclusion stands: the complete answer is OS
   enforcement under `moat exec`, where the agent's process tree cannot write `~/.moat`.

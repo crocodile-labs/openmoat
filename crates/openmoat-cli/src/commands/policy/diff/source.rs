@@ -108,7 +108,7 @@ pub fn from_git(base: &str, head: &str, policy: Option<&Path>) -> Result<Input> 
         Some(text) => {
             let repo = RepoPolicy::parse(&text)
                 .with_context(|| format!("invalid {REPO_POLICY} at {}", short(&base)))?;
-            // Not trusted (`openmoat trust`): it only adds deny and ask rules.
+            // Not trusted (`openmoat trust`): it only adds deny and review rules.
             let merged = repo.merge(&user, false)?;
             (merged, Some(format!("{REPO_POLICY} at {}", short(&base))))
         }

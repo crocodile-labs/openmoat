@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
+    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile, McpSpec, Prefixed,
     ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec,
     TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
@@ -40,15 +40,15 @@ const HOOKS: &[HookSpec] = &[HookSpec::new(
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "codex",
     display_name: "Codex",
-    asks: Asks {
-        on_pre_tool_use: Some("Codex hooks cannot ask"),
-        on_no_ask: None,
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+    reviews: Reviews {
+        on_pre_tool_use: Some("Codex hooks cannot prompt"),
+        on_no_prompt: None,
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
-    gaps: "web search and hosted tools are not hooked; asks become denies; Codex skips a \
+    gaps: "web search and hosted tools are not hooked; reviews become denies; Codex skips a \
          new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = \
          false` turns hooks off (`openmoat status` and `doctor` report that); calls run \
          unchecked if the hook binary is missing or crashes",
@@ -178,11 +178,11 @@ impl HostAdapter for Adapter {
         bench::read_reply(exit, false)
     }
 
-    /// Codex cannot ask, so an `ask` has to arrive as a blocking `deny`; an
+    /// Codex cannot prompt, so a `review` has to arrive as a blocking `deny`; an
     /// `allow` is no output, which Codex reads as no objection.
     fn seen(&self, _call: &Call, verdict: Verdict) -> Answer {
         match verdict {
-            Verdict::Ask => Answer::Deny,
+            Verdict::Review => Answer::Deny,
             Verdict::Allow => Answer::Passthrough,
             other => other.into(),
         }

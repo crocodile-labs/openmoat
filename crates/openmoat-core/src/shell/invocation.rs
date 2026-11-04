@@ -6,7 +6,7 @@
 //! looking for a literal `-c`. POSIX shells take `c` as a flag anywhere in an
 //! option cluster and run the first operand; fish takes the command as the value
 //! of `-c`. An option whose meaning is unknown could swallow the operand that
-//! holds the command, so it makes the command line unparseable (`ask`).
+//! holds the command, so it makes the command line unparseable (`review`).
 
 use super::ClassifyError;
 

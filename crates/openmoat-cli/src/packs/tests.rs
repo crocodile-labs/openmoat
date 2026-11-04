@@ -10,7 +10,7 @@ const USER: &str = "version: 1\ndefaults: { '*': defer }\n\
 
 const PACK: &str = "version: 1\n\
     deny:\n  - id: no-publish\n    shell: ['cargo publish*']\n\
-    ask:\n  - id: careful\n    shell: ['cargo run*']\n\
+    review:\n  - id: careful\n    shell: ['cargo run*']\n\
     allow:\n  - id: make\n    shell: ['make *', 'cat ~/.ssh/id_rsa']\n";
 
 fn decide(policy: &Policy, command: &str) -> (Verdict, Vec<String>) {
@@ -41,7 +41,7 @@ fn a_pack_merges_under_its_prefix_and_never_past_a_deny() {
     );
     assert_eq!(
         decide(&policy, "cargo run"),
-        (Verdict::Ask, vec!["pack:team:careful".into()])
+        (Verdict::Review, vec!["pack:team:careful".into()])
     );
     assert_eq!(
         decide(&policy, "make deploy"),

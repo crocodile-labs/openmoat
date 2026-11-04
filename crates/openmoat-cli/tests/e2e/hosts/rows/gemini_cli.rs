@@ -1,7 +1,7 @@
 //! The row for `gemini-cli`.
 //!
 //! Gemini CLI: an unknown tool is `tool.unknown` too. An allowed call,
-//! an ungoverned tool and an ask: `gemini_cli.rs`, which checks the
+//! an ungoverned tool and a review: `gemini_cli.rs`, which checks the
 //! whole reply.
 
 use serde_json::{Value, json};

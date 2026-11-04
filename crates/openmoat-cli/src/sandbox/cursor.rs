@@ -125,7 +125,7 @@ impl Grants {
         match spot(pattern) {
             // a `.git` or a file run later (CI, commit hooks) in a granted directory:
             // left open as in the workspace, since denying it would refuse the grant;
-            // Cursor keeps `.git` hooks and config unwritable, and the hook asks
+            // Cursor keeps `.git` hooks and config unwritable, and the hook holds those writes for review
             Spot::Absolute(path) if git_exclusion(pattern) || runs_later_exclusion(pattern) => {
                 push_unique(&mut self.open, path.to_owned());
             }

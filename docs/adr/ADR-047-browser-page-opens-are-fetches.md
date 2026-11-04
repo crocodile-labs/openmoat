@@ -60,18 +60,18 @@ says, not the way `curl` does; and it opens schemes that are no web page at all
      host of `file://host/share`, which Windows reaches over SMB); until now it named no
      host and deferred. `about:blank` is nothing. A scheme that names no network address
      (`javascript:`, `data:`, `blob:`, `view-source:`, `chrome:`, other `about:` pages,
-     extension pages) is `unparseable` and asks.
+     extension pages) is `unparseable` and needs review.
 3. **Policy key.** `mcp: { browser_open: fetch | net }`, absent meaning `fetch`. `net`
    keeps every page open a `net` connection, as before this ADR; the `fetch` default and
    `fetch` rules are not touched, so a person can keep browsers strict and `WebFetch` as it
    is.
 4. **Data in the URL.** `token-egress` and `placeholder-egress` read the whole URL of an
    open, user part, path, query and fragment included, and send it to every host above.
-   After a secret read the open asks (`session-taint`), as every network and MCP call
+   After a secret read the open needs review (`session-taint`), as every network and MCP call
    does. A URL that then also carries one encoded run of 80 or more characters (base64,
    base64url or hex: all hex digits, or upper and lower case letters and digits) is denied:
    the engine adds `@encoded-egress <host>`, which the new deny group `encoded-egress`
-   names. The rule: once a secret is in the session, a person reading the ask can judge a
+   names. The rule: once a secret is in the session, a person reading the review can judge a
    short URL, but not a few hundred characters of encoded text, and that is what the
    secret looks like on its way out through a GET. 80 is above a SHA-256 in hex (64), a
    UUID and a commit id, and below 60 encoded bytes; `+`, `/`, `.`, `=` and `&` end a run,
@@ -80,12 +80,12 @@ says, not the way `curl` does; and it opens schemes that are no web page at all
    data are `net` already.
 5. **Website content is untrusted.** Every MCP call has marked the session as having read
    untrusted content since ADR-020, so opening any site does, and so does the new `fetch`
-   atom. That already makes the steps that outlive the session ask: a write to a protected
+   atom. That already makes the steps that outlive the session need review: a write to a protected
    (runs-later) path (`session-taint`), a push that changes one (`push-runs-later`), and
    file provenance carries it to the sessions that read or run what this one wrote
-   (ADR-029). Reading files, editing source and running tests do not ask. This ADR adds no
-   new taint consequence. Package installs and new hosts are not made to ask after
-   untrusted content: every session reads documentation, so installs would ask in
+   (ADR-029). Reading files, editing source and running tests do not need review. This ADR adds no
+   new taint consequence. Package installs and new hosts are not made to need review after
+   untrusted content: every session reads documentation, so installs would need review in
    ordinary work; installs keep their own checks (ADR-030), and a new host is `net` (denied)
    or `fetch` (the agent's prompt) whatever the session read.
 
@@ -110,7 +110,7 @@ says, not the way `curl` does; and it opens schemes that are no web page at all
     link-local and metadata addresses only for a browser whose traffic goes through it,
     and the user's own browser (Claude in Chrome) does not.
   - Data in a URL below the encoded threshold, cut into shorter runs or spread over several
-    opens is not denied; after a secret read every open still asks.
+    opens is not denied; after a secret read every open still needs review.
   - What a page says can steer the agent (prompt injection). The session is marked as
     having read untrusted content, which covers writes that run later and pushes, not
     installs or later opens.
@@ -119,4 +119,4 @@ says, not the way `curl` does; and it opens schemes that are no web page at all
   - The allowlist trusts a server's tool name for what the tool does, as `safe-mcp` and
     the write verbs do; a malicious server is the MCP pinning's to catch (ADR-026, ADR-032).
 - Follow-up: whether untrusted content should make package installs and first contact
-  with a new host ask, measured against MoatBench's developer workflows first.
+  with a new host review, measured against MoatBench's developer workflows first.

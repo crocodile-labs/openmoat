@@ -38,8 +38,8 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
     Some(merged.to_string())
 }
 
-/// Cursor reads `permission`; it prompts on `ask` for shell and MCP calls only:
-/// `preToolUse` accepts `ask` but runs the call, `beforeReadFile` takes only
+/// Cursor reads `permission`; it prompts on `"ask"` for shell and MCP calls only:
+/// `preToolUse` accepts `"ask"` but runs the call, `beforeReadFile` takes only
 /// allow or deny. Exit 2 blocks; anything else is a failure.
 pub(super) fn read_reply(call: &Call, exit: &Exit<'_>) -> Answer {
     match exit.code {
@@ -47,7 +47,7 @@ pub(super) fn read_reply(call: &Call, exit: &Exit<'_>) -> Answer {
             (Some("allow"), _) => Answer::Allow,
             (Some("deny"), _) => Answer::Deny,
             (Some("ask"), Call::Write(_) | Call::Edit(_)) => Answer::Passthrough,
-            (Some("ask"), Call::Shell(_) | Call::Mcp { .. }) => Answer::Ask,
+            (Some("ask"), Call::Shell(_) | Call::Mcp { .. }) => Answer::Review,
             _ => Answer::Error,
         },
         Some(2) => Answer::Deny,
@@ -56,12 +56,12 @@ pub(super) fn read_reply(call: &Call, exit: &Exit<'_>) -> Answer {
 }
 
 /// Cursor's hooks have no "no decision", so a `defer` is Cursor's own prompt,
-/// or OpenMoat's ask for file tools (`Host::decided`), where an ask arrives as
+/// or OpenMoat's review for file tools (`Host::decided`), where a review arrives as
 /// a deny.
 pub(super) fn seen(call: &Call, verdict: Verdict) -> Answer {
     match verdict {
-        Verdict::Ask | Verdict::Defer if call.is_file_tool() => Answer::Deny,
-        Verdict::Defer => Answer::Ask,
+        Verdict::Review | Verdict::Defer if call.is_file_tool() => Answer::Deny,
+        Verdict::Defer => Answer::Review,
         other => other.into(),
     }
 }

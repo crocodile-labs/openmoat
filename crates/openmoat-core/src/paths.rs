@@ -19,7 +19,7 @@ pub fn normalise(raw: &str, home: &str, project: Option<&str>, cwd: &str) -> Str
     // path OpenMoat cannot place; keep the raw-under-cwd fallback so a direct
     // host-side `fs.read` of `~alice/.ssh/id_rsa` still has an atom to check (the
     // guarded suffix is intact; a rule naming `~alice` matches as written, and
-    // a shell token with it asks through `unparseable` via `resolve`).
+    // a shell token with it needs review through `unparseable` via `resolve`).
     resolve(raw, home, project, Some(cwd)).unwrap_or_else(|| collapse(&under(cwd, raw)))
 }
 
@@ -38,7 +38,7 @@ fn under(dir: &str, rel: &str) -> String {
 /// that may be unknown (`None`). `None` when the result depends on a directory
 /// that is not known: a relative path and an unknown `cwd`, `~-`, or a `~name`
 /// of another user (OpenMoat cannot know where other users' homes live, so a
-/// cross-user path is unresolvable; a shell token with it asks through
+/// cross-user path is unresolvable; a shell token with it needs review through
 /// `unparseable`).
 #[must_use]
 pub fn resolve(raw: &str, home: &str, project: Option<&str>, cwd: Option<&str>) -> Option<String> {
@@ -210,7 +210,7 @@ pub fn expand_pattern(raw: &str, home: &str, project: Option<&str>) -> Option<St
 /// `home` (the current user). Any other `~name` is unresolvable: homes do not
 /// always sit side by side (`/root`, `/srv/<name>`, networked homes), so a
 /// guessed `/<parent-of-home>/<name>` can judge one path while the OS reads
-/// another (#400). Return `None` for that case; the caller maps it to `ask`
+/// another (#400). Return `None` for that case; the caller maps it to `review`
 /// through `unparseable`. A leading `~` that is not followed by a valid login
 /// name (`~a$b`) stays literal (`Some(raw)`).
 fn expand_home(raw: &str, home: &str) -> Option<String> {
@@ -346,7 +346,7 @@ mod tests {
         // home heuristic assumed every home sits next to the current user's, which
         // is false on common layouts. `normalise` falls back to the literal word
         // under `cwd`; the shell path (`resolve`) returns `None` and the shell
-        // token asks through `unparseable`.
+        // token needs review through `unparseable`.
         assert_eq!(n("~alice/.ssh/id_rsa"), "/p/app/~alice/.ssh/id_rsa");
         assert_eq!(n("~+/x"), "/p/app/x");
         assert_eq!(n("~+"), "/p/app");

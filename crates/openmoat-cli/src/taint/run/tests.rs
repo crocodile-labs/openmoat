@@ -2,7 +2,7 @@ use openmoat_core::{Action, EvalContext, Policy};
 
 use super::*;
 
-const POLICY: &str = "version: 1\ndefaults: { \"*\": allow }\nask:\n  - { id: secrets-paths, fs.read: [\"/p/secret.txt\"] }\n";
+const POLICY: &str = "version: 1\ndefaults: { \"*\": allow }\nreview:\n  - { id: secrets-paths, fs.read: [\"/p/secret.txt\"] }\n";
 
 fn ctx() -> EvalContext {
     EvalContext {

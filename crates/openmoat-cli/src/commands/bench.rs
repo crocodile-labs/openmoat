@@ -322,7 +322,7 @@ fn compare(
         }
         steps.push(StepResult {
             got: *got,
-            expects_ask: expect == Verdict::Ask,
+            expects_review: expect == Verdict::Review,
             ok,
             gap: gap.is_some(),
         });

@@ -140,10 +140,10 @@ fn state(md: &mut String, e: &Evidence) -> Result<()> {
         "changed from the default policy this build ships"
     };
     writeln!(md, "- Policy: `{}`{sha}, {origin}", cell(&p.path))?;
-    if let Some([deny, allow, ask]) = p.rules {
+    if let Some([deny, allow, review]) = p.rules {
         writeln!(
             md,
-            "- Rule groups in force: {deny} deny, {allow} allow, {ask} ask"
+            "- Rule groups in force: {deny} deny, {allow} allow, {review} review"
         )?;
     }
     if let Some(error) = &p.error {

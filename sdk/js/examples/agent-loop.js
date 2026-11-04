@@ -9,8 +9,8 @@
 //
 // The rules the loop keeps (docs/SDK.md):
 // - deny: the call does not run; the model is told why. No one is asked.
-// - ask: the call runs only if a person approves this exact call.
-// - defer: this product has no permission flow of its own, so it asks too.
+// - review: the call runs only if a person approves this exact call.
+// - defer: this product has no permission flow of its own, so it is held for review too.
 // - allow: the call runs.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
@@ -107,7 +107,7 @@ export function createAgent({ openmoat, home, project, approve }) {
       const facts = { links };
       const decision = engine.decide(action, { facts, session });
       let mayRun = decision.verdict === "allow";
-      if (decision.verdict === "ask" || decision.verdict === "defer") {
+      if (decision.verdict === "review" || decision.verdict === "defer") {
         mayRun = await approve(call, decision.reason);
       }
       if (!mayRun) {
@@ -131,7 +131,7 @@ async function main() {
     openmoat: await load(),
     home,
     project,
-    approve: () => false, // no person at this terminal: every ask is refused
+    approve: () => false, // no person at this terminal: every review is refused
   });
   const script = [
     { name: "shell", input: { command: "echo hello > greeting.txt && cat greeting.txt" } },

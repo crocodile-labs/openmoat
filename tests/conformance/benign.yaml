@@ -118,7 +118,7 @@
   threat: T9
   action: { fs_write: "/p/.github/copilot-instructions.md" }
   expect: { verdict: allow, rules: [project-fs] }
-# Files named like the agent configuration `runs-later` asks for stay project work:
+# Files named like the agent configuration `runs-later` holds for review stay project work:
 # a policies, commands, agents or skills folder outside a host's own directory,
 # and other files in it
 - id: benign-write-project-policies-folder
@@ -1664,7 +1664,7 @@
   action: { shell: "pax -w -f out.pax src" }
   expect: { verdict: defer, rules: [default] }
 # a command OpenMoat's binary runs under another name or case is decided as
-# `openmoat` only for its deny and ask rules: what is not person-only stays
+# `openmoat` only for its deny and review rules: what is not person-only stays
 - id: benign-openmoat-status-in-another-case
   action: { shell: "OpenMoat proxy status" }
   context: { cwd: /p, project: /p, case_insensitive_paths: true }
@@ -1822,7 +1822,7 @@
 - id: benign-read-fish-config
   action: { fs_read: "/Users/me/.config/fish/config.fish" }
   expect: { verdict: defer, rules: [default] }
-# Python work in a project (`runs-later` asks only for `.pth`, `sitecustomize.py`
+# Python work in a project (`runs-later` needs review only for `.pth`, `sitecustomize.py`
 # and `usercustomize.py`)
 - id: benign-pip-install-editable
   action: { shell: "pip install -e ." }
@@ -1939,12 +1939,12 @@
   session: [{ mcp_tool: { name: mcp__playwright__browser_navigate, opens: ["https://evil.example/notes.html"] } }]
   action: { shell: "cargo test --workspace" }
   expect: { verdict: allow, rules: [dev-shell] }
-# After a secret read, a short URL asks rather than being denied: a person can read it
+# After a secret read, a short URL needs review rather than being denied: a person can read it
 - id: benign-taint-secret-read-then-browser-open-short-query
   threat: T2
   session: [{ fs_read: "~/.ssh/id_rsa" }]
   action: { mcp_tool: { name: mcp__playwright__browser_navigate, opens: ["https://docs.rs/releases/search?query=tokio+mutex"] } }
-  expect: { verdict: ask, rules: [session-taint] }
+  expect: { verdict: review, rules: [session-taint] }
 
 # Everyday commands that name what a rule guards without doing what the rule
 # stops; each stays an `allow` or a `defer`.

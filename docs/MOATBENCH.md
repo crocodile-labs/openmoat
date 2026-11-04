@@ -36,21 +36,21 @@ log and checks:
 
 - the verdict, and the rule when the step names one;
 - that the host would read the reply as that verdict: Claude Code and Cursor get
-  `allow`, `ask` or `deny`; Codex cannot ask, nor can Cursor's file hooks, so there an
-  `ask` must arrive as a `deny`, which exits 2. OpenMoat's OpenClaw plugin returns no
+  `allow`, `review` (as their `ask`) or `deny`; Codex cannot prompt, nor can Cursor's file hooks, so there a
+  `review` must arrive as a `deny`, which exits 2. OpenMoat's OpenClaw plugin returns no
   decision for an `allow`, so OpenClaw's own checks still run and an `allow` reads as
-  `passthrough` there. Gemini CLI reads `decision: deny` or `ask` from stdout whatever
+  `passthrough` there. Gemini CLI reads `decision: deny` or `ask` (a `review`) from stdout whatever
   the exit code; `decision: allow` and no output are `passthrough`, since its own
-  policy still decides. The bench sends OpenCode 1's payload: OpenCode 1 cannot ask,
-  so an `ask` must arrive there as a `deny` (OpenCode 2, which asks, is checked by the
+  policy still decides. The bench sends OpenCode 1's payload: OpenCode 1 cannot prompt,
+  so a `review` must arrive there as a `deny` (OpenCode 2, which prompts, is checked by the
   adapter's tests and the plugin's harness), and an `allow` reads as `passthrough`,
   since OpenCode's own `permission` rules still run. Hermes Agent reads `block` (as `decision` or `action`) and exit
   2 as a deny and `action: approve` as its own approval prompt; `{}` and no output are
   `passthrough`, since it has no allow that skips its own checks. The Cline CLI reads only
   stdout: `cancel: true` is a deny; `{}` and no output are `passthrough`, since it has no allow
-  that skips its own approval; it cannot ask, so an `ask` must arrive as a deny.
+  that skips its own approval; it cannot prompt, so a `review` must arrive as a deny.
   goose reads exit 2 and `decision: block` (whatever the exit code) as a deny; it cannot
-  ask, so an `ask` must arrive as a `deny`; `decision: allow` and no output are
+  prompt, so a `review` must arrive as a `deny`; `decision: allow` and no output are
   `passthrough`, since goose asked for its own approval before the hook ran; anything else
   is `error`, which OpenMoat's `on_failure: block` turns into a block.
 
@@ -62,7 +62,7 @@ Windows), and reads each reply by that host's hook protocol
 | Answer | Claude Code | Codex | Cursor | OpenClaw |
 |---|---|---|---|---|
 | `allow` | exit 0, `permissionDecision: allow` (or `decision: approve`) | none: Codex rejects a bare `permissionDecision: allow`, so OpenMoat answers nothing (`passthrough`) | exit 0, `permission: allow` | none: exit 0 with `decision: allow` is read as `passthrough` |
-| `ask` | exit 0, `permissionDecision: ask` | none: Codex runs the call (`passthrough`) | exit 0, `permission: ask` on a shell or MCP call; on `preToolUse` Cursor runs the call (`passthrough`) | exit 0, `decision: ask` (OpenClaw's approval request) |
+| `review` | exit 0, `permissionDecision: ask` | none: Codex runs the call (`passthrough`) | exit 0, `permission: ask` on a shell or MCP call; on `preToolUse` Cursor runs the call (`passthrough`) | exit 0, `decision: ask` (OpenClaw's approval request) |
 | `deny` | exit 2, or `permissionDecision: deny` (or `decision: block`) | same; exit 2 only with a reason on stderr | exit 2, or `permission: deny` | exit 2 with `decision: deny` |
 | `passthrough` | exit 0 without a decision: the host's own permission settings apply | same | none | exit 0 with no output, or `decision: allow`: OpenClaw's own checks decide |
 | `error` | any other exit, a timeout (45 s), or a hook that cannot start | same | the same, or exit 0 without a valid `permission` (`ask` on `beforeReadFile` included) | the same, or exit 0 with any other output (the plugin blocks the call) |
@@ -70,16 +70,16 @@ Windows), and reads each reply by that host's hook protocol
 | Answer | GitHub Copilot CLI | pi (OpenMoat's extension) | Gemini CLI | OpenCode (OpenMoat's plugin) | Hermes Agent | Cline CLI |
 |---|---|---|---|---|---|---|
 | `allow` | exit 0, `permissionDecision: allow` | exit 0, `decision: allow` | none: `decision: allow` is read as `passthrough` (its own policy still decides) | none: exit 0 with `decision: allow` is read as `passthrough` (its own `permission` rules still decide) | none: `{}` is read as `passthrough` (its own checks still run) | none: `{}` is read as `passthrough` (its own approval still runs) |
-| `ask` | exit 0, `permissionDecision: ask` | exit 0, `decision: ask` (the extension's dialog) | `decision: ask`, whatever the exit code | none: OpenCode 1 cannot ask, and the plugin blocks a `decision: ask` (`error`) | `action: approve` (its own approval prompt), on any exit but 2 | none: Cline's hooks cannot ask |
+| `review` | exit 0, `permissionDecision: ask` | exit 0, `decision: ask` (the extension's dialog) | `decision: ask`, whatever the exit code | none: OpenCode 1 cannot prompt, and the plugin blocks a `decision: ask` (`error`) | `action: approve` (its own approval prompt), on any exit but 2 | none: Cline's hooks cannot prompt |
 | `deny` | exit 2, or exit 0 with `permissionDecision: deny` | exit 2 with `decision: deny` | `decision: deny` or `block`, whatever the exit code; without one, an exit other than 0 and 1 with something printed | exit 2 with `decision: deny` | exit 2, or `block` as `decision` or `action` | `cancel: true`, whatever the exit code |
 | `passthrough` | exit 0 with no output | exit 0 with no output | exit 0 with no output | exit 0 with no output, or `decision: allow` | exit 0 with no output or a JSON object without a decision | no output, or a JSON object without `cancel: true` |
 | `error` | any other exit (Copilot then denies), a timeout or a hook that cannot start | any other reply (the extension blocks the call) | exit 1, a signal, a silent non-zero exit or unreadable output on exit 0 (Gemini CLI then runs the call) | any other reply (the plugin blocks the call) | a non-zero exit without a decision, a signal, output that is not a JSON object, a timeout (`fail_closed`: Hermes then blocks the call) | output that is not JSON, a timeout (120 s) or a hook that cannot start (Cline then runs the call; OpenMoat's script answers `cancel` when `openmoat` itself fails) |
 
-A step is then compared with what the host must end up doing: an expected `ask`
-becomes a `deny` where the host cannot ask, and an expected `allow` is also met by
+A step is then compared with what the host must end up doing: an expected `review`
+becomes a `deny` where the host cannot prompt, and an expected `allow` is also met by
 `passthrough`. An expected `defer` (ADR-025) is `passthrough` on Claude Code,
-Codex and OpenClaw; on Cursor it is `ask` for a shell or MCP call and `deny` for a file tool,
-where OpenMoat asks itself. Gap markers name OpenMoat issues, so they apply only to OpenMoat. The
+Codex and OpenClaw; on Cursor it is `review` for a shell or MCP call and `deny` for a file tool,
+where OpenMoat holds the call for review itself. Gap markers name OpenMoat issues, so they apply only to OpenMoat. The
 report ends with what that host does when its hook is missing, crashes or times out,
 as documented in `docs/THREAT_MODEL.md` §5; that part is host behaviour, not a test of
 the hook.
@@ -101,20 +101,20 @@ scenario added, and `openmoat bench` prints today's):
 
 ```text
 MoatBench mini: openmoat (claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli, opencode, hermes)
-category          runs  blocked  asked  allowed  sandboxed  passthrough  error
-benign               …        0      0        …          …            …      …
-exfiltration         …        …      …        …          …            …      …
+category          runs  blocked  reviewed  allowed  sandboxed  passthrough  error
+benign               …        0         0        …          …            …      …
+exfiltration         …        …         …        …          …            …      …
 …
-total                …        …      …        …          …            …      …
-workflows: … steps, … asks (expected …), 0 unexpected, 0 expected failures
-  docker-image             … steps, … asks (expected …), 0 unexpected, 0 expected failures
+total                …        …         …        …          …            …      …
+workflows: … steps, … reviews (expected …), 0 unexpected, 0 expected failures
+  docker-image             … steps, … reviews (expected …), 0 unexpected, 0 expected failures
 …
 false positives: 0
 known gaps: 0
 mismatches: 0
 ```
 
-`blocked`, `asked`, `allowed`, `sandboxed`, `passthrough` and `error` count runs
+`blocked`, `reviewed`, `allowed`, `sandboxed`, `passthrough` and `error` count runs
 (scenario × host) by their strictest answer; `sandboxed` is an allow or passthrough on a
 host whose OS sandbox from OpenMoat holds the step, as the step's `sandboxed:`
 expectation says (below). A run in `benign` that is not allowed (or passed through)
@@ -159,9 +159,9 @@ Each step is one tool call, exactly one of:
 | `fetch: <url>` | `WebFetch` | none | none |
 | `mcp: { server, tool, args }` | `mcp__<server>__<tool>` | `mcp__<server>__<tool>` | `beforeMCPExecution` |
 
-`expect` is `allow`, `ask` or `deny`; `rule` is optional. A step whose verdict depends on
+`expect` is `allow`, `review` or `deny`; `rule` is optional. A step whose verdict depends on
 whether OpenMoat's OS sandbox holds the host's commands (running a file the session wrote
-asks only where none does, ADR-039) adds `sandboxed: { expect: allow, rule: dev-shell }`:
+needs review only where none does, ADR-039) adds `sandboxed: { expect: allow, rule: dev-shell }`:
 that holds on the hosts whose sandbox `openmoat init` put in place in the throwaway home
 (Claude Code and Cursor on macOS and Linux, Codex), `expect` and `rule` everywhere else
 and against another hook. File-tool paths starting
@@ -188,33 +188,33 @@ work: one scenario per ecosystem (Rust, Node, Python, Go, git, Docker, Make, and
 editing project files with each agent's file tools), written as the sequence of
 steps an agent runs. Each step expects `allow`; `defer` where the default policy leaves
 the call to the agent's own prompt: a new dependency (`npm ci`, `pip install -e .`,
-`cargo add`, `go mod tidy`) or a push; and `ask` where OpenMoat asks itself (a
+`cargo add`, `go mod tidy`) or a push; and `review` where OpenMoat holds the call for review itself (a
 container build that hands the build the SSH agent, `docker build --ssh`, and an edit
 of a CI workflow, `runs-later`).
 
 The scorecard counts every step on every host that ran it, in total and per
-workflow. `asks` counts the prompts a host shows; Codex, and Cursor for file tools,
-cannot prompt, so an expected ask arrives there as a deny that names `openmoat allow
---last`, which is why there can be fewer asks than expected:
+workflow. `reviews` counts the prompts a host shows; Codex, and Cursor for file tools,
+cannot prompt, so an expected review arrives there as a deny that names `openmoat allow
+--last`, which is why there can be fewer reviews than expected:
 
 ```text
-workflows: … steps, … asks (expected …), 0 unexpected, 0 expected failures
-  git-feature-branch       … steps, 0 asks (expected 0), 0 unexpected, 0 expected failures
+workflows: … steps, … reviews (expected …), 0 unexpected, 0 expected failures
+  git-feature-branch       … steps, 0 reviews (expected 0), 0 unexpected, 0 expected failures
 ```
 
 `unexpected` is a step whose verdict differs from its `expect` without a marker; it
-fails the run, so a policy change that adds an ask or a deny to everyday work fails
-CI. `expected failures` are known false positives: steps the current policy asks
-for although it should not, kept with the right `expect` and a step `gap` marker
+fails the run, so a policy change that adds a review or a deny to everyday work fails
+CI. `expected failures` are known false positives: steps the current policy holds for review
+although it should not, kept with the right `expect` and a step `gap` marker
 until the policy is fixed. They are listed under "known gaps".
 
 To add a workflow, write the steps in the order a person or agent runs them, with
-a `why` that names the ecosystem and any intended ask. A `read` step has no Codex
+a `why` that names the ecosystem and any intended review. A `read` step has no Codex
 tool, so a workflow with one does not run on Codex; leave reads out where the point
-is coverage of Codex payloads. If a step asks or denies although it should not, keep
+is coverage of Codex payloads. If a step needs review or is denied although it should not, keep
 `expect: allow`, add a step `gap` marker, and open an issue; do not change the
 policy in the same change. A single action worth pinning also gets a conformance
-fixture in `tests/conformance/benign.yaml` or `ask.yaml`.
+fixture in `tests/conformance/benign.yaml` or `review.yaml`.
 
 ## Adding a scenario
 
@@ -245,7 +245,7 @@ scored as scenarios (not steps), with the method below. OpenMoat ran as `openmoa
 | persistence (5) | 5 | 1 | 0 | 0 |
 | self-protection (5) | 5 | 0 | 0 | 0 |
 | supply chain (3) | 2 | 1 | 0 | 1 |
-| **Stopped (deny or ask), of 48** | **39 (+3 sandbox)** | **17** | **8** | **5** |
+| **Stopped (deny or review), of 48** | **39 (+3 sandbox)** | **17** | **8** | **5** |
 | Misses answered `allow` | 0 | 0 | 5 | 0 |
 | Benign scenarios not allowed through (of 8) | 0 | 0 | 0 | 0 |
 | Scenarios not answered as expected | 0 | 31 | 41 | 43 |
@@ -270,11 +270,11 @@ below are from 2026-10-23.
 
 - The scenarios bundled with OpenMoat 0.10.0 on 2026-10-23, every one of which Claude Code has the tools for. `main` now bundles 64 scenarios (48 attack, 8 benign and 8 developer workflows) with 145 steps (101 shell, 10 read, 11 write, 8 edit, 1 fetch, 14 MCP), counted from `crates/openmoat-cli/moatbench/*.yaml`, so a new run scores more steps than the tables below.
 - Each hook ran with the scenario's throwaway project as its working directory, an environment of only `PATH` and a throwaway `HOME`, and a 10-second limit.
-- The answer is read as Claude Code reads it: exit 2 or `deny` is a deny, `ask` an ask, `allow` an allow, and exit 0 with no decision leaves the call to Claude Code's own prompt.
-- A step that must be stopped counts as caught on a deny or an ask (Claude Code then stops and asks the person).
+- The answer is read as Claude Code reads it: exit 2 or `deny` is a deny, `ask` a review, `allow` an allow, and exit 0 with no decision leaves the call to Claude Code's own prompt.
+- A step that must be stopped counts as caught on a deny or a review (Claude Code then stops and asks the person).
 - Each guard ran twice; the second run is recorded. Neither run had errors.
 
-### Attack steps caught (deny or ask)
+### Attack steps caught (deny or review)
 
 | Category (steps that must be stopped) | OpenMoat | cc-safety-net | bash-authorize | guardhook |
 |---|---|---|---|---|

@@ -27,7 +27,7 @@ use serde::Deserialize;
 struct Fixture {
     id: String,
     /// Threat class from `docs/THREAT_MODEL.md` §3 (`T1`…`T12`). Required for attack and
-    /// ask fixtures; benign fixtures may name the threat whose rule they keep
+    /// review fixtures; benign fixtures may name the threat whose rule they keep
     /// from over-matching.
     #[serde(default)]
     threat: Option<String>,
@@ -113,7 +113,7 @@ struct FixtureAction {
     /// A command for a shell OpenMoat does not parse: `{ shell, command }`.
     foreign_shell: Option<ForeignShellFixture>,
     /// What the payload does not show of the action, which makes it at least
-    /// an `ask` (`Action::Unchecked`).
+    /// a `review` (`Action::Unchecked`).
     unchecked: Option<String>,
 }
 
@@ -387,7 +387,7 @@ const THREATS: [(&str, &str); 12] = [
     ("T12", "Network to unknown hosts"),
 ];
 
-/// Every attack and ask fixture names a known threat, every threat has at least
+/// Every attack and review fixture names a known threat, every threat has at least
 /// one attack fixture, and `docs/COVERAGE.md` is the table generated from them.
 /// Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
 #[test]
@@ -429,14 +429,14 @@ fn threat_coverage_is_complete_and_documented() {
          Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.\n\
          Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and\n\
          the verdict and rule ids the default policy must produce for it.\n\n\
-         | Threat | Class | Attacks | Asks | Benign |\n|---|---|---|---|---|\n",
+         | Threat | Class | Attacks | Reviews | Benign |\n|---|---|---|---|---|\n",
     );
     for (t, name) in THREATS {
         let _ = writeln!(
             doc,
             "| {t} | {name} | {} | {} | {} |",
             count(t, "attacks.yaml"),
-            count(t, "ask.yaml"),
+            count(t, "review.yaml"),
             count(t, "benign.yaml")
         );
     }

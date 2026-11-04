@@ -30,7 +30,7 @@ pub enum HookState {
     },
     Unreadable(String),
     /// Installed, but the host's consent file does not approve it, so the
-    /// host skips it where it cannot ask; the reason says so.
+    /// host skips it where it cannot prompt; the reason says so.
     Unapproved(String),
     /// An entry of ours lacks the host's fail-closed key set to `true`
     /// ([`openmoat_hosts::HookFile::fail_closed_key`]), so the host runs a

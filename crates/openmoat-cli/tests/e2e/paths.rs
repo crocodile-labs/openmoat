@@ -68,7 +68,7 @@ fn an_explicit_home_project_is_a_usage_error() {
 
 /// `~name` is expanded the way the shell does it; the sandbox user is `home`,
 /// the last component of its home directory. Another user's home cannot be
-/// placed from the pure core (#400), so `~alice/…` asks through `unparseable`.
+/// placed from the pure core (#400), so `~alice/…` needs review through `unparseable`.
 #[test]
 fn tilde_user_paths_are_home_directories() {
     let sb = Sandbox::installed(&[".claude"]);

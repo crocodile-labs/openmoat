@@ -16,10 +16,10 @@ fn with_repo_policy(yaml: &str) -> (Sandbox, PathBuf) {
 }
 
 #[test]
-fn repo_deny_and_ask_tighten_what_the_user_allows() {
+fn repo_deny_and_review_tighten_what_the_user_allows() {
     let (sb, project) = with_repo_policy(
         "version: 1\ndeny:\n  - id: no-log\n    shell: ['git log']\n\
-         ask:\n  - id: tests\n    shell: ['cargo test']\n",
+         review:\n  - id: tests\n    shell: ['cargo test']\n",
     );
     let (verdict, reason) = sb.guard_bash("s1", &project, "git log --oneline");
     assert_eq!(verdict, "deny", "{reason}");

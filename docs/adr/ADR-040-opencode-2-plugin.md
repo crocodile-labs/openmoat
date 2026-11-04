@@ -57,10 +57,10 @@ behind this PR):
   checked, so a shell hook registered after OpenMoat's cannot change them.
   OpenCode 1 keeps its frozen `args` (ADR-033's approach), which a later plugin cannot
   rewrite in place.
-- **Asks reach the person on OpenCode 2.** The guard reads the plugin's envelope as
-  `execute.before` (`HookEvent::PreToolUse`, which can ask) or OpenCode 1's
-  `tool.execute.before` (`PreToolUseNoAsk`, an ask arrives as a deny with the
-  `openmoat allow --last` hint, as before). On an ask, the 2.x plugin calls
+- **Reviews reach the person on OpenCode 2.** The guard reads the plugin's envelope as
+  `execute.before` (`HookEvent::PreToolUse`, which can prompt) or OpenCode 1's
+  `tool.execute.before` (`PreToolUseNoPrompt`, a review arrives as a deny with the
+  `openmoat allow --last` hint, as before). On a review, the 2.x plugin calls
   `ctx.permission.assert` with action `openmoat`, OpenMoat's reason as the message and
   the call's id as its source, and its `evaluate` hook forces that request to `ask`
   even when OpenCode's rules would allow it; a configured deny, a rejection or no
@@ -69,8 +69,8 @@ behind this PR):
   `config.json` with a `-openmoat` or `-*` entry, or a policy denying OpenMoat's plugin,
   make `status` and `doctor` report OpenCode as not protected; a project's make them
   warn that OpenCode 2 sessions started there run unchecked. `kernel-self` already
-  denies the agent writing the global files and `runs-later` asks before it writes a
-  project's; it now also denies the agent setting `OPENCODE_CONFIG_DIR`,
+  denies the agent writing the global files and `runs-later` holds its writes to a project's
+  for review; it now also denies the agent setting `OPENCODE_CONFIG_DIR`,
   `OPENCODE_CONFIG` or `OPENCODE_CONFIG_CONTENT`, writing the background service's
   `service*.json` or running `opencode service set|unset` (the service's environment)
   and `opencode plugin add|remove|update` (2.x writes the global configuration).
@@ -101,7 +101,7 @@ behind this PR):
   including replacing a tool's implementation (`tool.transform`), renaming a tool so
   `event.tool` is not the tool that runs, changing a shell's working directory or
   environment, or a shell hook registered before OpenMoat's rewriting the command;
-  `--auto` (and `--yolo`, `--dangerously-skip-permissions`) approves OpenMoat's asks
+  `--auto` (and `--yolo`, `--dangerously-skip-permissions`) approves OpenMoat's reviews
   as it approves OpenCode's own, and the plugin cannot tell; a project's removal is
   reported for the session directory and its project root only; plugin load failures
   fail open.

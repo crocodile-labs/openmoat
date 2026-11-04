@@ -1,4 +1,4 @@
-//! A person answering a taint ask once for the rest of the session: `moat allow`
+//! A person answering a taint review once for the rest of the session: `moat allow`
 //! after the session read untrusted content, or their answer in the agent to a
 //! write of the same file (ADR-048). The attack side of the same changes: a
 //! grant from before the taint, another file, another session, a secret the
@@ -44,7 +44,7 @@ fn fetch_untrusted(sb: &Sandbox, session: &str) {
 }
 
 #[test]
-fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
+fn a_taint_review_answered_with_moat_allow_stays_answered_for_that_file() {
     let sb = Sandbox::installed(&[".claude"]);
     fetch_untrusted(&sb, "s1");
 
@@ -53,7 +53,7 @@ fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
     assert!(reason.contains("session-taint"), "{reason}");
     assert!(
         reason.contains("openmoat allow --last"),
-        "the ask says how: {reason}"
+        "the review says how: {reason}"
     );
 
     let out = sb.moat_approving(&["allow", "--last"]);
@@ -67,27 +67,30 @@ fn a_taint_ask_answered_with_moat_allow_stays_answered_for_that_file() {
     );
 
     // More untrusted content after the grant: the grant did not see it, so the
-    // same file asks again until it is answered again.
+    // same file needs review again until it is answered again.
     fetch_untrusted(&sb, "s1");
     let (verdict, reason) = tainted_write(&sb, "s1", "CMakeLists.txt");
-    assert_eq!(verdict, "ask", "a later read asks again: {reason}");
+    assert_eq!(verdict, "ask", "a later read needs review again: {reason}");
     let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "allow");
 
     // Only that file, only that session.
     let (verdict, reason) = tainted_write(&sb, "s1", "pom.xml");
-    assert_eq!(verdict, "ask", "another file still asks: {reason}");
+    assert_eq!(verdict, "ask", "another file still needs review: {reason}");
     assert!(reason.contains("session-taint"), "{reason}");
     fetch_untrusted(&sb, "s2");
     let (verdict, reason) = tainted_write(&sb, "s2", "CMakeLists.txt");
-    assert_eq!(verdict, "ask", "another session still asks: {reason}");
+    assert_eq!(
+        verdict, "ask",
+        "another session still needs review: {reason}"
+    );
 }
 
 #[test]
-fn a_grant_made_before_the_taint_does_not_answer_its_ask() {
+fn a_grant_made_before_the_taint_does_not_answer_its_review() {
     let sb = Sandbox::installed(&[".claude"]);
-    // A workflow write asks in a clean session (`runs-later`); approve it there.
+    // A workflow write needs review in a clean session (`runs-later`); approve it there.
     let workflow = ".github/workflows/ci.yml";
     assert_eq!(tainted_write(&sb, "s1", workflow).0, "ask");
     let out = sb.moat_approving(&["allow", "--last"]);
@@ -104,12 +107,12 @@ fn a_grant_made_before_the_taint_does_not_answer_its_ask() {
 #[test]
 fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
     let sb = Sandbox::installed(&[".claude"]);
-    // A policy that asks for secret reads and shell, re-pinned by a person.
+    // A policy that holds secret reads and shell for review, re-pinned by a person.
     std::fs::write(
         sb.home.join(".moat/policy.yaml"),
-        "version: 1\ndefaults: { '*': ask, net: deny }\n\
+        "version: 1\ndefaults: { '*': review, net: deny }\n\
          allow:\n  - id: registries\n    net: [api.github.com, crates.io]\n\
-         ask:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
+         review:\n  - id: secrets-paths\n    fs.read: ['~/.ssh/**']\n",
     )
     .unwrap();
     let accept = sb.moat_as_person(&["doctor", "--accept"]);
@@ -134,7 +137,7 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
     assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains(".ssh/id_rsa"), "{reason}");
 
-    // Granting that exact command after both does not answer the secret's ask.
+    // Granting that exact command after both does not answer the secret's review.
     let out = sb.moat_approving(&["allow", "--last"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let (verdict, reason) = send();
@@ -146,10 +149,11 @@ fn a_secret_the_session_read_is_not_answered_by_a_later_grant() {
 }
 
 /// The person's answer in the agent covers the file (ADR-048): once the file
-/// holds what an asked write sent (and did not before), later writes of it in
+/// holds what a reviewed write sent (and did not before), later writes of it in
 /// the session are allowed, until the session reads untrusted content again.
-/// The attack side: a declined write leaves no such file, so its retry asks;
-/// another file and another session ask; and a later untrusted read asks once
+/// The attack side: a declined write leaves no such file, so its retry needs
+/// review; another file and another session need review; and a later untrusted
+/// read needs review once
 /// more, answered again only by a write the person let run after it.
 #[test]
 fn an_approved_write_in_the_agent_covers_later_writes_of_the_same_file() {
@@ -160,7 +164,7 @@ fn an_approved_write_in_the_agent_covers_later_writes_of_the_same_file() {
     assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains("session-taint"), "{reason}");
 
-    // Declined: the file was not written, so the same write asks again.
+    // Declined: the file was not written, so the same write needs review again.
     let (verdict, reason) = tainted_write_of(&sb, "s1", file, "x");
     assert_eq!(verdict, "ask", "a declined write covers nothing: {reason}");
 
@@ -176,16 +180,19 @@ fn an_approved_write_in_the_agent_covers_later_writes_of_the_same_file() {
 
     // Only that file, only that session.
     let (verdict, reason) = tainted_write(&sb, "s1", "pom.xml");
-    assert_eq!(verdict, "ask", "another file still asks: {reason}");
+    assert_eq!(verdict, "ask", "another file still needs review: {reason}");
     fetch_untrusted(&sb, "s2");
     let (verdict, reason) = tainted_write_of(&sb, "s2", file, "y");
-    assert_eq!(verdict, "ask", "another session still asks: {reason}");
+    assert_eq!(
+        verdict, "ask",
+        "another session still needs review: {reason}"
+    );
 
-    // More untrusted content: the answer did not see it, so the file asks once
+    // More untrusted content: the answer did not see it, so the file needs review once
     // more; a write the person then lets run answers again.
     fetch_untrusted(&sb, "s1");
     let (verdict, reason) = tainted_write_of(&sb, "s1", file, "y");
-    assert_eq!(verdict, "ask", "a later read asks again: {reason}");
+    assert_eq!(verdict, "ask", "a later read needs review again: {reason}");
     approved(&sb, file, "y");
     let (verdict, reason) = tainted_write_of(&sb, "s1", file, "z");
     assert_eq!(verdict, "allow", "{reason}");
@@ -200,7 +207,7 @@ fn a_write_that_changed_nothing_does_not_cover_the_file() {
     approved(&sb, file, "x");
     fetch_untrusted(&sb, "s1");
 
-    // The file holds `x` already: this write asks, and whether the person
+    // The file holds `x` already: this write needs review, and whether the person
     // approved or declined it the file looks the same.
     let (verdict, reason) = tainted_write_of(&sb, "s1", file, "x");
     assert_eq!(verdict, "ask", "{reason}");
@@ -224,7 +231,7 @@ fn an_approved_edit_in_the_agent_covers_later_edits_of_the_same_file() {
     let (verdict, reason) = tainted_edit(&sb, "s1", file, "project(a)", "project(b)");
     assert_eq!(verdict, "ask", "{reason}");
     assert!(reason.contains("session-taint"), "{reason}");
-    // declined: the file is as it was, so the same edit asks again
+    // declined: the file is as it was, so the same edit needs review again
     let (verdict, reason) = tainted_edit(&sb, "s1", file, "project(a)", "project(b)");
     assert_eq!(verdict, "ask", "a declined edit covers nothing: {reason}");
 
@@ -251,7 +258,7 @@ fn an_approved_edit_in_the_agent_covers_later_edits_of_the_same_file() {
         {"old_string": "(c)", "new_string": "(c, d)", "replace_all": true}
     ]});
     let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "MultiEdit", &multi));
-    assert_eq!(verdict, "ask", "a later read asks again: {reason}");
+    assert_eq!(verdict, "ask", "a later read needs review again: {reason}");
     approved(&sb, file, "library(c, d)\n");
     let (verdict, reason) = tainted_edit(&sb, "s1", file, "library", "module");
     assert_eq!(verdict, "allow", "{reason}");
@@ -270,7 +277,7 @@ fn an_approved_edit_in_the_agent_covers_later_edits_of_the_same_file() {
     );
 }
 
-/// `moat allow --last` answering `s` on a taint ask.
+/// `moat allow --last` answering `s` on a taint review.
 fn allow_last_answering(sb: &Sandbox, answer: &str) -> std::process::Output {
     crate::common::output(
         sb.command()
@@ -282,8 +289,8 @@ fn allow_last_answering(sb: &Sandbox, answer: &str) -> std::process::Output {
 
 /// Answering `s` approves every protected write of the session until it reads
 /// untrusted content again. The attack side: a later read takes it back,
-/// another session still asks, and `s` approves nothing on an ask that is not
-/// a taint ask.
+/// another session still needs review, and `s` approves nothing on a review that
+/// is not a taint review.
 #[test]
 fn answering_s_covers_the_sessions_protected_writes_until_the_next_untrusted_read() {
     let sb = Sandbox::installed(&[".claude"]);
@@ -298,9 +305,9 @@ fn answering_s_covers_the_sessions_protected_writes_until_the_next_untrusted_rea
         text(&out)
     );
 
-    // The asked file has its own grant; the others are covered by `s`.
+    // The reviewed file has its own grant; the others are covered by `s`.
     assert_eq!(tainted_write(&sb, "s1", "CMakeLists.txt").0, "allow");
-    // `.claude/agents/` asks on its own now (`runs-later`), so `s` cannot cover it.
+    // `.claude/agents/` needs review on its own now (`runs-later`), so `s` cannot cover it.
     for file in ["pom.xml", "Makefile"] {
         let (verdict, reason) = tainted_write(&sb, "s1", file);
         assert_eq!(verdict, "allow", "{file}: {reason}");
@@ -316,9 +323,12 @@ fn answering_s_covers_the_sessions_protected_writes_until_the_next_untrusted_rea
 
     fetch_untrusted(&sb, "s2");
     let (verdict, reason) = tainted_write(&sb, "s2", "pom.xml");
-    assert_eq!(verdict, "ask", "another session still asks: {reason}");
+    assert_eq!(
+        verdict, "ask",
+        "another session still needs review: {reason}"
+    );
 
-    // A clean session's workflow write asks (`runs-later`), not a taint ask:
+    // A clean session's workflow write needs review (`runs-later`), not a taint review:
     // `s` is not offered there and approves nothing.
     assert_eq!(
         tainted_write(&sb, "s3", ".github/workflows/ci.yml").0,

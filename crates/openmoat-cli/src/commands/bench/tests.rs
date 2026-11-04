@@ -30,7 +30,7 @@ fn pre_tool_use(decision: &str) -> String {
 fn claude_code_reads_permission_decision_legacy_decision_and_exit_2() {
     let read = |reply: &Reply| hosts::classify(Host::ClaudeCode, &shell(), reply);
     assert_eq!(read(&exited(0, &pre_tool_use("allow"), "")), Answer::Allow);
-    assert_eq!(read(&exited(0, &pre_tool_use("ask"), "")), Answer::Ask);
+    assert_eq!(read(&exited(0, &pre_tool_use("ask"), "")), Answer::Review);
     assert_eq!(read(&exited(0, &pre_tool_use("deny"), "")), Answer::Deny);
     assert_eq!(
         read(&exited(0, r#"{"decision":"block"}"#, "")),
@@ -49,7 +49,7 @@ fn claude_code_reads_permission_decision_legacy_decision_and_exit_2() {
 }
 
 #[test]
-fn codex_cannot_ask_and_blocks_on_exit_2_only_with_a_reason() {
+fn codex_cannot_prompt_and_blocks_on_exit_2_only_with_a_reason() {
     let read = |reply: &Reply| hosts::classify(Host::Codex, &shell(), reply);
     assert_eq!(read(&exited(0, &pre_tool_use("allow"), "")), Answer::Allow);
     assert_eq!(
@@ -64,13 +64,13 @@ fn codex_cannot_ask_and_blocks_on_exit_2_only_with_a_reason() {
 }
 
 #[test]
-fn cursor_reads_permission_and_asks_only_for_shell_and_mcp() {
+fn cursor_reads_permission_and_prompts_only_for_shell_and_mcp() {
     let read = |call: &Call, reply: &Reply| hosts::classify(Host::Cursor, call, reply);
     let permission = |word: &str| exited(0, &format!(r#"{{"permission":"{word}"}}"#), "");
     let file = Call::Write("a".to_owned());
     let read_file = Call::Read("a".to_owned());
     assert_eq!(read(&shell(), &permission("allow")), Answer::Allow);
-    assert_eq!(read(&shell(), &permission("ask")), Answer::Ask);
+    assert_eq!(read(&shell(), &permission("ask")), Answer::Review);
     assert_eq!(read(&shell(), &permission("deny")), Answer::Deny);
     assert_eq!(read(&file, &permission("ask")), Answer::Passthrough);
     assert_eq!(read(&read_file, &permission("ask")), Answer::Error);
@@ -86,14 +86,14 @@ fn openclaw_reads_each_guard_reply_as_the_verdict_it_carries() {
     let seen = |verdict| hosts::seen(Host::OpenClaw, &shell(), verdict);
     // `moat guard --host openclaw`: nothing for defer, else the decision as JSON.
     let allow = exited(0, r#"{"decision":"allow","reason":"r"}"#, "");
-    let ask = exited(0, r#"{"decision":"ask","reason":"r"}"#, "");
+    let review = exited(0, r#"{"decision":"ask","reason":"r"}"#, "");
     let deny = exited(2, r#"{"decision":"deny","reason":"r"}"#, "");
     // The plugin returns no decision for an allow, so OpenClaw's own checks run.
     assert_eq!(read(&allow), Answer::Passthrough);
     assert_eq!(read(&allow), seen(Verdict::Allow));
     assert_eq!(read(&exited(0, "", "")), seen(Verdict::Defer));
-    assert_eq!(read(&ask), Answer::Ask);
-    assert_eq!(read(&ask), seen(Verdict::Ask));
+    assert_eq!(read(&review), Answer::Review);
+    assert_eq!(read(&review), seen(Verdict::Review));
     assert_eq!(read(&deny), Answer::Deny);
     assert_eq!(read(&deny), seen(Verdict::Deny));
     assert!(seen(Verdict::Allow).meets(Answer::Allow));
@@ -103,22 +103,25 @@ fn openclaw_reads_each_guard_reply_as_the_verdict_it_carries() {
 }
 
 #[test]
-fn an_ask_reaches_hosts_that_cannot_ask_as_a_deny() {
+fn a_review_reaches_hosts_that_cannot_prompt_as_a_deny() {
     use openmoat_core::Verdict;
     let file = Call::Edit("a".to_owned());
     assert_eq!(
-        hosts::seen(Host::ClaudeCode, &shell(), Verdict::Ask),
-        Answer::Ask
+        hosts::seen(Host::ClaudeCode, &shell(), Verdict::Review),
+        Answer::Review
     );
     assert_eq!(
-        hosts::seen(Host::Codex, &shell(), Verdict::Ask),
+        hosts::seen(Host::Codex, &shell(), Verdict::Review),
         Answer::Deny
     );
     assert_eq!(
-        hosts::seen(Host::Cursor, &shell(), Verdict::Ask),
-        Answer::Ask
+        hosts::seen(Host::Cursor, &shell(), Verdict::Review),
+        Answer::Review
     );
-    assert_eq!(hosts::seen(Host::Cursor, &file, Verdict::Ask), Answer::Deny);
+    assert_eq!(
+        hosts::seen(Host::Cursor, &file, Verdict::Review),
+        Answer::Deny
+    );
     assert!(Answer::Passthrough.meets(Answer::Allow));
     assert!(!Answer::Passthrough.meets(Answer::Deny));
     assert!(!Answer::Error.meets(Answer::Allow));

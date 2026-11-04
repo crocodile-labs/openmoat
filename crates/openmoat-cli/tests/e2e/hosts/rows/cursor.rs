@@ -1,6 +1,6 @@
 //! The row for `cursor`.
 //!
-//! Uninstall: `uninstall.rs`; an ask: `cursor.rs`.
+//! Uninstall: `uninstall.rs`; a review: `cursor.rs`.
 
 use serde_json::{Value, json};
 

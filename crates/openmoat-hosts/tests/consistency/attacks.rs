@@ -1,6 +1,6 @@
 //! Tool arguments an agent controls, spelled so a host reads one file while a
 //! careless adapter would hand the guard another: each must still reach the
-//! host as the deny (or ask) the plain spelling gets.
+//! host as the deny (or review) the plain spelling gets.
 
 use openmoat_core::Verdict;
 use openmoat_hosts::Host;

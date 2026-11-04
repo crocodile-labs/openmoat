@@ -55,11 +55,11 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
 }
 
 /// goose has put its own approval to the person before the hook runs, so an
-/// `allow` skips nothing: a passthrough. It cannot ask, so an `ask` must block.
+/// `allow` skips nothing: a passthrough. It cannot prompt, so a `review` must block.
 pub(super) fn seen(verdict: Verdict) -> Answer {
     match verdict {
         Verdict::Allow => Answer::Passthrough,
-        Verdict::Ask => Answer::Deny,
+        Verdict::Review => Answer::Deny,
         other => other.into(),
     }
 }

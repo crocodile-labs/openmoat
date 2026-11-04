@@ -5,7 +5,7 @@
 //! one of its ancestors or a filesystem root would turn that into "everywhere
 //! in the home directory" (`~/.gitconfig`, `~/Library/LaunchAgents`), so such
 //! a root is refused and the session has no project: `${project}` patterns
-//! match nothing and those calls fall through to `ask` and the defaults.
+//! match nothing and those calls fall through to `review` and the defaults.
 
 use std::path::{Path, PathBuf};
 

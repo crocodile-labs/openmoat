@@ -5,7 +5,7 @@ in `AGENTS.md`, the working contract for people and coding agents.
 
 ## Where to start
 
-- **A safe command is denied or asked about** (a *false positive*): open an issue with
+- **A safe command is denied or held for review** (a *false positive*): open an issue with
   the false-positive form and paste the `openmoat policy check` output.
 - **A dangerous action is allowed**, or anything else security-relevant: report it
   privately through a security advisory ([SECURITY.md](SECURITY.md)), never in a
@@ -222,7 +222,7 @@ no traffic leaving the machine:
   A local fake Anthropic API (`tests/differential/fake_api.py --calls`) asks for a fixed
   sequence of tool calls, and a stdio MCP server (`tests/differential/fake_mcp.py`)
   answers MCP calls. The scenarios are token egress, a push of a committed token, the
-  package near-miss ask, a changed MCP server, file provenance across two sessions and
+  package near-miss review, a changed MCP server, file provenance across two sessions and
   `onFailure: block`, which is asserted only from Claude Code 2.1.295 (with an older pin
   the test reports what happened). The same calls also run through `openmoat guard` alone,
   on every machine.
@@ -427,7 +427,7 @@ when you change an invariant (policy semantics, exit codes, crate boundaries).
 
 A shell-classifier bypass is not such a decision. The classifier triages; OS
 enforcement is the boundary (ADR-013). Report the bypass, add an attack fixture, and
-make the smallest change that turns it into `ask` or `deny`. Since ADR-025 an
+make the smallest change that turns it into `review` or `deny`. Since ADR-025 an
 `unparseable` call defers under the default policy, so emit an atom a default rule
 names instead (`<program> @<argument>`, `<shell> @stdin`, a `net` host, a real path).
 

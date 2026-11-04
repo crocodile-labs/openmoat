@@ -110,7 +110,7 @@ fn a_direct_command_is_quoted_word_by_word() {
 
 #[cfg(not(windows))]
 #[test]
-fn several_commands_run_each_in_a_subshell_and_one_that_hides_another_asks() {
+fn several_commands_run_each_in_a_subshell_and_one_that_hides_another_needs_review() {
     assert_eq!(
         action("run_commands-many"),
         Some(shell("(\ngit status\n)\n(\ncat ~/.ssh/id_rsa\n)"))
@@ -288,13 +288,13 @@ fn replies_are_cancel_an_empty_object_or_nothing() {
     let deny: Value = serde_json::from_str(&render(Verdict::Deny)).unwrap();
     assert_eq!(deny["cancel"], true);
     assert!(deny["errorMessage"].as_str().unwrap().starts_with("moat: deny"));
-    // An ask reaches Cline as a deny that says how to approve it.
-    let answered = Host::Cline.answer(&event, &Decision::new(Verdict::Ask));
+    // A review reaches Cline as a deny that says how to approve it.
+    let answered = Host::Cline.answer(&event, &Decision::new(Verdict::Review));
     assert_eq!(answered.verdict, Verdict::Deny);
-    let ask: Value =
+    let review: Value =
         serde_json::from_str(&Host::Cline.render_response(&event, &answered)).unwrap();
     assert!(
-        ask["errorMessage"]
+        review["errorMessage"]
             .as_str()
             .unwrap()
             .contains("openmoat allow --last")

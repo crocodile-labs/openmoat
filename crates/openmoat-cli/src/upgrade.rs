@@ -4,6 +4,7 @@
 //! only through `moat policy upgrade`. It merges the changes between the default
 //! the policy started from (`policy.base.yaml`) and this release's default into
 //! the policy, three ways (`merge.rs`), and leaves every line the person changed.
+//! It also renames `ask`, the name `review` had before 0.14.0 (`rename.rs`).
 
 use anyhow::Result;
 use openmoat_core::DEFAULT_POLICY;
@@ -12,6 +13,7 @@ use crate::context::read_policy;
 use crate::home::Home;
 
 mod merge;
+mod rename;
 
 pub use merge::Merge;
 
@@ -37,6 +39,9 @@ pub struct Plan {
     /// The policy as it is.
     pub current: String,
     pub merge: Merge,
+    /// The policy said `ask` where it now says `review` (ADR-053), and the
+    /// merged text renames it.
+    pub renamed: bool,
 }
 
 impl Plan {
@@ -48,11 +53,14 @@ impl Plan {
         } else {
             (DEFAULT_V0_3_0.to_owned(), Base::Assumed)
         };
-        let base = line_endings_of(&current, &base);
+        // Both sides renamed first, so the merge lines the renamed key up with
+        // the default's `review:` instead of seeing a change next to it.
+        let (yours, renamed) = rename::old_names(&current);
+        let base = rename::old_names(&line_endings_of(&current, &base)).0;
         let new = line_endings_of(&current, DEFAULT_POLICY);
-        let mut merge = merge::merge(&base, &current, &new);
+        let mut merge = merge::merge(&base, &yours, &new);
         let source = if source == Base::Assumed && merge.kept * 2 < merge.base_lines {
-            merge = merge::merge(&base, &current, &base);
+            merge = merge::merge(&base, &yours, &base);
             Base::Unrelated
         } else {
             source
@@ -61,12 +69,13 @@ impl Plan {
             base: source,
             current,
             merge,
+            renamed,
         })
     }
 
-    /// How many changes applying would make.
+    /// How many changes applying would make: the default's, and the rename.
     pub fn applicable(&self) -> usize {
-        self.merge.applied().count()
+        self.merge.applied().count() + usize::from(self.renamed)
     }
 }
 

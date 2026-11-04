@@ -149,7 +149,7 @@ fn code_that_only_reads_writes_nothing() {
 }
 
 #[test]
-fn code_that_writes_a_script_and_runs_it_asks() {
+fn code_that_writes_a_script_and_runs_it_needs_review() {
     // `exec` of what it reads back is code the scan cannot read
     let atoms = parsed(r#"python3 -c 'open("x.py","w").write("1"); exec(open("x.py").read())'"#);
     assert!(

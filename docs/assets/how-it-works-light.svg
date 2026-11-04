@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 790" width="800" height="790" role="img" aria-label="An AI coding agent wants to run a tool call. Through the agent's own hook, OpenMoat checks it against one local policy before it runs: npm test is allowed, a call with no rule is left to the agent's own prompt, a git hook write asks you, and reading ~/.ssh/id_rsa is denied. Allowed code still runs inside the OS sandbox and the egress proxy, and every decision goes into a local hash-chained audit log.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 790" width="800" height="790" role="img" aria-label="An AI coding agent wants to run a tool call. Through the agent's own hook, OpenMoat checks it against one local policy before it runs: npm test is allowed, a call with no rule is left to the agent's own prompt, a git hook write is held for your review, and reading ~/.ssh/id_rsa is denied. Allowed code still runs inside the OS sandbox and the egress proxy, and every decision goes into a local hash-chained audit log.">
 <defs>
 <pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.2" fill="#dcdcd7"/></pattern>
 <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#a3a3a3"/></marker>
@@ -37,7 +37,7 @@
 <text x="307.5" y="506" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#525252">own prompt decides</text>
 <line x1="492.5" y1="346" x2="492.5" y2="372" stroke="#a3a3a3" stroke-width="1.5" marker-end="url(#head)"/>
 <rect x="410" y="376" width="165" height="150" rx="12" fill="#ffffff" stroke="#9a6400" stroke-width="1.5"/>
-<text x="492.5" y="404" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" font-weight="700" fill="#9a6400">ask</text>
+<text x="492.5" y="404" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" font-weight="700" fill="#9a6400">review</text>
 <text x="492.5" y="432" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#171717">&gt; .git/hooks/pre-commit</text>
 <text x="492.5" y="452" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#171717">core.hooksPath</text>
 <text x="492.5" y="488" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#525252">outlives the session:</text>

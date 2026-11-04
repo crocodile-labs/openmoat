@@ -35,7 +35,7 @@ What exists:
   waits for a `cn` release that runs hooks.
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
   `mcp`, `web.search` and `tool.unknown`; verdicts `allow`, `defer` (the default for
-  anything no rule names, ADR-025), `ask` and `deny`.
+  anything no rule names, ADR-025), `review` and `deny`.
 - **Shell parsing.** OpenMoat's own POSIX lexer and classifier, executable pins
   (ADR-008) and symlink resolution (ADR-009).
 - **Audit.** A redacted, hash-chained local log with `show`, `replay` and `report`;
@@ -45,9 +45,9 @@ What exists:
   rules, Claude Code's `ConfigChange` veto, stable hook binary paths (ADR-016), and
   person-only commands that refuse when an agent is among their parent processes.
 - **Session taint.** After a secret read or untrusted content, risky follow-up calls
-  ask (ADR-020), also across the files a tainted session writes (ADR-029); after a
+  need review (ADR-020), also across the files a tainted session writes (ADR-029); after a
   secret read, a URL carrying a long encoded value is denied (`encoded-egress`, ADR-047).
-- **Package installs.** A name one typo away from a popular package asks (ADR-030);
+- **Package installs.** A name one typo away from a popular package needs review (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
 - **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
   per server with `openmoat mcp wrap` or `openmoat init --mcp-proxy`, pins
@@ -147,7 +147,7 @@ command string can be wrong (quoting, encodings, interpreters, programs that run
 programs), so:
 
 - The parser is frozen (AGENTS.md §5, CONTRIBUTING.md "Decisions"). A newly found bypass
-  gets an attack fixture and the smallest change that turns it into `ask`, not a new
+  gets an attack fixture and the smallest change that turns it into `review`, not a new
   grammar; the time saved goes into enforcement.
 - Every enforcement layer is generated from the one policy, and the layers are tested
   against each other (ADR-018 to ADR-020).

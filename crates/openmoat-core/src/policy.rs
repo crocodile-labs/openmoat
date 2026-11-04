@@ -29,7 +29,7 @@ impl Defaults {
                 .find_map(|k| map.get(k.as_str()).map(|v| (*v, format!("default.{k}"))))
                 .unwrap_or_else(|| {
                     (
-                        map.get("*").copied().unwrap_or(Verdict::Ask),
+                        map.get("*").copied().unwrap_or(Verdict::Review),
                         "default".to_owned(),
                     )
                 }),
@@ -49,14 +49,14 @@ impl Defaults {
 
     /// What OpenMoat gives a call it cannot classify, or a word that only looks
     /// like a host: `defer` under a catch-all (`"*"`) of `allow` or `defer`, else
-    /// `ask` (ADR-025). Never `allow`, and never a deny nothing named.
+    /// `review` (ADR-025). Never `allow`, and never a deny nothing named.
     #[must_use]
     pub fn unclassified(&self) -> Verdict {
         let catch_all = match self {
             Self::All(v) => *v,
-            Self::PerKind(map) => map.get("*").copied().unwrap_or(Verdict::Ask),
+            Self::PerKind(map) => map.get("*").copied().unwrap_or(Verdict::Review),
         };
-        catch_all.clamp(Verdict::Defer, Verdict::Ask)
+        catch_all.clamp(Verdict::Defer, Verdict::Review)
     }
 }
 
@@ -70,6 +70,9 @@ use crate::taint::{self, TaintSettings};
 use crate::verdict::Verdict;
 
 mod hook_only;
+mod old_names;
+
+pub use old_names::OldNames;
 
 /// The policy schema version (`version:`) this build reads; any other is an error.
 pub const SUPPORTED_VERSION: u32 = 1;
@@ -114,6 +117,19 @@ pub enum PolicyError {
     BadShellPattern {
         /// The pattern as written.
         pattern: String,
+    },
+    /// The file has both `ask:` and `review:` (ADR-053): `ask` is the old name
+    /// of `review`, and which list was meant cannot be told.
+    #[error(
+        "the policy has both `{old}:` and `{new}:`; `{old}` is the old name of `{new}`: \
+         move the `{old}:` rules into `{new}:` (`openmoat policy upgrade` renames a policy \
+         that has only `{old}:`)"
+    )]
+    OldAndNewName {
+        /// The old key.
+        old: &'static str,
+        /// The current key.
+        new: &'static str,
     },
     /// A rule group or `executables` entry is invalid; `problem` says why.
     #[error("rule `{rule}`: {problem}")]
@@ -275,10 +291,11 @@ pub struct Policy {
     /// Evaluated after `deny`.
     #[serde(default)]
     pub allow: Vec<RuleGroup>,
-    /// Evaluated after `allow`.
-    #[serde(default)]
-    pub ask: Vec<RuleGroup>,
-    /// Evaluated after `ask`: calls the agent's own permission flow decides
+    /// Evaluated after `allow`: calls a person reviews. Read from `ask:` too,
+    /// its name before ADR-053 ([`OldNames`]).
+    #[serde(default, alias = "ask")]
+    pub review: Vec<RuleGroup>,
+    /// Evaluated after `review`: calls the agent's own permission flow decides
     /// (ADR-025). Absent in policies written before it existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub defer: Vec<RuleGroup>,
@@ -309,13 +326,17 @@ pub struct Policy {
     /// How `moat mcp proxy` treats tool definitions (ADR-032). Absent in older policies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpSettings>,
-    /// Ask rules merged in from a repository policy ([`crate::RepoPolicy`],
+    /// Review rules merged in from a repository policy ([`crate::RepoPolicy`],
     /// ADR-022) or a policy pack (ADR-031). Tried after `deny` and before
-    /// `allow`, so a repository can make an action the user allows ask. Never
-    /// read from or written to a file, and not lowered to OS layers, which are
-    /// generated from the user policy alone.
+    /// `allow`, so a repository can make an action the user allows need review.
+    /// Never read from or written to a file, and not lowered to OS layers, which
+    /// are generated from the user policy alone.
     #[serde(skip)]
-    pub repo_ask: Vec<RuleGroup>,
+    pub repo_review: Vec<RuleGroup>,
+    /// Where the file used `ask`, the old name of `review` (ADR-053), which
+    /// `policy lint` warns about. Set by [`Policy::parse`]; never written.
+    #[serde(skip)]
+    pub old_names: OldNames,
 }
 
 /// The `sandbox:` section (ADR-018, ADR-019).
@@ -378,7 +399,7 @@ pub enum BrowserOpen {
     Net,
 }
 
-/// The release age `moat run` asks of new package versions when the policy
+/// The release age `moat run` requires of new package versions when the policy
 /// does not say (ADR-030).
 pub const DEFAULT_PACKAGE_MIN_RELEASE_AGE_DAYS: u16 = 7;
 
@@ -409,13 +430,15 @@ impl Policy {
 }
 
 fn default_verdict() -> Defaults {
-    Defaults::All(Verdict::Ask)
+    Defaults::All(Verdict::Review)
 }
 
 impl Policy {
     /// Parse and lint a policy document. Pure: takes the YAML text.
     pub fn parse(yaml: &str) -> Result<Self, PolicyError> {
-        let policy: Self = crate::yaml::from_str(yaml).map_err(PolicyError::Parse)?;
+        let old_names = old_names::find(yaml)?;
+        let mut policy: Self = crate::yaml::from_str(yaml).map_err(PolicyError::Parse)?;
+        policy.old_names = old_names;
         policy.lint()?;
         Ok(policy)
     }
@@ -429,10 +452,10 @@ impl Policy {
             });
         }
         let mut ids = BTreeSet::new();
-        let groups = self.deny.iter().chain(&self.repo_ask);
+        let groups = self.deny.iter().chain(&self.repo_review);
         for group in groups
             .chain(&self.allow)
-            .chain(&self.ask)
+            .chain(&self.review)
             .chain(&self.defer)
         {
             if group.id.trim().is_empty() {
@@ -480,10 +503,10 @@ impl Policy {
         secret::check(&self.secrets)
     }
 
-    /// Number of rule groups in `deny`, `allow` and `ask`.
+    /// Number of rule groups in `deny`, `allow` and `review`.
     #[must_use]
     pub fn rule_count(&self) -> (usize, usize, usize) {
-        (self.deny.len(), self.allow.len(), self.ask.len())
+        (self.deny.len(), self.allow.len(), self.review.len())
     }
 }
 

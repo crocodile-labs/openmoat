@@ -35,7 +35,7 @@ process.stdin.on("end", () => {
     case "deny": return say(deny, 2);
     case "allow": return say('{"decision":"allow","reason":"moat: allow [dev-shell]"}', 0);
     case "defer": return say("", 0);
-    case "ask": return say('{"decision":"ask","reason":"moat: ask [runs-later]"}', 0);
+    case "ask": return say('{"decision":"ask","reason":"moat: review [runs-later]"}', 0);
     case "crash": process.stderr.write("boom\\n"); process.exitCode = 1; return;
     case "garbage": return say("not json", 0);
     case "deny-exit-0": return say('{"decision":"deny","reason":"x"}', 0);

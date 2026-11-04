@@ -1,5 +1,5 @@
 //! The folder rule (ADR-038): reading or writing a folder that holds paths a
-//! deny rule names asks.
+//! deny rule names needs review.
 //!
 //! A recursive read (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `tar czf a.tgz
 //! ~/.hermes`) is one `fs.read` of the folder it names, and a deny rule that
@@ -7,15 +7,15 @@
 //! An extraction into a folder (`tar xf e.tar -C ~`) is one `fs.write` of it in
 //! the same way. So when the folder of an `fs.read` (or `fs.write`) atom is, or
 //! is an ancestor of, the literal folder of a deny rule's `fs.read` (or
-//! `fs.write`) pattern, the atom asks with [`HOLDS_PROTECTED_RULE`]. The
-//! classifier has no notion of "recursive", so a plain `ls ~/.codex` asks too.
+//! `fs.write`) pattern, the atom needs review with [`HOLDS_PROTECTED_RULE`]. The
+//! classifier has no notion of "recursive", so a plain `ls ~/.codex` needs review too.
 //!
 //! Patterns with no literal folder (`**/.env`, `**/.claude/settings.json`)
 //! contribute nothing, so a search of a project that holds a `.env` keeps its
-//! verdict. The rule only adds an ask: a deny on the folder itself still wins.
+//! verdict. The rule only adds a review: a deny on the folder itself still wins.
 //! The home folder and the folders above it (`/`, `/Users`) are left out: they
-//! hold every protected path, so a bare `/` word (`tr '/' '_'`) would ask, and a
-//! read of the home itself already asks (`home-sweep`) while a write of it is
+//! hold every protected path, so a bare `/` word (`tr '/' '_'`) would need review, and a
+//! read of the home itself already needs review (`home-sweep`) while a write of it is
 //! denied (`destructive`).
 
 use super::EvalContext;
@@ -25,7 +25,7 @@ use crate::pattern::{literal_folder, split_negation};
 use crate::policy::RuleGroup;
 use crate::verdict::{Decision, Verdict};
 
-/// The rule id of an ask for a folder that holds paths a deny rule names.
+/// The rule id of a review for a folder that holds paths a deny rule names.
 pub const HOLDS_PROTECTED_RULE: &str = "protected-contents";
 
 /// The literal folders of the deny rules' path patterns, per kind, compiled
@@ -88,7 +88,7 @@ impl ProtectedFolders {
         }
     }
 
-    /// An ask when `atom` reads or writes a folder that holds a protected
+    /// A review when `atom` reads or writes a folder that holds a protected
     /// folder (or is one); `None` otherwise.
     pub(super) fn decide(&self, atom: &AtomicAction) -> Option<Decision> {
         let (path, folders, verb) = match atom {
@@ -116,7 +116,7 @@ impl ProtectedFolders {
             [] => return None,
         };
         Some(Decision::single(
-            Verdict::Ask,
+            Verdict::Review,
             HOLDS_PROTECTED_RULE,
             format!("{verb} a folder that holds paths {names} {verb_rules}: {path}"),
         ))
@@ -180,7 +180,7 @@ deny:
 
     fn rules(f: &ProtectedFolders, atom: &AtomicAction) -> Option<String> {
         f.decide(atom).map(|d| {
-            assert_eq!(d.verdict, Verdict::Ask);
+            assert_eq!(d.verdict, Verdict::Review);
             assert_eq!(d.rules, [HOLDS_PROTECTED_RULE]);
             d.reasons.join("|")
         })
@@ -206,7 +206,7 @@ deny:
     }
 
     #[test]
-    fn a_folder_or_an_ancestor_asks_and_a_folder_below_does_not() {
+    fn a_folder_or_an_ancestor_needs_review_and_a_folder_below_does_not() {
         let f = folders(false);
         let codex = rules(&f, &read("/Users/me/.codex")).unwrap();
         assert_eq!(
@@ -219,7 +219,7 @@ deny:
         // `/srv` holds the moved `/srv/codex` and is not above the home.
         assert!(rules(&f, &read("/srv")).is_some());
         // The home and the folders above it, in either spelling, are left to
-        // `home-sweep` and `destructive`: a bare `/` word must not ask.
+        // `home-sweep` and `destructive`: a bare `/` word must not need review.
         for above in [
             "/Users/me",
             "/Users/me/",

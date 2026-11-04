@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 use openmoat_core::{Decision as CoreDecision, Verdict as CoreVerdict};
 
 /// The outcome of a decision, ordered by strictness:
-/// `Allow < Defer < Ask < Deny`.
+/// `Allow < Defer < Review < Deny`.
 ///
 /// | Verdict | The caller |
 /// |---|---|
 /// | `Deny` | must not run the call; no approval can lift it |
-/// | `Ask` | runs it only after a person approves this exact call |
+/// | `Review` | runs it only after a person approves this exact call |
 /// | `Defer` | applies its own permission flow; OpenMoat neither objects nor vouches |
 /// | `Allow` | may run it |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -23,20 +23,23 @@ pub enum Verdict {
     Allow,
     /// No objection and no approval: the caller's own permission flow decides.
     Defer,
-    /// A person must approve this exact call before it runs.
-    Ask,
+    /// A person must approve this exact call before it runs. Read from `"ask"`,
+    /// its name before 0.14.0 (ADR-053), so a caller or log written then still
+    /// decodes; only `"review"` is written.
+    #[serde(alias = "ask")]
+    Review,
     /// The call must not run.
     Deny,
 }
 
 impl Verdict {
-    /// The lowercase name: `allow`, `defer`, `ask` or `deny`.
+    /// The lowercase name: `allow`, `defer`, `review` or `deny`.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Allow => "allow",
             Self::Defer => "defer",
-            Self::Ask => "ask",
+            Self::Review => "review",
             Self::Deny => "deny",
         }
     }
@@ -47,7 +50,7 @@ impl Verdict {
         match verdict {
             CoreVerdict::Allow => Self::Allow,
             CoreVerdict::Defer => Self::Defer,
-            CoreVerdict::Ask => Self::Ask,
+            CoreVerdict::Review => Self::Review,
             _ => Self::Deny,
         }
     }
@@ -100,12 +103,17 @@ mod tests {
 
     #[test]
     fn verdicts_keep_the_engine_order_and_names() {
-        let all = [Verdict::Allow, Verdict::Defer, Verdict::Ask, Verdict::Deny];
+        let all = [
+            Verdict::Allow,
+            Verdict::Defer,
+            Verdict::Review,
+            Verdict::Deny,
+        ];
         assert!(all.windows(2).all(|w| w[0] < w[1]));
         for (v, core) in all.into_iter().zip([
             CoreVerdict::Allow,
             CoreVerdict::Defer,
-            CoreVerdict::Ask,
+            CoreVerdict::Review,
             CoreVerdict::Deny,
         ]) {
             assert_eq!(Verdict::from_core(core), v);
@@ -114,9 +122,17 @@ mod tests {
         }
     }
 
+    /// ADR-053: JSON from a caller or a log written before 0.14.0 says `"ask"`.
+    #[test]
+    fn the_old_name_ask_reads_as_review() {
+        let old: Verdict = serde_json::from_str("\"ask\"").unwrap();
+        assert_eq!(old, Verdict::Review);
+        assert_eq!(serde_json::to_string(&old).unwrap(), "\"review\"");
+    }
+
     #[test]
     fn reason_joins_the_reasons() {
-        let mut core = CoreDecision::single(CoreVerdict::Ask, "a", "one");
+        let mut core = CoreDecision::single(CoreVerdict::Review, "a", "one");
         core.reasons.push("two".into());
         let d = Decision::from_core(core);
         assert_eq!(d.reason(), "one; two");

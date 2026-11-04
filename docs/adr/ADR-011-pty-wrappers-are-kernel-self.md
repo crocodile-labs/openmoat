@@ -10,7 +10,7 @@ to run without a terminal (ADR-006, ADR-007). The terminal check looks at whethe
 stdout are a TTY. An agent can give a command a pseudo-terminal: `script -q /dev/null moat
 allow --last`, `script -qc 'moat allow --last' /dev/null`, `expect -c 'spawn moat allow …'`
 or `unbuffer moat allow …`. `kernel-self` matched `moat …` as the first word only, so the
-`script` and `expect` forms only asked (audit 2026-10-05).
+`script` and `expect` forms only needed review (audit 2026-10-05).
 
 ## Decision
 

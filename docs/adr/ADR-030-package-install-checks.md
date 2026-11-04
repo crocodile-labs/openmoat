@@ -16,9 +16,9 @@ the machine. Three ways a bad package arrives are common enough to plan for:
   and a bad version is published. Registries usually remove it within days.
 
 Under ADR-025 every install defers to the agent's own prompt, which shows the command
-but not that the name is one letter off. OpenMoat must not start asking about every
+but not that the name is one letter off. OpenMoat must not start holding for review every
 install either: unknown packages are normal (internal packages, new libraries), and
-an ask for each would be the noise ADR-025 removed. Nothing may leave the machine, so
+a review for each would be the noise ADR-025 removed. Nothing may leave the machine, so
 OpenMoat cannot ask a registry whether a name exists, how old it is or who owns it.
 
 ## Decision
@@ -32,7 +32,7 @@ OpenMoat cannot ask a registry whether a name exists, how old it is or who owns 
    and an install from the lockfile names none. An install whose names are not near
    misses (point 2) gives no atom of its own and decides exactly as its command does:
    an atom for every install would fall to the policy's catch-all and, since the
-   strictest atom wins, ask again for an install a rule allows.
+   strictest atom wins, need review again for an install a rule allows.
 2. **A bundled list of popular names per registry** (`openmoat-core/data/top-packages/`,
    a few hundred to about a thousand names each, plain text with its source and date).
    A name not on its list that is one edit (Damerau, optimal string alignment) from a
@@ -40,7 +40,7 @@ OpenMoat cannot ask a registry whether a name exists, how old it is or who owns 
    doubled letters, or adds or drops a squatter's prefix or suffix (`node-`, `-js`,
    `python-`, `py`, `-rs`, `ruby-`, …) gives the atom `@package-near-miss <ecosystem>
    <name> <popular name>`. Names are compared as each registry compares them (PEP 503 for
-   PyPI, `-`/`_` alike for crates.io, no `/vN` for Go). The default policy asks for that
+   PyPI, `-`/`_` alike for crates.io, no `/vN` for Go). The default policy holds for review that
    atom (`package-near-miss`), and the reason names the popular package. An exact
    popular name, or a name far from every popular one, gets nothing new.
 3. **A release age inside `moat run`** (`sandbox.package_min_release_age_days`, default
@@ -60,10 +60,10 @@ itself never downloads it.
 
 ## Consequences
 
-- `pip install reqeusts` and `npm i lodahs` ask, naming `requests` and `lodash`;
+- `pip install reqeusts` and `npm i lodahs` need review, naming `requests` and `lodash`;
   `pip install numpy pandas`, `npm i react react-dom`, `cargo add serde` and
   `npm i some-new-internal-pkg` defer as before. Conformance fixtures pin both.
-- A real but less popular package close to a listed one asks; the fix is to add it to
+- A real but less popular package close to a listed one needs review; the fix is to add it to
   the list. Names of four letters or fewer are never compared, since one letter
   separates many real short names.
 - The check is only as good as the list: it goes stale, it has no download counts for

@@ -1,6 +1,6 @@
 //! The row for `continue`.
 //!
-//! An ask: `continue_cli.rs`.
+//! A review: `continue_cli.rs`.
 
 use super::{PRE_TOOL_USE, Row, post_tool_use, pre_tool_use};
 

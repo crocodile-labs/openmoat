@@ -113,11 +113,11 @@ fn a_secret_read_inside_the_run_taints_its_egress() {
     let (sb, project) = installed_with_secret();
     moat_in(&project);
     // An untrusted repository policy may tighten: it makes this file a secret
-    // whose read asks, and an asked read may have run.
+    // whose read needs review, and a reviewed read may have run.
     std::fs::create_dir_all(project.join(".moat")).unwrap();
     std::fs::write(
         project.join(".moat/policy.yaml"),
-        "version: 1\nask:\n  - id: secrets-paths\n    fs.read: ['${project}/creds/**']\n",
+        "version: 1\nreview:\n  - id: secrets-paths\n    fs.read: ['${project}/creds/**']\n",
     )
     .unwrap();
     std::fs::create_dir_all(project.join("creds")).unwrap();

@@ -57,11 +57,11 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         _ => Vec::new(),
     };
     // A permission mode in which no question reaches a person
-    // (`Asks::prompt_free_modes`): an `ask` there is answered as a deny that
+    // (`Reviews::prompt_free_modes`): a `review` there is answered as a deny that
     // says how to approve it.
     let event = match p.permission_mode.as_deref() {
-        Some(mode) if host.spec().asks.prompt_free_modes.contains(&mode) => {
-            HookEvent::PreToolUseNoAsk
+        Some(mode) if host.spec().reviews.prompt_free_modes.contains(&mode) => {
+            HookEvent::PreToolUseNoPrompt
         }
         _ => HookEvent::PreToolUse,
     };
@@ -205,7 +205,8 @@ pub(crate) fn render(decision: &Decision) -> String {
     serde_json::json!({
         "hookSpecificOutput": {
             "hookEventName": EVENT,
-            "permissionDecision": decision.verdict.as_str(),
+            // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+            "permissionDecision": crate::wire::host_verdict(decision.verdict),
             "permissionDecisionReason": crate::reason_line(decision),
         }
     })

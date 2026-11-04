@@ -15,8 +15,8 @@
 //!
 //! Output: nothing for `defer`, else `{"decision": "allow" | "ask" | "deny",
 //! "reason"}`. The extension returns nothing for `allow`, asks the person with
-//! `ctx.ui.confirm` for `ask`, and blocks for `deny`; anything else it cannot
-//! read blocks the call.
+//! `ctx.ui.confirm` for `"ask"` (OpenMoat's `review`), and blocks for `deny`;
+//! anything else it cannot read blocks the call.
 
 use openmoat_core::{Decision, Verdict};
 use serde::Deserialize;
@@ -24,7 +24,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Activity, Asks, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HostAdapter,
+    Activity, Reviews, GUARD_BUDGET_S, Heartbeat, HookDir, HookLayout, HookSpec, HostAdapter,
     HostSpec, InstallSpec, McpFile, McpSpec, McpServersJson, ProjectSettingsSpec, wrong_event,
 };
 use crate::wire::owned_file::{OwnedFile, Syntax};
@@ -41,7 +41,7 @@ mod tools;
 /// Seconds OpenMoat's extension waits for `moat guard` before it blocks the
 /// call (`GUARD_TIMEOUT_MS` in `pi/integration/openmoat.js`, which the CLI's
 /// tests compare with this). pi itself waits for a `tool_call` handler without
-/// a limit, and a person's answer to an `ask` comes after this wait.
+/// a limit, and a person's answer to a `review` comes after this wait.
 pub(crate) const HOOK_TIMEOUT_S: u64 = 45;
 const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 
@@ -60,16 +60,16 @@ static EXTENSION: OwnedFile = OwnedFile {
     syntax: Syntax::JavaScript,
 };
 
-/// pi asks through the extension's dialog where it has a screen (`ctx.hasUI`:
+/// pi prompts through the extension's dialog where it has a screen (`ctx.hasUI`:
 /// the terminal UI and RPC mode); print and JSON modes have none.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "pi",
     display_name: "pi",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: Some("pi runs without a screen to ask on (print or JSON mode)"),
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+        on_no_prompt: Some("pi runs without a screen to prompt on (print or JSON mode)"),
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when OpenMoat's extension throws (pi's `tool_call` \
          fails closed), and the extension blocks when `openmoat` is missing, crashes or \
@@ -118,7 +118,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // rights; the user's `settings.json` can turn OpenMoat's extension off
     // with an `extensions` entry (`docs/settings.md`, "Resources";
     // `dist/core/package-manager.js` `isEnabledByOverrides`). Writes to the
-    // project files ask (`runs-later` in the default policy).
+    // project files need review (`runs-later` in the default policy).
     project_settings: Some(ProjectSettingsSpec {
         dir: ".pi",
         shared: "settings.json",
@@ -226,11 +226,11 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             .map(str::to_owned),
         _ => None,
     };
-    // Without a screen an `ask` cannot be put to the person (`Asks::on_no_ask`).
+    // Without a screen a `review` cannot be put to the person (`Reviews::on_no_prompt`).
     let event = if p.has_ui {
         HookEvent::PreToolUse
     } else {
-        HookEvent::PreToolUseNoAsk
+        HookEvent::PreToolUseNoPrompt
     };
     let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), &p.input);
     Ok(HookRequest {
@@ -254,7 +254,8 @@ pub(crate) fn render(decision: &Decision) -> String {
         return String::new();
     }
     serde_json::json!({
-        "decision": decision.verdict.as_str(),
+        // OpenMoat's `review` is sent as the host's "ask" (`host_verdict`).
+        "decision": crate::wire::host_verdict(decision.verdict),
         "reason": crate::reason_line(decision),
     })
     .to_string()

@@ -300,15 +300,18 @@ fn malformed_payloads_are_errors() {
 }
 
 #[test]
-fn codex_receives_an_ask_as_a_deny_that_says_how_to_approve() {
-    let mut ask = Decision::new(Verdict::Ask);
-    ask.rules.push("installs".into());
-    let codex = Host::Codex.answer(&HookEvent::PreToolUse, &ask);
+fn codex_receives_a_review_as_a_deny_that_says_how_to_approve() {
+    let mut review = Decision::new(Verdict::Review);
+    review.rules.push("installs".into());
+    let codex = Host::Codex.answer(&HookEvent::PreToolUse, &review);
     assert_eq!(codex.verdict, Verdict::Deny);
-    assert_eq!(codex.rules, ask.rules);
+    assert_eq!(codex.rules, review.rules);
     assert!(crate::reason_line(&codex).contains("openmoat allow --last"));
-    assert_eq!(Host::ClaudeCode.answer(&HookEvent::PreToolUse, &ask), ask);
-    assert_eq!(Host::Cursor.answer(&HookEvent::PreToolUse, &ask), ask);
+    assert_eq!(
+        Host::ClaudeCode.answer(&HookEvent::PreToolUse, &review),
+        review
+    );
+    assert_eq!(Host::Cursor.answer(&HookEvent::PreToolUse, &review), review);
     let allow = Decision::new(Verdict::Allow);
     assert_eq!(Host::Codex.answer(&HookEvent::PreToolUse, &allow), allow);
 }
@@ -333,11 +336,11 @@ fn response_document_shape() {
 
 #[test]
 fn response_bytes_are_exact_and_escaped() {
-    let mut decision = Decision::new(Verdict::Ask);
+    let mut decision = Decision::new(Verdict::Review);
     decision.reasons.push("say \"hi\"\n\\".into());
     assert_eq!(
         render(&decision),
-        r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"moat: ask — say \"hi\"\n\\"}}"#
+        r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"moat: review — say \"hi\"\n\\"}}"#
     );
 }
 
@@ -436,15 +439,15 @@ fn bash_in_mode(host: Host, mode: &str) -> HookRequest {
     host.parse_request(&payload.to_string()).unwrap()
 }
 
-/// `bypassPermissions` and `dontAsk` put no question to a person, so an `ask`
+/// `bypassPermissions` and `dontAsk` put no question to a person, so a `review`
 /// is answered as a deny that says how to approve it; a `defer` stays a defer.
 #[test]
-fn claude_code_modes_that_cannot_prompt_turn_an_ask_into_a_deny() {
-    let ask = Decision::new(Verdict::Ask);
+fn claude_code_modes_that_cannot_prompt_turn_a_review_into_a_deny() {
+    let review = Decision::new(Verdict::Review);
     for mode in ["bypassPermissions", "dontAsk"] {
         let req = bash_in_mode(Host::ClaudeCode, mode);
-        assert_eq!(req.event, HookEvent::PreToolUseNoAsk, "{mode}");
-        let answer = Host::ClaudeCode.answer(&req.event, &ask);
+        assert_eq!(req.event, HookEvent::PreToolUseNoPrompt, "{mode}");
+        let answer = Host::ClaudeCode.answer(&req.event, &review);
         assert_eq!(answer.verdict, Verdict::Deny, "{mode}");
         assert!(
             answer
@@ -466,14 +469,14 @@ fn claude_code_modes_that_cannot_prompt_turn_an_ask_into_a_deny() {
 }
 
 #[test]
-fn claude_code_modes_that_prompt_keep_the_ask() {
-    let ask = Decision::new(Verdict::Ask);
+fn claude_code_modes_that_prompt_keep_the_review() {
+    let review = Decision::new(Verdict::Review);
     for mode in ["default", "acceptEdits", "plan", "auto", "something-new"] {
         let req = bash_in_mode(Host::ClaudeCode, mode);
         assert_eq!(req.event, HookEvent::PreToolUse, "{mode}");
         assert_eq!(
-            Host::ClaudeCode.answer(&req.event, &ask).verdict,
-            Verdict::Ask
+            Host::ClaudeCode.answer(&req.event, &review).verdict,
+            Verdict::Review
         );
     }
     // Codex sends no such mode; a field of that name changes nothing there.

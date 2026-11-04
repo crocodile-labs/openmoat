@@ -33,7 +33,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, Location, McpFile, McpSpec,
+    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, Location, McpFile, McpSpec,
     Unseen, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -72,23 +72,23 @@ const _: () = assert!(crate::GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 /// sets `fail_closed` itself ([`hook_file::Hermes`]).
 const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", HOOK_TIMEOUT_S, false)];
 
-/// Hermes puts an `ask` to the person itself, except where it would approve
-/// it unseen ([`Unseen`]): there the ask is a deny.
+/// Hermes puts a `review` to the person itself, except where it would approve
+/// it unseen ([`Unseen`]): there the review is a deny.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "hermes",
     display_name: "Hermes Agent",
-    asks: Asks {
+    reviews: Reviews {
         on_pre_tool_use: None,
-        on_no_ask: Some(
+        on_no_prompt: Some(
             "Hermes Agent would run it without asking you (`HERMES_YOLO_MODE`, \
              `approvals.mode: off`, or a cron, single-query or unattended mode set to `approve`)",
         ),
-        defer_is_ask_on_no_ask: false,
+        defer_is_review_on_no_prompt: false,
         unseen: Some(Unseen {
             env: &["HERMES_YOLO_MODE"],
             config: settings::approves_unseen,
         }),
-        ..Asks::BASE
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when the hook cannot start, times out, exits non-zero \
          without a decision or prints something that is not JSON (`fail_closed: true`, which \
@@ -102,7 +102,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          checked (its tool calls are); a plugin, another hook's `modify` or tool middleware can \
          rewrite a call's arguments after the check; terminal commands on a remote backend \
          (docker, ssh, modal, …) are checked as local ones; the in-session `/yolo` toggle and \
-         `hermes -z` approve an ask unseen without OpenMoat seeing it; relative paths are \
+         `hermes -z` approve a review unseen without OpenMoat seeing it; relative paths are \
          checked against the Hermes process's directory, not the session's; another profile, \
          or `HERMES_SAFE_MODE=1`, runs without the hook; an internal error in Hermes's hook \
          dispatcher runs the call unchecked; a changed `config.yaml` is caught on the next \
@@ -245,15 +245,15 @@ fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
 
 /// Nothing for `defer` (ADR-025) and `{}` for `allow`: Hermes reads neither as
 /// a decision and has no "allow" that skips its own checks, so both leave the
-/// call to them, as without OpenMoat. An `ask` goes to Hermes's approval prompt
-/// with a `rule_key` of its own reason, so Hermes's "always" approves that ask
+/// call to them, as without OpenMoat. A `review` goes to Hermes's approval prompt
+/// with a `rule_key` of its own reason, so Hermes's "always" approves that review
 /// again, never the whole tool; a `deny` blocks.
 pub(crate) fn render(decision: &Decision) -> String {
     let line = crate::reason_line(decision);
     match decision.verdict {
         Verdict::Defer => String::new(),
         Verdict::Allow => "{}".to_owned(),
-        Verdict::Ask => serde_json::json!({
+        Verdict::Review => serde_json::json!({
             "action": "approve",
             "message": line,
             "rule_key": rule_key(decision),

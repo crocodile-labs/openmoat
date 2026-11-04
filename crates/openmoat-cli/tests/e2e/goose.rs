@@ -1,5 +1,5 @@
 //! goose: `init` writes OpenMoat's plugin with one fail-closed `PreToolUse`
-//! entry; goose cannot ask, so an ask arrives as a block; a deferred call is
+//! entry; goose cannot prompt, so a review arrives as a block; a deferred call is
 //! left to goose; `uninstall` takes the entry out. What every host does is in
 //! `hosts/`.
 
@@ -77,7 +77,7 @@ fn a_secret_read_is_blocked_and_an_ask_arrives_as_a_block() {
         "{reply}"
     );
 
-    // Code Mode's script calls tools the hook never sees: an ask, which goose
+    // Code Mode's script calls tools the hook never sees: a review, which goose
     // receives as a block saying how to approve it.
     let (code, reply) = guard(
         &sb,

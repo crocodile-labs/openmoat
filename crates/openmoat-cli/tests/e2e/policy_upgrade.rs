@@ -3,7 +3,7 @@
 
 use serde_json::json;
 
-use crate::common::{ASK, OK, Sandbox, USAGE, output, text, verdict};
+use crate::common::{OK, REVIEW, Sandbox, USAGE, output, text, verdict};
 
 /// What `moat init` wrote from 0.1.1 to 0.3.0, before it recorded a base.
 const V0_3_0: &str = include_str!("../../src/upgrade/default-v0.3.0.yaml");
@@ -115,7 +115,7 @@ fn a_0_3_0_policy_gains_the_new_defaults_and_undo_restores_it() {
     assert_eq!(policy(&sb), default_lf());
     intact(&sb);
     assert_eq!(web_search(&sb), "allow");
-    assert_eq!(nested_git_write(&sb), Some(ASK));
+    assert_eq!(nested_git_write(&sb), Some(REVIEW));
 
     let out = sb.moat(&["policy", "upgrade", "--undo", "--yes"]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
@@ -133,6 +133,7 @@ fn the_owners_changes_are_kept_and_a_conflicting_change_is_listed() {
     let fs_write = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**"]"#;
     let mine = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**", "!${project}/keys/**"]"#;
     let rule = "  - id: my-rule\n    shell: [\"make deploy\"]\n";
+    // The 0.3.0 default names the list `ask:`, which the upgrade also renames.
     let edited = V0_3_0
         .replace(fs_write, mine)
         .replace("ask:\n", &format!("ask:\n{rule}"));
@@ -166,7 +167,7 @@ fn the_owners_changes_are_kept_and_a_conflicting_change_is_listed() {
 
 #[test]
 fn a_policy_not_made_from_the_default_is_left_alone() {
-    let own = "version: 1\ndefaults:\n  \"*\": ask\n";
+    let own = "version: 1\ndefaults:\n  \"*\": review\n";
     let sb = older_home(own);
     let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
@@ -176,6 +177,57 @@ fn a_policy_not_made_from_the_default_is_left_alone() {
         text(&out)
     );
     assert_eq!(policy(&sb), own);
+}
+
+/// ADR-053: a policy that still says `ask` decides as before, `policy lint`
+/// names the old name, and `policy upgrade` renames it, also in a policy not
+/// made from the default; a file with both `ask:` and `review:` is refused.
+#[test]
+fn the_old_name_ask_is_warned_about_and_renamed_by_upgrade() {
+    let own = "version: 1\ndefaults:\n  \"*\": ask # strict\nask:\n  - id: deploy\n    \
+               shell: [\"make deploy\"]\n";
+    let sb = older_home(own);
+    let out = sb.moat(&["policy", "lint"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains("`ask:` is the old name of `review:`")
+            && text(&out).contains("`ask` is the old name of the `review` verdict")
+            && text(&out).contains("2 warnings"),
+        "{}",
+        text(&out)
+    );
+
+    let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
+    let shown = text(&out);
+    assert!(
+        shown.contains("-ask:") && shown.contains("+review:"),
+        "{shown}"
+    );
+    assert!(shown.contains("1 rename: `ask` is now `review`"), "{shown}");
+    assert_eq!(policy(&sb), own);
+
+    let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(policy(&sb), own.replace("ask", "review"));
+    intact(&sb);
+    let out = sb.moat(&["policy", "lint"]);
+    assert!(!text(&out).contains("old name"), "{}", text(&out));
+    let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
+    assert!(!text(&out).contains("rename"), "{}", text(&out));
+
+    let both = sb.home.join("both.yaml");
+    std::fs::write(
+        &both,
+        format!("{own}review:\n  - id: x\n    shell: [\"x\"]\n"),
+    )
+    .unwrap();
+    let out = sb.moat(&["policy", "lint", &both.to_string_lossy()]);
+    assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
+    assert!(
+        text(&out).contains("both `ask:` and `review:`"),
+        "{}",
+        text(&out)
+    );
 }
 
 #[test]

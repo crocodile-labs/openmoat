@@ -108,13 +108,13 @@ fn read_roots(policy: &Policy, ctx: &EvalContext) -> Vec<Allowance> {
         kind: Kind::FsRead,
         rule: READ_ROOTS_RULE.to_owned(),
         patterns,
-        message: "the hook decides these reads by the rules (ask by default); OS layers allow \
+        message: "the hook decides these reads by the rules (review by default); OS layers allow \
                   them so commands can run, and deny rules still win"
             .to_owned(),
     }]
 }
 
-/// The engine's `deny → allow → ask → default` for one kind, with `ask` read as deny.
+/// The engine's `deny → allow → review → default` for one kind, with `review` read as deny.
 fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec<Loss>) -> Access {
     let (verdict, default_rule) = policy.defaults.for_kind(kind);
     let default = if verdict == Verdict::Allow {
@@ -123,8 +123,8 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
         Effect::Deny
     };
     let hook = match verdict {
-        Verdict::Ask => Some("the hook asks"),
-        // ADR-025: the agent's own permission flow decides; an OS layer cannot ask it.
+        Verdict::Review => Some("the hook holds it for review"),
+        // ADR-025: the agent's own permission flow decides; an OS layer cannot prompt for it.
         Verdict::Defer => Some("the hook leaves it to the agent"),
         _ => None,
     };
@@ -140,14 +140,14 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
         deny: rules(&policy.deny, kind, ctx),
         allow: rules(&policy.allow, kind, ctx),
     };
-    let asks = rules(&policy.ask, kind, ctx)
+    let reviews = rules(&policy.review, kind, ctx)
         .into_iter()
-        .map(|r| ("the hook asks", r));
+        .map(|r| ("the hook holds it for review", r));
     let defers = rules(&policy.defer, kind, ctx)
         .into_iter()
         .map(|r| ("the hook leaves it to the agent", r));
-    for (hook, rule) in asks.chain(defers) {
-        // Under a deny default an ask or defer rule needs no rule of its own: what
+    for (hook, rule) in reviews.chain(defers) {
+        // Under a deny default a review or defer rule needs no rule of its own: what
         // no allow matches is denied anyway. Under an allow default it must deny,
         // and an OS layer has no tier between allow and the default, so it denies
         // before the allows do: narrower where an allow rule matches too.
@@ -194,7 +194,7 @@ fn rules(groups: &[RuleGroup], kind: Kind, ctx: &EvalContext) -> Vec<Rule> {
 fn decide_only(policy: &Policy) -> Vec<DecideOnly> {
     let groups = || {
         let lists = policy.deny.iter().chain(&policy.allow);
-        lists.chain(&policy.ask).chain(&policy.defer)
+        lists.chain(&policy.review).chain(&policy.defer)
     };
     let mut out: Vec<DecideOnly> = DECIDE_ONLY
         .into_iter()

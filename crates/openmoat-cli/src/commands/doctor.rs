@@ -194,11 +194,11 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
 fn policies(report: &mut Report, home: &Home) -> Option<Policy> {
     let policy = match home.load_policy() {
         Ok(policy) => {
-            let (deny, allow, ask) = policy.rule_count();
+            let (deny, allow, review) = policy.rule_count();
             report.line(
                 Area::Policy,
                 true,
-                format!("policy           lints ({deny} deny, {allow} allow, {ask} ask)"),
+                format!("policy           lints ({deny} deny, {allow} allow, {review} review)"),
             );
             Some(policy)
         }

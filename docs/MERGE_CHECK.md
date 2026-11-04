@@ -47,7 +47,7 @@ With `--base`, the policy files are read as the base revision has them, with git
 from the checked-out files:
 
 - `--policy <path>`, when the path is relative (a file of the repository);
-- the repository's `.moat/policy.yaml`, whose `deny` and `ask` rules are added, as the
+- the repository's `.moat/policy.yaml`, whose `deny` and `review` rules are added, as the
   hook adds them for an untrusted repository ([POLICY.md](POLICY.md) §10).
 
 A change to either file is reported (`diff-policy`) and applies from the next change

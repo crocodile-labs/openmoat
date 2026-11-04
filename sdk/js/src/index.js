@@ -8,7 +8,7 @@
 // No telemetry: nothing here sends anything anywhere.
 //
 // The SDK decides; enforcement is the caller's. A call it denies must not run,
-// and an `ask` must not run until a person approves that exact call.
+// and a `review` must not run until a person approves that exact call.
 
 /** The request protocol version this wrapper speaks (`ABI_VERSION` in Rust). */
 const ABI = 1;

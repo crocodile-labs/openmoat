@@ -25,7 +25,7 @@ fn add(store: &Store, session: &str, tool: &str, sha: &str) -> EventId {
             call_id: Some("t1"),
             tool,
             arguments_sha256: sha,
-            verdict: "ask",
+            verdict: "review",
         })
         .unwrap();
     id
@@ -72,7 +72,7 @@ fn a_decision_is_taken_once_for_its_arguments_and_tool() {
     );
     assert_eq!(
         (taken.host.as_str(), taken.verdict.as_str()),
-        ("claude-code", "ask")
+        ("claude-code", "review")
     );
     let taken = store.take_mcp_ticket("aa", |_| true).unwrap().unwrap();
     assert_eq!(taken.event_id, second);

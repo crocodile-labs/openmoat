@@ -8,8 +8,8 @@
 //! `openmoat run`) the sandbox stops that read whatever the script does. Where
 //! it does not (the agents with only a hook, and Claude Code and Cursor on
 //! native Windows) the hook is the only check, so running a file the same
-//! session wrote asks: [`checked`] turns an `allow` or a `defer` into an `ask`
-//! with [`RULE`], and a host that cannot ask gets a deny naming `openmoat
+//! session wrote needs review: [`checked`] turns an `allow` or a `defer` into a `review`
+//! with [`RULE`], and a host that cannot prompt gets a deny naming `openmoat
 //! allow --last`.
 //!
 //! It only tightens. A file the session did not write (it was there before,
@@ -26,7 +26,7 @@ use crate::home::Home;
 use crate::realpath::FsPathResolver;
 use crate::taint::provenance;
 
-/// The rule id of the ask, in audit rows and the reason the agent sees.
+/// The rule id of the review, in audit rows and the reason the agent sees.
 pub const RULE: &str = "session-written-code";
 
 /// The call being decided, as the check needs it.
@@ -44,7 +44,7 @@ pub struct Call<'a> {
     pub within_run: bool,
 }
 
-/// `decision` for `call`, asking when it allows or defers running a file the
+/// `decision` for `call`, held for review when it allows or defers running a file the
 /// same session wrote and no OS sandbox holds the command. `store` is the
 /// read handle of the audit log; `sandboxed` says whether the host's OS
 /// sandbox is in place ([`crate::protection::os_sandboxed`]), and is asked
@@ -100,14 +100,14 @@ pub fn checked(
         );
         return Ok(decision);
     }
-    Ok(ask(call.host, decision, &written))
+    Ok(review(call.host, decision, &written))
 }
 
 /// Whether a session grant for exactly this call was made after the session
 /// last wrote each of `written`: a grant made before a rewrite approved other
 /// code. Ordered by audit row where the grant recorded one, else by time.
 fn granted_since(call: &Call<'_>, written: &[Written], now_ms: i64) -> Result<bool> {
-    let Some(asked) = approvals::approvable(call.action, Some(call.cwd), call.user_home) else {
+    let Some(reviewed) = approvals::approvable(call.action, Some(call.cwd), call.user_home) else {
         return Ok(false);
     };
     let grants = Grants::load_in(call.home)?;
@@ -120,7 +120,7 @@ fn granted_since(call: &Call<'_>, written: &[Written], now_ms: i64) -> Result<bo
         session_id: call.session,
         project: &project,
     };
-    let Some(grant) = grants.newest(scope, &asked, now_ms) else {
+    let Some(grant) = grants.newest(scope, &reviewed, now_ms) else {
         return Ok(false);
     };
     Ok(written.iter().all(|w| match grant.audit_row {
@@ -129,26 +129,26 @@ fn granted_since(call: &Call<'_>, written: &[Written], now_ms: i64) -> Result<bo
     }))
 }
 
-/// `decision` tightened to the ask, naming the files.
-fn ask(host: Host, decision: Decision, written: &[Written]) -> Decision {
+/// `decision` tightened to the review, naming the files.
+fn review(host: Host, decision: Decision, written: &[Written]) -> Decision {
     let mut files: Vec<&str> = written.iter().map(|w| w.path.as_str()).collect();
     files.sort_unstable();
     files.dedup();
-    let mut asked = Decision::new(Verdict::Ask);
-    asked.rules.push(RULE.to_owned());
-    asked.reasons.push(format!(
+    let mut reviewed = Decision::new(Verdict::Review);
+    reviewed.rules.push(RULE.to_owned());
+    reviewed.reasons.push(format!(
         "runs code this session wrote, with no OS sandbox below the hook: {}",
         files.join(", ")
     ));
-    // Hosts that cannot ask are told how already (`Host::answer`).
-    if host.spec().asks.allow_last_hint {
-        asked.reasons.push(
+    // Hosts that cannot prompt are told how already (`Host::answer`).
+    if host.spec().reviews.allow_last_hint {
+        reviewed.reasons.push(
             "to run it in this session, run `openmoat allow --last` in a terminal".to_owned(),
         );
     }
-    asked.context.extend(decision.reasons);
-    asked.context.extend(decision.context);
-    asked
+    reviewed.context.extend(decision.reasons);
+    reviewed.context.extend(decision.context);
+    reviewed
 }
 
 #[cfg(test)]

@@ -56,7 +56,7 @@ dependency.
   detached signature over the bytes it then copies to `~/.moat/policy.d/packs/`, and
   records the pack's SHA-256 and signer in `~/.moat/packs.json`. A pack has a repository
   policy's shape and merges like a trusted one, under `pack:<name>:` ids: deny rules join
-  the user's, ask rules are tried before the user's allow rules, allow rules come after
+  the user's, review rules are tried before the user's allow rules, allow rules come after
   the user's. `moat policy remove <name>` takes one out.
 - `allowed_signers`, `packs.json` and the installed packs are pinned by the lock, so a
   pack changed after install is drift. Only those three commands add these pins; every

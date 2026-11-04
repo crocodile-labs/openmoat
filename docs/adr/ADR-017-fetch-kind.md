@@ -24,14 +24,14 @@ server does. Codex does not hook web tools, and the Cursor adapter maps no fetch
 - New action kind `fetch` (`Kind::Fetch`, `Action::Fetch { url }`,
   `AtomicAction::Fetch { host }`). Adapters produce it only for a host's own read-only fetch
   tool; today that is Claude Code `WebFetch`. The host comes from the one URL parser
-  (`host::of_url`); a URL without a host is `unparseable` (ask).
-- A fetch is a narrower kind of `net`. For a fetch atom, each list (`deny`, `allow`, `ask`)
+  (`host::of_url`); a URL without a host is `unparseable` (review).
+- A fetch is a narrower kind of `net`. For a fetch atom, each list (`deny`, `allow`, `review`)
   matches on its `net` patterns **or** its `fetch` patterns, and the default is
   `defaults.fetch`, else `defaults.net`, else `"*"`. A `fetch` pattern never matches any
   other network atom. Deny stays absolute and the strictest verdict still wins across atoms
   (ADR-002): a `net` deny rule catches a fetch, and a `fetch` allow cannot lift it.
-- The default policy adds `defaults: fetch: ask` and keeps `net: deny`. `registries` (a
-  `net` allow) keeps allowing both; `local-net` keeps localhost at ask for both.
+- The default policy adds `defaults: fetch: review` and keeps `net: deny`. `registries` (a
+  `net` allow) keeps allowing both; `local-net` keeps localhost at review for both.
 - Schema v1 stays v1: `fetch` is an optional key in rule groups and `defaults`. A policy
   without it behaves exactly as before, because a fetch then takes the `net` rules and
   default. The unreachable-rule lint treats a `net` pattern as covering a `fetch` pattern,
@@ -39,17 +39,17 @@ server does. Codex does not hook web tools, and the Cursor adapter maps no fetch
 
 ## Consequences
 
-- `WebFetch` of an unlisted host asks; the same URL through `curl`, `wget`, `nc`, `Monitor`
+- `WebFetch` of an unlisted host needs review; the same URL through `curl`, `wget`, `nc`, `Monitor`
   or an MCP argument is still denied. Audit lines show `fetch <url>` and rule
   `default.fetch`.
 - Residual risk, accepted because a person approves each fetch:
   - A GET can still exfiltrate data placed in the URL path or query
     (`https://evil.example/?k=<secret>`). The prompt shows the full URL; there is no taint
     tracking yet to escalate a fetch after a secret read.
-  - Fetched content can carry prompt injection into the session. `ask` does not inspect
+  - Fetched content can carry prompt injection into the session. `review` does not inspect
     content; it only keeps a human in the loop on which hosts are read.
   - There is no default `net` deny list, so a fetch of a link-local or internal address
-    (`http://169.254.169.254/`, `http://intranet/`) asks rather than being denied unless the
+    (`http://169.254.169.254/`, `http://intranet/`) needs review rather than being denied unless the
     user adds a `net` deny rule.
 - Users who want the old behaviour set `defaults: fetch: deny`; users who trust a
   documentation site add it under a `fetch` allow without opening it to shell clients.

@@ -46,7 +46,7 @@ struct PolicyState {
     sha256: Option<String>,
     /// Byte for byte the default policy this build ships.
     same_as_shipped_default: bool,
-    /// `deny`, `allow` and `ask` rule groups, after `openmoat allow` rules and packs.
+    /// `deny`, `allow` and `review` rule groups, after `openmoat allow` rules and packs.
     rules: Option<[usize; 3]>,
     error: Option<String>,
 }
@@ -153,21 +153,21 @@ fn window(store: &Store, since_ms: i64, until_ms: i64, host: Option<&str>) -> Re
 
 /// Every rule group id of `policy`.
 fn rule_ids(policy: &Policy) -> BTreeSet<String> {
-    [&policy.deny, &policy.allow, &policy.ask, &policy.defer]
+    [&policy.deny, &policy.allow, &policy.review, &policy.defer]
         .into_iter()
         .flatten()
         .map(|g| g.id.clone())
         .collect()
 }
 
-/// The `deny` and `ask` rule ids of the shipped default policy: the ones the
+/// The `deny` and `review` rule ids of the shipped default policy: the ones the
 /// compliance map names by policy id.
 pub fn default_rule_ids() -> Result<BTreeSet<String>> {
     let policy = Policy::parse(DEFAULT_POLICY)?;
     Ok(policy
         .deny
         .iter()
-        .chain(&policy.ask)
+        .chain(&policy.review)
         .map(|g| g.id.clone())
         .collect())
 }
@@ -187,8 +187,8 @@ fn policy_state(home: &Home, in_force: Result<&Policy, &anyhow::Error>) -> Polic
     }
     match in_force {
         Ok(policy) => {
-            let (deny, allow, ask) = policy.rule_count();
-            state.rules = Some([deny, allow, ask]);
+            let (deny, allow, review) = policy.rule_count();
+            state.rules = Some([deny, allow, review]);
         }
         Err(error) => state.error = Some(format!("{error:#}")),
     }

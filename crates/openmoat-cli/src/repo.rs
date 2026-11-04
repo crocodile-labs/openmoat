@@ -141,8 +141,8 @@ pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
 
 /// `user` with the deny rules of the project's repository policy added, trusted
 /// or not, and nothing else of it: what `openmoat run`'s proxy decides hosts
-/// with. Its allow rules would widen the proxy, and its ask rules would refuse
-/// what the team only wants asked about (the proxy cannot ask). A repository
+/// with. Its allow rules would widen the proxy, and its review rules would refuse
+/// what the team only wants reviewed (the proxy cannot prompt). A repository
 /// policy that exists but cannot be read is an error, as for `guard`.
 pub fn with_repo_denies(home: &Home, ctx: &EvalContext, user: Policy) -> Result<Policy> {
     let Some(root) = &ctx.project else {
@@ -168,9 +168,9 @@ pub fn summary(home: &Home) -> Result<Option<String>> {
     };
     let p = &found.policy;
     let rules = format!(
-        "{} deny, {} ask, {} allow",
+        "{} deny, {} review, {} allow",
         p.deny.len(),
-        p.ask.len(),
+        p.review.len(),
         p.allow.len()
     );
     let (signer, signed_only) = match home.load_policy() {

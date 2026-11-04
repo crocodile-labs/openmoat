@@ -4,9 +4,9 @@
 //! the packages the command line names. A name that is a near miss of a
 //! popular package (`crate::packages`) gives `@package-near-miss <ecosystem>
 //! <name> <popular name>`, which the default policy's `package-near-miss`
-//! group asks for. Any other install gives no atom of its own, so it decides
+//! group holds for review. Any other install gives no atom of its own, so it decides
 //! exactly as the command alone does: an atom for every install would fall to
-//! the catch-all, and under strictest-wins re-ask an install a rule allows.
+//! the catch-all, and under strictest-wins hold for review again an install a rule allows.
 //! Versions, extras and options are taken off; paths, URLs, git sources and
 //! requirement files name no registry package, and an install from the
 //! lockfile or a requirements file (`npm install`, `pip install -r
@@ -36,7 +36,7 @@ pub(super) fn note(argv: &[String], program: &str, sink: &mut Sink) -> Result<()
 /// Each `@package-near-miss <ecosystem> <name> <popular>` atom `command`
 /// gives, as one line, wherever on the line the install is (`cd app && pip
 /// install …`, `sh -c '…'`): what `moat allow --always` adds to its rule so the
-/// install a person approved is not asked about again. Package names are not
+/// install a person approved is not held for review again. Package names are not
 /// paths, so the directories the command runs in do not matter here.
 #[must_use]
 pub fn near_miss_atoms(command: &str) -> Vec<String> {

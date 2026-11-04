@@ -158,7 +158,7 @@ fn an_allowed_directory_with_its_git_left_out_is_still_granted() {
 }
 
 /// A file run later (`runs-later`) in a directory `moat allow --dir` granted is
-/// left open like the `.git`, so the grant is kept; the hook asks.
+/// left open like the `.git`, so the grant is kept; the hook holds it for review.
 #[test]
 fn a_file_run_later_in_an_allowed_directory_keeps_the_grant() {
     let out = generated(

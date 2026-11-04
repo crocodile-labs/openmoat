@@ -168,7 +168,8 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
     p.allows(&ir.fs.write, "allow file-write*");
     let both = "file-read* file-write*";
     if let Some(tmpdir) = &grants.tmpdir {
-        let message = "commands may read and write the temp directory; the hook asks";
+        let message =
+            "commands may read and write the temp directory; the hook holds them for review";
         p.grant(
             write,
             "seatbelt.tmpdir",
@@ -235,7 +236,7 @@ impl Generated {
                 "seatbelt.runs-later",
                 ci.map(|f| (*f).to_owned()).collect(),
                 "commands may write CI configuration, commit-hook managers' files and editor \
-                 tasks (an install runs `husky`); the hook asks before the agent writes one \
+                 tasks (an install runs `husky`); the hook holds the agent's writes of one for review \
                  (`runs-later`)",
             );
         }
@@ -282,7 +283,7 @@ fn rule(out: &mut String, comment: &str, operation: &str, patterns: &[String], c
     let patterns: Vec<String> = patterns.iter().flat_map(|p| alternatives(p)).collect();
     let patterns = &patterns[..];
     let (mut positive, mut excluded) = split(patterns);
-    // CI and commit-hook managers' files run later are the hook's to ask about:
+    // CI and commit-hook managers' files run later are the hook's to review:
     // a deny here would fail installs. An agent's own configuration stays out.
     excluded.retain(|p| !runs_later_exclusion(p) || agent_config_exclusion(p));
     // `dir/**` becomes `(subpath dir)`, which covers `dir` itself.

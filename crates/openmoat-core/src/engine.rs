@@ -1,6 +1,6 @@
 //! The decision engine (docs/POLICY.md §4, docs/ARCHITECTURE.md §4).
 //!
-//! Per atomic action: `deny → allow → ask → defaults`. Across the atomic
+//! Per atomic action: `deny → allow → review → defaults`. Across the atomic
 //! actions of one tool call: strictest verdict wins. Deny rules are absolute;
 //! an allow rule can never override a deny, so "deny by default with holes"
 //! is expressed through per-kind `defaults`, never through a deny rule.
@@ -70,13 +70,13 @@ pub struct CompiledPolicy<'p> {
     policy: Cow<'p, Policy>,
     ctx: EvalContext,
     deny: Vec<CompiledGroup>,
-    repo_ask: Vec<CompiledGroup>,
+    repo_review: Vec<CompiledGroup>,
     allow: Vec<CompiledGroup>,
-    ask: Vec<CompiledGroup>,
+    review: Vec<CompiledGroup>,
     defer: Vec<CompiledGroup>,
-    /// Paths a write to asks once the session read untrusted content (`taint`).
+    /// Paths whose writes need review once the session read untrusted content (`taint`).
     protected: Vec<GlobPattern>,
-    /// The folders deny rules' paths lie in, which reading or writing asks for.
+    /// The folders deny rules' paths lie in, which reading or writing needs review for.
     folders: contents::ProtectedFolders,
 }
 
@@ -93,7 +93,7 @@ struct CompiledGroup {
     /// `host:port` ones ([`crate::host::port_pattern`]), which a host without a
     /// port is matched against: `*:8443` allows port 8443 of every host to the
     /// proxy, and must not also match an IPv6 address whose text ends in
-    /// `:8443`. Deny and ask rules keep them: there they only refuse more.
+    /// `:8443`. Deny and review rules keep them: there they only refuse more.
     bare_hosts: Option<[Vec<GlobPattern>; Kind::ALL.len()]>,
 }
 
@@ -130,9 +130,9 @@ impl<'p> CompiledPolicy<'p> {
         Ok(Self {
             ctx: ctx.clone(),
             deny: compile_list(&policy.deny, false)?,
-            repo_ask: compile_list(&policy.repo_ask, false)?,
+            repo_review: compile_list(&policy.repo_review, false)?,
             allow: compile_list(&policy.allow, true)?,
-            ask: compile_list(&policy.ask, false)?,
+            review: compile_list(&policy.review, false)?,
             defer: compile_list(&policy.defer, false)?,
             protected: taint::compile_protected(&policy, ctx)?,
             folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
@@ -152,8 +152,8 @@ impl<'p> CompiledPolicy<'p> {
         &self.ctx
     }
 
-    /// Evaluate one atomic action: deny → allow → ask → defer → default, with a
-    /// repository policy's ask rules ([`Policy::repo_ask`]) tried before allow.
+    /// Evaluate one atomic action: deny → allow → review → defer → default, with a
+    /// repository policy's review rules ([`Policy::repo_review`]) tried before allow.
     ///
     /// Returns `None` for a whole-pipeline atom that no rule mentions: pipelines
     /// are only there so rules like `curl * | sh` can see across `|`; the
@@ -174,14 +174,14 @@ impl<'p> CompiledPolicy<'p> {
         ))
     }
 
-    /// The first of deny, repository ask, allow, ask and defer whose rules
+    /// The first of deny, repository review, allow, review and defer whose rules
     /// match `action`, with every matching rule; `None` when no rule does.
     fn matched_rules(&self, action: &AtomicAction) -> Option<Decision> {
         for (groups, verdict) in [
             (&self.deny, Verdict::Deny),
-            (&self.repo_ask, Verdict::Ask),
+            (&self.repo_review, Verdict::Review),
             (&self.allow, Verdict::Allow),
-            (&self.ask, Verdict::Ask),
+            (&self.review, Verdict::Review),
             (&self.defer, Verdict::Defer),
         ] {
             let mut hit = Decision::new(verdict);
@@ -270,7 +270,7 @@ impl CompiledGroup {
 impl CompiledPolicy<'_> {
     /// Decide one host action without executable resolution.
     ///
-    /// Unparseable input yields the policy's catch-all verdict (`ask` or
+    /// Unparseable input yields the policy's catch-all verdict (`review` or
     /// `defer`) with the parser's reason, never `allow`.
     #[must_use]
     pub fn decide(&self, action: &Action) -> Decision {
@@ -281,7 +281,7 @@ impl CompiledPolicy<'_> {
     /// extra atom for every path an unquoted glob operand names in the
     /// directories `paths` lists, and for every read or write `paths` resolves
     /// through a symlink; and the reason when part of the action cannot be
-    /// classified or a glob not expanded in full (`ask`).
+    /// classified or a glob not expanded in full (`review`).
     #[must_use]
     pub fn atoms(
         &self,
@@ -365,18 +365,22 @@ impl CompiledPolicy<'_> {
             _ => None,
         });
         // Another spelling of a command (OpenMoat's binary under another name
-        // or case) adds the deny or ask its rules give, and nothing else.
+        // or case) adds the deny or review its rules give, and nothing else.
         let aliased = aliases::aliases(&atoms, &self.ctx, resolver, paths)
             .into_iter()
             .filter_map(|atom| self.matched_rules(&atom))
-            .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Ask));
+            .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Review));
         // A part that could not be parsed, or arguments the adapter did not
-        // search, may name anything: never allow (defer or ask, ADR-025), and let
+        // search, may name anything: never allow (defer or review, ADR-025), and let
         // a deny on the rest still win. A line not read in full, or one past a
-        // classifier limit, asks: a deny in what was not read must not defer.
+        // classifier limit, needs review: a deny in what was not read must not defer.
         let verdict = self.policy.defaults.unclassified();
         let unparsed = unparsed.map(|u| {
-            let verdict = if u.asks { Verdict::Ask } else { verdict };
+            let verdict = if u.needs_review {
+                Verdict::Review
+            } else {
+                verdict
+            };
             unparseable(
                 verdict,
                 format!("could not parse action safely: {}", u.reason),
@@ -392,16 +396,16 @@ impl CompiledPolicy<'_> {
             )),
             _ => None,
         };
-        // What the payload does not show may be anything: at least `ask`.
+        // What the payload does not show may be anything: at least `review`.
         let partial = match action {
             Action::Unchecked { reason, .. } => Some(Decision::single(
-                Verdict::Ask,
+                Verdict::Review,
                 crate::action::UNCHECKED_RULE,
                 reason.clone(),
             )),
             _ => None,
         };
-        // A folder holding paths a deny rule names asks, whatever allows it (ADR-038).
+        // A folder holding paths a deny rule names needs review, whatever allows it (ADR-038).
         let folders = atoms.iter().filter_map(|atom| self.folders.decide(atom));
         atoms
             .iter()

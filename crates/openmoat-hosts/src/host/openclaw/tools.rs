@@ -128,7 +128,7 @@ pub(super) fn map(call: &Call<'_>) -> Result<Option<Action>, HostError> {
             },
         },
         // A job runs later from the Gateway, outside any hook: decided as a
-        // write to the database it is stored in, which `runs-later` asks for.
+        // write to the database it is stored in, which `runs-later` holds for review.
         "cron" => match field("action")?.as_str() {
             action if CRON_READS.contains(&action) => return Ok(None),
             action if CRON_SCHEDULES.contains(&action) => Action::FsWrite {

@@ -38,7 +38,7 @@ From each tool's schema:
 | `write.json`, `edit.json` | file writes; `edit` with a relative path |
 | `tree.json`, `analyze.json` | directory reads |
 | `read_image.json`, `read_image-url.json` | a local image and a downloaded one |
-| `execute_javascript.json` | a Code Mode script, which asks |
+| `execute_javascript.json` | a Code Mode script, which needs review |
 | `delegate.json` | a subagent started in another directory |
 | `list_functions.json` | an ungoverned call with no arguments |
 | `mcp.json`, `todo.json` | extension tools |

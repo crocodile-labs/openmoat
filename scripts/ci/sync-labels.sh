@@ -68,6 +68,6 @@ label "owner task"         5319e7 "Needs the maintainer (credentials, decisions,
 
 # issues: applied by the issue forms
 label bug                d73a4a "Behaves differently from the docs or policy"
-label "false positive"     fbca04 "A safe action denied or asked by the default policy"
+label "false positive"     fbca04 "A safe action denied or held for review by the default policy"
 label enhancement        a2eeef "Feature request"
 label design             c5def5 "Design proposal; may become an ADR"

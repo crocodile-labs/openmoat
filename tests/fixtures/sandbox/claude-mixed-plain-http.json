@@ -6,7 +6,7 @@
   ],
   "losses": [
     "net `secrets.local`: the secret goes to plain-HTTP requests on port 80 only, and Claude Code's broker cannot bind a secret to a port; the secret still works through `openmoat proxy`",
-    "fs.read `default`: Claude Code's file tools refuse reads outside the working directories (permissions.blockReadsOutsideWorkingDirectories) where the hook would ask; `/add-dir` adds a directory"
+    "fs.read `default`: Claude Code's file tools refuse reads outside the working directories (permissions.blockReadsOutsideWorkingDirectories) where the hook would hold the read for review; `/add-dir` adds a directory"
   ],
   "permissions": {
     "blockReadsOutsideWorkingDirectories": true

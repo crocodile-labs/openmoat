@@ -22,7 +22,7 @@
 //! The answer: exit 2 blocks with stderr as the reason, and so does
 //! `{"decision": "block", "reason"}` on stdout whatever the exit code; exit 0
 //! with nothing on stdout or `{"decision": "allow"}` lets the call run. There
-//! is no ask. goose has already put its own approval to the person (its
+//! is no prompt. goose has already put its own approval to the person (its
 //! `GOOSE_MODE`) before it runs the hook, so nothing skips it.
 //!
 //! Anything else (a hook that cannot start, times out, exits non-zero without
@@ -36,7 +36,7 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call, Exit, Place};
 use crate::contract::{
-    Asks, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, Location, McpFile, McpSpec,
+    Reviews, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, Location, McpFile, McpSpec,
     ProjectSettingsSpec, wrong_event,
 };
 use crate::{HookEvent, HookRequest, Host, HostError, Replacement};
@@ -53,7 +53,7 @@ mod tools;
 /// The one event OpenMoat answers.
 pub(crate) const EVENT: &str = "PreToolUse";
 
-/// Seconds goose waits for the hook (its default is 30). goose cannot ask, so
+/// Seconds goose waits for the hook (its default is 30). goose cannot prompt, so
 /// the hook never waits on a person; a timed-out hook blocks the call
 /// (`on_failure: block`). Above [`crate::GUARD_BUDGET_S`], so the guard's own
 /// deny arrives first.
@@ -64,15 +64,15 @@ const _: () = assert!(crate::GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 /// entry sets `on_failure: block` itself ([`hook_file::Goose`]).
 const HOOKS: &[HookSpec] = &[HookSpec::new(EVENT, "", HOOK_TIMEOUT_S, false)];
 
-/// goose has no `ask`: a hook allows or blocks.
+/// goose has no `review`: a hook allows or blocks.
 pub(crate) static SPEC: HostSpec = HostSpec {
     id: "goose",
     display_name: "goose",
-    asks: Asks {
-        on_pre_tool_use: Some("goose hooks cannot ask"),
-        on_no_ask: None,
-        defer_is_ask_on_no_ask: false,
-        ..Asks::BASE
+    reviews: Reviews {
+        on_pre_tool_use: Some("goose hooks cannot prompt"),
+        on_no_prompt: None,
+        defer_is_review_on_no_prompt: false,
+        ..Reviews::BASE
     },
     on_hook_failure: "blocks the call when the hook cannot start (goose runs it with `sh`, on \
          Windows too), times out, gets no payload, exits non-zero without a block or prints \
@@ -82,7 +82,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          `config.yaml`, replaced by a project plugin named `openmoat`, or a `hooks.json` goose \
          cannot read",
     gaps: "no OS sandbox from OpenMoat; Code Mode's `execute_javascript` calls other tools \
-         without the hook, so it asks (a deny in goose); goose loads plugins once, from the \
+         without the hook, so it needs review (a deny in goose); goose loads plugins once, from the \
          directory it starts in: a project's `.agents/plugins/` can add hooks or a plugin named \
          `openmoat` that replaces OpenMoat's, and its `.config/goose/settings.json` can turn \
          OpenMoat's off (`openmoat status` and `doctor` warn about the settings, not the \
@@ -242,7 +242,8 @@ fn string(input: &Value, key: &str) -> Option<String> {
 /// Nothing for `defer` (ADR-025): goose runs the call as it would without
 /// OpenMoat, its own approval already given. `allow` says so; `deny`, and any
 /// verdict that reaches here without being answered, blocks with the reason
-/// goose returns to the model. An `ask` arrives as a `deny` ([`SPEC`]'s asks).
+/// goose returns to the model. A `review` arrives as a `deny` ([`SPEC`]'s reviews); goose's protocol has no
+/// word for it, so no verdict word is ever sent (`wire::host_verdict` is not needed).
 pub(crate) fn render(decision: &Decision) -> String {
     match decision.verdict {
         Verdict::Defer => String::new(),

@@ -1,6 +1,6 @@
 //! OpenCode 2's payloads (`fixtures/v2-*.json`, built from the 2.2.0 source):
 //! its tool names and arguments, `~` expanded as OpenCode 2 expands it, and
-//! asks that reach the person.
+//! reviews that reach the person.
 
 use openmoat_core::{Action, Decision, Verdict};
 use serde_json::{Value, json};
@@ -48,7 +48,7 @@ fn write(path: &str) -> Option<Action> {
 }
 
 #[test]
-fn shell_is_a_shell_command_in_its_workdir_and_asks_can_be_asked() {
+fn shell_is_a_shell_command_in_its_workdir_and_reviews_reach_the_person() {
     let shell = fixture("v2-shell");
     assert_eq!(shell.event, HookEvent::PreToolUse);
     assert_eq!(shell.session_id, "ses_7c41d2a09ffeQrStUvWxYzAbCd");
@@ -210,19 +210,19 @@ fn malformed_payloads_are_errors() {
     );
     assert_eq!(
         Host::OpenCode.event_of(r#"{"hook_event_name": "tool.execute.before"}"#),
-        HookEvent::PreToolUseNoAsk
+        HookEvent::PreToolUseNoPrompt
     );
 }
 
-/// OpenCode 2 can ask: the `ask` reaches the plugin as an ask with OpenMoat's
+/// OpenCode 2 can prompt: the `review` reaches the plugin as a review with OpenMoat's
 /// reason, which it puts to the person through OpenCode's permission prompt.
 #[test]
-fn an_ask_stays_an_ask() {
+fn a_review_stays_a_review() {
     let event = fixture("v2-read").event;
-    let mut ask = Decision::new(Verdict::Ask);
-    ask.rules.push("runs-later".to_owned());
-    let answered = Host::OpenCode.answer(&event, &ask);
-    assert_eq!(answered.verdict, Verdict::Ask);
+    let mut review = Decision::new(Verdict::Review);
+    review.rules.push("runs-later".to_owned());
+    let answered = Host::OpenCode.answer(&event, &review);
+    assert_eq!(answered.verdict, Verdict::Review);
     let reply: Value =
         serde_json::from_str(&Host::OpenCode.render_response(&event, &answered)).unwrap();
     assert_eq!(reply["decision"], "ask");

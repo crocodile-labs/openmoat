@@ -13,7 +13,7 @@ and [`doc.rs`](doc.rs); if they disagree, the code wins.
 
 The plugin sends OpenClaw's `toolName`, `params`, `toolCallId`, `runId`, `toolKind`,
 `sessionId`, `sessionKey` and `agentId`, and adds `cwd`, `configPath`, `stateDir` and
-`platform`. It returns no decision for `allow`, `requireApproval` for `ask` and `block`
+`platform`. It returns no decision for `allow`, `requireApproval` for `review` (which `openmoat guard` sends it as `"ask"`) and `block`
 for `deny`; anything it cannot read blocks the call.
 
 ### Order among plugins
@@ -29,7 +29,7 @@ read at openclaw/openclaw `bd6a4e4`). So the plugin registers two handlers
 ([ADR-041](../../../../../docs/adr/ADR-041-openclaw-decides-first-and-last.md)):
 
 - at the highest priority (`Number.MAX_SAFE_INTEGER`) it runs `moat guard` on the call
-  as it came; a deny blocks before any other plugin runs, and after its ask no later
+  as it came; a deny blocks before any other plugin runs, and after its review no later
   plugin can change what the person approves;
 - at the lowest (`Number.MIN_SAFE_INTEGER`) it returns the parameters it decided on,
   so a change another plugin returned in between is undone and the call that runs is
@@ -59,9 +59,9 @@ CLI's commands), it runs `moat guard --heartbeat --host openclaw`
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
-## Asks
+## Reviews
 
-OpenClaw puts an `ask` to the person itself (`requireApproval`) and blocks when no one can
+OpenClaw puts a `review` to the person itself (`requireApproval`) and blocks when no one can
 answer.
 
 ## Configuration and MCP files
@@ -80,7 +80,7 @@ Credentials: the model sign-in databases (`agents/<id>/agent/openclaw-agent.sqli
 `secrets.json`, the older `auth-profiles.json`, `auth-state.json`, a per-agent
 `auth.json`, `codex-home/` and `mcp-oauth/` in the state directory are
 `agent-credentials`': the agent's own tools may neither read nor write them, under
-`OPENCLAW_STATE_DIR` too. `openclaw mcp add`, `set`, `configure` and `login` ask
+`OPENCLAW_STATE_DIR` too. `openclaw mcp add`, `set`, `configure` and `login` need review
 (`runs-later`). `openmoat status` and `openmoat doctor` warn when the `openclaw` on the
 search path is a version with a published advisory (`advisories.rs`).
 

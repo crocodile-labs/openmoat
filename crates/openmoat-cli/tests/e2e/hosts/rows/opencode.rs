@@ -43,9 +43,9 @@ pub fn row() -> Row {
             )
         }],
         malformed: Some((|_| fixture("opencode/read-malformed.json"), None)),
-        // OpenCode 2's envelope, which can ask; OpenCode 1's deny with the
+        // OpenCode 2's envelope, which can prompt; OpenCode 1's deny with the
         // `openmoat allow --last` hint is in `opencode.rs`.
-        ask: Some(|sb| {
+        review: Some(|sb| {
             let outside = json!({"path": sb.home.join("notes/todo.txt")});
             crate::opencode::payload2(sb, "read", &outside)
         }),

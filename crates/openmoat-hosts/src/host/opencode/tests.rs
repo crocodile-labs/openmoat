@@ -58,8 +58,8 @@ fn bash_is_a_shell_command_in_its_workdir() {
     assert_eq!(bash.session_id, "ses_5b2f0c1e9ffeAbCdEfGhIjKlMn");
     assert_eq!(bash.call_id.as_deref(), Some("toolu_bash_1"));
     assert_eq!(bash.cwd.as_deref(), Some("/p"));
-    // OpenCode 1 cannot ask.
-    assert_eq!(bash.event, HookEvent::PreToolUseNoAsk);
+    // OpenCode 1 cannot prompt.
+    assert_eq!(bash.event, HookEvent::PreToolUseNoPrompt);
     // On Windows the shell may be Git Bash, PowerShell or `cmd`, and a guard
     // built for Windows reads every call as Windows' whatever `platform` says.
     assert!(matches!(
@@ -275,15 +275,15 @@ fn malformed_and_foreign_payloads_are_errors() {
     ));
 }
 
-/// OpenCode 1 cannot ask: an ask is a deny that says how to approve it; a
+/// OpenCode 1 cannot prompt: a review is a deny that says how to approve it; a
 /// defer prints nothing.
 #[test]
-fn an_ask_is_a_deny_and_a_defer_prints_nothing() {
+fn a_review_is_a_deny_and_a_defer_prints_nothing() {
     let event = fixture("read").event;
-    assert_eq!(event, HookEvent::PreToolUseNoAsk);
-    let mut ask = Decision::new(Verdict::Ask);
-    ask.rules.push("runs-later".to_owned());
-    let answered = Host::OpenCode.answer(&event, &ask);
+    assert_eq!(event, HookEvent::PreToolUseNoPrompt);
+    let mut review = Decision::new(Verdict::Review);
+    review.rules.push("runs-later".to_owned());
+    let answered = Host::OpenCode.answer(&event, &review);
     assert_eq!(answered.verdict, Verdict::Deny);
     let reply: Value = serde_json::from_str(&Host::OpenCode.render_response(&event, &answered)).unwrap();
     assert_eq!(reply["decision"], "deny");
@@ -325,8 +325,8 @@ fn the_plugin_names_the_host_and_waits_as_long_as_the_spec_says() {
     assert!(source.contains(r#"export default { id: "openmoat", server, setup };"#));
 }
 
-/// A read of another agent's folder asks under the default policy
-/// (`protected-contents`, ADR-038); OpenCode 1 cannot ask, so it is a deny that
+/// A read of another agent's folder needs review under the default policy
+/// (`protected-contents`, ADR-038); OpenCode 1 cannot prompt, so it is a deny that
 /// names the rule and how to approve it. Through the `read` tool, which is
 /// checked on every OS (OpenCode's shell on Windows is left to OpenCode).
 #[test]
@@ -344,7 +344,7 @@ fn a_copy_of_an_agent_folder_is_denied_with_the_allow_hint() {
     let compiled = openmoat_core::CompiledPolicy::compile(&policy, &ctx).unwrap();
     let request = call("read", json!({"filePath": "/Users/me/.codex"}), json!({})).unwrap();
     let decision = compiled.decide(request.action.as_ref().unwrap());
-    assert_eq!(decision.verdict, Verdict::Ask);
+    assert_eq!(decision.verdict, Verdict::Review);
     assert_eq!(decision.rules, [openmoat_core::HOLDS_PROTECTED_RULE]);
     let event = request.event;
     let answered = Host::OpenCode.answer(&event, &decision);

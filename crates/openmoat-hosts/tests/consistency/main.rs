@@ -149,25 +149,25 @@ const HOME: &str = "/Users/me";
 /// receive that verdict as is.
 fn received(route: Route, expected: Verdict) -> Verdict {
     match (route, expected) {
-        // Codex hooks cannot ask, so an `ask` reaches Codex as a deny that says how
+        // Codex hooks cannot prompt, so a `review` reaches Codex as a deny that says how
         // to approve it (docs/INSTALL.md hosts table, `Host::answer`). Nor does
         // Claude Code in `bypassPermissions` or `dontAsk`, which puts no question
         // to a person; there a `defer` stays Claude Code's own
-        // (`HookEvent::PreToolUseNoAsk`).
-        // OpenCode 1 gives plugins no way to ask either, nor do Cline and goose their hooks.
+        // (`HookEvent::PreToolUseNoPrompt`).
+        // OpenCode 1 gives plugins no way to prompt either, nor do Cline and goose their hooks.
         (
             Route::Codex
             | Route::ClaudeCodeNoPrompt
             | Route::OpenCode
             | Route::Cline
             | Route::Goose,
-            Verdict::Ask,
+            Verdict::Review,
         ) => Verdict::Deny,
-        // Cursor does not enforce `ask` on `preToolUse` or `beforeReadFile`: it is
+        // Cursor does not enforce `"ask"` on `preToolUse` or `beforeReadFile`: it is
         // sent as a deny. Those file tools have no flow of their own for a
-        // `defer` either, so OpenMoat asks itself, which is again a deny there
+        // `defer` either, so OpenMoat holds the call for review itself, which is again a deny there
         // (ADR-025, docs/INSTALL.md hosts table, `Host::decided`).
-        (Route::CursorReadFile | Route::CursorPreTool, Verdict::Ask | Verdict::Defer) => {
+        (Route::CursorReadFile | Route::CursorPreTool, Verdict::Review | Verdict::Defer) => {
             Verdict::Deny
         }
         (_, verdict) => verdict,
@@ -358,7 +358,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
             Ok((hermes("terminal", &json!({ "command": c })), shell(c)))
         }
         // Hermes resolves a relative path against the session's directory,
-        // which its payload does not send, so a relative one asks; its file
+        // which its payload does not send, so a relative one needs review; its file
         // tools are sent the path the intent names, below the project.
         (Route::Hermes, Intent::Read(p)) => Ok((
             hermes("read_file", &json!({ "path": under_cwd(p) })),
@@ -409,7 +409,7 @@ fn repo_root() -> PathBuf {
 /// The conformance fixture `id`, which must be a plain intent.
 fn fixture(id: &str) -> (Intent, Expect) {
     let dir = repo_root().join("tests/conformance");
-    for name in ["attacks.yaml", "ask.yaml", "benign.yaml"] {
+    for name in ["attacks.yaml", "review.yaml", "benign.yaml"] {
         let text = fs::read_to_string(dir.join(name)).expect("conformance file");
         let fixtures: Vec<Fixture> = openmoat_core::yaml::from_str(&text).expect(name);
         let Some(f) = fixtures.into_iter().find(|f| f.id == id) else {
@@ -515,17 +515,17 @@ fn routes_use_the_events_the_translation_assumes() {
         (
             Route::ClaudeCodeNoPrompt,
             &shell,
-            HookEvent::PreToolUseNoAsk,
+            HookEvent::PreToolUseNoPrompt,
         ),
         (Route::Codex, &shell, HookEvent::PreToolUse),
         (Route::CursorShell, &shell, HookEvent::PreToolUse),
-        (Route::CursorReadFile, &read, HookEvent::PreToolUseNoAsk),
-        (Route::CursorPreTool, &read, HookEvent::PreToolUseNoAsk),
+        (Route::CursorReadFile, &read, HookEvent::PreToolUseNoPrompt),
+        (Route::CursorPreTool, &read, HookEvent::PreToolUseNoPrompt),
         (Route::OpenClaw, &shell, HookEvent::PreToolUse),
         (Route::CopilotCli, &read, HookEvent::PreToolUse),
         (Route::Pi, &shell, HookEvent::PreToolUse),
         (Route::GeminiCli, &read, HookEvent::PreToolUse),
-        (Route::OpenCode, &read, HookEvent::PreToolUseNoAsk),
+        (Route::OpenCode, &read, HookEvent::PreToolUseNoPrompt),
         (Route::OpenCode2, &read, HookEvent::PreToolUse),
         (Route::Hermes, &shell, HookEvent::PreToolUse),
         (Route::Cline, &read, HookEvent::PreToolUse),
@@ -557,8 +557,8 @@ rows! {
     token_to_wrong_host_by_shell => "T1-token-in-curl-header",
     token_to_wrong_host_by_fetch => "T12-token-in-fetch-query-to-allowed-host",
     // Writing a CI workflow, which runs later: a file tool, and a shell redirect.
-    write_ci_workflow => "ask-write-github-workflow",
-    write_ci_workflow_by_shell => "ask-echo-into-github-workflow",
+    write_ci_workflow => "review-write-github-workflow",
+    write_ci_workflow_by_shell => "review-echo-into-github-workflow",
     // Installing a near miss of a popular package name.
     package_near_miss_npm => "T5-npm-typosquat",
     package_near_miss_pip => "T5-pip-typosquat",
@@ -569,5 +569,5 @@ rows! {
     plain_project_read => "benign-read-relative",
     // Fetches: a registry is allowed, an unknown host is left to the host.
     allowed_fetch => "benign-webfetch-registry",
-    unknown_host_fetch_defers => "ask-webfetch-unknown-host",
+    unknown_host_fetch_defers => "review-webfetch-unknown-host",
 }

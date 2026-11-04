@@ -41,7 +41,7 @@ pub const ANY_GIT: &str = "**/.git/**";
 /// Files in a project that CI, a commit-hook manager, the editor or the agent
 /// host runs later, outside any sandbox (`runs-later` in the default policy,
 /// which also lists the hosts' home files). `project-fs` and `moat allow --dir`
-/// leave them out so the hook asks; an OS sandbox gets no deny for them, which
+/// leave them out so the hook holds them for review; an OS sandbox gets no deny for them, which
 /// would also make them unreadable (Codex globs) or refuse a whole granted
 /// directory (Cursor).
 pub const RUNS_LATER: &[&str] = &[
@@ -285,25 +285,28 @@ mod tests {
     }
 
     /// [`RUNS_LATER`] and the default policy name the same files: `runs-later`
-    /// asks for each, and `project-fs` leaves each out, so the ask is reached.
+    /// holds each for review, and `project-fs` leaves each out, so the review is reached.
     #[test]
     fn runs_later_matches_the_default_policy() {
         let policy = openmoat_core::Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
         let group = |groups: &[openmoat_core::RuleGroup], id: &str| {
             groups.iter().find(|g| g.id == id).unwrap().fs_write.clone()
         };
-        let asked = group(&policy.ask, "runs-later");
+        let reviewed = group(&policy.review, "runs-later");
         let allowed = group(&policy.allow, "project-fs");
         for file in RUNS_LATER {
-            assert!(asked.iter().any(|p| p == file), "runs-later lacks {file}");
+            assert!(
+                reviewed.iter().any(|p| p == file),
+                "runs-later lacks {file}"
+            );
             let left_out = format!("!${{project}}/{file}");
             assert!(allowed.contains(&left_out), "project-fs lacks {left_out}");
         }
-        let in_projects = asked.iter().filter(|p| p.starts_with("**/")).count();
-        assert_eq!(in_projects, RUNS_LATER.len(), "{asked:?}");
+        let in_projects = reviewed.iter().filter(|p| p.starts_with("**/")).count();
+        assert_eq!(in_projects, RUNS_LATER.len(), "{reviewed:?}");
     }
 
-    /// Every agent configuration file is one `runs-later` asks for; CI files
+    /// Every agent configuration file is one `runs-later` holds for review; CI files
     /// and commit-hook managers' files are not among them.
     #[test]
     fn agent_configuration_is_part_of_runs_later() {

@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you add support for another AI coding agent: adapter, installer, fixtures, tests and docs.
 
-**On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, ask or deny](#answer-allow-defer-ask-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
+**On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, review or deny](#answer-allow-defer-review-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
 Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose are maintained by the project; other agents come from contributors and are
@@ -73,14 +73,14 @@ its users at `openmoat run` ([SANDBOX.md](SANDBOX.md)) instead.
 
 | File | What to add |
 |---|---|
-| `crates/openmoat-hosts/src/host/<module>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `ask`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_file`, the `HookLayout` of the file: `Entries` with a `HookFile` layout, or `Owned`/`Plugin` with an `OwnedFile` from `host/<module>/integration/` for an agent without a command hook, whose plugin runs `openmoat guard --heartbeat --host <id>` as it loads and whose spec says how to tell it loaded, `heartbeat: Some(Heartbeat { program, activity })`, ADR-042, or `Script` with an `OwnedFile` for an agent whose hook is a file of its own that it runs for every call (Cline's `hooks/PreToolUse`: a POSIX shell script, `Syntax::PosixShell`, that answers the agent's block itself when `openmoat` cannot, and needs no heartbeat); the plugin starts with `// @ts-check`, type-checks with `scripts/ci/check-js.sh` and gets a Node harness in `crates/openmoat-hosts/tests/js_plugins/`: a `<module>.mjs` against the stand-ins for the host and the guard in `common.mjs`, which give the stand-in guard 5 s, and a `<module>.rs` module listed in its `main.rs`); `advisories`: the host's published security advisories with their fixed versions (`Advisories`, `host/<module>/advisories.rs`), which `openmoat status` and `openmoat doctor` warn about for the version on the search path (`Advisories::BASE` is none); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpReader` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpNames`), so a call is traced to the definition it came from; a reader or a naming of its own goes in `host/<module>/mcp.rs`; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `reader` (a `SettingsReader`, in `host/<module>/project_settings.rs`, that names what a parsed file sets that turns OpenMoat's hook off or runs a program), and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot ask, `seen`), with unit tests; it ends with `..HostSpec::BASE`, so the fields it does not name take their defaults |
+| `crates/openmoat-hosts/src/host/<module>.rs` | its `SPEC` (`HostSpec`: id, name, the format it sends, what it does with `review`, what it does when the hook fails, what it does not cover, where its configuration lives and the hook entries `openmoat init` writes there (`install`: `InstallSpec` with `hooks`, one `HookSpec` per event with its matcher, timeout and whether it sets Claude Code's `onFailure`, and `hook_file`, the `HookLayout` of the file: `Entries` with a `HookFile` layout, or `Owned`/`Plugin` with an `OwnedFile` from `host/<module>/integration/` for an agent without a command hook, whose plugin runs `openmoat guard --heartbeat --host <id>` as it loads and whose spec says how to tell it loaded, `heartbeat: Some(Heartbeat { program, activity })`, ADR-042, or `Script` with an `OwnedFile` for an agent whose hook is a file of its own that it runs for every call (Cline's `hooks/PreToolUse`: a POSIX shell script, `Syntax::PosixShell`, that answers the agent's block itself when `openmoat` cannot, and needs no heartbeat); the plugin starts with `// @ts-check`, type-checks with `scripts/ci/check-js.sh` and gets a Node harness in `crates/openmoat-hosts/tests/js_plugins/`: a `<module>.mjs` against the stand-ins for the host and the guard in `common.mjs`, which give the stand-in guard 5 s, and a `<module>.rs` module listed in its `main.rs`); `advisories`: the host's published security advisories with their fixed versions (`Advisories`, `host/<module>/advisories.rs`), which `openmoat status` and `openmoat doctor` warn about for the version on the search path (`Advisories::BASE` is none); `mcp`: where it reads MCP server definitions, as an `McpFile` and an `McpReader` for the user file and a list of project files with theirs, and how its hook payload names a server's tools (`McpNames`), so a call is traced to the definition it came from; a reader or a naming of its own goes in `host/<module>/mcp.rs`; `sandbox`: the OS sandbox OpenMoat writes into it, as a `SandboxFormat`, the file beside the hook file and why it is not written on native Windows, `None` when OpenMoat writes none; `project_settings`: the settings files a repository carries that the host merges over the user's, and the directory of hook or extension files it loads from a repository (`hook_dir`), which `openmoat doctor` and `openmoat status` warn about, the `reader` (a `SettingsReader`, in `host/<module>/project_settings.rs`, that names what a parsed file sets that turns OpenMoat's hook off or runs a program), and the person's own settings file (`user_file`), whose setting that turns OpenMoat's hook off makes those commands report the agent as not protected) and its `ADAPTER` (`HostAdapter`: `parse` for the events it handles, payload → `HookRequest`; `render`, `Decision` → response; for `openmoat bench`, `bench_payload`, `read_reply` and, if it cannot prompt, `seen`), with unit tests; it ends with `..HostSpec::BASE`, so the fields it does not name take their defaults |
 | `crates/openmoat-hosts/src/host/<module>/doc.rs` | `DOCS` (`HostDocs`): how OpenMoat is hooked and what protects its calls, as the README says them (`hook only`, or `hook + OS sandbox` when the spec has a `sandbox`), and one `ToolRow` per tool or group of tools the adapter maps, with the ungoverned ones; the spec sets `docs: doc::DOCS`. A test fails when the adapter matches a tool name no row names |
 | `crates/openmoat-hosts/src/host/<module>/HOST.md` | a page for people: what the agent is, its hook events and the tools OpenMoat sees, its configuration and MCP files, what it does when the hook fails, its known gaps and its sandbox, every fact taken from the spec and `doc.rs` |
 | `crates/openmoat-hosts/src/host/<module>/` | the rest of the adapter's code, one file per concern (`tools.rs`, `bench.rs`, `tests.rs`, as `host/pi/` has) |
 | `crates/openmoat-hosts/src/host.rs` | one line in the host list, `Variant => module,` (`Variant => module speaks ClaudeCode,` for a spec-only agent), with a doc comment naming the agent and its hook. It gives the `Host` variant, `Host::EVERY`, `Host::ALL` (when the spec has an `install`), the `--host` id list and the lookups of the spec and adapter |
 | `crates/openmoat-cli/src/mcp/servers.rs`, `crates/openmoat-cli/src/sandbox/` | only if the spec's `McpReader` has a new `McpSyntax` (a parser in `parse` and an editor in `wrap.rs`) or names a new `SandboxFormat` (a backend, and its arms in `sandbox/install.rs` and `commands/{sandbox,uninstall}.rs`) |
-| `crates/openmoat-hosts/src/host/<module>/hook_file.rs` | only if the hook file has a new layout: a `HookFile` impl (`entry`, `is_ours`, `binary`) that the spec names as `HookLayout::Entries`, or as `HookLayout::Yaml` for a YAML file the host rewrites itself (Hermes Agent's `config.yaml`: edited as text, `wire/hook_file/yaml.rs`); the CLI's `install/hook_file.rs` reads, backs up and writes the file. A host that runs a hook only once a file of its own approves the exact command (Hermes Agent's `shell-hooks-allowlist.json`) names a `ConsentFile` as `InstallSpec::consent`: `init` writes the approval, the lock pins it, `status` and `doctor` report a hook it does not approve and `uninstall` takes it out. A host that approves an `ask` without a person where the hook process can tell (an environment variable, a setting in the hook file) names that as `Asks::unseen`, and `guard` sends such an ask as a deny |
-| `crates/openmoat-hosts/src/host/<module>/protect.rs`, `tests/conformance/attacks.yaml` | `PROTECT` (`Protect`): the agent's configuration directory and hook file for `kernel-self` and the files a tainted session's writes ask about, each list with its comment, and `PROCESS` (`ProcessSpec`): its program names and package directories, by which the person-only commands tell they run under it; the spec sets `protect: protect::PROTECT, process: protect::PROCESS`. Then `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` writes the paths into `crates/openmoat-core/policies/default-v1.yaml` and `crates/openmoat-core/src/taint.rs`. Add an attack fixture: it is a policy change (see [Install, uninstall and the lock](#install-uninstall-and-the-lock)). `runs-later` (and the matching `project-fs` exclusions and `RUNS_LATER` in `crates/openmoat-cli/src/sandbox/patterns.rs`) are still edited by hand |
+| `crates/openmoat-hosts/src/host/<module>/hook_file.rs` | only if the hook file has a new layout: a `HookFile` impl (`entry`, `is_ours`, `binary`) that the spec names as `HookLayout::Entries`, or as `HookLayout::Yaml` for a YAML file the host rewrites itself (Hermes Agent's `config.yaml`: edited as text, `wire/hook_file/yaml.rs`); the CLI's `install/hook_file.rs` reads, backs up and writes the file. A host that runs a hook only once a file of its own approves the exact command (Hermes Agent's `shell-hooks-allowlist.json`) names a `ConsentFile` as `InstallSpec::consent`: `init` writes the approval, the lock pins it, `status` and `doctor` report a hook it does not approve and `uninstall` takes it out. A host that approves a `review` without a person where the hook process can tell (an environment variable, a setting in the hook file) names that as `Reviews::unseen`, and `guard` sends such a review as a deny |
+| `crates/openmoat-hosts/src/host/<module>/protect.rs`, `tests/conformance/attacks.yaml` | `PROTECT` (`Protect`): the agent's configuration directory and hook file for `kernel-self` and the files a tainted session's writes need review for, each list with its comment, and `PROCESS` (`ProcessSpec`): its program names and package directories, by which the person-only commands tell they run under it; the spec sets `protect: protect::PROTECT, process: protect::PROCESS`. Then `OPENMOAT_TEST_UPDATE_PROTECT=1 cargo test -p openmoat-hosts --test protect` writes the paths into `crates/openmoat-core/policies/default-v1.yaml` and `crates/openmoat-core/src/taint.rs`. Add an attack fixture: it is a policy change (see [Install, uninstall and the lock](#install-uninstall-and-the-lock)). `runs-later` (and the matching `project-fs` exclusions and `RUNS_LATER` in `crates/openmoat-cli/src/sandbox/patterns.rs`) are still edited by hand |
 | `crates/openmoat-hosts/src/host/<module>/fixtures/` | captured payloads and a `README.md` naming each one's source |
 | `crates/openmoat-cli/tests/e2e/<module>.rs` | end-to-end tests, with a `mod <module>;` line in `crates/openmoat-cli/tests/e2e/main.rs`, and the agent's payload shape in `crates/openmoat-cli/tests/e2e/host_failures.rs` |
 | `README.md`, `docs/INSTALL.md`, `docs/ARCHITECTURE.md` §3, `docs/THREAT_MODEL.md` §5 | generated, not edited: run `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs` to write the "Supported agents" row, the configuration directory row, the tool mapping rows and the known gaps line from the spec; then `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance` for `docs/COVERAGE.md` |
@@ -115,7 +115,7 @@ set `speaks: Some(Host::ClaudeCode)` in its spec and end its host list line with
 | opens a connection that can send data | `Net { url }` | `Monitor` WebSocket |
 | calls an MCP tool | `mcp::action("mcp__<server>__<tool>", input)` | `wire/mcp.rs` finds path and URL arguments |
 | a tool the hook receives for every tool and cannot classify | `wire::unknown::action(host, tool, input)`: `UnknownTool` with every path, URL and command its arguments name; `defaults.tool.unknown` decides the tool itself, `defer` in the default policy | pi, OpenClaw, Gemini CLI, Cursor `preToolUse` |
-| a call the payload shows only in part | `Action::unchecked(action, reason)`: `action` is decided and the call asks (`unchecked`) | GitHub Copilot CLI `write_bash`, Gemini CLI `grep_search` without `dir_path` |
+| a call the payload shows only in part | `Action::unchecked(action, reason)`: `action` is decided and the call needs review (`unchecked`) | GitHub Copilot CLI `write_bash`, Gemini CLI `grep_search` without `dir_path` |
 | anything else | `None`: recorded with rule `ungoverned` and deferred to the host (no output) | `TodoWrite`, `Task` |
 
 Rules the existing adapters follow:
@@ -134,7 +134,7 @@ Rules the existing adapters follow:
 - Keep the agent's session id (`session_or_unknown`) and call id. Grants, session
   taint and `openmoat allow --last` depend on them.
 
-## Answer allow, defer, ask or deny
+## Answer allow, defer, review or deny
 
 `render` writes the response the agent expects; `reason_line` gives the one-line reason
 for the model and the person. On a deny, `guard` also prints the reason on stderr and
@@ -144,18 +144,19 @@ A `defer` (ADR-025) means OpenMoat neither objects nor vouches: the agent's own
 permission flow decides, as it would without OpenMoat. For an agent that runs its own
 flow when a hook gives no answer, render nothing and exit 0, as `wire/pre_tool_use.rs` does.
 An agent with no such answer needs a mapping: Cursor's shell and MCP hooks send it as
-`ask` (`host/cursor.rs`), and for events that cannot prompt, `Asks::defer_is_ask_on_no_ask`
-in its spec makes `Host::decided` (`contract::decided`, driven by the spec's `Asks`) record and answer it as `ask`. Find out from the
+`"ask"` (`host/cursor.rs`), and for events that cannot prompt, `Reviews::defer_is_review_on_no_prompt`
+in its spec makes `Host::decided` (`contract::decided`, driven by the spec's `Reviews`) record and answer it as `review`. Find out from the
 agent's source which applies.
 
-Some agents cannot ask. Codex rejects `ask` and runs the call; the Continue CLI ignores
-it; Cursor accepts `ask` on `preToolUse` but runs the call, and `beforeReadFile` takes
-only allow or deny. For these, the spec's `Asks` says why the agent cannot ask, and
-`Host::answer` (`contract::answer`) turns an `ask` into a `deny` with that reason and the line saying how to
-approve it. The audit log keeps the `ask`, which is what `openmoat` and `openmoat allow --last`
-look for. If the agent cannot ask, fill in `Asks::on_pre_tool_use`. If it can ask only
-on some events, return `HookEvent::PreToolUseNoAsk` for the others and fill in
-`Asks::on_no_ask`, as `host/cursor.rs` does.
+Some agents cannot prompt. Codex rejects `"ask"` and runs the call; the Continue CLI ignores
+it; Cursor accepts `"ask"` on `preToolUse` but runs the call, and `beforeReadFile` takes
+only allow or deny. For these, the spec's `Reviews` says why the agent cannot prompt, and
+`Host::answer` (`contract::answer`) turns a `review` into a `deny` with that reason and the line saying how to
+approve it. The audit log keeps the `review`, which is what `openmoat` and `openmoat allow --last`
+look for. If the agent cannot prompt, fill in `Reviews::on_pre_tool_use`. If it can prompt only
+on some events, return `HookEvent::PreToolUseNoPrompt` for the others and fill in
+`Reviews::on_no_prompt`, as `host/cursor.rs` does. Send OpenMoat's `review` in the agent's
+own word (`"ask"` for most agents) through `wire::host_verdict`, never `Verdict::as_str`.
 Verify from the agent's documentation or source code what it does with each answer.
 When the documentation and the agent disagree, trust the agent, and say which you
 checked in the fixtures `README.md`.
@@ -237,8 +238,8 @@ runs the hook. Test at least:
   second `init` changes nothing;
 - a secret read or exfiltration fixture is denied with exit 2 in the agent's format;
 - a safe call is allowed;
-- an `ask` arrives as the agent needs it (a deny with `openmoat allow --last` if it cannot
-  ask);
+- a `review` arrives as the agent needs it (a deny with `openmoat allow --last` if it cannot
+  prompt);
 - a deferred call is left to the agent (no output and exit 0, or the agent's own
   prompt) and is not denied;
 - malformed arguments are denied;
@@ -255,7 +256,7 @@ runs the hook. Test at least:
   `failClosed`). Add the agent's column to the "When the hook fails" table in
   THREAT_MODEL §5, with sources, and to its spec's `on_hook_failure` and `gaps`; add its payload shape
   to `e2e/host_failures.rs`. Its hook timeout must stay above `GUARD_BUDGET_S`.
-- Say whether the agent can ask, and what the person does when it cannot.
+- Say whether the agent can prompt, and what the person does when it cannot.
 
 ## The pull request
 
@@ -266,5 +267,5 @@ runs the hook. Test at least:
   `type:`, `area: hosts`, `size:` and `risk:` labels (adapters and install are
   `risk: medium`; the default policy is `risk: high`).
 - The body needs **Testing** and **Security impact**. Security impact states which tools
-  are governed, which are not, and what happens on an ask and on a hook failure.
+  are governed, which are not, and what happens on a review and on a hook failure.
 - Run `scripts/ci/quality-gate.sh` before you push.

@@ -23,7 +23,7 @@ impl Policy {
 
     /// This policy with a repository policy (`.moat/policy.yaml`, ADR-022)
     /// merged in. A repository policy can only add restrictions: its deny and
-    /// ask rules always apply, prefixed `repo:`; its allow rules only when the
+    /// review rules always apply, prefixed `repo:`; its allow rules only when the
     /// person `trusted` this exact file.
     pub fn with_repository(&self, yaml: &str, trusted: bool) -> Result<Self, Error> {
         RepoPolicy::parse(yaml)

@@ -22,14 +22,14 @@
 //!   which only adds paths to check;
 //! - a component the matcher cannot compile (an unclosed `[`, which the shell
 //!   takes literally while `*` and `?` beside it still match) is not
-//!   expanded, and the call asks.
+//!   expanded, and the call needs review.
 
 use globset::{GlobBuilder, GlobMatcher};
 
 use crate::paths;
 use crate::realpath::PathResolver;
 
-/// Most paths the globs of one tool call may name; past it the call asks.
+/// Most paths the globs of one tool call may name; past it the call needs review.
 pub const MAX_MATCHES: usize = 256;
 /// Most directories listed for one tool call.
 pub const MAX_LISTINGS: usize = 1024;
@@ -80,7 +80,7 @@ impl<'r> Expansion<'r> {
 
     /// Why the expansion is incomplete, when a bound or a component that does
     /// not compile stopped it: what was not listed may be a secret, so the
-    /// call asks.
+    /// call needs review.
     pub(crate) fn overflow(self) -> Option<String> {
         self.overflow
     }

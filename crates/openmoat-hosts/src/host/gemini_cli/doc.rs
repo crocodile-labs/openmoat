@@ -24,14 +24,14 @@ const TOOLS: &[ToolRow] = &[
     ),
     ToolRow::new(
         "`glob`, `grep_search` (`search_file_content`)",
-        "`dir_path`, else `cwd` and an ask, since Gemini CLI then searches every workspace \
+        "`dir_path`, else `cwd` and a review, since Gemini CLI then searches every workspace \
          directory; for `glob` also the directory `pattern` names before its first wildcard, \
          for `grep_search` where `include_pattern` (`include` before 0.65) climbs to",
         "`FsRead`, `ReadFiles`; `Unchecked`",
     ),
     ToolRow::new(
         "`read_many_files`",
-        "each `include`, up to its first wildcard, and an ask: it reads every workspace directory",
+        "each `include`, up to its first wildcard, and a review: it reads every workspace directory",
         "`Unchecked`",
     ),
     ToolRow::new(

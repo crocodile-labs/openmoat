@@ -6,7 +6,7 @@ fn engine() -> Engine {
 }
 
 #[test]
-fn deny_ask_defer_and_allow_come_with_their_rules() {
+fn deny_review_defer_and_allow_come_with_their_rules() {
     let e = engine();
     let d = e.decide(&Action::shell("cat ~/.ssh/id_rsa"));
     assert_eq!(
@@ -28,7 +28,7 @@ fn deny_ask_defer_and_allow_come_with_their_rules() {
     let partial = e.decide(&Action::unchecked(Action::read("/p/a"), "input not shown"));
     assert_eq!(
         (partial.verdict, partial.rules.as_slice()),
-        (Verdict::Ask, &["unchecked".to_owned()][..])
+        (Verdict::Review, &["unchecked".to_owned()][..])
     );
 }
 

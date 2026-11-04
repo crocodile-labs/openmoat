@@ -10,7 +10,7 @@ Codex, …) and the machine, decides whether each tool call may run, and records
 The operating system enforces the policy only where a host sandbox or `openmoat run`
 applies (ADR-018, `docs/SANDBOX.md`); elsewhere the hook's decision is the only check.
 Correctness and fail-closed behaviour outrank features.
-If a change makes you choose, choose `ask` over `allow` and `deny` over a crash.
+If a change makes you choose, choose `review` over `allow` and `deny` over a crash.
 
 Specs: `docs/ARCHITECTURE.md` (crates, data flow, hooks, self-protection),
 `docs/POLICY.md` (policy semantics), `docs/THREAT_MODEL.md` (threats, known limitations),
@@ -32,7 +32,7 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 | `crates/openmoat-sdk` | the stable SDK façade over the core for other agent products (ADR-046, `docs/SDK.md`) | decides, never enforces; its public shapes are a contract (ADR-046 §4); no I/O outside the `fs` feature; every conformance fixture must decide exactly as the engine does |
 | `crates/openmoat-wasm`, `sdk/js` | the SDK as a WebAssembly module, and the JavaScript package over it | the module imports nothing; no `unsafe` block (only the three `#[expect(unsafe_code)]` exports); no npm dependencies; `scripts/ci/sdk-js.sh` builds and tests it |
 | `crates/openmoat-core/policies/default-v1.yaml` | shipped default policy | every change needs a conformance fixture and a CHANGELOG line |
-| `tests/conformance/{attacks,benign,ask}.yaml` | executable security claims | ids unique, one action each, `rules` must appear in the decision; attacks and asks carry `threat: T1…T12`; `docs/COVERAGE.md` is generated from them (`OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`) and every threat needs an attack |
+| `tests/conformance/{attacks,benign,review}.yaml` | executable security claims | ids unique, one action each, `rules` must appear in the decision; attacks and reviews carry `threat: T1…T12`; `docs/COVERAGE.md` is generated from them (`OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`) and every threat needs an attack |
 | `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads | golden inputs; never include real tokens or personal paths |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy | golden outputs; `OPENMOAT_TEST_UPDATE_GOLDEN=1` rewrites them, review the diff |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `hosts` (one table-driven suite over every host), `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `opencode`, `hermes`, `cline`, `heartbeat`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_files`, `anchor`, `edit`, `escapes`, `home_screen`, `human_only`, `listings`, `mcp`, `mcp_gateway`, `mcp_startup`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `check_diff`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `proxy_ca`, `proxy_session`, `repo_policy`, `secret`, `session_code`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants | isolated `HOME`/`MOAT_HOME`; no network |
@@ -45,9 +45,9 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 
 1. **Deny is absolute.** An allow rule can never override a deny rule. Kind-wide denial is `defaults: {kind: deny}` (ADR-002).
 2. **Strictest wins** across every atomic action one tool call produces.
-3. **Unparseable is never allow.** Anything the lexer or classifier cannot understand gets rule `unparseable`: `ask` when the policy's catch-all (`"*"`) is `ask` or `deny`, `defer` when it is `allow` or `defer` (ADR-025), never `allow`.
+3. **Unparseable is never allow.** Anything the lexer or classifier cannot understand gets rule `unparseable`: `review` when the policy's catch-all (`"*"`) is `review` or `deny`, `defer` when it is `allow` or `defer` (ADR-025), never `allow`.
 4. **Fail closed.** Every error path in `openmoat guard` yields a `deny` response and exit 2 (ADR-004).
-5. **Exit codes:** 0 allow, defer or ok, 1 the agent `openmoat run` started failed, 2 deny, 3 unresolved ask (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
+5. **Exit codes:** 0 allow, defer or ok, 1 the agent `openmoat run` started failed, 2 deny, 3 unresolved review (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
 6. **No secrets in the audit log.** Everything persisted passes `openmoat_audit::redact`.
 7. **Pure core.** `openmoat-core` depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Anything that needs the filesystem (program resolution, hashing) is injected from the CLI through a trait (`ProgramResolver`, `PathResolver`).
 8. **Idempotent install.** `openmoat init` never overwrites a policy, never duplicates a hook, always backs up before editing a host file.
@@ -79,7 +79,7 @@ Claim "done" only after it passes locally. CI runs the same script on macOS (arm
 
 ### Add or change a policy rule
 1. Edit `crates/openmoat-core/policies/default-v1.yaml` (keep rule ids stable; they appear in audit logs and user output).
-2. Add fixtures: at least one attack that must be denied/asked and one benign action that must still be allowed, in `tests/conformance/`.
+2. Add fixtures: at least one attack that must be denied/held for review and one benign action that must still be allowed, in `tests/conformance/`.
 3. If the semantics change (not just a pattern), update `docs/POLICY.md`, and add an ADR if an invariant moves.
 4. Add a `changelog.d/<pr>-<slug>.md` fragment under `### Security` or `### Changed` (CONTRIBUTING "Changelog").
 
@@ -88,13 +88,13 @@ A change to the popular-package lists (`crates/openmoat-core/data/top-packages/*
 ### Teach the classifier something new (new wrapper, interpreter, write-program, builtin)
 The shell classifier is a triage layer, not the security boundary (ADR-013); OS
 enforcement is. Under the parser freeze, a newly found bypass gets an attack fixture
-and the smallest change that makes it `ask`, not a new grammar or an ADR, unless an
+and the smallest change that makes it `review`, not a new grammar or an ADR, unless an
 invariant moves. Since ADR-025 `unparseable` defers under the default policy, so a
-bypass is not closed by making it unparseable: emit an atom a default `ask` or `deny`
+bypass is not closed by making it unparseable: emit an atom a default `review` or `deny`
 rule names (`<program> @<argument>`, `<shell> @stdin`, `@other-home`, a `Net`), or a
 real `fs`/`net` atom a deny rule matches. Never emit an atom no rule names for every
 call of a common command: it falls to the catch-all and, strictest winning, makes an
-allowed command ask. Put the saved time into enforcement (`docs/SANDBOX.md`).
+allowed command need review. Put the saved time into enforcement (`docs/SANDBOX.md`).
 1. Data goes in `crates/openmoat-core/src/shell/tables.rs`; behaviour in `commands.rs` or `tokens.rs`.
 2. Unit test in `shell/tests/` asserting the atomic actions produced.
 3. Conformance fixture showing the end-to-end verdict.

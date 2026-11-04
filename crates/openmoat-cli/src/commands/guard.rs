@@ -137,7 +137,7 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
         return Some(Code::Deny);
     }
     Some(match decision.verdict {
-        Verdict::Allow | Verdict::Defer | Verdict::Ask => Code::Ok,
+        Verdict::Allow | Verdict::Defer | Verdict::Review => Code::Ok,
         // `Deny`, and any verdict added to the core later, blocks the call.
         _ => {
             // Hosts may show hook stderr in a terminal; the reason quotes the call.
@@ -163,7 +163,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
     hangs::enter(Phase::Stdin);
     let (mut request, mut decision) = match read_stdin() {
         Ok(payload) => {
-            // The Continue CLI runs the Claude Code hook but cannot ask.
+            // The Continue CLI runs the Claude Code hook but cannot prompt.
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             event = host.event_of(&payload);
@@ -176,13 +176,13 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
         Err(error) => (None, kernel_error(&error)),
     };
 
-    // Where the host would approve an `ask` no person sees, it is a deny.
+    // Where the host would approve a `review` no person sees, it is a deny.
     if let Some(r) = &mut request
-        && decision.verdict == Verdict::Ask
+        && decision.verdict == Verdict::Review
     {
         unseen::mark(host, r);
     }
-    // Where the host has no flow of its own for `defer`, OpenMoat asks (ADR-025).
+    // Where the host has no flow of its own for `defer`, OpenMoat holds the call for review (ADR-025).
     if let Some(r) = &request {
         decision = host.decided(&r.event, decision);
     }
@@ -208,7 +208,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
     hangs::enter(Phase::Answer);
     let event = request.as_ref().map_or(event, |r| r.event.clone());
     // What the host receives can be stricter than what was decided and recorded
-    // (Codex and the Continue CLI cannot ask, so an `ask` reaches them as a `deny`).
+    // (Codex and the Continue CLI cannot prompt, so a `review` reaches them as a `deny`).
     let decision = host.answer(&event, &decision);
     respond(host, &event, &decision)
 }
@@ -353,17 +353,17 @@ fn evaluate(
         binary: &verified.lock.binary,
     };
     let mut decision = compiled.decide_with(action, &programs, &FsPathResolver);
-    // A grant a person made with `moat allow` turns an `ask` or a `defer` into an
-    // `allow` (Cursor's file tools ask for a defer, so they need it); a deny stays a deny.
-    if matches!(decision.verdict, Verdict::Ask | Verdict::Defer)
-        && let Some(asked) = approvals::approvable(action, Some(&ctx.cwd), &ctx.home)
+    // A grant a person made with `moat allow` turns a `review` or a `defer` into an
+    // `allow` (Cursor's file tools get a review for a defer, so they need it); a deny stays a deny.
+    if matches!(decision.verdict, Verdict::Review | Verdict::Defer)
+        && let Some(reviewed) = approvals::approvable(action, Some(&ctx.cwd), &ctx.home)
         && Grants::load_in(&home)?.matches(
             approvals::Scope {
                 host: host.id(),
                 session_id: &request.session_id,
                 project: &approvals::project_in(&ctx),
             },
-            &asked,
+            &reviewed,
             crate::time::now_ms(),
         )
     {
@@ -376,7 +376,7 @@ fn evaluate(
     // After the grant: taint only tightens, and a grant made before the
     // session read a secret did not approve sending that secret anywhere.
     // A grant made after the session read untrusted content answers that
-    // content's ask for this exact call (taint.rs).
+    // content's review for this exact call (taint.rs).
     hangs::enter(Phase::Taint);
     let store = home.open_audit()?;
     // A long fold saves what it reached as it goes, on a writable handle, so
@@ -480,9 +480,9 @@ fn read_stdin() -> Result<String> {
 /// A tool OpenMoat does not govern is recorded, and the host decides it as if no
 /// hook had answered (ADR-025): an `allow` would skip the host's own prompt and
 /// permission rules for a tool nobody checked. A host whose hooks have no "no
-/// decision" gets an `allow` instead (`Asks::ungoverned`).
+/// decision" gets an `allow` instead (`Reviews::ungoverned`).
 fn ungoverned(host: Host) -> Decision {
-    let mut decision = Decision::new(host.spec().asks.ungoverned);
+    let mut decision = Decision::new(host.spec().reviews.ungoverned);
     decision.rules.push(UNGOVERNED_RULE.to_owned());
     decision
         .reasons

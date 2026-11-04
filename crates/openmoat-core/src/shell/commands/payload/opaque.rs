@@ -2,7 +2,7 @@
 //! reaches files, the network, the environment or other programs, and builds
 //! the name it hands them at run time. `open(os.path.expanduser("~/.s" +
 //! "sh/id_rsa"))` names no path the scan sees, so no rule would match the file
-//! it opens; the payload is opaque, and asks (`opaque-code`).
+//! it opens; the payload is opaque, and needs review (`opaque-code`).
 //!
 //! Code that uses none of those APIs (`print(1+1)`), or hands them only
 //! literal text (`open('pyproject.toml')`, which the scan reads as a path), is

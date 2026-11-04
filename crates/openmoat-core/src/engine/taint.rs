@@ -17,7 +17,7 @@ use crate::repo::REPO_RULE_PREFIX;
 use crate::verdict::{Decision, Verdict};
 
 /// The rule group whose `fs.read` patterns name secret material, wherever the
-/// policy puts it. In the default policy it denies, so only a policy that asks
+/// policy puts it. In the default policy it denies, so only a policy that reviews
 /// for these reads lets one run and taint the session. A repository policy's
 /// group with the same base id (prefixed to `repo:secrets-paths` by
 /// `RepoPolicy::merge`) is also taint-significant.
@@ -32,9 +32,9 @@ pub struct Secret {
     /// What brought it in, for reasons (`read /Users/me/.ssh/id_rsa`).
     pub source: String,
     /// The one host the secret belongs to and may still go to. `None` for a
-    /// file read: it belongs to no host, so every host asks. The secrets
+    /// file read: it belongs to no host, so every host needs review. The secrets
     /// broker (ADR-020) raises a `Secret` with its own host when a brokered
-    /// value is used, so later requests to other hosts ask.
+    /// value is used, so later requests to other hosts need review.
     pub host: Option<String>,
 }
 
@@ -110,8 +110,8 @@ impl CompiledPolicy<'_> {
 
     /// `decision` for `action`, tightened by `taint`: after secret material,
     /// network to any host but the secret's own, and every MCP call, web
-    /// search and unknown tool (the hosts they reach are unknown), asks; after untrusted content, a write to
-    /// a protected path asks. Merging keeps the strictest verdict, so this
+    /// search and unknown tool (the hosts they reach are unknown), needs review; after untrusted content, a write to
+    /// a protected path needs review. Merging keeps the strictest verdict, so this
     /// never loosens a decision.
     #[must_use]
     pub fn with_taint(
@@ -143,7 +143,7 @@ impl CompiledPolicy<'_> {
         let encoded = encoded
             .iter()
             .filter_map(|atom| self.matched_rules(atom))
-            .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Ask));
+            .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Review));
         self.atoms(action, paths)
             .0
             .iter()
@@ -179,14 +179,14 @@ impl CompiledPolicy<'_> {
             }
             _ => return None,
         };
-        Some(Decision::single(Verdict::Ask, TAINT_RULE, reason))
+        Some(Decision::single(Verdict::Review, TAINT_RULE, reason))
     }
 
     fn names_secret(&self, atom: &AtomicAction) -> bool {
         // A repository policy's rules are renamed to `repo:<id>` by `RepoPolicy::merge`,
-        // so match the base id and the prefixed one; `repo_ask` carries the ask rules
+        // so match the base id and the prefixed one; `repo_review` carries the review rules
         // merged in (ADR-022), so iterate it too.
-        [&self.deny, &self.repo_ask, &self.allow, &self.ask]
+        [&self.deny, &self.repo_review, &self.allow, &self.review]
             .into_iter()
             .flatten()
             .any(|g| {

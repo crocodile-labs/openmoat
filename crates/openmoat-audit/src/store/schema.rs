@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 7;
+pub(super) const SCHEMA_VERSION: i64 = 8;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -151,6 +151,57 @@ const V7: &str = "
 ALTER TABLE session_writes ADD COLUMN before_sha256 TEXT;
 ";
 
+/// Version 8: the `review` verdict, called `ask` before (ADR-053). New rows
+/// record `review`; rows already written keep `ask`, which every reader takes
+/// as `review`, because the chain hashes the stored text and rewriting a row
+/// would break it. The tables are rebuilt as for [`V3`], each row keeping its
+/// id, values and hashes, so the chain still verifies.
+const V8: &str = "
+CREATE TABLE events_v8 (
+    id          INTEGER PRIMARY KEY,
+    ts_ms       INTEGER NOT NULL,
+    host        TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    call_id     TEXT,
+    cwd         TEXT,
+    tool        TEXT    NOT NULL,
+    action      TEXT    NOT NULL,
+    verdict     TEXT    NOT NULL CHECK (verdict IN ('allow','defer','review','ask','deny')),
+    rules       TEXT    NOT NULL,
+    reasons     TEXT    NOT NULL,
+    latency_us  INTEGER NOT NULL,
+    prev_hash   TEXT,
+    hash        TEXT
+);
+INSERT INTO events_v8 (id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules,
+                       reasons, latency_us, prev_hash, hash)
+    SELECT id, ts_ms, host, session_id, call_id, cwd, tool, action, verdict, rules,
+           reasons, latency_us, prev_hash, hash FROM events;
+DROP TABLE events;
+ALTER TABLE events_v8 RENAME TO events;
+CREATE INDEX events_session ON events(session_id, id);
+CREATE INDEX events_ts ON events(ts_ms);
+CREATE TABLE mcp_tickets_v8 (
+    id                INTEGER PRIMARY KEY,
+    event_id          INTEGER NOT NULL,
+    ts_ms             INTEGER NOT NULL,
+    host              TEXT    NOT NULL,
+    session_id        TEXT    NOT NULL,
+    call_id           TEXT,
+    tool              TEXT    NOT NULL,
+    arguments_sha256  TEXT    NOT NULL,
+    verdict           TEXT    NOT NULL CHECK (verdict IN ('allow','defer','review','ask'))
+);
+INSERT INTO mcp_tickets_v8 (id, event_id, ts_ms, host, session_id, call_id, tool,
+                            arguments_sha256, verdict)
+    SELECT id, event_id, ts_ms, host, session_id, call_id, tool, arguments_sha256, verdict
+    FROM mcp_tickets;
+DROP TABLE mcp_tickets;
+ALTER TABLE mcp_tickets_v8 RENAME TO mcp_tickets;
+CREATE INDEX mcp_tickets_arguments ON mcp_tickets(arguments_sha256, id);
+CREATE INDEX mcp_tickets_ts ON mcp_tickets(ts_ms);
+";
+
 /// Whether `table` has a column named `column`.
 fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -209,6 +260,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 7 && !has_column(&tx, "session_writes", "before_sha256")? {
         tx.execute_batch(V7)?;
+    }
+    if found < 8 {
+        tx.execute_batch(V8)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

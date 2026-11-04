@@ -44,7 +44,7 @@ pub(super) fn read_reply(exit: &Exit<'_>) -> Answer {
         Some(0) => match exit.document()["permissionDecision"].as_str() {
             Some("allow") => Answer::Allow,
             Some("deny") => Answer::Deny,
-            Some("ask") => Answer::Ask,
+            Some("ask") => Answer::Review,
             _ => Answer::Error,
         },
         _ => Answer::Error,

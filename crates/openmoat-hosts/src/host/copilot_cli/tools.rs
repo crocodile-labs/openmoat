@@ -88,7 +88,7 @@ pub(super) fn action(
 /// names only the session's working directory: a command that leaves its
 /// shell where OpenMoat cannot know ([`openmoat_core::leaves_unknown_directory`])
 /// would have every later command checked against the wrong directory, so it
-/// asks. A `cd` to a written-out directory is checked as a read of it.
+/// needs review. A `cd` to a written-out directory is checked as a read of it.
 fn persistent(command: String) -> Action {
     let moves = openmoat_core::leaves_unknown_directory(&command);
     let shell = Action::Shell { command };
@@ -106,7 +106,7 @@ fn persistent(command: String) -> Action {
 /// Keys typed into a shell or program that is already running: the shell
 /// joins them to what came before (an unfinished line, a continuation, a
 /// program reading its input), so what runs cannot be seen from one call. The
-/// typed text is still checked on its own, and the call asks at least.
+/// typed text is still checked on its own, and the call needs review at least.
 fn typed(input: Action) -> Action {
     Action::unchecked(
         input,

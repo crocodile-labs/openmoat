@@ -23,7 +23,7 @@ fn a_word_that_looks_like_a_host_gets_the_catch_all_not_the_net_default() {
     let p = policy(&format!(
         "version: 1\ndefaults: {{ '*': deny, net: deny }}\n{echo}"
     ));
-    assert_eq!(decided(&p, "echo app.dev").0, Verdict::Ask);
+    assert_eq!(decided(&p, "echo app.dev").0, Verdict::Review);
 }
 
 #[test]
@@ -40,14 +40,14 @@ fn net_rules_still_match_a_word_that_looks_like_a_host() {
 }
 
 #[test]
-fn defer_rules_sit_between_ask_and_the_defaults() {
+fn defer_rules_sit_between_review_and_the_defaults() {
     let p = policy(
-        "version: 1\ndefaults: deny\nask:\n  - id: q\n    shell: ['make deploy']\n\
+        "version: 1\ndefaults: deny\nreview:\n  - id: q\n    shell: ['make deploy']\n\
          defer:\n  - id: d\n    shell: ['make *']\n",
     );
     assert_eq!(
         decided(&p, "make deploy"),
-        (Verdict::Ask, vec!["q".to_owned()])
+        (Verdict::Review, vec!["q".to_owned()])
     );
     assert_eq!(
         decided(&p, "make test"),

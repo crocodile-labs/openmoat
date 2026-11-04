@@ -18,7 +18,7 @@ definition says (`command`, `args`, `env`, `url`, headers). Two threats follow:
 1. **An edited or planted definition.** A postinstall script, a `git pull`, or a cloned
    repository changes a definition or adds one. Claude Code asks once about a project's
    servers, by name, and does not ask again when the command behind that name changes.
-   The hook already asks before the agent itself writes these files (`runs-later`), but
+   The hook already holds the agent's own writes to these files for review (`runs-later`), but
    it never sees writes made by other programs.
 2. **A rug pull through tool descriptions** (#133, deferred by ADR-013). A server that was
    accepted later changes a tool's description or input schema, and the model reads the
@@ -41,7 +41,7 @@ one changed server is no reason to stop every tool.
    (`mcp__<name>__…`, the name as written or as Claude Code spells it) with rule
    `mcp-server-changed`. The reason names what changed and `moat mcp accept <name>`.
    Other servers and other tools are not affected, and lock drift of pinned files still
-   denies everything as before. We chose deny over ask: an ask answered in the host
+   denies everything as before. We chose deny over review: a review answered in the host
    records no accept, so the same question would come back on every call. A removed
    server is reported and holds back nothing. A configuration file that cannot be read
    hides which servers it starts, so it holds back every MCP call of that host.
