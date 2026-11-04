@@ -63,8 +63,10 @@ before it runs and ends Cline's run with `errorMessage` as the reason
   `search_codebase` (`FsRead` of the workspace).
 - `fetch_web_content` (`Fetch` for one URL, `UnknownTool` for several).
 - MCP tools, `<server>__<tool>`: recorded as `mcp__<server>__<tool>` and decided as
-  that MCP tool with every path, URL and command their arguments name, since a
-  plugin's tool may be named the same way.
+  that MCP tool. A browser server's call that only opens a page (`browser_navigate`)
+  is that page's open, as on every other host (ADR-047); any other is checked for every
+  path, URL and command its arguments name, since a plugin's tool may be named the same
+  way.
 - Any other tool (`skills`, subagent and team tools, a plugin's): `UnknownTool`.
 - Ungoverned: `ask_question`, `submit_and_exit`.
 - Not hooked: the provider's own `web_search`, which the model provider runs.

@@ -316,7 +316,7 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | Cline CLI | `apply_patch` | `input`: every file the patch touches | `Patch` |
 | Cline CLI | `search_codebase` | the workspace root | `FsRead` |
 | Cline CLI | `fetch_web_content` | `requests[].url`: one URL; several are checked as an unknown tool's hosts | `Fetch` / `UnknownTool` |
-| Cline CLI | `<server>__<tool>` | recorded as `mcp__<server>__<tool>`; every path, URL and command its arguments name | `McpTool` |
+| Cline CLI | `<server>__<tool>` | recorded as `mcp__<server>__<tool>`; a browser server's call that only opens a page is that page's open (ADR-047), any other is checked for every path, URL and command its arguments name | `McpTool` |
 | Cline CLI | `ask_question`, `submit_and_exit` | — | none: `ungoverned` |
 | Cline CLI | any other tool (`skills`, subagent and team tools, a plugin's) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 | Cline CLI | `web_search` (the provider's) | — | not hooked: the provider runs it |

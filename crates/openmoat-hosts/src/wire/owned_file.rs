@@ -96,9 +96,15 @@ impl OwnedFile {
         if self.source.matches(placeholder).count() != 1 {
             return Err(OwnedFileError(self.name, placeholder));
         }
-        Ok(self
+        let text = self
             .source
-            .replacen(placeholder, &self.syntax.line(binary), 1))
+            .replacen(placeholder, &self.syntax.line(binary), 1);
+        // `sh` reads a `\r` as part of a word: a script checked out with CRLF
+        // endings (Windows) is written with LF, as `.gitattributes` keeps it.
+        Ok(match self.syntax {
+            Syntax::PosixShell => text.replace("\r\n", "\n"),
+            Syntax::JavaScript => text,
+        })
     }
 
     /// Whether `text` is a copy `init` wrote, for this binary or another.

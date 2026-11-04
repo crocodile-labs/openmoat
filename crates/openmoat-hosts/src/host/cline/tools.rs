@@ -65,7 +65,7 @@ pub(super) fn map(call: &Call<'_>) -> Result<Mapped, HostError> {
         // the same, so its arguments are checked as an unknown tool's too.
         name if name.contains("__") => {
             let mcp = format!("mcp__{name}");
-            let action = crate::wire::unknown::mcp(&mcp, call.input)?;
+            let action = mcp_action(&mcp, call.input)?;
             return Ok(Mapped {
                 action: Some(action),
                 tool: Some(mcp),
@@ -74,6 +74,21 @@ pub(super) fn map(call: &Call<'_>) -> Result<Mapped, HostError> {
         _ => crate::wire::unknown::action(crate::Host::Cline, tool, call.input)?,
     };
     Ok(Mapped::action(action))
+}
+
+/// `mcp__<server>__<tool>`: a call that only opens one web page (a browser
+/// server's `navigate`, ADR-047) is that MCP tool's page open, as on every
+/// other host; any other is decided as the MCP tool with everything its
+/// arguments name checked, since a plugin's tool may be named the same way.
+fn mcp_action(name: &str, input: &Value) -> Result<Action, HostError> {
+    match crate::wire::mcp::action(name, input)? {
+        open @ Action::McpTool { .. } if opens_a_page(&open) => Ok(open),
+        _ => crate::wire::unknown::mcp(name, input),
+    }
+}
+
+fn opens_a_page(action: &Action) -> bool {
+    matches!(action, Action::McpTool { opens, .. } if !opens.is_empty())
 }
 
 /// One command of `run_commands`: a shell line, or a program and its

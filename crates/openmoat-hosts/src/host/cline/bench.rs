@@ -7,8 +7,11 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 
-pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
+/// `None` for a shell command on Windows, where Cline runs `run_commands` in
+/// PowerShell and OpenMoat leaves it to Cline.
+pub(super) fn payload(call: &Call, at: &Place<'_>) -> Option<String> {
     let (tool, input) = match call {
+        Call::Shell(_) if cfg!(windows) => return None,
         Call::Shell(command) => ("run_commands".to_owned(), json!({ "commands": [command] })),
         Call::Read(path) => (
             "read_files".to_owned(),
@@ -28,14 +31,14 @@ pub(super) fn payload(call: &Call, at: &Place<'_>) -> String {
         ),
         Call::Mcp { server, tool, args } => (format!("{server}__{tool}"), args.clone()),
     };
-    json!({
+    let payload = json!({
         "hookName": super::EVENT, "clineVersion": "", "timestamp": "2026-11-03T10:00:00.000Z",
         "taskId": at.session, "sessionContext": { "rootSessionId": at.session },
         "workspaceRoots": [at.cwd()], "userId": "me", "agent_id": "agent-1",
         "parent_agent_id": null, "iteration": 1,
         "tool_call": { "id": at.call_id, "name": tool, "input": input },
-    })
-    .to_string()
+    });
+    Some(payload.to_string())
 }
 
 /// Cline reads stdout only: `cancel: true` stops the call; any other object,

@@ -276,6 +276,7 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // fetch), OpenClaw 6, GitHub Copilot CLI 5 (its payload names no MCP
     // server), pi 5 (no fetch), Gemini CLI 6 (5 on Windows, whose PowerShell
     // commands OpenMoat leaves to Gemini CLI), OpenCode 6 (5 on Windows, whose
-    // shell OpenMoat leaves to OpenCode), Hermes Agent 6, Cline 6
-    assert_eq!(checked, 55 - 2 * usize::from(cfg!(windows)));
+    // shell OpenMoat leaves to OpenCode), Hermes Agent 6, Cline 6 (5 on Windows,
+    // whose PowerShell commands OpenMoat leaves to Cline)
+    assert_eq!(checked, 55 - 3 * usize::from(cfg!(windows)));
 }

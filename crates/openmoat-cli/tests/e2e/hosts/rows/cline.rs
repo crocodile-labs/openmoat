@@ -45,8 +45,10 @@ pub fn row() -> Row {
             let secret = sb.home.join(".aws").join("credentials");
             crate::cline::payload(sb, "read_files", &json!({ "files": [{ "path": secret }] }))
         }),
+        // A file in the project: Cline's shell on Windows is PowerShell, left to it.
         benign: Some(|sb| {
-            crate::cline::payload(sb, "run_commands", &json!({ "commands": ["git status"] }))
+            let file = sb.project().join("src").join("main.rs");
+            crate::cline::payload(sb, "read_files", &json!({ "files": [file] }))
         }),
         ungoverned: &[|sb| {
             crate::cline::payload(

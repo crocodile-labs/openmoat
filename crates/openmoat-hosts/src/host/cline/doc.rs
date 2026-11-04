@@ -33,7 +33,9 @@ const TOOLS: &[ToolRow] = &[
     ),
     ToolRow::new(
         "`<server>__<tool>`",
-        "recorded as `mcp__<server>__<tool>`; every path, URL and command its arguments name",
+        "recorded as `mcp__<server>__<tool>`; a browser server's call that only opens a page \
+         is that page's open (ADR-047), any other is checked for every path, URL and command \
+         its arguments name",
         "`McpTool`",
     ),
     ToolRow::new("`ask_question`, `submit_and_exit`", "—", "none: `ungoverned`"),
