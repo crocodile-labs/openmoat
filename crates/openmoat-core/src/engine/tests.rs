@@ -4,6 +4,7 @@ mod fetch;
 mod glob;
 mod installs;
 mod moved_dirs;
+mod personal;
 mod taint;
 mod unparseable;
 
