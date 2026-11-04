@@ -187,7 +187,7 @@ fn paths_with_spaces_and_quotes() {
         finding(&found, ".github/workflows/x\ty.yml").level,
         Level::Review
     );
-    assert_eq!(parse::unquote("\"caf\\303\\251\""), "café");
+    assert_eq!(parse::unquote("\"jos\\303\\251\""), "josé");
 }
 
 #[test]
