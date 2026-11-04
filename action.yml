@@ -1,0 +1,137 @@
+# OpenMoat merge check (docs/MERGE_CHECK.md, ADR-050): runs `openmoat policy check-diff`
+# on a pull request's change and reports, as annotations on the pull request, every file
+# it changes that the policy protects and every added line holding a known token.
+#
+# The release is downloaded from GitHub, its sha256 checked against the release's
+# sha256.sum and its build attestation checked with `gh attestation verify`, as
+# docs/INSTALL.md describes. Inputs reach the scripts only through environment
+# variables, never through `${{ }}` inside a script.
+name: OpenMoat merge check
+description: Flag pull request changes to CI, hooks, build files, agent settings, policy and secrets before merge
+author: Crocodile Labs
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  version:
+    description: OpenMoat release to run, such as 0.14.0 (no leading v).
+    required: true
+  fail-on:
+    description: "Fail the step on `review` (anything found), `deny` (only what the policy denies) or `never`."
+    required: false
+    default: review
+  policy:
+    description: Policy file to check against, as a path in the repository, read as the base revision has it. Empty is the default policy.
+    required: false
+    default: ""
+  base:
+    description: The revision the change is made against.
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  head:
+    description: The revision with the change.
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
+  token:
+    description: Token `gh attestation verify` reads the release's attestation with.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: "`clean`, `review` or `deny`."
+    value: ${{ steps.check.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install OpenMoat
+      id: install
+      shell: bash
+      env:
+        OPENMOAT_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        if ! [[ "$OPENMOAT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+          echo "::error title=OpenMoat::version must be a release number such as 0.14.0, not '$OPENMOAT_VERSION'"
+          exit 1
+        fi
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64) target=x86_64-unknown-linux-musl ;;
+          Linux-ARM64) target=aarch64-unknown-linux-musl ;;
+          macOS-ARM64) target=aarch64-apple-darwin ;;
+          macOS-X64) target=x86_64-apple-darwin ;;
+          *)
+            echo "::error title=OpenMoat::no OpenMoat release for $RUNNER_OS $RUNNER_ARCH; run the check on Linux or macOS"
+            exit 1
+            ;;
+        esac
+        archive="openmoat-$target.tar.xz"
+        dir=$(mktemp -d "$RUNNER_TEMP/openmoat.XXXXXX")
+        cd "$dir"
+        url="https://github.com/crocodile-labs/openmoat/releases/download/v$OPENMOAT_VERSION"
+        curl --proto '=https' --tlsv1.2 -fLsS --retry 3 -o "$archive" "$url/$archive"
+        curl --proto '=https' --tlsv1.2 -fLsS --retry 3 -o sha256.sum "$url/sha256.sum"
+        listed=$(grep -E "[ *]${archive//./\\.}\$" sha256.sum | cut -d' ' -f1 || true)
+        if [ -z "$listed" ]; then
+          echo "::error title=OpenMoat::sha256.sum of v$OPENMOAT_VERSION does not list $archive"
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null; then
+          got=$(sha256sum "$archive" | cut -d' ' -f1)
+        else
+          got=$(shasum -a 256 "$archive" | cut -d' ' -f1)
+        fi
+        if [ "$got" != "$listed" ]; then
+          echo "::error title=OpenMoat::$archive has sha256 $got; sha256.sum lists $listed"
+          exit 1
+        fi
+        gh attestation verify "$archive" --repo crocodile-labs/openmoat
+        tar xJf "$archive" --strip-components=1 "openmoat-$target/openmoat"
+        echo "binary=$dir/openmoat" >> "$GITHUB_OUTPUT"
+        "$dir/openmoat" --version
+
+    - name: Check the change
+      id: check
+      shell: bash
+      env:
+        OPENMOAT: ${{ steps.install.outputs.binary }}
+        OPENMOAT_BASE: ${{ inputs.base }}
+        OPENMOAT_HEAD: ${{ inputs.head }}
+        OPENMOAT_POLICY: ${{ inputs.policy }}
+        OPENMOAT_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -uo pipefail
+        case "$OPENMOAT_FAIL_ON" in
+          review | deny | never) ;;
+          *)
+            echo "::error title=OpenMoat::fail-on must be review, deny or never, not '$OPENMOAT_FAIL_ON'"
+            exit 1
+            ;;
+        esac
+        if [ -z "$OPENMOAT_BASE" ] || [ -z "$OPENMOAT_HEAD" ]; then
+          echo "::error title=OpenMoat::no base or head revision; run on pull_request or set the base and head inputs"
+          exit 1
+        fi
+        args=(policy check-diff "--base=$OPENMOAT_BASE" "--head=$OPENMOAT_HEAD" --format github)
+        if [ -n "$OPENMOAT_POLICY" ]; then
+          args+=("--policy=$OPENMOAT_POLICY")
+        fi
+        "$OPENMOAT" "${args[@]}"
+        code=$?
+        case "$code" in
+          0) result=clean ;;
+          2) result=deny ;;
+          3) result=review ;;
+          *)
+            echo "::error title=OpenMoat::the check could not run (exit $code)"
+            exit 1
+            ;;
+        esac
+        echo "result=$result" >> "$GITHUB_OUTPUT"
+        case "$OPENMOAT_FAIL_ON-$result" in
+          review-review | review-deny | deny-deny) exit 1 ;;
+          *) exit 0 ;;
+        esac

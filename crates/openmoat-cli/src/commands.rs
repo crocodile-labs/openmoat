@@ -79,6 +79,7 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Policy { command } => match command {
             PolicyCommand::Lint(args) => policy::lint(&args),
             PolicyCommand::Check(args) => policy::check(&args),
+            PolicyCommand::CheckDiff(args) => policy::check_diff(&args),
             PolicyCommand::Compile(args) => policy::compile(&args),
             PolicyCommand::Upgrade(args) => policy::upgrade(&args),
             PolicyCommand::Install(args) => policy::install(&args),

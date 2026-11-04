@@ -12,6 +12,11 @@ pub enum PolicyCommand {
     Lint(LintArgs),
     /// Decide one action against a policy and explain the result.
     Check(CheckArgs),
+    /// Check a change before it is merged: every file it adds, edits, deletes or renames that
+    /// the policy protects (CI, git hooks, build and package files, agent settings, OpenMoat's
+    /// own files, secrets), and added lines holding a known token. Exits 0 when nothing is
+    /// found, 2 when the policy denies something, 3 when something needs a person's review.
+    CheckDiff(CheckDiffArgs),
     /// Print what OS layers enforce for a policy: the compiled IR and its losses.
     Compile(CompileArgs),
     /// Add what this release's default policy changed to ~/.moat/policy.yaml, keeping every
@@ -94,6 +99,39 @@ pub struct CheckArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
+}
+
+#[derive(Debug, Args)]
+pub struct CheckDiffArgs {
+    /// The revision the change is made against, such as a pull request's base commit. The
+    /// change is everything from where `--head` left it to `--head`, and the policy files
+    /// are read as this revision has them. Without it, the unified diff on stdin is checked.
+    #[arg(long, value_name = "REV")]
+    pub base: Option<String>,
+
+    /// The revision with the change. Defaults to `HEAD`.
+    #[arg(long, value_name = "REV", requires = "base")]
+    pub head: Option<String>,
+
+    /// Policy to check against. Defaults to the shipped default policy, so every machine
+    /// gives the same answer. With --base, a relative path is a file of the repository,
+    /// read as --base has it. The repository's own `.moat/policy.yaml` at --base adds its
+    /// deny and ask rules.
+    #[arg(long, short)]
+    pub policy: Option<PathBuf>,
+
+    /// Output format. Defaults to `github` when GitHub Actions runs it, `text` otherwise.
+    #[arg(long, value_enum)]
+    pub format: Option<DiffFormat>,
+}
+
+/// `policy check-diff --format`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum DiffFormat {
+    Text,
+    Json,
+    /// GitHub Actions workflow commands (`::error file=…::…`), then the text.
+    Github,
 }
 
 #[derive(Debug, Args)]

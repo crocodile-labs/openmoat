@@ -449,6 +449,13 @@ If your policy says `require_signed_repo_policy: true`, a repository policy is t
 only when a trusted key signed it (`.moat/policy.yaml.sig`): a signed one needs no
 `openmoat trust`, and an unsigned one only tightens, even after `openmoat trust`.
 
+To check pull requests before they are merged, whoever or whatever wrote them, run
+`openmoat policy check-diff` in CI. It reports every changed file the policy protects
+(CI workflows, git hooks, build and package files, agent settings, OpenMoat's own
+files, secret files) and every added line that holds a known token, and reads the policy
+files as the base branch has them. The repository's `action.yml` runs it on GitHub
+([MERGE_CHECK.md](MERGE_CHECK.md)).
+
 ## MCP servers through the gateway
 
 The hook decides every MCP tool call an agent makes. `openmoat mcp proxy` also stands
@@ -673,6 +680,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
 | `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
 | `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
+| `openmoat policy check-diff [--base <rev> [--head <rev>]] [--policy <file>] [--format text\|json\|github]` | check a change before it is merged: from `--base` to `--head` (`HEAD`), or a unified diff on stdin; exit 0 nothing found, 2 something the policy denies, 3 something for review ([MERGE_CHECK.md](MERGE_CHECK.md)) |
 | `openmoat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them); signatures are made with `ssh-keygen -Y sign -n openmoat-pack` for a pack and `-n openmoat-repo-policy` for a repository policy |
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
@@ -684,6 +692,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat guard --host <id>` | the hook entry point; agents call it, you do not. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
 Exit codes: 0 allow or success, 1 the agent `openmoat run` started exited non-zero, 2 deny,
-3 unresolved ask (`policy check`), 64 usage or configuration error. `openmoat guard` never
+3 unresolved ask (`policy check`) or a change for review (`policy check-diff`), 64 usage or
+configuration error. `openmoat guard` never
 exits 64: it denies with exit 2 instead, so a broken hook blocks rather than fails open
 (ADR-004, ADR-015).

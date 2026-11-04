@@ -16,9 +16,11 @@ use crate::integrity;
 use crate::realpath::FsPathResolver;
 use crate::render;
 
+mod diff;
 mod pack;
 mod upgrade;
 
+pub use diff::run as check_diff;
 pub use pack::{install, remove, trust_key};
 pub use upgrade::run as upgrade;
 
