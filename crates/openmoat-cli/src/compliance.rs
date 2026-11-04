@@ -179,14 +179,15 @@ pub const GROUPS: &[Group] = &[
     },
     Group {
         id: "secret-egress",
-        title: "Secrets leaving the machine",
+        title: "Secrets and personal data leaving the machine",
         does: "deny a known token or a brokered secret sent to a host that is not its own, \
-               a push that publishes one, and ask before a session that read secret \
-               material sends data out",
+               a payment card number sent off the machine, a push that publishes a \
+               secret, and ask before a session that read secret material sends data out",
         covers: Covers::Rules(&[
             "token-egress",
             "placeholder-egress",
             "encoded-egress",
+            "card-egress",
             openmoat_core::TAINT_RULE,
             crate::push::SECRET_RULE,
             openmoat_proxy::RULE_SECRET,
