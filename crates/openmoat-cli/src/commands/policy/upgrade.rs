@@ -184,7 +184,12 @@ fn apply(home: &Home, plan: &Plan, out: &mut Deferred) -> Result<()> {
     write_private(&policy_backup, plan.current.as_bytes())?;
     copy_or_remove(&home.policy_base_path(), &base_backup)?;
     write_private(&home.policy_path(), plan.merge.text.as_bytes())?;
-    write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
+    // A policy not made from the default takes only the rename (ADR-053); recording
+    // the assumed 0.3.0 default as its base would make the next upgrade merge the
+    // default into it as if the person had edited every line.
+    if plan.base != Base::Unrelated {
+        write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
+    }
     let binary = crate::install::hook_binary()?;
     crate::install::migrate_hooks::update(home, &binary)?;
     let lock = integrity::repin(home, &binary, HookPins::Keep)?;
