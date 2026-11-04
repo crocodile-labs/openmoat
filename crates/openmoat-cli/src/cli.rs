@@ -9,7 +9,7 @@ mod audit;
 mod mcp;
 mod policy;
 
-pub use audit::{AnchorArgs, AuditCommand, ExportArgs, TeamReportArgs, VerifyArgs};
+pub use audit::{AnchorArgs, AuditCommand, EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
     ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffFormat, InstallArgs, LintArgs,
@@ -80,8 +80,8 @@ pub enum Command {
     /// so it stays up without a person running it (macOS launchd, Linux systemd user unit).
     /// `openmoat proxy` alone runs the proxy; `install`, `uninstall` and `status` manage the service.
     Proxy(ProxyArgs),
-    /// Export the audit log for review elsewhere, verify an export, and anchor the
-    /// log's head outside it.
+    /// Export the audit log for review elsewhere, verify an export, report on it as
+    /// evidence per framework control, and anchor the log's head outside it.
     Audit {
         #[command(subcommand)]
         command: AuditCommand,

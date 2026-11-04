@@ -207,3 +207,62 @@ fn the_doctor_bundle_keeps_no_command_path_or_token() {
     let again = sb.moat_as_person(&["doctor", "--bundle", &file.to_string_lossy()]);
     assert_eq!(again.status.code(), Some(USAGE), "{}", text(&again));
 }
+
+#[test]
+fn evidence_maps_the_window_to_controls_without_secrets() {
+    let sb = seeded();
+    let project = sb.project();
+    sb.guard(
+        "claude-code",
+        &bash_payload("alpha", &project, "cat ~/.ssh/id_rsa"),
+    );
+    let report = json(&sb.moat(&["audit", "evidence", "--format", "json"]));
+    assert_eq!(report["format"], "openmoat-evidence-v1", "{report}");
+    assert_eq!(report["totals"]["decisions"], 4, "{report}");
+    assert_eq!(report["log"]["chain"]["broken"], Value::Null, "{report}");
+    assert_eq!(
+        report["policy"]["same_as_shipped_default"], true,
+        "{report}"
+    );
+    assert_eq!(report["lock"]["present"], true, "{report}");
+    let controls = report["controls"].as_array().unwrap();
+    let llm02 = controls.iter().find(|c| c["id"] == "LLM02:2025").unwrap();
+    assert!(
+        llm02["counts"]["verdicts"]["deny"].as_u64() >= Some(1),
+        "{llm02}"
+    );
+    assert!(
+        llm02["samples"][0]["action"]
+            .as_str()
+            .is_some_and(|a| a.contains("id_rsa")),
+        "{llm02}"
+    );
+    let secrets = report["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["id"] == "secrets")
+        .unwrap();
+    assert_eq!(secrets["rules"][0]["status"], "in-policy", "{secrets}");
+
+    let out = sb.moat(&["audit", "evidence", "--since", "today", "--samples", "5"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let md = stdout(&out);
+    assert!(md.contains("Evidence, not a certification."), "{md}");
+    assert!(
+        md.contains("| LLM02:2025 Sensitive Information Disclosure |"),
+        "{md}"
+    );
+    let raw = stdout(&sb.moat(&["audit", "evidence", "--format", "json"]));
+    assert!(!raw.contains(TOKEN) && !md.contains(TOKEN));
+
+    let bad = sb.moat(&[
+        "audit",
+        "evidence",
+        "--since",
+        "today",
+        "--until",
+        "yesterday",
+    ]);
+    assert_eq!(bad.status.code(), Some(USAGE), "{}", text(&bad));
+}

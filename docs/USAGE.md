@@ -308,6 +308,10 @@ An anchor protects only as well as the place you keep it: push the ref
 (`git -C ~/notes push origin refs/moat/anchors`) or copy the file somewhere else.
 `openmoat doctor` shows when you last anchored.
 
+When a reviewer asks how you control what the agent does, `openmoat audit evidence --since 30d`
+lists, per framework control, the rules that fired and sample events from the log. It is
+evidence, not a certification: [COMPLIANCE.md](COMPLIANCE.md).
+
 ## Change the policy
 
 The common changes are one command each. Each prints the rule it added and the
@@ -673,6 +677,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
 | `openmoat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
 | `openmoat audit report <file>…` | one report over verified exports from several machines |
+| `openmoat audit evidence [--since …] [--until …] [--host …] [--samples N] [--format json]` | evidence for a window per control of OWASP Top 10 for LLM Applications 2025, SOC 2 and ISO/IEC 27001:2022 Annex A: rules that fired, decisions by verdict, redacted samples, the chain head, and the policy, lock and protections now; evidence, not a certification ([COMPLIANCE.md](COMPLIANCE.md)) |
 | `openmoat allow --last [--always]` | turn the last `ask` (a command or a file action) into a session grant (24 h; a command's only in the project it was asked in) or a permanent rule for exactly that command or those paths |
 | `openmoat allow "<command>" --host <id> --session <id> [--project <dir>]` | approve one exact command for one agent session, in the project of the current directory or `--project` |
 | `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |

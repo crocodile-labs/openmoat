@@ -13,8 +13,10 @@ use crate::render;
 use crate::time;
 
 mod anchor;
+mod evidence;
 
 pub use anchor::run as anchor;
+pub use evidence::run as evidence;
 
 pub fn export(args: &ExportArgs) -> Result<Code> {
     let since_ms = time::parse_since(&args.since, time::now_ms())?;
