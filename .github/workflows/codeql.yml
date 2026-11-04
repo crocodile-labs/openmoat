@@ -8,18 +8,28 @@ name: codeql
 #
 # Every language is analysed without a build (`build-mode: none`): nothing from
 # the pull request is compiled or run, so a fork's code never executes here.
+#
+# Not a required check, so a pull request that changes only Markdown or the
+# documentation's images (nothing CodeQL reads) does not start it, and the
+# merge queue does not run it.
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/assets/**"
+      - "changelog.d/**"
   push:
     branches: [main]
   schedule:
     - cron: "17 4 * * 1" # Mondays, before the weekly run
   workflow_dispatch:
 
+# A new push to a pull request cancels the run before; a push to main or a
+# scheduled run is never cancelled (each has its own group).
 concurrency:
-  group: codeql-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
 

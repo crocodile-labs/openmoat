@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Time `openmoat guard` late in a long agent session (#559).
 
-Usage: guard-session-latency.py <path to a release moat binary> [runs]
+Usage: guard-session-latency.py [--base <base moat binary>] <release moat binary> [runs]
 
 Every guard call reads its session from the audit log to work out the
 session's taint (POLICY.md §4.1), so the work grows with the session. This
@@ -12,11 +12,13 @@ audit log's `latency_us`. The earlier calls go through `openmoat guard` like any
 other, so the log is the real, hash-chained one.
 
 The session cache (#570) folds only the calls since the last one, so a long
-session should cost what a short one does. Like guard-latency.py, it warns
-when p95 at 5,000 earlier calls is over the 15 ms budget, and fails above
-three times it when the guard's own time (`latency_us`) is over three times
-it too: a regression back to folding the whole session fails here, while a
-loaded runner's slow process starts only warn.
+session should cost what a short one does. The rows held to the rule in
+latency_ab.py are the last size and the two rows after it: with one binary,
+the guard's own p95 fails above three times the 15 ms budget; with `--base`,
+the binary of the commit the change lands on grows its own session call for
+call beside this one, and the change fails only when its own p95 is clearly
+worse. A regression back to folding the whole session fails either way, while
+a loaded runner's slow process starts do not.
 
 Each size times BATCHES batches of `runs` calls and reports the median of the
 batches' p95. With 50 runs a batch's p95 is its third-slowest call, so three
@@ -31,31 +33,15 @@ state.
 """
 
 import json
-import os
-import sqlite3
 import statistics
-import subprocess
-import sys
-import tempfile
-import time
+
+import latency_ab
 
 SIZES = (100, 1_000, 5_000)
-BUDGET_MS = 15.0
-FAIL_MS = 3 * BUDGET_MS
 SESSION = "long-session"
 PROVENANCE_FILES = 500
 SCRIPTS = 100
 BATCHES = 3
-
-
-def percentile(samples, p):
-    ordered = sorted(samples)
-    return ordered[min(len(ordered) - 1, round(p / 100 * (len(ordered) - 1)))]
-
-
-def batched_p95(batches):
-    """The median of each batch's p95."""
-    return statistics.median(percentile(batch, 95) for batch in batches)
 
 
 def payload(project, command, session=SESSION, tool="Bash", tool_input=None):
@@ -70,109 +56,91 @@ def payload(project, command, session=SESSION, tool="Bash", tool_input=None):
 
 
 def main():
-    if len(sys.argv) not in (2, 3):
-        sys.exit(__doc__)
-    moat = os.path.abspath(sys.argv[1])
-    runs = int(sys.argv[2]) if len(sys.argv) == 3 else 50
-    home = tempfile.mkdtemp(prefix="moat-session-latency-")
-    project = os.path.join(home, "project")
-    os.makedirs(os.path.join(project, ".git"))
-    os.makedirs(os.path.join(project, "tools"))
-    os.makedirs(os.path.join(home, ".claude"))
-    # Only what the e2e tests pass (crates/openmoat-cli/tests/e2e/common.rs), so a
-    # developer's MOAT_HOME or CLAUDE_CONFIG_DIR can never be touched.
-    env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "USERPROFILE": home}
-    if "SYSTEMROOT" in os.environ:
-        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    # Started in the throwaway HOME, not this checkout: `openmoat init` refuses a
-    # binary inside the project of the current directory.
-    subprocess.run([moat, "init"], env=env, cwd=home, check=True, capture_output=True)
-    guard = [moat, "guard", "--host", "claude-code"]
+    binary, runs, base = latency_ab.arguments(__doc__, default_runs=50)
+    guards = latency_ab.install(binary, base, "moat-session-latency-", project_dirs=["tools"])
 
-    def call(command, **kw):
-        started = time.perf_counter()
-        out = subprocess.run(guard, input=payload(project, command, **kw), env=env, cwd=home,
-                             capture_output=True)
-        if out.returncode != 0:
-            sys.exit(f"`{command}`: exit {out.returncode}\n{out.stderr.decode()}")
-        return (time.perf_counter() - started) * 1000
+    def call(g, command, **kw):
+        return g.guard(payload(g.project, command, **kw), 0, f"`{command}`")
+
+    def each(command, **kw):
+        """The same call on every binary, so their sessions grow alike."""
+        for g in guards:
+            call(g, command, **kw)
 
     def timed(command_of):
-        """BATCHES batches of `runs` calls: end to end and `latency_us`, in ms."""
-        wall, own = [], []
+        """BATCHES batches of `runs` calls per binary, taken in turn: end to
+        end and `latency_us`, in ms."""
+        wall = {g.name: [] for g in guards}
+        own = {g.name: [] for g in guards}
         for batch in range(BATCHES):
-            wall.append([call(command_of(batch * runs + i)) for i in range(runs)])
-            with sqlite3.connect(os.path.join(home, ".moat", "audit.db")) as db:
-                own.append([r[0] / 1000 for r in db.execute(
-                    "SELECT latency_us FROM events ORDER BY id DESC LIMIT ?", (runs,))])
+            times = {g.name: [] for g in guards}
+            for i in range(runs):
+                for g in latency_ab.in_turn(guards, i):
+                    times[g.name].append(call(g, command_of(batch * runs + i)))
+            for g in guards:
+                wall[g.name].append(times[g.name])
+                own[g.name].append(g.recorded(runs))
         return wall, own
 
     def report(label, title, wall, own):
-        flat_wall = [ms for batch in wall for ms in batch]
-        flat_own = [ms for batch in own for ms in batch]
-        p95, own_p95 = batched_p95(wall), batched_p95(own)
-        rows.append(f"| {label} | {statistics.median(flat_wall):.1f} / {p95:.1f} | "
-                    f"{statistics.median(flat_own):.1f} / {own_p95:.1f} |")
-        # a comma ends a workflow command property, so the title has none
-        print(f"::notice title=guard latency {title}::"
-              f"end to end median {statistics.median(flat_wall):.1f} ms, p95 {p95:.1f} ms; "
-              f"latency_us median {statistics.median(flat_own):.1f} ms, p95 {own_p95:.1f} ms")
-        return p95, own_p95
+        """One table row per binary; (end to end p95, own p95) per binary."""
+        stats = {}
+        for g in guards:
+            flat_wall = [ms for batch in wall[g.name] for ms in batch]
+            flat_own = [ms for batch in own[g.name] for ms in batch]
+            p95, own_p95 = latency_ab.batched_p95(wall[g.name]), latency_ab.batched_p95(own[g.name])
+            stats[g.name] = (p95, own_p95)
+            rows.append(f"| {label} | {g.name} | {statistics.median(flat_wall):.1f} / {p95:.1f} | "
+                        f"{statistics.median(flat_own):.1f} / {own_p95:.1f} |")
+            # a comma ends a workflow command property, so the title has none
+            print(f"::notice title=guard latency {title} ({g.name})::"
+                  f"end to end median {statistics.median(flat_wall):.1f} ms, p95 {p95:.1f} ms; "
+                  f"latency_us median {statistics.median(flat_own):.1f} ms, p95 {own_p95:.1f} ms")
+        return stats
 
-    rows, earlier, worst, worst_own = [], 0, 0.0, 0.0
+    rows, measured, earlier = [], [], 0
     for size in SIZES:
         while earlier < size:
-            call(f"cat src/file{earlier}.rs")
+            each(f"cat src/file{earlier}.rs")
             earlier += 1
         wall, own = timed(lambda _: "git status")
-        p95, own_p95 = report(f"{size:,}", f"after {size} earlier calls", wall, own)
+        stats = report(f"{size:,}", f"after {size} earlier calls", wall, own)
         if size == SIZES[-1]:
-            worst, worst_own = p95, own_p95
+            measured.append((f"at {size} earlier calls", stats))
 
     # File provenance (ADR-029): another session reads untrusted content and
     # writes PROVENANCE_FILES files; every later read is looked up by path.
     fetch = {"url": "https://crates.io/crates/serde", "prompt": "summarise"}
-    call("fetch", session="tainted-writer", tool="WebFetch", tool_input=fetch)
+    each("fetch", session="tainted-writer", tool="WebFetch", tool_input=fetch)
     for i in range(PROVENANCE_FILES):
-        call(f"echo x > src/gen{i}.rs", session="tainted-writer")
+        each(f"echo x > src/gen{i}.rs", session="tainted-writer")
     wall, own = timed(lambda i: f"cat src/gen{i % PROVENANCE_FILES}.rs")
-    p95, own_p95 = report(f"{SIZES[-1]:,} and {PROVENANCE_FILES} tainted files",
-                          f"with {PROVENANCE_FILES} tainted files", wall, own)
-    worst, worst_own = max(worst, p95), max(worst_own, own_p95)
+    measured.append((f"with {PROVENANCE_FILES} tainted files",
+                     report(f"{SIZES[-1]:,} and {PROVENANCE_FILES} tainted files",
+                            f"with {PROVENANCE_FILES} tainted files", wall, own)))
 
     # Code the session wrote (ADR-039): the long session writes SCRIPTS files and
     # runs them, so each call looks the files up and, where Claude Code's sandbox
     # applies, reads whether it is in place: the slowest path of that check.
     for i in range(SCRIPTS):
-        call(f"echo 'print(1)' > tools/s{i}.py")
+        each(f"echo 'print(1)' > tools/s{i}.py")
     wall, own = timed(lambda i: f"python3 tools/s{i % SCRIPTS}.py")
-    p95, own_p95 = report(f"{SIZES[-1]:,} and {SCRIPTS} scripts it wrote, run",
-                          f"running {SCRIPTS} scripts the session wrote", wall, own)
-    worst, worst_own = max(worst, p95), max(worst_own, own_p95)
+    measured.append((f"running {SCRIPTS} scripts the session wrote",
+                     report(f"{SIZES[-1]:,} and {SCRIPTS} scripts it wrote, run",
+                            f"running {SCRIPTS} scripts the session wrote", wall, own)))
 
     table = "\n".join([
         f"`openmoat guard` late in one session, {BATCHES} batches of {runs} runs per size, "
         "ms (median of all runs / median of the batches' p95)",
         "",
-        "| earlier calls | end to end | latency_us |",
-        "|---|---|---|",
+        "| earlier calls | binary | end to end | latency_us |",
+        "|---|---|---|---|",
         *rows,
     ])
-    print(table)
-    if os.environ.get("GITHUB_STEP_SUMMARY"):
-        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
-            out.write(table + "\n")
-    if worst_own > FAIL_MS:
-        print(f"::error::guard's own p95 at {SIZES[-1]} earlier calls is {worst_own:.1f} ms, "
-              f"over {FAIL_MS:.0f} ms (3x the budget; end to end {worst:.1f} ms)")
-        sys.exit(1)
-    if worst > FAIL_MS:
-        print(f"::warning::guard end to end p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
-              f"over {FAIL_MS:.0f} ms, but its own p95 is {worst_own:.1f} ms: a slow runner, "
-              "not a slower guard")
-    elif worst > BUDGET_MS:
-        print(f"::warning::guard p95 at {SIZES[-1]} earlier calls is {worst:.1f} ms, "
-              f"over the {BUDGET_MS:.0f} ms budget")
+    compare = base is not None and not guards[-1].mismatch
+    verdicts = [latency_ab.judge(what, stats["head"], stats["base"] if compare else None)
+                for what, stats in measured]
+    latency_ab.finish(table, verdicts, guards)
 
 
 if __name__ == "__main__":

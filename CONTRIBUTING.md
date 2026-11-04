@@ -86,12 +86,37 @@ is pushed to `main` directly.
 
 Checks that must pass before merge (enforced by the `main` ruleset; names as shown on the
 PR): `macos-15`, `macos-15-intel`, `ubuntu-latest`, `windows-latest` (the quality gate),
-`openmoat-core builds for wasm32 (no I/O)`, `cargo-deny`, `crates package and build from
-their tarballs`, `workflows (actionlint, zizmor)`, `conventional` (title) and
-`labels · size · risk · body` (pr-standards). The branch must be up to date with `main`
-(strict checks), so rebase before merging. `fuzz (smoke)`, `guard latency` and
-`standard tier` run on every PR but are not required: a fuzz finding or a noisy runner
-should not block an unrelated change, so read them before merging. The PR body must have non-empty **Testing** and
+`standard tier (macos-15)`, `standard tier (ubuntu-latest)`, `guard latency (macos-15)`,
+`guard latency (ubuntu-latest)`, `openmoat-core builds for wasm32 (no I/O)`, `cargo-deny`,
+`crates package and build from their tarballs`, `unused dependencies (cargo-machete)`,
+`semver of the library crates`, `shell scripts and markdown links`, `spelling (typos)`,
+`workflows (actionlint, zizmor)`, `conventional` (title), `labels · size · risk · body`
+(pr-standards) and `review threads answered`. `fuzz (smoke)`, the JavaScript jobs, the
+shell lexer against bash and CodeQL run on every PR but are not required: a fuzz finding
+should not block an unrelated change, so read them before merging.
+
+What a pull request runs (`.github/workflows/ci.yml`, the `changes` job):
+
+- A PR that changes documentation only skips the Rust, JavaScript, fuzz and latency jobs;
+  links, spelling, changelog fragments and release version strings are still checked.
+  `scripts/ci/changes.py` decides: a document that any test, build or script names (the
+  generated tables in `README.md`, `docs/USAGE.md`, `docs/COVERAGE.md`,
+  `docs/EVIDENCE.md`, …) counts as code, so changing it runs everything. A skipped job
+  still reports success under its name, so the required checks are met.
+- The `macos-15-intel` gate, the slowest runner, runs on `main`, in the merge queue and
+  weekly, not on each push to a PR. Label the PR `ci: full` and re-run the workflow to
+  run it there.
+- `guard latency` builds the commit the PR lands on as well and times both on the same
+  runner, in turn; it fails when the PR makes the guard's own p95 clearly slower (more
+  than 1.25 times and 5 ms over), or above 150 ms whatever the base measured
+  (`scripts/ci/latency_ab.py`).
+- A new push cancels the PR's previous run. Runs on `main` and in the merge queue are
+  never cancelled.
+
+PRs merge through the merge queue: the queue tests each PR on top of `main` and the PRs
+queued ahead of it, then merges it, so a PR does not have to be rebased and re-run after
+every other merge. The PR-only checks (title, labels and body, review threads) passed on
+the PR and are skipped in the queue. The PR body must have non-empty **Testing** and
 **Security impact** sections. CODEOWNERS requests the maintainer's review on `risk:
 high` paths; with one maintainer it is not enforced by the ruleset (two-maintainer
 review is a v1.0 item). Squash-merge; the PR title becomes the commit subject and the

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Time `openmoat guard` the way a host runs it: one process per tool call.
 
-Usage: guard-latency.py <path to a release moat binary> [runs]
+Usage: guard-latency.py [--base <base moat binary>] <release moat binary> [runs]
 
 Installs moat into a throwaway HOME, sends an allowed and a denied Claude Code
 payload in BATCHES batches of `runs` calls each, and reports median/p95/p99 end
@@ -11,28 +11,21 @@ p99 are over all the runs; the p95 is the median of the batches' p95, as in
 guard-session-latency.py: a few slow process starts on a busy runner push up
 one batch, rarely two of three, while a real regression slows every batch.
 
-The 15 ms p95 budget is in docs/ARCHITECTURE.md (testing layers). CI runners
-are shared and noisy, so the end to end p95 only warns above the budget, and
-fails above three times it only when the guard's own time (`latency_us`, from
-its start to before the audit write) is over three times it too: the check
+The 15 ms p95 budget is in docs/ARCHITECTURE.md (testing layers). The check
 exists to catch a regression of the kind fixed in #95 (a policy load that
 grew to most of the budget), which shows in the guard's own time, not to
-measure the laptop number or the runner's process start. The same binary
-measured 20-33 ms end to end on pushes to main and 46-50 ms in pull request
-runs of the same day; its own time stayed under half the limit in both.
+measure the laptop number or the runner's process start. How a run passes is
+in latency_ab.py: with one binary, the guard's own p95 fails above three times
+the budget; with `--base`, the binary of the commit the change lands on is
+timed in turn on the same runner, and the change fails only when its own p95
+is clearly worse than that.
 """
 
 import json
-import os
-import sqlite3
 import statistics
-import subprocess
-import sys
-import tempfile
-import time
 
-BUDGET_MS = 15.0
-FAIL_MS = 3 * BUDGET_MS
+import latency_ab
+
 WARMUP = 10
 BATCHES = 3
 CASES = [
@@ -41,94 +34,64 @@ CASES = [
 ]
 
 
-def percentile(samples, p):
-    ordered = sorted(samples)
-    return ordered[min(len(ordered) - 1, round(p / 100 * (len(ordered) - 1)))]
-
-
 def summary(batches):
     """Median and p99 of all the runs, and the median of each batch's p95."""
     flat = [ms for batch in batches for ms in batch]
     return {
         "median": statistics.median(flat),
-        "p95": statistics.median(percentile(batch, 95) for batch in batches),
-        "p99": percentile(flat, 99),
+        "p95": latency_ab.batched_p95(batches),
+        "p99": latency_ab.percentile(flat, 99),
     }
 
 
 def main():
-    if len(sys.argv) not in (2, 3):
-        sys.exit(__doc__)
-    moat = os.path.abspath(sys.argv[1])
-    runs = int(sys.argv[2]) if len(sys.argv) == 3 else 100
-    home = tempfile.mkdtemp(prefix="moat-latency-")
-    project = os.path.join(home, "project")
-    os.makedirs(os.path.join(project, ".git"))
-    os.makedirs(os.path.join(home, ".claude"))
-    # Only what the e2e tests pass (crates/openmoat-cli/tests/e2e/common.rs), so a
-    # developer's MOAT_HOME or CLAUDE_CONFIG_DIR can never be touched.
-    env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "USERPROFILE": home}
-    if "SYSTEMROOT" in os.environ:
-        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    # Started in the throwaway HOME, not this checkout: `openmoat init` refuses a
-    # binary inside the project of the current directory.
-    subprocess.run([moat, "init"], env=env, cwd=home, check=True, capture_output=True)
+    binary, runs, base = latency_ab.arguments(__doc__, default_runs=100)
+    guards = latency_ab.install(binary, base, "moat-latency-")
 
-    rows, worst, worst_own = [], 0.0, 0.0
+    rows, measured = [], []
     for name, command, code in CASES:
-        payload = json.dumps({
+        # Each binary is sent its own project, inside its own HOME.
+        payload = {g.name: json.dumps({
             "session_id": "latency",
-            "cwd": project,
+            "cwd": g.project,
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": command},
             "tool_use_id": "t",
-        }).encode()
-        guard = [moat, "guard", "--host", "claude-code"]
-        wall, recorded = [], []
+        }).encode() for g in guards}
+        wall = {g.name: [] for g in guards}
+        own = {g.name: [] for g in guards}
         for batch in range(BATCHES):
-            times = []
+            times = {g.name: [] for g in guards}
             for i in range((WARMUP if batch == 0 else 0) + runs):
-                started = time.perf_counter()
-                out = subprocess.run(guard, input=payload, env=env, cwd=home,
-                                     capture_output=True)
-                elapsed = (time.perf_counter() - started) * 1000
-                if out.returncode != code:
-                    sys.exit(f"{name}: exit {out.returncode}, expected {code}\n"
-                             f"{out.stderr.decode()}")
-                if batch > 0 or i >= WARMUP:
-                    times.append(elapsed)
-            wall.append(times)
-            with sqlite3.connect(os.path.join(home, ".moat", "audit.db")) as db:
-                recorded.append([r[0] / 1000 for r in db.execute(
-                    "SELECT latency_us FROM events ORDER BY id DESC LIMIT ?", (runs,))])
-        e2e, own = summary(wall), summary(recorded)
-        worst = max(worst, e2e["p95"])
-        worst_own = max(worst_own, own["p95"])
-        rows.append(f"| {name} | " + " | ".join(
-            f"{s['median']:.1f} / {s['p95']:.1f} / {s['p99']:.1f}" for s in (e2e, own)) + " |")
+                for g in latency_ab.in_turn(guards, i):
+                    elapsed = g.guard(payload[g.name], code, name)
+                    if batch > 0 or i >= WARMUP:
+                        times[g.name].append(elapsed)
+            for g in guards:
+                wall[g.name].append(times[g.name])
+                own[g.name].append(g.recorded(runs))
+        stats = {}
+        for g in guards:
+            e2e, mine = summary(wall[g.name]), summary(own[g.name])
+            stats[g.name] = (e2e["p95"], mine["p95"])
+            rows.append(f"| {name} | {g.name} | " + " | ".join(
+                f"{s['median']:.1f} / {s['p95']:.1f} / {s['p99']:.1f}" for s in (e2e, mine))
+                + " |")
+        measured.append((f"for `{name}`", stats))
 
     table = "\n".join([
         f"`openmoat guard`, {BATCHES} batches of {runs} runs per case, ms "
         "(median / median of the batches' p95 / p99)",
         "",
-        "| case | end to end | latency_us |",
-        "|---|---|---|",
+        "| case | binary | end to end | latency_us |",
+        "|---|---|---|---|",
         *rows,
     ])
-    print(table)
-    if os.environ.get("GITHUB_STEP_SUMMARY"):
-        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
-            out.write(table + "\n")
-    if worst_own > FAIL_MS:
-        print(f"::error::guard's own p95 {worst_own:.1f} ms is over {FAIL_MS:.0f} ms "
-              f"(3x the budget; end to end {worst:.1f} ms)")
-        sys.exit(1)
-    if worst > FAIL_MS:
-        print(f"::warning::guard end to end p95 {worst:.1f} ms is over {FAIL_MS:.0f} ms, "
-              f"but its own p95 is {worst_own:.1f} ms: a slow runner, not a slower guard")
-    elif worst > BUDGET_MS:
-        print(f"::warning::guard p95 {worst:.1f} ms is over the {BUDGET_MS:.0f} ms budget")
+    compare = base is not None and not guards[-1].mismatch
+    verdicts = [latency_ab.judge(what, stats["head"], stats["base"] if compare else None)
+                for what, stats in measured]
+    latency_ab.finish(table, verdicts, guards)
 
 
 if __name__ == "__main__":
