@@ -14,7 +14,8 @@
 //! The core finds the pushes (`openmoat_core::Push`); reading the repository
 //! is I/O, so it is done here, with git, read-only, within [`BUDGET`].
 
-mod git;
+// `openmoat policy check-diff` reads a change with the same read-only runner.
+pub mod git;
 mod range;
 mod scan;
 

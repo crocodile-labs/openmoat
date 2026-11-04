@@ -1,4 +1,5 @@
-//! Running git read-only in the repository a push runs in, within a deadline.
+//! Running git read-only in the repository a push runs in (and the one
+//! `openmoat policy check-diff` checks), within a deadline.
 //!
 //! Every command only reads: `rev-parse`, `config --get`, `for-each-ref` and
 //! `log`. Options that let a repository's config start a program while git

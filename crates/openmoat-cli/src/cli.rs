@@ -12,8 +12,8 @@ mod policy;
 pub use audit::{AnchorArgs, AuditCommand, ExportArgs, TeamReportArgs, VerifyArgs};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
-    ActionKind, CheckArgs, CompileArgs, InstallArgs, LintArgs, PolicyCommand, RemoveArgs,
-    TrustKeyArgs, UpgradeArgs,
+    ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffFormat, InstallArgs, LintArgs,
+    PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,
 };
 
 #[derive(Debug, Parser)]

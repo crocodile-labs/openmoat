@@ -15,6 +15,7 @@ mod audit;
 #[cfg(unix)]
 mod binary_path;
 mod canary;
+mod check_diff;
 mod cli;
 mod cline;
 mod closed_pipe;
