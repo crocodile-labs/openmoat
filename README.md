@@ -66,7 +66,7 @@ covers what they leave out:
 ## Features
 
 - **One policy for every agent.** Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
-  pi, Gemini CLI, OpenCode, Hermes Agent and the Cline CLI, set up with `openmoat init`.
+  pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, set up with `openmoat init`.
 - **Secrets stay put.** SSH keys, `.env`, cloud credentials and each agent's own login
   files are denied, however the path is spelt.
 - **Nothing sensitive leaves.** Known tokens sent to the wrong host, encoded secrets after
