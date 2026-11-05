@@ -33,6 +33,34 @@ fn core_forbids_unsafe() {
     );
 }
 
+/// Invariant 4 (fail closed): `openmoat guard` turns a panic into a deny with
+/// `catch_unwind`, which only works while panics unwind. `panic = "abort"` in a
+/// profile would make every panic exit 134, which no host blocks on (they block
+/// on exit 2), so the call would run. No profile of the workspace may set it.
+#[test]
+fn no_profile_aborts_on_panic() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+    let text = fs::read_to_string(root).unwrap();
+    let mut profile = None;
+    for line in text.lines().map(str::trim) {
+        if line.starts_with('[') {
+            profile = line.strip_prefix("[profile.").map(str::to_owned);
+            continue;
+        }
+        let key = line.split('=').next().unwrap_or_default().trim();
+        if let Some(name) = &profile {
+            assert!(
+                key != "panic",
+                "[profile.{name} sets `panic`: the guard's panic-to-deny needs unwinding"
+            );
+        }
+    }
+    assert!(
+        text.contains("[profile.release]"),
+        "the release profile was found"
+    );
+}
+
 /// AGENTS §4: the most lines of code a source file may have. It is a ratchet:
 /// lower it when every file fits, never raise it.
 const MAX_CODE_LINES: usize = 500;

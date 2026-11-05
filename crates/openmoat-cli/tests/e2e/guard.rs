@@ -251,6 +251,43 @@ fn guard_fails_closed() {
     }
 }
 
+/// Invariant 4: a panic while deciding is a deny with exit 2 in the format of
+/// the payload's event, never exit 101, which hosts take as a failed hook and
+/// run the call. Debug builds panic where `MOAT_TEST_PANIC_AT` says.
+#[test]
+fn a_panic_while_deciding_denies() {
+    let sb = Sandbox::bare(&[".claude"]);
+    let panicking = |payload: &str| {
+        let mut cmd = sb.command();
+        cmd.args(["guard", "--host", "claude-code"])
+            .env("MOAT_TEST_PANIC_AT", "evaluate");
+        let out = crate::common::output(&mut cmd, Some(payload));
+        assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+        assert!(
+            stderr(&out).contains("MOAT_TEST_PANIC_AT=evaluate"),
+            "{}",
+            stderr(&out)
+        );
+        out
+    };
+    for tool in ["read.json", "bash.json"] {
+        let out = panicking(&fixture(&format!("claude-code/{tool}")));
+        let answer = decision(&out);
+        assert_eq!(answer["permissionDecision"], "deny", "{answer}");
+        let reason = answer["permissionDecisionReason"].as_str().unwrap();
+        assert!(reason.contains("kernel-error"), "{reason}");
+        assert!(reason.contains("internal error while deciding"), "{reason}");
+    }
+    // A settings change is blocked in its own event's format, not a tool call's.
+    let out = panicking(&fixture("claude-code/config-change.json"));
+    let answer: Value = serde_json::from_str(stdout(&out).trim()).unwrap();
+    assert_eq!(answer["decision"], "block", "{answer}");
+    assert!(
+        answer["reason"].as_str().unwrap().contains("kernel-error"),
+        "{answer}"
+    );
+}
+
 /// Hosts block a call only on exit 2, so a hook command line `guard` cannot
 /// parse (an unknown host, a missing or misspelt flag after an upgrade) must
 /// deny rather than fail open with the usage code (ADR-015).

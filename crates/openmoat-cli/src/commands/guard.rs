@@ -54,13 +54,37 @@ pub fn run(args: &GuardArgs) -> Code {
     deny_when_over_budget(host, Instant::now());
     // A panic would exit 101, which Claude Code treats as a non-blocking hook
     // failure, i.e. the call would proceed. Turn it into an explicit deny.
+    // The deny is in the format of the payload's event once it was read.
     let by_run = args.relayed;
-    if let Ok(code) = std::panic::catch_unwind(|| decide_and_respond(host, by_run)) {
+    let mut event = HookEvent::default();
+    let decided = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        decide_and_respond(host, by_run, &mut event)
+    }));
+    if let Ok(code) = decided {
         return code;
     }
     let decision = kernel_error(&anyhow::Error::msg("internal error while deciding"));
-    respond(host, &HookEvent::default(), &decision)
+    respond(host, &event, &decision)
 }
+
+/// Debug builds panic where this variable names, so the end-to-end tests can
+/// show that a panic on the guard path is a deny (invariant 4). Release builds
+/// do not read it.
+#[cfg(debug_assertions)]
+const PANIC_ENV: &str = "MOAT_TEST_PANIC_AT";
+
+/// Panic when [`PANIC_ENV`] names `point`: the test of invariant 4 needs a
+/// real panic on the guard path.
+#[cfg(debug_assertions)]
+fn fault_point(point: &str) {
+    assert!(
+        std::env::var(PANIC_ENV).ok().is_none_or(|v| v != point),
+        "{PANIC_ENV}={point}"
+    );
+}
+
+#[cfg(not(debug_assertions))]
+fn fault_point(_: &str) {}
 
 /// `--heartbeat`: the plugin's report that its host loaded it (ADR-042). No
 /// call is decided and nothing is read from stdin or written to stdout; a
@@ -147,8 +171,10 @@ fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Cod
     })
 }
 
-/// `by_run`: `openmoat run` relayed the call from inside its sandbox (`--relayed`).
-fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
+/// `by_run`: `openmoat run` relayed the call from inside its sandbox
+/// (`--relayed`). `event` is set to the payload's event as soon as it is read,
+/// for the deny [`run`] answers with if this panics.
+fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) -> Code {
     let started = Instant::now();
     // Inside `moat run` the sandbox holds no OpenMoat home: the run decides (ADR-028).
     if let Some(endpoint) = guard_relay::configured(&|var| std::env::var(var).ok()) {
@@ -158,7 +184,6 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
     // The event is read separately so a payload that cannot be parsed is still
     // refused in the format its hook expects.
     let mut host = installed_for;
-    let mut event = HookEvent::default();
     let mut out = Evaluated::default();
     hangs::enter(Phase::Stdin);
     let (mut request, mut decision) = match read_stdin() {
@@ -166,7 +191,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
             // The Continue CLI runs the Claude Code hook but cannot prompt.
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
-            event = host.event_of(&payload);
+            *event = host.event_of(&payload);
             // Inside `openmoat run` only when the run relayed it and named its session.
             let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
             let within_run = by_run && taint::run::run_session(run.as_deref()).is_some();
@@ -206,7 +231,9 @@ fn decide_and_respond(installed_for: Host, by_run: bool) -> Code {
     }
 
     hangs::enter(Phase::Answer);
-    let event = request.as_ref().map_or(event, |r| r.event.clone());
+    let event = request
+        .as_ref()
+        .map_or_else(|| event.clone(), |r| r.event.clone());
     // What the host receives can be stricter than what was decided and recorded
     // (Codex and the Continue CLI cannot prompt, so a `review` reaches them as a `deny`).
     let decision = host.answer(&event, &decision);
@@ -296,6 +323,7 @@ fn evaluate(
     let request = host
         .parse_request(payload)
         .context("parsing hook payload")?;
+    fault_point("evaluate");
     let home = Home::locate()?;
 
     if let HookEvent::SessionStart { .. } = &request.event {
