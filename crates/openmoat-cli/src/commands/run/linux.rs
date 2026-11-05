@@ -205,6 +205,10 @@ pub fn port_only_network() -> Option<String> {
 /// Whether the system's bubblewrap, which `moat run --isolate` needs, is
 /// installed; always `Some` here, where plain `moat run`'s Landlock rules
 /// cannot deny a path inside the project (`tier.rs`).
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every platform: `None` where plain `moat run` has no gap to name"
+)]
 pub fn bubblewrap() -> Option<bool> {
     Some(isolate::system_bwrap().is_some())
 }
