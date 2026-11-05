@@ -36,7 +36,7 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 | `crates/openmoat-hosts/src/host/<module>/fixtures/*.json` | real host payloads | golden inputs; never include real tokens or personal paths |
 | `tests/fixtures/sandbox/` | generated host sandbox settings and Seatbelt profile for the default policy | golden outputs; `OPENMOAT_TEST_UPDATE_GOLDEN=1` rewrites them, review the diff |
 | `crates/*/tests/` | end-to-end tests of the binary in one target, `crates/openmoat-cli/tests/e2e/` (one module per area: `cli`, `alias`, `guard`, `cursor`, `cursor_sandbox`, `hosts` (one table-driven suite over every host), `copilot_cli`, `openclaw`, `pi`, `gemini_cli`, `opencode`, `hermes`, `cline`, `heartbeat`, `config_change`, `lock`, `lock_settings`, `install_path`, `binary_path`, `approvals`, `allow`, `allow_files`, `anchor`, `edit`, `escapes`, `home_screen`, `human_only`, `listings`, `mcp`, `mcp_gateway`, `mcp_startup`, `packs`, `permission_mode`, `protection`, `provenance`, `audit`, `export`, `team`, `paths`, `policy_upgrade`, `push`, `replay_report`, `moatbench`, `sandbox`, `sandbox_sync`, `sandbox_exec`, `run`, `run_guard`, `uninstall`, `canary`, `check_diff`, `closed_pipe`, `codex`, `continue_cli`, `host_failures`, `proxy`, `proxy_ca`, `proxy_session`, `repo_policy`, `secret`, `session_code`, `taint`, `taint_answered`, `trust`, and `differential/` for the same scenarios against every enforcement layer, with `differential/agents` running the pinned real Claude Code against a scripted fake API; `common` is the shared helper module), conformance runner, the README and USAGE verdict tables checked against the default policy (`openmoat-core/tests/doc_tables.rs`), architecture invariants | isolated `HOME`/`MOAT_HOME`; no network |
-| `docs/` | INSTALL, USAGE, SANDBOX, POLICY, SDK, COMPLIANCE, ARCHITECTURE, THREAT_MODEL, ROADMAP, ADDING_AN_AGENT, MOATBENCH, DEMO, CHALLENGE, COVERAGE and EVIDENCE (generated), `adr/` | describe what the code does today; ADRs are immutable, superseded by new ADRs |
+| `docs/` | INSTALL, USAGE, SANDBOX, POLICY, SDK, MERGE_CHECK, COMPLIANCE, ARCHITECTURE, THREAT_MODEL, ROADMAP, ADDING_AN_AGENT, MOATBENCH, DEMO, CHALLENGE, COVERAGE and EVIDENCE (generated), `adr/` | describe what the code does today; ADRs are not edited but superseded by new ADRs, except to rename a term a later ADR renames (ADR-053 §7) |
 | `scripts/ci/quality-gate.sh` | the one gate | CI and the pre-push hook run exactly this |
 | `scripts/ci/latest-agents.sh`, `scripts/ci/clean-install.sh` | CI's weekly checks of each agent's latest release and of the published install paths, each in a throwaway home it refuses to leave | CI only: they install unreviewed agent releases and run `openmoat init` and `uninstall`; never run them on a machine whose agents you use |
 | `scripts/smoke-real-agents.sh` | a person's check of the protections with their own Claude Code, Codex, Gemini CLI, pi and GitHub Copilot CLI in a throwaway home (CONTRIBUTING "Testing with real agents") | refuses to run when a variable points at a real config directory; makes real, billed model calls; never in CI |
@@ -47,7 +47,7 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 2. **Strictest wins** across every atomic action one tool call produces.
 3. **Unparseable is never allow.** Anything the lexer or classifier cannot understand gets rule `unparseable`: `review` when the policy's catch-all (`"*"`) is `review` or `deny`, `defer` when it is `allow` or `defer` (ADR-025), never `allow`.
 4. **Fail closed.** Every error path in `openmoat guard` yields a `deny` response and exit 2 (ADR-004).
-5. **Exit codes:** 0 allow, defer or ok, 1 the agent `openmoat run` started failed, 2 deny, 3 unresolved review (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
+5. **Exit codes:** 0 allow, defer or ok, 1 the program `openmoat run` or `openmoat mcp proxy` started failed (or `mcp proxy` refused to start it), 2 deny, 3 unresolved review (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
 6. **No secrets in the audit log.** Everything persisted passes `openmoat_audit::redact`.
 7. **Pure core.** `openmoat-core` depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Anything that needs the filesystem (program resolution, hashing) is injected from the CLI through a trait (`ProgramResolver`, `PathResolver`).
 8. **Idempotent install.** `openmoat init` never overwrites a policy, never duplicates a hook, always backs up before editing a host file.
@@ -118,7 +118,7 @@ The full guide is `docs/ADDING_AN_AGENT.md`.
 Bump `SCHEMA_VERSION` in `store/schema.rs`, add a migration step, keep `Event` deserialisation backward compatible, and add a test that opens a database written by the previous version.
 
 ### Record a decision
-Copy the shape of `docs/adr/ADR-004-exit-code-contract.md`: Context, Decision, Consequences, status, date. Number sequentially. Never edit an accepted ADR; supersede it.
+Copy the shape of `docs/adr/ADR-004-exit-code-contract.md`: Context, Decision, Consequences, status, date. Number sequentially. Never edit an accepted ADR; supersede it. The one exception is a term a later ADR renames, which that ADR may rename in every ADR's text (ADR-053 §7).
 
 ## 6. Definition of done
 

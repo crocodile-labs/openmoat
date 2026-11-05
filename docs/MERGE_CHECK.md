@@ -1,5 +1,10 @@
 # Checking pull requests before merge
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you want to check pull requests before merge.
+
 OpenMoat's hook checks each tool call while an agent works. A pull request is the
 other place to check: it holds what an agent wrote (on a machine with OpenMoat or
 without it) and what people and forks wrote. `openmoat policy check-diff` reads a
@@ -143,7 +148,7 @@ repository policy). The check adds:
 | `diff-policy` | review | the change edits a policy file the check read |
 | `diff-link` | review | the change makes a symbolic link; where it points is checked too |
 | `diff-submodule` | review | the change moves a submodule to another commit |
-| `diff-unchecked` | review | the diff is larger than 64 MiB: its paths were checked, its added lines were not searched |
+| `diff-unchecked` | review | with `--base`, the diff is larger than 64 MiB: its paths were checked, its added lines were not searched (a diff on stdin that large is an error, exit 64) |
 
 ## How paths are compared
 

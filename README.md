@@ -107,6 +107,8 @@ brew install crocodile-labs/tap/openmoat     # macOS and Linux
 openmoat init                                # asks before it sets up each agent it finds
 ```
 
+On Windows, use the PowerShell installer in [docs/INSTALL.md](docs/INSTALL.md#install).
+
 `openmoat init` writes the default policy to `~/.moat/policy.yaml`, lists the agents it
 finds and asks `Protect Claude Code (~/.claude)? [Y/n/d]` for each one, after a one-line
 summary of each file it would change (`d` shows the full diff). It backs up every file
@@ -324,8 +326,8 @@ engine.decide({ type: "shell", command: "cat ~/.ssh/id_rsa" }); // { verdict: "d
 
 The SDK decides and your code enforces: a denied call must not run, and a `review` waits for
 a person. It is not a sandbox. Both packages decide every conformance fixture exactly as
-`openmoat guard` does. Both are on `main` and reach crates.io and npm with the next
-release. Guide, examples and the stability contract: [docs/SDK.md](docs/SDK.md).
+`openmoat guard` does. `openmoat-sdk` is on crates.io; `@openmoat/sdk` is built from
+`sdk/js` (`scripts/ci/sdk-js.sh`) until it is published to npm. Guide, examples and the stability contract: [docs/SDK.md](docs/SDK.md).
 
 ## Everyday use
 
@@ -341,8 +343,10 @@ Run these in your own terminal. Agents are denied all of them.
 | See what the agents did | `openmoat show` · `openmoat report --since today` |
 | Keep a token from the agent | `openmoat secret add gh` |
 | Change any rule (checked, and the diff shown before it applies) | `openmoat edit` |
+| See and undo what you allowed | `openmoat allowed` |
 | Get new default rules after an upgrade | `openmoat policy upgrade` |
 | Check a pull request's changes before merge | `openmoat policy check-diff --base main` |
+| Evidence for an auditor | `openmoat audit evidence --since 30d` |
 | Share rules with your team | commit `.moat/policy.yaml`, then `openmoat trust` |
 | Install a team's signed policy pack | `openmoat policy trust-key <key.pub> --name <who>` · `openmoat policy install <pack.yaml>` |
 | Turn OpenMoat off | `openmoat uninstall` |
@@ -385,7 +389,8 @@ Claude Code's `deny` or `ask`.
   [docs/MOATBENCH.md](docs/MOATBENCH.md#comparison-with-other-claude-code-guards).
 
 The full set on OpenMoat 0.12.0 (2026-10-30, macOS, `openmoat bench`), every scenario
-run as each of the nine agents' hook payloads:
+run as each of the nine agents' hook payloads (the Cline CLI and goose, added in 0.14.0,
+are not in these counts):
 
 | Category | Runs | Blocked | Reviewed | Allowed | OS sandbox | Left to the agent |
 |---|---|---|---|---|---|---|
@@ -463,7 +468,12 @@ The main gaps:
   Agent's gateway, cron and ACP sessions skip the hook when its command is not approved in
   `shell-hooks-allowlist.json` (`openmoat init` approves it), as Hermes does under
   `HERMES_SAFE_MODE=1` or in a profile OpenMoat did not set up, and Hermes runs a call
-  unchecked when its own hook dispatcher fails (a Hermes bug, not a failing hook).
+  unchecked when its own hook dispatcher fails (a Hermes bug, not a failing hook). The
+  Cline CLI runs a call when OpenMoat's hook script cannot start (native Windows), prints
+  something that is not JSON or is killed after 120 s, and under `--yolo`, which runs no
+  hooks. goose runs calls unchecked when it does not load OpenMoat's plugin
+  (`disabledPlugins`, `enabled: false` under `plugins` in `config.yaml`, or a project
+  plugin named `openmoat`); `openmoat status` reports the settings, not a project plugin.
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a
@@ -477,9 +487,20 @@ The main gaps:
   loads after OpenMoat's can change a call's input. OpenClaw runs the parameters
   OpenMoat decided on, except where another plugin changes them and asks for approval
   itself in one answer: OpenClaw then runs that plugin's change once you approve it.
-- **Some agents cannot prompt.** Codex, OpenCode 1 and Cursor's file tools receive a
-  `review` as a deny that says how to approve the call (`openmoat`, or
-  `openmoat allow --last`).
+  In the Cline CLI, another `PreToolUse` hook file or a plugin can rewrite a call's input
+  after OpenMoat checked it, and Cline approves calls on its own by default
+  (`--auto-approve`), so a deferred call usually runs.
+- **Some agents cannot prompt.** Codex, OpenCode 1, goose, the Cline CLI (where the deny
+  also ends Cline's run), Cursor's file tools, pi in print and JSON mode, and Hermes Agent
+  in YOLO mode receive a `review` as a deny that says how to approve the call
+  (`openmoat`, or `openmoat allow --last`); GitHub Copilot CLI in autopilot turns it into
+  a deny itself.
+- **The card check is narrow and can misfire.** `card-egress` reads only the text a call
+  shows: a number in a file (`curl -d @cards.csv`), encoded or split is not seen. A 13 to
+  19 digit number that starts with 3, 4, 5 or 6 and passes the Luhn check, such as a job
+  or order id in an API URL, can be denied even for an allowed host. `openmoat allow`
+  cannot lift a deny: narrow or remove the `card-egress` rule with `openmoat edit`
+  ([POLICY.md §4.4](docs/POLICY.md#44-personal-data-on-its-way-out)).
 - **OpenCode 2's `--auto` approves OpenMoat's reviews** as it approves OpenCode's own,
   and OpenMoat's plugin cannot tell. OpenCode before 1.3.4 is not supported:
   `openmoat init` does not set it up and `openmoat status` says to upgrade.
@@ -519,12 +540,9 @@ comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 To upgrade, update the binary the way you installed it, then run `openmoat doctor` and
 `openmoat policy upgrade` in your own terminal ([docs/INSTALL.md](docs/INSTALL.md#upgrading)).
-From 0.9.0 to 0.11.0 a default install needed nothing more; 0.12.0 needs `openmoat init`
-once (Claude Code's `SessionStart` hook) and `openmoat policy upgrade` (new default rules);
-0.12.1 needs `openmoat init` once more for Codex, then trusting the OpenMoat hook in Codex's `/hooks`;
-0.13.0 starts a wrapped MCP server only once `openmoat mcp accept` has accepted its definition;
-0.14.0 renames the `ask` verdict to `review`: run `openmoat policy upgrade` (it also adds `card-egress`) and `openmoat init` once for goose and the Cline CLI.
-Each release's upgrading note is in the [CHANGELOG](CHANGELOG.md).
+From 0.13.x to 0.14.0 also run `openmoat init` once if you use goose or the Cline CLI;
+`openmoat policy upgrade` renames the `ask` verdict to `review` and adds `card-egress`.
+Each release's own steps are in its [CHANGELOG](CHANGELOG.md) "Upgrading" line.
 
 ## Contributing
 

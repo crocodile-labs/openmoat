@@ -31,7 +31,7 @@ The crate is `openmoat-sdk` in `crates/openmoat-sdk`.
 
 ```toml
 [dependencies]
-openmoat-sdk = { git = "https://github.com/crocodile-labs/openmoat" }   # on crates.io from 0.12.0
+openmoat-sdk = "0.14"
 ```
 
 ```rust
@@ -59,6 +59,9 @@ cargo test -p openmoat-sdk --example agent_loop
 
 The package is `@openmoat/sdk` in `sdk/js`: no dependencies, Node 20 or later, or any
 runtime with WebAssembly. Types are in `src/index.d.ts`.
+
+`@openmoat/sdk` is not on npm yet: build it with `scripts/ci/sdk-js.sh` and install
+`sdk/js` from the checkout (`npm install ./sdk/js`).
 
 ```js
 import { load, Session } from "@openmoat/sdk";
@@ -143,8 +146,8 @@ Where the agent runs; every path absolute and slash-separated (`C:/Users/me` on 
 
 ## Facts
 
-The engine never looks at a disk. Three checks need facts from one; you observe them and
-pass them in (`Facts`):
+The engine never looks at a disk. Three checks need facts from a disk (program pins,
+symlinks, globs); you observe them and pass them in (`Facts`):
 
 | Field | Check |
 |---|---|
@@ -215,8 +218,8 @@ action and verdict shapes, rule ids, the schema version) and what is not (reason
 which verdict the default policy gives an action, a saved session's form) is ADR-046.
 Before 1.0 a minor release may change the stable surface, with a CHANGELOG entry.
 
-Publishing to crates.io and npm is a maintainer's release step; both packages are ready
-for it (`cargo package -p openmoat-sdk`, `npm pack` in `sdk/js` after a build).
+`openmoat-sdk` is published to crates.io with each release; the npm package is not
+published yet (`npm pack` in `sdk/js` after a build makes the package file).
 
 ## Building and testing
 
