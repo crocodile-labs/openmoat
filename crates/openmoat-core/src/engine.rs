@@ -25,7 +25,7 @@ mod taint;
 
 use atoms::checked_atoms;
 pub use contents::HOLDS_PROTECTED_RULE;
-pub use taint::{Secret, TAINT_RULE, Taint};
+pub use taint::{Secret, TAINT_RULE, Taint, UntrustedKind};
 
 /// Everything the engine needs from the environment. Supplied by the caller.
 #[derive(Debug, Clone)]

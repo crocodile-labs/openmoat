@@ -47,6 +47,57 @@ pub struct Taint {
     pub untrusted: Option<String>,
 }
 
+/// Where untrusted content a session read came from: the one list of what
+/// taints a session, which [`CompiledPolicy::exposure`] and the provenance
+/// report (ADR-056) both use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UntrustedKind {
+    /// A web page or search result (`fetch`, `web search`).
+    Web,
+    /// The result of an MCP tool.
+    Mcp,
+    /// The result of a host tool OpenMoat does not know.
+    UnknownTool,
+    /// A file a session that had read untrusted content wrote (ADR-029).
+    File,
+}
+
+impl UntrustedKind {
+    /// The kind of untrusted content `atom` reads, if it reads any.
+    #[must_use]
+    pub fn of(atom: &AtomicAction) -> Option<Self> {
+        match atom {
+            AtomicAction::Fetch { .. } | AtomicAction::WebSearch { .. } => Some(Self::Web),
+            AtomicAction::McpTool { .. } => Some(Self::Mcp),
+            AtomicAction::UnknownTool { .. } => Some(Self::UnknownTool),
+            _ => None,
+        }
+    }
+
+    /// The spelling notes and reports use.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Mcp => "mcp",
+            Self::UnknownTool => "unknown-tool",
+            Self::File => "file",
+        }
+    }
+
+    /// How a report names it: "after reading web content".
+    #[must_use]
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::Web => "web content",
+            Self::Mcp => "an MCP tool result",
+            Self::UnknownTool => "an unknown tool's result",
+            Self::File => "a file an exposed session wrote",
+        }
+    }
+}
+
 impl Taint {
     /// Add what another call exposed the session to.
     pub fn absorb(&mut self, other: Taint) {
@@ -96,16 +147,33 @@ impl CompiledPolicy<'_> {
                         untrusted: None,
                     });
                 }
-                AtomicAction::Fetch { .. }
-                | AtomicAction::WebSearch { .. }
-                | AtomicAction::UnknownTool { .. }
-                | AtomicAction::McpTool { .. } => {
+                _ if UntrustedKind::of(&atom).is_some() => {
                     taint.untrusted.get_or_insert_with(|| atom.describe());
                 }
                 _ => {}
             }
         }
         taint
+    }
+
+    /// The first untrusted content running `action` in `cwd` read, with what
+    /// kind it is: the same atoms [`CompiledPolicy::exposure`] counts, for
+    /// reports that say where the content came from (ADR-056).
+    #[must_use]
+    pub fn untrusted_read(
+        &self,
+        action: &Action,
+        cwd: &str,
+        paths: &dyn PathResolver,
+    ) -> Option<(UntrustedKind, String)> {
+        let ctx = EvalContext {
+            cwd: cwd.to_owned(),
+            ..self.ctx.clone()
+        };
+        let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
+        atoms
+            .iter()
+            .find_map(|atom| UntrustedKind::of(atom).map(|kind| (kind, atom.describe())))
     }
 
     /// `decision` for `action`, tightened by `taint`: after secret material,

@@ -212,3 +212,31 @@ fn a_version_3_database_is_migrated_to_provenance() {
             .unwrap()
     );
 }
+
+/// The tainted-write row of one call and one path, for `openmoat provenance`
+/// (ADR-056): a clean write, a read or another call's row is not it.
+#[test]
+fn the_tainted_write_of_one_call_is_found_by_its_event_and_path() {
+    let store = Store::open_in_memory().unwrap();
+    let a = event(&store, "a");
+    assert_eq!(store.tainted_write_at(a, "/p/run.sh").unwrap(), None);
+    let rows = [
+        row(
+            ProvenanceKind::TaintedWrite,
+            "/p/run.sh",
+            None,
+            "fetch x.example",
+        ),
+        row(ProvenanceKind::TaintedRead, "/p/other.sh", None, "read"),
+    ];
+    store.add_provenance(a, "pi", "a", &rows).unwrap();
+    let b = event(&store, "b");
+    let clean = row(ProvenanceKind::CleanWrite, "/p/run.sh", Some("ab"), "");
+    store.add_provenance(b, "pi", "b", &[clean]).unwrap();
+    assert_eq!(
+        store.tainted_write_at(a, "/p/run.sh").unwrap().as_deref(),
+        Some("fetch x.example")
+    );
+    assert_eq!(store.tainted_write_at(a, "/p/other.sh").unwrap(), None);
+    assert_eq!(store.tainted_write_at(b, "/p/run.sh").unwrap(), None);
+}
