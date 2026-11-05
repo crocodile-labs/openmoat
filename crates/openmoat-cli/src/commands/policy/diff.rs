@@ -35,7 +35,14 @@ pub fn run(args: &CheckDiffArgs) -> Result<Code> {
         &input.policy_source,
         input.repo_policy.as_deref(),
     );
-    output::write(args.format.unwrap_or_else(default_format), &report)?;
+    // Provenance notes (ADR-056): shown beside the report, never a verdict.
+    let provenance = crate::provenance::review::section(
+        args.base.as_deref(),
+        args.head.as_deref(),
+        args.provenance.level,
+    );
+    let format = args.format.unwrap_or_else(default_format);
+    crate::provenance::review::write(format, &report, provenance.as_ref(), output::write)?;
     Ok(match output::worst(&findings) {
         Some(Level::Deny) => Code::Deny,
         Some(Level::Review) => Code::Review,

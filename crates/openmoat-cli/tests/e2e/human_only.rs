@@ -38,6 +38,7 @@ fn a_human_only_command_started_by_an_agent_is_refused() {
         &["mcp", "wrap"],
         &["mcp", "unwrap"],
         &["audit", "anchor", "--file", "anchors.jsonl"],
+        &["provenance", "--write-notes"],
         &["policy", "install", "pack.yaml"],
         &["policy", "trust-key", "key.pub", "--name", "a"],
         &["policy", "remove", "team"],

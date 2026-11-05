@@ -113,6 +113,9 @@ pub struct CheckDiffArgs {
     #[arg(long, value_name = "REV", requires = "base")]
     pub head: Option<String>,
 
+    #[command(flatten)]
+    pub provenance: super::DiffProvenanceArgs,
+
     /// Policy to check against. Defaults to the shipped default policy, so every machine
     /// gives the same answer. With --base, a relative path is a file of the repository,
     /// read as --base has it. The repository's own `.moat/policy.yaml` at --base adds its

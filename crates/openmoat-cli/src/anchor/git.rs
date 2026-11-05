@@ -42,8 +42,9 @@ impl Repo {
     }
 
     /// Run `git <args>` with `stdin`; its output on success, else an error with
-    /// what git said.
-    fn run(&self, args: &[&str], stdin: Option<&[u8]>) -> Result<String> {
+    /// what git said. Also how `openmoat provenance --write-notes` writes its
+    /// notes (ADR-056).
+    pub(crate) fn run(&self, args: &[&str], stdin: Option<&[u8]>) -> Result<String> {
         let mut child = Command::new(&self.program)
             .arg("-C")
             .arg(&self.dir)

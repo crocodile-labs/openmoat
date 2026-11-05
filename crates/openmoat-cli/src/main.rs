@@ -25,6 +25,7 @@ mod packs;
 mod project;
 mod project_settings;
 mod protection;
+mod provenance;
 mod proxy_ca;
 mod proxy_session;
 mod push;

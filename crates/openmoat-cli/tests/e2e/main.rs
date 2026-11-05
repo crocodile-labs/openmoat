@@ -59,6 +59,7 @@ mod pi;
 mod policy_upgrade;
 mod protection;
 mod provenance;
+mod provenance_notes;
 mod proxy;
 mod proxy_ca;
 mod proxy_session;
