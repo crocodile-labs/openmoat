@@ -38,6 +38,26 @@ impl Kept {
     pub(super) fn drifted(&self, path: &Path) -> Option<&[u8]> {
         self.drifted.get(path).map(Vec::as_slice)
     }
+
+    /// A digest of `drift` (drift the guard decides through) as the lock check
+    /// read it: each drifted file's path and bytes, so two states of a relaxed
+    /// setting never share a digest while the lock stays the same. Empty for no
+    /// drift; `None` when a drifted file's bytes were not kept.
+    pub fn drift_digest(&self, drift: &[Drift]) -> Option<String> {
+        let mut text = Vec::new();
+        for d in drift {
+            let path = d.path();
+            text.extend_from_slice(path.to_string_lossy().as_bytes());
+            text.push(0);
+            text.extend_from_slice(self.drifted(path)?);
+            text.push(0);
+        }
+        Some(if drift.is_empty() {
+            String::new()
+        } else {
+            super::sha256_hex(&text)
+        })
+    }
 }
 
 /// [`Lock::verify_keeping`] of OpenMoat's own state files and installed packs

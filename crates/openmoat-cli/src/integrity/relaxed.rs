@@ -96,8 +96,11 @@ const RELAXED_PERMISSIONS: &[&str] = &[
     // Only to a mode in `PROMPTING_MODES`, or removed (`mode_relaxed`).
     MODE,
     // Narrows what sandboxed commands and file tools may read. Turning it off
-    // widens only the OS sandbox: no guard decision reads the sandbox's state,
-    // and `moat status` shows the agent as `hook only` while it is off.
+    // widens only the OS sandbox, and `moat status` shows the agent as `hook
+    // only` while it is off. One guard decision reads the sandbox's state: a
+    // call that runs code its session wrote needs review without an OS sandbox
+    // (ADR-039, `session_code.rs`); `protection::os_sandboxed_by_lock` keys its
+    // kept answer by this drift too, so the hold applies as soon as it is off.
     "blockReadsOutsideWorkingDirectories",
 ];
 

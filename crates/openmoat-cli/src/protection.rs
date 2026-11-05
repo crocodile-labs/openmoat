@@ -11,7 +11,7 @@ use serde::Serialize;
 
 use crate::home::Home;
 use crate::install::{HookState, HostConfig, Recorded};
-use crate::integrity::Lock;
+use crate::integrity::{Drift, Lock};
 use crate::sandbox::{Plan, install as host_sandbox};
 
 /// How much of the policy is enforced for one agent.
@@ -164,14 +164,26 @@ fn level(
 /// it wrote would otherwise pay on every call. The agent cannot write the state
 /// directory (`kernel-self`); a file that cannot be read or written only means
 /// the answer is worked out again.
-pub fn os_sandboxed_by_lock(home: &Home, host: Host) -> bool {
+///
+/// The lock alone is not the whole key: `drifted` is the drift the guard
+/// decides through (`integrity/relaxed.rs`), which leaves the lock as it was.
+/// One such setting, Claude Code's `permissions.blockReadsOutsideWorkingDirectories`,
+/// is part of the answer, so the drifted files' bytes are in the key too.
+pub fn os_sandboxed_by_lock(home: &Home, host: Host, drifted: &[Drift]) -> bool {
     if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
         return false;
     }
     let Ok(lock) = std::fs::read(home.lock_path()) else {
         return os_sandboxed(home, host);
     };
-    let digest = crate::integrity::sha256_hex(&lock);
+    // Bytes the check did not keep cannot be keyed: work the answer out.
+    let Some(drift) = home.kept().drift_digest(drifted) else {
+        return os_sandboxed(home, host);
+    };
+    let mut digest = crate::integrity::sha256_hex(&lock);
+    if !drift.is_empty() {
+        digest = format!("{digest}+{drift}");
+    }
     let path = home.root().join("sandboxed.json");
     let mut kept: SandboxedByLock = std::fs::read(&path)
         .ok()
@@ -266,7 +278,7 @@ mod tests {
         std::fs::create_dir_all(home.root()).unwrap();
         std::fs::write(home.lock_path(), b"lock one").unwrap();
         // An empty home has no sandbox settings in place.
-        assert!(!os_sandboxed_by_lock(&home, host));
+        assert!(!os_sandboxed_by_lock(&home, host, &[]));
         let kept = home.root().join("sandboxed.json");
         let text = std::fs::read_to_string(&kept).unwrap();
         assert!(
@@ -275,10 +287,55 @@ mod tests {
         );
         // A kept answer is read back as it is while the lock is unchanged.
         std::fs::write(&kept, text.replace("false", "true")).unwrap();
-        assert!(os_sandboxed_by_lock(&home, host));
+        assert!(os_sandboxed_by_lock(&home, host, &[]));
         // A new lock makes the answer be worked out again.
         std::fs::write(home.lock_path(), b"lock two").unwrap();
-        assert!(!os_sandboxed_by_lock(&home, host));
+        assert!(!os_sandboxed_by_lock(&home, host, &[]));
+    }
+
+    /// Drift the guard decides through leaves the lock as it was, but can
+    /// change the answer (Claude Code's `blockReadsOutsideWorkingDirectories`
+    /// turned off): the kept answer is not used for it.
+    #[test]
+    fn relaxed_drift_is_part_of_the_kept_answers_key() {
+        let Some(host) = Host::ALL.into_iter().find(|h| {
+            host_sandbox::format(*h).is_some() && host_sandbox::unavailable(*h).is_none()
+        }) else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        std::fs::create_dir_all(home.root()).unwrap();
+        let settings = dir.path().join("settings.json");
+        let on = r#"{"permissions":{"blockReadsOutsideWorkingDirectories":true}}"#;
+        std::fs::write(&settings, on).unwrap();
+        let lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&settings)).unwrap();
+        lock.save(&home.lock_path()).unwrap();
+        assert!(!os_sandboxed_by_lock(&home, host, &[]));
+        // Say the answer kept for this lock is "sandboxed".
+        let kept = home.root().join("sandboxed.json");
+        let text = std::fs::read_to_string(&kept).unwrap();
+        std::fs::write(&kept, text.replace("false", "true")).unwrap();
+        assert!(os_sandboxed_by_lock(&home, host, &[]));
+
+        // The setting is turned off; the lock is unchanged.
+        let off = r#"{"permissions":{"blockReadsOutsideWorkingDirectories":false}}"#;
+        std::fs::write(&settings, off).unwrap();
+        let (drift, bytes) = lock.verify_keeping(&[], &[]);
+        assert!(
+            matches!(drift.as_slice(), [Drift::KeysChanged(..)]),
+            "{drift:?}"
+        );
+        let checked = home.keeping(bytes);
+        assert!(
+            !os_sandboxed_by_lock(&checked, host, &drift),
+            "the answer kept for the lock is not the answer for the drifted settings"
+        );
+        // Without the bytes the check read, nothing kept is used either.
+        assert!(!os_sandboxed_by_lock(&home, host, &drift));
+        // The drift's own answer is kept under its own key and read back.
+        let text = std::fs::read_to_string(&kept).unwrap();
+        assert!(text.contains('+'), "{text}");
     }
 
     #[test]
