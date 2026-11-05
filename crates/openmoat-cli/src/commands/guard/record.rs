@@ -68,31 +68,61 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         decision,
         latency_us,
     };
-    let id = store.record(&event)?;
-    // A call that may have run wrote and read what it named (ADR-029); like
-    // the row, provenance that cannot be written fails the call.
-    if let Some(r) = request
-        && taint::ran(host, decision.verdict)
-    {
-        provenance.write(&store, id, host.id(), &r.session_id)?;
-    }
-    // An MCP call the host may now send: `openmoat mcp proxy` passes on only
-    // a call that matches such a decision (ADR-045). Like the row, a decision
-    // that cannot be written fails the call.
-    if let Some(r) = request {
-        mcp_ticket(&store, id, host, r, decision)?;
-    }
-    // Under `moat run`, the run's proxy applies this session's taint too
-    // (ADR-027); a link that cannot be written fails the call like the row.
-    let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
-    if let (Some(run), Some(r)) = (taint::run::run_session(run.as_deref()), request) {
-        taint::run::link(&store, run, host, &r.session_id)?;
-    }
+    let id = record_then(&store, &event, |id| {
+        // A call that may have run wrote and read what it named (ADR-029); like
+        // the row, provenance that cannot be written fails the call.
+        if let Some(r) = request
+            && taint::ran(host, decision.verdict)
+        {
+            provenance.write(&store, id, host.id(), &r.session_id)?;
+        }
+        // An MCP call the host may now send: `openmoat mcp proxy` passes on only
+        // a call that matches such a decision (ADR-045). Like the row, a decision
+        // that cannot be written fails the call.
+        if let Some(r) = request {
+            mcp_ticket(&store, id, host, r, decision)?;
+        }
+        // Under `moat run`, the run's proxy applies this session's taint too
+        // (ADR-027); a link that cannot be written fails the call like the row.
+        let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
+        if let (Some(run), Some(r)) = (taint::run::run_session(run.as_deref()), request) {
+            taint::run::link(&store, run, host, &r.session_id)?;
+        }
+        Ok(())
+    })?;
     // A deferred call is the agent's to decide; OpenMoat stays quiet about it.
     if !matches!(decision.verdict, Verdict::Allow | Verdict::Defer) {
         eprintln!("moat: trace {id}  (openmoat show {id})");
     }
     Ok(())
+}
+
+/// Record `event`, then what goes with its row (`with_row`: provenance, the
+/// MCP ticket, the `openmoat run` link). When that fails the host is answered
+/// with a deny (`decide_and_respond`), while the committed row says what was
+/// decided: a second row for the call records that deny, so the log's last word
+/// on the call is what the host was told. Each of those writes keeps its own
+/// transaction, as the store's writers all take the write lock themselves.
+fn record_then(
+    store: &Store,
+    event: &NewEvent<'_>,
+    with_row: impl FnOnce(EventId) -> Result<()>,
+) -> Result<EventId> {
+    let id = store.record(event)?;
+    if let Err(error) = with_row(id) {
+        // The reason the host gets: `decide_and_respond` adds this context.
+        let answered = super::kernel_error(&anyhow::Error::msg(format!(
+            "audit log unavailable: {error:#}"
+        )));
+        let denied = NewEvent {
+            decision: &answered,
+            ..*event
+        };
+        // Best effort: the host is denied whether or not this row is written.
+        let _ = store.record(&denied);
+        return Err(error);
+    }
+    Ok(id)
 }
 
 /// The decision on MCP call `request`, recorded as `event`, for the proxy to
@@ -123,4 +153,69 @@ fn mcp_ticket(
         verdict: decision.verdict.as_str(),
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use openmoat_audit::Store;
+    use openmoat_core::{Action, Decision, Verdict};
+
+    use super::*;
+
+    fn allowed() -> Decision {
+        let mut decision = Decision::new(Verdict::Allow);
+        decision.rules.push("dev-shell".to_owned());
+        decision
+    }
+
+    fn event<'a>(action: &'a Action, decision: &'a Decision) -> NewEvent<'a> {
+        NewEvent {
+            host: "a-host",
+            session_id: "s1",
+            call_id: Some("toolu_1"),
+            cwd: Some("/p"),
+            tool: "Bash",
+            action: Some(action),
+            decision,
+            latency_us: 1,
+        }
+    }
+
+    #[test]
+    fn a_failed_write_after_the_row_records_the_deny_the_host_got() {
+        let store = Store::open_in_memory().unwrap();
+        let action = Action::Shell {
+            command: "git status".into(),
+        };
+        let decision = allowed();
+        let failed = record_then(&store, &event(&action, &decision), |_| {
+            Err(anyhow::Error::msg("provenance table is read-only"))
+        });
+        assert!(failed.is_err());
+        let rows = store.session("s1").unwrap();
+        let verdicts: Vec<Verdict> = rows.iter().map(|e| e.verdict).collect();
+        assert_eq!(verdicts, [Verdict::Allow, Verdict::Deny]);
+        let last = rows.last().unwrap();
+        assert_eq!(last.call_id.as_deref(), Some("toolu_1"));
+        assert_eq!(last.rules, ["kernel-error"]);
+        assert!(
+            last.reasons[0].contains("audit log unavailable: provenance table is read-only"),
+            "{:?}",
+            last.reasons
+        );
+        assert!(store.verify_chain().unwrap().broken.is_none());
+    }
+
+    #[test]
+    fn a_call_whose_writes_succeed_has_one_row() {
+        let store = Store::open_in_memory().unwrap();
+        let action = Action::Shell {
+            command: "git status".into(),
+        };
+        let decision = allowed();
+        let id = record_then(&store, &event(&action, &decision), |_| Ok(())).unwrap();
+        let rows = store.session("s1").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, id);
+    }
 }
