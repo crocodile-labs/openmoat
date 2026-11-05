@@ -22,11 +22,11 @@ use crate::render::{self, Deferred};
 const LAST_ASK_SEARCH: usize = 200;
 
 pub fn run(args: &AllowArgs) -> Result<Code> {
-    let home = checked_home()?;
+    let (home, checkpoint) = checked_home()?;
     let mut out = Deferred::default();
     if args.site.is_some() || args.dir.is_some() || args.remove.is_some() {
         change_overlay(&home, args, &mut out)?;
-        repin(&home, out)?;
+        repin(&home, &checkpoint, out)?;
         return sync_sandboxes();
     }
     let (who, action) = match (&args.command, args.last) {
@@ -85,21 +85,51 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
                     return Ok(Code::Ok);
                 }
             };
+            // The person read the lock's state before the question; what changed
+            // since is not what they approved over.
+            checkpoint.verify(&home, &[])?;
             let who = Who::of(&event)?;
-            return approve(&home, who, &action, args.always, covers_taint, out);
+            let approval = Approval {
+                always: args.always,
+                covers_taint,
+            };
+            return approve(&home, &checkpoint, who, &action, approval, out);
         }
         _ => bail!("give a command, or --last to take the most recent review"),
     };
-    approve(&home, who, &action, args.always, false, out)
+    let approval = Approval {
+        always: args.always,
+        covers_taint: false,
+    };
+    approve(&home, &checkpoint, who, &action, approval, out)
+}
+
+/// What an approval writes: a permanent rule (`always`) or a session grant,
+/// which with `covers_taint` also answers the session's other taint reviews.
+#[derive(Clone, Copy)]
+struct Approval {
+    always: bool,
+    covers_taint: bool,
 }
 
 /// Approve exactly `action` (from [`reviewed`]) of `event` for its host session,
 /// or for good with `always`: the home screen's answer, with the same checks as
 /// `run`.
 pub(super) fn run_for(event: &Event, action: &Action, always: bool) -> Result<Code> {
-    let home = checked_home()?;
+    let (home, checkpoint) = checked_home()?;
     let who = Who::of(event)?;
-    approve(&home, who, action, always, false, Deferred::default())
+    let approval = Approval {
+        always,
+        covers_taint: false,
+    };
+    approve(
+        &home,
+        &checkpoint,
+        who,
+        action,
+        approval,
+        Deferred::default(),
+    )
 }
 
 /// The host session a grant is for, and the project it applies in
@@ -133,8 +163,8 @@ fn project_in(dir: Option<&Path>) -> Result<String> {
 }
 
 /// The state directory, once a person at a terminal is confirmed and the lock
-/// shows no drift.
-fn checked_home() -> Result<Home> {
+/// shows no drift, with the lock as it was then.
+fn checked_home() -> Result<(Home, integrity::Checkpoint)> {
     crate::terminal::refuse_agent("openmoat allow")?;
     if !crate::terminal::interactive() {
         bail!("`openmoat allow` must be run by a person in a terminal, not from a hook or script");
@@ -153,21 +183,26 @@ fn checked_home() -> Result<Home> {
             deny.reasons.join("\n  ")
         );
     }
-    Ok(home)
+    let checkpoint = integrity::Checkpoint::take(&home)?;
+    Ok((home, checkpoint))
 }
 
-/// Write the session grant, or with `always` the permanent rule, then re-pin;
-/// a permanent file rule also updates the agents' sandboxes. With
-/// `covers_taint` the session grant also answers the session's other taint
-/// reviews from untrusted content ([`approvals::Grant::covers_taint`]).
+/// Write the session grant, or with `always` the permanent rule, then re-pin
+/// over `checkpoint`; a permanent file rule also updates the agents'
+/// sandboxes. With `covers_taint` the session grant also answers the session's
+/// other taint reviews from untrusted content ([`approvals::Grant::covers_taint`]).
 fn approve(
     home: &Home,
+    checkpoint: &integrity::Checkpoint,
     who: Who,
     action: &Action,
-    always: bool,
-    covers_taint: bool,
+    approval: Approval,
     mut out: Deferred,
 ) -> Result<Code> {
+    let Approval {
+        always,
+        covers_taint,
+    } = approval;
     if always {
         let path = home.overlay_path();
         let mut overlay = Overlay::load(&path)?;
@@ -256,7 +291,7 @@ fn approve(
             )?;
         }
     }
-    repin(home, out)?;
+    repin(home, checkpoint, out)?;
     // a command rule is the hook's alone; a file rule is also a sandbox grant
     if always && !matches!(action, Action::Shell { .. }) {
         return sync_sandboxes();
@@ -318,9 +353,12 @@ fn spellings(paths: &[String]) -> Vec<String> {
     out
 }
 
-fn repin(home: &Home, mut out: Deferred) -> Result<Code> {
+/// Re-pin over `checkpoint`, accepting changes only to the files `allow`
+/// writes: the grants and the overlay.
+fn repin(home: &Home, checkpoint: &integrity::Checkpoint, mut out: Deferred) -> Result<Code> {
     let binary = crate::install::hook_binary()?;
-    let lock = integrity::repin(home, &binary, HookPins::Keep)?;
+    let written = [home.grants_path(), home.overlay_path()];
+    let lock = integrity::repin_after(home, &binary, HookPins::Keep, checkpoint, &written)?;
     writeln!(out, "✔ lock re-pinned ({} files)", lock.entries.len())?;
     out.finish()?;
     Ok(Code::Ok)

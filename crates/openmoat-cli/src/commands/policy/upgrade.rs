@@ -56,6 +56,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     person("openmoat policy upgrade")?;
     // Applying re-pins every pinned file, so upgrading over drift would accept it unseen.
     integrity::refuse_drift(&home, "upgrade the policy")?;
+    let checkpoint = integrity::Checkpoint::take(&home)?;
     lint(&home, &plan.merge.text)?;
     let count = plan.applicable();
     let question = format!("Apply {count} change{}? [y/N] ", plural(count));
@@ -64,6 +65,9 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
         out.finish()?;
         return Ok(Code::Ok);
     }
+    // The re-pin after the writes covers every pinned file: one changed while
+    // the question waited would be accepted unseen.
+    checkpoint.verify(&home, &[])?;
     apply(&home, &plan, &mut out)?;
     out.finish()?;
     Ok(Code::Ok)
@@ -223,6 +227,7 @@ fn undo(home: &Home, yes: bool) -> Result<Code> {
     }
     person("openmoat policy upgrade --undo")?;
     integrity::refuse_drift(home, "undo the policy upgrade")?;
+    let checkpoint = integrity::Checkpoint::take(home)?;
     let current = read_policy(&home.policy_path())?;
     let previous = read_policy(&policy_backup)?;
     let mut out = Deferred::default();
@@ -242,12 +247,15 @@ fn undo(home: &Home, yes: bool) -> Result<Code> {
         out.finish()?;
         return Ok(Code::Ok);
     }
+    checkpoint.verify(home, &[])?;
     write_private(&home.policy_path(), previous.as_bytes())?;
     copy_or_remove(&base_backup, &home.policy_base_path())?;
     fs::remove_file(&policy_backup)
         .with_context(|| format!("removing {}", policy_backup.display()))?;
     remove_if_present(&base_backup)?;
-    let lock = integrity::repin(home, &crate::install::hook_binary()?, HookPins::Keep)?;
+    let binary = crate::install::hook_binary()?;
+    let written = [home.policy_path()];
+    let lock = integrity::repin_after(home, &binary, HookPins::Keep, &checkpoint, &written)?;
     writeln!(
         out,
         "✔ {} restored to before the upgrade",

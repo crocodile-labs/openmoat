@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::home::{Home, write_private};
 use crate::install::{HookState, HostConfig};
 
+mod checkpoint;
 mod digest;
 mod forms;
 mod kept;
@@ -29,6 +30,7 @@ mod keys;
 mod relaxed;
 mod spec_keys;
 
+pub use checkpoint::{Checkpoint, repin_after};
 pub use digest::sha256_hex;
 use digest::{digest, digests, is_claude_settings};
 pub use kept::{Kept, verify_state};
