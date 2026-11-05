@@ -278,3 +278,33 @@ jobs:
       - run: cargo publish --locked --workspace
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  # npm trusted publishing (OIDC) for @openmoat/sdk: no npm token; npm checks that
+  # this workflow (release.yml in crocodile-labs/openmoat) asked, and records
+  # provenance. Builds the WebAssembly module and runs the SDK's conformance
+  # tests first (scripts/ci/sdk-js.sh), then publishes the version package.json
+  # names, which check-versions.py keeps equal to the release's.
+  publish-npm:
+    needs: [plan, host]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # exchanged for a short-lived npm publish credential
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: rust toolchain
+        # The channel, components and targets come from rust-toolchain.toml.
+        run: rustup toolchain install --no-self-update
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24" # npm 11.5.1 or later, which trusted publishing needs
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false # a release builds from nothing cached (cache poisoning)
+      - run: scripts/ci/sdk-js.sh
+      - name: npm publish
+        working-directory: sdk/js
+        run: npm publish --provenance --access public

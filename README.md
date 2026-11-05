@@ -330,8 +330,7 @@ engine.decide({ type: "shell", command: "cat ~/.ssh/id_rsa" }); // { verdict: "d
 
 The SDK decides and your code enforces: a denied call must not run, and a `review` waits for
 a person. It is not a sandbox. Both packages decide every conformance fixture exactly as
-`openmoat guard` does. `openmoat-sdk` is on crates.io; `@openmoat/sdk` is built from
-`sdk/js` (`scripts/ci/sdk-js.sh`) until it is published to npm. Guide, examples and the stability contract: [docs/SDK.md](docs/SDK.md).
+`openmoat guard` does. `openmoat-sdk` is on crates.io and `@openmoat/sdk` on npm. Guide, examples and the stability contract: [docs/SDK.md](docs/SDK.md).
 
 ## Everyday use
 

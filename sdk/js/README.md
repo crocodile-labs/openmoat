@@ -4,8 +4,9 @@ OpenMoat's policy decisions for your own agent product, in JavaScript: the engin
 compiled to WebAssembly behind a typed API. Decide each tool call before your loop runs
 it. No dependencies, no network, no telemetry: the module imports nothing from its host.
 
-`@openmoat/sdk` is not on npm yet: build it with `scripts/ci/sdk-js.sh` and install
-`sdk/js` from a checkout of the repository (`npm install ./sdk/js`).
+```sh
+npm install @openmoat/sdk
+```
 
 ```js
 import { load, Session } from "@openmoat/sdk";

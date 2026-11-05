@@ -60,8 +60,8 @@ cargo test -p openmoat-sdk --example agent_loop
 The package is `@openmoat/sdk` in `sdk/js`: no dependencies, Node 20 or later, or any
 runtime with WebAssembly. Types are in `src/index.d.ts`.
 
-`@openmoat/sdk` is not on npm yet: build it with `scripts/ci/sdk-js.sh` and install
-`sdk/js` from the checkout (`npm install ./sdk/js`).
+Install it from npm: `npm install @openmoat/sdk`. Releases are published from the release
+workflow with npm's provenance, so `npm audit signatures` checks where a version was built.
 
 ```js
 import { load, Session } from "@openmoat/sdk";
