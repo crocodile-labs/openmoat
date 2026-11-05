@@ -1,2 +1,0 @@
-### Changed
-- The policy compiler writes each brace alternative of a file pattern as a pattern of its own (`~/.codex/{auth.json,.credentials.json}` reaches Claude Code's `denyRead` and Codex's profile as two paths); `openmoat_core::ir::brace_alternatives`, `EvalContext::spellings` and `openmoat_hosts::Host::by_program` are new public functions ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
