@@ -35,7 +35,7 @@ impl EvalContext {
     }
 
     /// `raw` expanded once per spelling of the home directory and project root
-    /// it names ([`paths::expand_pattern`]), and once more per directory in
+    /// it names (`paths::expand_pattern`), and once more per directory in
     /// [`Self::moved_dirs`] it falls under; empty when it names no location.
     /// The policy compiler (`ir`) lowers patterns through the same expansion,
     /// and `openmoat run` finds where a policy pattern points with it.

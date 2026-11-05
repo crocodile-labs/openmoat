@@ -2,7 +2,7 @@
 //!
 //! The engine's globs read `{a,b}` as alternatives. Seatbelt has no such syntax,
 //! Claude Code's and Codex's settings and bubblewrap's mounts need each path on
-//! its own, so [`super::lower`] writes every alternative of a file pattern as a
+//! its own, so [`super::lower()`] writes every alternative of a file pattern as a
 //! pattern of its own (`~/.codex/{auth.json,.credentials.json}` becomes two).
 
 /// Most patterns one brace group may expand to; past it the pattern is
