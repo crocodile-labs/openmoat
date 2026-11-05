@@ -208,7 +208,7 @@ fn ordinary_commands_with_the_same_flags_are_untouched() {
         "zip -r out.zip dir",
         "unzip -o x.zip -d out",
         "wget https://x.test/f.zip -P downloads",
-        "7z x archive.7z -oout",
+        "7z x archive.7z -odist",
         "openssl rand -hex 16",
         "openssl s_client -connect host:443",
         "openssl enc -d -kfile key.txt -in f",
