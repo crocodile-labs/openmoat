@@ -7,7 +7,7 @@
 //! ([`hashed`]); the audit database keeps the hashes, by host, session and
 //! server (`mcp_flow`, schema version 9), never the text.
 //!
-//! - `openmoat mcp proxy` ([`crate::commands::mcp`]'s gateway) records the
+//! - `openmoat mcp proxy` (the gateway in `commands/mcp`) records the
 //!   pieces of the result of each `tools/call` it passed on, under the session
 //!   of the hook's decision for that call (ADR-045).
 //! - `openmoat guard` ([`checked`]) looks up the pieces of an MCP call's
