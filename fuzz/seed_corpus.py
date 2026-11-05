@@ -162,6 +162,13 @@ for script in [
     + S + b'\xff\xfe\n{"jsonrpc":"2.0","method":"x","params":"\xc2\x85"}\n',
     # a server the proxy may not start
     b"\x00\x00\x80" + INIT + b'{"jsonrpc":"2.0","method":"notifications/initialized"}\n',
+    # Regression (mcp_relay_framing, #734): a server error without an `id`
+    # reached the host.
+    b"\x00" + S + b'{"jsonrpc":"2.0","error":{"code":1,"message":"x"}}\n',
+    # Regression (mcp_relay_framing, #734): a request cancelling its own id;
+    # the target's model forgot the id the relay still waits on.
+    b"\x00" + H + b'{"jsonrpc":"2.0","id":7,"method":"notifications/cancelled","params":{"requestId":7}}\n'
+    + S + b'{"jsonrpc":"2.0","id":7,"result":{}}\n',
 ]:
     write("mcp_relay_framing", script)
 print(f"seeded {len(commands)} commands and {len(repo_policies)} repository policies")

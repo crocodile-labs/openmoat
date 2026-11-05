@@ -201,22 +201,28 @@ fuzz_target!(|data: &[u8]| {
                 let id = m.get("id").map(Value::to_string);
                 if is_request(&m) {
                     let method = m.get("method").and_then(Value::as_str).unwrap_or_default();
+                    // The relay's own listings use ids a host may not.
+                    let own = m
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|i| i.starts_with("openmoat-relay-"));
                     if let Some(id) = &id {
-                        // The relay's own listings use ids a host may not.
-                        let own = m
-                            .get("id")
-                            .and_then(Value::as_str)
-                            .is_some_and(|i| i.starts_with("openmoat-relay-"));
-                        assert!(own || waiting.insert(id.clone()), "id reused: {line}");
+                        assert!(own || !waiting.contains(id), "id reused: {line}");
                         assert!(
                             m.get("id").is_some_and(|i| i.is_string() || i.is_number()),
                             "{line}"
                         );
                     }
+                    // As the relay does: the id is checked first, then the
+                    // request it cancels is forgotten, then the id is
+                    // waiting (a request may cancel its own id).
                     if method == "notifications/cancelled"
                         && let Some(cancelled) = m.get("params").and_then(|p| p.get("requestId"))
                     {
                         waiting.remove(&cancelled.to_string());
+                    }
+                    if let Some(id) = id.filter(|_| !own) {
+                        waiting.insert(id);
                     }
                     let kind = match method {
                         "tools/call" => Some(Method::Tool),
