@@ -12,6 +12,7 @@ pub mod bench;
 mod contract;
 mod glob;
 mod host;
+mod program;
 mod registry;
 mod request;
 mod wire;

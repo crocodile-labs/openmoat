@@ -404,6 +404,10 @@ impl Confined {
         &self.report
     }
 
+    pub fn report_mut(&mut self) -> &mut Report {
+        &mut self.report
+    }
+
     pub fn warning(&self) -> Option<&str> {
         self.warning.as_deref()
     }

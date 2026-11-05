@@ -168,11 +168,13 @@ fn lower_access(policy: &Policy, ctx: &EvalContext, kind: Kind, losses: &mut Vec
 }
 
 /// One rule per group and policy list that governs `kind`, patterns expanded as
-/// the engine expands them. A rule whose patterns name no location (all
-/// `${project}` without a project, or only exclusions) matches nothing in the
-/// engine either, so it is left out, as is a `hook_only` group (ADR-034),
-/// which [`decide_only`] lists instead.
+/// the engine expands them; a file pattern's brace groups are written out as
+/// one pattern per alternative, which every OS backend can name. A rule whose
+/// patterns name no location (all `${project}` without a project, or only
+/// exclusions) matches nothing in the engine either, so it is left out, as is
+/// a `hook_only` group (ADR-034), which [`decide_only`] lists instead.
 fn rules(groups: &[RuleGroup], kind: Kind, ctx: &EvalContext) -> Vec<Rule> {
+    let files = matches!(kind, Kind::FsRead | Kind::FsWrite);
     groups
         .iter()
         .filter(|group| !group.hook_only)
@@ -184,6 +186,13 @@ fn rules(groups: &[RuleGroup], kind: Kind, ctx: &EvalContext) -> Vec<Rule> {
                     .patterns(*list)
                     .iter()
                     .flat_map(|p| ctx.spellings(p))
+                    .flat_map(|p| {
+                        if files {
+                            super::brace_alternatives(&p)
+                        } else {
+                            vec![p]
+                        }
+                    })
                     .collect(),
             })
         })

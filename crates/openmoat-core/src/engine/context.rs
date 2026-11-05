@@ -37,8 +37,10 @@ impl EvalContext {
     /// `raw` expanded once per spelling of the home directory and project root
     /// it names ([`paths::expand_pattern`]), and once more per directory in
     /// [`Self::moved_dirs`] it falls under; empty when it names no location.
-    /// The policy compiler (`ir`) lowers patterns through the same expansion.
-    pub(crate) fn spellings(&self, raw: &str) -> Vec<String> {
+    /// The policy compiler (`ir`) lowers patterns through the same expansion,
+    /// and `openmoat run` finds where a policy pattern points with it.
+    #[must_use]
+    pub fn spellings(&self, raw: &str) -> Vec<String> {
         let (negated, body) = crate::pattern::split_negation(raw);
         let bang = if negated { "!" } else { "" };
         let moved = self.moved_dirs.iter().filter_map(|(default, dir)| {

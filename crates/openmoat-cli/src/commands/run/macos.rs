@@ -139,6 +139,10 @@ impl Confined {
         &self.report
     }
 
+    pub fn report_mut(&mut self) -> &mut Report {
+        &mut self.report
+    }
+
     /// None: the profile allows only `localhost:<port>`.
     #[expect(
         clippy::unused_self,

@@ -116,16 +116,16 @@ deny:
       - "~/.gradle/gradle.properties"
     fs.write: *build-credentials
   # Where each supported agent keeps its login, provider keys and OAuth tokens.
-  # Not in secrets-paths, whose paths the OS sandboxes deny too: under `openmoat
-  # run` the agent itself runs in the sandbox and must read its own login.
-  # `hook_only` (ADR-034) denies the agent's own tools reading or writing them
-  # (a shell command naming them, file and MCP tools). The paths are generated
-  # from each agent's spec (`crates/openmoat-hosts/tests/protect.rs`); a moved
-  # agent directory (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) is followed as for
-  # `kernel-self`
+  # The hook denies the agent's own tools reading or writing them (a shell
+  # command naming them, file and MCP tools), and every OS sandbox denies them
+  # to the commands the agent runs (ADR-054). The agents' own sandboxes confine
+  # only those commands, so the agent itself still signs in; under `openmoat run`
+  # the agent runs inside the sandbox, which keeps that agent's own login
+  # readable and denies the others'. The paths are generated from each agent's
+  # spec (`crates/openmoat-hosts/tests/protect.rs`); a moved agent directory
+  # (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) is followed as for `kernel-self`
   - id: agent-credentials
     reason: an AI agent's own login, API keys or OAuth tokens
-    hook_only: true
     fs.read: &agent-credentials
       # Claude Code: its login where it keeps it in a file (Linux and Windows, and
       # macOS when the Keychain refuses it) and the Anthropic profiles `ant auth

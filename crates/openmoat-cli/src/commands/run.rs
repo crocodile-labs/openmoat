@@ -58,6 +58,7 @@ use crate::proxy_ca::Trust;
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
+use crate::sandbox::own_login::{self, Owner};
 use crate::taint::run::RUN_SESSION_ENV;
 
 /// What a proxy-aware program reads to find its proxy.
@@ -108,11 +109,16 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         trust: trust.as_ref().map(|t| path_string(t.dir())),
     };
     let state = home.root();
+    // The agent runs inside the sandbox and must read its own login there; every
+    // other agent's stays denied (ADR-054). The hook decides with the whole policy.
+    let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
+    let (sandboxed, kept) = own_login::for_session(&policy, &ctx, owner, &grants.writes);
     let mut agent = if args.isolate {
-        platform::isolate(&policy, &ctx, grants, &program, state)?
+        platform::isolate(&sandboxed, &ctx, grants, &program, state)?
     } else {
-        platform::confine(&policy, &ctx, grants, &program, state)?
+        platform::confine(&sandboxed, &ctx, grants, &program, state)?
     };
+    own_login::report(agent.report_mut(), &kept, &ctx);
     refuse_port_only(args.netns, agent.warning())?;
     agent.command().args(rest);
     agent

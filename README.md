@@ -70,8 +70,9 @@ covers what they leave out:
 - **One policy for every agent.** Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
   pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, set up with `openmoat init`.
 - **Secret files are closed to the agent's tool calls.** SSH keys, `.env`, cloud
-  credentials and each agent's own login files are denied, however the path is spelt
-  (what a program inside an allowed command reads is the sandbox's business: see Limits).
+  credentials and each agent's own login files are denied, however the path is spelt;
+  the OS sandboxes deny the same files to the programs the agent's commands run (see
+  Limits for what `openmoat run` keeps).
 - **Recognised secrets and card numbers in a call are denied:** known token formats sent
   to the wrong host, encoded secrets after a secret was read, payment card numbers. File
   contents and encoded data are not read.
@@ -436,11 +437,14 @@ The main gaps:
   Code's sandbox covers only `Bash`, `PowerShell` and `Monitor`; its file tools,
   `WebFetch` and MCP servers run outside it. Cursor runs some commands outside its
   sandbox.
-- **Agent logins are readable to the programs your commands run.** The hook denies the
-  agent's own tools reading its login and key files (`agent-credentials`), but no OS
-  sandbox denies them, since the agent reads its login there: code inside an allowed
-  command (a test, a package script, a downloaded binary) can read them. Options and the
-  plan are in [ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md).
+- **Under `openmoat run`, the agent's own login is readable to the commands it runs.**
+  Every OS sandbox denies the agents' login and key files (`agent-credentials`) to the
+  commands an agent runs; Claude Code's, Codex's and Cursor's sandboxes confine only those
+  commands, so the agent still signs in. `openmoat run` holds the agent itself, so it
+  keeps that agent's own login readable, and code inside an allowed command can read it
+  there; other agents' logins stay denied. An API-key login can go through the broker
+  instead ([BROKER_LOGINS.md](docs/BROKER_LOGINS.md)); an OAuth login cannot
+  ([ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md)).
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote needs review before an interpreter runs it, but a test runner, build tool or

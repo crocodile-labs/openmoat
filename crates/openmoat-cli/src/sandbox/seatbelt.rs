@@ -29,10 +29,11 @@ use super::patterns::{
     runs_later_exclusion, split,
 };
 use super::{Grants, Report};
-use braces::alternatives;
 use filter::{Case, filter};
+// The IR writes out the policy's brace groups already; a rule also takes
+// patterns this backend adds itself, so it expands them too.
+use openmoat_core::ir::brace_alternatives as alternatives;
 
-mod braces;
 mod filter;
 
 /// Paths every process reads: `/` (the dynamic loader), the controlling

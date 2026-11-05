@@ -13,7 +13,9 @@
 //! ([`landlock`]) are lowered per session instead, for the project `moat run`
 //! starts in; on Linux a seccomp filter (`seccomp`) closes the sockets Landlock
 //! leaves open. The Isolated tier's bubblewrap mounts (`bwrap`, Linux) are built on
-//! the same Landlock rules.
+//! the same Landlock rules. There the agent itself runs inside the sandbox, so
+//! `moat run` lowers a policy that keeps the agent's own login readable
+//! ([`own_login`]); the host sandboxes deny every agent's login to commands.
 
 pub mod backend;
 // Its tests walk real Unix paths, so they run on macOS too, not on Windows.
@@ -30,6 +32,7 @@ pub mod git_env;
 mod hook_only;
 pub mod install;
 pub mod landlock;
+pub mod own_login;
 mod patterns;
 pub(crate) use patterns::RUNS_LATER;
 pub mod seatbelt;
