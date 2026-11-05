@@ -103,20 +103,13 @@ What a pull request runs (`.github/workflows/ci.yml`, the `changes` job):
   generated tables in `README.md`, `docs/USAGE.md`, `docs/COVERAGE.md`,
   `docs/EVIDENCE.md`, …) counts as code, so changing it runs everything. A skipped job
   still reports success under its name, so the required checks are met.
-- The `macos-15-intel` gate, the slowest runner, runs on `main`, in the merge queue and
-  weekly, not on each push to a PR. Label the PR `ci: full` and re-run the workflow to
-  run it there.
 - `guard latency` builds the commit the PR lands on as well and times both on the same
   runner, in turn; it fails when the PR makes the guard's own p95 clearly slower (more
   than 1.25 times and 5 ms over), or above 150 ms whatever the base measured
   (`scripts/ci/latency_ab.py`).
-- A new push cancels the PR's previous run. Runs on `main` and in the merge queue are
-  never cancelled.
+- A new push cancels the PR's previous run. Runs on `main` are never cancelled.
 
-PRs merge through the merge queue: the queue tests each PR on top of `main` and the PRs
-queued ahead of it, then merges it, so a PR does not have to be rebased and re-run after
-every other merge. The PR-only checks (title, labels and body, review threads) passed on
-the PR and are skipped in the queue. The PR body must have non-empty **Testing** and
+A PR must be up to date with `main` before it merges. The PR body must have non-empty **Testing** and
 **Security impact** sections. CODEOWNERS requests the maintainer's review on `risk:
 high` paths; with one maintainer it is not enforced by the ruleset (two-maintainer
 review is a v1.0 item). Squash-merge; the PR title becomes the commit subject and the

@@ -3,20 +3,16 @@ name: pr-title
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
-  # The title was checked on the pull request; in the merge queue the job is
-  # skipped, which reports success, so the required `conventional` is met.
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
+  cancel-in-progress: true
 
 permissions:
   pull-requests: read
 
 jobs:
   conventional:
-    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
