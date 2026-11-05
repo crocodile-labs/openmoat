@@ -991,7 +991,9 @@ tests/conformance/             attacks.yaml, review.yaml, benign.yaml: one tool 
 tests/differential/            differential scenarios and hostile scripts (EVIDENCE.md)
 fuzz/                          cargo-fuzz targets: decide_shell, policy_parse,
                                host_payload, literal_pattern, proxy_parse,
-                               openclaw_json5 (separate workspace)
+                               openclaw_json5, repo_policy_merge,
+                               mcp_relay_framing, check_diff_parse
+                               (separate workspace)
 docs/                          this document, INSTALL, USAGE, DEMO, SANDBOX, POLICY,
                                SDK, THREAT_MODEL, ROADMAP, CHALLENGE, MOATBENCH,
                                ADDING_AN_AGENT, COVERAGE and EVIDENCE (generated), adr/

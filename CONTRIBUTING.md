@@ -338,7 +338,20 @@ and a `pip` that only prints. The temporary directory is kept so you can inspect
 `literal_pattern` (`openmoat allow --always` must produce a rule that lints and matches its
 command), `proxy_parse` (any request head or TLS `ClientHello` `openmoat proxy` reads) and
 `openclaw_json5` (any `openclaw.json`: the CLI's JSON5 reader, compiled from
-`crates/openmoat-cli/src/json5.rs`). It is a separate workspace built with nightly:
+`crates/openmoat-cli/src/json5.rs`), `repo_policy_merge` (any repository
+`.moat/policy.yaml` merged into the default policy: untrusted it never weakens a verdict
+of a fixed probe set, trusted it never allows what a deny rule denies),
+`mcp_relay_framing` (any lines the agent host and an MCP server send `openmoat mcp proxy`,
+through the relay's own line reader: what it passes on is one well-formed message per
+line, and a server's response reaches the host only when it answers a request the host
+is waiting for) and `check_diff_parse` (any unified diff `openmoat policy check-diff`
+reads: the paths it reports come from the input, and a diff cut off inside a hunk is an
+error). `openclaw_json5`, `mcp_relay_framing` and `check_diff_parse` compile the CLI's
+own files through `#[path]`, since `moat` is a binary crate; `mcp_relay_framing`
+replaces only the relay's pin store (`mcp/tools.rs`, which reads files) with a small
+stand-in in the target, so it fuzzes framing and routing, not pin storage. Seeds live in
+`fuzz/seed_corpus.py` (`fuzz/corpus/` is not committed); a crash's input goes there as a
+regression seed. It is a separate workspace built with nightly:
 
 ```bash
 cargo install cargo-fuzz --version 0.13.1 --locked

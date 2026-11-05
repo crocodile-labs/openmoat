@@ -140,6 +140,28 @@ fn a_harmless_change_is_clean() {
     assert_eq!(parse::parse("").unwrap(), []);
 }
 
+/// Found by the `check_diff_parse` fuzz target: the `\n` ending a diff cut
+/// off after a hunk header was read as a kept empty line, so the cut diff
+/// read as complete and its file as unchanged.
+#[test]
+fn a_diff_cut_after_a_hunk_header_is_an_error() {
+    let full = edit("src/main.rs", "fn main() {}");
+    let header = full.find("@@ -1,2").unwrap();
+    let end = header + full[header..].find('\n').unwrap();
+    for cut in [&full[..end], &full[..=end]] {
+        let error = parse::parse(cut).unwrap_err();
+        assert_eq!(error.problem, "the diff ends inside a hunk", "{cut:?}");
+    }
+    let one = "--- a/k\n+++ b/k\n@@ -1 +1 @@\n";
+    assert!(parse::parse(one).is_err());
+    // An empty kept line is still read where the diff really has one.
+    let kept = "--- a/k\n+++ b/k\n@@ -1,2 +1,2 @@\n\n-a\n+b\n";
+    assert_eq!(parse::parse(kept).unwrap()[0].added, [(2, "b".to_owned())]);
+    // A hunk starting at the last line number does not overflow.
+    let far = format!("--- a/k\n+++ b/k\n@@ -1 +{},2 @@\n-a\n+b\n+c\n", usize::MAX);
+    assert_eq!(parse::parse(&far).unwrap()[0].added.len(), 2);
+}
+
 #[test]
 fn deletions_and_renames_check_both_paths() {
     let deleted = "diff --git a/.github/workflows/scan.yml b/.github/workflows/scan.yml\n\

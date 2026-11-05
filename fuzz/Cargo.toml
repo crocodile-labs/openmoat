@@ -8,10 +8,10 @@ description = "Fuzz targets for OpenMoat's untrusted-input surfaces"
 [package.metadata]
 cargo-fuzz = true
 
-# `anyhow` is used by crates/openmoat-cli/src/json5.rs, which openclaw_json5
-# compiles through `#[path]`; cargo-machete does not follow that.
+# `anyhow` and `serde` are used by CLI files the targets compile through
+# `#[path]` (json5.rs, mcp/relay.rs); cargo-machete does not follow that.
 [package.metadata.cargo-machete]
-ignored = ["anyhow"]
+ignored = ["anyhow", "serde"]
 
 # Not part of the main workspace: built with nightly by `cargo fuzz`.
 [workspace]
@@ -32,8 +32,10 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
 [dependencies]
-# What crates/openmoat-cli/src/json5.rs, compiled into openclaw_json5, uses.
+# What crates/openmoat-cli/src/json5.rs (openclaw_json5) and
+# crates/openmoat-cli/src/mcp/relay.rs (mcp_relay_framing) use.
 anyhow = "1"
+serde = "1"
 # As the main workspace: json5.rs's numbers survive being written back.
 serde_json = { version = "1", features = ["float_roundtrip"] }
 libfuzzer-sys = "0.4"
@@ -79,6 +81,27 @@ bench = false
 [[bin]]
 name = "openclaw_json5"
 path = "fuzz_targets/openclaw_json5.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "repo_policy_merge"
+path = "fuzz_targets/repo_policy_merge.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_relay_framing"
+path = "fuzz_targets/mcp_relay_framing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "check_diff_parse"
+path = "fuzz_targets/check_diff_parse.rs"
 test = false
 doc = false
 bench = false

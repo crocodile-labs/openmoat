@@ -1374,8 +1374,10 @@ something OpenMoat claims to stop.
   scenarios sent as each agent's hook payloads to the real binary, with a
   scorecard of verdicts, false positives and known gaps.
 - **Fuzzing.** `cargo fuzz` targets for the shell path through the engine, policy
-  parsing, host payloads and `openmoat allow --always` patterns run in CI on every pull
-  request and weekly.
+  parsing, host payloads, `openmoat allow --always` patterns, the proxy's request
+  parser, OpenClaw's JSON5 config, repository policy merging, the MCP gateway's
+  framing and routing, and `check-diff`'s diff parser run in CI on every pull request
+  and weekly.
 - **Differential suite** (`tests/differential/scenarios.yaml`): each scenario runs
   against the hook decision and each host sandbox whose binary is present, and hostile
   project scripts run under `openmoat run`, Claude Code's sandbox and Codex's `openmoat`
