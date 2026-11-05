@@ -7,6 +7,8 @@
 
 use std::fmt;
 
+use openmoat_core::diffscan::{Block, Change};
+
 /// One file a diff changes.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FileChange {
@@ -23,9 +25,22 @@ pub struct FileChange {
     pub binary: bool,
     /// Each added line with its line number in the new file.
     pub added: Vec<(usize, String)>,
+    /// Each run of removed and added lines with no kept line between them,
+    /// for the content checks that compare what a line was with what it is.
+    pub blocks: Vec<Block>,
 }
 
 impl FileChange {
+    /// The file as the content checks read it, under its new path (its old
+    /// one when the change deletes it).
+    pub fn content(&self) -> Option<Change<'_>> {
+        Some(Change {
+            path: self.new.as_deref().or(self.old.as_deref())?,
+            added: &self.added,
+            blocks: &self.blocks,
+        })
+    }
+
     /// Every path the change writes: the old one (removed or renamed away) and
     /// the new one, once each.
     pub fn paths(&self) -> impl Iterator<Item = &str> {
@@ -53,11 +68,29 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// Lines left in the hunk being read, and the new file's next line number.
+/// Lines left in the hunk being read, the new file's next line number, and
+/// whether the last line read was removed or added (a block is open).
 struct Hunk {
     old: usize,
     new: usize,
     line: usize,
+    changing: bool,
+}
+
+impl Hunk {
+    /// The open block of `change`, opened at this line if the last line was kept.
+    fn block<'c>(&mut self, change: &'c mut FileChange) -> Option<&'c mut Block> {
+        if !self.changing {
+            self.changing = true;
+            let at = change.added.len();
+            change.blocks.push(Block {
+                at: self.line,
+                removed: Vec::new(),
+                added: at..at,
+            });
+        }
+        change.blocks.last_mut()
+    }
 }
 
 /// The file being read, with what its header said.
@@ -178,16 +211,28 @@ fn read_hunk_line(
         Some('+') => {
             taken(&mut hunk.new)?;
             if let Some(change) = change {
+                // open the block first: it starts at this line's index
+                hunk.block(change);
                 change.added.push((hunk.line, line[1..].to_owned()));
+                let end = change.added.len();
+                if let Some(block) = change.blocks.last_mut() {
+                    block.added.end = end;
+                }
             }
             hunk.line += 1;
         }
-        Some('-') => taken(&mut hunk.old)?,
+        Some('-') => {
+            taken(&mut hunk.old)?;
+            if let Some(block) = change.and_then(|c| hunk.block(c)) {
+                block.removed.push(line[1..].to_owned());
+            }
+        }
         // An empty line is a kept empty line whose leading space was trimmed.
         Some(' ') | None => {
             taken(&mut hunk.old)?;
             taken(&mut hunk.new)?;
             hunk.line += 1;
+            hunk.changing = false;
         }
         Some('\\') => {}
         Some(_) => return Err("a hunk has fewer lines than its header says"),
@@ -245,6 +290,7 @@ fn hunk_header(line: &str) -> Option<Hunk> {
         old,
         new,
         line: start,
+        changing: false,
     })
 }
 

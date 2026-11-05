@@ -12,14 +12,20 @@
 //! repository, a symbolic link and where it points, a submodule, a change to
 //! the policy files the check itself read, and added lines holding a known
 //! token shape (`openmoat_audit::token_shape`, the push check's scanner).
+//!
+//! And what the added lines do (ADR-055, `content.rs`): the core's content
+//! checks, at the levels the policy's `check_diff.levels` sets.
 
 use anyhow::Result;
+use openmoat_core::diffscan::Settings;
 use openmoat_core::{
     Action, CompiledPolicy, Decision, EvalContext, NoResolver, Policy, TAINT_RULE, Taint, Verdict,
 };
 use serde::Serialize;
 
 use super::parse::FileChange;
+
+mod content;
 
 /// Where the repository is placed for the engine. Not a real directory: no
 /// file is read, and it is outside any home so no `~/` rule meets it.
@@ -154,6 +160,8 @@ fn windows_spelling(path: &str) -> String {
 pub struct Gate<'p> {
     policy: CompiledPolicy<'p>,
     policy_files: Vec<String>,
+    /// The policy's `check_diff:` section.
+    settings: Option<&'p Settings>,
 }
 
 impl<'p> Gate<'p> {
@@ -180,11 +188,12 @@ impl<'p> Gate<'p> {
         Ok(Self {
             policy: CompiledPolicy::compile(policy, &ctx)?,
             policy_files,
+            settings: policy.check_diff.as_ref(),
         })
     }
 
-    /// Every finding of `files`, one per path (and one per added line that
-    /// holds a token), in the order of the diff.
+    /// Every finding of `files`, one per path and one per added line a check
+    /// finds something on, in the order of the diff; new hosts last.
     pub fn check(&self, files: &[FileChange]) -> Vec<Finding> {
         let mut findings: Vec<Finding> = Vec::new();
         let mut add = |finding: Finding| match findings
@@ -200,7 +209,13 @@ impl<'p> Gate<'p> {
             }
             self.mode_findings(file).into_iter().for_each(&mut add);
             secret_findings(file).into_iter().for_each(&mut add);
+            content::findings(self.settings, file)
+                .into_iter()
+                .for_each(&mut add);
         }
+        content::host_findings(&self.policy, self.settings, files)
+            .into_iter()
+            .for_each(&mut add);
         findings
     }
 

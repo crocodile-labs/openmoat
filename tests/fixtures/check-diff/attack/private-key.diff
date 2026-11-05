@@ -1,0 +1,12 @@
+# expect: deny
+# rules: diff-private-key
+# A deploy key committed with the code that uses it.
+diff --git a/deploy/keys/deploy_ed25519 b/deploy/keys/deploy_ed25519
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/deploy/keys/deploy_ed25519
+@@ -0,0 +1,3 @@
++-----BEGIN OPENSSH PRIVATE KEY-----
++b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
++-----END OPENSSH PRIVATE KEY-----

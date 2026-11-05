@@ -1,0 +1,29 @@
+# expect: review
+# rules:
+# A normal dependency added with its lockfile entry from the registry. The
+# review is ADR-050's path rule for package.json (an install runs what it
+# names), not a content finding.
+diff --git a/package.json b/package.json
+index 1111111..2222222 100644
+--- a/package.json
++++ b/package.json
+@@ -5,4 +5,5 @@
+   "dependencies": {
+     "express": "^4.19.2",
++    "zod": "^3.23.8",
+     "@types/node": "^20.11.0"
+   },
+diff --git a/package-lock.json b/package-lock.json
+index 3333333..4444444 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -120,3 +120,9 @@
+       "license": "MIT"
+     },
++    "node_modules/zod": {
++      "version": "3.23.8",
++      "resolved": "https://registry.npmjs.org/zod/-/zod-3.23.8.tgz",
++      "integrity": "sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g==",
++      "license": "MIT"
++    },
+     "node_modules/express": {

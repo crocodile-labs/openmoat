@@ -1,0 +1,20 @@
+# expect: review
+# rules: diff-private-key
+# A throwaway key for a TLS test, in a fixtures folder and marked as fake: a
+# review (was it ever used for anything real?), never a deny.
+diff --git a/tests/fixtures/tls/server.key b/tests/fixtures/tls/server.key
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/tests/fixtures/tls/server.key
+@@ -0,0 +1,3 @@
++-----BEGIN PRIVATE KEY-----
++MC4CAQAwBQYDK2VwBCIEIFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAK
++-----END PRIVATE KEY-----
+diff --git a/tests/fixtures/tls/README b/tests/fixtures/tls/README
+new file mode 100644
+index 0000000..2222222
+--- /dev/null
++++ b/tests/fixtures/tls/README
+@@ -0,0 +1 @@
++server.key is a fake key made for the TLS tests; it is used nowhere else.

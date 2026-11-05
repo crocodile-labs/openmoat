@@ -516,8 +516,12 @@ To check pull requests before they are merged, whoever or whatever wrote them, r
 `openmoat policy check-diff` in CI. It reports every changed file the policy protects
 (CI workflows, git hooks, build and package files, agent settings, OpenMoat's own
 files, secret files) and every added line that holds a known token, and reads the policy
-files as the base branch has them. The repository's `action.yml` runs it on GitHub
-([MERGE_CHECK.md](MERGE_CHECK.md)).
+files as the base branch has them. Its content checks read each added line, offline:
+near-miss and off-registry dependencies, install scripts, lockfile hashes swapped for the
+same version, GitHub workflows a fork can take over, downloaded or decoded code that
+runs, private keys, and hosts your network allow list does not name; `check_diff.levels`
+in the policy sets each rule to `deny`, `review` or `off`. The repository's `action.yml`
+runs it on GitHub ([MERGE_CHECK.md](MERGE_CHECK.md)).
 
 ## MCP servers through the gateway
 

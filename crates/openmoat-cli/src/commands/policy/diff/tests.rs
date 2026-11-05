@@ -7,6 +7,9 @@ use super::gate::{self, Finding, Gate, Level};
 use super::output;
 use super::parse::{self, FileChange};
 
+mod content;
+mod fixtures;
+
 fn check(diff: &str) -> Vec<Finding> {
     let policy = Policy::parse(DEFAULT_POLICY).unwrap();
     let gate = Gate::new(&policy, &[".moat/policy.yaml".to_owned()]).unwrap();

@@ -111,6 +111,16 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    for id in policy
+        .check_diff
+        .iter()
+        .flat_map(crate::diffscan::Settings::turned_off)
+    {
+        out.push(Warning {
+            rule: format!("check_diff.levels.{id}"),
+            message: format!("`openmoat policy check-diff` no longer reports `{id}` findings"),
+        });
+    }
     if policy.trust_mcp_first_sight() {
         out.push(Warning {
             rule: "mcp.trust_first_sight".to_owned(),

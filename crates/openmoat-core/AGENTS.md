@@ -1,6 +1,6 @@
 # openmoat-core
 
-The trusted core: the policy model and lint, the POSIX lexer (`lexer/`), the shell classifier (`shell/`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists (`data/top-packages/`) and the shipped default policy (`policies/default-v1.yaml`). Every decision OpenMoat makes is made here. Root rules: [AGENTS.md](../../AGENTS.md).
+The trusted core: the policy model and lint, the POSIX lexer (`lexer/`), the shell classifier (`shell/`), patterns, path normalisation, the engine, the policy compiler (`ir/`), the repository policy merge (`repo.rs`), the popular-package lists (`data/top-packages/`), the content checks of `policy check-diff` (`diffscan/`, one rule table in `diffscan.rs`) and the shipped default policy (`policies/default-v1.yaml`). Every decision OpenMoat makes is made here. Root rules: [AGENTS.md](../../AGENTS.md).
 
 ## Rules
 - Pure: no I/O. `std::fs`, `std::env`, `std::process`, `std::net`, `println!`/`eprintln!`/`dbg!` are rejected by `tests/architecture.rs`. Anything that needs the filesystem comes in through a trait the CLI implements (`ProgramResolver`, `PathResolver`).

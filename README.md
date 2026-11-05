@@ -95,7 +95,10 @@ covers what they leave out:
   `audit export`, `audit anchor`.
 - **Team rules.** A committed `.moat/policy.yaml`, or a policy pack signed with an SSH key.
 - **Pull request check.** `openmoat policy check-diff` and a GitHub Action flag a change to
-  CI, git hooks, agent settings, the policy or secret files before it is merged
+  CI, git hooks, agent settings, the policy or secret files before it is merged, and,
+  line by line and offline, typo-squatted dependencies, swapped lockfile hashes, CI
+  workflows a fork can take over, downloaded or decoded code that runs, private keys
+  and new hosts your allow list does not name
   ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
 - **In your own agent.** The Rust and JavaScript SDKs give your product the same
   decisions ([docs/SDK.md](docs/SDK.md)).

@@ -345,6 +345,10 @@ pub struct Policy {
     /// How `moat mcp proxy` treats tool definitions (ADR-032). Absent in older policies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpSettings>,
+    /// The levels `openmoat policy check-diff` reports its content checks at
+    /// (ADR-055). Absent in older policies: each check's own level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_diff: Option<crate::diffscan::Settings>,
     /// Review rules merged in from a repository policy ([`crate::RepoPolicy`],
     /// ADR-022) or a policy pack (ADR-031). Tried after `deny` and before
     /// `allow`, so a repository can make an action the user allows need review.
@@ -531,6 +535,7 @@ impl Policy {
             lint_read_root(root)?;
         }
         taint::check(self.taint.as_ref())?;
+        crate::diffscan::check(self.check_diff.as_ref())?;
         secret::check(&self.secrets)
     }
 

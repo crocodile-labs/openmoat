@@ -1,0 +1,27 @@
+# expect: clean
+# rules:
+# A README with links and the usual install line, and source code that calls
+# an allowed host, an example host and localhost.
+diff --git a/README.md b/README.md
+index 1111111..2222222 100644
+--- a/README.md
++++ b/README.md
+@@ -3,2 +3,6 @@
+ ## Install
+
++Install the toolchain first: `curl --proto '=https' -sSf https://sh.rustup.rs | sh`
++(see https://www.rust-lang.org/tools/install), then read
++[the guide](https://docs.acme-tools.dev/guide) and file issues at
++https://github.com/acme/tool/issues.
+diff --git a/src/client.ts b/src/client.ts
+index 1111111..2222222 100644
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -1,4 +1,7 @@
+ import { request } from "./http";
++// GitHub's REST API, https://docs.github.com/en/rest
++const API = "https://api.github.com";
++const DEV = process.env.DEV ? "http://localhost:8080" : "https://api.example.com";
+
+ export async function get(path: string) {
+   return request(API + path);

