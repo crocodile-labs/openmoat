@@ -430,6 +430,11 @@ The main gaps:
   Code's sandbox covers only `Bash`, `PowerShell` and `Monitor`; its file tools,
   `WebFetch` and MCP servers run outside it. Cursor runs some commands outside its
   sandbox.
+- **Agent logins are readable to the programs your commands run.** The hook denies the
+  agent's own tools reading its login and key files (`agent-credentials`), but no OS
+  sandbox denies them, since the agent reads its login there: code inside an allowed
+  command (a test, a package script, a downloaded binary) can read them. Options and the
+  plan are in [ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md).
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote needs review before an interpreter runs it, but a test runner, build tool or

@@ -157,7 +157,9 @@ something OpenMoat claims to stop.
   denies the agent's own tools reading or writing them (a shell command naming them,
   a file tool, an MCP argument), but a sandbox leaves them readable, since the agent
   reads its own login there; a program a sandboxed command runs, or a script that
-  builds the path at run time, can still read them. A recursive read of the folder
+  builds the path at run time, can still read them, and so can any program an allowed
+  command runs on a hook-only agent. The options and the plan are in
+  [ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md). A recursive read of the folder
   that holds them (`cp -r ~/.codex x`, `tar czf a.tgz ~/.hermes`) is one read of the
   folder; the hook holds it for review (`protected-contents`, ADR-038), and a host that
   cannot prompt denies it, but once a person approves it the copy holds the files.
