@@ -95,6 +95,22 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.hermes/plugins/**",
     "**/.hermes",
     "**/.hermes/plugins",
+    // git hooks in the folders a repository's `core.hooksPath` usually names, and
+    // Cline's workspace hooks, with the folders above them
+    "**/.githooks/**",
+    "**/.git-hooks/**",
+    "**/githooks/**",
+    "**/git-hooks/**",
+    "**/.githooks",
+    "**/.git-hooks",
+    "**/githooks",
+    "**/git-hooks",
+    "**/.clinerules/hooks/**",
+    "**/.cline/hooks/**",
+    "**/.clinerules",
+    "**/.clinerules/hooks",
+    "**/.cline",
+    "**/.cline/hooks",
     // what every Python start runs; an install writes them (`pip install -e .`)
     "**/site-packages/*.pth",
     "**/dist-packages/*.pth",

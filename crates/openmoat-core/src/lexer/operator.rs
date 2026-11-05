@@ -40,6 +40,7 @@ impl Lexer {
             let is_redirect = matches!(first, First::Less | First::Greater);
             if is_fd && is_redirect && !w.quoted {
                 self.current = None;
+                self.boundaries.clear();
             }
         }
         self.bump();

@@ -7,7 +7,7 @@
 //! is only seen once the path is resolved (ADR-009). Being a path inside the
 //! project costs nothing, since `project-fs` allows it.
 
-use super::tables::{FILE_OPERANDS, NO_FILE_OPERANDS, WRITE_ALL_PATHS, WRITE_LAST_PATH};
+use super::tables::{EDITORS, FILE_OPERANDS, NO_FILE_OPERANDS, WRITE_ALL_PATHS, WRITE_LAST_PATH};
 
 /// The file `word` names as an argument of `program`, if any.
 ///
@@ -35,6 +35,13 @@ pub(super) fn file_operand<'w>(
         || WRITE_ALL_PATHS.contains(&program)
         || WRITE_LAST_PATH.contains(&program);
     ((file_program || word.contains('/')) && is_local(word)).then_some(word)
+}
+
+/// Whether `program` saves back the `file` it opens: an editor ([`EDITORS`])
+/// given a file. A folder it browses (`code .`, `vim ~`, a word ending in `/`)
+/// is no file it writes.
+pub(super) fn editor_saves(program: &str, file: &str) -> bool {
+    EDITORS.contains(&program) && !matches!(file, "." | ".." | "~" | "/") && !file.ends_with('/')
 }
 
 /// `VALUE` of `--opt=VALUE` or `NAME=VALUE`, when the `=` comes before any `/`.
@@ -83,5 +90,23 @@ mod tests {
             assert_eq!(file_operand("s", program, false), Some("s"), "{program}");
         }
         assert_eq!(file_operand("--", "cat", false), None);
+    }
+
+    #[test]
+    fn editors_save_the_files_they_open_not_folders() {
+        use super::editor_saves;
+        for (program, file) in [("vim", "~/.zshrc"), ("nano", "x"), ("code", "src/a.rs")] {
+            assert!(editor_saves(program, file), "{program} {file}");
+        }
+        for (program, file) in [
+            ("code", "."),
+            ("vim", "~"),
+            ("nvim", "/"),
+            ("emacs", "src/"),
+            ("cat", "x"),
+            ("open", "x"),
+        ] {
+            assert!(!editor_saves(program, file), "{program} {file}");
+        }
     }
 }

@@ -520,6 +520,9 @@ fn classify_arguments(
                 sink.write(ctx, file)?;
             } else {
                 sink.read(ctx, file)?;
+                if operands::editor_saves(program, file) {
+                    sink.write(ctx, file)?;
+                }
             }
         }
     }

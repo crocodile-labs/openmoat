@@ -15,7 +15,12 @@
 //! the Luhn check. A run of digits longer than 19 is never one, nor digits
 //! glued to letters (a commit SHA, a UUID), nor a decimal fraction. Card
 //! numbers that payment processors publish for testing identify nobody and are
-//! left out ([`PUBLIC_TEST_CARDS`]).
+//! left out ([`PUBLIC_TEST_CARDS`]). About one in ten numbers with a brand's
+//! prefix passes the Luhn check, so a contiguous run counts only in a card's
+//! context: as the value of a card's field (`card=`, `"cardNumber":`, `pan=`,
+//! `card[number]=`) or sent with a security code or an expiry date. A bare
+//! run in a path, a query or a search is an id (ADR-052, amended in 0.14.1);
+//! printed groups (`4000 1234 5678 9017`) are a card wherever they are.
 //!
 //! A mail address is `local@domain.tld`; one is ordinary (a commit author, a
 //! sign-up in a test, `--user me@example.com`), so only [`BULK_EMAILS`] or more
@@ -90,7 +95,8 @@ const PUBLIC_TEST_CARDS: &[&str] = &[
 /// Every class of personal data in `texts`, the words or URL of one send.
 pub(crate) fn classes_in(texts: &[&str]) -> Vec<Class> {
     let mut found = Vec::new();
-    if texts.iter().any(|t| has_card_number(t)) {
+    let card_fields = texts.iter().any(|t| names_card_fields(t));
+    if texts.iter().any(|t| card_number_in(t, card_fields)) {
         found.push(Class::Card);
     }
     if distinct_emails(texts, BULK_EMAILS) >= BULK_EMAILS {
@@ -99,8 +105,21 @@ pub(crate) fn classes_in(texts: &[&str]) -> Vec<Class> {
     found
 }
 
-/// Whether `text` holds a card number (see the module documentation).
+/// Whether `text` holds a card number (see the module documentation), with
+/// only `text` itself as the send.
+#[cfg(test)]
 pub(crate) fn has_card_number(text: &str) -> bool {
+    card_number_in(text, names_card_fields(text))
+}
+
+/// Whether `text` holds a card number in a card's context: written in the
+/// groups a card is printed in, given as the value of a card's field
+/// ([`card_key_before`]), or sent with the other fields of a card
+/// (`card_fields`: a security code or an expiry date, [`names_card_fields`]).
+/// A bare run of digits is otherwise an id (`/repositories/4000123456789017`,
+/// `?id=…`, a search for a job number), which is what such a run in a URL or
+/// a query usually is (ADR-052, amended in 0.14.1).
+fn card_number_in(text: &str, card_fields: bool) -> bool {
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -109,7 +128,12 @@ pub(crate) fn has_card_number(text: &str) -> bool {
             i += 3;
         } else if bytes[i].is_ascii_digit() && starts_number(bytes, i) {
             match card_at(bytes, i) {
-                Scan::Card => return true,
+                Scan::Card { grouped, end } => {
+                    if grouped || card_fields || card_key_before(bytes, i) {
+                        return true;
+                    }
+                    i = end;
+                }
                 // Another number may start at the next group (`1-4000…`);
                 // each start reads at most `MAX_GROUPS` groups, so the scan
                 // stays linear.
@@ -124,10 +148,102 @@ pub(crate) fn has_card_number(text: &str) -> bool {
 
 /// What reading a candidate number found.
 enum Scan {
-    Card,
+    /// A card number's digits, `grouped` when written in two or more groups,
+    /// ending at `end`.
+    Card { grouped: bool, end: usize },
     /// No card here; carry on at this offset.
     Next(usize),
 }
+
+/// Most bytes of punctuation between a field's name and its value
+/// (`"card":{"number":"`, `card%22%3A%22`).
+const MAX_KEY_GAP: usize = 12;
+/// Longest field name read before a value.
+const MAX_KEY: usize = 32;
+
+/// Whether the number at `start` is the value of a card's field: the name just
+/// before it (past `=`, `:`, quotes, brackets, `/` or spaces, and percent
+/// escapes of them) holds `card` (`card`, `cardNumber`, `credit_card`,
+/// `X-Card`, `/cards/`), or is `cc`, `ccnum`, `ccn`, `ccno` or `pan`, or is
+/// `number`/`num`/`no` right after such a name (`card[number]=`,
+/// `{"card":{"number":`, `card number 4000…`). Reads a bounded window, so the
+/// scan stays linear.
+fn card_key_before(bytes: &[u8], start: usize) -> bool {
+    let Some((key, key_start)) = key_before(bytes, start) else {
+        return false;
+    };
+    if card_key(&key) {
+        return true;
+    }
+    matches!(key.as_str(), "number" | "num" | "no" | "nr")
+        && key_before(bytes, key_start).is_some_and(|(outer, _)| card_key(&outer))
+}
+
+/// The name of a card's field, lowercase without `_` and `-`.
+fn card_key(key: &str) -> bool {
+    key.contains("card") || matches!(key, "cc" | "ccnum" | "ccnumber" | "ccn" | "ccno" | "pan")
+}
+
+/// The field name that ends before `at` past at most [`MAX_KEY_GAP`] bytes of
+/// punctuation, lowercase without `_` and `-`, and where it starts.
+fn key_before(bytes: &[u8], at: usize) -> Option<(String, usize)> {
+    let mut end = at;
+    let gap_floor = at.saturating_sub(MAX_KEY_GAP);
+    loop {
+        if end >= 3 && end - 3 >= gap_floor && is_escape(bytes, end - 3) {
+            end -= 3;
+        } else if end > gap_floor
+            && matches!(
+                bytes[end - 1],
+                b'=' | b':' | b'"' | b'\'' | b'[' | b']' | b'{' | b'/' | b' '
+            )
+        {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+    let mut begin = end;
+    while begin > 0
+        && end - begin < MAX_KEY
+        && (bytes[begin - 1].is_ascii_alphanumeric() || matches!(bytes[begin - 1], b'_' | b'-'))
+    {
+        begin -= 1;
+    }
+    // `%22card`: the hex digits of an escape are not part of the name
+    if begin >= 1 && bytes[begin - 1] == b'%' && end - begin > 2 {
+        begin += 2;
+    }
+    let key: String = bytes[begin..end]
+        .iter()
+        .filter(|b| !matches!(b, b'_' | b'-'))
+        .map(|b| char::from(b.to_ascii_lowercase()))
+        .collect();
+    (!key.is_empty()).then_some((key, begin))
+}
+
+/// Whether `text` names the other fields of a card: a security code (`cvv`,
+/// `cvc`, `cvv2`, `cvc2`, `cvn`, `csc`) or an expiry date (`exp`, `expiry`,
+/// `expiration`, `expmonth`, `expyear`), as a whole word in any case.
+fn names_card_fields(text: &str) -> bool {
+    text.split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|word| CARD_FIELDS.iter().any(|f| word.eq_ignore_ascii_case(f)))
+}
+
+/// The words of [`names_card_fields`].
+const CARD_FIELDS: &[&str] = &[
+    "cvv",
+    "cvc",
+    "cvv2",
+    "cvc2",
+    "cvn",
+    "csc",
+    "exp",
+    "expiry",
+    "expiration",
+    "expmonth",
+    "expyear",
+];
 
 /// Whether a number may start at `at`: the byte before it is no letter, digit
 /// or `_` (part of a word, a hex id) and no `.` (a decimal fraction or an
@@ -192,7 +308,10 @@ fn card_at(bytes: &[u8], start: usize) -> Scan {
         .is_none_or(|b| !(b.is_ascii_alphanumeric() || *b == b'_'));
     let number = &digits[..count];
     if ends && printed_layout(&groups[..group_count]) && is_card(number) {
-        Scan::Card
+        Scan::Card {
+            grouped: group_count > 1,
+            end: i,
+        }
     } else {
         Scan::Next(second_group.unwrap_or(i))
     }

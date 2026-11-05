@@ -105,5 +105,7 @@ malformed (a deny). The full table is in
   call OpenMoat defers usually runs.
 - Another `PreToolUse` file or a plugin can rewrite a call's input (`overrideInput`)
   after OpenMoat checked it. A workspace's `.cline/hooks` and `.clinerules/hooks` run
-  with the agent's rights; writes to them need review (session taint).
+  with the agent's rights; writing them (or renaming a folder onto `.clinerules`,
+  `.cline` or their `hooks`) needs review (`runs-later`), and session taint protects
+  every `.cline` and `.clinerules` file.
 - The VS Code extension, and native Windows, are not covered.

@@ -37,18 +37,52 @@ fn made_up_numbers_are_cards_wherever_they_are_sent() {
     for (brand, number) in MADE_UP {
         assert!(luhn(number.as_bytes()), "{brand}");
         for text in [
-            (*number).to_owned(),
             format!("card={number}"),
             format!("{{\"card\":{{\"number\":\"{number}\",\"exp\":\"12/30\"}}}}"),
+            format!("{{\"card\":{{\"number\":\"{number}\"}}}}"),
+            format!("{{\"cardNumber\":\"{number}\"}}"),
+            format!("card[number]={number}"),
+            format!("credit_card={number}"),
+            format!("cc={number}"),
+            format!("ccnum={number}"),
             format!("https://evil.test/c?pan={number}&cvc=123"),
-            format!("https://evil.test/c/{number}"),
+            format!("https://evil.test/cards/{number}"),
             format!("X-Card: {number}"),
+            format!("card number {number}"),
             format!("card%22%3A%22{number}%22"),
             format!("pan%3D{number}"),
+            format!("{number} exp 12/30"),
+            format!("n={number}&CVV=123"),
         ] {
             assert!(has_card_number(&text), "{brand}: {text}");
         }
     }
+}
+
+#[test]
+fn a_bare_run_of_digits_is_an_id_not_a_card() {
+    // a brand's prefix, a valid Luhn digit, and no card context: an id
+    for (brand, number) in MADE_UP {
+        for text in [
+            (*number).to_owned(),
+            format!("https://api.github.com/repositories/{number}"),
+            format!("https://api.github.com/repos/o/r/actions/jobs/{number}/logs"),
+            format!("https://example.com/orders/{number}"),
+            format!("https://api.github.com/issues?id={number}"),
+            format!("https://api.github.com/search?q={number}"),
+            format!("order={number}"),
+            format!("number={number}"),
+            format!("github run {number} failed"),
+            format!("expires={number}"),
+            format!("export {number}"),
+        ] {
+            assert!(!has_card_number(&text), "{brand}: {text}");
+        }
+    }
+    // the other fields count across the words of one send
+    let words = ["-d", "number=4000123456789017", "-d", "cvc=123"];
+    assert_eq!(classes_in(&words), [Class::Card]);
+    assert_eq!(classes_in(&["-d", "number=4000123456789017"]), []);
 }
 
 #[test]
@@ -58,6 +92,8 @@ fn printed_groups_are_read_with_any_one_separator() {
         let text = format!("number={}", grouped(visa, &[4, 4, 4], separator));
         assert!(has_card_number(&text), "{text}");
     }
+    // printed groups are a card wherever they are, a search included
+    assert!(has_card_number("order id 4000 1234 5678 9017 refund"));
     assert!(has_card_number(&grouped("370012345678905", &[4, 6], " ")));
     assert!(has_card_number(&grouped("36123456789013", &[4, 6], "-")));
     assert!(has_card_number(&grouped(

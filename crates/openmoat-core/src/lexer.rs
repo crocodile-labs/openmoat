@@ -28,6 +28,7 @@
 mod ansi_c;
 mod brace;
 mod heredoc;
+mod names;
 mod operator;
 #[cfg(test)]
 mod tests;
@@ -178,6 +179,9 @@ struct Lexer {
     tokens: Vec<Token>,
     pending_heredocs: Vec<heredoc::Pending>,
     current: Option<Word>,
+    /// Offsets into the current word's text where its quoting changed (a quote
+    /// or an escape began or ended), where a variable name ends (`names.rs`).
+    boundaries: Vec<usize>,
 }
 
 impl Lexer {
@@ -188,7 +192,14 @@ impl Lexer {
             tokens: Vec::new(),
             pending_heredocs: Vec::new(),
             current: None,
+            boundaries: Vec::new(),
         }
+    }
+
+    /// Note that the quoting changes here, at the end of the current word's text.
+    fn boundary(&mut self) {
+        let at = self.current.as_ref().map_or(0, |w| w.text.len());
+        self.boundaries.push(at);
     }
 
     fn peek(&self) -> Option<char> {
@@ -210,13 +221,15 @@ impl Lexer {
     }
 
     fn flush_word(&mut self) {
-        if let Some(w) = self.current.take() {
+        let boundaries = std::mem::take(&mut self.boundaries);
+        if let Some(mut w) = self.current.take() {
             if let Some(pending) = self.awaiting_delimiter() {
                 // The word following `<<` is the delimiter, not an argument.
                 pending.literal |= w.quoted;
                 pending.delimiter = Some(w.text);
                 return;
             }
+            names::end_names(&mut w, &boundaries);
             self.tokens.push(Token::Word(w));
         }
     }
@@ -251,16 +264,21 @@ impl Lexer {
                 '\'' => {
                     self.bump();
                     if self.take_unquoted_dollar() {
+                        self.boundary();
                         self.ansi_c_quoted()?;
                     } else {
+                        self.boundary();
                         self.single_quoted()?;
                     }
+                    self.boundary();
                 }
                 '"' => {
                     self.bump();
                     // `$"…"` (locale translation) is a double-quoted string
                     self.take_unquoted_dollar();
+                    self.boundary();
                     self.double_quoted()?;
+                    self.boundary();
                 }
                 '\\' => {
                     self.bump();
@@ -270,7 +288,9 @@ impl Lexer {
                             if let Some(pending) = self.awaiting_delimiter() {
                                 pending.literal = true;
                             }
+                            self.boundary();
                             self.word().text.push(escaped);
+                            self.boundary();
                         }
                         None => return Err(LexError::TrailingBackslash),
                     }

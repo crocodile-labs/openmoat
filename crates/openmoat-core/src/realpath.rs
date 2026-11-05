@@ -111,7 +111,14 @@ impl PathResolver for MapPathResolver {
                 (rest.is_empty() || rest.starts_with('/')).then_some((link.len(), target, rest))
             })
             .max_by_key(|(len, _, _)| *len)
-            .map(|(_, target, rest)| format!("{target}{rest}"))
+            // a link to `/` (Linux's `/proc/self/root`) joins as the OS does: no `//`
+            .map(|(_, target, rest)| {
+                if rest.is_empty() {
+                    target.clone()
+                } else {
+                    format!("{}{rest}", target.trim_end_matches('/'))
+                }
+            })
     }
 }
 
@@ -134,6 +141,16 @@ mod tests {
         assert_eq!(r.resolve("/p/sx/id_rsa"), None);
         assert_eq!(r.resolve("/p/src/main.rs"), None);
         assert_eq!(NoResolver.resolve("/p/s"), None);
+        // a link to the root, as Linux's `/proc/self/root` is, joins without `//`
+        let root = MapPathResolver {
+            links: BTreeMap::from([("/proc/self/root".to_owned(), "/".to_owned())]),
+            ..MapPathResolver::default()
+        };
+        assert_eq!(
+            root.resolve("/proc/self/root/h/.ssh/id_rsa").as_deref(),
+            Some("/h/.ssh/id_rsa")
+        );
+        assert_eq!(root.resolve("/proc/self/root").as_deref(), Some("/"));
     }
 
     #[test]
