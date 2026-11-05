@@ -62,7 +62,8 @@ fn init_creates_state_and_installs_claude_code_hook() {
     let status = sb.moat(&["status"]);
     assert_eq!(status.status.code(), Some(0), "{}", stdout(&status));
     let shown = crate::common::squash(&stdout(&status));
-    assert!(shown.contains("✔ Claude Code hook"), "{shown}");
+    assert!(shown.contains(" Claude Code hook"), "{shown}");
+    assert!(!shown.contains("✗ Claude Code"), "{shown}");
 }
 
 #[test]

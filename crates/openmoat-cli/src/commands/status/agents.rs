@@ -92,7 +92,7 @@ pub(super) fn hooks(shown: &mut Shown, home: &Home, binary: &Path) -> Result<boo
         let text = format!("found at {}; {}", found.display(), host.spec().gaps);
         shown
             .agents
-            .push(Row::new(Mark::Info, host.display_name(), text));
+            .push(Row::new(Mark::Attention, host.display_name(), text));
     }
     Ok(healthy)
 }

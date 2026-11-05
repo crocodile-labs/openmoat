@@ -381,10 +381,14 @@ fn audit_line(report: &mut Report, chain: &ChainReport) {
             chain.events
         ),
     );
+    // Shown without --verbose: the head is what a person records elsewhere.
     if let Some(head) = &chain.head {
-        report.note(&format!(
-            "audit log        head {head}; record it elsewhere (`openmoat audit anchor`), then `openmoat audit verify --against` it later"
-        ));
+        report.note_at(
+            &format!(
+                "audit log        head {head}; record it elsewhere (`openmoat audit anchor`), then `openmoat audit verify --against` it later"
+            ),
+            Place::OpenMoat,
+        );
     }
     if chain.unchained > 0 {
         report.note_at(

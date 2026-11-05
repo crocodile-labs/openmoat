@@ -22,21 +22,20 @@ fn agent(sb: &Sandbox, host: &str) -> Value {
 fn each_agent_reports_its_level_and_gaps() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
     let status = squash(&stdout(&sb.moat(&["status"])));
-    for line in [
-        "✔ Claude Code hook + OS sandbox\n",
-        "✔ Codex hook + OS sandbox\n",
-        "✔ Cursor hook + OS sandbox\n",
-    ] {
-        assert!(status.contains(line), "{line:?} in {status}");
+    // `!` instead of `✔` where something else names the agent: an advisory
+    // for the version on the search path, Linux's TIOCSTI warning for Codex.
+    for name in ["Claude Code", "Codex", "Cursor"] {
+        let line = format!(" {name} hook + OS sandbox\n");
+        assert!(status.contains(&line), "{line:?} in {status}");
+        assert!(!status.contains(&format!("✗ {name}")), "{status}");
     }
     // The known gaps, with every check, only with --verbose.
     assert!(!status.contains("known gaps"), "{status}");
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let doctor = squash(&stdout(&out));
-    // `!` instead of `✔` where a warning names the agent (Linux's TIOCSTI one for Codex).
     assert!(doctor.contains(" Codex hook + OS sandbox\n"), "{doctor}");
-    assert!(doctor.contains("✔ Cursor hook + OS sandbox\n"), "{doctor}");
+    assert!(doctor.contains(" Cursor hook + OS sandbox\n"), "{doctor}");
     assert!(!doctor.contains("known gaps:"), "{doctor}");
     let verbose = squash(&stdout(&sb.moat(&["doctor", "--verbose"])));
     for line in [
@@ -182,7 +181,7 @@ fn claude_code_on_native_windows_is_hook_only() {
     );
     let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains("✔ Claude Code hook only (sandbox not available"),
+        status.contains(" Claude Code hook only (sandbox not available"),
         "{status}"
     );
     let home = text(&output(&mut sb.command(), Some("")));

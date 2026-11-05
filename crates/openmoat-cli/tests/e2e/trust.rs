@@ -193,7 +193,7 @@ fn status_and_doctor_say_which_form_applies() {
     let (sb, project) = repo();
     let dir = project.to_string_lossy().into_owned();
     for (_, out) in reports(&sb, &project) {
-        assert!(out.contains("repo policy"), "{out}");
+        assert!(out.contains("Repo policy"), "{out}");
         assert!(out.contains("not trusted: tightening only"), "{out}");
     }
     assert_eq!(trust(&sb, &[&dir]).status.code(), Some(OK));

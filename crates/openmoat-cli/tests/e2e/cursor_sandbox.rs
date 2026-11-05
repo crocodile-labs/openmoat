@@ -59,7 +59,7 @@ fn init_writes_and_pins_sandbox_json_and_uninstall_gives_it_back() {
 
     // Later commands find the directory through the record, without the variable.
     let status = crate::common::squash(&stdout(&sb.moat(&["status"])));
-    assert!(status.contains("✔ Cursor hook + OS sandbox\n"), "{status}");
+    assert!(status.contains(" Cursor hook + OS sandbox\n"), "{status}");
     let doctor = sb.moat(&["doctor", "--verbose"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
     let shown = crate::common::squash(&stdout(&doctor));

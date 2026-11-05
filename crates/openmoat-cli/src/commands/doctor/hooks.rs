@@ -80,14 +80,9 @@ pub(super) fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<V
             host.spec().gaps,
             found.display()
         ));
-        report.human(
-            Place::Agents,
-            Row::new(
-                Mark::Info,
-                name,
-                "found here; OpenMoat has no hook for it (openmoat doctor --verbose)",
-            ),
-        );
+        // What it means for that agent stays in sight: no hook protects it.
+        let text = format!("found at {}; {}", found.display(), host.spec().gaps);
+        report.human(Place::Agents, Row::new(Mark::Attention, name, text));
     }
     Ok(hook_files)
 }

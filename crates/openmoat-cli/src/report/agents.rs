@@ -48,6 +48,15 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
         } else {
             mark
         };
+        // The hook a version runs OpenMoat through, where versions differ
+        // (OpenCode 1's and 2's).
+        let through = host
+            .filter(|_| agent.level.hooked())
+            .and_then(crate::install::host_version::hook_api);
+        let text = match through {
+            Some(through) => format!("{text} · {through}"),
+            None => text,
+        };
         table.rows.push(Row::new(mark, agent.name, text));
         if let Some(limit) = agent.limit.filter(|_| agent.level.hooked()) {
             table.rows.push(Row::new(
