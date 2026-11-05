@@ -195,7 +195,8 @@ id     time (UTC) host         verdict rules          action
 
 `review` shows the agent's own permission prompt, tagged with the rule
 (`moat: review [git-internals] — git runs what its config, hooks and refs name …`). Approve
-it there. Codex, Cursor for file tools, pi in print and JSON mode, OpenCode, Claude Code in
+it there. Codex, Cursor for file tools, pi in print and JSON mode, OpenCode 1, goose, the
+Cline CLI, Claude Code in
 `bypassPermissions` and `dontAsk` modes, and Continue CLI cannot prompt: there the call is
 denied with a message that says to run `openmoat` or `openmoat allow --last`. GitHub
 Copilot CLI in autopilot turns a `review` into a deny itself; `openmoat allow --last`
@@ -208,7 +209,7 @@ openmoat allow --last --always   # or a permanent rule in ~/.moat/policy.d/appro
 ```
 
 On an agent without an OS sandbox from OpenMoat (OpenClaw, GitHub Copilot CLI, pi,
-Gemini CLI, OpenCode, Hermes Agent, goose, and Claude Code and Cursor on native Windows or
+Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, and Claude Code and Cursor on native Windows or
 with their sandbox not in place), running a script the same session wrote needs review
 (`session-written-code`: `moat: review [session-written-code] — runs code this session
 wrote, with no OS sandbox below the hook: /p/x.py`). Look at the script, then approve
@@ -566,8 +567,11 @@ these takes one command in your own terminal (agents are denied all of them):
   agent is using the wrapped server. `openmoat mcp unwrap <server>` takes the gateway out
   of that server's path. With another rule, the policy denies what the call's arguments
   name: the error message names the rule and the reason.
-- **A command you need keeps needing review or is denied**: `openmoat allow --last` for this session,
-  `openmoat allow --last --always` for good, or `openmoat edit` for a wider rule. Please also
+- **A command you need keeps needing review**: `openmoat allow --last` for this session,
+  `openmoat allow --last --always` for good, or `openmoat edit` for a wider rule.
+  **A command you need is denied**: deny rules win over every allow, so change or remove
+  the rule with `openmoat edit` (for a card-number false positive, narrow `card-egress`,
+  [POLICY.md](POLICY.md#44-personal-data-on-its-way-out) §4.4). Please also
   report it with the "False positive" issue template, so the default policy stops doing it.
 - **You need OpenMoat off right now**: `openmoat uninstall` takes OpenMoat out of every agent it
   set up and puts each settings file back as it was; restart the agent afterwards. Your
@@ -648,7 +652,8 @@ these takes one command in your own terminal (agents are denied all of them):
 - **The `openmoat` binary is missing or broken**: Codex, Continue CLI and Claude Code before
   2.1.295 then run tool calls without the hook ("When the hook fails" in
   [THREAT_MODEL.md](THREAT_MODEL.md)), and Claude Code from 2.1.295, Cursor, OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent and goose block them.
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI (through
+  OpenMoat's hook script) and goose block them.
  Reinstall it (`brew reinstall crocodile-labs/tap/openmoat`, or the installer in
   [INSTALL.md](INSTALL.md)), then run `openmoat uninstall` if you want it off.
 
@@ -707,7 +712,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
 | `openmoat guard --host <id>` | the hook entry point; agents call it, you do not. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
-Exit codes: 0 allow or success, 1 the agent `openmoat run` started exited non-zero, 2 deny,
+Exit codes: 0 allow or success, 1 the program `openmoat run` or `openmoat mcp proxy` started
+exited non-zero, or `openmoat mcp proxy` refused to start the server, 2 deny,
 3 unresolved review (`policy check`) or a change for review (`policy check-diff`), 64 usage or
 configuration error. `openmoat guard` never
 exits 64: it denies with exit 2 instead, so a broken hook blocks rather than fails open

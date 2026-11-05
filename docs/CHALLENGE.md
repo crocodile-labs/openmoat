@@ -21,7 +21,8 @@ It takes five minutes to set up, and you can start without any agent:
 
 The latest release (`openmoat --version`) with the **default policy**, as
 `openmoat init` installs it, protecting one of the supported agents: Claude Code, Codex,
-Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode or Hermes Agent. You may also attack the policy
+Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline
+CLI or goose. You may also attack the policy
 engine directly with `openmoat policy check`, without any agent.
 
 ## Set up

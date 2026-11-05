@@ -50,4 +50,4 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | [CHANGELOG.md](../CHANGELOG.md) | Every user-visible change, per release |
 
 Documents are updated in the same pull request as the behaviour they describe. ADRs
-are immutable and superseded, never edited.
+are superseded, not edited, except to rename a term a later ADR renames (ADR-053 §7).
