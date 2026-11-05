@@ -54,6 +54,7 @@ label "risk: high"     b60205 "Decision engine, policy, guard, workflows, SECURI
 # workflow
 label "needs: fixture"      e4e669 "Behaviour change without a conformance fixture"
 label "needs: adr"          e4e669 "Changes an invariant; add docs/adr entry"
+label "ci: full"            000000 "Run every CI job on this PR, macos-15-intel included (ci.yml)"
 label security           b60205 "Security-relevant; maintainer review required"
 label "good first issue"   7057ff "Adapters, docs, examples; never the trusted core"
 label breaking           b60205 "Breaking change to policy schema, CLI or exit codes"

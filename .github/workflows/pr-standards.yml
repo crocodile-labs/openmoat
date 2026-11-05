@@ -2,6 +2,9 @@ name: pr-standards
 
 # Runs on `pull_request` and on `pull_request_target`, and both run every check
 # (a job skipped by an `if` would report success under the same check name).
+# In the merge queue (`merge_group`) there is no pull request to read, and the
+# check passed on the pull request itself, so the job is skipped there on
+# purpose: skipped, it reports success and the required check is met.
 # Labels are written only where the token can: a `pull_request` run from a fork
 # has a read-only token, so for a fork the `pull_request_target` run adds them.
 # `pull_request_target` is safe here because the job never checks out or runs
@@ -13,6 +16,13 @@ on:
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   pull_request_target: # zizmor: ignore[dangerous-triggers] no checkout, no PR code runs
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  merge_group:
+
+# A newer edit, label or push cancels the run before, per trigger: the
+# `pull_request` and `pull_request_target` runs of one change both finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 permissions:
   contents: read
@@ -23,7 +33,7 @@ jobs:
     name: labels · size · risk · body
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.actor != 'dependabot[bot]'
+    if: github.event_name != 'merge_group' && github.actor != 'dependabot[bot]'
     env:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
