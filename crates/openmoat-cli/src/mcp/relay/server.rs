@@ -47,12 +47,22 @@ impl Relay {
             }
             (None, true) => {
                 let id = fields.get("id").cloned().unwrap_or(Value::Null);
-                if self.response_of(&id, fields, out) {
-                    self.filter_listing(&mut message);
-                    Some(message)
-                } else {
-                    None
+                if !self.response_of(&id, fields, out) {
+                    return None;
                 }
+                if let Some(result) = fields.get("result")
+                    && let Err(e) = self.gate.result(&id_key(&id), result)
+                {
+                    // The model must not read a result whose pieces the
+                    // cross-server flow check does not have (ADR-058).
+                    out.push(dropped(&format!("the result of request {id}: {e:#}")));
+                    let why = format!(
+                        "OpenMoat cannot record this result ({e:#}), so it is not passed on"
+                    );
+                    return Some(error(&id, REFUSED, &why));
+                }
+                self.filter_listing(&mut message);
+                Some(message)
             }
             _ => {
                 out.push(dropped(

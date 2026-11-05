@@ -406,6 +406,13 @@ pub struct McpSettings {
     /// unlisted hosts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_open: Option<BrowserOpen>,
+    /// MCP servers, by the name `openmoat mcp proxy --server` gives them,
+    /// whose data flows are trusted (ADR-058): text such a server returned may
+    /// reach another server's tool that writes or sends, and a call to such a
+    /// server may carry another server's text, without a `mcp-cross-server`
+    /// review.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flow_trusted: Vec<String>,
 }
 
 /// `mcp.browser_open`: the kind a read-only page open of an MCP tool is decided as.
@@ -445,6 +452,13 @@ impl Policy {
     #[must_use]
     pub fn browser_open_is_fetch(&self) -> bool {
         self.mcp.as_ref().and_then(|m| m.browser_open) != Some(BrowserOpen::Net)
+    }
+
+    /// The MCP servers whose data flows need no `mcp-cross-server` review
+    /// (`mcp.flow_trusted`, ADR-058).
+    #[must_use]
+    pub fn mcp_flow_trusted(&self) -> &[String] {
+        self.mcp.as_ref().map_or(&[], |m| m.flow_trusted.as_slice())
     }
 }
 

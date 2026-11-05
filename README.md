@@ -227,7 +227,10 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   hides a changed tool until you accept it, and passes a call to the server only when
   the policy does not deny it as the server receives it and the agent's hook decided
   exactly that call (`mcp-unattributed` otherwise), so a server cannot answer a call
-  OpenMoat refused or receive one nobody checked.
+  OpenMoat refused or receive one nobody checked. When text one wrapped server returned
+  (an address, an email address, a long token) shows up in a call to another server's
+  tool that writes or sends, the call needs review (`mcp-cross-server`); same-server and
+  read-only calls stay quiet.
 - **Known flaws.** `openmoat status` and `openmoat doctor` warn when an agent's installed
   version has a published security advisory, and name the version that fixes it.
 - **Self-protection.** The agent cannot edit the policy, approve its own blocked call or

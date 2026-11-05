@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 8;
+pub(super) const SCHEMA_VERSION: i64 = 9;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -18,6 +18,8 @@ pub(super) const MCP_TICKETS_VERSION: i64 = 6;
 /// The first version that keeps, with each file a session wrote, the state of
 /// the file before the write ([`V7`]).
 pub(super) const WRITE_BEFORE_VERSION: i64 = 7;
+/// The first version with the pieces of MCP tool results ([`V9`]).
+pub(super) const MCP_FLOW_VERSION: i64 = 9;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -232,6 +234,24 @@ CREATE INDEX mcp_tickets_arguments ON mcp_tickets(arguments_sha256, id);
 CREATE INDEX mcp_tickets_ts ON mcp_tickets(ts_ms);
 ";
 
+/// Version 9: the pieces of the MCP tool results each session received, by
+/// server (ADR-058, `mcp_flow.rs`). A lookup like [`V6`]: rows hold hashes,
+/// never text, and are removed by age and past a row limit per session.
+/// `IF NOT EXISTS`, as for [`V4`].
+const V9: &str = "
+CREATE TABLE IF NOT EXISTS mcp_flow (
+    id          INTEGER PRIMARY KEY,
+    ts_ms       INTEGER NOT NULL,
+    host        TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    server      TEXT    NOT NULL,
+    piece       TEXT    NOT NULL,
+    UNIQUE (host, session_id, server, piece)
+);
+CREATE INDEX IF NOT EXISTS mcp_flow_piece ON mcp_flow(host, session_id, piece);
+CREATE INDEX IF NOT EXISTS mcp_flow_ts ON mcp_flow(ts_ms);
+";
+
 /// A `CHECK` of one table that a step widens: `from` becomes `to`, which
 /// accepts every value `from` accepts, and more.
 struct Widening {
@@ -359,6 +379,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
         if !widen_check(&tx, tickets)? {
             tx.execute_batch(V8_REBUILD_TICKETS)?;
         }
+    }
+    if found < 9 {
+        tx.execute_batch(V9)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

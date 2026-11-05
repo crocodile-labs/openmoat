@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use super::*;
 
 mod gaps;
+mod results;
 
 /// One call the gate saw: its method, name, arguments, and why the pins held it.
 #[derive(Debug, Clone, PartialEq)]

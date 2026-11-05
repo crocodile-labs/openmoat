@@ -18,6 +18,8 @@ use serde_json::{Value, json};
 
 use crate::common::{OK, Sandbox, output, stdout, text};
 
+mod flow;
+
 const FIXTURES: &str = include_str!("mcp_gateway/fixtures.json");
 
 /// Every place a reader may end a line (as in `src/mcp/relay/tests/gaps.rs`).
@@ -40,7 +42,7 @@ impl Gateway {
         let gateway = Self { sb, record };
         // `openmoat mcp proxy` starts only a definition a person accepted
         // (ADR-049): one per mode, each starting the proxy as `docs`.
-        for mode in ["answer", "silent", "rug"] {
+        for mode in ["answer", "silent", "rug", "inject"] {
             let line = gateway.proxy_line(mode);
             let args: Vec<&str> = line.iter().map(String::as_str).collect();
             gateway.sb.define_wrapped(&format!("docs-{mode}"), &args);

@@ -120,6 +120,18 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    let trusted = policy.mcp_flow_trusted();
+    if !trusted.is_empty() {
+        out.push(Warning {
+            rule: "mcp.flow_trusted".to_owned(),
+            message: format!(
+                "text these MCP servers return may reach another server's tools that write or \
+                 send, and calls to them may carry other servers' text, with no \
+                 `mcp-cross-server` review: {}",
+                trusted.join(", ")
+            ),
+        });
+    }
     out
 }
 
@@ -483,10 +495,12 @@ mod tests {
         let w = warn("version: 1\nmcp: { trust_first_sight: true }\n");
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("mcp.trust_first_sight"), "{w:?}");
-        assert_eq!(
-            warn("version: 1\nmcp: { trust_first_sight: false }\n"),
-            Vec::<String>::new()
-        );
+        let quiet = "version: 1\nmcp: { trust_first_sight: false, flow_trusted: [] }\n";
+        assert_eq!(warn(quiet), Vec::<String>::new());
+        // servers trusted for cross-server flow (ADR-058)
+        let w = warn("version: 1\nmcp: { flow_trusted: [github, linear] }\n");
+        assert!(w.len() == 1 && w[0].contains("`mcp.flow_trusted`"), "{w:?}");
+        assert!(w[0].contains("github, linear"), "{w:?}");
     }
 
     #[test]
