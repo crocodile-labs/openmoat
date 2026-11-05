@@ -27,7 +27,9 @@ fn each_agent_reports_its_level_and_gaps() {
         "Claude Code      ✔ protection: hook + OS sandbox",
         "Claude Code      · known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox",
         "Codex            ✔ protection: hook + OS sandbox",
-        "Codex            · known gaps: web search and hosted tools are not hooked; reviews become denies",
+        "Codex            · known gaps: web search, hosted tools, code mode's `exec`/`wait` and \
+         `request_permissions` are not hooked; what `write_stdin` types into a running command \
+         is not hooked",
         "Cursor           ✔ protection: hook + OS sandbox",
         "Cursor           · known gaps: commands Cursor runs outside its sandbox",
     ] {

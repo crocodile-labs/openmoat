@@ -469,7 +469,10 @@ fn codex_payloads_use_the_same_contract() {
     assert!(sb.home.join(".codex/hooks.json").is_file());
 
     let hooks = std::fs::read_to_string(sb.home.join(".codex/hooks.json")).unwrap();
-    assert!(hooks.contains("Bash|apply_patch|mcp__.*"), "{hooks}");
+    assert!(
+        hooks.contains("Bash|apply_patch|read_mcp_resource|view_image|mcp__.*"),
+        "{hooks}"
+    );
 
     for (payload, rule) in [
         ("codex/pretooluse-shell.json", "env-poison"),
