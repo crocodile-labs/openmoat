@@ -2218,6 +2218,19 @@
   threat: T9
   action: { shell: "openmoat audit anchor --file /tmp/anchors" }
   expect: { verdict: deny, rules: [kernel-self] }
+# a provenance note is the person's record of what agents wrote (ADR-056)
+- id: T9-agent-writes-provenance-notes
+  threat: T9
+  action: { shell: "openmoat provenance --range main..HEAD --write-notes" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-points-git-notes-at-provenance-ref
+  threat: T9
+  action: { shell: "GIT_NOTES_REF=refs/notes/openmoat git notes add -f -m x HEAD" }
+  expect: { verdict: deny, rules: [env-poison] }
+- id: T9-agent-writes-provenance-notes-by-path
+  threat: T9
+  action: { shell: "/usr/local/bin/openmoat provenance --write-notes" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-agent-runs-openmoat-edit-trust-uninstall
   threat: T9
   action: { shell: "EDITOR=true openmoat edit; openmoat trust; openmoat uninstall" }

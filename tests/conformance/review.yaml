@@ -2382,6 +2382,39 @@
   threat: T7
   action: { shell: "git init --template=/tmp/t new" }
   expect: { verdict: review, rules: [git-internals] }
+# an agent writing, moving or removing OpenMoat's provenance notes (ADR-056)
+- id: review-agent-adds-provenance-note
+  threat: T9
+  action: { shell: "git notes --ref openmoat add -f -m '{\"files\":[]}' HEAD" }
+  expect: { verdict: review, rules: [provenance-notes] }
+- id: review-agent-removes-provenance-note
+  threat: T9
+  action: { shell: "git notes --ref=refs/notes/openmoat remove HEAD" }
+  expect: { verdict: review, rules: [provenance-notes] }
+- id: review-agent-copies-provenance-note
+  threat: T9
+  action: { shell: "git notes --ref=openmoat copy -f HEAD~1 HEAD" }
+  expect: { verdict: review, rules: [provenance-notes] }
+- id: review-agent-moves-provenance-ref
+  threat: T9
+  action: { shell: "git update-ref refs/notes/openmoat 4b825dc642cb6eb9a060e54bf8d69288fbee4904" }
+  expect: { verdict: review, rules: [provenance-notes] }
+- id: review-agent-deletes-provenance-ref
+  threat: T9
+  action: { shell: "git update-ref -d refs/notes/openmoat" }
+  expect: { verdict: review, rules: [provenance-notes] }
+- id: review-agent-moves-refs-from-input
+  threat: T9
+  action: { shell: "printf 'delete refs/notes/openmoat\\n' | git update-ref --stdin" }
+  expect: { verdict: review, rules: [provenance-notes] }
+- id: review-agent-sets-notes-ref-config
+  threat: T9
+  action: { shell: "git config core.notesRef refs/notes/openmoat" }
+  expect: { verdict: review, rules: [git-internals] }
+- id: review-agent-writes-provenance-ref-file
+  threat: T9
+  action: { fs_write: "/p/.git/refs/notes/openmoat" }
+  expect: { verdict: review, rules: [git-internals] }
 # deleting a local branch the reflog still holds needs review rather than denies
 - id: review-git-branch-force-delete
   threat: T4

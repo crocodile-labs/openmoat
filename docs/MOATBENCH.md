@@ -268,7 +268,7 @@ below are from 2026-10-23.
 
 ### Method
 
-- The scenarios bundled with OpenMoat 0.10.0 on 2026-10-23, every one of which Claude Code has the tools for. `main` now bundles 64 scenarios (48 attack, 8 benign and 8 developer workflows) with 145 steps (101 shell, 10 read, 11 write, 8 edit, 1 fetch, 14 MCP), counted from `crates/openmoat-cli/moatbench/*.yaml`, so a new run scores more steps than the tables below.
+- The scenarios bundled with OpenMoat 0.10.0 on 2026-10-23, every one of which Claude Code has the tools for. `main` now bundles 65 scenarios (49 attack, 8 benign and 8 developer workflows) with 147 steps (103 shell, 10 read, 11 write, 8 edit, 1 fetch, 14 MCP), counted from `crates/openmoat-cli/moatbench/*.yaml`, so a new run scores more steps than the tables below.
 - Each hook ran with the scenario's throwaway project as its working directory, an environment of only `PATH` and a throwaway `HOME`, and a 10-second limit.
 - The answer is read as Claude Code reads it: exit 2 or `deny` is a deny, `ask` a review, `allow` an allow, and exit 0 with no decision leaves the call to Claude Code's own prompt.
 - A step that must be stopped counts as caught on a deny or a review (Claude Code then stops and asks the person).

@@ -253,8 +253,13 @@ pub const GROUPS: &[Group] = &[
         id: "self-protection",
         title: "OpenMoat's own policy, hooks and binary",
         does: "deny the agent changing or stopping OpenMoat and running the commands only a \
-               person may run",
-        covers: Covers::Rules(&["kernel-self", "agent-folders", "stops-openmoat"]),
+               person may run, and hold its writes to OpenMoat's provenance notes for review",
+        covers: Covers::Rules(&[
+            "kernel-self",
+            "agent-folders",
+            "stops-openmoat",
+            "provenance-notes",
+        ]),
         controls: &[&LLM06, &CC8_1, &A8_9],
     },
     Group {

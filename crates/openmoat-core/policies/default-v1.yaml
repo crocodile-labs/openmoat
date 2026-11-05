@@ -470,6 +470,9 @@ deny:
       # an audit anchor is the person's record of the log, kept outside it (ADR-031)
       - "{moat,openmoat} audit anchor*"
       - "*/{moat,openmoat} audit anchor*"
+      # a provenance note is the person's record of what agents wrote (ADR-056)
+      - "{moat,openmoat} provenance * --write-notes*"
+      - "*/{moat,openmoat} provenance * --write-notes*"
       # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
       - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
       - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
@@ -1023,6 +1026,14 @@ review:
     # DIR's hooks into the new repository; an empty `--template=` copies none
     shell: ["git config *", "git remote *", "git -c *", "git --config-env*", "git --git-dir*", "git --work-tree*", "git --exec-path*",
       "git init --template=?*", "git init --template ?*", "git init * --template=?*", "git init * --template ?*"]
+  # provenance notes (ADR-056) are a person's record of what agents wrote; an agent that
+  # wrote, moved or removed them could hide its own work from a review. Only the notes
+  # ref OpenMoat uses: other notes and all of history stay as they are. `GIT_NOTES_REF`
+  # is denied (`env-poison`), `git config core.notesRef` and files under `.git` need review
+  # (`git-internals`); `update-ref --stdin` reads which refs it moves from its input
+  - id: provenance-notes
+    reason: OpenMoat's provenance notes record what agents wrote; a person writes them with `openmoat provenance --write-notes`
+    shell: ["git notes * *openmoat*", "git update-ref * *notes/openmoat*", "git update-ref * --stdin*"]
   # deleting a local branch loses nothing the reflog does not keep for weeks, so it
   # needs review where a force push or `reset --hard` is denied
   - id: destructive-recoverable
