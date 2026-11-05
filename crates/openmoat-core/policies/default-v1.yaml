@@ -597,7 +597,9 @@ deny:
   - id: card-egress
     reason: sends a payment card number to a host off this machine
     # `@pii-egress card <host>` atoms: 13 to 19 digits with a card brand's prefix and
-    # length that pass the Luhn check, in the places `token-egress` reads; loopback
+    # length that pass the Luhn check, in the places `token-egress` reads, written in
+    # a card's printed groups or in a card's context (a card field's value, or sent
+    # with a security code or expiry), so a bare id in a URL is none; loopback
     # hosts and processors' published test numbers are left out (POLICY.md §4.4,
     # ADR-052). `@pii-egress emails <host>` (ten or more distinct mail addresses in
     # one send) has no default rule: add one to deny or review
@@ -626,6 +628,12 @@ allow:
       "!${project}/**/opencode.json", "!${project}/**/opencode.jsonc",
       "!${project}/**/.opencode", "!${project}/**/.opencode/plugins", "!${project}/**/.opencode/plugin",
       "!${project}/**/.hermes/plugins/**", "!${project}/**/.hermes", "!${project}/**/.hermes/plugins",
+      # the folders a repository's `core.hooksPath` usually names, and Cline's workspace
+      # hooks, with the folders above them
+      "!${project}/**/.githooks/**", "!${project}/**/.git-hooks/**", "!${project}/**/githooks/**", "!${project}/**/git-hooks/**",
+      "!${project}/**/.githooks", "!${project}/**/.git-hooks", "!${project}/**/githooks", "!${project}/**/git-hooks",
+      "!${project}/**/.clinerules/hooks/**", "!${project}/**/.cline/hooks/**",
+      "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline", "!${project}/**/.cline/hooks",
       # what every Python start runs, a project's `.venv` included
       "!${project}/**/site-packages/*.pth", "!${project}/**/dist-packages/*.pth",
       "!${project}/**/sitecustomize.py", "!${project}/**/usercustomize.py"]
@@ -683,6 +691,11 @@ allow:
       - "git config {-f,--file,--blob} ?* {--get,--get-all,--get-regexp,--list,-l}"
       - "git config {--file=*,--blob=*} {--get,--get-all,--get-regexp,--list,-l}"
       - "git config {get,list}"
+      # `git config <section>.<key>` with nothing after it prints the value, as
+      # `--get` does; a value after it, or a subcommand (`edit`, which has no
+      # `.`), writes and needs review
+      - "git config [a-zA-Z0-9]*.?* $"
+      - "git config {--global,--local,--system,--worktree,--show-origin,--show-scope,--includes} [a-zA-Z0-9]*.?* $"
       - "ls*"
       - "cat *"
       - "head *"
@@ -1076,6 +1089,17 @@ review:
       "~/.hermes/profiles/*/.env", "~/.hermes/profiles/*/plugins/**", "~/.hermes/profiles/*/hooks/**",
       "~/.hermes/profiles/*/agent-hooks/**", "~/.hermes/profiles/*/skills/**", "~/.hermes/profiles/*/cron/**",
       "**/.hermes/plugins/**", "**/.hermes", "**/.hermes/plugins",
+      # git hooks outside `.git`: the folders a repository's `core.hooksPath` usually
+      # names (`.githooks` and `githooks`, `.git-hooks` and `scripts/git-hooks`), which
+      # git runs on the next commit or push once the setting points there. Not every
+      # folder named `hooks`: React hooks and docs live in those
+      "**/.githooks/**", "**/.git-hooks/**", "**/githooks/**", "**/git-hooks/**",
+      "**/.githooks", "**/.git-hooks", "**/githooks", "**/git-hooks",
+      # Cline: a workspace's hooks, every file of which it runs on each tool call, with
+      # the folders above them (a rename away and back edits them); its rules files
+      # in `.clinerules/` stay ordinary project writes
+      "**/.clinerules/hooks/**", "**/.cline/hooks/**",
+      "**/.clinerules", "**/.clinerules/hooks", "**/.cline", "**/.cline/hooks",
       # the Continue CLI's configuration, whose `mcpServers` it starts
       "~/.continue/config.yaml",
       # what every Python start runs, the allowed `pytest` included: a `.pth`

@@ -237,6 +237,30 @@
 - id: benign-card-to-localhost-dev-server
   action: { shell: "curl -d 'card=4000123456789017' http://localhost:3000/pay" }
   expect: { verdict: defer, rules: [default] }
+# A bare run of digits that happens to pass the Luhn check with a card brand's
+# prefix is an id, not a card (ADR-052, amended in 0.14.1): a repository or job
+# id in a path, an order id, an id in a query and a number searched for
+- id: benign-repository-id-in-api-path
+  action: { fetch: "https://api.github.com/repositories/4000123456789017" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-job-id-in-api-path
+  action: { fetch: "https://api.github.com/repos/o/r/actions/jobs/4532015112830366/logs" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-order-id-in-path
+  action: { fetch: "https://api.github.com/orders/4556737586899855" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-id-in-query
+  action: { fetch: "https://api.github.com/issues?id=4000123456789017&o=6011123456789019" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-number-in-api-search
+  action: { fetch: "https://api.github.com/search/issues?q=5425233430109903" }
+  expect: { verdict: allow, rules: [registries] }
+- id: benign-number-in-web-search
+  action: { web_search: "github actions run 4000123456789017 failed" }
+  expect: { verdict: allow, rules: [default.web.search] }
+- id: benign-curl-repository-id
+  action: { shell: "curl https://api.github.com/repositories/4000123456789017" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-one-mail-address-to-allowed-host
   action: { fetch: "https://api.github.com/search/users?q=me@example.com" }
   expect: { verdict: allow, rules: [registries] }
@@ -853,6 +877,47 @@
 - id: benign-git-config-get-subcommand
   action: { shell: "git config get user.name" }
   expect: { verdict: allow, rules: [dev-shell] }
+# `git config <name>` alone prints the value, as `--get` does
+- id: benign-git-config-name-alone
+  action: { shell: "git config user.name" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-email-alone
+  action: { shell: "git config user.email" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-global-name-alone
+  action: { shell: "git config --global user.email" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-config-hooks-path-read
+  action: { shell: "git -C sub config core.hooksPath" }
+  expect: { verdict: allow, rules: [dev-shell] }
+# Folders named `hooks` hold React hooks and docs, not git hooks, and Cline's rules
+# files stay ordinary project writes; only the hook folders need review
+- id: benign-write-react-hook
+  action: { fs_write: "/p/src/hooks/useAuth.ts" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-hooks-docs
+  action: { shell: "echo '# hooks' > docs/hooks/README.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-clinerules-rule
+  action: { fs_write: "/p/.clinerules/style.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-cline-other-file
+  action: { fs_write: "/p/.cline/notes.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+# A loop variable quoted on its own before more text (`"$n"p`) is the shell's `${n}p`
+- id: benign-loop-quoted-line-number-for-sed
+  action: { shell: "for n in 1 2; do sed -n \"$n\"p src/main.rs; done" }
+  expect: { verdict: allow, rules: [text-tools] }
+- id: benign-loop-single-quoted-suffix-for-sed
+  action: { shell: "for n in 10 20; do sed -n $n'p' README.md; done" }
+  expect: { verdict: allow, rules: [text-tools] }
+# An editor on a project file or the project folder keeps its verdict
+- id: benign-editor-project-file
+  action: { shell: "vim src/main.rs" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-editor-project-folder
+  action: { shell: "code ." }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-git-describe-tags
   action: { shell: "git describe --tags" }
   expect: { verdict: allow, rules: [dev-shell] }

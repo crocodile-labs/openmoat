@@ -496,9 +496,10 @@ The main gaps:
   (`openmoat`, or `openmoat allow --last`); GitHub Copilot CLI in autopilot turns it into
   a deny itself.
 - **The card check is narrow and can misfire.** `card-egress` reads only the text a call
-  shows: a number in a file (`curl -d @cards.csv`), encoded or split is not seen. A 13 to
-  19 digit number that starts with 3, 4, 5 or 6 and passes the Luhn check, such as a job
-  or order id in an API URL, can be denied even for an allowed host. `openmoat allow`
+  shows: a number in a file (`curl -d @cards.csv`), encoded or split is not seen. A
+  contiguous number counts only in a card's context (a card field's value, or beside a
+  security code or expiry); a bare id in a URL path, query or search is not a card, but a
+  number printed in card groups (`4000 1234 5678 9017`) counts anywhere. `openmoat allow`
   cannot lift a deny: narrow or remove the `card-egress` rule with `openmoat edit`
   ([POLICY.md §4.4](docs/POLICY.md#44-personal-data-on-its-way-out)).
 - **OpenCode 2's `--auto` approves OpenMoat's reviews** as it approves OpenCode's own,

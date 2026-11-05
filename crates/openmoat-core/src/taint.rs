@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 136] = [
+const PROTECTED_WRITES: [&str; 144] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -24,7 +24,15 @@ const PROTECTED_WRITES: [&str; 136] = [
     "**/Jenkinsfile",
     "**/.buildkite/**",
     "**/.husky/**",
+    // the folders a repository's `core.hooksPath` usually names (`runs-later`)
     "**/.githooks/**",
+    "**/.git-hooks/**",
+    "**/githooks/**",
+    "**/git-hooks/**",
+    "**/.githooks",
+    "**/.git-hooks",
+    "**/githooks",
+    "**/git-hooks",
     "**/.pre-commit-config.yaml",
     "**/lefthook.yml",
     "**/.lefthook.yml",
@@ -176,6 +184,7 @@ const PROTECTED_WRITES: [&str; 136] = [
     // Cline: its directory (settings, MCP servers, hooks, plugins), the
     // rules, workflows and hooks in `Documents/Cline`, and a project's `.cline`
     // and `.clinerules` (hooks, plugins, rules)
+    "**/.cline",
     "**/.cline/**",
     "**/Documents/Cline/**",
     "**/.clinerules",

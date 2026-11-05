@@ -250,6 +250,11 @@ pub const FILE_OPERANDS: &[&str] = &[
     "open",
 ];
 
+/// Editors among [`FILE_OPERANDS`]: they read the file they open and save it
+/// back, so each file operand is a write as well (`vim ~/.zshrc` meets the
+/// rule a write of it does, `nano ~/.moat/policy.yaml` `kernel-self`).
+pub const EDITORS: &[&str] = &["vi", "vim", "nvim", "nano", "emacs", "code"];
+
 /// Programs whose arguments are never files: `echo` and `printf` print them,
 /// `tr` takes character sets. A `/` in them is text.
 pub const NO_FILE_OPERANDS: &[&str] = &["echo", "printf", "tr"];

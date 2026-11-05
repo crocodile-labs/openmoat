@@ -7,17 +7,17 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Reviews | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 150 | 72 | 10 |
-| T2 | Secret exfiltration via file tools | 49 | 3 | 3 |
-| T3 | Secret exfiltration via environment | 122 | 5 | 20 |
+| T1 | Secret exfiltration via shell | 159 | 72 | 10 |
+| T2 | Secret exfiltration via file tools | 52 | 3 | 3 |
+| T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
 | T5 | Supply-chain execution | 28 | 67 | 15 |
-| T6 | Environment poisoning | 60 | 33 | 7 |
+| T6 | Environment poisoning | 60 | 39 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 28 | 1 | 9 |
-| T9 | Hook / policy tampering by the agent | 397 | 117 | 53 |
+| T9 | Hook / policy tampering by the agent | 401 | 131 | 53 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
-| T11 | Time-of-check / time-of-use, symlinks | 28 | 4 | 6 |
+| T11 | Time-of-check / time-of-use, symlinks | 31 | 4 | 6 |
 | T12 | Network to unknown hosts | 113 | 20 | 20 |
 
 ## T1: Secret exfiltration via shell
@@ -47,6 +47,15 @@ the verdict and rule ids the default policy must produce for it.
 - `T1-card-in-header-to-allowed-host` (attacks): Deny [card-egress]
 - `T1-card-url-encoded-in-form` (attacks): Deny [card-egress]
 - `T1-card-piped-into-curl` (attacks): Deny [card-egress]
+- `T1-card-field-in-query-to-allowed-host` (attacks): Deny [card-egress]
+- `T1-card-cc-in-query-to-allowed-host` (attacks): Deny [card-egress]
+- `T1-card-in-cards-path-to-allowed-host` (attacks): Deny [card-egress]
+- `T1-card-nested-json-number-to-allowed-host` (attacks): Deny [card-egress]
+- `T1-card-camel-case-json-to-allowed-host` (attacks): Deny [card-egress]
+- `T1-card-bracket-form-field-to-allowed-host` (attacks): Deny [card-egress]
+- `T1-card-number-beside-cvc-in-another-word` (attacks): Deny [card-egress]
+- `T1-card-pan-to-redirected-host` (attacks): Deny [card-egress]
+- `T1-card-printed-groups-in-query-to-allowed-host` (attacks): Deny [card-egress]
 - `T1-cat-maven-settings` (attacks): Deny [build-credentials]
 - `T1-cat-maven-settings-security` (attacks): Deny [build-credentials]
 - `T1-cat-gradle-properties` (attacks): Deny [build-credentials]
@@ -279,6 +288,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T2-dotenv-dist-exclusion-is-exact` (attacks): Deny [secrets-paths]
 - `T2-dotenv-mode-example-exclusion-is-exact` (attacks): Deny [secrets-paths]
 - `T2-copy-env-into-dist-template` (attacks): Deny [secrets-paths]
+- `T2-quote-ends-variable-name-in-path` (attacks): Deny [secrets-paths]
+- `T2-single-quote-ends-variable-name-in-path` (attacks): Deny [secrets-paths]
+- `T2-escape-ends-variable-name-in-path` (attacks): Deny [secrets-paths]
 - `T2-read-envrc` (attacks): Deny [secrets-paths]
 - `T2-home-session-file-tool-write` (attacks): Review [persistence]
 - `T2-taint-read-ssh-key-then-github-api` (attacks): Review [session-taint]
@@ -315,6 +327,7 @@ the verdict and rule ids the default policy must produce for it.
 
 ## T3: Secret exfiltration via environment
 
+- `T3-quote-ends-secret-variable-name` (attacks): Deny [env-secrets]
 - `T3-echo-api-key` (attacks): Deny [env-secrets]
 - `T3-braced-default-expansion` (attacks): Deny [env-secrets]
 - `T3-quoted-expansion` (attacks): Deny [env-secrets]
@@ -787,6 +800,12 @@ the verdict and rule ids the default policy must produce for it.
 - `review-git-config-get-with-pager-option` (review): Review [git-internals]
 - `review-git-config-edit` (review): Review [git-internals]
 - `review-git-config-unset` (review): Review [git-internals]
+- `review-git-config-name-and-value` (review): Review [git-internals]
+- `review-git-config-edit-subcommand` (review): Review [git-internals]
+- `review-git-config-unset-subcommand` (review): Review [git-internals]
+- `review-git-config-global-name-and-value` (review): Review [git-internals]
+- `review-git-config-file-name-and-value` (review): Review [git-internals]
+- `review-git-config-name-then-pager` (review): Review [git-internals]
 - `review-git-remote-set-url` (review): Review [git-internals]
 - `review-bare-git-with-a-program-running-option` (review): Review [git-internals]
 - `defer-lowercase-proxy-variable` (review): Defer [default]
@@ -1469,6 +1488,10 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-start-stop-daemon-openmoat-allow` (attacks): Deny [kernel-self]
 - `T9-mv-github-folder` (attacks): Deny [agent-folders]
 - `T9-mv-github-copilot-folder` (attacks): Deny [agent-folders]
+- `T9-editor-opens-openmoat-binary` (attacks): Deny [kernel-self]
+- `T9-editor-opens-openmoat-policy` (attacks): Deny [kernel-self]
+- `T9-editor-opens-claude-settings` (attacks): Deny [kernel-self]
+- `T9-editor-opens-shell-rc` (attacks): Deny [shell-rc]
 - `T9-systemctl-stop-proxy` (attacks): Deny [kernel-self]
 - `T9-systemctl-disable-now-proxy` (attacks): Deny [kernel-self]
 - `T9-systemctl-mask-proxy` (attacks): Deny [kernel-self]
@@ -1632,6 +1655,20 @@ the verdict and rule ids the default policy must produce for it.
 - `review-write-jenkinsfile` (review): Review [runs-later]
 - `review-write-buildkite` (review): Review [runs-later]
 - `review-write-husky-hook` (review): Review [runs-later]
+- `review-write-githooks-hook` (review): Review [runs-later]
+- `review-write-githooks-hook-file-tool` (review): Review [runs-later]
+- `review-write-dot-git-hooks-hook` (review): Review [runs-later]
+- `review-write-githooks-without-dot` (review): Review [runs-later]
+- `review-write-scripts-git-hooks` (review): Review [runs-later]
+- `review-rename-folder-onto-githooks` (review): Review [runs-later]
+- `review-copy-hook-into-githooks` (review): Review [runs-later]
+- `review-git-config-hooks-path` (review): Review [git-internals]
+- `review-git-config-global-hooks-path` (review): Review [git-internals]
+- `review-write-clinerules-hook` (review): Review [runs-later]
+- `review-write-cline-hook` (review): Review [runs-later]
+- `review-write-nested-clinerules-hook` (review): Review [runs-later]
+- `review-rename-folder-onto-clinerules` (review): Review [runs-later]
+- `review-rename-folder-onto-cline-hooks` (review): Review [runs-later]
 - `review-write-pre-commit-config` (review): Review [runs-later]
 - `review-write-lefthook` (review): Review [runs-later]
 - `review-write-dot-lefthook` (review): Review [runs-later]
@@ -1748,6 +1785,9 @@ the verdict and rule ids the default policy must produce for it.
 - `T11-dotenv-mode-example-symlink-to-ssh-key` (attacks): Deny [secrets-paths]
 - `T11-linked-project-read-key-through-symlink` (attacks): Deny [secrets-paths]
 - `T11-linked-home-read-key-through-symlink` (attacks): Deny [secrets-paths]
+- `T11-read-key-through-proc-self-root` (attacks): Deny [secrets-paths]
+- `T11-write-shell-rc-through-proc-self-root` (attacks): Deny [shell-rc]
+- `T11-read-dotenv-through-proc-self-cwd` (attacks): Deny [secrets-paths]
 - `T11-dotdot-after-symlink-shell-read` (attacks): Deny [secrets-paths]
 - `T11-dotdot-after-symlink-file-tool-read` (attacks): Deny [secrets-paths]
 - `T11-dotdot-after-symlink-relative-file-tool-read` (attacks): Deny [secrets-paths]

@@ -23,6 +23,7 @@ pub(super) const PROTECT: Protect = Protect {
          rules, workflows and hooks in `Documents/Cline`, and a project's `.cline`\n\
          and `.clinerules` (hooks, plugins, rules)",
         &[
+            "**/.cline",
             "**/.cline/**",
             "**/Documents/Cline/**",
             "**/.clinerules",
