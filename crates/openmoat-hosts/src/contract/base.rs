@@ -30,6 +30,8 @@ impl HostSpec {
         session_dir: super::SessionDir::Payload,
         workspace_dirs: None,
         payload_copies: 1,
+        limit: None,
+        other_hooks: None,
     };
 }
 

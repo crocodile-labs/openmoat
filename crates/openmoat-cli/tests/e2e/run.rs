@@ -130,6 +130,22 @@ fn isolate_never_runs_a_bwrap_from_path() {
     }
 }
 
+/// Plain `moat run` on Linux says, before the agent starts, what Landlock
+/// leaves open inside the project and that `--isolate` closes it; macOS's
+/// Seatbelt denies those paths, so it says nothing of the kind.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn plain_run_names_what_it_leaves_open_inside_the_project_on_linux() {
+    let (sb, project) = installed_with_secret();
+    let out = run_sh(&sb, &project, "echo ran");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let named = stderr(&out).contains("`openmoat run --isolate` closes this");
+    assert_eq!(named, cfg!(target_os = "linux"), "{}", text(&out));
+    if named {
+        assert!(stderr(&out).contains("`.git/hooks`"), "{}", text(&out));
+    }
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[test]
 fn refuses_where_no_sandbox_can_be_generated() {

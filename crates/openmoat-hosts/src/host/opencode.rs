@@ -189,6 +189,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             also: &[".opencode/plugin"],
             extensions: &["js", "ts"],
         }),
+        plugin_dir: None,
         reader: &project_settings::READER,
         user_file: "opencode.json",
         // OpenCode 2 reads these two; OpenCode 1's `config.json` cannot remove a plugin.

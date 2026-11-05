@@ -86,6 +86,12 @@ pub fn port_only_network() -> Option<String> {
     None
 }
 
+/// None: Seatbelt denies paths inside the project, so plain `moat run` has
+/// no Linux-only gap to name (`tier.rs`).
+pub fn bubblewrap() -> Option<bool> {
+    None
+}
+
 /// The terminals (`/dev/ttys*`) this process's standard input, output and
 /// error are on. macOS has no `/proc` to name an open file, so each stream's
 /// device number is looked up among the terminals in `/dev`.

@@ -23,6 +23,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod release_age;
+pub mod tier;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
 
@@ -277,6 +278,12 @@ pub fn port_only_network() -> Option<String> {
     platform::port_only_network()
 }
 
+/// On Linux, whether the system's bubblewrap is installed; `None` elsewhere,
+/// where plain `moat run` has no gap inside the project to name ([`tier`]).
+pub fn bubblewrap() -> Option<bool> {
+    platform::bubblewrap()
+}
+
 /// Refuse to start, under `--netns=require`, an agent whose network is
 /// restricted by port only (`port_only`, the platform's warning).
 fn refuse_port_only(netns: Netns, port_only: Option<&str>) -> Result<()> {
@@ -318,6 +325,9 @@ fn notice(
     )?;
     if let Some(warning) = agent.warning() {
         writeln!(err, "{warning}")?;
+    }
+    if let Some(open) = tier::notice(platform::bubblewrap(), args.isolate) {
+        writeln!(err, "{open}")?;
     }
     if args.verbose {
         writeln!(

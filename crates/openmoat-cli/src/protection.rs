@@ -58,6 +58,10 @@ pub struct Protection {
     /// What the hook and sandbox do not cover for this agent
     /// ([`HostSpec::gaps`](openmoat_hosts::HostSpec::gaps)).
     pub gaps: &'static str,
+    /// The limit a person must not miss, printed on its own line
+    /// ([`HostSpec::limit`](openmoat_hosts::HostSpec::limit)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<&'static str>,
 }
 
 impl Protection {
@@ -105,6 +109,9 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                         )
                         .map(|off| format!("hook turned off by {off}"))
                         .or_else(|| {
+                            crate::project_settings::replaced_here(host, &config.settings_path)
+                        })
+                        .or_else(|| {
                             crate::heartbeat::check(home, &config).and_then(|loaded| {
                                 crate::heartbeat::not_loaded(host.display_name(), &loaded)
                             })
@@ -119,6 +126,7 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                 level,
                 reason,
                 gaps: host.spec().gaps,
+                limit: host.spec().limit,
             })
         })
         .collect()
@@ -239,7 +247,8 @@ fn sandbox(
 ) -> Result<(), String> {
     if host_sandbox::format(host).is_none() {
         return Err(format!(
-            "no OS sandbox from OpenMoat; `openmoat run` puts {} in one (docs/SANDBOX.md)",
+            "no OS sandbox from OpenMoat; {} puts {} in one (docs/SANDBOX.md)",
+            crate::commands::sandboxing_command(),
             host.display_name()
         ));
     }
@@ -443,6 +452,7 @@ mod tests {
             level,
             reason: reason.map(str::to_owned),
             gaps: "",
+            limit: None,
         };
         assert_eq!(
             protection(Level::HookOnly, Some("why"))

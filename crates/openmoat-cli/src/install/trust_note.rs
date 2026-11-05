@@ -46,6 +46,7 @@ mod tests {
             level: crate::protection::Level::HookOnly,
             reason: None,
             gaps: "",
+            limit: None,
         }
     }
 

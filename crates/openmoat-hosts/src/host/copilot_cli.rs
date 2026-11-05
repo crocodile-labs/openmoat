@@ -102,6 +102,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             also: &[],
             extensions: &["json"],
         }),
+        plugin_dir: None,
         reader: &super::claude_code::project_settings::READER,
         user_file: "settings.json",
         user_more: &[],

@@ -192,3 +192,40 @@ fn clines_two_copies_of_a_call_count_once_against_the_limit() {
     assert_eq!(out.status.code(), Some(DENY));
     assert!(stdout(&out).contains("smaller parts"), "{}", stdout(&out));
 }
+
+/// `status` names Cline's limits on a line of their own, and every other
+/// `PreToolUse` hook Cline runs beside OpenMoat's, which can rewrite a call
+/// after OpenMoat checked it.
+#[test]
+fn status_names_clines_limits_and_its_other_hooks() {
+    use crate::common::{json as parse, output};
+    let dir = crate::hosts::dir_of(openmoat_hosts::Host::Cline);
+    let sb = Sandbox::installed(&[&dir]);
+    let status = || {
+        let mut cmd = sb.command();
+        cmd.current_dir(sb.project())
+            .args(["status", "--format", "json"]);
+        parse(&output(&mut cmd, None))
+    };
+    let doc = status();
+    let cline = doc["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["host"] == "cline")
+        .unwrap()
+        .clone();
+    assert!(
+        cline["limit"].as_str().unwrap().contains("--yolo"),
+        "{cline}"
+    );
+    assert_eq!(doc["other_hooks"], json!([]), "{doc}");
+
+    let theirs = sb.project().join(".clinerules/hooks/PreToolUse.py");
+    std::fs::create_dir_all(theirs.parent().unwrap()).unwrap();
+    std::fs::write(&theirs, "print('{}')\n").unwrap();
+    let doc = status();
+    let other = doc["other_hooks"].to_string();
+    assert!(other.contains("PreToolUse.py"), "{doc}");
+    assert!(other.contains("overrideInput"), "{doc}");
+}

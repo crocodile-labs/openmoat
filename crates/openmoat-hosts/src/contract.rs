@@ -154,6 +154,41 @@ pub struct HostSpec {
     /// reads that many times its per-call limit, so a file is refused at the
     /// same size whichever host writes it.
     pub payload_copies: u64,
+    /// The one limit of the host's protection a person must not miss, which
+    /// `moat status` and `moat doctor` print on a line of its own beside the
+    /// protection level (Cline's `--yolo`); `None` for most hosts, whose
+    /// [`Self::gaps`] say it all.
+    pub limit: Option<&'static str>,
+    /// Other hook files the host runs for the event OpenMoat's hook answers,
+    /// which `moat status` and `moat doctor` name when they are there; `None`
+    /// for a host whose other hooks are its project settings' business
+    /// ([`Self::project_settings`]) or that has none.
+    pub other_hooks: Option<OtherHooks>,
+}
+
+/// Where a host finds hook files for OpenMoat's event besides OpenMoat's own
+/// ([`HostSpec::other_hooks`]): Cline runs every `PreToolUse` file in each of
+/// its hook directories, and its plugins, and any of them can rewrite the
+/// call's input (`overrideInput`) after OpenMoat checked it.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct OtherHooks {
+    /// A hook file's name without its extension (Cline's `PreToolUse`, run
+    /// with or without one).
+    pub stem: &'static str,
+    /// Directories holding them, relative to the home directory.
+    pub home_dirs: &'static [&'static str],
+    /// Directories holding them, relative to the configuration directory
+    /// (OpenMoat's own file there is left out).
+    pub config_dirs: &'static [&'static str],
+    /// Directories holding them, relative to the working directory and its
+    /// project root.
+    pub project_dirs: &'static [&'static str],
+    /// Directories of the configuration directory each of whose entries is a
+    /// plugin, which may answer the event too.
+    pub plugin_dirs: &'static [&'static str],
+    /// What one of them can do, for its warning.
+    pub effect: &'static str,
 }
 
 /// Which directory of a call is the session's ([`HostSpec::session_dir`]).
@@ -195,6 +230,10 @@ pub struct ProjectSettingsSpec {
     /// extensions (GitHub Copilot CLI's `.github/hooks`, pi's `.pi/extensions`);
     /// `None` when it has none.
     pub hook_dir: Option<HookDir>,
+    /// A directory of the project holding plugins, one directory each, which
+    /// the host loads beside the person's and in place of a person's plugin of
+    /// the same name (goose's `.agents/plugins`); `None` when it has none.
+    pub plugin_dir: Option<PluginDir>,
     /// Which keys of these files turn OpenMoat's hook off, run a program or
     /// redirect the agent; one reader per host folder.
     pub reader: &'static dyn SettingsReader,
@@ -238,6 +277,22 @@ impl HookDir {
     pub fn paths(&self) -> impl Iterator<Item = &'static str> {
         std::iter::once(self.path).chain(self.also.iter().copied())
     }
+}
+
+/// A project's directory of plugins ([`ProjectSettingsSpec::plugin_dir`]):
+/// each plugin is a directory, named by its directory, whose hooks are in
+/// [`Self::hook_file`]. A project plugin named [`Self::own`] replaces
+/// OpenMoat's: unless its hook file is OpenMoat's byte for byte, the host runs
+/// every call without OpenMoat's hook in that project.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct PluginDir {
+    /// The directory, relative to the project.
+    pub path: &'static str,
+    /// A plugin's hook file, relative to the plugin's directory.
+    pub hook_file: &'static str,
+    /// OpenMoat's plugin's directory name.
+    pub own: &'static str,
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.

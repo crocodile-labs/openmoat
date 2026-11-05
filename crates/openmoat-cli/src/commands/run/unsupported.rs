@@ -51,6 +51,11 @@ pub fn port_only_network() -> Option<String> {
     None
 }
 
+/// None: `moat run` refuses here, so it has no Linux-only gap to name.
+pub fn bubblewrap() -> Option<bool> {
+    None
+}
+
 /// None: `moat run` refuses here.
 pub fn terminals() -> Vec<String> {
     Vec::new()

@@ -424,3 +424,83 @@ fn a_removal_of_openmoats_opencode_plugin_is_named() {
         "{rows:?}"
     );
 }
+
+/// goose loads a project's `.agents/plugins/openmoat` in place of OpenMoat's
+/// plugin: unless its hook file is OpenMoat's, goose is not protected in a
+/// session started there. Its other plugins' hooks are warned about, and the
+/// project root's replacement is named from a subdirectory.
+#[test]
+fn a_goose_project_plugin_that_replaces_openmoats_is_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let user_home = dir.path().join("home");
+    let ours = user_home.join(".agents/plugins/openmoat/hooks/hooks.json");
+    fs::create_dir_all(ours.parent().unwrap()).unwrap();
+    let hooks = r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"openmoat guard --host goose","on_failure":"block"}]}]}}"#;
+    fs::write(&ours, hooks).unwrap();
+    let project = user_home.join("proj");
+    let sub = project.join("sub");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(&sub).unwrap();
+    let replaced = |cwd: &Path| super::plugins::replaced(cwd, &user_home, Host::Goose, &ours);
+    let rows = |cwd: &Path| super::warnings(cwd, &user_home, Host::Goose, &ours);
+    assert_eq!(replaced(&project), None);
+    assert_eq!(rows(&project), Vec::<String>::new());
+
+    // A copy of OpenMoat's own hook file replaces nothing.
+    let theirs = project.join(".agents/plugins/openmoat/hooks/hooks.json");
+    fs::create_dir_all(theirs.parent().unwrap()).unwrap();
+    fs::write(&theirs, hooks).unwrap();
+    assert_eq!(replaced(&project), None);
+
+    // Any other hook file, or none at all, leaves goose unprotected there.
+    fs::write(&theirs, r#"{"hooks":{}}"#).unwrap();
+    let why = replaced(&project).unwrap();
+    assert!(
+        why.starts_with(
+            &project
+                .join(".agents/plugins")
+                .join("openmoat")
+                .display()
+                .to_string()
+        ),
+        "{why}"
+    );
+    assert!(
+        why.contains("without OpenMoat; remove that directory"),
+        "{why}"
+    );
+    fs::remove_file(&theirs).unwrap();
+    assert!(replaced(&project).is_some());
+    // The protection level's reason, not a second warning.
+    assert_eq!(rows(&project), Vec::<String>::new());
+
+    // From a subdirectory, the project root's plugin is a warning only.
+    assert_eq!(replaced(&sub), None);
+    let found = rows(&sub);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].contains("for a goose session started in"),
+        "{found:?}"
+    );
+
+    // Another plugin's hooks are warned about; one without hooks is not.
+    let other = project.join(".agents/plugins/helper/hooks/hooks.json");
+    fs::create_dir_all(other.parent().unwrap()).unwrap();
+    fs::create_dir_all(project.join(".agents/plugins/skills-only")).unwrap();
+    fs::write(&other, r#"{"hooks":{"PreToolUse":[]}}"#).unwrap();
+    let found = rows(&project);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].contains("helper"), "{found:?}");
+    assert!(
+        found[0].contains("adds hooks that run commands"),
+        "{found:?}"
+    );
+
+    // goose started in the home directory loads the person's own plugin.
+    assert_eq!(replaced(&user_home), None);
+    // A host without project plugins has nothing to replace.
+    assert_eq!(
+        super::plugins::replaced(&project, &user_home, Host::Pi, &ours),
+        None
+    );
+}
