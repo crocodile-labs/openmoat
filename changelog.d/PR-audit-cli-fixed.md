@@ -1,2 +1,3 @@
 ### Fixed
 - The first hook call after upgrading from 0.13 no longer copies the whole audit log to accept the `review` verdict: the schema step now widens its check in place, in milliseconds at any size. On a large log the copy ran past the guard's 30 s budget, was rolled back and started again on the next call, so every call was denied ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- Loading the policy on each hook call is faster: the check for the old `ask` name no longer parses the default policy a second time, and merging a repository policy, a pack or `openmoat allow` rules no longer parses every pattern of the policy again (about 14 ms less per call with a repository policy) ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

@@ -54,13 +54,27 @@ enum ProbeDefaults {
     Other(IgnoredAny),
 }
 
+/// Whether `yaml` holds `ask` as a word of its own, as the old key and the old
+/// verdict both are, whatever quotes, colon or braces surround them. `asks`,
+/// `masking` or `task` do not count: the shipped default has those (in
+/// comments) and no word `ask`, so loading it skips the second parse. A comment
+/// or a reason with the word only costs that parse; it changes no result.
+fn has_word(yaml: &str) -> bool {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    yaml.match_indices(OLD_REVIEW).any(|(at, word)| {
+        let before = yaml.get(..at).and_then(|s| s.chars().next_back());
+        let after = yaml.get(at + word.len()..).and_then(|s| s.chars().next());
+        !before.is_some_and(is_word) && !after.is_some_and(is_word)
+    })
+}
+
 /// The old names `yaml` uses. Text without the word skips the second parse,
 /// and text that does not parse is left to the schema's own error.
 ///
 /// # Errors
 /// [`PolicyError::OldAndNewName`] when the document has both `ask:` and `review:`.
 pub(super) fn find(yaml: &str) -> Result<OldNames, PolicyError> {
-    if !yaml.contains(OLD_REVIEW) {
+    if !has_word(yaml) {
         return Ok(OldNames::default());
     }
     let Ok(probe) = crate::yaml::from_str::<Probe>(yaml) else {
@@ -131,6 +145,41 @@ mod tests {
         let one = Policy::parse("version: 1\ndefaults: ask\n").unwrap();
         assert_eq!(one.defaults, Defaults::All(Verdict::Review));
         assert!(one.old_names.ask_default && !one.old_names.ask_list);
+    }
+
+    #[test]
+    fn only_a_word_ask_takes_the_second_parse() {
+        use super::has_word;
+        // The shipped default has `asks` and `masking`, never the word: loading
+        // it, the most common parse there is, reads the YAML once.
+        assert!(!has_word(crate::DEFAULT_POLICY));
+        for text in [
+            "# asks first",
+            "masking: x",
+            "task: y",
+            "ask_me: z",
+            "basket",
+        ] {
+            assert!(!has_word(text), "{text}");
+        }
+        for text in [
+            "ask:\n",
+            "defaults: ask",
+            "defaults: { '*': ask, net: deny }",
+            "{\"ask\": []}",
+            "defaults: {net: ask}",
+            "ask",
+            "x: \u{e9}ask",
+        ] {
+            assert_eq!(has_word(text), !text.contains('\u{e9}'), "{text}");
+        }
+        // Every spelling the probe reads is still found through `find`.
+        for text in [
+            "version: 1\n\"ask\": []\n",
+            "version: 1\ndefaults: {net: 'ask'}\n",
+        ] {
+            assert!(super::find(text).unwrap().any(), "{text}");
+        }
     }
 
     #[test]
