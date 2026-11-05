@@ -303,6 +303,7 @@ jobs:
         with:
           node-version: "24" # npm 11.5.1 or later, which trusted publishing needs
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false # a release builds from nothing cached (cache poisoning)
       - run: scripts/ci/sdk-js.sh
       - name: npm publish
         working-directory: sdk/js
