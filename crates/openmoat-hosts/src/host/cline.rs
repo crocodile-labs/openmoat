@@ -119,6 +119,8 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     protect: protect::PROTECT,
     process: protect::PROCESS,
     docs: doc::DOCS,
+    // The arguments come as `tool_call.input` and again as `preToolUse.parameters`.
+    payload_copies: 2,
     ..HostSpec::BASE
 };
 
@@ -247,6 +249,7 @@ fn parse(host: Host, p: Payload) -> Result<HookRequest, HostError> {
         content: None,
         edits: Vec::new(),
         mcp_arguments,
+        sandboxed: false,
         event: HookEvent::PreToolUse,
     })
 }

@@ -20,8 +20,13 @@ exit 2 blocks; no output, or `"allow"`, leaves the call to Gemini CLI's own poli
 
 - `run_shell_command` (`Shell`; `ForeignShell` on Windows).
 - `read_file`, `list_directory` (`FsRead`); `write_file`, `replace` (`FsWrite`).
-- `glob`, `grep_search` (`FsRead`, `ReadFiles`; `Unchecked` when no `dir_path`);
-  `read_many_files` (`Unchecked`).
+- `glob`, `grep_search` (`FsRead`, `ReadFiles`) and `read_many_files` (`ReadFiles`).
+  Without a `dir_path` Gemini CLI searches every workspace directory: the working
+  directory and those `context.includeDirectories` adds in the user's
+  `settings.json` and the project's `.gemini/settings.json`, which `openmoat guard`
+  reads and checks as read too. A settings file it cannot parse leaves the search
+  needing review (`Unchecked`). Directories added with `--include-directories` or
+  `/directory add` are not in any file and are not checked.
 - `web_fetch` (`Fetch`), `google_web_search` (`WebSearch`).
 - `read_mcp_resource` (`FsRead` for a `file:` URI; `UnknownTool`); MCP tools
   `mcp_<server>_<tool>` (`McpTool` as `mcp__<server>__<tool>` from `mcp_context`;
@@ -71,7 +76,9 @@ No OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no se
 hooks at all and asks the person before every tool instead; a project's
 `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments
 (`openmoat status` and `doctor` warn about one); extension hooks run beside OpenMoat's; a
-hook that times out lets the call run.
+search without a `dir_path` is checked over the working directory and the
+`context.includeDirectories` of the user and project settings, not over directories added
+with `--include-directories` or `/directory add`; a hook that times out lets the call run.
 
 ## Sandbox
 

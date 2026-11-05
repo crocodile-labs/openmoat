@@ -30,9 +30,25 @@ pub const SOCKET_ENV: &str = "MOAT_GUARD_SOCKET";
 /// The token `moat run` wants with each call.
 pub const TOKEN_ENV: &str = "MOAT_GUARD_TOKEN";
 
-/// The most a hook payload may hold: what `moat guard` reads from standard
-/// input, and what the relay carries.
+/// The most one copy of a call's arguments may hold: `moat guard` reads that
+/// much from standard input for each copy a host's payload carries
+/// ([`payload_limit`]).
 pub const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
+
+/// The most `host`'s payload may hold ([`openmoat_hosts::HostSpec::payload_copies`]).
+pub fn payload_limit(host: openmoat_hosts::Host) -> u64 {
+    MAX_PAYLOAD_BYTES * host.spec().payload_copies.max(1)
+}
+
+/// The most a payload the relay carries may hold: the largest of every
+/// host's [`payload_limit`].
+pub fn relayed_limit() -> u64 {
+    openmoat_hosts::Host::EVERY
+        .into_iter()
+        .map(payload_limit)
+        .max()
+        .unwrap_or(MAX_PAYLOAD_BYTES)
+}
 
 /// A connection the relay reads and writes, with timeouts.
 pub trait Stream: std::io::Read + std::io::Write {

@@ -29,6 +29,7 @@ use crate::{push, render, secrets, session_code, taint, time};
 
 mod config_change;
 mod drift;
+mod placed;
 mod record;
 mod session_start;
 mod unseen;
@@ -119,7 +120,7 @@ fn deny_when_over_budget(host: Host, started: Instant) {
         let decision = kernel_error(&anyhow::Error::msg(format!(
             "no decision within {GUARD_BUDGET_S} s"
         )));
-        if let Some(code) = answer_once(host, &HookEvent::default(), &decision) {
+        if let Some(code) = answer_once(host, &Answer::To(&HookEvent::default()), &decision) {
             if let Ok(home) = Home::locate() {
                 let elapsed_ms = started.elapsed().as_millis();
                 hangs::record(&home, host, time::now_ms(), phase, elapsed_ms);
@@ -135,18 +136,28 @@ static RESPONDED: Mutex<bool> = Mutex::new(false);
 
 /// [`answer_once`]; when the budget's deny came first, its exit code.
 fn respond(host: Host, event: &HookEvent, decision: &Decision) -> Code {
-    answer_once(host, event, decision).unwrap_or(Code::Deny)
+    answer_once(host, &Answer::To(event), decision).unwrap_or(Code::Deny)
 }
 
-/// Write `decision` for `event` and return the exit code that goes with it, or
+/// What a response answers: the call the payload described, or, when it could
+/// not be read, only its event.
+enum Answer<'a> {
+    For(&'a HookRequest),
+    To(&'a HookEvent),
+}
+
+/// Write `decision` for `answer` and return the exit code that goes with it, or
 /// `None` when a response was already written.
-fn answer_once(host: Host, event: &HookEvent, decision: &Decision) -> Option<Code> {
+fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<Code> {
     let mut responded = RESPONDED.lock().unwrap_or_else(PoisonError::into_inner);
     if *responded {
         return None;
     }
     *responded = true;
-    let response = host.render_response(event, decision);
+    let response = match answer {
+        Answer::For(request) => host.render_response_for(request, decision),
+        Answer::To(event) => host.render_response(event, decision),
+    };
     let mut stdout = io::stdout().lock();
     // An empty response is `defer` (ADR-025): no output at all, not even a newline.
     let written = if response.is_empty() {
@@ -186,7 +197,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     let mut host = installed_for;
     let mut out = Evaluated::default();
     hangs::enter(Phase::Stdin);
-    let (mut request, mut decision) = match read_stdin() {
+    let (mut request, mut decision) = match read_stdin(installed_for) {
         Ok(payload) => {
             // The Continue CLI runs the Claude Code hook but cannot prompt.
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
@@ -237,7 +248,10 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     // What the host receives can be stricter than what was decided and recorded
     // (Codex and the Continue CLI cannot prompt, so a `review` reaches them as a `deny`).
     let decision = host.answer(&event, &decision);
-    respond(host, &event, &decision)
+    match &request {
+        Some(request) => answer_once(host, &Answer::For(request), &decision).unwrap_or(Code::Deny),
+        None => respond(host, &event, &decision),
+    }
 }
 
 /// Under `moat run`: the call goes to the run's process outside the sandbox,
@@ -245,7 +259,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
 /// format the payload's hook expects; nothing is recorded from in here.
 fn relayed(installed_for: Host, endpoint: Result<guard_relay::Endpoint>, started: Instant) -> Code {
     hangs::enter(Phase::Stdin);
-    let payload = match read_stdin() {
+    let payload = match read_stdin(installed_for) {
         Ok(payload) => payload,
         Err(error) => {
             return respond(installed_for, &HookEvent::default(), &kernel_error(&error));
@@ -352,6 +366,7 @@ fn evaluate(
     out.drifted = verified.checked.relaxed;
     // From here each pinned state file is read as the lock check matched it.
     let home = verified.home;
+    let request = placed::placed(&home, host, request, &out.drifted)?;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
     if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {
@@ -483,19 +498,25 @@ fn evaluate(
     Ok((Some(request), decision))
 }
 
-fn read_stdin() -> Result<String> {
+/// The hook payload on stdin, up to the limit for `host`: [`MAX_PAYLOAD_BYTES`]
+/// for each copy of the call's arguments its payload carries
+/// ([`openmoat_hosts::HostSpec::payload_copies`]), so a file is refused at the
+/// same size whichever agent writes it.
+fn read_stdin(host: Host) -> Result<String> {
+    let limit = guard_relay::payload_limit(host);
     let mut payload = String::new();
     // One byte past the limit tells a payload that is too large from one that
     // only ends there; cut off, it would fail as malformed JSON instead.
     io::stdin()
         .lock()
-        .take(MAX_PAYLOAD_BYTES + 1)
+        .take(limit + 1)
         .read_to_string(&mut payload)
         .context("reading hook payload from stdin (must be UTF-8)")?;
-    if payload.len() as u64 > MAX_PAYLOAD_BYTES {
+    if payload.len() as u64 > limit {
         bail!(
-            "this tool call is larger than {} MiB, more than OpenMoat reads, so it is \
-             refused; ask the agent to write the file in smaller parts",
+            "this tool call's arguments are larger than {} MiB, more than OpenMoat checks in \
+             one call, so it is refused unchecked; write the file in smaller parts (create \
+             it, then append to it)",
             MAX_PAYLOAD_BYTES / (1024 * 1024)
         );
     }

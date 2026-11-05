@@ -137,4 +137,58 @@ mod script {
                 .contains("hook-failure")
         );
     }
+
+    /// Audit 2026-11-05 H10 and H12: `init` says it moves a person's own
+    /// `PreToolUse` aside, keeps the file's mode, and `uninstall` gives the
+    /// file back with its mode.
+    #[test]
+    fn init_says_it_moves_a_persons_hook_and_modes_survive() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let dir = crate::hosts::dir_of(Host::Cline);
+        let sb = Sandbox::bare(&[&dir]);
+        let mine = hook(&sb);
+        fs::create_dir_all(mine.parent().unwrap()).unwrap();
+        fs::write(&mine, "#!/bin/sh\necho mine\n").unwrap();
+        fs::set_permissions(&mine, fs::Permissions::from_mode(0o755)).unwrap();
+        let init = sb.moat(&["init", "--yes"]);
+        assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
+        assert!(
+            stdout(&init).contains("moved your own hook"),
+            "{}",
+            text(&init)
+        );
+        assert_eq!(mode(&mine), 0o755, "the hook file keeps its mode");
+        let again = sb.moat_as_person(&["init", "--yes"]);
+        assert!(
+            !stdout(&again).contains("moved your own hook"),
+            "{}",
+            text(&again)
+        );
+        let out = sb.moat_as_person(&["uninstall"]);
+        assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+        assert_eq!(fs::read_to_string(&mine).unwrap(), "#!/bin/sh\necho mine\n");
+        assert_eq!(mode(&mine), 0o755, "given back with its mode");
+    }
+}
+
+/// Audit H9: Cline sends a call's arguments twice, so the limit is counted
+/// once per copy: a file other agents may write in one call is checked, and
+/// one past the limit is refused with how to go on.
+#[test]
+fn clines_two_copies_of_a_call_count_once_against_the_limit() {
+    use crate::common::{DENY, OK, stdout};
+    let sb = Sandbox::installed(&[&crate::hosts::dir_of(openmoat_hosts::Host::Cline)]);
+    let with_copies = |size: usize| {
+        let input =
+            json!({ "command": "create", "path": "data.txt", "file_text": "a".repeat(size) });
+        let mut doc: Value = serde_json::from_str(&payload(&sb, "editor", &input)).unwrap();
+        doc["preToolUse"] = json!({ "toolName": "editor", "parameters": input });
+        doc.to_string()
+    };
+    let out = sb.guard("cline", &with_copies(600_000));
+    assert_eq!(out.status.code(), Some(OK), "{}", stdout(&out));
+    let out = sb.guard("cline", &with_copies(1_100_000));
+    assert_eq!(out.status.code(), Some(DENY));
+    assert!(stdout(&out).contains("smaller parts"), "{}", stdout(&out));
 }

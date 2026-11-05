@@ -12,7 +12,22 @@ pub(super) const DOCS: HostDocs = HostDocs {
 };
 
 const TOOLS: &[ToolRow] = &[
-    ToolRow::new("`Bash`", "`command`", "`Shell`"),
+    ToolRow::new(
+        "`Bash`",
+        "`command`; a start of a shell, REPL, editor or login without its own commands, \
+         which `write_stdin` types into unhooked",
+        "`Shell`; that start `Unchecked` (review)",
+    ),
+    ToolRow::new(
+        "`read_mcp_resource`",
+        "`server`, `uri` (a `file:` URI as its file)",
+        "`McpTool` (`read_resource`)",
+    ),
+    ToolRow::new(
+        "`view_image`",
+        "`path` (an `http(s)` URL fetched)",
+        "`FsRead` or `Fetch`",
+    ),
     ToolRow::new(
         "`apply_patch`",
         "`command` (the patch envelope)",
@@ -24,7 +39,7 @@ const TOOLS: &[ToolRow] = &[
         "`McpTool`",
     ),
     ToolRow::new(
-        "any other tool (`update_plan`, …)",
+        "any other tool (`update_plan`, `list_mcp_resources`, …)",
         "—",
         "none: `ungoverned`",
     ),

@@ -35,6 +35,21 @@ The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 Only the shell and MCP events prompt on `"ask"`; on the others a review is sent as a deny
 ("Cursor does not prompt for this hook").
 
+Cursor's hooks have no "no decision", so a call no rule decides (`defer`) is sent as
+`"ask"` on the shell event. A command whose payload says `sandbox: true` is the exception
+while OpenMoat's `sandbox.json` is installed and pinned: Cursor would run it in that
+sandbox without asking, so the `defer` is sent as `"allow"`. A `review` or `deny` of such
+a command is sent as before, and a command Cursor runs outside its sandbox
+(`sandbox: false`) still gets `"ask"`.
+
+## Working directory
+
+The payload's `cwd` is where the command or tool runs, which the model chooses; the
+session's directories are `workspace_roots`. A `cwd` inside a workspace root is decided as
+before. One outside every root is decided from the first root, with the command run after
+a `cd` to the `cwd` and relative paths taken from it, so a write from
+`~/Library/LaunchAgents` is checked as that path, never as one inside the project.
+
 ## Configuration and MCP files
 
 - Configuration directory: `CURSOR_CONFIG_DIR`, else `~/.cursor`; hooks in `hooks.json`.

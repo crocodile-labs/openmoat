@@ -12,7 +12,7 @@ use crate::cli::InitArgs;
 use crate::environment::Snapshot;
 use crate::exit::Code;
 use crate::home::Home;
-use crate::install::{HostConfig, Outcome, Recorded, dir_variable, env_config_dir};
+use crate::install::{HookLayout, HostConfig, Outcome, Recorded, dir_variable, env_config_dir};
 use crate::integrity;
 use crate::render::Deferred;
 use crate::sandbox::{self, Plan};
@@ -54,6 +54,12 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     }
     for host in hosts.iter().copied() {
         let config = unattended::config(&home, host, unattended)?;
+        let replaced = match config.layout {
+            HookLayout::Owned(file) | HookLayout::Script(file) => {
+                crate::install::owned::persons_file(&config, file)
+            }
+            HookLayout::Entries(_) | HookLayout::Plugin(_) | HookLayout::Yaml(_) => None,
+        };
         let outcome = config.install(&home, &binary, dry_run)?;
         let verb = match outcome {
             Outcome::Installed => "installed",
@@ -70,6 +76,18 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             binary.display(),
             host.id()
         )?;
+        if let Some(backup) = replaced.filter(|_| outcome != Outcome::Unchanged) {
+            let verb = if dry_run { "would move" } else { "moved" };
+            writeln!(
+                out,
+                "! {:<16} {verb} your own hook {} to {}: {} runs one file there, so yours does \
+                 not run while OpenMoat is installed; `openmoat uninstall` puts it back",
+                host.display_name(),
+                config.settings_path.display(),
+                backup.display(),
+                host.display_name()
+            )?;
+        }
         if let Some(note) = crate::install::trust_note::after_install(host, outcome) {
             writeln!(out, "{prefix} {:<16} next: {note}", host.display_name())?;
         }

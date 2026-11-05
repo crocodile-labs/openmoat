@@ -55,6 +55,13 @@ Before 2.1.295 Claude Code runs the call when the hook is missing, cannot start,
 non-zero other than 2, or times out (default 600 s); from 2.1.295 it blocks it
 (`openmoat init` sets `onFailure: "block"`).
 
+`openmoat init` writes `onFailure` only when the `claude` on the search path reports
+2.1.295 or later, since older versions reject the key. A person who runs Claude Code only
+from the desktop app or an IDE extension, with no `claude` on the search path, gets
+entries without it, so a hook that fails runs the call. `openmoat doctor` warns about
+that ("runs a tool call when its hook fails to start, crashes or times out"); install the
+CLI, or put its `claude` on the search path, and run `openmoat init` again.
+
 ## Known gaps
 
 File tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295

@@ -16,7 +16,7 @@ use openmoat_hosts::{HookFile, HookFileState, yaml_hooks};
 use serde_json::Value;
 
 use super::{HOOK_BACKUP, HookState, HostConfig, Outcome, consent};
-use crate::home::{Home, write_private};
+use crate::home::{Home, KeepMode, write_like};
 use crate::sandbox::install::read_text;
 
 /// Add or update OpenMoat's entries in `config`'s YAML hook file, and its
@@ -43,11 +43,11 @@ pub fn install(
     }
     if let Some((file, text)) = consent {
         super::back_up(home, &file, HOOK_BACKUP)?;
-        write_private(&file, text.as_bytes())?;
+        write_like(&file, text.as_bytes(), &file, KeepMode::NotWritableByOthers)?;
     }
     if edited != Outcome::Unchanged {
         super::back_up(home, path, HOOK_BACKUP)?;
-        write_private(path, text.as_bytes())?;
+        write_like(path, text.as_bytes(), path, KeepMode::NotWritableByOthers)?;
     }
     Ok(outcome)
 }

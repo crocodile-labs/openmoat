@@ -302,6 +302,42 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
     written
 }
 
+/// Which permission bits of a file [`write_like`] carries over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeepMode {
+    /// All of them: a file given back from its backup is as it was.
+    All,
+    /// All but the group's and others' write bits: a host file OpenMoat puts
+    /// its hook into keeps what the person gave it (an executable bit, others'
+    /// read), but no one else may change the hook.
+    NotWritableByOthers,
+}
+
+/// [`write_private`], then `path` given the permission bits `like` had before
+/// (Unix), as `keep` says, so a host file keeps the mode the person gave it.
+/// Owner-only when `like` does not exist.
+pub fn write_like(path: &Path, bytes: &[u8], like: &Path, keep: KeepMode) -> Result<()> {
+    #[cfg(unix)]
+    let mode = {
+        use std::os::unix::fs::PermissionsExt;
+        let mask = match keep {
+            KeepMode::All => 0o7777,
+            KeepMode::NotWritableByOthers => 0o7755,
+        };
+        fs::metadata(like)
+            .ok()
+            .map(|meta| meta.permissions().mode() & mask)
+    };
+    #[cfg(not(unix))]
+    let _ = (like, keep);
+    write_private(path, bytes)?;
+    #[cfg(unix)]
+    if let Some(mode) = mode {
+        restrict(path, mode)?;
+    }
+    Ok(())
+}
+
 /// Write `bytes` to `path`, owner-only, unless `path` exists already: the file
 /// appears whole or not at all, and when two processes race the first one's
 /// stays. Whether this call wrote it.
@@ -447,6 +483,29 @@ mod tests {
         );
         let leftovers = fs::read_dir(file.parent().unwrap()).unwrap().count();
         assert_eq!(leftovers, 1, "no temporary file is left behind");
+    }
+
+    /// A host file keeps the mode the person gave it; others never get to
+    /// write OpenMoat's hook, and a file given back is as it was.
+    #[test]
+    fn host_files_keep_their_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("PreToolUse");
+        fs::write(&file, b"mine").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o775)).unwrap();
+        write_like(&file, b"ours", &file, KeepMode::NotWritableByOthers).unwrap();
+        assert_eq!(
+            (fs::read(&file).unwrap(), mode(&file)),
+            (b"ours".to_vec(), 0o755)
+        );
+        let backup = dir.path().join("PreToolUse.moat-backup");
+        fs::write(&backup, b"mine").unwrap();
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o664)).unwrap();
+        write_like(&file, b"mine", &backup, KeepMode::All).unwrap();
+        assert_eq!(mode(&file), 0o664);
+        let new = dir.path().join("new.json");
+        write_like(&new, b"{}", &new, KeepMode::NotWritableByOthers).unwrap();
+        assert_eq!(mode(&new), 0o600, "a new file is owner-only");
     }
 
     #[test]

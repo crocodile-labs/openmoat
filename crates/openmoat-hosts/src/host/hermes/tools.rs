@@ -11,8 +11,12 @@
 //! Hermes resolves a relative path against the session's working directory
 //! (`tools/file_tools_paths.py`: the directory the session's terminal last
 //! moved to, or the workspace a Desktop, TUI or ACP session registered), which
-//! the hook payload does not send: its `cwd` is the Hermes process's. A file
-//! tool's relative path is therefore checked against that `cwd` and needs review.
+//! the hook payload does not send: its `cwd` is the Hermes process's, where the
+//! terminal starts. A file tool's relative path is checked against that `cwd`.
+//! What would make it land elsewhere needs review instead: a relative path
+//! that climbs out of it (`..`), and a `terminal` call that leaves the
+//! session's shell outside it (a `cd` or `workdir` elsewhere), after which
+//! every relative path would resolve there.
 
 use openmoat_core::Action;
 use serde_json::Value;
@@ -38,26 +42,48 @@ const AGENT_STATE_TOOLS: &[&str] = &[
 /// the agent started; `write` and `submit` type into it.
 const PROCESS_READS: &[&str] = &["list", "poll", "log", "wait", "kill", "close", "handoff"];
 
-/// What the payload does not show about a relative path.
+/// What the payload does not show about a relative directory.
 const RELATIVE: &str = "Hermes Agent resolves a relative path against the session's working \
      directory, which its hook does not send (it sends the Hermes process's)";
 
+/// What the payload does not show about the relative `path` a call reads or writes.
+fn relative_escapes(path: &str, verb: &str) -> String {
+    format!(
+        "{verb} `{path}`, which climbs out of the directory Hermes Agent resolves it against \
+         (the session's working directory, which its hook does not send)"
+    )
+}
+
+/// What a `terminal` call that leaves the session's shell outside `cwd` hides.
+pub(super) const MOVES_OUT: &str = "the command leaves the session's shell outside the directory Hermes \
+     Agent was started in, and later relative file paths would resolve there";
+
 /// The action of the `tool` call with arguments `args` (an object), `None`
-/// for a tool that touches nothing OpenMoat governs. A tool not named here
-/// is an unknown tool: every path, URL and command its arguments name is
-/// checked ([`crate::wire::unknown`]).
-pub(super) fn action(tool: &str, args: &Value) -> Result<Option<Action>, HostError> {
+/// for a tool that touches nothing OpenMoat governs; `cwd` is the payload's.
+/// A tool not named here is an unknown tool: every path, URL and command its
+/// arguments name is checked ([`crate::wire::unknown`]).
+pub(super) fn action(
+    tool: &str,
+    args: &Value,
+    cwd: Option<&str>,
+) -> Result<Option<Action>, HostError> {
     let field = |name: &'static str| crate::input_str(args, tool, name);
     let action = match tool {
-        "terminal" => terminal(field("command")?, args.get("workdir")),
-        "read_file" => checked(Action::FsRead {
-            path: field("path")?,
-        }),
-        "write_file" => checked(Action::FsWrite {
-            path: field("path")?,
-        }),
-        "patch" => patch(args)?,
-        "search_files" => search(args),
+        "terminal" => terminal(field("command")?, args.get("workdir"), cwd),
+        "read_file" => checked(
+            Action::FsRead {
+                path: field("path")?,
+            },
+            cwd,
+        ),
+        "write_file" => checked(
+            Action::FsWrite {
+                path: field("path")?,
+            },
+            cwd,
+        ),
+        "patch" => checked(patch(args)?, cwd),
+        "search_files" => checked(search(args), cwd),
         "web_search" => Action::WebSearch {
             query: field("query")?,
         },
@@ -157,10 +183,14 @@ fn skill_name(operation: &Value) -> Option<String> {
 /// The shell stays where a `cd` leaves it for the session's later commands,
 /// so a command that leaves it where OpenMoat cannot know needs review
 /// ([`openmoat_core::leaves_unknown_directory`]), as does one with a relative
-/// `workdir`.
-fn terminal(command: String, workdir: Option<&Value>) -> Action {
+/// `workdir`, and one that leaves it outside `cwd`, against which later
+/// relative file paths are checked.
+fn terminal(command: String, workdir: Option<&Value>, cwd: Option<&str>) -> Action {
     let moves = openmoat_core::leaves_unknown_directory(&command);
     let dir = workdir.and_then(Value::as_str).filter(|d| !d.trim().is_empty());
+    let out = cwd.is_some_and(|cwd| {
+        dir.is_some_and(|d| !crate::request::is_inside(d, cwd)) || cds_outside(&command, cwd)
+    });
     let line = match dir {
         Some(dir) => format!("cd {} && {command}", quoted_dir(dir)),
         None => command,
@@ -174,9 +204,69 @@ fn terminal(command: String, workdir: Option<&Value>) -> Action {
             "the command leaves the session's shell, which later commands reuse, in a \
              directory OpenMoat cannot know",
         )
+    } else if out {
+        Action::unchecked(shell, MOVES_OUT)
     } else {
         shell
     }
+}
+
+/// Whether a `cd` or `pushd` of `command` outside a subshell moves the shell
+/// to a written-out directory that is not `cwd` or below it: elsewhere by an
+/// absolute or `~` path, climbing out by `..`, or home with no target. One
+/// that cannot be read counts.
+fn cds_outside(command: &str, cwd: &str) -> bool {
+    use openmoat_core::lexer::{Operator, Token, lex};
+    let Ok(tokens) = lex(command) else {
+        return true;
+    };
+    let mut depth = 0_usize;
+    let mut words: Vec<&str> = Vec::new();
+    let outside = |words: &[&str]| match words {
+        ["cd" | "pushd", rest @ ..] => match rest.iter().find(|w| !w.starts_with('-')) {
+            None => rest.is_empty() || rest.iter().all(|w| *w != "-"),
+            Some(target) if rooted(target) => !crate::request::is_inside(target, cwd),
+            Some(target) => climbs(target),
+        },
+        _ => false,
+    };
+    for token in &tokens {
+        match token {
+            Token::Word(word) => words.push(&word.text),
+            Token::Operator(Operator::OpenParen) => {
+                depth += 1;
+                words.clear();
+            }
+            Token::Operator(Operator::CloseParen) => {
+                depth = depth.saturating_sub(1);
+                words.clear();
+            }
+            Token::Operator(op) if op.is_separator() => {
+                if depth == 0 && outside(&words) {
+                    return true;
+                }
+                words.clear();
+            }
+            _ => {}
+        }
+    }
+    depth == 0 && outside(&words)
+}
+
+/// Whether the relative `path` climbs above where it starts (`../x`, `a/../../x`).
+fn climbs(path: &str) -> bool {
+    let mut depth = 0_i64;
+    for segment in path.split(['/', '\\']) {
+        if segment == ".." {
+            depth -= 1;
+            if depth < 0 {
+                return true;
+            }
+        } else if !segment.is_empty() && segment != "." {
+            depth += 1;
+        }
+    }
+    false
 }
 
 /// `dir` quoted for the shell, a leading `~` kept so the shell expands it.
@@ -197,18 +287,31 @@ fn rooted(path: &str) -> bool {
         || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
 }
 
-/// A file tool's action, needing review when its path is relative.
-fn checked(action: Action) -> Action {
-    let relative = match &action {
-        Action::FsRead { path } | Action::FsWrite { path } => !rooted(path),
-        Action::ReadFiles { paths } => paths.iter().any(|p| !rooted(p)),
-        Action::Patch { writes } => writes.iter().any(|p| !rooted(p)),
-        _ => false,
+/// A file tool's action, checked against the payload's `cwd`. It needs review
+/// when one of its relative paths climbs out of that directory, or, with no
+/// `cwd` to check against, when one is relative at all; the reason names the
+/// path and whether it is read or written.
+fn checked(action: Action, cwd: Option<&str>) -> Action {
+    let (paths, verb): (&[String], &str) = match &action {
+        Action::FsRead { path } => (std::slice::from_ref(path), "reads"),
+        Action::FsWrite { path } => (std::slice::from_ref(path), "writes"),
+        Action::ReadFiles { paths } => (paths, "reads"),
+        Action::Patch { writes } => (writes, "writes"),
+        _ => (&[], ""),
     };
-    if relative {
-        Action::unchecked(action, RELATIVE)
-    } else {
-        action
+    let held = paths
+        .iter()
+        .find(|p| !rooted(p) && (cwd.is_none() || climbs(p)));
+    match held {
+        Some(path) if cwd.is_none() => {
+            let reason = format!("{verb} `{path}`: {RELATIVE}");
+            Action::unchecked(action, reason)
+        }
+        Some(path) => {
+            let reason = relative_escapes(path, verb);
+            Action::unchecked(action, reason)
+        }
+        None => action,
     }
 }
 
@@ -218,7 +321,7 @@ fn checked(action: Action) -> Action {
 fn patch(args: &Value) -> Result<Action, HostError> {
     let field = |name: &'static str| crate::input_str(args, "patch", name);
     let mode = args.get("mode").and_then(Value::as_str).unwrap_or("replace");
-    Ok(checked(match mode {
+    Ok(match mode {
         "patch" => {
             let writes = openmoat_core::patch_writes(&field("patch")?);
             if writes.is_empty() {
@@ -232,7 +335,7 @@ fn patch(args: &Value) -> Result<Action, HostError> {
         _ => Action::FsWrite {
             path: field("path")?,
         },
-    }))
+    })
 }
 
 /// `search_files` reads `path` (the session's directory when absent); for a
@@ -251,11 +354,10 @@ fn search(args: &Value) -> Action {
         },
         _ => Action::ReadFiles { paths },
     };
-    let action = match pattern {
+    match pattern {
         Some(pattern) if files => crate::bounded(action, [pattern]),
         _ => action,
-    };
-    checked(action)
+    }
 }
 
 /// `web_extract` reads each of `urls` (at most five) without a body: one is a

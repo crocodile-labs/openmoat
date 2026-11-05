@@ -18,19 +18,22 @@ mod doc;
 mod hook_file;
 mod mcp;
 mod project_settings;
+mod tools;
 mod trust;
 
 #[cfg(test)]
 mod tests;
 
-/// Codex runs `PreToolUse` for shell, `apply_patch` file edits and MCP tools;
-/// web search and hosted tools have no hook. Codex has no key that blocks a
+/// Codex runs `PreToolUse` for shell, `apply_patch` file edits, MCP tools and
+/// its local tools, which it names by their function (`read_mcp_resource`,
+/// `view_image`); web search and hosted tools have no hook, and `write_stdin`
+/// "doesn't run `PreToolUse` again". Codex has no key that blocks a
 /// call whose hook fails: "a failed `PreToolUse` hook marks that hook run as
 /// failed, reports the error, and continues the tool call"
 /// (<https://learn.chatgpt.com/docs/hooks>), so `guard` itself must answer.
 const HOOKS: &[HookSpec] = &[HookSpec::new(
     "PreToolUse",
-    "Bash|apply_patch|mcp__.*",
+    "Bash|apply_patch|read_mcp_resource|view_image|mcp__.*",
     TOOL_HOOK_TIMEOUT_S,
     false,
 )];
@@ -48,7 +51,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, cannot start, exits non-zero \
          other than 2 (or 2 with nothing on stderr), or times out (default 600 s)",
-    gaps: "web search and hosted tools are not hooked; reviews become denies; Codex skips a \
+    gaps: "web search, hosted tools, code mode's `exec`/`wait` and `request_permissions` are \
+         not hooked; what `write_stdin` types into a running command is not hooked, so a \
+         command that starts a shell, REPL, editor or login without its own commands needs \
+         review; reviews become denies; Codex skips a \
          new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = \
          false` turns hooks off (`openmoat status` and `doctor` report that); calls run \
          unchecked if the hook binary is missing or crashes",
@@ -114,6 +120,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    // Codex 0.166 sends a call's own working directory (a shell call's
+    // `workdir`) as `cwd` (`command_input_cwd` in
+    // `hooks/src/events/pre_tool_use.rs`) and starts every hook in the
+    // session's directory.
+    session_dir: crate::contract::SessionDir::HookProcess,
     ..HostSpec::BASE
 };
 
@@ -135,7 +146,11 @@ impl HostAdapter for Adapter {
         payload: &str,
     ) -> Result<HookRequest, HostError> {
         match event {
-            None | Some(pre_tool_use::EVENT) => pre_tool_use::parse(host, payload),
+            None | Some(pre_tool_use::EVENT) => {
+                let mut request = pre_tool_use::parse_with(host, payload, tools::own)?;
+                request.action = request.action.map(tools::held);
+                Ok(request)
+            }
             other => Err(wrong_event(other)),
         }
     }

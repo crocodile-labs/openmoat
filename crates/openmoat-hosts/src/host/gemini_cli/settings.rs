@@ -61,3 +61,22 @@ pub(super) const RELAXED_KEYS: &[RelaxedKey] = &[
     // which connects to the editor, stays pinned.
     RelaxedKey::flag("ide.hasSeenNudge"),
 ];
+
+/// The directories a `settings.json` adds to Gemini CLI's workspace:
+/// `context.includeDirectories` (`settingsSchema.ts`; read by
+/// `WorkspaceContext` in `packages/core/src/utils/workspaceContext.ts`, 0.65.0),
+/// which every search without a `dir_path` reads too. A value there that is
+/// not a list of paths is taken as the home directory, so what such a search
+/// reads is still checked as reading a directory that holds every secret.
+pub(super) fn include_directories(settings: &serde_json::Value) -> Vec<String> {
+    match settings.pointer("/context/includeDirectories") {
+        None | Some(serde_json::Value::Null) => Vec::new(),
+        Some(serde_json::Value::Array(dirs)) if dirs.iter().all(serde_json::Value::is_string) => {
+            dirs.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        }
+        Some(_) => vec!["~".to_owned()],
+    }
+}

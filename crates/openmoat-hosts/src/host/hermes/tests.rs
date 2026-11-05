@@ -67,8 +67,16 @@ fn the_payload_gives_session_call_and_working_directory() {
 fn a_terminal_command_runs_in_its_workdir_and_a_lost_shell_needs_review() {
     assert_eq!(action("terminal-workdir"), Some(shell("cd '/p/app' && cargo test")));
     assert_eq!(action("terminal-background"), Some(shell("npm run dev")));
+    // A `workdir` outside the directory Hermes started in moves the session's
+    // shell there, where later relative file paths would resolve.
     let home = call("terminal", json!({ "command": "ls", "workdir": "~/it's" })).unwrap();
-    assert_eq!(home.action, Some(shell(r"cd ~/'it'\''s' && ls")));
+    assert_eq!(
+        home.action,
+        Some(Action::unchecked(
+            shell(r"cd ~/'it'\''s' && ls"),
+            super::tools::MOVES_OUT
+        ))
+    );
     let relative_dir = call("terminal", json!({ "command": "ls", "workdir": "app" })).unwrap();
     assert_eq!(
         relative_dir.action,
@@ -82,7 +90,7 @@ fn a_terminal_command_runs_in_its_workdir_and_a_lost_shell_needs_review() {
 }
 
 #[test]
-fn file_tools_name_their_paths_and_a_relative_one_needs_review() {
+fn file_tools_name_their_paths_and_a_relative_one_is_checked_from_cwd() {
     assert_eq!(
         action("read_file"),
         Some(Action::FsRead {
@@ -91,10 +99,20 @@ fn file_tools_name_their_paths_and_a_relative_one_needs_review() {
     );
     assert_eq!(
         action("read_file-relative"),
-        Some(relative(Action::FsRead {
+        Some(Action::FsRead {
             path: "src/main.rs".to_owned()
-        }))
+        })
     );
+    // Without a `cwd` to check it against, a relative path needs review.
+    let bare = json!({
+        "hook_event_name": "pre_tool_call", "tool_name": "read_file",
+        "tool_input": { "path": "src/main.rs" }, "session_id": "s", "cwd": "",
+    });
+    let bare = Host::Hermes.parse_request(&bare.to_string()).unwrap();
+    let Some(Action::Unchecked { reason, .. }) = bare.action else {
+        panic!("{bare:?}");
+    };
+    assert!(reason.starts_with("reads `src/main.rs`: "), "{reason}");
     let write = fixture("write_file").unwrap();
     assert_eq!(
         write.action,
@@ -120,17 +138,19 @@ fn file_tools_name_their_paths_and_a_relative_one_needs_review() {
 }
 
 #[test]
-fn a_search_reads_its_path_or_needs_review_for_the_sessions_directory() {
+fn a_search_reads_its_path_or_the_directory_hermes_started_in() {
     assert_eq!(
         action("search_files"),
         Some(Action::FsRead {
             path: "/p/src".to_owned()
         })
     );
-    assert!(matches!(
+    assert_eq!(
         action("search_files-no-path"),
-        Some(Action::Unchecked { .. })
-    ));
+        Some(Action::FsRead {
+            path: ".".to_owned()
+        })
+    );
     let climbs = call(
         "search_files",
         json!({ "pattern": "../../.ssh/*", "target": "files", "path": "/p/src" }),
@@ -315,6 +335,87 @@ fn each_verdict_is_rendered_as_hermes_reads_it() {
     )
     .unwrap();
     assert_ne!(other["rule_key"], review["rule_key"]);
+}
+
+fn payload(tool: &str, input: &Value) -> String {
+    json!({
+        "hook_event_name": "pre_tool_call",
+        "tool_name": tool,
+        "tool_input": input,
+        "session_id": "h1",
+        "cwd": "/p",
+    })
+    .to_string()
+}
+
+fn parsed(tool: &str, input: &Value) -> crate::HookRequest {
+    Host::Hermes.parse_request(&payload(tool, input)).unwrap()
+}
+
+/// One "always" approves one call: two calls held for the same reason get
+/// keys of their own, and the same call keeps its key.
+#[test]
+fn the_rule_key_names_the_call() {
+    let review = Decision::single(Verdict::Review, "persistence", "runs later");
+    let key = |request: &crate::HookRequest| {
+        let out: Value =
+            serde_json::from_str(&Host::Hermes.render_response_for(request, &review)).unwrap();
+        out["rule_key"].as_str().unwrap().to_owned()
+    };
+    let readme = parsed("read_file", &json!({ "path": "README.md" }));
+    let plist = parsed("write_file", &json!({ "path": "evil.plist", "content": "x" }));
+    assert_ne!(key(&readme), key(&plist));
+    assert_eq!(key(&readme), key(&parsed("read_file", &json!({ "path": "README.md" }))));
+}
+
+/// A relative path inside the directory Hermes was started in is checked
+/// there; one that climbs out, or any after the shell left it, needs review,
+/// and the reason names the file and whether it is read or written.
+#[test]
+fn relative_paths_are_held_only_where_they_may_land_elsewhere() {
+    let readme = parsed("read_file", &json!({ "path": "src/main.rs" }));
+    assert_eq!(
+        readme.action,
+        Some(Action::FsRead {
+            path: "src/main.rs".to_owned()
+        })
+    );
+    let search = parsed("search_files", &json!({ "pattern": "fn main" }));
+    assert!(!matches!(search.action, Some(Action::Unchecked { .. })), "{search:?}");
+    let climbs = parsed("write_file", &json!({ "path": "../../x.plist", "content": "x" }));
+    match climbs.action {
+        Some(Action::Unchecked { reason, .. }) => {
+            assert!(reason.starts_with("writes `../../x.plist`"), "{reason}");
+        }
+        other => panic!("{other:?}"),
+    }
+    for (command, workdir) in [
+        ("cd ~/Library/LaunchAgents", None),
+        ("cd /tmp && ls", None),
+        ("cd .. && ls", None),
+        ("cd", None),
+        ("ls", Some("/etc")),
+    ] {
+        let mut input = json!({ "command": command });
+        if let Some(dir) = workdir {
+            input["workdir"] = json!(dir);
+        }
+        let held = parsed("terminal", &input);
+        assert!(matches!(held.action, Some(Action::Unchecked { .. })), "{command}");
+    }
+    for (command, workdir) in [
+        ("cd src && cargo test", None),
+        ("cd /p/sub && make", None),
+        ("(cd /tmp && ls) && ls", None),
+        ("cargo test", Some("/p")),
+    ] {
+        let mut input = json!({ "command": command });
+        if let Some(dir) = workdir {
+            input["workdir"] = json!(dir);
+        }
+        let plain = parsed("terminal", &input);
+        assert!(matches!(plain.action, Some(Action::Shell { .. })), "{command}: {plain:?}");
+    }
 }
 
 /// Where Hermes would approve a review unseen, OpenMoat's review reaches it as a

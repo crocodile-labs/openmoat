@@ -314,3 +314,45 @@ fn a_project_settings_file_that_disables_openmoat_is_warned_about() {
     assert!(warnings.contains("`hooksConfig.disabled`"), "{warnings}");
     assert!(warnings.contains("`hooks` adds hooks"), "{warnings}");
 }
+
+/// Audit 2026-11-05 H7: a search without a `dir_path` is checked over the
+/// workspace the settings name, not asked about. A directory the settings add
+/// is read as well, so a workspace that holds `~/.ssh` is still denied, and a
+/// settings file that cannot be read leaves the search needing review.
+#[test]
+fn a_workspace_search_is_decided_over_the_directories_the_settings_name() {
+    let sb = Sandbox::installed(&[".gemini"]);
+    let project = sb.project();
+    let searches = [
+        ("grep_search", json!({ "pattern": "fn main" })),
+        ("glob", json!({ "pattern": "**/*.rs" })),
+        (
+            "read_many_files",
+            json!({ "include": ["src/a.rs", "src/b.rs"] }),
+        ),
+    ];
+    for (tool, input) in &searches {
+        let (code, reply) = guard(&sb, &payload(&sb, tool, input));
+        assert_eq!(code, Some(OK), "{tool}");
+        assert_ne!(reply["decision"], "ask", "{tool}: {reply}");
+    }
+    let project_settings = project.join(".gemini/settings.json");
+    fs::create_dir_all(project_settings.parent().unwrap()).unwrap();
+    let ssh = json!({ "context": { "includeDirectories": ["~/.ssh"] } });
+    fs::write(&project_settings, ssh.to_string()).unwrap();
+    let (code, reply) = guard(
+        &sb,
+        &payload(&sb, "grep_search", &json!({ "pattern": "KEY" })),
+    );
+    assert_eq!(
+        (code, &reply["decision"]),
+        (Some(DENY), &Value::from("deny")),
+        "{reply}"
+    );
+    fs::write(&project_settings, "{ not json").unwrap();
+    let (_, reply) = guard(
+        &sb,
+        &payload(&sb, "grep_search", &json!({ "pattern": "x" })),
+    );
+    assert_eq!(reply["decision"], "ask", "{reply}");
+}
