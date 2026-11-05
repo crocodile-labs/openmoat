@@ -1398,7 +1398,8 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   - last, the IR's deny rules, because Seatbelt applies the last match. Their `!`
     exceptions become `require-all`/`require-not`, so a deny with exceptions is exact.
     A read deny covers `file-read-data` and `file-read-xattr` and leaves `stat`
-    working.
+    working. Every deny also names `file-link`, so a denied file cannot be
+    hard-linked to a path no deny names (THREAT_MODEL.md §5, "TOCTOU and hard links").
   - a fixed deny of `com.apple.SecurityServer` and `securityd`.
 
   Globs become `subpath`/`literal` where they name one place, else anchored regexes

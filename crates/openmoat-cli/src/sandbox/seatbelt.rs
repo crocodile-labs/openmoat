@@ -6,6 +6,9 @@
 //!   allow above them can re-open what they name (ADR-002);
 //! - a read deny of `file-read-data` (contents) and `file-read-xattr` leaves
 //!   `stat` working, so `git status` does not fail on `.env`;
+//! - every deny also names `file-link`, so a denied file cannot be hard-linked
+//!   to a path no deny names (not yet verified with `sandbox-exec`: see
+//!   "TOCTOU and hard links" in `docs/THREAT_MODEL.md`);
 //! - `require-all`/`require-not` express a rule's `!` exceptions exactly;
 //! - paths are compared resolved (`/tmp` is `/private/tmp`) and in their
 //!   on-disk spelling, even when a program names them in another case; a
@@ -192,13 +195,22 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
     } else {
         Case::Exact
     };
+    // `file-link` is its own operation, checked against the file a hard link
+    // is made to (Apple's app sandbox denies it for `~/Library` the same way).
+    // Without it a command could link a denied file into the project and read
+    // or write it there, under a path no deny names.
     rules(
         &mut p.profile,
         &ir.fs.read.deny,
-        "deny file-read-data file-read-xattr",
+        "deny file-read-data file-read-xattr file-link",
         deny,
     );
-    rules(&mut p.profile, &ir.fs.write.deny, "deny file-write*", deny);
+    rules(
+        &mut p.profile,
+        &ir.fs.write.deny,
+        "deny file-write* file-link",
+        deny,
+    );
     agent_config(&mut p, &ir.fs.write, deny);
     p.profile.push_str(KEYCHAIN);
     p.profile.push_str(TERMINAL_INPUT);
@@ -337,7 +349,7 @@ fn agent_config(p: &mut Generated, write: &Access, case: Case) {
     rule(
         &mut p.profile,
         comment,
-        "deny file-write*",
+        "deny file-write* file-link",
         &with_real_paths(&patterns),
         case,
     );

@@ -1136,7 +1136,16 @@ something OpenMoat claims to stop.
   its first operand, `link`, `cp -l`/`--link`, the directory of `rsync --link-dest`,
   also as GNU's `gln`/`gcp` and under `busybox`), so `kernel-self` and the
   other write denies hold for it; a hard link made another way (an interpreter's
-  `os.link`, `cpio -l`, `pax -l`) is not seen.
+  `os.link`, `cpio -l`, `pax -l`) is not seen by the hook. Under `openmoat run` on
+  macOS the Seatbelt profile also denies `file-link` wherever it denies a read or a
+  write (`~/.moat/**`, the secret paths, the agents' configuration in the project),
+  so a sandboxed command cannot link `~/.moat/proxy.key` or `audit.db` into the
+  project and read or rewrite it there. Seatbelt checks `file-link` against the
+  file linked to, as Apple's app sandbox uses it for `~/Library`; this has not yet
+  been confirmed with `sandbox-exec` on a machine, so until it is, treat a hard link
+  out of a denied tree under the Seatbelt profile as a known limit. Landlock on
+  Linux needs `REFER` on the tree a file is linked from, which `openmoat run` grants
+  only with write access, and never inside the state directory (`exposure.rs`).
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand
   is checked as every file it matches when the hook runs (POLICY.md §4), with
   `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`;
