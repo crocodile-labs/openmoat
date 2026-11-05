@@ -1273,6 +1273,13 @@
   threat: T1
   action: { shell: "cat $(find ~ -name id_rsa)" }
   expect: { verdict: review, rules: [home-sweep] }
+# A repository review rule still holds a host the user allows: it can only make
+# the user policy stricter, never a default deny weaker (attacks.yaml)
+- id: review-repo-holds-a-host-the-user-allows
+  threat: T9
+  action: { net: "https://github.com/x" }
+  repo: { policy: "version: 1\nreview:\n  - id: any-host\n    net: ['*']\n" }
+  expect: { verdict: review, rules: ["repo:any-host"] }
 # A directory allowed with `moat allow --dir` (here as the rule it writes): its
 # `.git` is left out like the project's, so planting a hook or config there is
 # not allowed by the rule and goes to the agent's own prompt

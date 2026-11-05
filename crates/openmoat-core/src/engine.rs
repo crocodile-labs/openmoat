@@ -155,50 +155,65 @@ impl<'p> CompiledPolicy<'p> {
     /// Evaluate one atomic action: deny → allow → review → defer → default, with a
     /// repository policy's review rules ([`Policy::repo_review`]) tried before allow.
     ///
+    /// A repository review never softens what the user's policy alone decides
+    /// for the atom: per atom the result is the stricter of the two (ADR-022),
+    /// so a repository's `review: [{net: ['*']}]` leaves a host the `net: deny`
+    /// default refuses denied.
+    ///
     /// Returns `None` for a whole-pipeline atom that no rule mentions: pipelines
     /// are only there so rules like `curl * | sh` can see across `|`; the
     /// per-sub-command atoms carry the default verdict.
     #[must_use]
     pub fn evaluate_atomic(&self, action: &AtomicAction) -> Option<Decision> {
-        if let Some(hit) = self.matched_rules(action) {
-            return Some(hit);
+        if let Some(deny) = Self::hit(&self.deny, Verdict::Deny, action) {
+            return Some(deny);
         }
-        if matches!(action, AtomicAction::Pipeline { .. }) {
-            return None;
+        let own = self.own_rules(action).or_else(|| {
+            (!matches!(action, AtomicAction::Pipeline { .. })).then(|| {
+                let (verdict, rule_id) = self.policy.defaults.for_atom(action);
+                Decision::single(
+                    verdict,
+                    &rule_id,
+                    format!("no rule matched {}", action.describe()),
+                )
+            })
+        });
+        match Self::hit(&self.repo_review, Verdict::Review, action) {
+            Some(repo) => Some(match own {
+                Some(own) if own.verdict > repo.verdict => own,
+                _ => repo,
+            }),
+            None => own,
         }
-        let (verdict, rule_id) = self.policy.defaults.for_atom(action);
-        Some(Decision::single(
-            verdict,
-            &rule_id,
-            format!("no rule matched {}", action.describe()),
-        ))
     }
 
     /// The first of deny, repository review, allow, review and defer whose rules
     /// match `action`, with every matching rule; `None` when no rule does.
     fn matched_rules(&self, action: &AtomicAction) -> Option<Decision> {
-        for (groups, verdict) in [
-            (&self.deny, Verdict::Deny),
-            (&self.repo_review, Verdict::Review),
-            (&self.allow, Verdict::Allow),
-            (&self.review, Verdict::Review),
-            (&self.defer, Verdict::Defer),
-        ] {
-            let mut hit = Decision::new(verdict);
-            for g in groups {
-                if g.matches(action) {
-                    let why = g.reason.as_ref().map_or_else(
-                        || action.describe(),
-                        |r| format!("{r}: {}", action.describe()),
-                    );
-                    hit.push(&g.id, why);
-                }
-            }
-            if !hit.rules.is_empty() {
-                return Some(hit);
-            }
+        Self::hit(&self.deny, Verdict::Deny, action)
+            .or_else(|| Self::hit(&self.repo_review, Verdict::Review, action))
+            .or_else(|| self.own_rules(action))
+    }
+
+    /// The first of the user's allow, review and defer lists whose rules match.
+    fn own_rules(&self, action: &AtomicAction) -> Option<Decision> {
+        Self::hit(&self.allow, Verdict::Allow, action)
+            .or_else(|| Self::hit(&self.review, Verdict::Review, action))
+            .or_else(|| Self::hit(&self.defer, Verdict::Defer, action))
+    }
+
+    /// `verdict` with every group of `groups` that matches `action`; `None`
+    /// when none does.
+    fn hit(groups: &[CompiledGroup], verdict: Verdict, action: &AtomicAction) -> Option<Decision> {
+        let mut hit = Decision::new(verdict);
+        for g in groups.iter().filter(|g| g.matches(action)) {
+            let why = g.reason.as_ref().map_or_else(
+                || action.describe(),
+                |r| format!("{r}: {}", action.describe()),
+            );
+            hit.push(&g.id, why);
         }
-        None
+        (!hit.rules.is_empty()).then_some(hit)
     }
 }
 

@@ -1367,8 +1367,9 @@ review:
   `sandbox` stay yours, and any other key is an error. Rules follow §1–§3.
 - `deny` groups join your deny rules. `review` groups are tried after your deny rules and
   before your allow rules. So they make an action your policy allows need review, but they
-  never soften one of your denies. Per atomic action the result is the stricter of
-  the two policies.
+  never soften one of your denies, a `deny` your `defaults` give included: a repository
+  `review` naming `net: ['*']` leaves a host the `net: deny` default refuses denied. Per
+  atomic action the result is the stricter of the two policies.
 - `allow` groups are ignored until you trust the file. Trusted, they are added after
   your allow rules, so your deny rules (`secrets-paths`, `kernel-self`, …) still win.
   They can widen your `review` rules and defaults.

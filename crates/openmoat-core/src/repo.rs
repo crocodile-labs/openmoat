@@ -186,6 +186,38 @@ mod tests {
         );
     }
 
+    /// Found by the `repo_policy_merge` fuzz target: a repository review rule
+    /// was tried before the user's defaults, so it turned a host the user's
+    /// `net: deny` default refuses into one a person could approve.
+    #[test]
+    fn a_repo_review_never_softens_a_user_default_deny() {
+        let ctx = EvalContext {
+            home: "/h".into(),
+            project: Some("/p".into()),
+            real_home: None,
+            real_project: None,
+            moved_dirs: Vec::new(),
+            cwd: "/p".into(),
+            case_insensitive_paths: false,
+        };
+        let repo =
+            "version: 1\nreview:\n  - id: any-host\n    net: ['*']\n    shell: ['cargo *']\n";
+        let p = merged(repo, false);
+        let net = CompiledPolicy::compile(&p, &ctx)
+            .unwrap()
+            .decide(&Action::Net {
+                url: "https://evil.example/x".into(),
+            });
+        assert_eq!(net.verdict, Verdict::Deny, "{net:?}");
+        assert!(!net.rules.iter().any(|r| r.starts_with(REPO_RULE_PREFIX)));
+        // Where the user's policy is weaker than review, the repository's
+        // review still holds.
+        assert_eq!(
+            decide(&p, "cargo test"),
+            (Verdict::Review, vec!["repo:any-host".into()])
+        );
+    }
+
     #[test]
     fn rule_ids_are_prefixed_so_they_cannot_pose_as_the_users() {
         let repo = "version: 1\ndeny:\n  - id: secrets\n    shell: ['ls']\n";
