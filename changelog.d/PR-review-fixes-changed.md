@@ -1,0 +1,2 @@
+### Changed
+- Cline CLI: `openmoat status` and `doctor` print Cline's limits on a line of their own (`cline --yolo` runs no hooks; another hook or plugin can rewrite a call after OpenMoat checked it; Cline runs the call when OpenMoat's script cannot start or is killed after 120 s), and name every other `PreToolUse` file in Cline's hook folders and every Cline plugin they find; `status --format json` lists them under `other_hooks` and gives each agent's `limit` ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

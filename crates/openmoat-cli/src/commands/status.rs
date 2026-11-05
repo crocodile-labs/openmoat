@@ -42,6 +42,10 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
                 .into_iter()
                 .map(|warning| warning.text)
                 .collect::<Vec<_>>(),
+            "other_hooks": crate::project_settings::other_hooks::warnings_here(&home)
+                .into_iter()
+                .map(|warning| warning.text)
+                .collect::<Vec<_>>(),
         }))?;
         return Ok(Code::Ok);
     }
@@ -70,6 +74,10 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     for warning in crate::project_settings::warnings_here(&home) {
         let name = warning.host.display_name();
         writeln!(out, "{name:<16} ! project settings {}", warning.text)?;
+    }
+    for warning in crate::project_settings::other_hooks::warnings_here(&home) {
+        let name = warning.host.display_name();
+        writeln!(out, "{name:<16} ! other hook {}", warning.text)?;
     }
     if let Ok(policy) = home.load_policy() {
         healthy &= sandboxes(&mut out, &home, &Plan::new(&home, &policy)?, &binary)?;
@@ -418,6 +426,9 @@ fn protection_lines(out: &mut impl io::Write, home: &Home, binary: &Path) -> Res
                 _ => "✗",
             };
             writeln!(out, "{:<16} {mark} protection: {summary}", agent.name)?;
+            if let Some(limit) = agent.limit {
+                writeln!(out, "{:<16} ! limit: {limit}", agent.name)?;
+            }
             writeln!(out, "{:<16} · known gaps: {}", agent.name, agent.gaps)?;
         }
     }

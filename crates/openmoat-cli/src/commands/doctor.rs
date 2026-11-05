@@ -158,9 +158,16 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         let name = warning.host.display_name();
         report.warn(&format!("{name:<16} project settings {}", warning.text));
     }
+    for warning in crate::project_settings::other_hooks::warnings_here(&home) {
+        let name = warning.host.display_name();
+        report.warn(&format!("{name:<16} other hook {}", warning.text));
+    }
     for agent in protection::report(&home, &binary)? {
         if let Some(line) = crate::install::trust_note::protection_line(&agent) {
             report.note(&line);
+            if let Some(limit) = agent.limit {
+                report.warn(&format!("{:<16} limit: {limit}", agent.name));
+            }
             report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
         }
     }

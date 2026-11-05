@@ -104,7 +104,11 @@ malformed (a deny). The full table is in
 - Cline approves calls on its own by default (`--auto-approve`, default `true`), so a
   call OpenMoat defers usually runs.
 - Another `PreToolUse` file or a plugin can rewrite a call's input (`overrideInput`)
-  after OpenMoat checked it. A workspace's `.cline/hooks` and `.clinerules/hooks` run
+  after OpenMoat checked it. `openmoat status` and `doctor` name every other
+  `PreToolUse` file in `~/Documents/Cline/Hooks`, `<CLINE_DIR>/hooks` and the current
+  workspace's hook folders, and every entry of `<CLINE_DIR>/plugins`, and print Cline's
+  limits (`--yolo`, hooks that rewrite input, a script that cannot start or times out) on
+  a line of their own. `--yolo` is a flag of one run, which they cannot see. A workspace's `.cline/hooks` and `.clinerules/hooks` run
   with the agent's rights; writing them (or renaming a folder onto `.clinerules`,
   `.cline` or their `hooks`) needs review (`runs-later`), and session taint protects
   every `.cline` and `.clinerules` file.

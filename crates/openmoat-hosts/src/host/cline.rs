@@ -39,7 +39,7 @@ use serde_json::Value;
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
     Reviews, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpServersJson, McpSpec, wrong_event,
+    McpServersJson, McpSpec, OtherHooks, wrong_event,
 };
 use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -91,7 +91,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          and a deny ends Cline's run; Cline approves calls on its own by default \
          (`--auto-approve`), so a call OpenMoat defers usually runs; another `PreToolUse` \
          file or plugin can rewrite a call's input (`overrideInput`) after OpenMoat checked \
-         it, and a workspace's `.cline/hooks` and `.clinerules/hooks` run with the agent's \
+         it (`openmoat status` and `doctor` name the ones they find), and a workspace's `.cline/hooks` and `.clinerules/hooks` run with the agent's \
          rights (writing them needs review, `runs-later`); the provider's own `web_search` runs without a hook; on native Windows \
          the script does not run",
     // `$CLINE_DIR/hooks`, `~/.cline` unless `CLINE_DIR` moves it
@@ -121,6 +121,23 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     docs: doc::DOCS,
     // The arguments come as `tool_call.input` and again as `preToolUse.parameters`.
     payload_copies: 2,
+    limit: Some(
+        "`cline --yolo` runs no hooks; another hook or plugin can rewrite a call after \
+         OpenMoat checked it; Cline runs the call if OpenMoat's script cannot start or is \
+         killed after 120 s",
+    ),
+    // Every `PreToolUse` file of Cline's hook directories runs, OpenMoat's
+    // among them (`resolveHooksConfigSearchPaths`), and so do the plugins in
+    // `$CLINE_DIR/plugins`.
+    other_hooks: Some(OtherHooks {
+        stem: "PreToolUse",
+        home_dirs: &["Documents/Cline/Hooks"],
+        config_dirs: &["hooks"],
+        project_dirs: &[".clinerules/hooks", ".cline/hooks"],
+        plugin_dirs: &["plugins"],
+        effect: "runs on every Cline tool call beside OpenMoat's hook and can rewrite the \
+                 call's input (`overrideInput`) after OpenMoat checked it",
+    }),
     ..HostSpec::BASE
 };
 

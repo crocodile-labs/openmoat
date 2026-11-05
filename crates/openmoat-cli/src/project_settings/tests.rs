@@ -456,10 +456,19 @@ fn a_goose_project_plugin_that_replaces_openmoats_is_named() {
     fs::write(&theirs, r#"{"hooks":{}}"#).unwrap();
     let why = replaced(&project).unwrap();
     assert!(
-        why.starts_with(&project.join(".agents/plugins").join("openmoat").display().to_string()),
+        why.starts_with(
+            &project
+                .join(".agents/plugins")
+                .join("openmoat")
+                .display()
+                .to_string()
+        ),
         "{why}"
     );
-    assert!(why.contains("without OpenMoat; remove that directory"), "{why}");
+    assert!(
+        why.contains("without OpenMoat; remove that directory"),
+        "{why}"
+    );
     fs::remove_file(&theirs).unwrap();
     assert!(replaced(&project).is_some());
     // The protection level's reason, not a second warning.
@@ -469,7 +478,10 @@ fn a_goose_project_plugin_that_replaces_openmoats_is_named() {
     assert_eq!(replaced(&sub), None);
     let found = rows(&sub);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert!(found[0].contains("for a goose session started in"), "{found:?}");
+    assert!(
+        found[0].contains("for a goose session started in"),
+        "{found:?}"
+    );
 
     // Another plugin's hooks are warned about; one without hooks is not.
     let other = project.join(".agents/plugins/helper/hooks/hooks.json");
@@ -479,7 +491,10 @@ fn a_goose_project_plugin_that_replaces_openmoats_is_named() {
     let found = rows(&project);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].contains("helper"), "{found:?}");
-    assert!(found[0].contains("adds hooks that run commands"), "{found:?}");
+    assert!(
+        found[0].contains("adds hooks that run commands"),
+        "{found:?}"
+    );
 
     // goose started in the home directory loads the person's own plugin.
     assert_eq!(replaced(&user_home), None);

@@ -154,6 +154,41 @@ pub struct HostSpec {
     /// reads that many times its per-call limit, so a file is refused at the
     /// same size whichever host writes it.
     pub payload_copies: u64,
+    /// The one limit of the host's protection a person must not miss, which
+    /// `moat status` and `moat doctor` print on a line of its own beside the
+    /// protection level (Cline's `--yolo`); `None` for most hosts, whose
+    /// [`Self::gaps`] say it all.
+    pub limit: Option<&'static str>,
+    /// Other hook files the host runs for the event OpenMoat's hook answers,
+    /// which `moat status` and `moat doctor` name when they are there; `None`
+    /// for a host whose other hooks are its project settings' business
+    /// ([`Self::project_settings`]) or that has none.
+    pub other_hooks: Option<OtherHooks>,
+}
+
+/// Where a host finds hook files for OpenMoat's event besides OpenMoat's own
+/// ([`HostSpec::other_hooks`]): Cline runs every `PreToolUse` file in each of
+/// its hook directories, and its plugins, and any of them can rewrite the
+/// call's input (`overrideInput`) after OpenMoat checked it.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct OtherHooks {
+    /// A hook file's name without its extension (Cline's `PreToolUse`, run
+    /// with or without one).
+    pub stem: &'static str,
+    /// Directories holding them, relative to the home directory.
+    pub home_dirs: &'static [&'static str],
+    /// Directories holding them, relative to the configuration directory
+    /// (OpenMoat's own file there is left out).
+    pub config_dirs: &'static [&'static str],
+    /// Directories holding them, relative to the working directory and its
+    /// project root.
+    pub project_dirs: &'static [&'static str],
+    /// Directories of the configuration directory each of whose entries is a
+    /// plugin, which may answer the event too.
+    pub plugin_dirs: &'static [&'static str],
+    /// What one of them can do, for its warning.
+    pub effect: &'static str,
 }
 
 /// Which directory of a call is the session's ([`HostSpec::session_dir`]).

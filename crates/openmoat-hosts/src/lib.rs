@@ -20,9 +20,10 @@ pub use contract::{
     Activity, Advisories, Advisory, AlsoDir, AutoStart, ConsentFile, Detect, ExtraFile,
     GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookTrust,
     HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location,
-    McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, Paths, Platform,
-    PluginDir, ProcessSpec, ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, Reviews,
-    SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader, ToolRow, Unseen, Version,
+    McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, OtherHooks, Paths,
+    Platform, PluginDir, ProcessSpec, ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey,
+    Reviews, SandboxFormat, SandboxSpec, SessionDir, SettingsFile, SettingsReader, ToolRow, Unseen,
+    Version,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;

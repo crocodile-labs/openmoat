@@ -58,6 +58,10 @@ pub struct Protection {
     /// What the hook and sandbox do not cover for this agent
     /// ([`HostSpec::gaps`](openmoat_hosts::HostSpec::gaps)).
     pub gaps: &'static str,
+    /// The limit a person must not miss, printed on its own line
+    /// ([`HostSpec::limit`](openmoat_hosts::HostSpec::limit)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<&'static str>,
 }
 
 impl Protection {
@@ -122,6 +126,7 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                 level,
                 reason,
                 gaps: host.spec().gaps,
+                limit: host.spec().limit,
             })
         })
         .collect()
@@ -446,6 +451,7 @@ mod tests {
             level,
             reason: reason.map(str::to_owned),
             gaps: "",
+            limit: None,
         };
         assert_eq!(
             protection(Level::HookOnly, Some("why"))

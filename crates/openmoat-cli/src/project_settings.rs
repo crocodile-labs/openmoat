@@ -374,6 +374,7 @@ pub fn warnings_here(home: &Home) -> Vec<Warning> {
         .collect()
 }
 
+pub mod other_hooks;
 mod plugins;
 
 pub use plugins::replaced_here;
