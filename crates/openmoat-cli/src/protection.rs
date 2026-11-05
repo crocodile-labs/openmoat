@@ -105,6 +105,9 @@ pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
                         )
                         .map(|off| format!("hook turned off by {off}"))
                         .or_else(|| {
+                            crate::project_settings::replaced_here(host, &config.settings_path)
+                        })
+                        .or_else(|| {
                             crate::heartbeat::check(home, &config).and_then(|loaded| {
                                 crate::heartbeat::not_loaded(host.display_name(), &loaded)
                             })

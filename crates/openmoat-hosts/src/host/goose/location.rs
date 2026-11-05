@@ -16,7 +16,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::contract::{Locate, Located};
+use crate::contract::{Locate, Located, PluginDir};
 
 /// The variable that moves goose's configuration and plugins together.
 pub(super) const ROOT_VARIABLE: &str = "GOOSE_PATH_ROOT";
@@ -29,11 +29,23 @@ const XDG: &str = "XDG_CONFIG_HOME";
 /// The configuration directory under the home directory on Windows.
 const WINDOWS_DIR: [&str; 5] = ["AppData", "Roaming", "Block", "goose", "config"];
 
+/// OpenMoat's plugin's directory name, which is the plugin's name to goose.
+const PLUGIN: &str = "openmoat";
+
+/// The plugins goose loads from the directory it starts in
+/// (`plugins/discovery.rs`): a plugin there named as one of the person's
+/// replaces it, so a project's `openmoat` replaces OpenMoat's.
+pub(super) const PROJECT_PLUGINS: PluginDir = PluginDir {
+    path: ".agents/plugins",
+    hook_file: "hooks/hooks.json",
+    own: PLUGIN,
+};
+
 /// OpenMoat's hook file under a directory that holds `.agents`.
 fn hook_file_in(home: &Path) -> PathBuf {
     home.join(".agents")
         .join("plugins")
-        .join("openmoat")
+        .join(PLUGIN)
         .join("hooks")
         .join(HOOK_FILE_NAME)
 }

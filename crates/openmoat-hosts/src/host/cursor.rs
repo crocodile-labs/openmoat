@@ -93,6 +93,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         local: None,
         more: &[],
         hook_dir: None,
+        plugin_dir: None,
         reader: &project_settings::READER,
         user_file: "hooks.json",
         user_more: &[],

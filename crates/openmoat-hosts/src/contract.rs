@@ -195,6 +195,10 @@ pub struct ProjectSettingsSpec {
     /// extensions (GitHub Copilot CLI's `.github/hooks`, pi's `.pi/extensions`);
     /// `None` when it has none.
     pub hook_dir: Option<HookDir>,
+    /// A directory of the project holding plugins, one directory each, which
+    /// the host loads beside the person's and in place of a person's plugin of
+    /// the same name (goose's `.agents/plugins`); `None` when it has none.
+    pub plugin_dir: Option<PluginDir>,
     /// Which keys of these files turn OpenMoat's hook off, run a program or
     /// redirect the agent; one reader per host folder.
     pub reader: &'static dyn SettingsReader,
@@ -238,6 +242,22 @@ impl HookDir {
     pub fn paths(&self) -> impl Iterator<Item = &'static str> {
         std::iter::once(self.path).chain(self.also.iter().copied())
     }
+}
+
+/// A project's directory of plugins ([`ProjectSettingsSpec::plugin_dir`]):
+/// each plugin is a directory, named by its directory, whose hooks are in
+/// [`Self::hook_file`]. A project plugin named [`Self::own`] replaces
+/// OpenMoat's: unless its hook file is OpenMoat's byte for byte, the host runs
+/// every call without OpenMoat's hook in that project.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct PluginDir {
+    /// The directory, relative to the project.
+    pub path: &'static str,
+    /// A plugin's hook file, relative to the plugin's directory.
+    pub hook_file: &'static str,
+    /// OpenMoat's plugin's directory name.
+    pub own: &'static str,
 }
 
 /// Where a host keeps the configuration `moat init` writes its hook into.

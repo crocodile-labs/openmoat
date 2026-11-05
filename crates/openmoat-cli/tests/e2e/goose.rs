@@ -115,6 +115,43 @@ fn a_deferred_call_is_left_to_goose_and_malformed_arguments_are_blocked() {
     assert_eq!(reply["decision"], "block", "{reply}");
 }
 
+/// goose's protection in the directory `cwd`, from `status --format json`.
+fn goose_status(sb: &Sandbox, cwd: &std::path::Path) -> Value {
+    let mut cmd = sb.command();
+    cmd.current_dir(cwd).args(["status", "--format", "json"]);
+    let doc = crate::common::json(&crate::common::output(&mut cmd, None));
+    doc["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["host"] == "goose")
+        .unwrap()
+        .clone()
+}
+
+/// A project's `.agents/plugins/openmoat` replaces OpenMoat's plugin in a
+/// goose session started there: `status` says goose is not protected there and
+/// names the directory.
+#[test]
+fn a_project_plugin_that_replaces_openmoats_is_not_protected() {
+    let sb = Sandbox::installed(&[&dir()]);
+    let project = sb.project();
+    assert_eq!(goose_status(&sb, &project)["level"], "hook-only");
+
+    let theirs = project.join(".agents/plugins/openmoat/hooks/hooks.json");
+    fs::create_dir_all(theirs.parent().unwrap()).unwrap();
+    fs::write(&theirs, r#"{"hooks":{}}"#).unwrap();
+    let agent = goose_status(&sb, &project);
+    assert_eq!(agent["level"], "not-protected", "{agent}");
+    let reason = agent["reason"].as_str().unwrap();
+    assert!(reason.contains("replaces OpenMoat's plugin"), "{agent}");
+    assert!(reason.contains("remove that directory"), "{agent}");
+
+    // A byte-for-byte copy of OpenMoat's hook file is OpenMoat's plugin.
+    fs::copy(hook_file(&sb), &theirs).unwrap();
+    assert_eq!(goose_status(&sb, &project)["level"], "hook-only");
+}
+
 #[test]
 fn uninstall_takes_the_entry_out() {
     let sb = Sandbox::installed(&[&dir()]);

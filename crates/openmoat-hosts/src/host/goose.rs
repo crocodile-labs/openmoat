@@ -85,8 +85,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          without the hook, so it needs review (a deny in goose); goose loads plugins once, from the \
          directory it starts in: a project's `.agents/plugins/` can add hooks or a plugin named \
          `openmoat` that replaces OpenMoat's, and its `.config/goose/settings.json` can turn \
-         OpenMoat's off (`openmoat status` and `doctor` warn about the settings, not the \
-         plugins); `plugins` in `config.yaml` can turn it off; the shell on Windows is `cmd` \
+         OpenMoat's off (`openmoat status` and `doctor` report goose not protected in a \
+         directory whose plugin replaces OpenMoat's, and warn about the settings and the other \
+         plugins' hooks); `plugins` in `config.yaml` can turn it off; the shell on Windows is `cmd` \
          (or `GOOSE_SHELL`), which OpenMoat leaves to goose; with `GOOSE_PATH_ROOT` the moved \
          plugin directory is pinned but not in the default policy; a changed `hooks.json` is \
          caught on the next call",
@@ -110,13 +111,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     }),
     // `enabledPlugins` and `disabledPlugins` in `.config/goose/settings.json`
     // and `settings.local.json` of the directory goose starts in, over the
-    // person's `settings.json` (`plugins/discovery.rs`).
+    // person's `settings.json` (`plugins/discovery.rs`). The plugins of that
+    // directory's `.agents/plugins` load beside the person's, and one named
+    // `openmoat` in place of OpenMoat's.
     project_settings: Some(ProjectSettingsSpec {
         dir: ".config/goose",
         shared: "settings.json",
         local: Some("settings.local.json"),
         more: &[],
         hook_dir: None,
+        plugin_dir: Some(location::PROJECT_PLUGINS),
         reader: &project_settings::READER,
         user_file: "settings.json",
         user_more: &[],

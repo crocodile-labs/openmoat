@@ -23,8 +23,9 @@ exit 0 with nothing on stdout, or `{"decision": "allow"}`, lets it run. goose as
 person for its own approval (`GOOSE_MODE`) before it runs the hook.
 
 goose loads plugins once, when it starts, from `~/.agents/plugins/` and from the
-`.agents/plugins/` of the directory it starts in. The plugin directory is shared with
-other agents that read Open Plugins.
+`.agents/plugins/` of the directory it starts in; a plugin's name is its directory's, and a
+project plugin replaces the person's plugin of the same name. The plugin directory is
+shared with other agents that read Open Plugins.
 
 ## Tools OpenMoat sees
 
@@ -81,7 +82,11 @@ goose runs every call unchecked when it does not load OpenMoat's plugin: turned 
 
 No OS sandbox from OpenMoat; Code Mode's `execute_javascript` needs review, since its tool
 calls skip the hook; a project's `.agents/plugins/` can add hooks or replace OpenMoat's
-plugin, which `openmoat status` and `doctor` do not report yet; the Windows shell is left
+plugin: run in a directory whose `.agents/plugins/openmoat` is not a byte-for-byte copy of
+OpenMoat's hook file, `openmoat status` and `doctor` report goose not protected there and
+name the directory to remove, and they warn about the other plugins' hooks and about a
+project root's replacement seen from a subdirectory. They only see the directory they run
+in, not one goose is started in later; the Windows shell is left
 to goose; with `GOOSE_PATH_ROOT` the moved plugin is pinned by the lock but not named in
 the default policy; a changed `hooks.json` is caught on the next call.
 

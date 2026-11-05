@@ -325,6 +325,27 @@ pub fn warnings(cwd: &Path, user_home: &Path, host: Host, hook_file: &Path) -> V
             rows.push(row(&path, what));
         }
     }
+    if let Some(dir) = &spec.plugin_dir {
+        for root in project_dirs(cwd, user_home) {
+            // The working directory's replacement is the protection level's
+            // reason ([`replaced`]); the project root's applies to a session
+            // started there.
+            if root != cwd
+                && let Some(plugin) = plugins::replacing(&root, dir, hook_file)
+            {
+                rows.push(format!(
+                    "{}: replaces OpenMoat's plugin for a {} session started in {}, which \
+                     runs every call without OpenMoat; remove that directory",
+                    plugin.display(),
+                    host.display_name(),
+                    root.display()
+                ));
+            }
+            for path in plugins::others(&root, dir) {
+                rows.push(row(&path, spec.reader.hook_dir_effect()));
+            }
+        }
+    }
     rows
 }
 
@@ -352,6 +373,10 @@ pub fn warnings_here(home: &Home) -> Vec<Warning> {
         })
         .collect()
 }
+
+mod plugins;
+
+pub use plugins::replaced_here;
 
 #[cfg(test)]
 mod tests;
