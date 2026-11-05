@@ -889,6 +889,14 @@ unprotected, and hashing them during the migration would vouch for whatever they
 at that moment. `doctor` counts them as not covered; an event without a hash after
 `legacy_last_id` is a break. What the chain does not detect is in [THREAT_MODEL.md](THREAT_MODEL.md) §5.
 
+Migrations run on the first writable open after an upgrade, which is usually a
+`guard` inside its 30 s budget, so no step may copy the log. A step that admits a new
+verdict (`defer` in version 3, `review` in version 8) widens the `CHECK` in place: it
+edits the table's text in `sqlite_master` under `writable_schema` and moves
+`schema_version`, the procedure SQLite documents for a constraint every stored row
+already meets, and costs milliseconds at any size (`store/schema.rs`, `widen_check`).
+Only a table whose `CHECK` is not the text the ladder wrote is rebuilt instead.
+
 ## 8. Files on disk
 
 ```
