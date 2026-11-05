@@ -2356,6 +2356,15 @@
   threat: T9
   action: { shell: "openmoat policy upgrade --help" }
   expect: { verdict: allow, rules: [openmoat-readonly] }
+# `guard` and `mcp proxy` are a host's to run, but their usage reads nothing
+- id: benign-openmoat-guard-help
+  threat: T9
+  action: { shell: "openmoat guard --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-mcp-proxy-help
+  threat: T9
+  action: { shell: "openmoat mcp proxy --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
 - id: benign-openmoat-policy-lint
   threat: T9
   action: { shell: "openmoat policy lint x.yaml" }

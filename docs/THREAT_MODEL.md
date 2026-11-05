@@ -493,7 +493,10 @@ something OpenMoat claims to stop.
     it and a same-user process that can read the agent's environment could take it.
     That is enough because what the token buys is small: a real decision on a payload
     the asker chose, recorded as such. Any process outside `openmoat run` gets the same by
-    running `openmoat guard` itself. It cannot choose the verdict of a row, change the
+    running `openmoat guard` itself; an agent's own shell tool cannot, since `kernel-self`
+    denies `guard` and `mcp proxy` (only a host runs them, as its hook, from its plugin or
+    as an MCP server's command, where no hook sees it), so an agent cannot forge rows, MCP
+    tickets or a session's proxy credential that way. It cannot choose the verdict of a row, change the
     lock or the policy, read a secret source, or make taint looser: link rows only add
     sessions to the run, and taint only tightens.
   - *Nothing in the payload beyond what `openmoat guard` already trusts.* The payload,
