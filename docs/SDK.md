@@ -205,6 +205,12 @@ The SDK is the decision only. These stay with `openmoat`: the policy lock and dr
 checks, approvals (`openmoat allow`), the audit log, MCP server pins, host hooks, the OS
 sandboxes and the egress proxy. A product that needs them runs `openmoat`.
 
+A `Session` does not take what a call returned yet, so it has no injected-input check
+(`injected-input`, POLICY.md §4.1.2, ADR-057). After untrusted content it tightens protected
+writes and, after a secret read, network, as above; a later command that uses a host a page
+named is not linked to the page. The conformance fixtures that give a call's output are the
+CLI's claim and are skipped by the SDK's conformance test.
+
 ## Versions
 
 | Constant | Rust | JavaScript |

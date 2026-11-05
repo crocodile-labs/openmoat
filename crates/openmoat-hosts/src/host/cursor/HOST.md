@@ -66,6 +66,11 @@ back.
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat installs none of Cursor's after-call hooks
+(`afterShellExecution`, `afterMCPExecution`), so it never sees what a call returned. A host,
+path or command untrusted output named is not linked to the later call that uses it; only
+session taint applies.
+
 Commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier
 approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined;
 file-tool reviews become denies; Task and tools that name no path are not hooked; a failed

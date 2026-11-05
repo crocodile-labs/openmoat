@@ -106,6 +106,10 @@ from one that has not run: the note stays a note. `openclaw plugins inspect open
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat's plugin does not handle `after_tool_call`, so it never
+sees what a call returned. A host, path or command untrusted output named is not linked to
+the later call that uses it; only session taint applies.
+
 No OS sandbox from OpenMoat; a parameter change by another plugin is undone, except by a
 plugin that also asks for approval (OpenClaw keeps the parameters of the first approval
 request, so a person approving that plugin's request runs its change, unchecked) or one

@@ -417,7 +417,9 @@ unlisted hosts. The atom never appears in a session that read no secret.
   `.config/opencode/**`, `.opencode/**`, `opencode.json[c]` and cached npm plugins
   `.cache/opencode/node_modules/**`, and Hermes Agent's
   `.hermes.md`, `.hermes/**` and, in its home, `skills/`, `cron/`, `memories/` and
-  `SOUL.md`) and OpenMoat's own `.moat/**`, at any depth:
+  `SOUL.md`, and the instruction files and skills other agents load: the shared
+  `.agents/skills/**`, Windsurf's `.windsurfrules` and `.windsurf/rules/**`, and GitHub
+  Copilot's path-scoped `.github/instructions/**`, ADR-057) and OpenMoat's own `.moat/**`, at any depth:
   every file `runs-later` holds for review and every config file `kernel-self` protects (a
   test keeps the lists in step). Source and test files are not protected,
   test-runner configs written in JavaScript (`jest.config.js`) included: they are code the
@@ -500,6 +502,61 @@ tighten as in §4.1.
 - Not tracked: content copied, renamed or produced indirectly (a build that writes
   output, a script that writes another file), and files under a directory a search
   tool reads (`Grep`, `Glob`).
+
+#### 4.1.2 Injected input
+
+Session taint knows that untrusted content came in. Injected input also knows what it said
+(ADR-057). Where the host reports what a call returned (Claude Code's `PostToolUse`), a later
+shell command or write that uses a host, path or command from untrusted output needs review,
+with rule id `injected-input` and a reason that names the source:
+
+```text
+review [injected-input] the host `collect.evil.example` came from the output of
+`gh issue view 12 --comments`, untrusted content this session read; fetch
+collect.evil.example may follow an instruction planted there
+```
+
+- **Untrusted output.** Counted:
+  - the output of what §4.1 calls untrusted content: a `fetch`, a `web.search`, an `mcp`
+    result, a `tool.unknown`;
+  - a shell command that reads from a host the policy does not allow on its own
+    (`curl -s https://evil.example/notes.txt`);
+  - a forge's client (`gh`, `glab`, `tea`), whose issue, pull-request and comment text
+    anyone may write.
+
+  Not counted: a file read, or a local command (`cat NOTES.md`, `cargo test`).
+- **What is kept.** Each output (its first 1 MiB) is reduced to at most 256 tokens:
+  - the hosts of its URLs;
+  - words that look like host names;
+  - absolute and `~/` paths outside the project;
+  - the commands of its code spans (fenced blocks, backticks, `$ ` lines; 16 to 512
+    characters, with arguments), read as the classifier reads a command.
+
+  Left out: the hosts the call itself reached, loopback and project paths. Each token is
+  stored as a keyed fingerprint (HMAC under `~/.moat/proxy.key`) with its source, never as
+  text. A session keeps at most 4096; past that, new ones are dropped.
+- **What it tightens.** Checked are a shell command, a write and a patch:
+  - a `net` or `fetch` atom whose host was kept;
+  - a write to a kept path;
+  - a command equal to a kept one, when the call also reaches a host or a file outside the
+    project that the policy does not allow. Docs that say `git push origin main` stay
+    quiet.
+
+  An atom the policy allows on its own stays allowed: a host on the allow list
+  (`git push`, `curl https://api.github.com/…`), a project file, `cargo build`. A deny
+  stays a deny.
+- **Not checked.** A fetch, a web search and an MCP call: following a link or a search
+  result is reading, and the host's own prompt decides fetches (`fetch: defer`).
+- **Answered.** By the person in the agent's prompt, or with `openmoat allow` for that
+  exact call.
+- **Hosts.** Only Claude Code reports output, and the Continue CLI, which runs Claude
+  Code's hooks. After an upgrade, run `openmoat init` once to add the `PostToolUse` entry;
+  `openmoat doctor` and `openmoat status` report the hook as needing it until then. Every
+  other host keeps §4.1 alone; its HOST.md says so.
+- **Limits.** Matches are exact: a host spelled another way, a reworded command or a
+  relative path is not linked. Content that floods the bounds with decoys can push a
+  planted token out. A command in plain prose is linked by its hosts and paths only.
+- Conformance fixtures give an earlier call's output with `output:` in its `session:` entry.
 
 ### 4.2 The push check
 
@@ -711,6 +768,7 @@ These appear in responses and in `openmoat show` alongside the ids from `policy.
 | `config-change` | allow | a Claude Code `ConfigChange` for a settings file that is not pinned, or still matches the lock apart from settings drift (§8); a change that names no file is allowed only while every pinned file matches the lock apart from settings drift; recorded |
 | `project-settings` | deny | a Claude Code `ConfigChange` for a project's `.claude/settings.json` or `.claude/settings.local.json` (or a `/settings-review` copy of one, or, when the change names no file, the one in the session's directory or its project root) that sets `disableAllHooks`, `hooks`, `env`, `apiKeyHelper`, `awsAuthRefresh`, `awsCredentialExport`, `otelHeadersHelper`, `statusLine`, `subagentStatusLine`, `fileSuggestion`, an enabled plugin, `extraKnownMarketplaces`, `enableAllProjectMcpServers` or `enabledMcpjsonServers` (any value but `false`, `null`, `""`, `{}` or `[]`; Claude Code starts those MCP servers, which runs their commands, though their tool calls stay held by their pins), or `sandbox` beyond `{"enabled": true}`, that cannot be read or parsed, or whose bytes changed between the check and the decision; the session keeps its previous settings. Permission lists and modes still load: the hook decides every call in every mode (THREAT_MODEL §5) |
 | `session-taint` | review | earlier calls of the session read secret material or untrusted content, and this call could carry the secret out or persist the content (§4.1) |
+| `injected-input` | review | a shell command or write uses a host, path or command that came from untrusted output the session read, and the policy does not allow that part on its own (§4.1.2) |
 | `protected-contents` | review | the call reads a folder that holds paths a deny rule names (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `ls ~/.codex`), or writes into one (`tar xf a.tar -C ~/.config`): the folder rule (§3.2, ADR-038) |
 | `session-written-code` | review | the call runs a file the same host session wrote (`python3 x.py`, `bash x.sh`, `./x`) and no OS sandbox from OpenMoat holds it (§4.3, ADR-039) |
 | `push-secret` | deny | a commit a `git push` or `gh pr create` would publish adds a known token format or a brokered secret's value (§4.2) |

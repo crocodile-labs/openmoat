@@ -166,6 +166,10 @@ without the plugin from one that has not run: the note stays a note.
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat's plugin does not handle `tool.execute.after`, so it
+never sees what a call returned. A host, path or command untrusted output named is not
+linked to the later call that uses it; only session taint applies.
+
 No OS sandbox from OpenMoat; OpenCode 1 plugins cannot prompt, so a review is a deny that says
 how to approve it; OpenCode 2's `--auto` approves OpenMoat's reviews unseen; OpenCode before
 1.3.4 is not supported; other plugins and custom tools run in OpenCode's process with the

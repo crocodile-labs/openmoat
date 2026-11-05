@@ -353,6 +353,45 @@ fn a_missing_event_entry_is_stale_not_installed() {
     assert_eq!(state(&cfg, binary), HookState::Installed);
 }
 
+/// An install from before the `PostToolUse` entry (ADR-057) is stale, and `init`
+/// adds the entry beside a person's own, without `onFailure`: the call already ran.
+#[test]
+fn an_install_without_the_post_tool_use_entry_is_stale_until_init_adds_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = HostConfig {
+        hooks: Host::ClaudeCode.spec().install.as_ref().unwrap().hooks,
+        ..config_blocking(dir.path())
+    };
+    let binary = Path::new("/x/openmoat");
+    install(&cfg, binary, false).unwrap();
+    let mut doc = root(&cfg);
+    let hooks = doc["hooks"].as_object_mut().unwrap();
+    hooks.remove("PostToolUse");
+    hooks.insert(
+        "PostToolUse".into(),
+        json!([{"matcher": "Write", "hooks": [{"type": "command", "command": "fmt.sh"}]}]),
+    );
+    fs::write(&cfg.settings_path, doc.to_string()).unwrap();
+    assert!(matches!(state(&cfg, binary), HookState::Stale { .. }));
+
+    install(&cfg, binary, false).unwrap();
+    assert_eq!(state(&cfg, binary), HookState::Installed);
+    let post = root(&cfg)["hooks"]["PostToolUse"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(post.len(), 2, "{post:?}");
+    let ours = post
+        .iter()
+        .find(|e| e["hooks"][0]["command"] == "/x/openmoat")
+        .unwrap();
+    assert_eq!(
+        ours["matcher"],
+        "Bash|WebFetch|WebSearch|ReadMcpResourceTool|mcp__.*"
+    );
+    assert!(ours["hooks"][0].get("onFailure").is_none(), "{ours}");
+}
+
 #[test]
 fn dry_run_writes_nothing() {
     let dir = tempfile::tempdir().unwrap();

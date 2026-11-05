@@ -172,6 +172,9 @@ hook can see or stop it.
 
 ## Known gaps
 
+- Injected input (ADR-057): OpenMoat does not install the `post_tool_call` hook, so it never
+  sees what a call returned. A host, path or command untrusted output named is not linked to
+  the later call that uses it; only session taint applies.
 - No OS sandbox from OpenMoat: `openmoat run hermes` is the OS layer.
 - What an `execute_code` script does itself (Python file, process and network calls) is
   not checked; the tools it calls are.

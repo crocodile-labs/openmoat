@@ -39,6 +39,10 @@ or times out (default 600 s).
 
 ## Known gaps
 
+Injected input (ADR-057): a Continue CLI that runs Claude Code's hooks also runs its
+`PostToolUse` entry and gets the same check (see [claude_code](../claude_code/HOST.md));
+one that runs none is not checked, as for every other call.
+
 The released Continue CLI does not run hooks, so OpenMoat cannot check its tool calls;
 run it under `openmoat run` ([SANDBOX.md](../../../../../docs/SANDBOX.md)).
 

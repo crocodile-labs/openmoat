@@ -72,6 +72,10 @@ and prints something, as a missing `openmoat` does.
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat does not install Gemini CLI's `AfterTool` hook, so it
+never sees what a call returned. A host, path or command untrusted output named is not
+linked to the later call that uses it; only session taint applies.
+
 No OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no settings
 hooks at all and asks the person before every tool instead; a project's
 `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's arguments

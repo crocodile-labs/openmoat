@@ -80,6 +80,10 @@ goose runs every call unchecked when it does not load OpenMoat's plugin: turned 
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat does not install goose's `PostToolUse` hook, so it never
+sees what a call returned. A host, path or command untrusted output named is not linked to
+the later call that uses it; only session taint applies.
+
 No OS sandbox from OpenMoat; Code Mode's `execute_javascript` needs review, since its tool
 calls skip the hook; a project's `.agents/plugins/` can add hooks or replace OpenMoat's
 plugin: run in a directory whose `.agents/plugins/openmoat` is not a byte-for-byte copy of

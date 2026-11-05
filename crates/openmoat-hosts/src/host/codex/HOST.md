@@ -95,6 +95,10 @@ Codex runs the call when the hook is missing, cannot start, exits non-zero other
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat does not install Codex's `PostToolUse` hook, so it never
+sees what a call returned. A host, path or command a fetched page, issue or MCP result named
+is not linked to the later call that uses it; only session taint applies.
+
 Web search, hosted tools, code mode's `exec`/`wait` and `request_permissions` are not
 hooked; what `write_stdin` types into a running command is not hooked, so a command that
 starts a shell, REPL, editor or login without its own commands needs review; reviews

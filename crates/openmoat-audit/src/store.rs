@@ -17,6 +17,7 @@ use crate::KnownSecrets;
 mod chain;
 mod export;
 mod export_verify;
+mod injected_inputs;
 mod mcp_flow;
 mod mcp_tickets;
 mod provenance;
@@ -29,6 +30,7 @@ mod session_writes;
 pub use chain::{BreakKind, ChainBreak, ChainHead, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
+pub use injected_inputs::{MAX_PER_SESSION as MAX_INJECTED_PER_SESSION, NewInjected};
 pub use mcp_flow::{MAX_AGE_MS as MCP_FLOW_MAX_AGE_MS, MAX_SESSION_ROWS as MCP_FLOW_SESSION_ROWS};
 pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
@@ -308,6 +310,11 @@ impl Store {
     /// The session writes keep the state of the file before the write (version 7).
     fn write_before(&self) -> bool {
         self.version >= schema::WRITE_BEFORE_VERSION
+    }
+
+    /// The schema has the injected-input fingerprints table (version 10).
+    fn injected_inputs(&self) -> bool {
+        self.version >= schema::INJECTED_INPUTS_VERSION
     }
 
     /// This handle, masking `secrets` in every event it records from now on.

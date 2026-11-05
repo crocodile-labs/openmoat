@@ -11,6 +11,7 @@ Anthropic's Claude Code. Its `PreToolUse` format is also what the Continue CLI s
 | `PreToolUse` | `Bash\|Monitor\|PowerShell\|Edit\|Write\|MultiEdit\|NotebookEdit\|Read\|Glob\|Grep\|LSP\|SendFile\|WebFetch\|WebSearch\|ReadMcpResourceTool\|EnterWorktree\|Skill\|Artifact\|ArtifactData\|mcp__.*` | 600 s | sets `onFailure: "block"` |
 | `ConfigChange` | `user_settings\|project_settings\|local_settings` | 60 s | the settings-change veto |
 | `SessionStart` | `startup\|resume\|clear\|compact` | 60 s | with `sandbox.proxy_port`, issues the session its `openmoat proxy` credential in `CLAUDE_ENV_FILE` (ADR-044); prints nothing, a failure exits 2 |
+| `PostToolUse` | `Bash\|WebFetch\|WebSearch\|ReadMcpResourceTool\|mcp__.*` | 60 s | what the call returned (`tool_response`): when it is untrusted output, keeps keyed fingerprints of its hosts, paths and code-span commands for `injected-input` (ADR-057); prints nothing, writes no audit row, a failure exits 2, which Claude Code shows the model; new after 0.15.0, so an older install reports "run `openmoat init`" |
 
 ## Tools OpenMoat sees
 
@@ -68,6 +69,11 @@ CLI, or put its `claude` on the search path, and run `openmoat init` again.
 
 File tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295
 calls run unchecked if the hook binary is missing or crashes.
+
+Injected input (ADR-057) reads only the tools of the `PostToolUse` matcher: the output of
+`PowerShell`, `Monitor`, `Read` and every ungoverned tool is not looked at. A tool response
+larger than the guard's payload limit is not read; the hook reports the error and keeps
+nothing for that call.
 
 ## Sandbox
 

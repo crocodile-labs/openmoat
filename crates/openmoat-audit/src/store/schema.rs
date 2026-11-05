@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::StoreError;
 
 /// Schema version this build writes, kept in `PRAGMA user_version`.
-pub(super) const SCHEMA_VERSION: i64 = 9;
+pub(super) const SCHEMA_VERSION: i64 = 10;
 
 /// The first version with the hash chain ([`V2`]).
 pub(super) const CHAIN_VERSION: i64 = 2;
@@ -20,6 +20,9 @@ pub(super) const MCP_TICKETS_VERSION: i64 = 6;
 pub(super) const WRITE_BEFORE_VERSION: i64 = 7;
 /// The first version with the pieces of MCP tool results ([`V9`]).
 pub(super) const MCP_FLOW_VERSION: i64 = 9;
+/// The first version with the fingerprints of untrusted content each session
+/// read ([`V10`]).
+pub(super) const INJECTED_INPUTS_VERSION: i64 = 10;
 
 /// Version 1: the events table.
 const V1: &str = "
@@ -252,6 +255,23 @@ CREATE INDEX IF NOT EXISTS mcp_flow_piece ON mcp_flow(host, session_id, piece);
 CREATE INDEX IF NOT EXISTS mcp_flow_ts ON mcp_flow(ts_ms);
 ";
 
+/// Version 10: keyed fingerprints of the distinctive parts of untrusted content
+/// each session read (ADR-057, `injected_inputs.rs`). A lookup like [`V5`]:
+/// one row per fingerprint and session, bounded per session and in all.
+/// `IF NOT EXISTS`, as for [`V4`].
+const V10: &str = "
+CREATE TABLE IF NOT EXISTS injected_inputs (
+    id          INTEGER PRIMARY KEY,
+    ts_ms       INTEGER NOT NULL,
+    host        TEXT    NOT NULL,
+    session_id  TEXT    NOT NULL,
+    fingerprint TEXT    NOT NULL,
+    source      TEXT    NOT NULL,
+    UNIQUE (host, session_id, fingerprint)
+);
+CREATE INDEX IF NOT EXISTS injected_inputs_ts ON injected_inputs(ts_ms);
+";
+
 /// A `CHECK` of one table that a step widens: `from` becomes `to`, which
 /// accepts every value `from` accepts, and more.
 struct Widening {
@@ -382,6 +402,9 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if found < 9 {
         tx.execute_batch(V9)?;
+    }
+    if found < INJECTED_INPUTS_VERSION {
+        tx.execute_batch(V10)?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

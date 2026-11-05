@@ -107,3 +107,13 @@
   steps:
     - { mcp: { server: playwright, tool: browser_navigate, args: { url: "https://notes.example.net/setup" } }, expect: defer, rule: default.fetch }
     - { write: ".github/workflows/release.yml", expect: review, rule: session-taint }
+
+- id: mcp-browser-page-then-agents-skill
+  threat: T8
+  why: >-
+    A skill in `.agents/skills` is loaded into the next session of every agent that reads
+    the folder, so after a page the agent opened, writing one needs review (`session-taint`,
+    ADR-057); in a clean session it is an ordinary project write.
+  steps:
+    - { mcp: { server: playwright, tool: browser_navigate, args: { url: "https://notes.example.net/setup" } }, expect: defer, rule: default.fetch }
+    - { write: ".agents/skills/deploy/SKILL.md", expect: review, rule: session-taint }

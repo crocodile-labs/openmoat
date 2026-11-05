@@ -30,6 +30,7 @@ use crate::{push, render, secrets, session_code, taint, time};
 mod config_change;
 mod drift;
 mod placed;
+mod post_tool_use;
 mod record;
 mod session_start;
 mod unseen;
@@ -203,6 +204,10 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
             let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
             host = installed_for.sender(&payload, continue_env);
             *event = host.event_of(&payload);
+            // What a call returned: nothing to decide or record (ADR-057).
+            if matches!(event, HookEvent::PostToolUse { .. }) {
+                return post_tool_use::answer(host, &payload, event);
+            }
             // Inside `openmoat run` only when the run relayed it and named its session.
             let run = std::env::var(taint::run::RUN_SESSION_ENV).ok();
             let within_run = by_run && taint::run::run_session(run.as_deref()).is_some();
@@ -395,7 +400,15 @@ fn evaluate(
         snapshot: &snapshot,
         binary: &verified.lock.binary,
     };
-    let mut decision = compiled.decide_with(action, &programs, &FsPathResolver);
+    let decision = compiled.decide_with(action, &programs, &FsPathResolver);
+    hangs::enter(Phase::Taint);
+    let store = home.open_audit()?;
+    // A part of the call that came from untrusted output the session read
+    // (ADR-057); before the grant, so a person's grant for this exact call
+    // answers it.
+    let session_of = (host, request.session_id.as_str());
+    let mut decision =
+        taint::injected::checked(&home, &store, session_of, &compiled, action, decision)?;
     // A grant a person made with `moat allow` turns a `review` or a `defer` into an
     // `allow` (Cursor's file tools get a review for a defer, so they need it); a deny stays a deny.
     if matches!(decision.verdict, Verdict::Review | Verdict::Defer)
@@ -420,8 +433,6 @@ fn evaluate(
     // session read a secret did not approve sending that secret anywhere.
     // A grant made after the session read untrusted content answers that
     // content's review for this exact call (taint.rs).
-    hangs::enter(Phase::Taint);
-    let store = home.open_audit()?;
     // A long fold saves what it reached as it goes, on a writable handle, so
     // the next call reads on even if this one runs out of time.
     let audit = home.audit_path();

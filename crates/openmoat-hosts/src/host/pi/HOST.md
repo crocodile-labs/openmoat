@@ -81,6 +81,10 @@ yet" is a note: pi has not run since. `--no-extensions` is reported this way too
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat's extension does not handle pi's `tool_result` event, so
+it never sees what a call returned. A host, path or command untrusted output named is not
+linked to the later call that uses it; only session taint applies.
+
 No OS sandbox from OpenMoat; a call OpenMoat defers runs; an input change by an extension
 pi loads after OpenMoat's (a package's) and an extension that replaces a built-in tool are
 not checked; a trusted project's `.pi` settings and extensions load with the agent's

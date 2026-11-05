@@ -88,6 +88,11 @@ struct FixtureAction {
     patch: Option<Vec<String>>,
     foreign_shell: Option<ForeignShellFixture>,
     unchecked: Option<String>,
+    /// What an earlier call returned (ADR-057). The SDK's `Session` does not
+    /// take call outputs yet (docs/SDK.md "Limits"), so a fixture whose
+    /// session reports one is the CLI's claim alone and is skipped here.
+    #[serde(default)]
+    output: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -418,6 +423,9 @@ fn every_fixture_decides_through_the_sdk_as_through_the_engine() {
     let mut vectors = Vec::new();
     let mut cache = Compiled::default();
     for f in &fixtures {
+        if f.session.iter().any(|earlier| earlier.output.is_some()) {
+            continue;
+        }
         let engine = engine_decision(f, &policy, &mut cache);
         let sdk = sdk_decision(f, &mut cache);
         let same = sdk.verdict.as_str() == engine.verdict.as_str()

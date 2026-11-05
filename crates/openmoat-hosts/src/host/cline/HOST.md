@@ -96,6 +96,9 @@ malformed (a deny). The full table is in
 
 ## Known gaps
 
+- Injected input (ADR-057): OpenMoat does not install Cline's `PostToolUse` hook, so it never
+  sees what a call returned. A host, path or command untrusted output named is not linked to
+  the later call that uses it; only session taint applies.
 - No OS sandbox from OpenMoat (`openmoat run` sandboxes the whole agent).
 - `--yolo` runs no hooks; `--config`, `--hooks-dir` or a moved `CLINE_DIR` that OpenMoat
   did not install into skip OpenMoat's script.
