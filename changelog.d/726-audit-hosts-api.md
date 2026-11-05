@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-hosts`: `HookRequest` has a new public field `sandboxed` (set it to `false` where you build a request yourself, or start from a parsed one). Added: `HookRequest::from_session_dir`, `HookRequest::searches_workspace`, `HookRequest::with_workspace_dirs`, `Host::render_response_for` (use it instead of `render_response` when you have the request), the `SessionDir` enum and the `HostSpec` fields `session_dir`, `workspace_dirs` and `payload_copies` ([#726](https://github.com/crocodile-labs/openmoat/pull/726)).

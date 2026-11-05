@@ -546,7 +546,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 
 ## Status
 
-**Usable daily.** The latest release is `0.14.0`. The policy format and the commands can
+**Usable daily.** The latest release is `0.15.0`. The policy format and the commands can
 still change before 1.0; every such change has a CHANGELOG line. What exists and what
 comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -554,6 +554,8 @@ To upgrade, update the binary the way you installed it, then run `openmoat docto
 `openmoat policy upgrade` in your own terminal ([docs/INSTALL.md](docs/INSTALL.md#upgrading)).
 From 0.13.x to 0.14.0 also run `openmoat init` once if you use goose or the Cline CLI;
 `openmoat policy upgrade` renames the `ask` verdict to `review` and adds `card-egress`.
+From 0.14.0 to 0.15.0 run `openmoat policy upgrade` for the changed default rules, and if
+you use Codex, `openmoat init` again and trust OpenMoat's hook in Codex's `/hooks`.
 Each release's own steps are in its [CHANGELOG](CHANGELOG.md) "Upgrading" line.
 
 ## Contributing
