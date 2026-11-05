@@ -15,6 +15,7 @@ use serde_json::Value;
 use crate::StoreError;
 
 mod judge;
+mod programs;
 
 const REPLACEMENT: &str = "[redacted]";
 
@@ -162,6 +163,7 @@ fn rules() -> impl Iterator<Item = (&'static str, Mask)> {
     NAMED
         .iter()
         .copied()
+        .chain(programs::RULES.iter().copied())
         .chain(shapes)
         .chain(TAIL.iter().copied())
 }

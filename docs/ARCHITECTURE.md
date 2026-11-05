@@ -750,7 +750,14 @@ stored as sent. Redaction is two passes (`crates/openmoat-audit/src/redact.rs`):
    ungoverned tool, a settings change or a call refused for lock drift are written
    before or without loading the policy and get the patterns only.
 2. **Patterns.** Bearer and basic auth, `key=value` and quoted `"key": "value"`
-   credentials, `-u user:password`, common token shapes, URL passwords. A few
+   credentials, `-u user:password`, common token shapes, URL passwords, and the
+   shapes of `redact/programs.rs`: the password flags of well-known programs, each
+   only as that program's flag (`mysql -p<pw>`, `sshpass -p`, `docker login -p`,
+   `redis-cli -a`, `openssl -k`/`-pass pass:`, `zip -P`, `htpasswd -b`, `aws configure
+   set aws_secret_access_key`), upper-case environment names ending in a credential
+   word (`PGPASSWORD`, `MYSQL_PWD`, `OPENAI_KEY`; a `$VAR` or path value is kept),
+   `Cookie:` values, Slack and Discord webhook paths, and a URL user part that is a
+   key (20+ characters with a digit, as a Sentry DSN's). A few
    matches are kept because they hold no credential (`redact/judge.rs`): a name whose
    last part is `count`, `file`, `path`, `dir`, `name`, `id`, `len`, `length`,
    `size`, `type` or `url` (`token_count=`, `--token-file=`); a `-u` drive path or
