@@ -30,9 +30,10 @@ What exists:
 
 - **Agents.** One policy for Claude Code, Codex, Cursor, OpenClaw (a `before_tool_call`
   plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI, OpenCode 1 and 2
-  (one plugin on `tool.execute.before` and `execute.before`, ADR-040) and Hermes Agent (a `pre_tool_call` shell hook, approved
-  in its hook allowlist), each through its own hooks; the Continue CLI adapter
-  waits for a `cn` release that runs hooks.
+  (one plugin on `tool.execute.before` and `execute.before`, ADR-040), Hermes Agent (a
+  `pre_tool_call` shell hook, approved in its hook allowlist), the Cline CLI (a
+  `PreToolUse` hook script) and goose (a `PreToolUse` hook in a plugin), each through its
+  own hooks; the Continue CLI adapter waits for a `cn` release that runs hooks.
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
   `mcp`, `web.search` and `tool.unknown`; verdicts `allow`, `defer` (the default for
   anything no rule names, ADR-025), `review` and `deny`.
@@ -40,6 +41,11 @@ What exists:
   (ADR-008) and symlink resolution (ADR-009).
 - **Audit.** A redacted, hash-chained local log with `show`, `replay` and `report`;
   `openmoat audit export`, `verify` and `report` for a team; audit anchors (ADR-031).
+- **Compliance evidence.** `openmoat audit evidence` reports the log per control of
+  OWASP LLM 2025, SOC 2 and ISO/IEC 27001 (ADR-051, [COMPLIANCE.md](COMPLIANCE.md)).
+- **Merge check.** `openmoat policy check-diff` and a composite GitHub Action report a
+  pull request's changes to protected files and added tokens (ADR-050,
+  [MERGE_CHECK.md](MERGE_CHECK.md)).
 - **Approvals.** `openmoat allow` for a command, a site or a directory (ADR-007).
 - **Self-protection.** A policy lock checked on every call (ADR-006), `kernel-self`
   rules, Claude Code's `ConfigChange` veto, stable hook binary paths (ADR-016), and
@@ -47,6 +53,7 @@ What exists:
 - **Session taint.** After a secret read or untrusted content, risky follow-up calls
   need review (ADR-020), also across the files a tainted session writes (ADR-029); after a
   secret read, a URL carrying a long encoded value is denied (`encoded-egress`, ADR-047).
+  A payment card number sent off the machine is denied (`card-egress`, ADR-052).
 - **Package installs.** A name one typo away from a popular package needs review (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
 - **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
@@ -122,10 +129,8 @@ agent has an adapter, `openmoat run` can still sandbox it.
 |---|---|---|
 | #258 | GitHub Copilot cloud agent and VS Code | `preToolUse` in `.github/hooks` |
 | #259 | Windsurf | `pre_run_command`, `pre_read_code`, `pre_write_code`, `pre_mcp_tool_use` |
-| #260 | Cline | `PreToolUse` script hook |
 | #261 | Kiro | `PreToolUse` command hook |
 | #262 | Amp | plugin `tool.call` event |
-| #263 | goose | `PreToolUse` |
 | #266 | Junie (CLI) | `PreToolUse` |
 
 Aider and the Zed agent have no pre-execution hook, and Roo Code has shut down; use

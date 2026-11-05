@@ -1,5 +1,10 @@
 # Compliance evidence
 
+[README](../README.md) · [Docs index](README.md) · [openmoat.dev/docs](https://openmoat.dev/docs/)
+
+> [!NOTE]
+> **Read this when** you need records of what your agents were allowed and denied for a security review or audit.
+
 Evidence, not a certification. `openmoat audit evidence` turns the audit log into a report
 a security reviewer or auditor can read: for a time window, per control of three public
 frameworks, which OpenMoat rules fired, how often by verdict, and sample events. It does
