@@ -45,7 +45,7 @@ fn in_session(
     let home = absolute(&user_home()?)?;
     let tool = absolute(Path::new(tool))?;
     let keep = match project::root_of(&session, &home) {
-        Some(root) => project::contains(&root, &tool),
+        Some(root) => inside(&root, &tool),
         None => git_root(&tool, &home).is_some(),
     };
     Ok(if keep {
@@ -53,6 +53,16 @@ fn in_session(
     } else {
         request.from_session_dir(&path_string(&session))
     })
+}
+
+/// Whether `tool` is `root` or below it, as written or with links resolved:
+/// the hook's working directory comes from the OS with its links resolved
+/// (macOS `/var` is `/private/var`), while the payload names the directory as
+/// the host spelled it.
+fn inside(root: &Path, tool: &Path) -> bool {
+    let real = |p: &Path| std::fs::canonicalize(p).ok();
+    project::contains(root, tool)
+        || matches!((real(root), real(tool)), (Some(r), Some(t)) if project::contains(&r, &t))
 }
 
 /// The nearest directory at or above `start` holding `.git`, when it may be

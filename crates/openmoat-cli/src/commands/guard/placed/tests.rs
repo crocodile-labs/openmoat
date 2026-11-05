@@ -71,3 +71,31 @@ fn a_session_outside_any_project_keeps_only_a_git_work_tree() {
     let moved = placed(Host::Codex, &home, &plain, "ls");
     assert_eq!(moved.cwd.as_deref(), Some(path_string(&home).as_str()));
 }
+
+/// The OS reports the hook's directory with its links resolved (macOS `/var`
+/// is `/private/var`); the payload names the project as the host spelled it.
+/// Both are the same project, and nothing moves.
+#[cfg(unix)]
+#[test]
+fn the_project_is_the_same_through_a_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real");
+    std::fs::create_dir_all(real.join("proj/.git")).unwrap();
+    let link = dir.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let session = std::fs::canonicalize(real.join("proj")).unwrap();
+    let spelled = link.join("proj");
+    let kept = placed(Host::Codex, &session, &spelled, "make");
+    assert_eq!(kept.cwd.as_deref(), Some(path_string(&spelled).as_str()));
+    assert_eq!(
+        kept.action,
+        Some(Action::Shell {
+            command: "make".to_owned()
+        })
+    );
+    // A directory outside the project still moves, through a link or not.
+    let outside = dir.path().join("other");
+    std::fs::create_dir_all(&outside).unwrap();
+    let moved = placed(Host::Codex, &session, &outside, "ls");
+    assert_eq!(moved.cwd.as_deref(), Some(path_string(&session).as_str()));
+}
