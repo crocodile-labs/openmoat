@@ -366,7 +366,7 @@ fn evaluate(
     out.drifted = verified.checked.relaxed;
     // From here each pinned state file is read as the lock check matched it.
     let home = verified.home;
-    let request = placed::placed(&home, host, request)?;
+    let request = placed::placed(&home, host, request, &out.drifted)?;
     // A server whose definition a person has not accepted runs a command
     // nobody reviewed; only its own tool calls are held back (ADR-026).
     if let Some(openmoat_core::Action::McpTool { name, .. }) = &request.action {

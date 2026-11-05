@@ -15,12 +15,18 @@ use crate::install::{HostConfig, read_or_empty};
 use crate::project;
 
 /// `request` with every fact the guard adds.
-pub(super) fn placed(home: &Home, host: Host, request: HookRequest) -> Result<HookRequest> {
+pub(super) fn placed(
+    home: &Home,
+    host: Host,
+    request: HookRequest,
+    drifted: &[crate::integrity::Drift],
+) -> Result<HookRequest> {
     let mut request = in_session(host, request, &std::env::current_dir)?;
     if request.searches_workspace() {
         request = in_workspace(home, host, request)?;
     }
-    request.sandboxed = request.sandboxed && crate::protection::os_sandboxed_by_lock(home, host);
+    request.sandboxed =
+        request.sandboxed && crate::protection::os_sandboxed_by_lock(home, host, drifted);
     Ok(request)
 }
 
