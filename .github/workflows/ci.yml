@@ -4,16 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-  # The merge queue: each queued pull request is tested once on top of main
-  # and whatever is queued ahead of it, so a merge no longer leaves every other
-  # pull request "behind" and re-running everything.
-  merge_group:
   schedule:
     - cron: "17 6 * * 1" # weekly on main: cargo-deny sees new advisories, fuzz runs 600 s per target
 
 # A new push to a pull request cancels the run of the push before. Runs on
-# main, in the merge queue and on schedule each have a group of their own (the
-# run id), so none is cancelled, nor dropped while waiting behind another.
+# main and on schedule each have a group of their own (the run id), so none is
+# cancelled, nor dropped while waiting behind another.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -27,10 +23,8 @@ env:
 
 jobs:
   # What the other jobs run. On a pull request, `code` is false when it changes
-  # documentation only (scripts/ci/changes.py says what counts), and `full` is
-  # true with the `ci: full` label: it adds the macos-15-intel gate, the slowest
-  # and scarcest runner. On a push to main, in the merge queue and on schedule
-  # both are true.
+  # documentation only (scripts/ci/changes.py says what counts); on a push to
+  # main and on schedule it is true.
   #
   # A job skipped by its `if` reports success under its name, which meets a
   # required check. A matrix job skipped that way reports one check under its
@@ -45,10 +39,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read # the `ci: full` label
     outputs:
       code: ${{ steps.what.outputs.code }}
-      full: ${{ steps.what.outputs.full }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,18 +50,10 @@ jobs:
         id: what
         env:
           EVENT: ${{ github.event_name }}
-          PR: ${{ github.event.pull_request.number }}
-          GH_TOKEN: ${{ github.token }}
-        # The label is read now, not from the event, so re-running the
-        # workflow after labelling is enough.
         run: |
           if [ "$EVENT" != pull_request ]; then
-            printf 'code=true\nfull=true\n' >> "$GITHUB_OUTPUT"
-          elif gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx 'ci: full'; then
-            echo "labelled 'ci: full': every job runs"
-            printf 'code=true\nfull=true\n' >> "$GITHUB_OUTPUT"
+            echo "code=true" >> "$GITHUB_OUTPUT"
           else
-            echo "full=false" >> "$GITHUB_OUTPUT"
             python3 scripts/ci/changes.py HEAD^1 HEAD >> "$GITHUB_OUTPUT"
           fi
 
@@ -77,12 +61,12 @@ jobs:
     name: ${{ matrix.os }}
     needs: changes
     if: ${{ !cancelled() }}
-    runs-on: ${{ (needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false')) && matrix.os || 'ubuntu-latest' }}
-    # macos-15-intel runs on main and in the merge queue, where it may take longer.
+    runs-on: ${{ needs.changes.outputs.code != 'false' && matrix.os || 'ubuntu-latest' }}
+    # macos-15-intel is the slowest runner and may take longer.
     timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 45 || 30 }}
     env:
       # The same test as `runs-on`: whether this leg has anything to run.
-      RUN_LEG: ${{ needs.changes.outputs.code != 'false' && (matrix.os != 'macos-15-intel' || needs.changes.outputs.full != 'false') }}
+      RUN_LEG: ${{ needs.changes.outputs.code != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -90,14 +74,8 @@ jobs:
     steps:
       - name: nothing to run
         if: env.RUN_LEG != 'true'
-        env:
-          OS: ${{ matrix.os }}
         run: |
-          if [ "$OS" = macos-15-intel ]; then
-            echo "::notice::macos-15-intel runs on main, in the merge queue and weekly; label the pull request 'ci: full' and re-run to run it here"
-          else
-            echo "::notice::documentation only: the quality gate is skipped (see the changes job)"
-          fi
+          echo "::notice::documentation only: the quality gate is skipped (see the changes job)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.RUN_LEG == 'true'
         with:
@@ -180,9 +158,7 @@ jobs:
 
   # The jobs below skip on a documentation-only pull request; skipped, a
   # required one reports success under its name. `!cancelled()` lets them run
-  # when the changes job failed. The ones that are not required checks also
-  # skip in the merge queue: they ran on the pull request, and nobody reads a
-  # non-required result there.
+  # when the changes job failed.
   core-is-pure:
     name: openmoat-core builds for wasm32 (no I/O)
     needs: changes
@@ -205,7 +181,7 @@ jobs:
   js-plugins:
     name: JavaScript plugins type-check
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -220,7 +196,7 @@ jobs:
   sdk-js:
     name: JavaScript SDK (wasm module, conformance under Node)
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -236,7 +212,7 @@ jobs:
 
   # `openmoat guard` per process (scripts/ci/guard-latency.py) and late in a
   # 5,000-call session (scripts/ci/guard-session-latency.py). On a pull request
-  # and in the merge queue the binary of the commit the change lands on
+  # the binary of the commit the change lands on
   # (`HEAD^1`) is built too and timed in turn with it on this runner, and the
   # change fails only when the guard's own p95 is clearly worse than that
   # (scripts/ci/latency_ab.py): shared runners are too noisy for a fixed limit.
@@ -282,7 +258,7 @@ jobs:
           cargo build --locked --release -p openmoat
           mkdir -p "$RUNNER_TEMP/head" "$RUNNER_TEMP/base"
           cp target/release/openmoat "$RUNNER_TEMP/head/"
-          if [ "$EVENT" = pull_request ] || [ "$EVENT" = merge_group ]; then
+          if [ "$EVENT" = pull_request ]; then
             if git worktree add --detach "$RUNNER_TEMP/base-src" HEAD^1 &&
               cargo build --locked --release -p openmoat \
                 --manifest-path "$RUNNER_TEMP/base-src/Cargo.toml" --target-dir target; then
@@ -315,7 +291,7 @@ jobs:
   lexer-vs-bash:
     name: shell lexer against bash
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -369,14 +345,11 @@ jobs:
       - run: cargo machete
 
   # The published library crates against their last state (CONTRIBUTING "API
-  # changes"). While the version is 0.x, a break needs a minor bump. Skipped in
-  # the merge queue: its blocking step compares a pull request with its base,
-  # which the pull request's own run did, and the queue has no pull request
-  # title or label to read.
+  # changes"). While the version is 0.x, a break needs a minor bump.
   semver:
     name: semver of the library crates
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -441,7 +414,7 @@ jobs:
   fuzz:
     name: fuzz (smoke)
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

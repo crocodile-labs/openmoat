@@ -12,22 +12,16 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  # The threads were checked on the pull request; in the merge queue the job is
-  # skipped, which reports success, so the required check is met.
-  merge_group:
 
 permissions: {}
 
-# Merge-queue runs get a group of their own (the run id) and are never
-# cancelled: a cancelled run would fail the required check.
 concurrency:
   group: review-threads-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
+  cancel-in-progress: true
 
 jobs:
   threads:
     name: review threads answered
-    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
