@@ -45,10 +45,35 @@ fn install_table() -> Vec<String> {
             .join(", ");
         lines.push(format!(
             "| {} | `~/{}` | `{}` | `{}` | {entries} |",
-            spec.display_name, install.dir_name, install.dir_variable, install.config_file
+            spec.display_name,
+            install.dir_name,
+            install.dir_variable,
+            hook_file(install)
         ));
     }
     lines
+}
+
+/// The hook file as the table names it: relative to the directory, or from
+/// the home directory when a host's own location rules put it outside
+/// (goose's `~/.agents/plugins/openmoat/hooks/hooks.json`).
+fn hook_file(install: &openmoat_hosts::InstallSpec) -> String {
+    let openmoat_hosts::Location::Custom(locate) = &install.location else {
+        return install.config_file.to_owned();
+    };
+    let home = std::path::Path::new("/home");
+    let located = locate.default_for(home);
+    if located.config.starts_with(&located.dir) {
+        return install.config_file.to_owned();
+    }
+    let parts: Vec<String> = located
+        .config
+        .strip_prefix(home)
+        .unwrap()
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    format!("~/{}", parts.join("/"))
 }
 
 /// `docs/THREAT_MODEL.md` §5: what `moat status` and `moat doctor` print as each

@@ -7,7 +7,7 @@ The Codex CLI. It sends `PreToolUse` in Claude Code's format. Every fact here co
 
 | Event | Matcher | Timeout |
 |---|---|---|
-| `PreToolUse` | `Bash\|apply_patch\|mcp__.*` | 600 s |
+| `PreToolUse` | `Bash\|apply_patch\|read_mcp_resource\|view_image\|mcp__.*` | 600 s |
 
 Supported hook schema: Codex 0.160.1 through 0.166.0, checked at both endpoints.
 Codex ignores `args`: OpenMoat writes one POSIX shell-quoted `command`, plus
@@ -37,8 +37,27 @@ and [trust discovery](https://github.com/openai/codex/blob/rust-v0.166.0/codex-r
 
 ## Tools OpenMoat sees
 
-- `Bash` (`Shell`), `apply_patch` (`Patch`), `mcp__<server>__<tool>` (`McpTool`).
-- Ungoverned: `update_plan` and any other tool.
+- `Bash` (`Shell`), `apply_patch` (`Patch`), `mcp__<server>__<tool>` (`McpTool`),
+  `read_mcp_resource` (`McpTool` `read_resource`, a `file:` URI read as its file) and
+  `view_image` (`FsRead`, `Fetch` for an `http(s)` URL).
+- `write_stdin` runs no hook: Codex types into a command an earlier call started. A
+  `Bash` call that starts a program reading its commands from its input (a shell, a
+  REPL, an editor, `ssh host`, `sqlite3 db`, `tmux`, `docker run -i` … with no script
+  or command of its own, and whose input is not a pipe, file or here-document) needs
+  review (`Unchecked`); the deny tells the model to pass the commands instead
+  (`bash x.sh`, `bash -c …`, `python3 x.py`, `ssh host cmd` are decided as before).
+- Ungoverned: `update_plan`, `list_mcp_resources` and any other tool; code mode's
+  `exec`/`wait` and `request_permissions` are not hooked.
+
+## Working directory
+
+Codex sends a call's own working directory as `cwd` (a shell call's `workdir`, which the
+model chooses) and starts every hook in the session's directory. When the `cwd` lies
+outside the session's project, `openmoat guard` decides the call from the session's
+directory, with the command run after a `cd` to the `cwd` and relative paths taken from
+it: a write from `~/Library/LaunchAgents` is checked as that path. A session started
+outside any project (the home directory) keeps a `cwd` inside a git work tree as its
+project.
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
@@ -74,10 +93,12 @@ Codex runs the call when the hook is missing, cannot start, exits non-zero other
 
 ## Known gaps
 
-Web search and hosted tools are not hooked; reviews become denies; Codex skips a new or
-changed hook until the person trusts it in `/hooks`, and `[features] hooks = false` turns
-hooks off (`openmoat status` and `doctor` report that); calls run unchecked if the hook
-binary is missing or crashes.
+Web search, hosted tools, code mode's `exec`/`wait` and `request_permissions` are not
+hooked; what `write_stdin` types into a running command is not hooked, so a command that
+starts a shell, REPL, editor or login without its own commands needs review; reviews
+become denies; Codex skips a new or changed hook until the person trusts it in `/hooks`,
+and `[features] hooks = false` turns hooks off (`openmoat status` and `doctor` report
+that); calls run unchecked if the hook binary is missing or crashes.
 
 ## Sandbox
 

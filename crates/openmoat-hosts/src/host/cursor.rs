@@ -142,6 +142,19 @@ impl HostAdapter for Adapter {
         render(decision)
     }
 
+    /// A command Cursor runs in its sandbox, which OpenMoat's sandbox
+    /// settings confine (the guard clears [`HookRequest::sandboxed`]
+    /// otherwise), runs without a question when no hook answers: there a
+    /// `defer` is `allow`, as Cursor would decide it, not a prompt.
+    fn render_for(&self, request: &HookRequest, decision: &Decision) -> String {
+        if request.sandboxed && decision.verdict == Verdict::Defer {
+            let mut allowed = decision.clone();
+            allowed.verdict = Verdict::Allow;
+            return render(&allowed);
+        }
+        render(decision)
+    }
+
     fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {
         bench::payload(call, at)
     }
@@ -185,6 +198,9 @@ struct Payload {
     mcp_server_name: Option<String>,
     #[serde(default)]
     tool_use_id: Option<String>,
+    /// `beforeShellExecution`: whether Cursor runs the command in its sandbox.
+    #[serde(default)]
+    sandbox: bool,
 }
 
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
@@ -198,10 +214,23 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
                 field,
             })
     };
-    let cwd = p
-        .cwd
-        .filter(|c| !c.is_empty())
-        .or_else(|| p.workspace_roots.first().cloned());
+    // `cwd` is where the command or tool runs, which the model chooses; the
+    // workspace roots are the session's. A `cwd` outside every root is decided
+    // from the first root, as running there (`crate::request`).
+    let tool_dir = p.cwd.clone().filter(|c| !c.is_empty());
+    let session_dir = match &tool_dir {
+        Some(dir)
+            if p
+                .workspace_roots
+                .iter()
+                .any(|root| crate::request::is_inside(dir, root)) =>
+        {
+            None
+        }
+        _ => p.workspace_roots.first().cloned(),
+    };
+    let cwd = tool_dir.or_else(|| p.workspace_roots.first().cloned());
+    let sandboxed = event == "beforeShellExecution" && p.sandbox;
     let (tool, action) = match event {
         "beforeShellExecution" => (
             "Shell".to_owned(),
@@ -230,7 +259,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         other => return Err(HostError::WrongEvent(other.to_owned())),
     };
     let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), &p.tool_input);
-    Ok(HookRequest {
+    let request = HookRequest {
         host,
         session_id: crate::session_or_unknown(p.conversation_id),
         call_id: p.tool_use_id.or(p.generation_id),
@@ -240,7 +269,12 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         content: None,
         edits: Vec::new(),
         mcp_arguments,
+        sandboxed,
         event: event_kind(event),
+    };
+    Ok(match session_dir {
+        Some(dir) => request.from_session_dir(&dir),
+        None => request,
     })
 }
 

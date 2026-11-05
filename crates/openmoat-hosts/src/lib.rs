@@ -13,6 +13,7 @@ mod contract;
 mod glob;
 mod host;
 mod registry;
+mod request;
 mod wire;
 
 pub use contract::{
@@ -21,7 +22,7 @@ pub use contract::{
     HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location,
     McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, Paths, Platform,
     ProcessSpec, ProjectSettingsSpec, Protect, ProxySessions, RelaxedKey, Reviews, SandboxFormat,
-    SandboxSpec, SettingsFile, SettingsReader, ToolRow, Unseen, Version,
+    SandboxSpec, SessionDir, SettingsFile, SettingsReader, ToolRow, Unseen, Version,
 };
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
@@ -242,6 +243,14 @@ impl Host {
         registry::adapter(self).render(event, decision)
     }
 
+    /// [`Host::render_response`] for the call `request` describes: a host
+    /// whose answer names the call (Hermes Agent's approval key) or depends on
+    /// how the host runs it (Cursor's sandbox) reads it from there.
+    #[must_use]
+    pub fn render_response_for(self, request: &HookRequest, decision: &Decision) -> String {
+        registry::adapter(self).render_for(request, decision)
+    }
+
     /// The hook payload this host sends for `call` at `at`, or `None` when it
     /// has no tool for it (Codex reads files through its shell; only Claude
     /// Code and OpenClaw fetch).
@@ -319,7 +328,13 @@ pub struct HookRequest {
     pub session_id: String,
     /// The host's id for this tool call, when it sends one.
     pub call_id: Option<String>,
-    /// The working directory the tool runs in, when the host sends it.
+    /// The directory the call is decided from, when the host sends it: the
+    /// session's working directory, whose project is `${project}`. Where a
+    /// host sends the directory the tool runs in, which the model chooses
+    /// (Codex, Cursor), and it lies outside the session's project, the
+    /// request is moved to the session's directory
+    /// ([`HookRequest::from_session_dir`]) and the action carries where the
+    /// tool runs.
     pub cwd: Option<String>,
     /// The tool name as the host spells it.
     pub tool: String,
@@ -339,6 +354,12 @@ pub struct HookRequest {
     /// them: `openmoat mcp proxy` passes a call on to the server only when it
     /// matches one the hook decided (ADR-045). `None` for any other call.
     pub mcp_arguments: Option<String>,
+    /// Whether the host says it runs the call inside its own OS sandbox
+    /// (Cursor `beforeShellExecution` `sandbox: true`). The guard clears it
+    /// when OpenMoat's sandbox settings for the host are not installed; while
+    /// set, a host whose hooks have no "no decision" may answer a `defer` as
+    /// the host would without a hook.
+    pub sandboxed: bool,
     /// Which hook fired.
     pub event: HookEvent,
 }

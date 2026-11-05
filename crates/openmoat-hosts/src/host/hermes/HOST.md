@@ -47,12 +47,16 @@ call to them.
 ## Tools OpenMoat sees
 
 - `terminal` (`Shell`, with `workdir` as a `cd` before the command; `Unchecked` for a
-  relative `workdir` or a command that leaves the session's shell where OpenMoat cannot
-  know).
+  relative `workdir`, a command that leaves the session's shell where OpenMoat cannot
+  know, and one that leaves it outside the payload's `cwd`: a `cd` or `workdir` to
+  another absolute or `~` directory, a `cd ..` out of it, or a bare `cd`).
 - `read_file` (`FsRead`); `write_file`, `patch` (`FsWrite`; `Patch` for a V4A
-  `mode: patch`); `search_files` (`FsRead`, `ReadFiles`). A relative path needs review
-  (`Unchecked`): Hermes resolves it against the session's directory, which the payload
-  does not send.
+  `mode: patch`); `search_files` (`FsRead`, `ReadFiles`). Hermes resolves a relative path
+  against the session's directory, which the payload does not send: it is checked
+  against the payload's `cwd`, where the session's shell starts and stays unless a
+  `terminal` call moves it out (held above). A relative path that climbs out of that
+  directory (`..`) needs review (`Unchecked`), and so does every relative path when the
+  payload has no `cwd`; the reason names the file and whether it is read or written.
 - `web_search` (`WebSearch`), `web_extract` (`Fetch` for one URL, `UnknownTool` for
   several), `browser_navigate` (`Net`).
 - `execute_code` (`ForeignShell`, `unparseable`): the script is not read; each tool it
@@ -79,8 +83,9 @@ sees the tool that runs. The full table is in
 
 A review goes to Hermes's own approval prompt (the terminal, or the gateway's buttons on
 Telegram, Slack and the others), which blocks the call on a denial, a timeout or when no
-one can answer. Its `rule_key` is a hash of OpenMoat's reason, so Hermes's "always"
-approves that review again, never the whole tool.
+one can answer. Its `rule_key` is a hash of the call (the tool and every path, URL and
+command its action names) and of OpenMoat's reasons, so Hermes's "always" approves that
+same call again, never another call held for the same reason nor the whole tool.
 
 Hermes approves a review without a person seeing it in YOLO mode and with
 `approvals.mode: off` (the Desktop's "Approvals: off"), and in cron, `hermes chat -q` and
@@ -175,9 +180,11 @@ hook can see or stop it.
   OpenMoat's check; the lock pins the hooks and plugins Hermes loads.
 - Terminal commands on a remote backend (`terminal.backend` docker, ssh, modal, daytona,
   singularity, vercel) are checked as if they ran locally.
-- Relative paths of terminal commands are checked against the Hermes process's directory,
-  which differs from the session's after a `cd` in an earlier call, and in Desktop, TUI
-  and ACP sessions, which register a workspace of their own; relative file-tool paths need review.
+- Relative paths of terminal commands and file tools are checked against the Hermes
+  process's directory. A `terminal` call that moves the session's shell out of it needs
+  review; one inside it (`cd src`) is not held, so later paths are checked from the
+  start directory, inside the same project. Desktop, TUI and ACP sessions register a
+  workspace of their own, which a relative path then resolves against unseen.
 - The in-session `/yolo` toggle and `hermes -z` approve a review unseen.
 - A changed `config.yaml` is caught on the next tool call (Hermes has no
   settings-change hook); a gateway drops a hook removed from it within about 30 s.

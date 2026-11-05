@@ -32,9 +32,26 @@ struct Payload {
     permission_mode: Option<String>,
 }
 
+/// The action of one of a host's own tools, from its name and input; `None`
+/// for a tool the shared mapping reads.
+pub(crate) type OwnTools = fn(&str, &Value) -> Option<Result<Action, HostError>>;
+
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
+    parse_with(host, payload, |_, _| None)
+}
+
+/// [`parse`], with the tools only this host has (Codex `view_image`) mapped
+/// by `own` before the shared mapping.
+pub(crate) fn parse_with(
+    host: Host,
+    payload: &str,
+    own: OwnTools,
+) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
-    let action = map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?;
+    let action = match own(&p.tool_name, &p.tool_input) {
+        Some(action) => Some(action?),
+        None => map_tool(&p.tool_name, &p.tool_input, p.cwd.as_deref())?,
+    };
     // `Write` replaces the whole file with `content` (an empty file included).
     let content = match p.tool_name.as_str() {
         "Write" => p
@@ -76,6 +93,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         content,
         edits,
         mcp_arguments,
+        sandboxed: false,
         event,
     })
 }

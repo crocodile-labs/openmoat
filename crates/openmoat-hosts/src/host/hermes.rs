@@ -27,7 +27,7 @@
 //! than 0 with no decision or prints something that is not a JSON object
 //! blocks the call; without it each of those lets the call run.
 
-use openmoat_core::{Decision, Verdict};
+use openmoat_core::{Action, Decision, Verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -165,7 +165,11 @@ impl HostAdapter for Adapter {
     }
 
     fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
-        render(decision)
+        render(decision, None)
+    }
+
+    fn render_for(&self, request: &HookRequest, decision: &Decision) -> String {
+        render(decision, Some((&request.tool, request.action.as_ref())))
     }
 
     fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String> {
@@ -212,7 +216,8 @@ fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
             problem: "`tool_input` is not an object".to_owned(),
         });
     }
-    let action = tools::action(&tool, &p.tool_input)?;
+    let cwd = p.cwd.filter(|c| !c.is_empty());
+    let action = tools::action(&tool, &p.tool_input, cwd.as_deref())?;
     // `write_file` replaces the whole file with `content`.
     let content = match tool.as_str() {
         "write_file" => p
@@ -233,12 +238,13 @@ fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
         host,
         session_id: crate::session_or_unknown(p.session_id.filter(|s| !s.is_empty())),
         call_id,
-        cwd: p.cwd.filter(|c| !c.is_empty()),
+        cwd,
         tool,
         action,
         content,
         edits: Vec::new(),
         mcp_arguments,
+        sandboxed: false,
         event: HookEvent::PreToolUse,
     })
 }
@@ -246,9 +252,11 @@ fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
 /// Nothing for `defer` (ADR-025) and `{}` for `allow`: Hermes reads neither as
 /// a decision and has no "allow" that skips its own checks, so both leave the
 /// call to them, as without OpenMoat. A `review` goes to Hermes's approval prompt
-/// with a `rule_key` of its own reason, so Hermes's "always" approves that review
-/// again, never the whole tool; a `deny` blocks.
-pub(crate) fn render(decision: &Decision) -> String {
+/// with a `rule_key` of the call and its reasons, so Hermes's "always" approves
+/// that same call again, never another call with the same reason nor the whole
+/// tool; a `deny` blocks. `call` is the tool and its action, `None` when the
+/// payload was not read.
+pub(crate) fn render(decision: &Decision, call: Option<(&str, Option<&Action>)>) -> String {
     let line = crate::reason_line(decision);
     match decision.verdict {
         Verdict::Defer => String::new(),
@@ -256,7 +264,7 @@ pub(crate) fn render(decision: &Decision) -> String {
         Verdict::Review => serde_json::json!({
             "action": "approve",
             "message": line,
-            "rule_key": rule_key(decision),
+            "rule_key": rule_key(decision, call),
         })
         .to_string(),
         // `Deny`, and any verdict added to the core later, blocks the call.
@@ -264,13 +272,20 @@ pub(crate) fn render(decision: &Decision) -> String {
     }
 }
 
-/// `openmoat:` and a stable hash of the decision's rules and reasons, which
-/// name what the call does: the grain at which Hermes's "always" approves.
-fn rule_key(decision: &Decision) -> String {
+/// `openmoat:` and a stable hash of the call (its tool and action, every path,
+/// URL and command it names) and of the decision's rules and reasons: the
+/// grain at which Hermes's "always" approves.
+fn rule_key(decision: &Decision, call: Option<(&str, Option<&Action>)>) -> String {
     // FNV-1a, 64 bits: the same key from every build, so an "always" a
-    // person gave survives an OpenMoat upgrade.
+    // person gave survives an OpenMoat upgrade while the call stays the same.
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for part in decision.rules.iter().chain(&decision.reasons) {
+    let named = call.map(|(tool, action)| {
+        let action = action
+            .and_then(|a| serde_json::to_string(a).ok())
+            .unwrap_or_default();
+        format!("{tool}\0{action}")
+    });
+    for part in named.iter().chain(&decision.rules).chain(&decision.reasons) {
         for byte in part.bytes().chain([0]) {
             hash ^= u64::from(byte);
             hash = hash.wrapping_mul(0x0100_0000_01b3);

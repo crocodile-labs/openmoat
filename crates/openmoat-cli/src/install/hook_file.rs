@@ -16,7 +16,7 @@ use openmoat_hosts::HookFileState;
 use serde_json::{Map, Value};
 
 use super::{HOOK_BACKUP, HookLayout, HostConfig, openclaw, owned, yaml};
-use crate::home::{Home, write_private};
+use crate::home::{Home, KeepMode, write_like};
 
 pub use openmoat_hosts::HookOutcome as Outcome;
 
@@ -98,7 +98,7 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
     if edited != Outcome::Unchanged {
         super::back_up(home, path, HOOK_BACKUP)?;
         let text = serde_json::to_string_pretty(&root)? + "\n";
-        write_private(path, text.as_bytes())?;
+        write_like(path, text.as_bytes(), path, KeepMode::NotWritableByOthers)?;
     }
     Ok(outcome)
 }

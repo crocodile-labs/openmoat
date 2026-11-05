@@ -10,8 +10,6 @@ use std::io::{Read, Write};
 use anyhow::{Context as _, Result, bail, ensure};
 use zeroize::Zeroizing;
 
-use super::MAX_PAYLOAD_BYTES;
-
 /// What a request starts with; no HTTP method does, so the proxy's port can
 /// carry it (`openmoat_proxy::LocalService`).
 pub const REQUEST_MAGIC: &[u8] = b"MOAT-GUARD/1\n";
@@ -141,9 +139,9 @@ impl Reply {
     }
 }
 
-/// The payload limit `moat guard` applies to standard input.
-fn payload_limit() -> usize {
-    usize::try_from(MAX_PAYLOAD_BYTES).unwrap_or(usize::MAX)
+/// The largest payload limit `moat guard` applies to standard input.
+pub(super) fn payload_limit() -> usize {
+    usize::try_from(super::relayed_limit()).unwrap_or(usize::MAX)
 }
 
 fn push_field(frame: &mut Vec<u8>, bytes: &[u8]) -> Result<()> {

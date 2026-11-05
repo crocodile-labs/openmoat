@@ -1,6 +1,8 @@
 //! Codex: its `PreToolUse` cannot prompt, so a `review` must still stop the call.
 
-use crate::common::{DENY, OK, Sandbox, fixture, hook_output, stderr, stdout};
+use std::path::Path;
+
+use crate::common::{DENY, OK, Sandbox, fixture, hook_output, output, stderr, stdout};
 
 #[test]
 fn bare_openmoat_denies_hook_input_but_keeps_the_home_screen() {
@@ -315,6 +317,92 @@ fn a_review_blocks_codex_until_a_person_approves_it() {
     let out = sb.guard("codex", &shell("codex-s2", "npm install left-pad"));
     assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
     assert!(stdout(&out).trim().is_empty(), "{}", stdout(&out));
+}
+
+/// The guard as Codex starts it: in the session's directory `session`, with a
+/// payload whose `cwd` is the tool's own working directory `tool_dir`.
+fn codex_call(
+    sb: &Sandbox,
+    session: &Path,
+    tool_dir: &Path,
+    tool: &str,
+    input: &str,
+) -> std::process::Output {
+    let payload = format!(
+        r#"{{"session_id":"cx-1","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_use_id":"c1","tool_input":{input}}}"#,
+        serde_json::Value::from(tool_dir.to_string_lossy().as_ref())
+    );
+    output(
+        sb.command()
+            .current_dir(session)
+            .args(["guard", "--host", "codex"]),
+        Some(&payload),
+    )
+}
+
+/// Audit 2026-11-05 H1: a model-chosen `workdir` is where the command runs,
+/// never the project. A relative write from `~/Library/LaunchAgents` is that
+/// persistence write; the same work inside the project is not held.
+#[test]
+fn a_codex_workdir_never_decides_the_project() {
+    let sb = Sandbox::installed(&[".codex"]);
+    let proj = sb.project();
+    let agents = sb.home.join("Library/LaunchAgents");
+    std::fs::create_dir_all(&agents).unwrap();
+    std::fs::create_dir_all(proj.join("src")).unwrap();
+    let write = r#"{"command":"printf x > evil.plist"}"#;
+    let out = codex_call(&sb, &proj, &agents, "Bash", write);
+    assert_eq!(out.status.code(), Some(DENY), "{}", stdout(&out));
+    let reason = hook_output(&out)["permissionDecisionReason"].to_string();
+    assert!(reason.contains("persistence"), "{reason}");
+    for dir in [&proj, &proj.join("src")] {
+        let out = codex_call(
+            &sb,
+            &proj,
+            dir,
+            "Bash",
+            r#"{"command":"printf x > out.txt"}"#,
+        );
+        assert_eq!(out.status.code(), Some(OK), "{}", stdout(&out));
+        assert!(stdout(&out).is_empty(), "{}", stdout(&out));
+    }
+}
+
+/// Audit H2 and H3: a start that `write_stdin` would type into unhooked is
+/// held, one with its own commands is not; `read_mcp_resource` and
+/// `view_image` are checked as the files they read.
+#[test]
+fn codex_holds_input_it_cannot_see_and_checks_its_own_read_tools() {
+    let sb = Sandbox::installed(&[".codex"]);
+    let proj = sb.project();
+    let held = codex_call(&sb, &proj, &proj, "Bash", r#"{"command":"bash -i"}"#);
+    assert_eq!(held.status.code(), Some(DENY));
+    let reason = hook_output(&held)["permissionDecisionReason"].to_string();
+    assert!(reason.contains("write_stdin"), "{reason}");
+    for command in ["bash x.sh", "python3 x.py", "ls"] {
+        let input = serde_json::json!({ "command": command }).to_string();
+        let out = codex_call(&sb, &proj, &proj, "Bash", &input);
+        assert_eq!(out.status.code(), Some(OK), "{command}: {}", stdout(&out));
+    }
+    let key = sb.home.join(".ssh/id_rsa");
+    let resource = serde_json::json!({
+        "server": "filesystem",
+        "uri": format!("file://{}", key.to_string_lossy().replace('\\', "/")),
+    });
+    let out = codex_call(
+        &sb,
+        &proj,
+        &proj,
+        "read_mcp_resource",
+        &resource.to_string(),
+    );
+    assert_eq!(out.status.code(), Some(DENY), "{}", stdout(&out));
+    let image = serde_json::json!({ "path": key.to_string_lossy() });
+    let out = codex_call(&sb, &proj, &proj, "view_image", &image.to_string());
+    assert_eq!(out.status.code(), Some(DENY), "{}", stdout(&out));
+    let shot = serde_json::json!({ "path": "shot.png" });
+    let out = codex_call(&sb, &proj, &proj, "view_image", &shot.to_string());
+    assert_eq!(out.status.code(), Some(OK), "{}", stdout(&out));
 }
 
 /// Codex runs `PermissionRequest` hooks only once it has decided to prompt, so

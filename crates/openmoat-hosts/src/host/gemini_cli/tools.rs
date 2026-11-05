@@ -8,6 +8,7 @@ use openmoat_core::Action;
 use serde_json::Value;
 
 use super::McpContext;
+use crate::request::EVERY_WORKSPACE_DIRECTORY;
 use crate::{Host, HostError};
 
 /// What one call is, and what the request records besides its action.
@@ -148,16 +149,10 @@ fn in_dir(input: &Value, command: String) -> String {
     }
 }
 
-/// Why a search with no `dir_path` is not all checked: Gemini CLI then
-/// searches every directory of its workspace (`workspaceContext.getDirectories()`
-/// in `packages/core/src/tools/grep.ts`, `glob.ts` and, which has no
-/// `dir_path`, `read-many-files.ts`, 0.65.0), and the hook payload names only
-/// the working directory.
-const EVERY_WORKSPACE_DIRECTORY: &str = "without a `dir_path` Gemini CLI searches every \
-     workspace directory, and the hook names only the working directory";
-
 /// A search with no `dir_path`, which reads the working directory and every
-/// other workspace directory the payload does not name: at least a `review`.
+/// other workspace directory the payload does not name, marked so: the guard
+/// replaces the mark with the directories the settings add
+/// ([`crate::HookRequest::with_workspace_dirs`]).
 fn workspace_wide(input: &Value, action: Action) -> Action {
     let named = input
         .get("dir_path")

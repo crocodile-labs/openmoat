@@ -19,7 +19,7 @@ use anyhow::Result;
 use openmoat_hosts::OwnedFile;
 
 use super::{HOOK_BACKUP, HookState, HostConfig, Outcome};
-use crate::home::{Home, write_private};
+use crate::home::{Home, KeepMode, write_like};
 
 /// `file` as `init` writes it for `binary`.
 pub fn text(file: &OwnedFile, binary: &Path) -> Result<String> {
@@ -49,8 +49,17 @@ pub fn install(
     if current.as_deref().is_some_and(|text| !file.is_ours(text)) {
         super::back_up(home, path, HOOK_BACKUP)?;
     }
-    write_private(path, wanted.as_bytes())?;
+    write_like(path, wanted.as_bytes(), path, KeepMode::NotWritableByOthers)?;
     Ok(outcome)
+}
+
+/// The file of the person's at `config`'s hook file that `install` would
+/// move to its backup: a whole-file hook (Cline's `PreToolUse`) replaces it,
+/// so it does not run while OpenMoat is installed. `None` when there is none
+/// or it is OpenMoat's.
+pub fn persons_file(config: &HostConfig, file: &OwnedFile) -> Option<std::path::PathBuf> {
+    let current = fs::read_to_string(&config.settings_path).ok()?;
+    (!file.is_ours(&current)).then(|| super::backup_path(&config.settings_path, HOOK_BACKUP))
 }
 
 /// `file` as `init` would write it over `current`; `None` when it would not

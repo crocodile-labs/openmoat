@@ -64,7 +64,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          settings hooks at all and asks the person before every tool instead; a project's \
          `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's \
          arguments (`openmoat status` and `doctor` warn about one); extension hooks run beside \
-         OpenMoat's; a hook that times out lets the call run",
+         OpenMoat's; a search without a `dir_path` is checked over the working directory and \
+         the `context.includeDirectories` of the user and project settings, not over \
+         directories added with `--include-directories` or `/directory add`; a hook that \
+         times out lets the call run",
     // `GEMINI_CLI_HOME` replaces the home directory `.gemini` is looked up in
     // (`homedir()` in `packages/core/src/utils/paths.ts`).
     install: Some(InstallSpec {
@@ -104,6 +107,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    workspace_dirs: Some(settings::include_directories),
     ..HostSpec::BASE
 };
 
@@ -203,6 +207,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         content,
         edits: Vec::new(),
         mcp_arguments,
+        sandboxed: false,
         event: HookEvent::PreToolUse,
     })
 }

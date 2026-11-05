@@ -27,6 +27,9 @@ impl HostSpec {
         process: ProcessSpec::BASE,
         advisories: super::Advisories::BASE,
         docs: HostDocs::BASE,
+        session_dir: super::SessionDir::Payload,
+        workspace_dirs: None,
+        payload_copies: 1,
     };
 }
 

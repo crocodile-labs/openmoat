@@ -19,7 +19,7 @@ use toml_edit::DocumentMut;
 
 use crate::cli::UninstallArgs;
 use crate::exit::Code;
-use crate::home::{Home, user_home, write_private};
+use crate::home::{Home, KeepMode, user_home, write_like};
 use crate::install::{self, HookLayout, HostConfig, Recorded, read_or_empty};
 use crate::integrity;
 use crate::render::Deferred;
@@ -383,7 +383,8 @@ fn finish(
         Some(backup) => {
             let bytes =
                 fs::read(backup).with_context(|| format!("reading {}", backup.display()))?;
-            write_private(path, &bytes)?;
+            // The backup is a copy, mode included, of the file before `init`.
+            write_like(path, &bytes, backup, KeepMode::All)?;
             Undone::Restored(backup.clone())
         }
         None if created => {
@@ -391,7 +392,7 @@ fn finish(
             Undone::Deleted
         }
         None => {
-            write_private(path, text.as_bytes())?;
+            write_like(path, text.as_bytes(), path, KeepMode::NotWritableByOthers)?;
             return Ok(Undone::Stripped(backups.to_vec()));
         }
     };

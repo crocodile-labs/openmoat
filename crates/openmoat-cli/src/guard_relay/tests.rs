@@ -78,7 +78,9 @@ fn a_request_and_a_reply_read_back_as_written() {
 
 #[test]
 fn an_oversize_payload_is_refused_before_it_is_read() {
-    let limit = usize::try_from(MAX_PAYLOAD_BYTES).unwrap();
+    // Cline's payload carries the arguments twice: the relay takes the largest limit.
+    let limit = super::wire::payload_limit();
+    assert_eq!(limit as u64, 2 * MAX_PAYLOAD_BYTES);
     let at_limit = request(token(), &"x".repeat(limit));
     let wire = bytes_of(|out| at_limit.write_to(out).unwrap());
     assert!(Request::read_from(&mut Cursor::new(&wire)).is_ok());

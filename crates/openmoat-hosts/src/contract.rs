@@ -65,6 +65,12 @@ pub(crate) trait HostAdapter: Sync {
     /// The response document the host expects on stdout.
     fn render(&self, event: &HookEvent, decision: &Decision) -> String;
 
+    /// [`HostAdapter::render`] for the call `request` describes, for a format
+    /// whose answer depends on the call itself.
+    fn render_for(&self, request: &HookRequest, decision: &Decision) -> String {
+        self.render(&request.event, decision)
+    }
+
     /// The hook payload the host sends for `call` at `at`, or `None` when the
     /// host has no tool for it.
     fn bench_payload(&self, call: &Call, at: &Place<'_>) -> Option<String>;
@@ -134,6 +140,35 @@ pub struct HostSpec {
     pub advisories: Advisories,
     /// What the generated host tables of the docs say (`tests/docs.rs`).
     pub docs: HostDocs,
+    /// Which directory of a call is the session's, the one whose project is
+    /// `${project}`.
+    pub session_dir: SessionDir,
+    /// The directories the host's settings add to its workspace (Gemini CLI's
+    /// `context.includeDirectories`), read from a parsed settings file: a
+    /// search that names no directory reads them too
+    /// ([`HookRequest::with_workspace_dirs`]). Empty from the function when
+    /// the file sets none; no function for a host without such a setting.
+    pub workspace_dirs: Option<fn(&serde_json::Value) -> Vec<String>>,
+    /// How many times the payload carries a call's arguments (Cline sends them
+    /// as `tool_call.input` and again as `preToolUse.parameters`): the guard
+    /// reads that many times its per-call limit, so a file is refused at the
+    /// same size whichever host writes it.
+    pub payload_copies: u64,
+}
+
+/// Which directory of a call is the session's ([`HostSpec::session_dir`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SessionDir {
+    /// The payload's `cwd`, or what the adapter took from the payload's
+    /// session fields (Cursor's `workspace_roots`).
+    Payload,
+    /// The hook process's own working directory, where the host starts every
+    /// hook: the payload's `cwd` is where the tool runs, which the model
+    /// chooses (Codex sends a shell call's `workdir` there). The guard moves
+    /// a request whose `cwd` lies outside the session's project to it
+    /// ([`HookRequest::from_session_dir`]).
+    HookProcess,
 }
 
 /// Where a host reads a project's own settings. They come from the repository,

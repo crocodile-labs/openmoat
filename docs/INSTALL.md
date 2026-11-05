@@ -365,7 +365,7 @@ table is generated from each agent's `HostSpec` (`OPENMOAT_TEST_UPDATE_DOCS=1 ca
 | OpenCode | `~/.config/opencode` | `XDG_CONFIG_HOME` | `plugins/openmoat.js` | `tool.execute.before` (45 s), `execute.before` (45 s) |
 | Hermes Agent | `~/.hermes` | `HERMES_HOME` | `config.yaml` | `pre_tool_call` (60 s) |
 | Cline CLI | `~/.cline` | `CLINE_DIR` | `hooks/PreToolUse` | `PreToolUse` (120 s) |
-| goose | `~/.config/goose` | `GOOSE_PATH_ROOT` | `hooks.json` | `PreToolUse` (60 s) |
+| goose | `~/.config/goose` | `GOOSE_PATH_ROOT` | `~/.agents/plugins/openmoat/hooks/hooks.json` | `PreToolUse` (60 s) |
 <!-- /generated -->
 
 If you start Claude Code with `CLAUDE_CONFIG_DIR`
