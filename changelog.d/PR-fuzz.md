@@ -1,2 +1,0 @@
-### Security
-- A repository policy's `review` rule no longer softens a `deny` your `defaults` give: a committed `.moat/policy.yaml` with `review: [{net: ['*']}]` turned every host the `net: deny` default refuses into a review a person could approve; per action the stricter of the two policies now wins, as POLICY §10 says. Found by the new `repo_policy_merge` fuzz target ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

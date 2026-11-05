@@ -1,2 +1,0 @@
-### Security
-- `openmoat policy check-diff` no longer reads a diff cut off right after a hunk header as complete: the newline ending the input was taken for a kept empty line, so the cut file read as unchanged. Such a diff is now an error, like any diff that ends inside a hunk. Found by the new `check_diff_parse` fuzz target, with `repo_policy_merge` and `mcp_relay_framing` added beside it ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
