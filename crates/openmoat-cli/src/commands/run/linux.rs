@@ -202,6 +202,13 @@ pub fn port_only_network() -> Option<String> {
     netns::doctor_warning()
 }
 
+/// Whether the system's bubblewrap, which `moat run --isolate` needs, is
+/// installed; always `Some` here, where plain `moat run`'s Landlock rules
+/// cannot deny a path inside the project (`tier.rs`).
+pub fn bubblewrap() -> Option<bool> {
+    Some(isolate::system_bwrap().is_some())
+}
+
 pub use isolate::{inside, isolate};
 
 /// The terminals this process's standard input, output and error are on, as

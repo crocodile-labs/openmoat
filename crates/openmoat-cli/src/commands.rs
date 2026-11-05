@@ -101,3 +101,10 @@ pub fn run(cli: Cli) -> Result<Code> {
         },
     }
 }
+
+/// The command that puts an agent without a sandbox of its own in one, as
+/// `moat status`, `moat doctor` and `moat init` name it: `--isolate` on Linux,
+/// where plain `moat run` leaves paths inside the project open ([`run::tier`]).
+pub fn sandboxing_command() -> &'static str {
+    run::tier::command(run::bubblewrap())
+}

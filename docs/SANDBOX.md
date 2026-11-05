@@ -329,7 +329,9 @@ bubblewrap.
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`
   and add files under `.git/hooks`. [EVIDENCE.md](EVIDENCE.md) marks each as a gap. The
   hook still decides the agent's own tool calls on them. `openmoat run --isolate` covers
-  these paths where bubblewrap runs (below). Outside the project, where the agent gets
+  these paths where bubblewrap runs (below). Plain `openmoat run` says so on standard
+  error each time it starts, `openmoat doctor` warns about it on Linux, and `status` and
+  `doctor` name `openmoat run --isolate` for an agent without a sandbox of its own. Outside the project, where the agent gets
   a network namespace, each existing file or directory a deny rule names without a
   glob inside a read root or a `--write` path is covered for the session as under
   `--isolate` (hidden, or bound read-only for a write deny): `~/.cargo/credentials.toml`

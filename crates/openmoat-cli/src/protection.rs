@@ -247,7 +247,8 @@ fn sandbox(
 ) -> Result<(), String> {
     if host_sandbox::format(host).is_none() {
         return Err(format!(
-            "no OS sandbox from OpenMoat; `openmoat run` puts {} in one (docs/SANDBOX.md)",
+            "no OS sandbox from OpenMoat; {} puts {} in one (docs/SANDBOX.md)",
+            crate::commands::sandboxing_command(),
             host.display_name()
         ));
     }

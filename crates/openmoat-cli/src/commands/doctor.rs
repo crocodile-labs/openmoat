@@ -144,8 +144,9 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .and_then(|policy| warnings::state_in_grant(&home, policy, linux));
     let macos = warnings::old_macos(crate::os_version::macos().as_deref());
     let network = super::run::port_only_network();
+    let lightweight = super::run::tier::doctor_warning(super::run::bubblewrap());
     let alias = warnings::alias_hooks(&home, &binary);
-    for warning in [tiocsti, hangs, state, macos, network]
+    for warning in [tiocsti, hangs, state, macos, network, lightweight]
         .into_iter()
         .flatten()
         .chain(alias)

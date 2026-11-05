@@ -512,8 +512,10 @@ The main gaps:
 - **A program that runs as you outside any sandbox** can change the policy and
   recompute the lock. Only the OS sandboxes stop that, so hook-only agents do not have
   this protection.
-- **On Linux, plain `openmoat run` does not protect files inside the project**
-  (`.env`, `.git`, `.moat`); `openmoat run --isolate` does.
+- **On Linux, plain `openmoat run` does not protect files inside the project:**
+  commands the agent starts can read and write `.env`, create `.envrc`, and write `.moat`
+  and `.git/hooks`. `openmoat run` says so when it starts and `openmoat doctor` warns about
+  it; `openmoat run --isolate` (bubblewrap) closes it.
 
 Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5-known-limitations).
 

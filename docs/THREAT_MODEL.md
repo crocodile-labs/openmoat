@@ -254,8 +254,8 @@ something OpenMoat claims to stop.
   - On Linux, Landlock only grants. Secrets inside a granted tree stay readable and
     writable for the agent's commands: `.env` in the project, `~/.cargo/credentials.toml`
     in a read root, the project's `.git`; `.envrc` and `.moat` can be created. The hook still denies them for the agent's
-    tool calls. `openmoat run --isolate` closes this where bubblewrap runs (below).
-    Without a network namespace, a `--write` path that holds what `kernel-self`
+    tool calls. `openmoat run --isolate` closes this where bubblewrap runs (below);
+    plain `openmoat run` says so when it starts and `openmoat doctor` warns. Without a network namespace, a `--write` path that holds what `kernel-self`
     protects (`--write ~/.claude` holds `settings.json`) refuses to start, since
     nothing could keep those paths from commands.
   - An agent's own configuration in the project (`.claude/hooks/`, `.mcp.json`,
