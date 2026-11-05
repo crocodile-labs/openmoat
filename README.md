@@ -100,6 +100,10 @@ covers what they leave out:
   workflows a fork can take over, downloaded or decoded code that runs, private keys
   and new hosts your allow list does not name
   ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
+- **Which lines an agent wrote.** `openmoat provenance` shows which files and lines of
+  your commits an agent session wrote, and whether it had read a web page or an MCP
+  result first; kept in git notes, shown on the pull request. Only commits made with
+  OpenMoat running have a record ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
 - **In your own agent.** The Rust and JavaScript SDKs give your product the same
   decisions ([docs/SDK.md](docs/SDK.md)).
 - **Measured.** MoatBench runs attack scenarios against OpenMoat and other tools
@@ -467,6 +471,10 @@ The main gaps:
   scripts, links and redirects lead next, nor where its name resolves. What the page says
   marks the session as untrusted, so writes to files that run later need review; installs and
   later pages do not.
+- **Provenance covers only what the hook saw.** `openmoat provenance` knows the writes
+  agent sessions made through calls OpenMoat decided, on the machine that made them;
+  a commit without a note, or with no record, is not shown to be a person's
+  ([docs/PROVENANCE.md](docs/PROVENANCE.md#limits)).
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).
 - **The check and the call are two moments.** OpenMoat decides on what the call names;
@@ -555,6 +563,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 | [Sandboxes](docs/SANDBOX.md) | The agents' own sandboxes, `openmoat run` and `openmoat run --isolate` |
 | [SDK](docs/SDK.md) | OpenMoat's decisions in your own agent product, from Rust or JavaScript |
 | [Merge check](docs/MERGE_CHECK.md) | Checking a pull request before merge: `openmoat policy check-diff` and the GitHub Action |
+| [Provenance](docs/PROVENANCE.md) | Which files and lines of your commits an agent wrote, after reading what: `openmoat provenance` and its git notes |
 | [Threat model](docs/THREAT_MODEL.md) | What is defended, and what is not |
 | [MoatBench](docs/MOATBENCH.md), [coverage](docs/COVERAGE.md), [evidence](docs/EVIDENCE.md) | Attack scenarios, conformance fixtures per threat, what the OS layer stops |
 | [Architecture](docs/ARCHITECTURE.md), [decisions](docs/adr/README.md) | How the code is built and why |

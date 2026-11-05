@@ -107,6 +107,7 @@ becomes an annotation on the pull request: `deny` as an error, `review` as a war
 | `fail-on` | `review` | fail the step on anything found (`review`), only on `deny`, or `never` |
 | `policy` | the default policy | a policy file in the repository, read as the base has it |
 | `base`, `head` | the pull request's base and head commits | the revisions to compare |
+| `provenance` | `review` | what agent provenance notes say the change's agents wrote: warnings (`review`), notices (`info`) or nothing (`off`); never fails the step ([PROVENANCE.md](PROVENANCE.md)) |
 | `token` | `github.token` | what `gh attestation verify` reads the attestation with |
 
 The output `result` is `clean`, `review` or `deny`. Use the `pull_request` event, not
