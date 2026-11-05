@@ -109,6 +109,68 @@ pub fn mcp_resource_action(server: &str, uri: &str) -> Result<Action, HostError>
     )
 }
 
+/// Words of a tool's name that make it send something somewhere, beyond the
+/// write verbs ([`crate::WRITE_VERBS`]): `send_message`, `post_comment`,
+/// `add_issue_comment`, `run_query`. Matched as whole words of the name, so
+/// `truncate` is not `run` and `repost` is not `post`. Nouns a reading tool
+/// names too (`get_pull_request`, `list_messages`) are not in it.
+const SEND_WORDS: &[&str] = &[
+    "send", "post", "put", "add", "publish", "reply", "notify", "submit", "upload", "push",
+    "merge", "commit", "invoke", "execute", "exec", "run", "share", "invite", "transfer", "pay",
+    "deploy", "trigger", "dispatch",
+];
+
+/// Whether the MCP tool `name` (`mcp__<server>__<tool>`), called as `action`
+/// ([`mcp_call_action`]), writes, sends or connects by its shape: a write verb
+/// anywhere in its name (as the hook reads its paths), a word of its name that
+/// sends, or arguments that name a file it writes, a host, a page or a
+/// command. The one reading by name and arguments of what an MCP tool does,
+/// for the cross-server flow check (ADR-058), which the tool's annotations
+/// override when it has them.
+#[must_use]
+pub fn mcp_tool_acts(name: &str, action: &Action) -> bool {
+    let own = name.rsplit("__").next().unwrap_or(name);
+    let lower = own.to_ascii_lowercase();
+    if crate::WRITE_VERBS.iter().any(|verb| lower.contains(verb)) {
+        return true;
+    }
+    if words(own).iter().any(|w| SEND_WORDS.contains(&w.as_str())) {
+        return true;
+    }
+    match action {
+        Action::McpTool {
+            writes,
+            hosts,
+            opens,
+            commands,
+            ..
+        } => !(writes.is_empty() && hosts.is_empty() && opens.is_empty() && commands.is_empty()),
+        _ => false,
+    }
+}
+
+/// The words of a tool name, lowercased: split at `_`, `-`, `.`, `/` and
+/// where a lowercase letter or digit meets an uppercase one (`sendMessage`).
+fn words(name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut word = String::new();
+    let mut previous_lower = false;
+    for c in name.chars() {
+        let split = !c.is_ascii_alphanumeric() || (c.is_ascii_uppercase() && previous_lower);
+        if split && !word.is_empty() {
+            out.push(std::mem::take(&mut word));
+        }
+        if c.is_ascii_alphanumeric() {
+            word.push(c.to_ascii_lowercase());
+        }
+        previous_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+    }
+    if !word.is_empty() {
+        out.push(word);
+    }
+    out
+}
+
 /// The MCP request for a server's tools, the page after `cursor` when one is
 /// given: what `openmoat mcp proxy` sends when a server says its tools changed.
 #[must_use]
@@ -170,6 +232,46 @@ mod tests {
         };
         assert_eq!(hook_arguments(Some(&shell), &object), None);
         assert_eq!(hook_arguments(None, &object), None);
+    }
+
+    #[test]
+    fn a_tool_acts_by_its_verbs_its_send_words_or_what_its_arguments_name() {
+        let acts =
+            |name: &str, args: Value| mcp_tool_acts(name, &mcp_call_action(name, &args).unwrap());
+        assert!(acts("mcp__fs__write_file", json!({"path": "/p/a"})));
+        assert!(acts(
+            "mcp__slack__send_message",
+            json!({"channel": "c", "text": "t"})
+        ));
+        assert!(acts("mcp__chat__postMessage", json!({"text": "t"})));
+        assert!(acts(
+            "mcp__http__request",
+            json!({"url": "https://evil.example"})
+        ));
+        assert!(acts(
+            "mcp__x__go",
+            json!({"endpoint": "https://evil.example"})
+        ));
+        assert!(!acts("mcp__github__search_code", json!({"q": "fn main"})));
+        assert!(!acts(
+            "mcp__github__get_file_contents",
+            json!({"owner": "o", "path": "a"})
+        ));
+        assert!(!acts("mcp__fs__read_file", json!({"path": "/p/a"})));
+        assert!(!acts(
+            "mcp__github__get_pull_request",
+            json!({"pullNumber": 1})
+        ));
+        assert!(!acts("mcp__github__list_commits", json!({"repo": "r"})));
+        assert!(acts("mcp__github__add_issue_comment", json!({"body": "b"})));
+        assert!(
+            !acts("mcp__db__truncate_preview", json!({})),
+            "`run` is not a word here"
+        );
+        assert!(
+            !acts("mcp__news__repost_count", json!({})),
+            "`post` is not a word here"
+        );
     }
 
     #[test]

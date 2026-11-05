@@ -16,8 +16,14 @@
 //! `resources/read` is decided on the policy alone (a `file:` URI as the file
 //! it names, any other as a host): a host also reads resources for the person,
 //! with no hook. `prompts/get` and the server's own requests are recorded.
+//!
+//! The result of each `tools/call` passed on a hook decision has its pieces
+//! kept under that decision's session (`mcp/flow.rs`, ADR-058), so the hook
+//! can tell when a later call carries them to another server.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
 
 use anyhow::{Context as _, Result};
@@ -28,6 +34,7 @@ use serde_json::Value;
 
 use crate::environment::{Snapshot, WithOwnBinary};
 use crate::home::Home;
+use crate::mcp::names_tool;
 use crate::mcp::relay::{Call, Gate, Method};
 use crate::realpath::FsPathResolver;
 use crate::{context, integrity, secrets};
@@ -48,7 +55,20 @@ pub struct Gateway {
     cwd: PathBuf,
     /// The session of rows no hook decision names.
     session: String,
+    /// The host and session of each tool call passed on and not answered
+    /// yet, by request id: where its result's pieces go (ADR-058).
+    awaiting: Mutex<HashMap<String, Awaiting>>,
 }
+
+/// Whose tool call a result answers.
+struct Awaiting {
+    host: String,
+    session: String,
+}
+
+/// The most passed calls awaiting a result the gateway keeps, as many as the
+/// relay lets the server leave unanswered.
+const MAX_AWAITING: usize = 4096;
 
 /// What the gateway made of one call.
 struct Outcome {
@@ -74,7 +94,27 @@ impl Gateway {
                 std::process::id(),
                 crate::time::now_ms()
             ),
+            awaiting: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// Remember that the tool call `request` was passed on for the hook's
+    /// decision `ticket`, so its result is kept under that session.
+    fn await_result(&self, request: &str, ticket: &Ticket) {
+        let mut awaiting = self.awaiting.lock().unwrap_or_else(PoisonError::into_inner);
+        if awaiting.len() >= MAX_AWAITING
+            && let Some(any) = awaiting.keys().next().cloned()
+        {
+            // A request the server never answered (cancelled, or lost).
+            awaiting.remove(&any);
+        }
+        awaiting.insert(
+            request.to_owned(),
+            Awaiting {
+                host: ticket.host.clone(),
+                session: ticket.session_id.clone(),
+            },
+        );
     }
 
     /// The name the policy and the audit log give `call`.
@@ -265,8 +305,38 @@ impl Gate for Gateway {
             Verdict::Deny => Some(refusal(&outcome.decision)),
             _ => None,
         };
+        let awaits = match (&outcome.ticket, call.request, &refused) {
+            (Some(ticket), Some(request), None) => Some((request, ticket.clone())),
+            _ => None,
+        };
         self.record(store, &name, outcome, started)?;
+        if let Some((request, ticket)) = awaits {
+            self.await_result(request, &ticket);
+        }
         Ok(refused)
+    }
+
+    /// Keep the pieces of a passed tool call's result under the session the
+    /// hook's decision named (ADR-058); a response to anything else is not a
+    /// tool result of a session and is let through as it is.
+    fn result(&self, request: &str, result: &Value) -> Result<()> {
+        let awaiting = self
+            .awaiting
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(request);
+        let Some(awaiting) = awaiting else {
+            return Ok(());
+        };
+        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(result));
+        if pieces.is_empty() {
+            return Ok(());
+        }
+        let store = self.store()?.with_secrets(self.known());
+        store
+            .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
+            .context("recording what the tool's result held")?;
+        Ok(())
     }
 
     fn server_request(&self, method: &str) -> Result<()> {
@@ -295,41 +365,6 @@ fn refusal(decision: &Decision) -> String {
     let rules = decision.rules.join(", ");
     let reasons = decision.reasons.join("; ");
     format!("OpenMoat refused this call [{rules}]: {reasons}")
-}
-
-/// Whether `hook_name`, the MCP tool name `host`'s hook decided, names tool
-/// `tool` of server `server`: the server as the host spells it
-/// ([`crate::mcp::tool_of`]), then `__<tool>` (or `-<tool>` where the host
-/// joins them so), the tool's name as written or with the characters a host
-/// replaces in names as `_`.
-pub(super) fn names_tool(host: Host, hook_name: &str, server: &str, tool: &str) -> bool {
-    if tool.is_empty() || !crate::mcp::tool_of(host, hook_name, server) {
-        return false;
-    }
-    let spelled = |keep: fn(char) -> bool| -> String {
-        tool.chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || keep(c) {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect()
-    };
-    let spellings = [
-        tool.to_owned(),
-        spelled(|c| c == '_' || c == '-'),
-        spelled(|c| c == '_'),
-    ];
-    let joiner = if hook_name.starts_with("mcp__") {
-        "__"
-    } else {
-        "-"
-    };
-    spellings
-        .iter()
-        .any(|t| hook_name.ends_with(&format!("{joiner}{t}")))
 }
 
 #[cfg(test)]

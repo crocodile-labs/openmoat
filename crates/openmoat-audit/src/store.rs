@@ -17,6 +17,7 @@ use crate::KnownSecrets;
 mod chain;
 mod export;
 mod export_verify;
+mod mcp_flow;
 mod mcp_tickets;
 mod provenance;
 mod rules;
@@ -28,6 +29,7 @@ mod session_writes;
 pub use chain::{BreakKind, ChainBreak, ChainHead, ChainReport, GENESIS};
 pub use export::{ExportFilter, ExportFormat, ExportedEvent};
 pub use export_verify::{AnchorCheck, ExportBreak, ExportReport, verify_export};
+pub use mcp_flow::{MAX_AGE_MS as MCP_FLOW_MAX_AGE_MS, MAX_SESSION_ROWS as MCP_FLOW_SESSION_ROWS};
 pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use session_cache::Cached;
@@ -296,6 +298,11 @@ impl Store {
     /// The schema has the MCP call decisions table (version 6).
     fn mcp_tickets(&self) -> bool {
         self.version >= schema::MCP_TICKETS_VERSION
+    }
+
+    /// The schema has the MCP result pieces table (version 9).
+    fn mcp_flow(&self) -> bool {
+        self.version >= schema::MCP_FLOW_VERSION
     }
 
     /// The session writes keep the state of the file before the write (version 7).

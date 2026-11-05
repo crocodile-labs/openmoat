@@ -35,7 +35,7 @@ pub use host::openclaw::{
 pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
 pub use wire::mcp_call::{
-    canonical_json, mcp_call_action, mcp_call_arguments, mcp_resource_action,
+    canonical_json, mcp_call_action, mcp_call_arguments, mcp_resource_action, mcp_tool_acts,
     mcp_tools_list_request,
 };
 pub use wire::owned_file::{OwnedFile, OwnedFileError, Syntax};

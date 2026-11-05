@@ -537,8 +537,23 @@ $ openmoat audit export --session 9f2c…
 {…,"host":"mcp-proxy","session_id":"9f2c…","call_id":"toolu_01…","tool":"mcp__github__get_issue",…,"verdict":"allow","rules":["mcp-proxy"],…}
 ```
 
+- **One server's result carried into another server's action needs review.** The gateway
+  keeps hashed pieces of each result: addresses, email addresses, long tokens, and runs of
+  eight words ([ADR-058](adr/ADR-058-mcp-cross-server-flow.md)). When a later call of
+  another server's tool that writes or sends carries one, the hook holds it for review
+  (rule `mcp-cross-server`), naming both servers:
+
+  ```text
+  moat: review [mcp-cross-server] — this call to MCP server `mail` writes or sends text that
+      MCP server `web` returned earlier in this session: …
+  ```
+
+  Calls of the same server, tools that only read, and other sessions stay quiet. To trust
+  a server's flows, list it in the policy: `mcp: { flow_trusted: [github] }`.
+
 The gateway covers stdio servers. A remote (HTTP) server is checked by the hook alone, and
-tool results reach the model as the server sent them (they mark the session untrusted).
+its results are not kept for the flow check. Tool results reach the model as the server
+sent them (they mark the session untrusted).
 
 ## If OpenMoat gets in your way
 

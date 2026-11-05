@@ -80,16 +80,23 @@ impl Relay {
             };
         }
         let params = fields.get("params");
+        let key = id.map(id_key);
+        let request = key.as_deref();
         let refused = match method {
-            "tools/call" => self.tool_call(params),
+            "tools/call" => self.tool_call(params, request),
             "resources/read" => {
                 let uri = params.and_then(|p| p.get("uri")).and_then(Value::as_str);
-                self.gated(Method::Resource, uri.unwrap_or(""), None, None)
+                self.gated(Method::Resource, uri.unwrap_or(""), (None, request), None)
             }
             "prompts/get" => {
                 let name = params.and_then(|p| p.get("name")).and_then(Value::as_str);
                 let arguments = params.and_then(|p| p.get("arguments"));
-                self.gated(Method::Prompt, name.unwrap_or(""), arguments, None)
+                self.gated(
+                    Method::Prompt,
+                    name.unwrap_or(""),
+                    (arguments, request),
+                    None,
+                )
             }
             "notifications/cancelled" => {
                 // The server may never answer a cancelled request.
@@ -134,7 +141,7 @@ impl Relay {
     }
 
     /// `tools/call`: the pins first, then the gate.
-    fn tool_call(&self, params: Option<&Value>) -> Option<(i64, String)> {
+    fn tool_call(&self, params: Option<&Value>, request: Option<&str>) -> Option<(i64, String)> {
         let tool = params
             .and_then(|p| p.get("name"))
             .and_then(Value::as_str)
@@ -149,21 +156,23 @@ impl Relay {
             ));
         }
         let held = self.refusal(tool);
-        self.gated(Method::Tool, tool, arguments, held)
+        self.gated(Method::Tool, tool, (arguments, request), held)
     }
 
     /// The gate's answer: `None` to pass the call on, else the error to answer.
+    /// `request` is the request's id ([`id_key`]), `None` for a notification.
     fn gated(
         &self,
         method: Method,
         name: &str,
-        arguments: Option<&Value>,
+        (arguments, request): (Option<&Value>, Option<&str>),
         held: Option<String>,
     ) -> Option<(i64, String)> {
         let call = Call {
             method,
             name,
             arguments,
+            request,
         };
         let code = if held.is_some() {
             UNKNOWN_TOOL

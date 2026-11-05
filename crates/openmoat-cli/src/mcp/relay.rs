@@ -26,6 +26,9 @@
 //! - a response must answer a request the host sent and the server has not
 //!   answered; any other is dropped, so a server cannot slip the host a listing
 //!   or a result nobody asked for;
+//! - a result goes to the [`Gate`] before the host sees it, which keeps the
+//!   pieces of a tool call's result for the cross-server flow check (ADR-058);
+//!   one it cannot keep reaches the host as an error;
 //! - a response that lists tools (`result.tools`) leaves out the tools the pins
 //!   hold;
 //! - `notifications/tools/list_changed` has the relay read the tools again
@@ -77,6 +80,9 @@ pub struct Call<'a> {
     pub name: &'a str,
     /// The tool's or prompt's arguments; `None` when the message has none.
     pub arguments: Option<&'a Value>,
+    /// The request's id as the relay matches its response ([`id_key`]);
+    /// `None` for a notification, which gets no response.
+    pub request: Option<&'a str>,
 }
 
 /// Decides and records what the relay passes on (`commands/mcp/gate.rs`).
@@ -88,6 +94,14 @@ pub trait Gate: Send + Sync {
     /// Record a request the server sent the host; an error has it answered
     /// with an error instead of reaching the host.
     fn server_request(&self, method: &str) -> Result<()>;
+    /// The server's `result` for the host's request `request` ([`id_key`]),
+    /// before it reaches the host: the gate keeps what a tool call it passed
+    /// returned (ADR-058). An error has the host answered with an error
+    /// instead, so a result is never seen by the model unrecorded.
+    fn result(&self, request: &str, result: &Value) -> Result<()> {
+        let _ = (request, result);
+        Ok(())
+    }
 }
 
 /// Saves the pins after a listing changed them.

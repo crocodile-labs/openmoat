@@ -10,7 +10,9 @@
 //! `moat mcp proxy` (`relay.rs`, `tools.rs`) sits between the host and one stdio
 //! server, pins each tool's whole definition on first sight (`tools.rs`), and
 //! hides a tool whose definition changed until a person accepts it. `wrap.rs`
-//! points a server's definition at the proxy and back.
+//! points a server's definition at the proxy and back. `flow.rs` holds for
+//! review a call that carries one server's result into another server's tool
+//! that writes or sends (ADR-058).
 
 use std::path::{Path, PathBuf};
 
@@ -22,6 +24,7 @@ use crate::home::Home;
 use crate::install::HostConfig;
 use crate::integrity::Lock;
 
+pub mod flow;
 pub mod outside;
 pub mod pins;
 pub mod relay;
@@ -133,6 +136,41 @@ pub fn tool_of(host: Host, tool: &str, name: &str) -> bool {
             .mcp
             .as_ref()
             .is_some_and(|mcp| mcp.tool_names.tool_of(tool, name))
+}
+
+/// Whether `hook_name`, the MCP tool name `host`'s hook decided, names tool
+/// `tool` of server `server`: the server as the host spells it
+/// ([`tool_of`]), then `__<tool>` (or `-<tool>` where the host joins them
+/// so), the tool's name as written or with the characters a host replaces in
+/// names as `_`.
+pub fn names_tool(host: Host, hook_name: &str, server: &str, tool: &str) -> bool {
+    if tool.is_empty() || !tool_of(host, hook_name, server) {
+        return false;
+    }
+    let spelled = |keep: fn(char) -> bool| -> String {
+        tool.chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || keep(c) {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect()
+    };
+    let spellings = [
+        tool.to_owned(),
+        spelled(|c| c == '_' || c == '-'),
+        spelled(|c| c == '_'),
+    ];
+    let joiner = if hook_name.starts_with("mcp__") {
+        "__"
+    } else {
+        "-"
+    };
+    spellings
+        .iter()
+        .any(|t| hook_name.ends_with(&format!("{joiner}{t}")))
 }
 
 /// Store `changes` as accepted in the lock at `home`. A lock without MCP pins

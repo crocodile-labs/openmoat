@@ -1,5 +1,6 @@
 mod chain;
 mod export;
+mod mcp_flow;
 mod mcp_tickets;
 mod migration_cost;
 mod provenance;

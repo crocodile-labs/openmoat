@@ -490,6 +490,18 @@ fn evaluate(
         decision,
         (crate::time::now_ms(), &sandboxed),
     )?;
+    // Another MCP server's result carried into a tool that acts; only
+    // tightens (ADR-058).
+    let flow = crate::mcp::flow::Sink {
+        home: &home,
+        store: &store,
+        host,
+        session: &request.session_id,
+        action,
+        arguments: request.mcp_arguments.as_deref(),
+        policy: compiled.policy(),
+    };
+    let decision = crate::mcp::flow::checked(&flow, decision)?;
     drop(store);
     // Last: a push is checked for what it would publish (push.rs); only tightens.
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
