@@ -25,7 +25,8 @@ decision in a local, hash-chained audit log.
 It is for developers who let Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
 pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI or goose run commands on their own machine and want one set of rules across
 them. It is one Rust binary (`openmoat`) for macOS, Linux and Windows. No AI model
-decides, and nothing leaves your machine unless you export it.
+decides, and OpenMoat itself sends nothing off your machine: the log stays local unless
+you export it.
 
 **Why not just the agent's own prompt and sandbox?** OpenMoat does not replace them; it
 covers what they leave out:
@@ -37,8 +38,9 @@ covers what they leave out:
   call or uninstall OpenMoat.
 - **A deny still holds when nobody is asked:** auto-approve modes, CI and background agents.
 - **The same policy writes the agents' own OS sandboxes** (Claude Code, Codex, Cursor), so
-  code inside an allowed command is confined too; `openmoat run` does this for any agent
-  on macOS and Linux. Where no sandbox applies, a script the agent wrote needs review before it
+  code inside an allowed command is confined too, within what each sandbox can deny
+  ([Limits](#limits)); `openmoat run` does this for any agent on macOS and Linux (on
+  Linux, `--isolate` also for files inside the project). Where no sandbox applies, a script the agent wrote needs review before it
   runs.
 
 <p align="center">
@@ -67,10 +69,12 @@ covers what they leave out:
 
 - **One policy for every agent.** Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI,
   pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, set up with `openmoat init`.
-- **Secrets stay put.** SSH keys, `.env`, cloud credentials and each agent's own login
-  files are denied, however the path is spelt.
-- **Nothing sensitive leaves.** Known tokens sent to the wrong host, encoded secrets after
-  a secret was read, and payment card numbers are denied.
+- **Secret files are closed to the agent's tool calls.** SSH keys, `.env`, cloud
+  credentials and each agent's own login files are denied, however the path is spelt
+  (what a program inside an allowed command reads is the sandbox's business: see Limits).
+- **Recognised secrets and card numbers in a call are denied:** known token formats sent
+  to the wrong host, encoded secrets after a secret was read, payment card numbers. File
+  contents and encoded data are not read.
 - **Shell commands read like a shell reads them.** Variables, quoting, base64, `$(…)`,
   `bash -c` and `ssh` commands are resolved before the decision.
 - **Risky installs and scripts.** Typo-squatted package names, scripts the session wrote,
@@ -478,7 +482,8 @@ The main gaps:
   something that is not JSON or is killed after 120 s, and under `--yolo`, which runs no
   hooks. goose runs calls unchecked when it does not load OpenMoat's plugin
   (`disabledPlugins`, `enabled: false` under `plugins` in `config.yaml`, or a project
-  plugin named `openmoat`); `openmoat status` reports the settings, not a project plugin.
+  plugin named `openmoat`); `openmoat status` and `doctor` report both, for the directory
+  they run in.
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a
@@ -493,7 +498,7 @@ The main gaps:
   OpenMoat decided on, except where another plugin changes them and asks for approval
   itself in one answer: OpenClaw then runs that plugin's change once you approve it.
   In the Cline CLI, another `PreToolUse` hook file or a plugin can rewrite a call's input
-  after OpenMoat checked it, and Cline approves calls on its own by default
+  after OpenMoat checked it (`openmoat status` and `doctor` name the ones they find), and Cline approves calls on its own by default
   (`--auto-approve`), so a deferred call usually runs.
 - **Some agents cannot prompt.** Codex, OpenCode 1, goose, the Cline CLI (where the deny
   also ends Cline's run), Cursor's file tools, pi in print and JSON mode, and Hermes Agent
