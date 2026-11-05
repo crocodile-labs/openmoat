@@ -48,7 +48,9 @@ fn drift_accepted_with_y_repins() {
     assert!(shown.contains("Accept these changes? [y/N]"), "{shown}");
     assert!(shown.contains("lock re-pinned"), "{shown}");
     assert!(shown.contains("Nothing needs you."), "{shown}");
-    assert!(text(&sb.moat(&["doctor"])).contains("healthy"));
+    let doctor = sb.moat(&["doctor"]);
+    assert_eq!(doctor.status.code(), Some(0), "{}", text(&doctor));
+    assert!(!text(&doctor).contains("re-installs and re-pins"));
 }
 
 #[test]

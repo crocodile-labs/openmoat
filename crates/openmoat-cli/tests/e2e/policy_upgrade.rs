@@ -72,21 +72,56 @@ fn a_new_policy_records_its_base_and_has_nothing_to_upgrade() {
     assert!(text(&out).contains("has every change"), "{}", text(&out));
 }
 
+/// The changes are shown grouped by what they do; `--diff`, or `d` at the
+/// question, shows the full diff, and the question's default stays no.
+#[test]
+fn the_changes_are_grouped_and_d_shows_the_diff() {
+    let sb = older_home(V0_3_0);
+    let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(OK), "{shown}");
+    // The changes grow with every later default; the two 0.4.0 additions must be among them.
+    assert!(
+        shown.contains("has new default rules for your policy"),
+        "{shown}"
+    );
+    assert!(shown.contains("  New protections\n"), "{shown}");
+    assert!(shown.contains("· `defaults:` changed"), "{shown}");
+    assert!(
+        shown.contains("+ `project-fs` no longer allows "),
+        "{shown}"
+    );
+    assert!(shown.contains("comment and wording update"), "{shown}");
+    assert!(shown.contains("OpenMoat 0.3.0 default"), "{shown}");
+    // The summary, not the diff, unless asked for.
+    assert!(!shown.contains("+  web.search: allow"), "{shown}");
+    let out = sb.moat(&["policy", "upgrade", "--dry-run", "--diff"]);
+    let shown = text(&out);
+    assert!(shown.contains("+  web.search: allow"), "{shown}");
+    assert!(shown.contains(r#""!${project}/**/.git/**""#), "{shown}");
+
+    // `d` shows the full diff and asks again; an empty answer is still no.
+    let mut person = sb.command();
+    person
+        .env("MOAT_ASSUME_TTY", "1")
+        .args(["policy", "upgrade"]);
+    let out = output(&mut person, Some("d\n\n"));
+    let shown = text(&out);
+    assert_eq!(
+        shown.matches("Apply these changes? [y/N/d]").count(),
+        2,
+        "{shown}"
+    );
+    assert!(shown.contains("+  web.search: allow"), "{shown}");
+    assert!(shown.contains("the policy was not changed"), "{shown}");
+    assert_eq!(policy(&sb), V0_3_0);
+}
+
 #[test]
 fn a_0_3_0_policy_gains_the_new_defaults_and_undo_restores_it() {
     let sb = older_home(V0_3_0);
     assert_eq!(web_search(&sb), "ask");
     assert_eq!(nested_git_write(&sb), Some(OK));
-
-    let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
-    let shown = text(&out);
-    assert_eq!(out.status.code(), Some(OK), "{shown}");
-    // The count grows with every later default; the two 0.4.0 additions must be among them.
-    assert!(shown.contains("Policy update available: "), "{shown}");
-    assert!(shown.contains("+  web.search: allow"), "{shown}");
-    assert!(shown.contains(r#""!${project}/**/.git/**""#), "{shown}");
-    assert!(shown.contains("OpenMoat 0.3.0 default"), "{shown}");
-    assert_eq!(policy(&sb), V0_3_0);
 
     // No terminal: nothing changes, `--yes` or not.
     let out = sb.moat(&["policy", "upgrade", "--yes"]);
@@ -112,8 +147,25 @@ fn a_0_3_0_policy_gains_the_new_defaults_and_undo_restores_it() {
         "{}",
         text(&out)
     );
+    // The sandbox sync it used to ask the person for is done, with its checks.
+    assert!(
+        text(&out).contains("✔ Agents' sandboxes "),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        !text(&out).contains("run `openmoat sandbox sync`"),
+        "{}",
+        text(&out)
+    );
     assert_eq!(policy(&sb), default_lf());
     intact(&sb);
+    let sync = sb.moat_as_person(&["sandbox", "sync"]);
+    assert!(
+        !text(&sync).contains("(sandbox updated)"),
+        "the upgrade left nothing to sync: {}",
+        text(&sync)
+    );
     assert_eq!(web_search(&sb), "allow");
     assert_eq!(nested_git_write(&sb), Some(REVIEW));
 
@@ -142,7 +194,10 @@ fn the_owners_changes_are_kept_and_a_conflicting_change_is_listed() {
 
     let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
     let shown = text(&out);
-    assert!(shown.contains("Policy update available: "), "{shown}");
+    assert!(
+        shown.contains("has new default rules for your policy"),
+        "{shown}"
+    );
     assert!(
         shown.contains("Not applied: you changed the policy at line"),
         "{shown}"
@@ -161,7 +216,7 @@ fn the_owners_changes_are_kept_and_a_conflicting_change_is_listed() {
     // The change left out is listed again, and nothing else is offered.
     let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
     let shown = text(&out);
-    assert!(!shown.contains("Policy update available"), "{shown}");
+    assert!(!shown.contains("has new default rules"), "{shown}");
     assert!(shown.contains("Not applied"), "{shown}");
 }
 
@@ -199,11 +254,20 @@ fn the_old_name_ask_is_warned_about_and_renamed_by_upgrade() {
 
     let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
     let shown = text(&out);
+    assert!(shown.contains("renames a word in your policy"), "{shown}");
+    assert!(
+        shown.contains("  Renamed\n    ~ `ask` is now `review` (same behaviour)"),
+        "{shown}"
+    );
+    // The rename only: nothing else is named.
+    assert!(!shown.contains("New protections"), "{shown}");
+    assert!(!shown.contains("Other changes"), "{shown}");
+    let out = sb.moat(&["policy", "upgrade", "--dry-run", "--diff"]);
+    let shown = text(&out);
     assert!(
         shown.contains("-ask:") && shown.contains("+review:"),
         "{shown}"
     );
-    assert!(shown.contains("1 rename: `ask` is now `review`"), "{shown}");
     assert_eq!(policy(&sb), own);
 
     let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
@@ -236,14 +300,18 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
     let update = "changes from the OpenMoat";
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = crate::common::squash(&text(&out));
     assert!(
-        text(&out).contains("! policy update    ") && text(&out).contains(update),
-        "{}",
-        text(&out)
+        shown.contains("! Policy ")
+            && shown.contains(update)
+            && shown.contains("to review → openmoat policy upgrade"),
+        "{shown}"
     );
     let out = sb.moat(&["init", "--yes"]);
     assert!(
-        text(&out).contains("! policy update    ") && text(&out).contains(update),
+        text(&out).contains("Review the new default rules (")
+            && text(&out).contains(update)
+            && text(&out).contains("): openmoat policy upgrade"),
         "{}",
         text(&out)
     );
@@ -262,8 +330,9 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
     assert_eq!(out.status.code(), Some(OK), "{shown}");
     assert!(
         shown.contains("See the changes? [y/N]")
-            && shown.contains("Apply ")
-            && shown.contains(" changes? [y/N]")
+            && shown.contains("Apply these changes? [y/N/d]")
+            && shown.contains("✔ Policy upgraded"),
+        "{shown}"
     );
     assert_eq!(policy(&sb), default_lf());
     assert!(text(&sb.moat(&[])).contains("Nothing needs you."));

@@ -3,10 +3,9 @@
 
 use std::fs;
 
-use openmoat_hosts::Host;
 use serde_json::Value;
 
-use crate::common::{OK, Sandbox, json, output, stdout, text};
+use crate::common::{OK, Sandbox, json, output, squash, stdout, text};
 
 /// The `agents` entry of `moat status --format json` for `host`.
 fn agent(sb: &Sandbox, host: &str) -> Value {
@@ -22,29 +21,35 @@ fn agent(sb: &Sandbox, host: &str) -> Value {
 #[test]
 fn each_agent_reports_its_level_and_gaps() {
     let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
-    let status = stdout(&sb.moat(&["status"]));
+    let status = squash(&stdout(&sb.moat(&["status"])));
     for line in [
-        "Claude Code      ✔ protection: hook + OS sandbox",
-        "Claude Code      · known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox",
-        "Codex            ✔ protection: hook + OS sandbox",
-        "Codex            · known gaps: web search, hosted tools, code mode's `exec`/`wait` and \
-         `request_permissions` are not hooked; what `write_stdin` types into a running command \
-         is not hooked",
-        "Cursor           ✔ protection: hook + OS sandbox",
-        "Cursor           · known gaps: commands Cursor runs outside its sandbox",
+        "✔ Claude Code hook + OS sandbox\n",
+        "✔ Codex hook + OS sandbox\n",
+        "✔ Cursor hook + OS sandbox\n",
     ] {
         assert!(status.contains(line), "{line:?} in {status}");
     }
-    let doctor = stdout(&sb.moat(&["doctor"]));
-    assert!(
-        doctor.contains("· Codex            protection: hook + OS sandbox"),
-        "{doctor}"
-    );
-    assert!(
-        doctor.contains("· Cursor           protection: hook + OS sandbox"),
-        "{doctor}"
-    );
-    assert!(doctor.contains("healthy"), "{doctor}");
+    // The known gaps, with every check, only with --verbose.
+    assert!(!status.contains("known gaps"), "{status}");
+    let out = sb.moat(&["doctor"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let doctor = squash(&stdout(&out));
+    // `!` instead of `✔` where a warning names the agent (Linux's TIOCSTI one for Codex).
+    assert!(doctor.contains(" Codex hook + OS sandbox\n"), "{doctor}");
+    assert!(doctor.contains("✔ Cursor hook + OS sandbox\n"), "{doctor}");
+    assert!(!doctor.contains("known gaps:"), "{doctor}");
+    let verbose = squash(&stdout(&sb.moat(&["doctor", "--verbose"])));
+    for line in [
+        "· Claude Code known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox",
+        "· Codex known gaps: web search, hosted tools, code mode's `exec`/`wait` and \
+         `request_permissions` are not hooked; what `write_stdin` types into a running command \
+         is not hooked",
+        "· Cursor known gaps: commands Cursor runs outside its sandbox",
+        "· Codex protection: hook + OS sandbox",
+        "· Cursor protection: hook + OS sandbox",
+    ] {
+        assert!(verbose.contains(line), "{line:?} in {verbose}");
+    }
 
     let claude = agent(&sb, "claude-code");
     assert_eq!(claude["level"], "hook-and-os-sandbox", "{claude}");
@@ -83,10 +88,14 @@ fn a_drifted_sandbox_is_hook_only_and_says_which() {
         reason.starts_with("sandbox: default_permissions is not \"moat\""),
         "{reason}"
     );
-    let status = stdout(&sb.moat(&["status"]));
+    let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains("Codex            ! protection: hook only: sandbox: default_permissions"),
+        status.contains("! Codex hook only (sandbox: default_permissions"),
         "{status}"
+    );
+    assert!(
+        status.contains("✗ Codex sandbox: default_permissions"),
+        "the drift needs the person: {status}"
     );
 }
 
@@ -99,24 +108,25 @@ fn a_missing_hook_is_not_protected_and_absent_agents_keep_their_line() {
     assert_eq!(claude["reason"], "hook missing", "{claude}");
     assert_eq!(agent(&sb, "codex")["level"], "not-found");
 
-    let status = stdout(&sb.moat(&["status"]));
+    let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains("Claude Code      ✗ protection: not protected: hook missing"),
+        status.contains("✗ Claude Code not protected (hook missing)\n"),
+        "{status}"
+    );
+    assert!(
+        status.contains("✗ Claude Code hook missing → openmoat init\n"),
         "{status}"
     );
     // agents with no folder share one line
     let not_found = status
         .lines()
-        .find(|l| l.starts_with("not found        · "))
+        .find(|l| l.starts_with(" – Not installed: "))
         .expect(&status);
     assert!(not_found.contains("Codex"), "{status}");
     assert!(!not_found.contains("Claude Code"), "{status}");
     assert!(!status.contains("host not found"), "{status}");
-    assert!(!status.contains("Codex            ✗"), "{status}");
-    assert!(
-        !status.contains("Codex            · known gaps"),
-        "{status}"
-    );
+    assert!(!status.contains("✗ Codex"), "{status}");
+    assert!(!status.contains("known gaps"), "{status}");
 
     let home = text(&output(&mut sb.command(), Some("")));
     assert!(home.contains("No agent is protected"), "{home}");
@@ -170,9 +180,9 @@ fn claude_code_on_native_windows_is_hook_only() {
             .starts_with("sandbox not available on native Windows"),
         "{claude}"
     );
-    let status = stdout(&sb.moat(&["status"]));
+    let status = squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains("Claude Code      ! protection: hook only: sandbox not available"),
+        status.contains("✔ Claude Code hook only (sandbox not available"),
         "{status}"
     );
     let home = text(&output(&mut sb.command(), Some("")));
@@ -182,73 +192,74 @@ fn claude_code_on_native_windows_is_hook_only() {
     );
 }
 
-/// Each host's label in the sections of `moat status` and `moat doctor`: its
-/// name, cut to the 16-character label column.
-fn host_labels() -> Vec<String> {
-    Host::ALL
-        .iter()
-        .map(|host| host.display_name().chars().take(16).collect())
-        .collect()
-}
-
-/// `before`, every host's label in `Host::ALL` order, then the audit log.
-fn with_hosts(before: &[&str]) -> Vec<String> {
-    let before = before.iter().map(|label| (*label).to_owned());
-    before
-        .chain(host_labels())
-        .chain(["audit log".to_owned()])
-        .collect()
-}
-
-/// The first line of each section of `moat status` and `moat doctor`, in the
-/// order they print: the label column after `skip` leading characters (the
-/// check mark in `doctor`).
-fn sections(out: &str, skip: usize) -> Vec<String> {
-    let known = with_hosts(&[
-        "state directory",
-        "policy",
-        "lock",
-        "approvals",
-        "environment",
-        "not found",
-    ]);
-    let mut seen: Vec<String> = Vec::new();
-    for line in out.lines() {
-        let label = line.chars().skip(skip).take(16).collect::<String>();
-        let label = label.trim_end();
-        if known.iter().any(|k| k == label) && !seen.iter().any(|s| s == label) {
-            seen.push(label.to_owned());
-        }
+/// Where each of `parts` first starts in `out`, which must have them all, in
+/// this order.
+fn in_order(out: &str, parts: &[&str]) {
+    let mut at = 0;
+    for part in parts {
+        let found = out[at..]
+            .find(part)
+            .unwrap_or_else(|| panic!("{part:?} after byte {at} in {out}"));
+        at += found + part.len();
     }
-    seen
 }
 
 #[test]
 fn status_and_doctor_print_their_sections_in_order() {
     let sb = Sandbox::installed(&[".codex"]);
-    let status = stdout(&sb.moat(&["status"]));
-    // `status` names the agents found (here Codex) one per line, then the
-    // agents with no folder on one `not found` line
-    assert_eq!(
-        sections(&status, 0),
-        [
-            "state directory",
-            "policy",
-            "lock",
-            "approvals",
-            "Codex",
-            "not found",
-            "audit log"
+    let status = squash(&stdout(&sb.moat(&["status"])));
+    // `status` names the agents found (here Codex) one per line, the agents
+    // with no folder on one line, then OpenMoat's own state.
+    in_order(
+        &status,
+        &[
+            " · status\n",
+            "\nAgents\n",
+            " Codex hook + OS sandbox\n",
+            " – Not installed: ",
+            "\nOpenMoat\n",
+            "✔ Policy ",
+            "✔ Lock ",
+            " MCP servers ",
+            "· Approvals ",
+            "✔ Audit log ",
         ],
-        "{status}"
     );
-    let doctor = stdout(&sb.moat(&["doctor"]));
-    assert_eq!(
-        sections(&doctor, 2),
-        with_hosts(&["state directory", "policy", "lock", "environment"]),
+    let doctor = squash(&stdout(&sb.moat(&["doctor"])));
+    in_order(
+        &doctor,
+        &[
+            " · doctor\n",
+            "\nAgents\n",
+            " Codex hook + OS sandbox\n",
+            " – Not installed: ",
+            "\nOpenMoat\n",
+            "✔ Policy ",
+            "✔ Lock ",
+            "✔ Audit log ",
+        ],
+    );
+    // No problem: the last line says so (a warning may still need a look).
+    let last = doctor.lines().last().unwrap_or_default();
+    assert!(
+        last.ends_with("known gaps per agent: openmoat doctor --verbose"),
         "{doctor}"
     );
-    assert_eq!(doctor.lines().last(), Some("healthy"), "{doctor}");
+    // Every check, the agents not found included, with --verbose.
+    let verbose = squash(&stdout(&sb.moat(&["doctor", "--verbose"])));
+    in_order(
+        &verbose,
+        &[
+            "\nEvery check\n",
+            "✔ State directory ",
+            "✔ Policy lints",
+            "✔ Lock ",
+            "✔ Environment ",
+            "· Claude Code host not found",
+            "✔ Codex hook installed",
+            "✔ Audit log ",
+        ],
+    );
 }
 
 #[test]
@@ -258,32 +269,29 @@ fn status_and_doctor_report_a_missing_lock_and_audit_log() {
     fs::remove_file(sb.home.join(".moat/audit.db")).unwrap();
     let out = sb.moat(&["status"]);
     assert_eq!(out.status.code(), Some(64), "{}", text(&out));
-    let status = stdout(&out);
+    let status = squash(&stdout(&out));
     for line in [
-        "lock             ✗ missing (run `openmoat init`)",
-        "approvals        no active session grants",
-        "audit log        ✗ missing (run `openmoat init`)",
+        "✗ Lock missing → openmoat init\n",
+        "· Approvals no active session grants\n",
+        "✗ Audit log missing → openmoat init\n",
     ] {
-        assert!(status.lines().any(|l| l == line), "{line:?} in {status}");
+        assert!(status.contains(line), "{line:?} in {status}");
     }
+    in_order(&status, &["Needs your attention", "✗ Lock", "\nAgents\n"]);
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(64), "{}", text(&out));
-    let doctor = stdout(&out);
+    let doctor = squash(&stdout(&out));
     assert!(
-        doctor
-            .lines()
-            .any(|l| l == "✗ lock             missing; run `openmoat init`"),
+        doctor.contains("✗ Lock missing → openmoat init\n"),
         "{doctor}"
     );
-    assert!(
-        doctor.lines().any(|l| l.starts_with("✗ audit log        ")),
-        "{doctor}"
-    );
+    assert!(doctor.contains("✗ Audit log "), "{doctor}");
+    in_order(&doctor, &["Needs your attention", "✗ Lock", "\nAgents\n"]);
     assert!(
         doctor
             .lines()
             .last()
-            .is_some_and(|l| l.starts_with("2 problem(s). ")),
+            .is_some_and(|l| l.contains(" need you · `openmoat init` re-installs and re-pins")),
         "{doctor}"
     );
 }

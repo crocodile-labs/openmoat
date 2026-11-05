@@ -164,6 +164,11 @@ pub struct InitArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Also print each file written and its hook entries, the backups and the
+    /// files the lock pins.
+    #[arg(long)]
+    pub verbose: bool,
+
     #[command(flatten)]
     pub mcp: InitMcpArgs,
 }
@@ -347,7 +352,8 @@ pub struct DoctorArgs {
     #[arg(long)]
     pub accept: bool,
 
-    /// Print every place each host sandbox is stricter or wider than the policy.
+    /// Also print every check with its paths, each agent's known gaps, and every
+    /// place each host sandbox is stricter or wider than the policy.
     #[arg(long)]
     pub verbose: bool,
 

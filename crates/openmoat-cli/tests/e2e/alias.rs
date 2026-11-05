@@ -175,7 +175,7 @@ fn init_moves_hooks_written_as_moat_to_openmoat() {
         "{}",
         text(&hook)
     );
-    let doctor = run(&sb, &openmoat, &["doctor"], None);
+    let doctor = run(&sb, &openmoat, &["doctor", "--verbose"], None);
     for said in [
         "hook installed",
         "hook runs the old `moat` name",

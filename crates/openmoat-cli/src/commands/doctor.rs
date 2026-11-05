@@ -6,19 +6,23 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use openmoat_audit::{ChainReport, Store};
 use openmoat_core::Policy;
-use openmoat_hosts::Host;
 
 use crate::cli::{DoctorArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
-use crate::install::{HookState, HostConfig, Recorded, dir_variable, env_config_dir, stale_hint};
 use crate::integrity::{self, HookPinGap, HookPins, Lock};
 use crate::protection;
 use crate::render::Deferred;
+use crate::report::{Mark, Row};
+use human::Place;
+use rows::Report;
 
 mod bundle;
+mod hooks;
+mod human;
 mod json;
 mod mcp;
+mod rows;
 mod sandboxes;
 mod warnings;
 
@@ -44,47 +48,7 @@ enum Area {
 /// crash-looping service is a problem; a running one is a check.
 fn service(report: &mut Report, home: &Home) {
     if let Some((ok, text)) = super::proxy::service_line(home) {
-        if ok {
-            report.line(Area::Service, true, text);
-        } else {
-            report.line(Area::Service, false, text);
-        }
-    }
-}
-
-struct Report {
-    problems: Vec<(Area, String)>,
-    out: Deferred,
-    /// Every row in order, for `--format json`.
-    rows: Vec<json::Row>,
-}
-
-impl Report {
-    fn line(&mut self, area: Area, ok: bool, text: String) {
-        // `Deferred` keeps a write error for `finish`; it never returns one here.
-        let _ = writeln!(self.out, "{} {text}", if ok { "✔" } else { "✗" });
-        let status = if ok {
-            json::Status::Ok
-        } else {
-            json::Status::Problem
-        };
-        self.rows.push(json::Row::new(status, Some(area), &text));
-        if !ok {
-            self.problems.push((area, text));
-        }
-    }
-
-    fn note(&mut self, text: &str) {
-        let _ = writeln!(self.out, "· {text}");
-        self.rows
-            .push(json::Row::new(json::Status::Note, None, text));
-    }
-
-    /// A row that needs attention without being a problem: the exit code stays 0.
-    fn warn(&mut self, text: &str) {
-        let _ = writeln!(self.out, "! {text}");
-        self.rows
-            .push(json::Row::new(json::Status::Warning, None, text));
+        report.line(Area::Service, ok, text);
     }
 }
 
@@ -92,15 +56,11 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
     let as_json = args.format == Format::Json;
-    let mut report = Report {
-        problems: Vec::new(),
-        out: if as_json || args.bundle.is_some() {
-            Deferred::quiet()
-        } else {
-            Deferred::default()
-        },
-        rows: Vec::new(),
-    };
+    let mut report = Report::new(if as_json || args.bundle.is_some() {
+        Deferred::quiet()
+    } else {
+        Deferred::default()
+    });
 
     report.line(
         Area::State,
@@ -109,9 +69,11 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     );
     let policy = policies(&mut report, &home);
     if let Some(update) = crate::upgrade::available(&home) {
-        report.warn(&format!(
-            "policy update    {update}: `openmoat policy upgrade` shows them and asks"
-        ));
+        report.warn_as(
+            &format!("policy update    {update}: `openmoat policy upgrade` shows them and asks"),
+            Row::new(Mark::Attention, "Policy", format!("{update} to review"))
+                .fix("openmoat policy upgrade"),
+        );
     }
     let lock = load_lock(&mut report, &home);
     let drift = lock
@@ -119,7 +81,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .map(|lock| verify_lock(&mut report, lock, &binary))
         .unwrap_or_default();
     environment(&mut report, &home);
-    let hook_files = hooks(&mut report, &home, &binary)?;
+    let hook_files = hooks::hooks(&mut report, &home, &binary)?;
     if let Some(lock) = &lock {
         hook_pins(&mut report, lock, &home, &hook_files);
         mcp::lines(&mut report, &home, lock, &binary);
@@ -163,26 +125,23 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         let name = warning.host.display_name();
         report.warn(&format!("{name:<16} other hook {}", warning.text));
     }
-    for agent in protection::report(&home, &binary)? {
-        if let Some(line) = crate::install::trust_note::protection_line(&agent) {
-            report.note(&line);
-            if let Some(limit) = agent.limit {
-                report.warn(&format!("{:<16} limit: {limit}", agent.name));
-            }
-            report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
-        }
-    }
+    protections(&mut report, &home, &binary)?;
     match Store::open_read_only(&home.audit_path()).and_then(|store| store.verify_chain()) {
         Ok(chain) => audit_line(&mut report, &chain),
         Err(e) => report.line(Area::Audit, false, format!("audit log        {e}")),
     }
     if let Some(last) = crate::anchor::Last::load(&home) {
-        report.note(&format!(
+        let text = format!(
             "audit anchor     last made {} (event {}) in {}",
             crate::time::timestamp(last.anchored_ms),
             last.event,
             last.to
-        ));
+        );
+        report.note_at(&text, Place::OpenMoat);
+    }
+    if !as_json && args.bundle.is_none() {
+        let agents = std::mem::take(&mut report.agents);
+        human::sections(&mut report, &agents, args.verbose);
     }
     if args.accept {
         let intact = drift.is_empty() && lock.is_some();
@@ -194,7 +153,26 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     if as_json {
         return json::finish(&report.rows, report.problems.len());
     }
-    finish(report)
+    finish(report, args.verbose)
+}
+
+/// Each agent's protection level, its limit and its known gaps; the text
+/// output shows the level in its `Agents` section, the rest with `--verbose`.
+fn protections(report: &mut Report, home: &Home, binary: &Path) -> Result<()> {
+    let agents = protection::report(home, binary)?;
+    for agent in &agents {
+        if let Some(line) = crate::install::trust_note::protection_line(agent) {
+            report.note(&line);
+            if let Some(limit) = agent.limit {
+                // Shown under the agent's row (`report::agent_table`).
+                let text = format!("{:<16} limit: {limit}", agent.name);
+                report.warn_at(&text, Place::Details);
+            }
+            report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
+        }
+    }
+    report.agents = agents;
+    Ok(())
 }
 
 /// The policy line and, in a project with one, the repository policy line;
@@ -203,10 +181,16 @@ fn policies(report: &mut Report, home: &Home) -> Option<Policy> {
     let policy = match home.load_policy() {
         Ok(policy) => {
             let (deny, allow, review) = policy.rule_count();
-            report.line(
+            report.line_as(
                 Area::Policy,
                 true,
                 format!("policy           lints ({deny} deny, {allow} allow, {review} review)"),
+                Place::OpenMoat,
+                Row::new(
+                    Mark::Ok,
+                    "Policy",
+                    format!("{deny} deny · {allow} allow · {review} review rules"),
+                ),
             );
             Some(policy)
         }
@@ -216,7 +200,7 @@ fn policies(report: &mut Report, home: &Home) -> Option<Policy> {
         }
     };
     match crate::repo::summary(home) {
-        Ok(Some(line)) => report.note(&format!("repo policy      {line}")),
+        Ok(Some(line)) => report.note_at(&format!("repo policy      {line}"), Place::OpenMoat),
         Ok(None) => {}
         Err(e) => report.line(
             Area::Policy,
@@ -316,9 +300,12 @@ fn hook_pins(report: &mut Report, lock: &Lock, home: &Home, hook_files: &[PathBu
     }
     for path in gap.elsewhere {
         let (path, moved) = (path.display(), HookPinGap::moved_by());
-        report.note(&format!(
-            "hook file        {path} is pinned but not this shell's ({moved}); re-pinning keeps it"
-        ));
+        report.note_at(
+            &format!(
+                "hook file        {path} is pinned but not this shell's ({moved}); re-pinning keeps it"
+            ),
+            Place::OpenMoat,
+        );
     }
 }
 
@@ -342,6 +329,7 @@ fn accept(
             "refusing to pin a policy that does not lint; fix it, then run `openmoat doctor --accept` again"
         );
     }
+    writeln!(report.out)?;
     if intact {
         // MCP definitions are not files of the lock: accepted on their own, after
         // a person has seen each change.
@@ -364,150 +352,11 @@ fn accept(
 }
 
 /// The closing line, the output and the exit code.
-fn finish(mut report: Report) -> Result<Code> {
-    if report.problems.is_empty() {
-        writeln!(report.out, "healthy")?;
-        report.out.finish()?;
-        return Ok(Code::Ok);
-    }
-    writeln!(
-        report.out,
-        "{} problem(s). `openmoat init` re-installs and re-pins; `openmoat doctor --accept` accepts edits you made yourself.",
-        report.problems.len()
-    )?;
+fn finish(mut report: Report, verbose: bool) -> Result<Code> {
+    human::footer(&mut report, verbose);
+    let healthy = report.problems.is_empty();
     report.out.finish()?;
-    Ok(Code::Usage)
-}
-
-/// One line per host's hook, then the Continue CLI warning; returns the
-/// installed hook files.
-fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<Vec<PathBuf>> {
-    let recorded = Recorded::load(home)?;
-    let mut hook_files = Vec::new();
-    crate::install::host_version::prefetch_present(home);
-    for host in Host::ALL {
-        let config = HostConfig::for_host(home, host)?;
-        let name = host.display_name();
-        // A version with a published advisory: a flaw no hook sees.
-        if let Some(line) = config
-            .host_present()
-            .then(|| crate::install::host_version::advisory(host))
-            .flatten()
-        {
-            report.warn(&line);
-        }
-        // Every command follows the record; a variable naming another directory
-        // is reported rather than silently ignored or followed.
-        if let Some((locate, set_up)) = config.custom_location() {
-            if recorded.dir(host).is_some()
-                && let Some(line) = crate::install::location::env_disagrees(locate, &set_up)?
-            {
-                report.line(Area::Hook, false, format!("{name:<16} {line}"));
-            }
-        } else if let (Some(env), Some(dir)) = (env_config_dir(host)?, recorded.dir(host))
-            && env != dir
-        {
-            let (var, _) = dir_variable(host)?;
-            report.line(
-                Area::Hook,
-                false,
-                format!(
-                    "{name:<16} {var} is {}, but `openmoat init` set it up in {}, which OpenMoat uses; \
-                     run `openmoat init` with {var} set to set up that directory instead",
-                    env.display(),
-                    dir.display()
-                ),
-            );
-        }
-        let state = config.state(binary);
-        // A version that does not load OpenMoat's hook (OpenCode before
-        // 1.3.4), whatever the hook file says.
-        if config.host_present()
-            && let Some(why) = crate::install::host_version::unsupported(host)
-        {
-            report.line(
-                Area::Hook,
-                false,
-                format!("{name:<16} not protected: {why}"),
-            );
-            continue;
-        }
-        if recorded.skipped(host) && config.host_present() && matches!(state, HookState::Missing) {
-            report.note(&format!(
-                "{name:<16} not set up; `openmoat init --hosts {}` adds it",
-                host.id()
-            ));
-            continue;
-        }
-        match state {
-            HookState::Installed => {
-                if let Some(warning) = config.trust_warning() {
-                    report.warn(&format!("{name:<16} {warning}"));
-                }
-                // the files the lock pins with it (OpenClaw's plugin), as integrity lists them
-                hook_files.extend(config.extra_files());
-                hook_files.push(config.settings_path.clone());
-                // The hook a version runs OpenMoat through, where versions
-                // differ (OpenCode 1's and 2's).
-                let through = crate::install::host_version::hook_api(host)
-                    .map(|through| format!(" ({through})"))
-                    .unwrap_or_default();
-                report.line(
-                    Area::Hook,
-                    true,
-                    format!(
-                        "{name:<16} hook installed{through}  {}",
-                        config.settings_path.display()
-                    ),
-                );
-                // Whether the host loaded the plugin (ADR-042).
-                if let Some(loaded) = crate::heartbeat::check(home, &config) {
-                    let (mark, text) = crate::heartbeat::line(name, &loaded);
-                    let text = format!("{name:<16} {text}");
-                    match mark {
-                        crate::heartbeat::Mark::Note => report.note(&text),
-                        crate::heartbeat::Mark::Warning => report.warn(&text),
-                    }
-                }
-                if config.runs_calls_when_hook_fails() {
-                    report.warn(&format!(
-                        "{name:<16} runs a tool call when its hook fails to start, crashes or \
-                         times out: no `claude` 2.1.295 or later on PATH, so the hook has no \
-                         `onFailure: \"block\"`; update Claude Code, then run `openmoat init`"
-                    ));
-                }
-            }
-            HookState::Missing if !config.host_present() => {
-                report.note(&format!("{name:<16} host not found"));
-            }
-            HookState::Missing => {
-                report.line(
-                    Area::Hook,
-                    false,
-                    format!("{name:<16} hook missing; run `openmoat init`"),
-                );
-            }
-            HookState::Stale { command } => {
-                report.line(
-                    Area::Hook,
-                    false,
-                    format!("{name:<16} {}", stale_hint(&command)),
-                );
-            }
-            HookState::Unreadable(e) | HookState::Unapproved(e) | HookState::FailsOpen(e) => {
-                report.line(Area::Hook, false, format!("{name:<16} {e}"));
-            }
-        }
-    }
-    for (host, found) in crate::install::detected()? {
-        let name = host.display_name();
-        report.note(&format!(
-            "{name:<16} {}  {}",
-            host.spec().gaps,
-            found.display()
-        ));
-    }
-    Ok(hook_files)
+    Ok(if healthy { Code::Ok } else { Code::Usage })
 }
 
 /// The audit log line: event count and whether the hash chain holds.
@@ -538,9 +387,12 @@ fn audit_line(report: &mut Report, chain: &ChainReport) {
         ));
     }
     if chain.unchained > 0 {
-        report.note(&format!(
-            "audit log        {} events written before the hash chain existed are not covered",
-            chain.unchained
-        ));
+        report.note_at(
+            &format!(
+                "audit log        {} events written before the hash chain existed are not covered",
+                chain.unchained
+            ),
+            Place::OpenMoat,
+        );
     }
 }

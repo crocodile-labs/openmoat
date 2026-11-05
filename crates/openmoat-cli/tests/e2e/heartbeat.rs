@@ -55,7 +55,11 @@ fn a_fresh_init_is_not_loaded_yet_and_a_report_makes_it_loaded() {
     // A note, not a problem: the agent has not run since.
     assert_eq!(find(&doc["agents"], "pi")["level"], "hook-only", "{doc}");
     let shown = text(&sb.moat(&["status"]));
-    assert!(shown.contains("· plugin not loaded yet since"), "{shown}");
+    let shown = crate::common::squash(&shown);
+    assert!(
+        shown.contains("· pi plugin not loaded yet since"),
+        "{shown}"
+    );
 
     let out = heartbeat(&sb, "pi");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));

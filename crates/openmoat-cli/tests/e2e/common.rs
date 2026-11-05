@@ -349,6 +349,18 @@ pub fn text(out: &Output) -> String {
     format!("{}{}", stdout(out), stderr(out))
 }
 
+/// `text` with each run of spaces as one: the human output pads its columns
+/// to the widest label, so a check on a row reads it this way.
+pub fn squash(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if !(c == ' ' && out.ends_with(' ')) {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Standard output parsed as one JSON document (`Null` when it is not JSON).
 pub fn json(out: &Output) -> Value {
     serde_json::from_str(stdout(out).trim()).unwrap_or(Value::Null)

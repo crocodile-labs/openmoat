@@ -157,10 +157,11 @@ fn a_guard_that_cannot_decide_in_time_denies_before_the_host_times_out() {
     }
     let doctor = sb.moat(&["doctor"]);
     let denied = format!(
-        "! guard            {} call(s) denied with no decision within 30 s",
+        "! Guard {} call(s) denied with no decision within 30 s",
         rows().len()
     );
-    assert!(text(&doctor).contains(&denied), "{}", text(&doctor));
+    let shown = crate::common::squash(&text(&doctor));
+    assert!(shown.contains(&denied), "{shown}");
     assert!(
         text(&doctor).contains("most while reading the tool call (phase stdin)"),
         "{}",

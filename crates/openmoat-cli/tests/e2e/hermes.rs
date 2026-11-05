@@ -261,7 +261,8 @@ fn an_entry_without_fail_closed_is_reported() {
     let status = text(&sb.moat(&["status"]));
     assert!(status.contains(lacks), "{status}");
     assert!(
-        status.contains("protection: not protected: hook runs the call when it fails"),
+        crate::common::squash(&status)
+            .contains("✗ Hermes Agent not protected (hook runs the call when it fails)"),
         "{status}"
     );
     let doctor = text(&sb.moat(&["doctor"]));

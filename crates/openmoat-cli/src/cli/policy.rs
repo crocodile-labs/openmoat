@@ -165,10 +165,19 @@ pub enum ActionKind {
 }
 
 #[derive(Debug, Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "four command-line flags, each of its own: clap reads them as bools"
+)]
 pub struct UpgradeArgs {
     /// Show the changes without writing anything; needs no terminal.
     #[arg(long, conflicts_with = "undo")]
     pub dry_run: bool,
+
+    /// Show the full diff of the policy after the summary of its changes
+    /// (`d` at the question shows it too).
+    #[arg(long, conflicts_with = "undo")]
+    pub diff: bool,
 
     /// Apply without asking (still only from a terminal).
     #[arg(long, short = 'y')]

@@ -29,15 +29,16 @@ pub(super) fn servers(
     proxy: Option<Proxy>,
     hosts: &[Host],
     hold: bool,
-    out: &mut Deferred,
+    files: &mut super::Writers<'_>,
 ) -> Result<()> {
     let cwd = std::env::current_dir().ok();
     let pinned = crate::mcp::pin_current(home, binary, cwd.as_deref(), hold)?;
     writeln!(
-        out,
+        files.detail,
         "✔ mcp servers      {} definitions pinned; a changed or new one waits for `openmoat mcp accept`",
         pinned.count
     )?;
+    let out: &mut Deferred = files.out;
     if !pinned.held.is_empty() {
         writeln!(
             out,

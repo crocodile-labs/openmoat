@@ -31,6 +31,7 @@ mod push;
 mod realpath;
 mod render;
 mod repo;
+mod report;
 mod sandbox;
 mod secrets;
 mod session_code;

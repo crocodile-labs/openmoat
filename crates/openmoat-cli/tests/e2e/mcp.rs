@@ -16,7 +16,7 @@ const SERVERS: &str = r#"{"numStartups": 3, "mcpServers": {
 fn installed_with(servers: &str) -> Sandbox {
     let sb = Sandbox::bare(&[".claude"]);
     std::fs::write(sb.home.join(".claude.json"), servers).unwrap();
-    let out = sb.moat(&["init", "--yes"]);
+    let out = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
         text(&out).contains("2 definitions pinned"),
@@ -52,7 +52,7 @@ fn servers_inside_the_claude_config_dir_are_pinned() {
     std::fs::write(&inside, SERVERS).unwrap();
     let out = output(
         sb.command()
-            .args(["init", "--yes"])
+            .args(["init", "--yes", "--verbose"])
             .env("CLAUDE_CONFIG_DIR", &config),
         None,
     );

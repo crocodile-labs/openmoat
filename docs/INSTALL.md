@@ -95,26 +95,42 @@ openmoat status    # policy, lock, hooks and protection level per agent, recent 
 ```
 
 `openmoat init` writes `~/.moat/policy.yaml` (the default policy), pins it and the hook
-files in `~/.moat/policy.lock` and creates the audit log. Then it lists each agent
-whose configuration directory exists, with the files it would change, and asks once
-per agent. Before each question it sums up every file that agent would get: new or
-edited, lines added and removed, and the top-level settings it sets. Answer `d` to see
-the full diff, then answer again (the line counts below are an example; yours depend on
-your settings and home directory):
+files in `~/.moat/policy.lock` and creates the audit log. Then it shows one line per
+agent whose configuration directory exists, with what it would add there, and asks once
+per agent. Answer `d` to see the full diff, then answer again. An agent whose files
+already have everything is not asked: a yes would change nothing. It ends with each
+agent's protection, the steps left to you (only the ones this run needs) and how to
+undo:
 
 ```
-Found these agents:
-  Claude Code  /Users/you/.claude (changes settings.json)
-  Codex        /Users/you/.codex (changes hooks.json, config.toml)
-  /Users/you/.claude/settings.json: edited, +310 -0 lines; sets env, hooks, permissions, sandbox
-Protect Claude Code (/Users/you/.claude)? [Y/n/d]
-  /Users/you/.codex/hooks.json: new file, +23 -0 lines; sets hooks
-  /Users/you/.codex/config.toml: edited, +12 -0 lines; sets sandbox_workspace_write
-Protect Codex (/Users/you/.codex)? [Y/n/d]
+OpenMoat 0.15.0 · protecting the agents on this machine
+
+  Each file is backed up first · d shows the full diff · openmoat uninstall undoes it
+
+  Claude Code  ~/.claude    adds hook + sandbox settings  Protect? [Y/n/d] y
+  Codex        ~/.codex     adds hook + sandbox settings  Protect? [Y/n/d] y
+  OpenClaw     ~/.openclaw  already set up                ✔
+
+✔ 3 agents protected
+
+  Agent        Protection
+  Claude Code  ✔ hook + OS sandbox
+  Codex        ✔ hook + OS sandbox
+  OpenClaw     ✔ hook only
+
+Next steps
+  1. Codex: open Codex and trust OpenMoat's hook in /hooks; Codex runs a changed hook only then
+  2. Restart your agents (a new session reads the new settings)
+  3. Try it: openmoat policy check "cat ~/.ssh/id_rsa"
+
+Backups saved · undo everything: openmoat uninstall · check any time: openmoat status · details: openmoat init --verbose
 ```
 
-Only the agents you accept get the hook and sandbox settings. The last lines name the
-backups and how to undo: `Undo anytime: openmoat uninstall`. `init` never overwrites an
+`openmoat init --verbose` also prints, before each question, every file the agent would
+get (new or edited, lines added and removed, the top-level settings it sets), and after
+it each hook entry written, the backups and the files the lock pins.
+
+Only the agents you accept get the hook and sandbox settings. `init` never overwrites an
 existing policy, never duplicates a hook and backs up a host file before editing it
 (`<file>.moat-backup` for hooks, `<file>.moat-sandbox-backup` for sandbox settings), so
 it is safe to run again. The backups it creates are listed in `~/.moat/hosts.json`;
@@ -229,14 +245,18 @@ Then, in a terminal of your own:
      ([Upgrade note](#upgrade-note)).
    - a sandbox line ending `run openmoat sandbox sync`: the new release writes the agents'
      sandbox settings differently. Run `openmoat sandbox sync`.
-   - `policy update  N changes from the OpenMoat … default`: see step 2.
+   - `Policy  N changes from the OpenMoat … default to review → openmoat policy upgrade`:
+     see step 2.
 
    Re-run `openmoat init` only when doctor asks for it.
 2. **`openmoat policy upgrade`.** `openmoat init` and an upgrade keep your `policy.yaml` as it
    is, so rules the new default policy gained, security fixes among them, reach you only
-   this way. It shows the diff and asks; `--dry-run` only shows it, `--undo` puts the
-   previous policy back ([USAGE.md](USAGE.md#after-upgrading-openmoat)). `openmoat` alone
-   offers the same at a terminal.
+   this way. It shows what changes, grouped (new protections, fewer interruptions, the
+   comment updates counted), and asks; `d` at the question or `--diff` shows the full
+   diff, `--dry-run` only shows the changes, `--undo` puts the previous policy back
+   ([USAGE.md](USAGE.md#after-upgrading-openmoat)). Once applied it updates the agents'
+   sandboxes as `openmoat sandbox sync` does. `openmoat` alone offers the same at a
+   terminal.
 
 ### What can change between 0.x minor releases
 

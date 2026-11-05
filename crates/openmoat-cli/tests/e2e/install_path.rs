@@ -77,7 +77,11 @@ fn hooks_survive_a_package_manager_upgrade() {
     );
     let out = run(&moat, &["doctor"], None);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(text(&out).contains("healthy"), "{}", text(&out));
+    assert!(
+        !text(&out).contains("re-installs and re-pins"),
+        "no problem: {}",
+        text(&out)
+    );
 }
 
 #[test]
@@ -109,7 +113,7 @@ fn doctor_and_status_name_a_missing_or_different_hook_binary() {
     let out = output(sb.command_at(&moat).args(["doctor"]), None);
     assert_eq!(out.status.code(), Some(USAGE));
     assert!(
-        text(&out).contains("which does not exist; run `openmoat init`"),
+        text(&out).contains("which does not exist → openmoat init"),
         "{}",
         text(&out)
     );

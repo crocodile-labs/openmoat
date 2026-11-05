@@ -3,12 +3,20 @@
 use std::fs;
 use std::path::Path;
 
-use crate::common::{DENY, OK, Sandbox, USAGE, output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, USAGE, output, squash, stdout, text};
 
 /// `moat init` as a person at a terminal answering `answers`.
 fn init_answering(sb: &Sandbox, answers: &str) -> std::process::Output {
+    init_with(sb, &[], answers)
+}
+
+/// `openmoat init` with `args`, as a person answering `answers`.
+fn init_with(sb: &Sandbox, args: &[&str], answers: &str) -> std::process::Output {
     output(
-        sb.command().arg("init").env("MOAT_ASSUME_TTY", "1"),
+        sb.command()
+            .arg("init")
+            .args(args)
+            .env("MOAT_ASSUME_TTY", "1"),
         Some(answers),
     )
 }
@@ -46,11 +54,22 @@ fn init_asks_per_agent_and_changes_only_the_accepted_ones() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
     let out = init_answering(&sb, "\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let shown = stdout(&out);
-    assert!(shown.contains("Protect Claude Code ("), "{shown}");
-    assert!(shown.contains("Protect Codex ("), "{shown}");
+    let shown = squash(&stdout(&out));
+    // The answers are not echoed here as a terminal echoes them, so one
+    // question follows the other on the same line.
+    let main = std::path::MAIN_SEPARATOR;
     assert!(
-        shown.contains("Undo anytime: openmoat uninstall"),
+        shown.contains(&format!(" Claude Code ~{main}.claude adds hook")),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(&format!(" Codex ~{main}.codex adds hook")),
+        "{shown}"
+    );
+    assert_eq!(shown.matches("Protect? [Y/n/d]").count(), 2, "{shown}");
+    assert!(shown.contains("✔ 1 agent protected"), "{shown}");
+    assert!(
+        shown.contains("undo everything: openmoat uninstall"),
         "{shown}"
     );
     assert!(sb.home.join(".claude/settings.json").is_file());
@@ -59,16 +78,57 @@ fn init_asks_per_agent_and_changes_only_the_accepted_ones() {
 
     let declined = Sandbox::bare(&[".claude"]);
     let out = init_answering(&declined, "");
-    assert!(stdout(&out).contains("none accepted"), "{}", text(&out));
+    assert!(stdout(&out).contains("No agent accepted"), "{}", text(&out));
     assert!(!declined.home.join(".claude/settings.json").exists());
 }
 
-/// Before asking about an agent, `init` sums up every file it would change
-/// there (new or edited, lines, the settings it sets), not the whole diff.
+/// An agent whose files need no change is not asked again: a yes would
+/// change nothing. One that does need a change still is.
+#[test]
+fn init_asks_only_about_agents_that_would_change() {
+    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let out = init_answering(&sb, "\nn\n");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    // Claude Code is set up now; Codex was declined.
+    let out = init_answering(&sb, "n\n");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let shown = squash(&stdout(&out));
+    let main = std::path::MAIN_SEPARATOR;
+    assert!(
+        shown.contains(&format!(" Claude Code ~{main}.claude already set up ✔\n")),
+        "{shown}"
+    );
+    assert_eq!(shown.matches("Protect? [Y/n/d]").count(), 1, "{shown}");
+    assert!(
+        shown.contains(&format!(" Codex ~{main}.codex adds hook")),
+        "{shown}"
+    );
+    assert!(!sb.home.join(".codex/hooks.json").exists());
+    assert!(shown.contains("✔ 1 agent protected"), "{shown}");
+    // Nothing changed for Claude Code: no restart, no trust step.
+    assert!(!shown.contains("Restart your agents"), "{shown}");
+}
+
+/// Before asking about an agent, `init` says in a few words what it would
+/// write there and, with `--verbose`, sums up every file it would change (new
+/// or edited, lines, the settings it sets), not the whole diff.
 #[test]
 fn init_sums_up_each_agents_changes_before_asking() {
     let sb = Sandbox::bare(&[".claude", ".codex"]);
     let out = init_answering(&sb, "\nn\n");
+    let shown = stdout(&out);
+    // native Windows has no OS sandbox for Claude Code
+    let claude = if cfg!(windows) {
+        "adds hook "
+    } else {
+        "adds hook + sandbox settings"
+    };
+    let first = shown.find("Protect? [Y/n/d]").expect(&shown);
+    assert!(shown[..first].contains(claude), "{shown}");
+    assert!(!shown.contains("settings.json: new file"), "{shown}");
+
+    let sb = Sandbox::bare(&[".claude", ".codex"]);
+    let out = init_with(&sb, &["--verbose"], "\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = stdout(&out);
     let claude = shown
@@ -82,12 +142,11 @@ fn init_sums_up_each_agents_changes_before_asking() {
     // native Windows has no OS sandbox for Claude Code, so no `sandbox` key there
     assert_eq!(claude.contains("sandbox"), !cfg!(windows), "{shown}");
     assert!(
-        shown.find(claude).unwrap() < shown.find("Protect Claude Code (").unwrap(),
+        shown.find(claude).unwrap() < shown.find("Protect? [Y/n/d]").unwrap(),
         "{shown}"
     );
     assert!(shown.contains("hooks.json: new file, +"), "{shown}");
     assert!(shown.contains("config.toml: new file, +"), "{shown}");
-    assert!(shown.contains("[Y/n/d]"), "{shown}");
     assert!(!shown.contains("(after openmoat init)"), "{shown}");
     assert!(sb.home.join(".claude/settings.json").is_file());
     assert!(!sb.home.join(".codex/hooks.json").exists());
@@ -102,8 +161,25 @@ fn init_shows_the_full_diff_on_d_and_asks_again() {
     let out = init_answering(&sb, "d\n\nd\nn\n");
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let shown = stdout(&out);
-    assert_eq!(shown.matches("Protect Claude Code (").count(), 2, "{shown}");
-    assert_eq!(shown.matches("Protect Codex (").count(), 2, "{shown}");
+    // Claude Code's question twice, then Codex's twice.
+    let asked: Vec<usize> = shown
+        .match_indices("Protect? [Y/n/d]")
+        .map(|(at, _)| at)
+        .collect();
+    assert_eq!(asked.len(), 4, "{shown}");
+    // The agent a question is about: the first column of its line. A piped
+    // answer is not echoed, so the line may follow the question before it.
+    let agent_before = |at: usize| {
+        let line = shown[..at].rsplit('\n').next().unwrap_or_default();
+        let line = line.rsplit("[Y/n/d] ").next().unwrap_or_default();
+        line.trim_start()
+            .split("  ")
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert_eq!(agent_before(asked[0]), "Claude Code", "{shown}");
+    assert_eq!(agent_before(asked[2]), "Codex", "{shown}");
     let claude = shown
         .find("settings.json (after openmoat init)")
         .expect(&shown);
@@ -111,16 +187,8 @@ fn init_shows_the_full_diff_on_d_and_asks_again() {
         .find("hooks.json (after openmoat init)")
         .expect(&shown);
     // each diff comes after the first question and before the question again
-    assert!(
-        shown.find("Protect Claude Code (").unwrap() < claude,
-        "{shown}"
-    );
-    assert!(
-        claude < shown.rfind("Protect Claude Code (").unwrap(),
-        "{shown}"
-    );
-    assert!(shown.find("Protect Codex (").unwrap() < codex, "{shown}");
-    assert!(codex < shown.rfind("Protect Codex (").unwrap(), "{shown}");
+    assert!(asked[0] < claude && claude < asked[1], "{shown}");
+    assert!(asked[2] < codex && codex < asked[3], "{shown}");
     assert!(
         shown.contains("config.toml (after openmoat init)"),
         "{shown}"
@@ -164,8 +232,9 @@ fn uninstall_restores_the_original_files_byte_for_byte() {
     let codex_original = "# mine\nmodel = \"o3\"\n";
     fs::write(&settings, claude_original).unwrap();
     fs::write(&codex_config, codex_original).unwrap();
-    let out = sb.moat(&["init", "--yes"]);
+    let out = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(stdout(&out).contains("Backups saved"), "{}", text(&out));
     assert!(
         stdout(&out).contains("settings.json.moat-backup"),
         "{}",
@@ -229,7 +298,7 @@ fn a_users_file_at_a_backup_name_is_never_taken_or_deleted() {
     let mine = sb.home.join(".claude/settings.json.moat-backup");
     fs::write(&settings, "{\"theme\": \"dark\"}\n").unwrap();
     fs::write(&mine, "my own notes\n").unwrap();
-    let out = sb.moat(&["init", "--yes", "--hosts", "claude-code"]);
+    let out = sb.moat(&["init", "--yes", "--hosts", "claude-code", "--verbose"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     assert!(
         !stdout(&out).contains("settings.json.moat-backup"),
@@ -279,10 +348,12 @@ fn commands_follow_the_recorded_config_dir() {
     assert!(recorded.contains("custom-claude"), "{recorded}");
 
     let status = sb.moat(&["status"]);
+    assert_eq!(status.status.code(), Some(OK), "{}", text(&status));
+    let doctor = sb.moat(&["doctor", "--verbose"]);
     assert!(
-        stdout(&status).contains("custom-claude"),
+        stdout(&doctor).contains("custom-claude"),
         "{}",
-        text(&status)
+        text(&doctor)
     );
     assert!(!sb.home.join(".claude/settings.json").exists());
 

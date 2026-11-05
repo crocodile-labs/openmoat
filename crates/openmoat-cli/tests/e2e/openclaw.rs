@@ -144,7 +144,7 @@ fn openclaw_config_path_is_followed_and_protected() {
         reply["reason"].to_string().contains("kernel-self"),
         "{reply}"
     );
-    let doctor = text(&sb.moat(&["doctor"]));
+    let doctor = text(&sb.moat(&["doctor", "--verbose"]));
     assert!(doctor.contains("main.json5"), "{doctor}");
 }
 

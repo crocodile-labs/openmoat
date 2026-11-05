@@ -85,12 +85,7 @@ fn init_writes_both_sandboxes_keeps_user_settings_and_pins_them() {
     let doctor = sb.moat(&["doctor"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
     assert!(
-        stdout(&doctor).contains("Codex            sandbox matches the policy"),
-        "{}",
-        text(&doctor)
-    );
-    assert!(
-        stdout(&doctor).contains("wider; --verbose for details)"),
+        crate::common::squash(&stdout(&doctor)).contains(" Codex hook + OS sandbox\n"),
         "{}",
         text(&doctor)
     );
@@ -98,10 +93,14 @@ fn init_writes_both_sandboxes_keeps_user_settings_and_pins_them() {
         !stdout(&doctor).contains("stricter: "),
         "the list waits for --verbose"
     );
-    let verbose = sb.moat(&["doctor", "--verbose"]);
+    let verbose = crate::common::squash(&stdout(&sb.moat(&["doctor", "--verbose"])));
     assert!(
-        stdout(&verbose).contains("stricter: fs.write `codex.git`"),
-        "losses are printed with --verbose"
+        verbose.contains("Codex sandbox matches the policy ("),
+        "{verbose}"
+    );
+    assert!(
+        verbose.contains("stricter: fs.write `codex.git`"),
+        "losses are printed with --verbose: {verbose}"
     );
 }
 
@@ -208,7 +207,7 @@ fn native_windows_leaves_out_the_claude_code_sandbox() {
     let note = "Claude Code      sandbox not available on native Windows; \
                 the hook still applies the policy (use WSL2 for OS confinement)";
     let sb = Sandbox::bare(&[".claude", ".codex"]);
-    let init = sb.moat(&["init", "--yes"]);
+    let init = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert!(stdout(&init).contains(note), "{}", text(&init));
     let claude = settings(&sb);
@@ -253,7 +252,7 @@ fn native_windows_init_removes_an_old_claude_code_sandbox() {
             "sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}"#,
     )
     .unwrap();
-    let init = sb.moat(&["init", "--yes"]);
+    let init = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert!(
         stdout(&init).contains("an older OpenMoat's are removed"),

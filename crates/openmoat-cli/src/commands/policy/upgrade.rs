@@ -1,5 +1,7 @@
 //! `moat policy upgrade`: add what this release's default changed to the
-//! person's policy, show the diff and ask; `--undo` puts the previous one back.
+//! person's policy, show what changes (grouped, `summary.rs`; the full diff on
+//! `d` or `--diff`) and ask; once applied, sync the agents' sandboxes as `openmoat
+//! sandbox sync` does. `--undo` puts the previous policy back.
 
 use std::fs;
 use std::io::{ErrorKind, Write as _};
@@ -17,6 +19,8 @@ use crate::integrity::{self, HookPins};
 use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 use crate::upgrade::{Base, Plan};
 
+mod summary;
+
 pub fn run(args: &UpgradeArgs) -> Result<Code> {
     let home = Home::locate()?;
     if !home.policy_path().is_file() {
@@ -30,13 +34,14 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     }
     let plan = Plan::for_home(&home)?;
     let mut out = Deferred::default();
-    describe(&plan, &mut out)?;
+    describe(&plan, args, &mut out)?;
     let binary = crate::install::hook_binary()?;
     let hook_upgrade = crate::install::migrate_hooks::needed(&home, &binary)?;
     if hook_upgrade {
         writeln!(
             out,
-            "Hook update required; after upgrading, review and trust changed OpenMoat hooks in your agent"
+            "OpenMoat's hooks change too; an agent that keeps its own record of trusted hooks \
+             asks you to trust the changed one"
         )?;
     }
     if plan.applicable() == 0 || args.dry_run {
@@ -45,6 +50,8 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
             integrity::refuse_drift(&home, "upgrade existing hooks")?;
             crate::install::migrate_hooks::update(&home, &binary)?;
             integrity::repin(&home, &binary, HookPins::Keep)?;
+            writeln!(out, "✔ OpenMoat's hooks updated")?;
+            trust_steps(&home, &binary, &mut out)?;
         }
         if !args.dry_run && up_to_date_without_record(&plan) && crate::terminal::person() {
             // Recorded now so a later default is compared with this one, not 0.3.0.
@@ -58,9 +65,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     integrity::refuse_drift(&home, "upgrade the policy")?;
     let checkpoint = integrity::Checkpoint::take(&home)?;
     lint(&home, &plan.merge.text)?;
-    let count = plan.applicable();
-    let question = format!("Apply {count} change{}? [y/N] ", plural(count));
-    if !args.yes && !crate::commands::edit::confirm(&mut out, &question)? {
+    if !args.yes && !confirm(&plan, &mut out)? {
         writeln!(out, "the policy was not changed")?;
         out.finish()?;
         return Ok(Code::Ok);
@@ -69,12 +74,75 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     // the question waited would be accepted unseen.
     checkpoint.verify(&home, &[])?;
     apply(&home, &plan, &mut out)?;
+    if hook_upgrade {
+        trust_steps(&home, &binary, &mut out)?;
+    }
+    sync(&home, &mut out)?;
     out.finish()?;
     Ok(Code::Ok)
 }
 
-/// What the default adds, as a diff of the policy, and what it cannot add.
-fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
+/// `Apply these changes? [y/N/d]`, where `d` shows the full diff and asks
+/// again; anything but yes, end of input included, is no.
+fn confirm(plan: &Plan, out: &mut Deferred) -> Result<bool> {
+    loop {
+        let question = "\nApply these changes? [y/N/d]   (d = show the full diff) ";
+        match crate::commands::edit::answer(out, question)?.as_str() {
+            "y" | "yes" => return Ok(true),
+            "d" | "diff" => full_diff(plan, out)?,
+            _ => return Ok(false),
+        }
+    }
+}
+
+/// The policy as it is against the policy upgraded, as `diff -u` shows it.
+fn full_diff(plan: &Plan, out: &mut Deferred) -> Result<()> {
+    let diff = unified_diff(
+        Algorithm::Myers,
+        &plan.current,
+        &plan.merge.text,
+        DIFF_CONTEXT_LINES,
+        Some(("policy.yaml (installed)", "policy.yaml (upgraded)")),
+    );
+    write!(out, "{diff}")?;
+    Ok(())
+}
+
+/// The step each set-up agent with its own record of trusted hooks needs
+/// after its hook changed (Codex's `/hooks`).
+fn trust_steps(home: &Home, binary: &Path, out: &mut Deferred) -> Result<()> {
+    for host in openmoat_hosts::Host::ALL {
+        if let Some(step) = crate::install::trust_note::step(host)
+            && crate::install::HostConfig::for_host(home, host)?.set_up(binary)
+        {
+            writeln!(out, "! {}: {step}", host.display_name())?;
+        }
+    }
+    Ok(())
+}
+
+/// The agents' sandboxes from the upgraded policy, as `openmoat sandbox sync`
+/// writes them, after the same checks; when they cannot be written, the
+/// command to run.
+fn sync(home: &Home, out: &mut Deferred) -> Result<()> {
+    let mut lines = Vec::new();
+    match crate::commands::sandbox::sync_checked(home, "openmoat policy upgrade", &mut lines) {
+        Ok(synced) if synced.updated == 0 => {
+            writeln!(out, "✔ Agents' sandboxes already follow the policy")?;
+        }
+        Ok(_) => writeln!(out, "✔ Agents' sandboxes updated")?,
+        Err(e) => writeln!(
+            out,
+            "! Agents' sandboxes not updated: {e:#}\n  run `openmoat sandbox sync` so the agents' \
+             sandboxes follow the upgraded policy"
+        )?,
+    }
+    Ok(())
+}
+
+/// What the default adds, grouped (`summary.rs`) or, with `--diff`, also as a
+/// diff of the policy, and what it cannot add.
+fn describe(plan: &Plan, args: &UpgradeArgs, out: &mut Deferred) -> Result<()> {
     match plan.base {
         Base::Recorded => {}
         Base::Assumed => writeln!(
@@ -96,30 +164,25 @@ fn describe(plan: &Plan, out: &mut Deferred) -> Result<()> {
     let count = plan.applicable();
     if count > 0 {
         let from_default = count - usize::from(plan.renamed);
-        writeln!(
-            out,
-            "Policy update available: {from_default} change{} from the OpenMoat {VERSION} default",
-            plural(from_default)
-        )?;
-        if plan.renamed {
+        let title = if from_default > 0 {
+            format!("OpenMoat {VERSION} has new default rules for your policy")
+        } else {
+            format!("OpenMoat {VERSION} renames a word in your policy")
+        };
+        writeln!(out, "{title}\n")?;
+        let applied: Vec<_> = plan.merge.applied().collect();
+        summary::summarise(&plan.current, &plan.merge.text, &applied, plan.renamed).write(out)?;
+        if args.diff {
+            writeln!(out)?;
+            full_diff(plan, out)?;
+        }
+        if args.dry_run {
             writeln!(
                 out,
-                "and 1 rename: `ask` is now `review` (the rule list `ask:` and the verdict `ask`, \
-                 read the same until you rename them)"
+                "\nNothing was changed: `openmoat policy upgrade` applies them after asking \
+                 (`--diff` shows the full diff); `--undo` takes them back."
             )?;
         }
-        let diff = unified_diff(
-            Algorithm::Myers,
-            &plan.current,
-            &plan.merge.text,
-            DIFF_CONTEXT_LINES,
-            Some(("policy.yaml (installed)", "policy.yaml (upgraded)")),
-        );
-        write!(out, "{diff}")?;
-        writeln!(
-            out,
-            "`openmoat policy upgrade` applies them after asking; `--undo` takes them back."
-        )?;
     }
     for change in plan.merge.conflicts() {
         writeln!(
@@ -196,23 +259,17 @@ fn apply(home: &Home, plan: &Plan, out: &mut Deferred) -> Result<()> {
     }
     let binary = crate::install::hook_binary()?;
     crate::install::migrate_hooks::update(home, &binary)?;
-    let lock = integrity::repin(home, &binary, HookPins::Keep)?;
-    let count = plan.applicable();
+    integrity::repin(home, &binary, HookPins::Keep)?;
+    let paths = crate::report::Paths::detect();
+    writeln!(out)?;
     writeln!(
         out,
-        "✔ {} upgraded ({count} change{})",
-        home.policy_path().display(),
-        plural(count)
-    )?;
-    writeln!(out, "✔ lock re-pinned ({} files)", lock.entries.len())?;
-    writeln!(
-        out,
-        "  the previous policy is in {}; undo: openmoat policy upgrade --undo",
-        policy_backup.display()
+        "✔ Policy upgraded            undo: openmoat policy upgrade --undo"
     )?;
     writeln!(
         out,
-        "  run `openmoat sandbox sync` so the agents' sandboxes follow the upgraded policy"
+        "  the previous policy is in {}",
+        paths.path(&policy_backup)
     )?;
     Ok(())
 }
@@ -283,8 +340,4 @@ fn remove_if_present(path: &Path) -> Result<()> {
         }
         _ => Ok(()),
     }
-}
-
-fn plural(count: usize) -> &'static str {
-    if count == 1 { "" } else { "s" }
 }

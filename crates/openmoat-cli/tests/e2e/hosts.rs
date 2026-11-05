@@ -12,7 +12,7 @@ use std::process::Output;
 use openmoat_hosts::{Host, HostSpec, InstallSpec, Location};
 use serde_json::Value;
 
-use crate::common::{DENY, OK, Sandbox, output, stdout, text};
+use crate::common::{DENY, OK, Sandbox, output, squash, stdout, text};
 
 pub mod rows;
 mod settings;
@@ -132,7 +132,7 @@ fn init_writes_its_entries_once_and_status_and_doctor_name_it() {
         let hook = hook_file(&sb, host);
         let first = fs::read(&hook).unwrap_or_else(|e| panic!("{id}: {e}"));
 
-        let again = sb.moat(&["init", "--yes"]);
+        let again = sb.moat(&["init", "--yes", "--verbose"]);
         assert_eq!(again.status.code(), Some(OK), "{id}: {}", text(&again));
         let events: Vec<&str> = install.hooks.iter().map(|hook| hook.event).collect();
         let unchanged = format!("unchanged: {} →", events.join(", "));
@@ -146,10 +146,10 @@ fn init_writes_its_entries_once_and_status_and_doctor_name_it() {
         let status = sb.moat(&["status"]);
         assert_eq!(status.status.code(), Some(OK), "{id}: {}", text(&status));
         assert!(text(&status).contains(name), "{id}: {}", text(&status));
-        let doctor = text(&sb.moat(&["doctor"]));
+        let doctor = squash(&text(&sb.moat(&["doctor", "--verbose"])));
         let line = match installed_level(host.spec()) {
-            Some(level) => format!("{name:<16} protection: {level}"),
-            None => format!("{name:<16} protection: "),
+            Some(level) => format!("· {name} protection: {level}"),
+            None => format!("· {name} protection: "),
         };
         assert!(doctor.contains(&line), "{id}: {line:?} in {doctor}");
         assert!(

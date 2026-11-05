@@ -9,15 +9,50 @@ use anyhow::Result;
 use similar::{Algorithm, ChangeTag, TextDiff, udiff::unified_diff};
 
 use crate::home::Home;
-use crate::install::HostConfig;
+use crate::install::{HostConfig, Outcome, Recorded};
 use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 use crate::sandbox::{self, Plan};
 
-/// One file `init` would write: its path, its text now and after.
+/// One file `init` would write: its path, its text now and after, and what
+/// of OpenMoat's it writes there.
 pub(super) struct Change {
     path: PathBuf,
     before: String,
     after: String,
+    parts: Vec<Part>,
+}
+
+/// What of OpenMoat's a changed file gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Part {
+    /// The hook entries, or OpenMoat's own hook file.
+    Hook,
+    /// The sandbox settings from the policy.
+    Sandbox,
+    /// The host's record of consent to the hook (Hermes Agent's allowlist).
+    Consent,
+}
+
+impl Part {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Hook => "hook",
+            Self::Sandbox => "sandbox settings",
+            Self::Consent => "hook consent",
+        }
+    }
+}
+
+/// What `changes` write, in a few words: `adds hook + sandbox settings`, or
+/// `updates …` when the hook is there already (`installed`).
+pub(super) fn what(changes: &[Change], installed: bool) -> String {
+    let parts: BTreeSet<Part> = changes
+        .iter()
+        .flat_map(|c| c.parts.iter().copied())
+        .collect();
+    let names: Vec<&str> = parts.into_iter().map(Part::name).collect();
+    let verb = if installed { "updates" } else { "adds" };
+    format!("{verb} {}", names.join(" + "))
 }
 
 /// Every change `init` would make to `config`'s host: its hooks and, with
@@ -35,6 +70,7 @@ pub(super) fn changes(
         .render(binary, &before)?
         .unwrap_or_else(|| before.clone());
     let mut changes = vec![Change {
+        parts: vec![Part::Hook],
         path,
         before,
         after,
@@ -45,6 +81,7 @@ pub(super) fn changes(
         let after = crate::install::consent::render(config, consent, &path, binary, &before)?
             .unwrap_or_else(|| before.clone());
         changes.push(Change {
+            parts: vec![Part::Consent],
             path,
             before,
             after,
@@ -56,14 +93,23 @@ pub(super) fn changes(
     {
         let path = sandbox::install::settings_path(home, host)?;
         if let Some(shared) = changes.iter_mut().find(|c| c.path == path) {
-            if let Some(r) = sandbox::install::render(home, host, plan, &shared.after)? {
+            // A file with the hook too (Claude Code's `settings.json`): its
+            // first part is the hook only when the hook's entries change.
+            if shared.before == shared.after {
+                shared.parts.clear();
+            }
+            if let Some(r) = sandbox::install::render(home, host, plan, &shared.after)?
+                && r.text != shared.after
+            {
                 shared.after = r.text;
+                shared.parts.push(Part::Sandbox);
             }
         } else {
             let before = sandbox::install::read_text(&path)?;
             let after = sandbox::install::render(home, host, plan, &before)?
                 .map_or_else(|| before.clone(), |r| r.text);
             changes.push(Change {
+                parts: vec![Part::Sandbox],
                 path,
                 before,
                 after,
@@ -72,6 +118,25 @@ pub(super) fn changes(
     }
     changes.retain(|c| c.before != c.after);
     Ok(changes)
+}
+
+/// Whether `init` would leave `config`'s agent exactly as it is, so there is
+/// nothing to ask: no file to change (`changes` empty, and no file of the hook
+/// `changes` does not show, such as OpenClaw's plugin) and the same record of
+/// where the agent keeps its files (`hosts.json`), which a yes would rewrite.
+pub(super) fn nothing_to_do(
+    home: &Home,
+    config: &HostConfig,
+    binary: &Path,
+    changes: &[Change],
+) -> Result<bool> {
+    if !changes.is_empty() || config.install(home, binary, true)? != Outcome::Unchanged {
+        return Ok(false);
+    }
+    let recorded = Recorded::load(home)?;
+    let mut after = Recorded::load(home)?;
+    after.insert(config);
+    Ok(after == recorded)
 }
 
 /// One line per changed file: new or edited, lines added and removed, and the
@@ -211,7 +276,23 @@ mod tests {
             path: PathBuf::from(path),
             before: before.to_owned(),
             after: after.to_owned(),
+            parts: vec![Part::Hook],
         }
+    }
+
+    #[test]
+    fn what_names_each_part_once_in_order() {
+        let mut both = change("/h/settings.json", "", "{}");
+        both.parts.push(Part::Sandbox);
+        let consent = Change {
+            parts: vec![Part::Consent, Part::Hook],
+            ..change("/h/allow.json", "", "x")
+        };
+        assert_eq!(what(&[both], false), "adds hook + sandbox settings");
+        assert_eq!(
+            what(&[consent, change("/h/c.yaml", "a", "b")], true),
+            "updates hook + hook consent"
+        );
     }
 
     #[test]

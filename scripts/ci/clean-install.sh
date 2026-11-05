@@ -234,7 +234,9 @@ for line in "${quickstart[@]}"; do
     case "$line" in
     "openmoat init"*)
         [ "$rc" -eq 0 ] || fail "\`$line\` exited $rc"
-        grep -qF '· agents           none found; pass --hosts to set one up' "$out/quickstart-$ran.txt" ||
+        # The second wording is the one before 0.16.0, which a published release still prints.
+        grep -qF -e '· No agents found; pass --hosts to set one up' \
+            -e '· agents           none found; pass --hosts to set one up' "$out/quickstart-$ran.txt" ||
             fail "\`$line\` with no agent installed does not say: none found; pass --hosts to set one up"
         echo "ok    with no agent installed, init says none was found"
         ;;
@@ -283,7 +285,8 @@ claude --version </dev/null
 begin "init before Claude Code's first start"
 run_logged init-unstarted openmoat init
 [ "$rc" -eq 0 ] || fail "openmoat init exited $rc"
-grep -qF '· agents           none found; pass --hosts to set one up' "$out/init-unstarted.txt" ||
+grep -qF -e '· No agents found; pass --hosts to set one up' \
+    -e '· agents           none found; pass --hosts to set one up' "$out/init-unstarted.txt" ||
     fail "init before Claude Code ever started does not say none was found"
 echo "ok    an agent never started has no configuration directory; init says none was found"
 

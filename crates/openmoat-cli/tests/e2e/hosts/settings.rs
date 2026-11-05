@@ -33,7 +33,7 @@ fn a_changed_mcp_server_holds_back_only_its_tools() {
         // Cline's is in a folder of its directory (`data/settings`).
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, (mcp.servers)(mcp.command)).unwrap();
-        let out = sb.moat(&["init", "--yes", "--hosts", id]);
+        let out = sb.moat(&["init", "--yes", "--hosts", id, "--verbose"]);
         assert_eq!(out.status.code(), Some(OK), "{id}: {}", text(&out));
         assert!(text(&out).contains(mcp.pinned), "{id}: {}", text(&out));
         let call = |tool: &str| guard(&row, &sb, &(mcp.call)(&sb, tool));

@@ -8,7 +8,7 @@ use super::Outcome;
 use crate::protection::Protection;
 
 /// `host`'s trust step, if its spec has one.
-fn step(host: Host) -> Option<&'static str> {
+pub fn step(host: Host) -> Option<&'static str> {
     host.spec().install.as_ref()?.trust_step
 }
 

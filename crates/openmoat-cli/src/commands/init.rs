@@ -1,7 +1,12 @@
 //! `moat init`: create the state directory, default policy, audit log and host hooks.
+//!
+//! What a person sees: a line per agent found with what it would get and the
+//! question (`ask.rs`), then the agents protected, the steps left and how to
+//! undo (`summary.rs`). Each file written, the backups and the lock are shown
+//! with `--verbose` (and in a dry run).
 
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use openmoat_audit::Store;
@@ -15,21 +20,41 @@ use crate::home::Home;
 use crate::install::{HookLayout, HostConfig, Outcome, Recorded, dir_variable, env_config_dir};
 use crate::integrity;
 use crate::render::Deferred;
+use crate::report::Style;
 use crate::sandbox::{self, Plan};
 
+mod ask;
 mod mcp;
 mod preview;
+mod summary;
 #[cfg(test)]
 mod tests;
 mod unattended;
 
 pub fn run(args: &InitArgs) -> Result<Code> {
     let dry_run = args.dry_run;
-    let prefix = if dry_run { "would" } else { "✔" };
+    // A dry run is a list of what would be written: every line of it shows.
+    let verbose = args.verbose || dry_run;
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
     refuse_writable_binary(&home, &binary)?;
     let mut out = Deferred::default();
+    // Each file written, the backups and the lock: shown with `--verbose`.
+    let mut detail = if verbose {
+        Deferred::default()
+    } else {
+        Deferred::quiet()
+    };
+    let title = if dry_run {
+        "what `openmoat init` would change (dry run)"
+    } else {
+        "protecting the agents on this machine"
+    };
+    writeln!(
+        out,
+        "{}\n",
+        Style::detect().bold(&format!("OpenMoat {} · {title}", crate::VERSION))
+    )?;
     // Whether a lock existed before this run; `repin` below always leaves one.
     let lock_existed = !dry_run && refuse_repin(&home, &mut out)?;
     // No person over an existing lock: what the lock trusts stays (`unattended.rs`).
@@ -45,67 +70,43 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     // but OpenMoat's own state directory.
     let hosts = choose_hosts(&home, args, &binary, &mut out)?;
 
-    state(&home, dry_run, unattended, &mut out)?;
+    let mut steps = summary::Steps {
+        update: state(&home, dry_run, unattended, &mut detail)?,
+        ..summary::Steps::default()
+    };
     if !dry_run {
         home.ensure_approval_files()?;
         // Recorded before the files are written: every command from here on,
         // this one included, finds each agent where this shell says it is.
         record(&home, &hosts, unattended)?;
     }
+    let mut files = Writers {
+        out: &mut out,
+        detail: &mut detail,
+    };
     for host in hosts.iter().copied() {
-        let config = unattended::config(&home, host, unattended)?;
-        let replaced = match config.layout {
-            HookLayout::Owned(file) | HookLayout::Script(file) => {
-                crate::install::owned::persons_file(&config, file)
-            }
-            HookLayout::Entries(_) | HookLayout::Plugin(_) | HookLayout::Yaml(_) => None,
-        };
-        let outcome = config.install(&home, &binary, dry_run)?;
-        let verb = match outcome {
-            Outcome::Installed => "installed",
-            Outcome::Updated => "updated",
-            Outcome::Unchanged => "unchanged",
-        };
-        let events: Vec<&str> = config.hooks.iter().map(|spec| spec.event).collect();
-        writeln!(
-            out,
-            "{prefix} {:<16} {} ({verb}: {} → {} guard --host {})",
-            host.display_name(),
-            config.settings_path.display(),
-            events.join(", "),
-            binary.display(),
-            host.id()
+        install(
+            &home, &binary, host, unattended, dry_run, &mut steps, &mut files,
         )?;
-        if let Some(backup) = replaced.filter(|_| outcome != Outcome::Unchanged) {
-            let verb = if dry_run { "would move" } else { "moved" };
-            writeln!(
-                out,
-                "! {:<16} {verb} your own hook {} to {}: {} runs one file there, so yours does \
-                 not run while OpenMoat is installed; `openmoat uninstall` puts it back",
-                host.display_name(),
-                config.settings_path.display(),
-                backup.display(),
-                host.display_name()
-            )?;
-        }
-        if let Some(note) = crate::install::trust_note::after_install(host, outcome) {
-            writeln!(out, "{prefix} {:<16} next: {note}", host.display_name())?;
-        }
     }
-
-    sandboxes(&home, &binary, &hosts, dry_run, &mut out)?;
+    steps.changed |= sandboxes(&home, &binary, &hosts, dry_run, &mut files)?;
 
     if dry_run {
-        writeln!(out, "would lock             {}", home.lock_path().display())?;
+        let detail = &mut *files.detail;
+        writeln!(
+            detail,
+            "would lock             {}",
+            home.lock_path().display()
+        )?;
         if args.mcp.mcp_proxy {
             let sandbox = args.mcp.sandbox();
-            super::mcp::wrap_servers(&home, &binary, &hosts, &[], sandbox, true, &mut out)?;
+            super::mcp::wrap_servers(&home, &binary, &hosts, &[], sandbox, true, detail)?;
         }
-        writeln!(out, "dry run: nothing was written")?;
+        writeln!(files.out, "dry run: nothing was written")?;
     } else {
         let lock = integrity::repin(&home, &binary, integrity::HookPins::Adopt)?;
         writeln!(
-            out,
+            files.detail,
             "✔ lock             {} ({} files pinned)",
             home.lock_path().display(),
             lock.entries.len()
@@ -113,14 +114,88 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         let proxy = args.mcp.mcp_proxy.then(|| mcp::Proxy {
             sandbox: args.mcp.sandbox(),
         });
-        mcp::servers(&home, &binary, proxy, &hosts, unattended, &mut out)?;
-        if !hosts.is_empty() {
-            backups(&home, &hosts, &mut out)?;
-        }
-        writeln!(out, "done. run `openmoat status` any time to verify.")?;
+        mcp::servers(&home, &binary, proxy, &hosts, unattended, &mut files)?;
+        let backups = if hosts.is_empty() {
+            0
+        } else {
+            backups(&home, &hosts, files.detail)?
+        };
+        summary::write(&home, &binary, &hosts, &steps, backups, verbose, files.out)?;
     }
+    detail.finish()?;
     out.finish()?;
     Ok(Code::Ok)
+}
+
+/// What `init` prints: what every run shows, and the lines `--verbose` adds.
+struct Writers<'a> {
+    out: &'a mut Deferred,
+    detail: &'a mut Deferred,
+}
+
+/// Install `host`'s hook, noting the steps it leaves to the person.
+fn install(
+    home: &Home,
+    binary: &Path,
+    host: Host,
+    unattended: bool,
+    dry_run: bool,
+    steps: &mut summary::Steps,
+    files: &mut Writers<'_>,
+) -> Result<()> {
+    let prefix = if dry_run { "would" } else { "✔" };
+    let config = unattended::config(home, host, unattended)?;
+    let replaced = match config.layout {
+        HookLayout::Owned(file) | HookLayout::Script(file) => {
+            crate::install::owned::persons_file(&config, file)
+        }
+        HookLayout::Entries(_) | HookLayout::Plugin(_) | HookLayout::Yaml(_) => None,
+    };
+    let outcome = config.install(home, binary, dry_run)?;
+    let verb = match outcome {
+        Outcome::Installed => "installed",
+        Outcome::Updated => "updated",
+        Outcome::Unchanged => "unchanged",
+    };
+    steps.changed |= outcome != Outcome::Unchanged;
+    let events: Vec<&str> = config.hooks.iter().map(|spec| spec.event).collect();
+    writeln!(
+        files.detail,
+        "{prefix} {:<16} {} ({verb}: {} → {} guard --host {})",
+        host.display_name(),
+        config.settings_path.display(),
+        events.join(", "),
+        binary.display(),
+        host.id()
+    )?;
+    if let Some(backup) = replaced.filter(|_| outcome != Outcome::Unchanged) {
+        let verb = if dry_run { "would move" } else { "moved" };
+        writeln!(
+            files.out,
+            "! {:<16} {verb} your own hook {} to {}: {} runs one file there, so yours does \
+             not run while OpenMoat is installed; `openmoat uninstall` puts it back",
+            host.display_name(),
+            config.settings_path.display(),
+            backup.display(),
+            host.display_name()
+        )?;
+    }
+    // The agent's own record of trusted hooks: after a change, or while it
+    // does not trust the hook yet.
+    let trust = crate::install::trust_note::after_install(host, outcome).or_else(|| {
+        config
+            .trust_warning()
+            .and_then(|_| crate::install::trust_note::step(host))
+    });
+    if let Some(note) = trust {
+        writeln!(
+            files.detail,
+            "{prefix} {:<16} next: {note}",
+            host.display_name()
+        )?;
+        steps.trust.push((host.display_name(), note));
+    }
+    Ok(())
 }
 
 /// Which checks guard `init`'s re-pin of an existing lock.
@@ -201,8 +276,14 @@ fn refuse_writable_binary(home: &Home, binary: &std::path::Path) -> Result<()> {
 }
 
 /// OpenMoat's own state: the directory, the default policy (kept when there is
-/// one), the audit log and the search-path snapshot (kept when `unattended`).
-fn state(home: &Home, dry_run: bool, unattended: bool, out: &mut Deferred) -> Result<()> {
+/// one), the audit log and the search-path snapshot (kept when `unattended`);
+/// the update a kept policy can take from this release's default.
+fn state(
+    home: &Home,
+    dry_run: bool,
+    unattended: bool,
+    out: &mut Deferred,
+) -> Result<Option<String>> {
     let prefix = if dry_run { "would" } else { "✔" };
     if !dry_run {
         home.ensure()?;
@@ -215,6 +296,7 @@ fn state(home: &Home, dry_run: bool, unattended: bool, out: &mut Deferred) -> Re
     } else {
         home.ensure_policy()?
     };
+    let mut update = None;
     if wrote_policy {
         writeln!(
             out,
@@ -223,7 +305,8 @@ fn state(home: &Home, dry_run: bool, unattended: bool, out: &mut Deferred) -> Re
         )?;
     } else {
         writeln!(out, "✔ policy           {} (kept)", policy_path.display())?;
-        if let Some(update) = crate::upgrade::available(home) {
+        update = crate::upgrade::available(home);
+        if let Some(update) = &update {
             writeln!(
                 out,
                 "! policy update    {update}: `openmoat policy upgrade` shows them and asks"
@@ -263,11 +346,11 @@ fn state(home: &Home, dry_run: bool, unattended: bool, out: &mut Deferred) -> Re
             snapshot.programs.len()
         )?;
     }
-    Ok(())
+    Ok(update)
 }
 
-/// The backups `init` made of `hosts`' files, and how to undo.
-fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
+/// The backups `init` made of `hosts`' files, and how to undo; how many.
+fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<usize> {
     let recorded = Recorded::load(home)?;
     let mut backups = Vec::new();
     for host in hosts {
@@ -285,8 +368,7 @@ fn backups(home: &Home, hosts: &[Host], out: &mut Deferred) -> Result<()> {
     } else {
         writeln!(out, "✔ backups          {}", backups.join(", "))?;
     }
-    writeln!(out, "Undo anytime: openmoat uninstall")?;
-    Ok(())
+    Ok(backups.len())
 }
 
 /// The hosts to set up: `--hosts` as given; else every host found, each confirmed
@@ -317,7 +399,7 @@ fn choose_hosts(
             let name = config.host.display_name();
             writeln!(
                 out,
-                "{name}: {} is {}, which does not exist yet; start {name} once to create \
+                "· {name}: {} is {}, which does not exist yet; start {name} once to create \
                  it, then run openmoat init again",
                 dir_variable(config.host)?.0,
                 config.dir().display()
@@ -328,10 +410,7 @@ fn choose_hosts(
     found.retain(|c| takes_hook.contains(&c.host));
     let names: Vec<&str> = found.iter().map(|c| c.host.display_name()).collect();
     if found.is_empty() {
-        writeln!(
-            out,
-            "· agents           none found; pass --hosts to set one up"
-        )?;
+        writeln!(out, "· No agents found; pass --hosts to set one up")?;
         return Ok(Vec::new());
     }
     if args.yes || args.dry_run {
@@ -340,67 +419,22 @@ fn choose_hosts(
     if !crate::terminal::interactive() {
         writeln!(
             out,
-            "· agents           found {}; none changed without a terminal: run `openmoat init` \
+            "! OpenMoat found {}; none changed without a terminal: run `openmoat init` \
              in a terminal to choose, or `openmoat init --yes` to set up all of them",
             names.join(", ")
         )?;
         return Ok(Vec::new());
     }
-    writeln!(out, "Found these agents:")?;
-    for config in &found {
-        let files: Vec<String> = host_files(config)
-            .iter()
-            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-            .collect();
-        writeln!(
-            out,
-            "  {:<12} {} (changes {})",
-            config.host.display_name(),
-            config.dir().display(),
-            files.join(", ")
-        )?;
-    }
-    writeln!(
-        out,
-        "OpenMoat adds its hook and sandbox settings to each agent you accept, backing \
-         up every file first; `openmoat uninstall` undoes it. Each agent's changes are \
-         summed up before you are asked; answer d to see the full diff."
-    )?;
     // The sandbox settings the policy `init` keeps or installs gives each agent.
     let plan = sandbox_plan(home, binary).ok();
-    let mut chosen = Vec::new();
-    for config in &found {
-        let changes = preview::changes(home, config, binary, plan.as_ref())?;
-        preview::summary(config, &changes, out)?;
-        loop {
-            write!(
-                out,
-                "Protect {} ({})? [Y/n/d] ",
-                config.host.display_name(),
-                config.dir().display()
-            )?;
-            out.flush()?;
-            // End of input is a no: nothing is changed that a person did not accept.
-            let answer = crate::terminal::read_answer()?;
-            if answer.is_empty() {
-                writeln!(out)?;
-                break;
-            }
-            match answer.trim().to_ascii_lowercase().as_str() {
-                "d" | "diff" => preview::diff(&changes, out)?,
-                "" | "y" | "yes" => {
-                    chosen.push(config.host);
-                    break;
-                }
-                _ => break,
-            }
-        }
-    }
+    let asking = ask::Asking {
+        plan: plan.as_ref(),
+        verbose: args.verbose,
+        every_agent: args.mcp.mcp_proxy,
+    };
+    let chosen = ask::ask(home, &found, binary, &asking, out)?;
     if chosen.is_empty() {
-        writeln!(
-            out,
-            "· agents           none accepted; no agent's files were changed"
-        )?;
+        writeln!(out, "· No agent accepted; no agent's files were changed")?;
     }
     Ok(chosen)
 }
@@ -460,29 +494,33 @@ fn sandbox_plan(home: &Home, binary: &std::path::Path) -> Result<Plan> {
 /// Standard tier (ADR-018): each selected host's own sandbox, configured from
 /// the policy. A policy that does not lint is reported, not fatal, so `init`
 /// can still repair hooks; `moat sandbox sync` writes the sandboxes later.
+/// Whether a sandbox changed.
 fn sandboxes(
     home: &Home,
     binary: &std::path::Path,
     hosts: &[Host],
     dry_run: bool,
-    out: &mut Deferred,
-) -> Result<()> {
+    files: &mut Writers<'_>,
+) -> Result<bool> {
     let prefix = if dry_run { "would" } else { "✔" };
     let selected: Vec<Host> = sandbox::install::hosts()
         .filter(|h| hosts.contains(h))
         .collect();
     if selected.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let plan = match sandbox_plan(home, binary) {
         Ok(plan) => plan,
         Err(e) => {
-            writeln!(out, "✗ sandbox          not written: {e:#}")?;
-            return Ok(());
+            writeln!(files.out, "✗ sandbox          not written: {e:#}")?;
+            return Ok(false);
         }
     };
+    let out = &mut *files.detail;
+    let mut any = false;
     for host in selected {
         let changed = sandbox::install::write(home, host, &plan, dry_run)?;
+        any |= changed;
         if let Some(note) = sandbox::install::unavailable(host) {
             if changed {
                 writeln!(
@@ -506,5 +544,5 @@ fn sandboxes(
             report.allowances.len()
         )?;
     }
-    Ok(())
+    Ok(any)
 }
