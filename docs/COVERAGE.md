@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 60 | 39 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 28 | 1 | 9 |
-| T9 | Hook / policy tampering by the agent | 401 | 131 | 53 |
+| T9 | Hook / policy tampering by the agent | 407 | 131 | 55 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 4 | 6 |
 | T12 | Network to unknown hosts | 113 | 20 | 20 |
@@ -1257,6 +1257,12 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-forged-plugin-heartbeat-flag-last` (attacks): Deny [kernel-self]
 - `T9-forged-plugin-heartbeat-by-path` (attacks): Deny [kernel-self]
 - `T9-forged-plugin-heartbeat-in-bash-c` (attacks): Deny [kernel-self]
+- `T9-agent-runs-the-hook` (attacks): Deny [kernel-self]
+- `T9-agent-runs-the-hook-by-path` (attacks): Deny [kernel-self]
+- `T9-agent-runs-the-hook-old-name` (attacks): Deny [kernel-self]
+- `T9-agent-runs-the-hook-from-a-pipe` (attacks): Deny [kernel-self]
+- `T9-agent-runs-the-hook-with-session-start-env` (attacks): Deny [kernel-self]
+- `T9-agent-runs-the-mcp-gateway` (attacks): Deny [kernel-self]
 - `T9-opencode2-write-service-settings` (attacks): Deny [kernel-self]
 - `T9-opencode2-plugin-add` (attacks): Deny [kernel-self]
 - `T9-opencode2-plugin-remove` (attacks): Deny [kernel-self]
@@ -1617,6 +1623,8 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-openmoat-subcommand-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-init-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-policy-upgrade-help` (benign): Allow [openmoat-readonly]
+- `benign-openmoat-guard-help` (benign): Allow [openmoat-readonly]
+- `benign-openmoat-mcp-proxy-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-policy-lint` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-build-policy-lint` (benign): Allow [openmoat-readonly, project-fs]
 - `benign-openmoat-policy-check` (benign): Allow [openmoat-readonly]

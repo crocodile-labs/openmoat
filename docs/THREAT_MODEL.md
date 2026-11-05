@@ -493,7 +493,10 @@ something OpenMoat claims to stop.
     it and a same-user process that can read the agent's environment could take it.
     That is enough because what the token buys is small: a real decision on a payload
     the asker chose, recorded as such. Any process outside `openmoat run` gets the same by
-    running `openmoat guard` itself. It cannot choose the verdict of a row, change the
+    running `openmoat guard` itself; an agent's own shell tool cannot, since `kernel-self`
+    denies `guard` and `mcp proxy` (only a host runs them, as its hook, from its plugin or
+    as an MCP server's command, where no hook sees it), so an agent cannot forge rows, MCP
+    tickets or a session's proxy credential that way. It cannot choose the verdict of a row, change the
     lock or the policy, read a secret source, or make taint looser: link rows only add
     sessions to the run, and taint only tightens.
   - *Nothing in the payload beyond what `openmoat guard` already trusts.* The payload,
@@ -1133,7 +1136,16 @@ something OpenMoat claims to stop.
   its first operand, `link`, `cp -l`/`--link`, the directory of `rsync --link-dest`,
   also as GNU's `gln`/`gcp` and under `busybox`), so `kernel-self` and the
   other write denies hold for it; a hard link made another way (an interpreter's
-  `os.link`, `cpio -l`, `pax -l`) is not seen.
+  `os.link`, `cpio -l`, `pax -l`) is not seen by the hook. Under `openmoat run` on
+  macOS the Seatbelt profile also denies `file-link` wherever it denies a read or a
+  write (`~/.moat/**`, the secret paths, the agents' configuration in the project),
+  so a sandboxed command cannot link `~/.moat/proxy.key` or `audit.db` into the
+  project and read or rewrite it there. Seatbelt checks `file-link` against the
+  file linked to, as Apple's app sandbox uses it for `~/Library`; this has not yet
+  been confirmed with `sandbox-exec` on a machine, so until it is, treat a hard link
+  out of a denied tree under the Seatbelt profile as a known limit. Landlock on
+  Linux needs `REFER` on the tree a file is linked from, which `openmoat run` grants
+  only with write access, and never inside the state directory (`exposure.rs`).
 - **Glob operands are expanded at decision time.** An unquoted `* ? [` path operand
   is checked as every file it matches when the hook runs (POLICY.md §4), with
   `bash` defaults (no `dotglob`, `nocaseglob` or `extglob`; `**` as `globstar`;

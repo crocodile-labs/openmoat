@@ -221,9 +221,16 @@ impl Home {
     fn with_merged(&self, mut policy: Policy) -> Result<Policy> {
         let overlay = crate::approvals::Overlay::load_in(self)?;
         if !overlay.allow.is_empty() {
-            policy.allow.extend(overlay.allow);
-            policy
-                .lint()
+            // The policy's own patterns were parsed with it: parse only the
+            // overlay's, and check the merge as a whole for duplicate ids.
+            overlay
+                .allow
+                .iter()
+                .try_for_each(openmoat_core::RuleGroup::check_patterns)
+                .and_then(|()| {
+                    policy.allow.extend(overlay.allow);
+                    policy.lint_structure()
+                })
                 .with_context(|| format!("merging {}", self.overlay_path().display()))?;
         }
         crate::packs::merge_installed(self, &mut policy)?;

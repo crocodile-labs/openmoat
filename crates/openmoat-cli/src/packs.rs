@@ -148,8 +148,13 @@ pub fn apply(policy: &mut Policy, name: &str, pack: &RepoPolicy) -> Result<()> {
     policy.deny.extend(prefixed(&pack.deny));
     policy.repo_review.extend(prefixed(&pack.review));
     policy.allow.extend(prefixed(&pack.allow));
-    policy
-        .lint()
+    // Only the pack's patterns are new; the policy's were parsed with it.
+    pack.deny
+        .iter()
+        .chain(&pack.review)
+        .chain(&pack.allow)
+        .try_for_each(RuleGroup::check_patterns)
+        .and_then(|()| policy.lint_structure())
         .with_context(|| format!("merging policy pack `{name}`"))
 }
 

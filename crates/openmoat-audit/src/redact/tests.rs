@@ -4,6 +4,8 @@ use super::{
 };
 use serde_json::json;
 
+mod programs;
+
 #[test]
 fn every_pattern_compiles() {
     assert!(

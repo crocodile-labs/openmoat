@@ -205,6 +205,25 @@ impl RuleGroup {
     fn is_empty(&self) -> bool {
         Kind::ALL.iter().all(|k| self.patterns(*k).is_empty())
     }
+
+    /// Check that every pattern of this group parses, naming the group in the
+    /// error: what [`Policy::lint`] does for each group.
+    ///
+    /// # Errors
+    /// [`PolicyError::Rule`] for the first pattern that does not parse.
+    pub fn check_patterns(&self) -> Result<(), PolicyError> {
+        for kind in Kind::ALL {
+            for p in self.patterns(kind) {
+                let compiled = if kind == Kind::Shell {
+                    ShellPattern::compile(p).map(drop)
+                } else {
+                    GlobPattern::compile(p, false).map(drop)
+                };
+                compiled.map_err(|e| rule_err(&self.id, &e))?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -443,8 +462,21 @@ impl Policy {
         Ok(policy)
     }
 
-    /// Structural validation independent of any environment.
+    /// Structural validation independent of any environment: [`Self::lint_structure`]
+    /// and every pattern's syntax ([`RuleGroup::check_patterns`]).
     pub fn lint(&self) -> Result<(), PolicyError> {
+        self.lint_structure()?;
+        self.groups().try_for_each(RuleGroup::check_patterns)
+    }
+
+    /// [`Self::lint`] without parsing each pattern again, for a policy that
+    /// gained rule groups after a full lint, such as a merge of rules each
+    /// checked when they were read (a repository policy, a pack, `openmoat allow`
+    /// rules): the new groups' patterns are checked with
+    /// [`RuleGroup::check_patterns`], and nothing else needs reparsing. Parsing
+    /// every pattern costs more than the rest of the lint together, and
+    /// [`crate::CompiledPolicy::compile`] reports a bad one in any case.
+    pub fn lint_structure(&self) -> Result<(), PolicyError> {
         if self.version != SUPPORTED_VERSION {
             return Err(PolicyError::Version {
                 found: self.version,
@@ -452,12 +484,7 @@ impl Policy {
             });
         }
         let mut ids = BTreeSet::new();
-        let groups = self.deny.iter().chain(&self.repo_review);
-        for group in groups
-            .chain(&self.allow)
-            .chain(&self.review)
-            .chain(&self.defer)
-        {
+        for group in self.groups() {
             if group.id.trim().is_empty() {
                 return Err(PolicyError::Rule {
                     rule: "<unnamed>".into(),
@@ -469,16 +496,6 @@ impl Policy {
             }
             if group.is_empty() {
                 return Err(PolicyError::EmptyRule(group.id.clone()));
-            }
-            for kind in Kind::ALL {
-                for p in group.patterns(kind) {
-                    let compiled = if kind == Kind::Shell {
-                        ShellPattern::compile(p).map(drop)
-                    } else {
-                        GlobPattern::compile(p, false).map(drop)
-                    };
-                    compiled.map_err(|e| rule_err(&group.id, &e))?;
-                }
             }
         }
         hook_only::check(self)?;
@@ -501,6 +518,16 @@ impl Policy {
         }
         taint::check(self.taint.as_ref())?;
         secret::check(&self.secrets)
+    }
+
+    /// Every rule group, in the order the engine tries the lists.
+    fn groups(&self) -> impl Iterator<Item = &RuleGroup> {
+        self.deny
+            .iter()
+            .chain(&self.repo_review)
+            .chain(&self.allow)
+            .chain(&self.review)
+            .chain(&self.defer)
     }
 
     /// Number of rule groups in `deny`, `allow` and `review`.

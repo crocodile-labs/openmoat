@@ -1,6 +1,6 @@
 //! Schema versions and the migration ladder.
 
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 use super::StoreError;
 
@@ -50,10 +50,17 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 INSERT INTO meta (key, value) VALUES ('legacy_last_id', COALESCE((SELECT MAX(id) FROM events), 0));
 ";
 
-/// Version 3: the `defer` verdict (ADR-025). `SQLite` cannot change a `CHECK`, so the
-/// table is rebuilt; every row keeps its id, values and hashes, so the chain still
-/// verifies.
-const V3: &str = "
+/// Version 3: the `defer` verdict (ADR-025), by [`widen_check`]. [`V3_REBUILD`] is
+/// the fallback for a table whose `CHECK` is not the text this ladder wrote.
+const V3: Widening = Widening {
+    table: "events",
+    from: "CHECK (verdict IN ('allow','ask','deny'))",
+    to: "CHECK (verdict IN ('allow','defer','ask','deny'))",
+};
+
+/// Version 3 by a rebuild: every row keeps its id, values and hashes, so the
+/// chain still verifies, but every row is copied.
+const V3_REBUILD: &str = "
 CREATE TABLE events_v3 (
     id          INTEGER PRIMARY KEY,
     ts_ms       INTEGER NOT NULL,
@@ -154,9 +161,28 @@ ALTER TABLE session_writes ADD COLUMN before_sha256 TEXT;
 /// Version 8: the `review` verdict, called `ask` before (ADR-053). New rows
 /// record `review`; rows already written keep `ask`, which every reader takes
 /// as `review`, because the chain hashes the stored text and rewriting a row
-/// would break it. The tables are rebuilt as for [`V3`], each row keeping its
-/// id, values and hashes, so the chain still verifies.
-const V8: &str = "
+/// would break it. Both `CHECK`s are widened in place by [`widen_check`]: no
+/// row is copied, so the step takes the same few milliseconds on a log of a
+/// million rows as on an empty one. The guard is what opens the log after an
+/// upgrade, inside its time budget; a rebuild there (0.14.0 did one) took
+/// minutes on a large log and denied every call while it ran.
+const V8: [Widening; 2] = [
+    Widening {
+        table: "events",
+        from: "CHECK (verdict IN ('allow','defer','ask','deny'))",
+        to: "CHECK (verdict IN ('allow','defer','review','ask','deny'))",
+    },
+    Widening {
+        table: "mcp_tickets",
+        from: "CHECK (verdict IN ('allow','defer','ask'))",
+        to: "CHECK (verdict IN ('allow','defer','review','ask'))",
+    },
+];
+
+/// Version 8's `events` by a rebuild, the fallback of [`V8`] for a table whose
+/// `CHECK` is not the text this ladder wrote: each row keeps its id, values and
+/// hashes, so the chain still verifies.
+const V8_REBUILD_EVENTS: &str = "
 CREATE TABLE events_v8 (
     id          INTEGER PRIMARY KEY,
     ts_ms       INTEGER NOT NULL,
@@ -181,6 +207,10 @@ DROP TABLE events;
 ALTER TABLE events_v8 RENAME TO events;
 CREATE INDEX events_session ON events(session_id, id);
 CREATE INDEX events_ts ON events(ts_ms);
+";
+
+/// Version 8's `mcp_tickets` by a rebuild, as [`V8_REBUILD_EVENTS`].
+const V8_REBUILD_TICKETS: &str = "
 CREATE TABLE mcp_tickets_v8 (
     id                INTEGER PRIMARY KEY,
     event_id          INTEGER NOT NULL,
@@ -201,6 +231,66 @@ ALTER TABLE mcp_tickets_v8 RENAME TO mcp_tickets;
 CREATE INDEX mcp_tickets_arguments ON mcp_tickets(arguments_sha256, id);
 CREATE INDEX mcp_tickets_ts ON mcp_tickets(ts_ms);
 ";
+
+/// A `CHECK` of one table that a step widens: `from` becomes `to`, which
+/// accepts every value `from` accepts, and more.
+struct Widening {
+    table: &'static str,
+    from: &'static str,
+    to: &'static str,
+}
+
+/// Apply `step` without copying a row. `SQLite` keeps a table's definition as
+/// text in `sqlite_master`, and changing a `CHECK` is a change it documents as
+/// safe to make by editing that text (<https://sqlite.org/lang_altertable.html#otheralter>)
+/// when every row already stored meets the new one, as each row meets a wider
+/// one. So the step costs the same on a log of a million rows as on an empty one.
+///
+/// Returns `false`, having changed nothing, when the table's text does not
+/// hold `from` exactly once (a table this ladder did not write): the caller
+/// rebuilds the table instead. Returns `true` when it already holds `to`.
+fn widen_check(tx: &Transaction<'_>, step: &Widening) -> Result<bool, StoreError> {
+    let sql: Option<String> = tx
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [step.table],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(sql) = sql else {
+        return Ok(false);
+    };
+    if sql.contains(step.to) {
+        return Ok(true);
+    }
+    if sql.matches(step.from).count() != 1 {
+        return Ok(false);
+    }
+    let widened = sql.replacen(step.from, step.to, 1);
+    // A definition `SQLite` cannot parse would leave the database unreadable:
+    // try it on a scratch database first, and rebuild instead if it fails.
+    if Connection::open_in_memory()?
+        .execute_batch(&widened)
+        .is_err()
+    {
+        return Ok(false);
+    }
+    let schema_version: i64 = tx.pragma_query_value(None, "schema_version", |r| r.get(0))?;
+    tx.pragma_update(None, "writable_schema", true)?;
+    // Moving the schema version makes every other connection read the new
+    // definition before its next statement.
+    let edited = tx
+        .execute(
+            "UPDATE sqlite_master SET sql = ?1 WHERE type = 'table' AND name = ?2",
+            params![widened, step.table],
+        )
+        .and_then(|_| tx.pragma_update(None, "schema_version", schema_version + 1));
+    // `RESET` turns editing off again and makes this connection read the new
+    // definition too; on an error the transaction rolls the edit back.
+    tx.execute_batch("PRAGMA writable_schema = RESET")?;
+    edited?;
+    Ok(true)
+}
 
 /// Whether `table` has a column named `column`.
 fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
@@ -246,8 +336,8 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
     if found < 2 {
         tx.execute_batch(V2)?;
     }
-    if found < 3 {
-        tx.execute_batch(V3)?;
+    if found < 3 && !widen_check(&tx, &V3)? {
+        tx.execute_batch(V3_REBUILD)?;
     }
     if found < 4 {
         tx.execute_batch(V4)?;
@@ -262,7 +352,13 @@ pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
         tx.execute_batch(V7)?;
     }
     if found < 8 {
-        tx.execute_batch(V8)?;
+        let [events, tickets] = &V8;
+        if !widen_check(&tx, events)? {
+            tx.execute_batch(V8_REBUILD_EVENTS)?;
+        }
+        if !widen_check(&tx, tickets)? {
+            tx.execute_batch(V8_REBUILD_TICKETS)?;
+        }
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;

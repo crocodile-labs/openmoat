@@ -1140,6 +1140,33 @@
   threat: T9
   action: { shell: "bash -c 'openmoat guard --heartbeat --host openclaw'" }
   expect: { verdict: deny, rules: [kernel-self] }
+# The hook itself, run by an agent with a payload it wrote: decisions and MCP
+# tickets in any session's name, and a proxy credential written where it says.
+# Only a host runs `guard` (as its hook or from its plugin), where no hook sees it.
+- id: T9-agent-runs-the-hook
+  threat: T9
+  action: { shell: "openmoat guard --host claude-code < forged.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-the-hook-by-path
+  threat: T9
+  action: { shell: "/Users/me/.cargo/bin/openmoat guard --host codex < forged.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-the-hook-old-name
+  threat: T9
+  action: { shell: "moat guard" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-the-hook-from-a-pipe
+  threat: T9
+  action: { shell: "echo '{}' | openmoat guard --host codex" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-the-hook-with-session-start-env
+  threat: T9
+  action: { shell: "CLAUDE_ENV_FILE=/p/e openmoat guard --host claude-code < ss.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-the-mcp-gateway
+  threat: T9
+  action: { shell: "openmoat mcp proxy github -- npx -y server-github" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-opencode2-write-service-settings
   threat: T9
   action: { fs_write: "~/.config/opencode/service.json" }

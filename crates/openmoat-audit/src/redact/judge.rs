@@ -14,7 +14,7 @@ const NOT_SECRET_PARTS: &[&str] = &[
 ];
 
 /// Programs whose `-u`/`--user` is `user:password` for an HTTP server.
-const HTTP_CLIENTS: &[&str] = &["curl", "wget", "http", "https", "xh", "xhs", "curlie"];
+pub(super) const HTTP_CLIENTS: &[&str] = &["curl", "wget", "http", "https", "xh", "xhs", "curlie"];
 
 /// Commands that run the next word as the program (`sudo curl …`).
 const RUNNERS: &[&str] = &["sudo", "env", "command", "exec", "time", "nohup"];
@@ -89,7 +89,7 @@ pub(super) fn quoted_value(caps: &Captures<'_>, _: &str) -> String {
 
 /// The program of the command that the text before a match ends in, by its
 /// file name, lowercased and without `.exe`.
-fn program_before(before: &str) -> String {
+pub(super) fn program_before(before: &str) -> String {
     let segment = before
         .rsplit([';', '|', '&', '\n', '('])
         .next()

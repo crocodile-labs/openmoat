@@ -55,8 +55,21 @@ impl RepoPolicy {
         if trusted {
             merged.allow.extend(prefixed(&self.allow));
         }
-        merged.lint()?;
+        self.lint_merged(&merged)?;
         Ok(merged)
+    }
+
+    /// Lint `merged` as a whole for what a merge can break (a duplicate id),
+    /// and parse only this policy's patterns: the user's were parsed when the
+    /// user policy was, and parsing them all again on every hook call cost more
+    /// than the rest of the lint.
+    fn lint_merged(&self, merged: &Policy) -> Result<(), PolicyError> {
+        merged.lint_structure()?;
+        self.deny
+            .iter()
+            .chain(&self.review)
+            .chain(&self.allow)
+            .try_for_each(RuleGroup::check_patterns)
     }
 
     /// `user` with only this policy's deny rules added: what `openmoat run`'s
@@ -66,7 +79,7 @@ impl RepoPolicy {
     pub fn merge_deny(&self, user: &Policy) -> Result<Policy, PolicyError> {
         let mut merged = user.clone();
         merged.deny.extend(prefixed(&self.deny));
-        merged.lint()?;
+        self.lint_merged(&merged)?;
         Ok(merged)
     }
 }
