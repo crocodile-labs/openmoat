@@ -58,7 +58,7 @@ in the policy, what else (taint, an MCP flow) shaped it and how to change it.
    - The `call` is masked as the audit log is (`openmoat_audit` token shapes and the
      brokered secrets' values), shown with `~` for the home directory, on one line, cut in
      the middle past 100 characters; the reasons on the `rule` line are masked the same way
-     and cut past 300. Control and invisible characters are shown as `?`.
+     and each one is cut past 300 on its own, so every rule's reason stays readable. Control and invisible characters are shown as `?`.
    - Exactly one `next` step, for the person: do it yourself, answer the prompt, or approve
      it in a terminal. It never suggests another call, a variant, an encoding, a split or a
      retry other than the same call after the person approved it; a test checks the

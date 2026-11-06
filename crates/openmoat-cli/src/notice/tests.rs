@@ -36,6 +36,41 @@ fn a_titled_deny_gets_a_notice_with_the_call_and_its_rule_text() {
     );
 }
 
+/// Each reason is shortened on its own: with two rules, the second reason's
+/// source (what tainted the session) stays on the `rule` line.
+#[test]
+fn every_reason_keeps_its_own_text() {
+    let policy = Policy::parse(POLICY).unwrap();
+    let path = format!("/tmp/{}/home/proj/.github/workflows/ci.yml", "x".repeat(40));
+    let mut d = Decision::single(Verdict::Deny, "keys", format!("runs later: write {path}"));
+    d.rules.push("taint".into());
+    d.reasons.push(format!(
+        "the session read untrusted content (ran /tmp/{}/run.sh, which session a wrote); \
+         {path} changes what runs later",
+        "y".repeat(40)
+    ));
+    let notice = of(&d, &Titles::of(&policy, &d), None, &KnownSecrets::default()).unwrap();
+    let detail = notice.detail.unwrap();
+    for part in [
+        "runs later: write",
+        "run.sh",
+        "session a",
+        "changes what runs later",
+    ] {
+        assert!(detail.contains(part), "{part}: {detail}");
+    }
+    assert!(!detail.contains('…'), "{detail}");
+    let long = Decision::single(Verdict::Deny, "keys", "z".repeat(400));
+    let notice = of(
+        &long,
+        &Titles::of(&policy, &long),
+        None,
+        &KnownSecrets::default(),
+    )
+    .unwrap();
+    assert_eq!(notice.detail.unwrap().chars().count(), 300);
+}
+
 /// No title, an allow or a defer: no notice, so the host gets the one line.
 #[test]
 fn an_untitled_rule_or_a_quiet_verdict_gets_none() {

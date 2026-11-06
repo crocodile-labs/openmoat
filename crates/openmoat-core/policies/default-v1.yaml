@@ -1067,6 +1067,8 @@ review:
   # (`git-internals`); `update-ref --stdin` reads which refs it moves from its input
   - id: provenance-notes
     reason: OpenMoat's provenance notes record what agents wrote; a person writes them with `openmoat provenance --write-notes`
+    title: rewriting OpenMoat's record of what agents wrote
+    why: the notes are your record of which changes an agent made; an agent that edits them can hide its own work
     shell: ["git notes * *openmoat*", "git update-ref * *notes/openmoat*", "git update-ref * --stdin*"]
   # deleting a local branch loses nothing the reflog does not keep for weeks, so it
   # needs review where a force push or `reset --hard` is denied

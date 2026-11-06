@@ -13,7 +13,9 @@ use crate::report::Paths;
 /// The longest call shown, in characters; a longer one loses its middle.
 pub const CALL_CHARS: usize = 100;
 
-/// The longest run of reasons shown on the `rule` line.
+/// The longest reason shown on the `rule` line; each reason is cut on its own,
+/// so a decision of two rules (`runs-later` and `session-taint`) keeps both,
+/// the second one's source included.
 const DETAIL_CHARS: usize = 300;
 
 /// The title and `why` of each rule of a decision that has one, in the
@@ -66,13 +68,18 @@ pub fn of(
     let call = call
         .map(|(tool, action)| middle(&shown(&paths, known, &call_text(tool, action)), CALL_CHARS));
     // The reasons keep their paths as written: the `rule` line is the line
-    // earlier releases sent, masked and on one line.
-    let reasons = decision.reasons.join("; ");
+    // earlier releases sent, masked and on one line, each reason shortened alone.
+    let detail = decision
+        .reasons
+        .iter()
+        .map(|reason| middle(&masked(known, reason), DETAIL_CHARS))
+        .collect::<Vec<_>>()
+        .join("; ");
     Some(Box::new(Notice {
         title: clean(title).into_owned(),
         why: why.map(|w| clean(w).into_owned()),
         call,
-        detail: (!reasons.is_empty()).then(|| middle(&masked(known, &reasons), DETAIL_CHARS)),
+        detail: (!detail.is_empty()).then_some(detail),
         unasked: None,
     }))
 }
