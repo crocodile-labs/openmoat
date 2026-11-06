@@ -224,8 +224,10 @@ action and verdict shapes, rule ids, the schema version) and what is not (reason
 which verdict the default policy gives an action, a saved session's form) is ADR-046.
 Before 1.0 a minor release may change the stable surface, with a CHANGELOG entry.
 
-`openmoat-sdk` is published to crates.io with each release; the npm package is not
-published yet (`npm pack` in `sdk/js` after a build makes the package file).
+Both packages carry the release version: the Rust crate `openmoat-sdk` takes the
+workspace version and goes to crates.io with each release, and `@openmoat/sdk` has the
+same version in `sdk/js/package.json` and is published to npm by the release workflow
+(npm trusted publishing, with provenance). For 0.16.0 both are `0.16.0`.
 
 ## Building and testing
 

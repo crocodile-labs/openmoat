@@ -44,8 +44,13 @@ What exists:
 - **Compliance evidence.** `openmoat audit evidence` reports the log per control of
   OWASP LLM 2025, SOC 2 and ISO/IEC 27001 (ADR-051, [COMPLIANCE.md](COMPLIANCE.md)).
 - **Merge check.** `openmoat policy check-diff` and a composite GitHub Action report a
-  pull request's changes to protected files and added tokens (ADR-050,
+  pull request's changes to protected files and added tokens (ADR-050), and what its
+  added lines do: supply chain, CI takeover, decoded or downloaded code that runs,
+  private keys and new hosts, each level set by `check_diff.levels` (ADR-055,
   [MERGE_CHECK.md](MERGE_CHECK.md)).
+- **Provenance.** `openmoat provenance` attributes a commit's files and lines to agent
+  sessions from the audit log, keeps notes on `refs/notes/openmoat` and verifies them;
+  `check-diff` shows them (ADR-056, [PROVENANCE.md](PROVENANCE.md)).
 - **Approvals.** `openmoat allow` for a command, a site or a directory (ADR-007).
 - **Self-protection.** A policy lock checked on every call (ADR-006), `kernel-self`
   rules, Claude Code's `ConfigChange` veto, stable hook binary paths (ADR-016), and
@@ -53,7 +58,9 @@ What exists:
 - **Session taint.** After a secret read or untrusted content, risky follow-up calls
   need review (ADR-020), also across the files a tainted session writes (ADR-029); after a
   secret read, a URL carrying a long encoded value is denied (`encoded-egress`, ADR-047).
-  A payment card number sent off the machine is denied (`card-egress`, ADR-052).
+  A payment card number sent off the machine is denied (`card-egress`, ADR-052). With
+  Claude Code, a later command or write that uses a host, path or command untrusted
+  output named needs review (`injected-input`, ADR-057).
 - **Package installs.** A name one typo away from a popular package needs review (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
 - **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
@@ -62,13 +69,16 @@ What exists:
   (ADR-032), and is a gateway: it passes only the messages it checked and rewrote itself,
   and a call only when the policy does not deny it as the server receives it and the
   agent's hook decided exactly that call (ADR-045). A browser MCP call that only opens a
-  page is a `fetch`, judged by every host a client may read its URL as (ADR-047).
+  page is a `fetch`, judged by every host a client may read its URL as (ADR-047). Text
+  one wrapped server returned that reaches another server's acting tool needs review
+  (`mcp-cross-server`, ADR-058).
 - **Signed policy packs.** `openmoat policy trust-key`, `install` and `remove`, verified
   with OpenSSH signatures (ADR-031).
 - **Repository policy.** `<repo>/.moat/policy.yaml` only tightens until `openmoat trust`
   (ADR-022).
 - **Standard tier.** Claude Code's, Codex's and Cursor's own sandboxes configured and
   pinned from the policy (ADR-018), and a protection level per agent in `openmoat status`.
+  Every sandbox denies the agents' logins to the commands they run (ADR-054).
 - **Lightweight tier.** `openmoat run`: Seatbelt on macOS 13 or later, Landlock and seccomp
   on Linux, around the whole agent.
 - **Isolated tier on Linux.** `openmoat run --isolate` under bubblewrap, rootless.
@@ -85,8 +95,8 @@ What exists:
   MoatBench ([MOATBENCH.md](MOATBENCH.md)) and fuzz targets, all run in CI.
 - **SDK.** `openmoat-sdk` for Rust and `@openmoat/sdk` for JavaScript (the engine as
   WebAssembly): the same decisions inside your own agent product, which enforces them
-  (ADR-046, [SDK.md](SDK.md)). `openmoat-sdk` is on crates.io from 0.12.0; the npm
-  package follows once its publishing is set up.
+  (ADR-046, [SDK.md](SDK.md)). `openmoat-sdk` is on crates.io from 0.12.0; from
+  0.16.0 `@openmoat/sdk` is published to npm by the release workflow, at the same version.
 
 What it does not do: confine every call. Only commands inside the host sandboxes or
 `openmoat run` are confined by the operating system. Elsewhere an allowed call runs with
