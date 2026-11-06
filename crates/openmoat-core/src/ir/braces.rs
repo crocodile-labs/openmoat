@@ -1,15 +1,20 @@
-//! Brace groups in IR globs, expanded before they become Seatbelt filters.
+//! Brace groups in file globs, expanded before they reach an OS backend.
+//!
+//! The engine's globs read `{a,b}` as alternatives. Seatbelt has no such syntax,
+//! Claude Code's and Codex's settings and bubblewrap's mounts need each path on
+//! its own, so [`super::lower()`] writes every alternative of a file pattern as a
+//! pattern of its own (`~/.codex/{auth.json,.credentials.json}` becomes two).
 
 /// Most patterns one brace group may expand to; past it the pattern is
 /// translated as written.
 const MAX_ALTERNATIVES: usize = 64;
 
 /// `pattern` with its brace groups expanded (`src/{a,b}.rs` → `src/a.rs`,
-/// `src/b.rs`), as the
-/// engine's glob reads them; nested groups too. A pattern without braces, with
-/// an unclosed group, or with more than [`MAX_ALTERNATIVES`] results is
-/// returned as it is.
-pub(super) fn alternatives(pattern: &str) -> Vec<String> {
+/// `src/b.rs`), as the engine's glob reads them; nested groups too. A pattern
+/// without braces, with an unclosed group, or with more than
+/// `MAX_ALTERNATIVES` (64) results is returned as it is.
+#[must_use]
+pub fn alternatives(pattern: &str) -> Vec<String> {
     let mut out = Vec::new();
     if expand(pattern, &mut out) {
         out
@@ -64,4 +69,37 @@ fn first_group(pattern: &str) -> Option<(usize, usize, Vec<&str>)> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::alternatives;
+
+    fn owned(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn each_alternative_becomes_a_pattern() {
+        assert_eq!(
+            alternatives("/h/{.ssh/**,.aws/**}"),
+            owned(&["/h/.ssh/**", "/h/.aws/**"])
+        );
+        assert_eq!(
+            alternatives("/a/{b,{c,d}e}/f"),
+            owned(&["/a/b/f", "/a/ce/f", "/a/de/f"])
+        );
+        assert_eq!(
+            alternatives("!/p/{x,y}/**"),
+            owned(&["!/p/x/**", "!/p/y/**"])
+        );
+        assert_eq!(alternatives("/a/{b"), owned(&["/a/{b"]), "unclosed");
+        assert_eq!(
+            alternatives(r"/a/\{b,c}"),
+            owned(&[r"/a/\{b,c}"]),
+            "escaped"
+        );
+        let wide = "/{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}";
+        assert_eq!(alternatives(wide), owned(&[wide]), "past the bound");
+    }
 }

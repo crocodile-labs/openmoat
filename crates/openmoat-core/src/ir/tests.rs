@@ -39,9 +39,12 @@ fn default_policy_lowers_paths_and_hosts() {
     .unwrap();
     assert_eq!(ir.fs.read.default, Effect::Deny);
     // `kernel-self` also denies reads of OpenMoat's state beside the policy.
-    assert_eq!(ids(&ir.fs.read.deny), ["secrets-paths", "kernel-self"]);
+    assert_eq!(
+        ids(&ir.fs.read.deny),
+        ["secrets-paths", "agent-credentials", "kernel-self"]
+    );
     assert!(
-        ir.fs.read.deny[1]
+        ir.fs.read.deny[2]
             .patterns
             .contains(&"/Users/me/.moat/policy.lock".to_owned())
     );
@@ -62,11 +65,17 @@ fn default_policy_lowers_paths_and_hosts() {
     );
     assert_eq!(
         ids(&ir.fs.write.deny),
-        ["secrets-paths", "destructive", "kernel-self", "shell-rc"]
+        [
+            "secrets-paths",
+            "agent-credentials",
+            "destructive",
+            "kernel-self",
+            "shell-rc"
+        ]
     );
     // the home directory and the root themselves, not their subtrees, and raw disks
     assert_eq!(
-        ir.fs.write.deny[1].patterns[..3],
+        ir.fs.write.deny[2].patterns[..3],
         ["/Users/me", "/", "/dev/disk*"]
     );
     assert_eq!(ir.egress.net.default, Effect::Deny);
@@ -256,29 +265,79 @@ fn hook_only_deny_groups_are_left_to_the_hook() {
 }
 
 #[test]
-fn the_default_policy_leaves_build_and_agent_credentials_out_of_os_layers() {
+fn the_default_policy_leaves_build_credentials_out_of_os_layers() {
     let ir = lowered(crate::DEFAULT_POLICY);
     let json = serde_json::to_string(&ir.fs).unwrap();
-    // An agent under `openmoat run` reads its own login inside the sandbox.
+    // `mvn` and `gradle` run inside the sandboxes read their settings.
     for file in [
         ".m2/settings.xml",
         ".m2/settings-security.xml",
         "gradle.properties",
-        ".claude/.credentials.json",
-        ".codex/auth.json",
-        "opencode/auth.json",
-        ".hermes/auth.json",
     ] {
         assert!(!json.contains(file), "{file} reaches OS layers: {json}");
     }
-    for rule in ["build-credentials", "agent-credentials"] {
-        assert!(
-            ir.decide_only
-                .iter()
-                .any(|d| d.kind == "fs.read" && d.rules.iter().any(|r| r == rule)),
-            "{rule}"
-        );
+    let hook_only = |rule: &str| {
+        ir.decide_only
+            .iter()
+            .any(|d| d.kind == "fs.read" && d.rules.iter().any(|r| r == rule))
+    };
+    assert!(hook_only("build-credentials"));
+    assert!(!hook_only("agent-credentials"));
+}
+
+/// ADR-054: every agent's login is an OS-layer deny, each file of a brace
+/// group a pattern of its own, so a command an agent runs cannot read another
+/// agent's token through any backend.
+#[test]
+fn the_default_policy_denies_agent_logins_in_os_layers() {
+    let ir = lowered(crate::DEFAULT_POLICY);
+    let check = ir.checker().unwrap();
+    for file in [
+        "/h/.claude/.credentials.json",
+        "/h/.config/anthropic/default.json",
+        "/h/.codex/auth.json",
+        "/h/.codex/.credentials.json",
+        "/h/.local/share/opencode/auth.json",
+        "/h/.hermes/auth.json",
+        "/h/.gemini/oauth_creds.json",
+        "/h/.pi/agent/auth.json",
+        "/h/.config/goose/secrets.yaml",
+    ] {
+        assert_eq!(check.check_os(&read(file)), Some(Effect::Deny), "{file}");
+        let write = AtomicAction::FsWrite { path: file.into() };
+        assert_eq!(check.check_os(&write), Some(Effect::Deny), "{file}");
     }
+    let rule = ir
+        .fs
+        .read
+        .deny
+        .iter()
+        .find(|r| r.id == "agent-credentials")
+        .unwrap();
+    assert!(rule.patterns.iter().all(|p| !p.contains('{')), "{rule:?}");
+    assert!(
+        rule.patterns
+            .contains(&"/h/.codex/.credentials.json".to_owned()),
+        "{rule:?}"
+    );
+}
+
+#[test]
+fn brace_groups_in_file_patterns_become_one_pattern_each() {
+    let ir = lowered(
+        "version: 1\ndefaults: allow\ndeny:\n  - id: k\n    fs.read: ['/h/{a,b/**}', '!/h/b/{ok,fine}']\n\
+         \x20   net: ['{x,y}.example']\n",
+    );
+    assert_eq!(
+        ir.fs.read.deny[0].patterns,
+        ["/h/a", "/h/b/**", "!/h/b/ok", "!/h/b/fine"]
+    );
+    let check = ir.checker().unwrap();
+    assert_eq!(check.check(&read("/h/b/c")), Some(Effect::Deny));
+    assert_eq!(check.check(&read("/h/b/ok")), Some(Effect::Allow));
+    // Host patterns stay as written: no backend lists a host path by path.
+    let net = ir.egress.net.deny.iter().find(|r| r.id == "k").unwrap();
+    assert_eq!(net.patterns, ["{x,y}.example"]);
 }
 
 #[test]

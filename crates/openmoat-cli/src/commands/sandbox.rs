@@ -14,7 +14,9 @@ use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
 use crate::sandbox::backend::SandboxBackend;
-use crate::sandbox::{Grants, Plan, Report, claude, install, landlock_rules, seatbelt_profile};
+use crate::sandbox::{
+    Grants, Plan, Report, claude, install, landlock_rules, own_login, seatbelt_profile,
+};
 
 /// One host's generated settings, ready to print.
 struct Shown<'a> {
@@ -67,6 +69,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
         render::json(&json!({
             "default_read_roots": plan.default_read_roots,
             "hook_only": hook_only_json(&policy),
+            "agent_logins": agent_logins_json(&policy),
             "hosts": doc,
             "lightweight": {
                 "seatbelt": { "profile": &seatbelt.profile, "report": &seatbelt.report },
@@ -84,6 +87,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
     }
     write_secrets(&mut out, &policy.secrets, &claude_doc, &plan.claude.report)?;
     write_hook_only(&mut out, &policy)?;
+    write_agent_logins(&mut out, &policy)?;
     for shown in hosts {
         if let Some(note) = install::unavailable(shown.host) {
             writeln!(out, "{}  {note}", shown.host.display_name())?;
@@ -287,6 +291,57 @@ fn write_hook_only(out: &mut impl io::Write, policy: &openmoat_core::Policy) -> 
         for (kind, patterns) in kinds {
             writeln!(out, "  {id}  {kind}: {}", patterns.join(", "))?;
         }
+    }
+    Ok(())
+}
+
+/// Whether `policy` denies the agents' logins in the OS sandboxes (ADR-054):
+/// its `agent-credentials` group is there and not `hook_only`.
+fn agent_logins_denied(policy: &openmoat_core::Policy) -> bool {
+    policy
+        .deny
+        .iter()
+        .any(|g| g.id == own_login::RULE && !g.hook_only)
+}
+
+/// Each agent with a login and the patterns `openmoat run` keeps readable
+/// when it starts that agent, in the host list's order.
+fn kept_logins() -> Vec<(Host, Vec<String>)> {
+    Host::ALL
+        .into_iter()
+        .map(|host| (host, own_login::own_patterns(host)))
+        .filter(|(_, patterns)| !patterns.is_empty())
+        .collect()
+}
+
+/// [`kept_logins`] for `--format json`, under the rule they come from.
+fn agent_logins_json(policy: &openmoat_core::Policy) -> Value {
+    let denied = agent_logins_denied(policy);
+    let kept: serde_json::Map<String, Value> = kept_logins()
+        .into_iter()
+        .filter(|_| denied)
+        .map(|(host, patterns)| (host.id().to_owned(), json!(patterns)))
+        .collect();
+    json!({ "rule": own_login::RULE, "denied": denied, "run_keeps": kept })
+}
+
+/// Where the agents' logins are denied, and what `openmoat run` keeps of them.
+fn write_agent_logins(out: &mut impl io::Write, policy: &openmoat_core::Policy) -> io::Result<()> {
+    if !agent_logins_denied(policy) {
+        return Ok(());
+    }
+    writeln!(
+        out,
+        "Agent logins  every sandbox denies the agents' login files to the commands an agent \
+         runs (`{}`, ADR-054); the agents' own sandboxes confine only those commands, so the \
+         agent still signs in. `openmoat run` holds the agent itself, so it keeps the login of \
+         the agent it starts readable (`{}`), or for another program the logins inside its \
+         `--write` paths:",
+        own_login::RULE,
+        own_login::ALLOWANCE
+    )?;
+    for (host, patterns) in kept_logins() {
+        writeln!(out, "  {}  {}", host.display_name(), patterns.join(", "))?;
     }
     Ok(())
 }

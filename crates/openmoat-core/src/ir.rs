@@ -20,9 +20,11 @@ use serde::Serialize;
 
 use crate::kind::Kind;
 
+mod braces;
 mod check;
 mod lower;
 
+pub use braces::alternatives as brace_alternatives;
 pub use check::Checker;
 pub use lower::{CLOUD_METADATA, CLOUD_METADATA_RULE, READ_ROOTS_RULE, lower};
 
@@ -58,7 +60,8 @@ pub struct Enforcement {
 
 /// File access rules. Paths are absolute, slash-separated globs with `~` and
 /// `${project}` already expanded once per spelling of each root (the home
-/// directory and project as given and with their symlinks resolved).
+/// directory and project as given and with their symlinks resolved), and each
+/// brace group's alternatives written out ([`brace_alternatives`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Filesystem {
     /// Whether paths compare case-insensitively (default macOS and Windows file systems).

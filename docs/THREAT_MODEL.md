@@ -51,7 +51,7 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 
 | # | Class | Hook | OS layer |
 |---|---|---|---|
-| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included, and a payment card number sent off the machine by `card-egress` (ADR-052); a read of a folder that holds denied paths (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `tar czf a.tgz ~/.docker`) needs review (`protected-contents`, ADR-038), since the classifier sees one read of the folder and the deny names files inside it | No reads of secret paths, network only through a proxy to allowed hosts |
+| T1 | Secret exfiltration via shell (`curl -d @~/.ssh/id_rsa …`) | `secrets-paths` denies reads and writes of secret paths, also through `cd`, relative operands, glob operands, `~name`, symlinks and nested shells; unlisted hosts are denied by `default.net`; a known kind of token or a brokered secret's placeholder sent to a host that is not its own is denied by `token-egress` and `placeholder-egress`, allowed hosts included, and a payment card number sent off the machine by `card-egress` (ADR-052); a read of a folder that holds denied paths (`cp -r ~/.codex x`, `grep -r . ~/.gemini`, `tar czf a.tgz ~/.docker`) needs review (`protected-contents`, ADR-038), since the classifier sees one read of the folder and the deny names files inside it; `agent-credentials` denies every agent's login and key files the same way | No reads of secret paths, nor of any agent's login files, by the commands an agent runs (under `openmoat run`, except the running agent's own, ADR-054); network only through a proxy to allowed hosts |
 | T2 | Secret exfiltration via file tools (`Read ~/.aws/credentials`) | The same path rules for Claude Code `Read`/`Glob`/`Grep`/`LSP`, Cursor `beforeReadFile` and `preToolUse` `Read`/`Grep`/`Glob`, Gemini CLI `read_file`/`read_many_files`/`glob`/`grep_search`/`list_directory`, and MCP path arguments | Only under `openmoat run`: Claude Code's and Cursor's file tools run outside their sandboxes |
 | T3 | Secret exfiltration via the environment (`echo $OPENAI_API_KEY`, `env`) | `env-secrets` denies reads of secret-shaped names; `env-dump` denies argument-less `env`, `printenv`, `set`, `export`, `declare`, `typeset`, and inline interpreter code that reads the whole environment (an alias such as `e = os.environ` is not followed, §5) | *Planned:* a scrubbed environment |
 | T4 | Destructive git and filesystem operations | `destructive` denies force pushes in every spelling, remote branch deletion, `reset --hard`, `clean -fdx`, `stash drop/clear`, `rm -rf` of `/` and `~`, `sudo`, `mkfs`, `dd if=`; `branch -D`, which the reflog undoes, needs review (`destructive-recoverable`); a recursive `rm` that may reach the project root or beyond and discarding checkouts are not allowed, so they defer to the agent's own prompt (ADR-025) | Writes outside the project and the temp directory never reach the disk: refused on macOS, made in an in-memory home that is discarded on Linux ([SANDBOX.md](SANDBOX.md)); inside the project only the hook decides |
@@ -163,14 +163,19 @@ something OpenMoat claims to stop.
   The Maven and Gradle settings `build-credentials` names are denied by the hook only
   (ADR-034): where a policy makes them readable to sandboxed commands (a read root or
   allow rule over `~/.m2` or `~/.gradle`), any program such a command runs can read
-  them, not only `mvn` and `gradle`. The same holds for `agent-credentials`, the
-  files where each agent keeps its login, provider keys and OAuth tokens: the hook
-  denies the agent's own tools reading or writing them (a shell command naming them,
-  a file tool, an MCP argument), but a sandbox leaves them readable, since the agent
-  reads its own login there; a program a sandboxed command runs, or a script that
-  builds the path at run time, can still read them, and so can any program an allowed
-  command runs on a hook-only agent. The options and the plan are in
-  [ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md). A recursive read of the folder
+  them, not only `mvn` and `gradle`. `agent-credentials`, the files where each agent
+  keeps its login, provider keys and OAuth tokens, is denied both ways
+  ([ADR-054](adr/ADR-054-agent-credentials-in-sandboxes.md)): the hook denies the
+  agent's own tools reading or writing them (a shell command naming them, a file tool,
+  an MCP argument), and every OS sandbox denies them to the commands the agent runs, so
+  a program a sandboxed command starts, or a script that builds the path at run time,
+  gets `EPERM` or `EACCES`. Claude Code's, Codex's and Cursor's sandboxes confine only
+  those commands, so the agent itself still signs in. Under `openmoat run` the agent is
+  inside the sandbox: the login of the agent it starts (or, for another program, the
+  logins inside its `--write` paths) stays readable to every command there, and only
+  the other agents' are denied; on Linux without a network namespace, one inside a
+  `--write` path stays open too (`landlock.inside-grants`). On a hook-only agent any
+  program an allowed command runs can read them. A recursive read of the folder
   that holds them (`cp -r ~/.codex x`, `tar czf a.tgz ~/.hermes`) is one read of the
   folder; the hook holds it for review (`protected-contents`, ADR-038), and a host that
   cannot prompt denies it, but once a person approves it the copy holds the files.

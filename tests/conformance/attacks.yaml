@@ -4830,8 +4830,9 @@
   repo: { policy: "version: 1\nallow:\n  - id: alt\n    net: ['*:8443']\n", trusted: true }
   expect: { verdict: deny, rules: [default.net] }
 
-# T1/T2/T8 each agent's own login, provider keys and OAuth tokens (`agent-credentials`,
-# hook only: under `openmoat run` the agent itself still reads them)
+# T1/T2/T8 each agent's own login, provider keys and OAuth tokens (`agent-credentials`;
+# the OS sandboxes deny them to commands too, ADR-054, and `openmoat run` keeps the
+# running agent's own: `crates/openmoat-cli/src/sandbox/own_login/tests.rs`)
 - id: T2-read-claude-code-credentials
   threat: T2
   action: { fs_read: "~/.claude/.credentials.json" }

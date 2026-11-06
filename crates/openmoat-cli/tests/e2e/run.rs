@@ -17,6 +17,9 @@ mod repo_net;
 /// An agent's own configuration in the project stays out of commands' reach.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod agent_config;
+/// The running agent keeps its login; other agents' stay denied (ADR-054).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod agent_logins;
 
 /// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
 /// outside the home so that writing the home is not a temp-directory write.

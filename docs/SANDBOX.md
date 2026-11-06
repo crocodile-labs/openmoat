@@ -23,13 +23,32 @@ command ends; the file on disk does not change (`contained` in
 default `build-credentials` (`~/.m2/settings.xml`, `~/.gradle/gradle.properties`), is
 left out of every generated sandbox, so `mvn` and `gradle` can read their settings
 wherever the sandbox lets commands read `~/.m2` or `~/.gradle`; the hook still denies
-the agent's own access. So is the default `agent-credentials` (where each agent
-keeps its login, provider keys and OAuth tokens): under `openmoat run` the agent
-itself reads its login inside the sandbox, and so can any command it runs there, while
-the hook denies the agent's own tools reading or writing them. The default `agent-folders` (renaming a `.github` or
+the agent's own access. The default `agent-folders` (renaming a `.github` or
 `.github/copilot` folder) is one too, so a clone or an install inside the sandbox can
 still create a `.github`. `openmoat sandbox show` lists these groups and their paths as
 decided by the hook only, not in the OS sandbox (`hook_only` in `--format json`).
+
+The default `agent-credentials` (where each agent keeps its login, provider keys and
+OAuth tokens) is denied in every sandbox (ADR-054). Each agent's own sandbox confines
+only the commands it runs, never the agent itself, so the agent keeps signing in while
+a command it runs (a test, a package script, a downloaded binary) gets `EPERM` or
+`EACCES` on any agent's login, its own included: Claude Code's `denyRead`, `denyWrite`
+and `Read(//…)`/`Edit(//…)` rules, Codex's profile (which denies the Codex home whole
+already) and Cursor's read boundary, which grants no path holding one. A command that
+needs another agent's login (`codex exec` started from Claude Code) fails there; set
+`hook_only: true` on the group in your policy to leave it to the hook again.
+`openmoat run` holds the agent itself (below), so it keeps that agent's login readable.
+`openmoat sandbox show` lists the logins under `Agent logins` and what `openmoat run`
+keeps for each agent (`agent_logins` in `--format json`).
+
+```console
+# a command Claude Code runs in its own sandbox, after `openmoat init`:
+$ cat ~/.codex/auth.json
+cat: /Users/you/.codex/auth.json: Operation not permitted
+$ cat ~/.claude/.credentials.json
+cat: /Users/you/.claude/.credentials.json: Operation not permitted
+# Claude Code itself still signs in: it reads the file outside its sandbox
+```
 
 - **Claude Code** (`settings.json`): the `sandbox` block (`enabled`,
   `failIfUnavailable: true`, `allowUnsandboxedCommands: false`, `excludedCommands: []`,
@@ -391,6 +410,17 @@ bubblewrap.
   write the project, the temp directory and each `--write` path (the agent's state).
   Deny rules still win (`~/.claude/settings.json` stays unwritable; on Linux only where
   the agent gets a network namespace, above).
+- **Agent logins.** The agent reads its own login inside the sandbox, so `openmoat run`
+  finds which agent it starts (the command as typed, or the file it resolves to, by each
+  agent's program names and install directories) and leaves that agent's login files
+  out of `agent-credentials` for this sandbox, listed as `run.own-login`. Every other
+  agent's login stays denied, inside a `--write` path too (on Linux where the agent gets
+  a network namespace; without one Landlock lists it as `landlock.inside-grants`). For a
+  program that is no agent OpenMoat knows (`npx …`, an MCP server under
+  `openmoat mcp wrap --sandbox`), the login files inside its `--write` paths stay
+  readable instead. The commands the agent runs share its login here; for an API-key
+  login, [BROKER_LOGINS.md](BROKER_LOGINS.md) keeps the key out of the sandbox. The hook
+  still denies the agent's own tools reading its login.
 - git uses a bare repository only when named: `openmoat run` (and `--isolate`) appends
   `safe.bareRepository=explicit` to the agent's `GIT_CONFIG_COUNT` entries, keeping
   the ones it inherits, and refuses to start when `GIT_CONFIG_COUNT` is not a number.

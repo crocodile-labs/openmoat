@@ -70,6 +70,10 @@ impl Confined {
         match *self {}
     }
 
+    pub fn report_mut(&mut self) -> &mut Report {
+        match *self {}
+    }
+
     pub fn warning(&self) -> Option<&str> {
         match *self {}
     }

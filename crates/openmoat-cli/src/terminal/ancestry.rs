@@ -97,24 +97,14 @@ fn agent_name(argv: &[String]) -> Option<String> {
         return Some(helper.name.to_owned());
     }
     argv.iter().take(2).find_map(|word| {
+        // `openmoat` itself by its program name; the hosts as their specs say.
         let lower = word.trim_start_matches('-').to_ascii_lowercase();
-        let segments: Vec<&str> = lower.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
-        let base = segments.last()?;
-        let stem = [".exe", ".js", ".mjs", ".cjs"]
-            .iter()
-            .find_map(|ext| base.strip_suffix(ext))
-            .unwrap_or(base);
-        let mut names = processes()
-            .flat_map(|process| process.names)
-            .chain(OPENMOAT);
-        if let Some(name) = names.find(|a| **a == stem) {
+        let base = lower.rsplit(['/', '\\']).find(|s| !s.is_empty())?;
+        let stem = base.strip_suffix(".exe").unwrap_or(base);
+        if let Some(name) = OPENMOAT.iter().find(|name| **name == stem) {
             return Some((*name).to_owned());
         }
-        let dirs = &segments[..segments.len() - 1];
-        processes()
-            .flat_map(|process| process.package_dirs)
-            .find(|pattern| dirs.windows(pattern.len()).any(|w| w == **pattern))
-            .map(|pattern| pattern[0].to_owned())
+        Host::by_program(word).map(|(_, name)| name.to_owned())
     })
 }
 

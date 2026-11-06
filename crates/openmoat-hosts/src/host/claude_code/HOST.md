@@ -42,7 +42,9 @@ OpenMoat's `review` is sent as Claude Code's `"ask"`, which Claude Code puts to 
 Credentials: the login Claude Code keeps in a file (`.credentials.json` in its
 configuration directory on Linux and Windows, and on macOS when the Keychain refuses
 it) and the Anthropic profiles in `~/.config/anthropic` are `agent-credentials`': the
-agent's own tools may neither read nor write them, under `CLAUDE_CONFIG_DIR` too. The
+agent's own tools may neither read nor write them, under `CLAUDE_CONFIG_DIR` too, and
+Claude Code's sandbox denies them (and every other agent's login) to the commands it
+runs, while Claude Code itself signs in outside it (ADR-054). The
 macOS Keychain entry is read by `security find-generic-password -w`, which
 `secrets-paths` denies. `claude setup-token`, which prints a new long-lived token, needs review
 (`agent-token`); `claude mcp add`, `add-json`, `login` and `claude plugin install` need review

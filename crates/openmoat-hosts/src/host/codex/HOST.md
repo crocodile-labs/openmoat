@@ -79,7 +79,9 @@ so a review is sent as a deny that the person approves with `openmoat allow --la
 Credentials: `auth.json` (the ChatGPT tokens or API key, the default store) and
 `.credentials.json` (MCP OAuth tokens without a keyring) in `CODEX_HOME` are
 `agent-credentials`': the agent's own tools may not read them (`kernel-self` already
-denies every write there). The keyring entries (`Codex Auth`, `Codex MCP Credentials`)
+denies every write there). The Codex profile denies the Codex home, and every other
+agent's login file, to the commands Codex runs; Codex itself signs in outside its
+sandbox (ADR-054). The keyring entries (`Codex Auth`, `Codex MCP Credentials`)
 are read by `security find-generic-password -w` or `secret-tool lookup`, which
 `secrets-paths` denies. `codex mcp add` and `codex mcp login` need review (`runs-later`);
 `codex mcp add --url` starts the server's OAuth sign-in at once. `openmoat status` and
