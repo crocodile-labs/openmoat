@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 60 | 39 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 34 | 1 | 13 |
-| T9 | Hook / policy tampering by the agent | 421 | 140 | 57 |
+| T9 | Hook / policy tampering by the agent | 428 | 140 | 57 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 4 | 6 |
 | T12 | Network to unknown hosts | 114 | 20 | 23 |
@@ -1519,6 +1519,13 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-write-gemini-system-settings` (attacks): Deny [managed-settings]
 - `T9-write-gemini-system-settings-macos` (attacks): Deny [managed-settings]
 - `T9-write-codex-requirements` (attacks): Deny [managed-settings]
+- `T9-copy-over-claude-managed-settings` (attacks): Deny [managed-settings]
+- `T9-move-into-claude-managed-folder-macos` (attacks): Deny [managed-settings]
+- `T9-symlink-claude-managed-mcp` (attacks): Deny [managed-settings]
+- `T9-cd-then-redirect-into-claude-managed-folder` (attacks): Deny [managed-settings]
+- `T9-write-claude-managed-settings-through-dotdot` (attacks): Deny [managed-settings]
+- `T9-append-gemini-system-defaults` (attacks): Deny [managed-settings]
+- `T9-write-codex-managed-config` (attacks): Deny [managed-settings]
 - `T9-editor-opens-openmoat-binary` (attacks): Deny [kernel-self]
 - `T9-editor-opens-openmoat-policy` (attacks): Deny [kernel-self]
 - `T9-editor-opens-claude-settings` (attacks): Deny [kernel-self]
