@@ -406,8 +406,8 @@ unlisted hosts. The atom never appears in a session that read no secret.
   `NuGet.config`), Ruby (`Rakefile`, `*.rake`, `Gemfile`, `*.gemspec`, `.rspec`), PHP
   (`composer.json`, `artisan`, `phpunit.xml`), Python (`conftest.py`, `pytest.ini`,
   `pyproject.toml`, `setup.py`, `setup.cfg`, `tox.ini`, `noxfile.py`, a site directory's
-  `*.pth`, `sitecustomize.py`, `usercustomize.py`) and containers
-  (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`), and agent instructions and
+  `*.pth`, `sitecustomize.py`, `usercustomize.py`, a virtual environment's `bin/`) and containers
+  (`Dockerfile`, `docker-compose*.yml`, `compose*.yml`, `.devcontainer/`, `.devcontainer.json`), and agent instructions and
   settings (`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `.claude.json`, `.codex/**`,
   `.cursor/**`, `.cursorrules`, `.mcp.json`, OpenClaw's `.openclaw/openclaw.json`,
   `.openclaw/openmoat/**` and `.openclaw/extensions/**`, GitHub Copilot CLI's `.copilot`
