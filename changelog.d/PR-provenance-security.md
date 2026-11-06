@@ -1,2 +1,0 @@
-### Security
-- Agents cannot write OpenMoat's provenance record. `openmoat provenance --write-notes` from an agent is denied (`kernel-self`). An agent's `git notes` on the `openmoat` notes ref, `git update-ref` of `refs/notes/openmoat` and `git update-ref --stdin` need review (new `provenance-notes` group). Other notes refs and reading history are unchanged ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
