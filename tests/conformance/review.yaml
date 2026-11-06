@@ -1477,6 +1477,52 @@
   threat: T9
   action: { fs_write: "/p/.vscode/tasks.json" }
   expect: { verdict: review, rules: [runs-later] }
+# package-manager and build configuration that runs code or swaps the registry on the
+# next install, script or build, which may run in the person's own terminal
+- id: review-write-project-npmrc
+  threat: T5
+  action: { fs_write: "/p/.npmrc" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-redirect-yarn-path-into-yarnrc
+  threat: T5
+  action: { shell: "echo 'yarnPath: ./x.cjs' > .yarnrc.yml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-legacy-yarnrc
+  threat: T5
+  action: { fs_write: "/p/.yarnrc" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-cargo-config
+  threat: T5
+  action: { fs_write: "/p/.cargo/config.toml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-nested-legacy-cargo-config
+  threat: T5
+  action: { fs_write: "/p/crates/a/.cargo/config" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-bunfig
+  threat: T5
+  action: { fs_write: "/p/bunfig.toml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-user-pip-conf
+  threat: T5
+  action: { fs_write: "~/.config/pip/pip.conf" }
+  expect: { verdict: review, rules: [persistence] }
+- id: review-write-legacy-user-pip-conf
+  threat: T5
+  action: { fs_write: "~/.pip/pip.conf" }
+  expect: { verdict: review, rules: [persistence] }
+- id: review-write-macos-user-pip-conf
+  threat: T5
+  action: { fs_write: "~/Library/Application Support/pip/pip.conf" }
+  expect: { verdict: review, rules: [persistence] }
+- id: review-write-user-uv-toml
+  threat: T5
+  action: { fs_write: "~/.config/uv/uv.toml" }
+  expect: { verdict: review, rules: [persistence] }
+- id: review-write-user-bunfig
+  threat: T5
+  action: { fs_write: "~/.bunfig.toml" }
+  expect: { verdict: review, rules: [persistence] }
 - id: review-workflow-through-a-symlinked-dir
   threat: T11
   action: { shell: "echo x > ci/ci.yml" }
