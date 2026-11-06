@@ -40,6 +40,7 @@ mod policy;
 mod programs;
 mod realpath;
 mod repo;
+mod route;
 mod secret;
 mod shell;
 mod taint;

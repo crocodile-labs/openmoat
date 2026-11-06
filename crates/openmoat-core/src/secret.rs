@@ -2,17 +2,15 @@
 //!
 //! OpenMoat keeps the value; the agent holds a placeholder; `moat proxy` puts the
 //! value into one header of requests to one host, and with `allow` rules only
-//! of the requests they name (`route.rs`, ADR-043). This module is the schema,
+//! of the requests they name (`crate::route`, ADR-043). This module is the schema,
 //! its validation and the rules' matching: reading the source is the CLI's
 //! job, using the value is the proxy's.
 
-mod route;
-
 use serde::{Deserialize, Serialize};
 
-pub use self::route::{MAX_ROUTES, METHOD_OVERRIDE_HEADERS, PathRefusal, RequestPath, Route};
 use crate::host::{MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN};
 use crate::policy::PolicyError;
+pub use crate::route::{MAX_ROUTES, METHOD_OVERRIDE_HEADERS, PathRefusal, RequestPath, Route};
 
 /// What a brokered secret's id is prefixed with where it stands for a rule id
 /// (`secrets.<id>`): lint warnings, policy errors and sandbox losses.

@@ -1,6 +1,7 @@
-//! A brokered secret's method and path rules (`allow:`, ADR-043): which
-//! requests may receive its value, and the request path in the form they are
-//! matched against.
+//! Method and path rules for HTTP requests (ADR-043): which requests a
+//! brokered secret's `allow:` rules let receive its value, and the request path
+//! in the form they are matched against. Shared, so that other request rules
+//! (ADR-062, proposed) match paths the same way.
 //!
 //! A rule is `METHOD /path`: the method in capitals, compared exactly, and a
 //! path of `/`-separated segments, each a literal, `*` (exactly one non-empty
