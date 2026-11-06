@@ -586,6 +586,21 @@ deny:
     why: it would take settings OpenMoat protects out of its sight
     hook_only: true
     fs.write: ["**/.github", "**/.github/copilot"]
+  # the agents' system-wide settings, which outrank the user's and the project's:
+  # Claude Code's managed settings (`managed-settings.json`, `managed-settings.d/`,
+  # `managed-mcp.json`), Gemini CLI's system settings and defaults, Codex's
+  # `requirements.toml`. One can turn every hook off or add its own. An
+  # administrator deploys them; where the folder is writable (`/etc/claude-code` on
+  # WSL, a loosely permissioned `ProgramData`) the agent could too. `hook_only`
+  # (ADR-034): the OS sandboxes grant no write there anyway
+  - id: managed-settings
+    reason: an agent's system-wide settings outrank the user's and can turn OpenMoat's hooks off; an administrator deploys them
+    title: changing an agent's system-wide settings
+    why: they outrank your own and can switch OpenMoat's hooks off for every later session
+    hook_only: true
+    fs.write: ["/Library/Application Support/ClaudeCode/**", "/etc/claude-code/**", "C:/Program Files/ClaudeCode/**",
+      "/Library/Application Support/GeminiCli/**", "/etc/gemini-cli/**", "C:/ProgramData/gemini-cli/**",
+      "/etc/codex/**", "C:/ProgramData/OpenAI/Codex/**"]
   - id: shell-rc
     reason: edits persist into every future shell session
     title: editing your shell's start-up files
@@ -655,6 +670,8 @@ allow:
       # program settings the editor runs (`runs-later` needs review)
       "!${project}/**/.vscode/**", "!${project}/**/.vscode", "!${project}/**/*.code-workspace",
       "!${project}/**/.idea/**", "!${project}/**/.idea", "!${project}/**/*.run.xml",
+      # package-manager and build configuration that runs code (`runs-later` needs review)
+      "!${project}/**/.npmrc", "!${project}/**/.yarnrc", "!${project}/**/.yarnrc.yml", "!${project}/**/.cargo/config.toml", "!${project}/**/.cargo/config", "!${project}/**/bunfig.toml",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
       "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
       "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json",
@@ -1104,6 +1121,11 @@ review:
       # accepted edit could otherwise turn into a command no prompt asked about
       # (code.claude.com/docs/en/jetbrains, "Security considerations")
       "**/.vscode/**", "**/.vscode", "**/*.code-workspace", "**/.idea/**", "**/.idea", "**/*.run.xml",
+      # package-manager and build configuration that runs code on the next install,
+      # script or build (`.npmrc` `node-options`/`script-shell`, `.yarnrc.yml`
+      # `yarnPath`, `.cargo/config.toml` `rustc-wrapper`/`runner`, `bunfig.toml`
+      # `preload`), in the project or the home
+      "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/.cargo/config.toml", "**/.cargo/config", "**/bunfig.toml",
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
@@ -1212,7 +1234,11 @@ review:
       # its place later, with the person's rights. Installers (`pipx`, `cargo
       # install`, `brew`) are commands, not writes, and keep their verdict;
       # `kernel-self` denies OpenMoat's own binary names in any `bin`
-      "~/.local/bin/**", "~/bin/**", "~/.cargo/bin/**", "/usr/local/bin/**", "/opt/homebrew/bin/**"]
+      "~/.local/bin/**", "~/bin/**", "~/.cargo/bin/**", "/usr/local/bin/**", "/opt/homebrew/bin/**",
+      # where every later install fetches packages from, and what every Bun start
+      # preloads: pip's and uv's user configuration, Bun's global configuration
+      "~/.config/pip/pip.conf", "~/.pip/pip.conf", "~/Library/Application Support/pip/pip.conf",
+      "~/.config/uv/uv.toml", "~/.bunfig.toml"]
     # `at` and `batch` run the job on their stdin or in `-f FILE` later; the job's
     # commands are classified too, so a denied one stays denied
     shell: ["crontab *", "at *", "batch *"]
@@ -1277,6 +1303,33 @@ review:
     why: the build can read and keep what it is given
     # `dev-shell` allows `docker build` without these options
     shell: ["docker build *"]
+  # a container handed the host: privileged mode, the host's process, network or
+  # user namespaces, added capabilities, devices, a weaker security profile, the
+  # host's root or the Docker socket mounted in. Code in it can change this machine
+  # outside any sandbox, as root where the daemon runs as root. Other runs defer,
+  # as before; a key folder mounted in is decided by its path (`secrets-paths`)
+  - id: container-host
+    reason: gives a container the host's root, devices, namespaces or Docker socket, so it can change this machine outside any sandbox
+    title: giving a container the host's root, devices or Docker socket
+    why: code in that container can change this machine outside any sandbox, as root where the daemon runs as root
+    shell:
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --privileged*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network}=host*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network} host*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --cap-add*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --device*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --security-opt*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} /"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} /:*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} *docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v/:*,-v=/:*,--volume=/:*,-v/,-v=/,--volume=/}"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v*docker.sock*,--volume=*docker.sock*}"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *{source,src}=/,*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *{source,src}=/"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*{source,src}=/,*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*{source,src}=/"
   # `claude setup-token` signs in and prints a new long-lived login token
   # without saving it; the person may mean to (a CI secret), the agent should
   # not do it unasked. Commands that print a stored token are denied

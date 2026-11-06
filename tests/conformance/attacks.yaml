@@ -4693,6 +4693,66 @@
   threat: T9
   action: { shell: "mv .github/copilot c" }
   expect: { verdict: deny, rules: [agent-folders] }
+- id: T9-write-claude-managed-settings-macos
+  threat: T9
+  action: { fs_write: "/Library/Application Support/ClaudeCode/managed-settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-claude-managed-settings-linux
+  threat: T9
+  action: { fs_write: "/etc/claude-code/managed-settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-tee-claude-managed-dropin
+  threat: T9
+  action: { shell: "echo '{\"disableAllHooks\": true}' | tee /etc/claude-code/managed-settings.d/00-off.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-claude-managed-mcp
+  threat: T9
+  action: { fs_write: "/etc/claude-code/managed-mcp.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-remove-claude-managed-folder
+  threat: T9
+  action: { shell: "rm -rf '/Library/Application Support/ClaudeCode'" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-gemini-system-settings
+  threat: T9
+  action: { fs_write: "/etc/gemini-cli/settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-gemini-system-settings-macos
+  threat: T9
+  action: { fs_write: "/Library/Application Support/GeminiCli/settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-codex-requirements
+  threat: T9
+  action: { fs_write: "/etc/codex/requirements.toml" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-copy-over-claude-managed-settings
+  threat: T9
+  action: { shell: "cp settings.json /etc/claude-code/managed-settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-move-into-claude-managed-folder-macos
+  threat: T9
+  action: { shell: "mv new.json '/Library/Application Support/ClaudeCode/managed-settings.json'" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-symlink-claude-managed-mcp
+  threat: T9
+  action: { shell: "ln -sf /p/evil.json /etc/claude-code/managed-mcp.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-cd-then-redirect-into-claude-managed-folder
+  threat: T9
+  action: { shell: "cd /etc/claude-code && echo x > managed-settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-claude-managed-settings-through-dotdot
+  threat: T9
+  action: { fs_write: "/etc/claude-code/managed-settings.d/../managed-settings.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-append-gemini-system-defaults
+  threat: T9
+  action: { shell: "tee -a /etc/gemini-cli/system-defaults.json < defaults.json" }
+  expect: { verdict: deny, rules: [managed-settings] }
+- id: T9-write-codex-managed-config
+  threat: T9
+  action: { fs_write: "/etc/codex/managed_config.toml" }
+  expect: { verdict: deny, rules: [managed-settings] }
 
 # T9 an editor saves the file it opens, so opening a protected file in one is
 # decided as a write of it

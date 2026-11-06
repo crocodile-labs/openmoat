@@ -11,11 +11,11 @@ the verdict and rule ids the default policy must produce for it.
 | T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
-| T5 | Supply-chain execution | 29 | 67 | 15 |
+| T5 | Supply-chain execution | 29 | 96 | 15 |
 | T6 | Environment poisoning | 60 | 42 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 36 | 1 | 13 |
-| T9 | Hook / policy tampering by the agent | 413 | 156 | 57 |
+| T9 | Hook / policy tampering by the agent | 428 | 156 | 57 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 6 | 6 |
 | T12 | Network to unknown hosts | 114 | 20 | 23 |
@@ -671,6 +671,24 @@ the verdict and rule ids the default policy must produce for it.
 - `review-pnpm-install` (review): Defer [default]
 - `review-npx-downloads-a-tool` (review): Defer [default]
 - `review-docker-run` (review): Defer [default]
+- `review-docker-run-privileged` (review): Review [container-host]
+- `review-docker-run-host-pid` (review): Review [container-host]
+- `review-docker-run-host-network-spaced` (review): Review [container-host]
+- `review-podman-run-cap-add` (review): Review [container-host]
+- `review-docker-run-mounts-host-root` (review): Review [container-host]
+- `review-docker-run-mounts-host-root-attached` (review): Review [container-host]
+- `review-docker-run-mounts-docker-socket` (review): Review [container-host]
+- `review-docker-run-bind-mount-root` (review): Review [container-host]
+- `review-docker-exec-privileged` (review): Review [container-host]
+- `review-docker-container-run-privileged` (review): Review [container-host]
+- `review-docker-run-cap-add-all-spaced` (review): Review [container-host]
+- `review-docker-run-mounts-host-root-read-only` (review): Review [container-host]
+- `review-docker-run-mounts-host-root-attached-short` (review): Review [container-host]
+- `review-docker-run-detached-host-pid-spaced` (review): Review [container-host]
+- `review-nerdctl-run-host-network` (review): Review [container-host]
+- `review-podman-run-unconfined-seccomp` (review): Review [container-host]
+- `review-docker-run-bind-mount-root-attached` (review): Review [container-host]
+- `review-docker-run-published-port` (review): Defer [default]
 - `review-npm-ci` (review): Defer [default]
 - `review-pip-install-editable` (review): Defer [default]
 - `review-go-mod-tidy-resolves-new-modules` (review): Defer [default]
@@ -692,6 +710,17 @@ the verdict and rule ids the default policy must produce for it.
 - `review-go-run-remote-module` (review): Defer [default]
 - `review-npx-project-tool` (review): Defer [default]
 - `defer-install-a-dependency` (review): Defer [default]
+- `review-write-project-npmrc` (review): Review [runs-later]
+- `review-redirect-yarn-path-into-yarnrc` (review): Review [runs-later]
+- `review-write-legacy-yarnrc` (review): Review [runs-later]
+- `review-write-cargo-config` (review): Review [runs-later]
+- `review-write-nested-legacy-cargo-config` (review): Review [runs-later]
+- `review-write-bunfig` (review): Review [runs-later]
+- `review-write-user-pip-conf` (review): Review [persistence]
+- `review-write-legacy-user-pip-conf` (review): Review [persistence]
+- `review-write-macos-user-pip-conf` (review): Review [persistence]
+- `review-write-user-uv-toml` (review): Review [persistence]
+- `review-write-user-bunfig` (review): Review [persistence]
 - `review-claude-mcp-add` (review): Review [runs-later]
 - `review-claude-mcp-add-json` (review): Review [runs-later]
 - `review-claude-mcp-login` (review): Review [runs-later]
@@ -1517,6 +1546,21 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-start-stop-daemon-openmoat-allow` (attacks): Deny [kernel-self]
 - `T9-mv-github-folder` (attacks): Deny [agent-folders]
 - `T9-mv-github-copilot-folder` (attacks): Deny [agent-folders]
+- `T9-write-claude-managed-settings-macos` (attacks): Deny [managed-settings]
+- `T9-write-claude-managed-settings-linux` (attacks): Deny [managed-settings]
+- `T9-tee-claude-managed-dropin` (attacks): Deny [managed-settings]
+- `T9-write-claude-managed-mcp` (attacks): Deny [managed-settings]
+- `T9-remove-claude-managed-folder` (attacks): Deny [managed-settings]
+- `T9-write-gemini-system-settings` (attacks): Deny [managed-settings]
+- `T9-write-gemini-system-settings-macos` (attacks): Deny [managed-settings]
+- `T9-write-codex-requirements` (attacks): Deny [managed-settings]
+- `T9-copy-over-claude-managed-settings` (attacks): Deny [managed-settings]
+- `T9-move-into-claude-managed-folder-macos` (attacks): Deny [managed-settings]
+- `T9-symlink-claude-managed-mcp` (attacks): Deny [managed-settings]
+- `T9-cd-then-redirect-into-claude-managed-folder` (attacks): Deny [managed-settings]
+- `T9-write-claude-managed-settings-through-dotdot` (attacks): Deny [managed-settings]
+- `T9-append-gemini-system-defaults` (attacks): Deny [managed-settings]
+- `T9-write-codex-managed-config` (attacks): Deny [managed-settings]
 - `T9-editor-opens-openmoat-binary` (attacks): Deny [kernel-self]
 - `T9-editor-opens-openmoat-policy` (attacks): Deny [kernel-self]
 - `T9-editor-opens-claude-settings` (attacks): Deny [kernel-self]

@@ -62,6 +62,15 @@ mod tests {
         );
         assert_eq!(host("C:\\Tools\\Codex.exe"), Some("codex"));
         assert_eq!(host("/opt/homebrew/bin/goose"), Some("goose"));
+        // Cline's Node wrapper, the binary its `postinstall` caches, and the
+        // platform package's binary
+        for cline in [
+            "/usr/local/lib/node_modules/cline/bin/cline",
+            "/usr/local/lib/node_modules/cline/bin/.cline",
+            "/usr/local/lib/node_modules/@cline/cli-darwin-arm64/bin/cline",
+        ] {
+            assert_eq!(host(cline), Some("cline"), "{cline}");
+        }
         for other in ["/bin/zsh", "/usr/bin/python3", "npx", "", "/"] {
             assert_eq!(host(other), None, "{other}");
         }

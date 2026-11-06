@@ -62,6 +62,13 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.idea/**",
     "**/.idea",
     "**/*.run.xml",
+    // package-manager and build configuration that runs code on the next install or build
+    "**/.npmrc",
+    "**/.yarnrc",
+    "**/.yarnrc.yml",
+    "**/.cargo/config.toml",
+    "**/.cargo/config",
+    "**/bunfig.toml",
     "**/.claude/hooks/**",
     "**/.mcp.json",
     "**/.cursor/mcp.json",

@@ -1,6 +1,6 @@
 # Cline CLI (`cline`)
 
-The Cline CLI (`cline`, npm `@cline/cli`, <https://github.com/cline/cline>), through its
+The Cline CLI (`cline`, npm `cline`, <https://github.com/cline/cline>), through its
 `PreToolUse` file hook, checked against the source of tag `cli-v3.0.74` (2026-10-26);
 the SDK files it runs hooks with are the same in the VS Code extension's `v4.1.26`.
 Every fact here comes from [`cline.rs`](../cline.rs) and the files beside this one; if
