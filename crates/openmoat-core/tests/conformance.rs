@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 
 use openmoat_core::{
-    Action, CompiledPolicy, DEFAULT_POLICY, EvalContext, MapPathResolver, MapResolver, Policy,
-    RepoPolicy, Taint, TaintSecret, Verdict,
+    Action, CompiledPolicy, DEFAULT_POLICY, EvalContext, InjectedMap, MapPathResolver, MapResolver,
+    Policy, RepoPolicy, Taint, TaintSecret, Verdict,
 };
 use serde::Deserialize;
 
@@ -115,6 +115,10 @@ struct FixtureAction {
     /// What the payload does not show of the action, which makes it at least
     /// a `review` (`Action::Unchecked`).
     unchecked: Option<String>,
+    /// For an earlier call of `session`: what it returned, as a host reports
+    /// it after the call (ADR-057). Its tokens are kept when the call read
+    /// untrusted content.
+    output: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -323,11 +327,19 @@ fn default_policy_conformance() {
         );
         let cwd = fixture.context.as_ref().map_or(&ctx.cwd, |c| &c.cwd);
         let mut taint = Taint::default();
-        for (n, earlier) in fixture.session.into_iter().enumerate() {
+        let mut seen = InjectedMap::default();
+        for (n, mut earlier) in fixture.session.into_iter().enumerate() {
+            let output = earlier.output.take();
             let earlier = earlier.into_action(&format!("{}.session[{n}]", fixture.id));
             taint.absorb(compiled.exposure(&earlier, cwd, &links));
+            if let (Some(output), Some(source)) =
+                (output, compiled.output_source(&earlier, cwd, &links))
+            {
+                seen.add(compiled.injected_tokens(&earlier, cwd, &output), &source);
+            }
         }
         let decision = compiled.with_taint(plain, &action, &links, &taint);
+        let decision = compiled.with_injected(decision, &action, &links, &seen);
         let missing: Vec<&String> = fixture
             .expect
             .rules

@@ -59,6 +59,10 @@ gone.
 
 ## Known gaps
 
+Injected input (ADR-057): OpenMoat does not install Copilot's `postToolUse` hook, so it
+never sees what a call returned. A host, path or command untrusted output named is not
+linked to the later call that uses it; only session taint applies.
+
 A hook that times out lets the call run; `disableAllHooks` in Copilot's user or a
 repository's `settings.json` turns the hook off (`openmoat status` and `doctor` report it);
 MCP tools are told apart from built-in ones only by name, so a changed server is traced by

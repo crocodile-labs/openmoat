@@ -26,6 +26,7 @@ use crate::home::Home;
 use crate::integrity::sha256_hex;
 use crate::realpath::FsPathResolver;
 
+pub mod injected;
 pub mod issued;
 pub mod provenance;
 pub mod run;

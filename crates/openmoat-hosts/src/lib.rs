@@ -319,6 +319,15 @@ pub enum HookEvent {
         /// Why it started (`startup`, `resume`, `clear`, `compact`).
         source: String,
     },
+    /// A tool ran and the host reports what it returned (Claude Code
+    /// `PostToolUse`): nothing to decide; OpenMoat keeps fingerprints of
+    /// untrusted output for later calls (ADR-057).
+    PostToolUse {
+        /// The tool's output as text: every string the host's `tool_response`
+        /// holds, joined by newlines, at most
+        /// [`openmoat_core::MAX_INJECTED_SCAN_BYTES`].
+        output: String,
+    },
 }
 
 /// A host tool call, normalised.

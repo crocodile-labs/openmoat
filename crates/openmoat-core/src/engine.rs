@@ -20,6 +20,7 @@ mod atoms;
 mod contents;
 mod context;
 mod egress;
+mod injection;
 mod taint;
 
 use atoms::checked_atoms;

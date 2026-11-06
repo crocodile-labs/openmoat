@@ -2,7 +2,7 @@
 //!
 //! A review: `continue_cli.rs`.
 
-use super::{PRE_TOOL_USE, Row, post_tool_use, pre_tool_use};
+use super::{PRE_TOOL_USE, Row, notification, pre_tool_use};
 
 pub fn row() -> Row {
     Row {
@@ -11,7 +11,7 @@ pub fn row() -> Row {
         env: Some("CONTINUE_PROJECT_DIR"),
         governed: "continue/pretooluse-bash.json",
         unknown_tool: || pre_tool_use("FutureTool"),
-        unknown_event: post_tool_use,
+        unknown_event: notification,
         ..PRE_TOOL_USE
     }
 }

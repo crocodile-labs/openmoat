@@ -291,8 +291,8 @@ fn malformed_payloads_are_errors() {
         Host::ClaudeCode.parse_request(empty),
         Err(HostError::MissingField { .. })
     ));
-    let wrong =
-        r#"{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}"#;
+    // `PostToolUse` is read since ADR-057; an event OpenMoat installs no entry for is not
+    let wrong = r#"{"hook_event_name":"Stop","tool_name":"Bash","tool_input":{"command":"ls"}}"#;
     assert!(matches!(
         Host::ClaudeCode.parse_request(wrong),
         Err(HostError::WrongEvent(_))

@@ -39,6 +39,7 @@ mod host_failures;
 mod hosts;
 #[cfg(unix)]
 mod human_only;
+mod injected;
 #[cfg(unix)]
 mod install_path;
 mod listings;

@@ -20,7 +20,7 @@ pub use redact::{KnownSecrets, MIN_SECRET_LEN, TOKEN_SHAPES, redact, redact_valu
 pub use store::{
     AnchorCheck, BreakKind, Cached, ChainBreak, ChainHead, ChainReport, Event, EventId,
     ExportBreak, ExportFilter, ExportFormat, ExportReport, ExportedEvent, Exposure, FileProvenance,
-    GENESIS, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS, MCP_TICKET_MAX_AGE_MS, NewEvent,
-    NewProvenance, NewTicket, ProvenanceKind, SessionWrite, Store, StoreError, Ticket, Written,
-    verify_export,
+    GENESIS, MAX_INJECTED_PER_SESSION, MCP_FLOW_MAX_AGE_MS, MCP_FLOW_SESSION_ROWS,
+    MCP_TICKET_MAX_AGE_MS, NewEvent, NewInjected, NewProvenance, NewTicket, ProvenanceKind,
+    SessionWrite, Store, StoreError, Ticket, Written, verify_export,
 };

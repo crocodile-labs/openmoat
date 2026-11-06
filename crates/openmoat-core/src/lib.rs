@@ -21,6 +21,7 @@ pub mod diffscan;
 mod engine;
 mod expand;
 mod host;
+mod injection;
 pub mod ir;
 mod kind;
 // Public only for the differential test against bash (`tests/lexer_vs_bash.rs`);
@@ -54,6 +55,11 @@ pub use engine::{
 };
 pub use host::{
     MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN, file_url_path, malformed_port_pattern, port_pattern,
+};
+pub use injection::{
+    INJECTED_RULE, InjectedLookup, InjectedMap, MAX_SCANNED_BYTES as MAX_INJECTED_SCAN_BYTES,
+    MAX_TOKENS_PER_OUTPUT as MAX_INJECTED_TOKENS_PER_OUTPUT, Token as InjectedToken,
+    TokenKind as InjectedTokenKind,
 };
 pub use kind::{Kind, UnknownKind};
 pub use patch::writes as patch_writes;

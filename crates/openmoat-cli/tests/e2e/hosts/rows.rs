@@ -174,8 +174,15 @@ fn pre_tool_use(tool: &str) -> Value {
            "tool_name": tool, "tool_input": {"file_path": "~/.ssh/id_rsa"}})
 }
 
-/// A Claude Code `PostToolUse` call, an event OpenMoat does not handle.
+/// A `PostToolUse` call, an event OpenMoat does not handle for the hosts that
+/// use this row (Claude Code's own `PostToolUse` is handled since ADR-057).
 fn post_tool_use() -> Value {
     json!({"session_id": "s", "hook_event_name": "PostToolUse",
            "tool_name": "Bash", "tool_input": {"command": "ls"}})
+}
+
+/// A Claude Code `Notification` event, which OpenMoat's guard does not handle.
+fn notification() -> Value {
+    json!({"session_id": "s", "hook_event_name": "Notification",
+           "message": "Claude needs your permission to use Bash"})
 }

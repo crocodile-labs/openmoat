@@ -243,7 +243,9 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   until you review it ([what the lock is not](docs/POLICY.md#what-the-lock-is-not)).
 - **Session taint.** After a session reads a secret, its network and MCP calls need review.
   After it reads web content or an MCP result, writes to CI, git hooks, build files and
-  agent instructions need review.
+  agent instructions and skills need review. With Claude Code, a later command or write
+  that uses a host, path or command the content named needs review too, with the source
+  named (`injected-input`).
 - **Audit.** Every decision goes into a local, hash-chained log (tamper-evident, not
   tamper-proof) that you read with `openmoat show`, `openmoat replay` and
   `openmoat report`, and export and verify with `openmoat audit`. `openmoat audit anchor`
@@ -449,6 +451,9 @@ The main gaps:
   there; other agents' logins stay denied. An API-key login can go through the broker
   instead ([BROKER_LOGINS.md](docs/BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md)).
+- **Injected input is linked only with Claude Code, and only exactly.** Other agents
+  report no call output, and a planted host spelled another way or a reworded command
+  is not linked to its source ([ADR-057](docs/adr/ADR-057-injected-input-and-instruction-files.md)).
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote needs review before an interpreter runs it, but a test runner, build tool or

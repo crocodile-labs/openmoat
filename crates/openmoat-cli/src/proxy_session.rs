@@ -18,6 +18,12 @@
 //!
 //! Nothing about a credential is stored: the proxy recomputes the signature,
 //! compares it in constant time, and checks the expiry.
+//!
+//! The same key, under its own domain ([`FINGERPRINT_DOMAIN`]), keys the
+//! fingerprints of untrusted content a session read (ADR-057,
+//! [`Key::fingerprint`]), so the audit database holds no text an attacker or
+//! a reader of the file could test guesses against without the key. A person
+//! who replaces the key revokes credentials and forgets those fingerprints.
 
 mod hmac;
 
@@ -42,6 +48,10 @@ pub const TTL: Duration = Duration::from_hours(24);
 
 /// Signed in front of every `user`, so the key's signatures mean nothing else.
 const DOMAIN: &[u8] = b"openmoat-proxy-session-v1\n";
+
+/// Signed in front of every injected-input fingerprint (ADR-057), so they and
+/// the credentials' signatures never coincide.
+const FINGERPRINT_DOMAIN: &[u8] = b"openmoat-injected-input-v1\n";
 
 /// The version prefix of `user`.
 const VERSION: &str = "v1";
@@ -105,6 +115,22 @@ impl Key {
         let mac = Zeroizing::new(hmac::sha256(self.0.as_slice(), &message));
         let mut out = Zeroizing::new(String::with_capacity(64));
         hex_into(&mut out, mac.as_slice());
+        out
+    }
+
+    /// The fingerprint of one token of untrusted content: the first 128 bits
+    /// of its HMAC under [`FINGERPRINT_DOMAIN`], `kind` and `text` separated by
+    /// a NUL neither holds, as lowercase hex.
+    pub fn fingerprint(&self, kind: &str, text: &str) -> String {
+        let mut message =
+            Vec::with_capacity(FINGERPRINT_DOMAIN.len() + kind.len() + 1 + text.len());
+        message.extend_from_slice(FINGERPRINT_DOMAIN);
+        message.extend_from_slice(kind.as_bytes());
+        message.push(0);
+        message.extend_from_slice(text.as_bytes());
+        let mac = hmac::sha256(self.0.as_slice(), &message);
+        let mut out = String::with_capacity(32);
+        hex_into(&mut out, &mac[..16]);
         out
     }
 }

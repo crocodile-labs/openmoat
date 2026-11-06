@@ -1,5 +1,6 @@
 //! Anthropic's Claude Code: `PreToolUse` ([`crate::wire::pre_tool_use`]),
-//! `ConfigChange` ([`config_change`]) and `SessionStart` ([`session_start`]).
+//! `ConfigChange` ([`config_change`]), `SessionStart` ([`session_start`]) and
+//! `PostToolUse` ([`post_tool_use`]).
 
 use openmoat_core::Decision;
 use serde_json::json;
@@ -16,6 +17,7 @@ pub(crate) mod config_change;
 mod advisories;
 mod doc;
 mod mcp;
+mod post_tool_use;
 pub(crate) mod project_settings;
 mod session_start;
 
@@ -26,10 +28,18 @@ mod session_start;
 /// which `moat doctor` and `moat status` report with "run `moat init`".
 const TOOL_MATCHER: &str = "Bash|Monitor|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|LSP|SendFile|WebFetch|WebSearch|ReadMcpResourceTool|EnterWorktree|Skill|Artifact|ArtifactData|mcp__.*";
 
+/// The tools whose output may be content an attacker controls (ADR-057): a
+/// shell command (`gh issue view`, `curl`), a fetch, a search, an MCP result.
+/// The guard keeps fingerprints of it only when the call reads from outside
+/// (`CompiledPolicy::output_source`).
+const OUTPUT_MATCHER: &str = "Bash|WebFetch|WebSearch|ReadMcpResourceTool|mcp__.*";
+
 /// `PreToolUse` asks Claude Code to block a call whose hook fails
 /// (`onFailure`); the settings-change veto does not, and a session start
 /// cannot be blocked. `SessionStart` gives each session its own credential for
 /// `openmoat proxy` (ADR-044) at every start, resume, `/clear` and compaction.
+/// `PostToolUse` reports what a call returned, after it ran, so it has
+/// nothing to block (ADR-057).
 const HOOKS: &[HookSpec] = &[
     HookSpec::new("PreToolUse", TOOL_MATCHER, TOOL_HOOK_TIMEOUT_S, true),
     HookSpec::new(
@@ -44,6 +54,7 @@ const HOOKS: &[HookSpec] = &[
         CONFIG_HOOK_TIMEOUT_S,
         false,
     ),
+    HookSpec::new(post_tool_use::EVENT, OUTPUT_MATCHER, CONFIG_HOOK_TIMEOUT_S, false),
 ];
 
 /// Claude Code prompts on `PreToolUse`, except in a permission mode that puts no
@@ -157,6 +168,7 @@ impl HostAdapter for Adapter {
             None | Some(pre_tool_use::EVENT) => pre_tool_use::parse(host, payload),
             Some(config_change::EVENT) => config_change::parse(host, payload),
             Some(session_start::EVENT) => session_start::parse(host, payload),
+            Some(post_tool_use::EVENT) => post_tool_use::parse(host, payload),
             other => Err(wrong_event(other)),
         }
     }
@@ -170,6 +182,9 @@ impl HostAdapter for Adapter {
             session_start::EVENT => HookEvent::SessionStart {
                 source: String::new(),
             },
+            post_tool_use::EVENT => HookEvent::PostToolUse {
+                output: String::new(),
+            },
             _ => HookEvent::PreToolUse,
         }
     }
@@ -179,6 +194,7 @@ impl HostAdapter for Adapter {
             HookEvent::PreToolUse | HookEvent::PreToolUseNoPrompt => pre_tool_use::render(decision),
             HookEvent::ConfigChange { .. } => config_change::render(decision),
             HookEvent::SessionStart { .. } => session_start::render(decision),
+            HookEvent::PostToolUse { .. } => post_tool_use::render(decision),
         }
     }
 

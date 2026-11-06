@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 144] = [
+const PROTECTED_WRITES: [&str; 149] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -126,6 +126,14 @@ const PROTECTED_WRITES: [&str; 144] = [
     "**/.cursor/**",
     "**/.cursorrules",
     "**/.mcp.json",
+    // instruction files and skills the next session of an agent obeys
+    // (ADR-057): the shared `.agents/skills` folder several agents load,
+    // Windsurf's rules, and GitHub Copilot's path-scoped instructions
+    "**/.agents/skills",
+    "**/.agents/skills/**",
+    "**/.windsurfrules",
+    "**/.windsurf/rules/**",
+    "**/.github/instructions/**",
     // generated:taint from each host spec's `protect.taint` (openmoat-hosts `tests/protect.rs`)
     // Continue CLI: its configuration, whose MCP servers it starts
     "**/.continue/config.yaml",

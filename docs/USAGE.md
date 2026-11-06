@@ -294,6 +294,23 @@ write, whose result the hook cannot see, needs review each time. Under
 connections; a new run starts clean. [POLICY.md](POLICY.md) §4.1 has the full rules and
 the list of protected files.
 
+With Claude Code, OpenMoat also follows what the untrusted content said (ADR-057).
+A later shell command or write that uses a host, a path outside the project, or a command
+from a page, an issue body (`gh issue view`) or an MCP result needs review, with rule
+`injected-input`, and the reason names where it came from:
+
+```text
+review [injected-input] the host `collect.evil.example` came from the page fetched from
+https://docs.example/setup, untrusted content this session read; fetch collect.evil.example
+may follow an instruction planted there
+```
+
+What the policy allows on its own (`cargo build`, a project file, `git push`, the
+registries) stays allowed, and fetches and searches are your agent's prompt as before.
+After upgrading, run `openmoat init` once to add the `PostToolUse` hook entry this needs.
+`openmoat doctor` reports the hook as needing `openmoat init` until then.
+OpenMoat keeps fingerprints of the output, not the text ([POLICY.md](POLICY.md) §4.1.2).
+
 The same holds for `openmoat proxy` with Claude Code (`sandbox.proxy_port`, ADR-044):
 each session's `SessionStart` hook gives its Bash commands a proxy credential of their
 own, and after the session reads a secret the proxy refuses its commands' connections
