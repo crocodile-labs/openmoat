@@ -46,6 +46,13 @@ Two sources see results without any host event:
 
 ## Decision
 
+What this adds is tracking, not a new enforcement point: an after-call hook cannot stop
+the call that produced the output, and on some hosts it cannot hold the agent at all. It
+records which hosts, paths and commands untrusted output named, so that a *later* call
+that uses one needs review at the pre-call hook, which is where OpenMoat already decides.
+Where a host's after-call event is missing, broken or skipped, that later call is decided
+exactly as today (session taint still applies).
+
 1. **One event, every host that has one.** Each host adapter maps its after-call payload to
    the existing `HookEvent::PostToolUse { output }`: every string of the host's result
    field, joined by newlines, cut at `MAX_INJECTED_SCAN_BYTES` (1 MiB). Nothing else in the
@@ -145,10 +152,15 @@ entries) and §10; docs/ADDING_AN_AGENT.md (after-call event as part of an adapt
 
 ## Plan (one PR each, ≤ 500 lines)
 
-1. `feat(core)`: host and command normalisation for injected-input, with unit and
-   conformance fixtures. No host change.
+Verified sources first: the gateway, which OpenMoat runs itself, and Cline, whose payload
+the repository already has. A host whose after-call payload is not yet captured from a
+real release (the latest-agents job records one per host before its PR) waits for it.
+
+1. `feat(mcp)`: the gateway keeps `injected_tokens` of wrapped servers' results, for every
+   agent.
 2. `host(cline)`: parse `tool_result` (fixture exists), install the `PostToolUse` script.
-3. `feat(mcp)`: the gateway keeps `injected_tokens` of wrapped servers' results.
+3. `feat(core)`: host and command normalisation for injected-input, with unit and
+   conformance fixtures. No host change.
 4. `host(codex)`: `PostToolUse`, after a captured payload.
 5. `host(gemini-cli)`: `AfterTool`.
 6. `host(copilot-cli)`: `postToolUse`.
