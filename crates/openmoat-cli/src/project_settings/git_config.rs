@@ -57,7 +57,8 @@ pub fn warnings(cwd: &Path, user_home: &Path) -> Vec<String> {
                         lines.push(format!(
                             "{}: sets {}, which git runs as a program, the agent's own \
                              background git included, when a session starts and before any \
-                             hook; review it and remove what you did not add",
+                             hook, so OpenMoat can only warn: only `openmoat run` keeps that git \
+                             in a sandbox; review it and remove what you did not add",
                             file.display(),
                             keys.join(", ")
                         ));

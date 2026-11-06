@@ -149,7 +149,8 @@ something OpenMoat claims to stop.
   in the background when a session starts, often before their trust question, and a
   repository that arrives as files (an archive, a shared drive) keeps the `.git` it was
   made with. No hook sees that git; under `openmoat run` it runs inside the sandbox.
-  `openmoat doctor` and `openmoat status` name each such key of the current repository
+  This is detection, not prevention: `openmoat doctor` and `openmoat status` name each
+  such key of the current repository
   (`repo_git_config` in `status --format json`), reading the files as text; a hooks
   folder `runs-later` already holds (`.husky/_`, `.githooks`) and Git LFS's filters are
   left out.
