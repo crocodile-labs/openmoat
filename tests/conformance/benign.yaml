@@ -1296,6 +1296,12 @@
 - id: benign-ide-diagnostics-of-a-project-file
   action: { mcp_tool: { name: mcp__ide__getDiagnostics, reads: ["/p/src/lib.rs"] } }
   expect: { verdict: defer, rules: [default] }
+- id: benign-write-devcontainer-notes
+  action: { fs_write: "/p/docs/devcontainer.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-module-under-venv-named-folder
+  action: { fs_write: "/p/src/venv/binaries.py" }
+  expect: { verdict: allow, rules: [project-fs] }
 - id: benign-write-package-json
   action: { fs_write: "/p/package.json" }
   expect: { verdict: allow, rules: [project-fs] }

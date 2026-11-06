@@ -645,7 +645,10 @@ allow:
       "!${project}/**/.clinerules", "!${project}/**/.clinerules/hooks", "!${project}/**/.cline", "!${project}/**/.cline/hooks",
       # what every Python start runs, a project's `.venv` included
       "!${project}/**/site-packages/*.pth", "!${project}/**/dist-packages/*.pth",
-      "!${project}/**/sitecustomize.py", "!${project}/**/usercustomize.py"]
+      "!${project}/**/sitecustomize.py", "!${project}/**/usercustomize.py",
+      # a virtual environment's interpreter and a dev container's host command
+      "!${project}/**/.venv/bin/**", "!${project}/**/venv/bin/**", "!${project}/**/.venv/bin", "!${project}/**/venv/bin",
+      "!${project}/**/.devcontainer/**", "!${project}/**/.devcontainer", "!${project}/**/.devcontainer.json"]
   # Claude Code's own temporary folder (`/tmp/claude-<uid>/`): the output of the
   # agent's background commands, which it reads back with `cat`
   - id: agent-temp
@@ -1130,7 +1133,14 @@ review:
       # what every Python start runs, the allowed `pytest` included: a `.pth`
       # file in a site directory (a line starting `import` is executed) and
       # `sitecustomize`/`usercustomize`, imported from any folder on `sys.path`
-      "**/site-packages/*.pth", "**/dist-packages/*.pth", "**/sitecustomize.py", "**/usercustomize.py"]
+      "**/site-packages/*.pth", "**/dist-packages/*.pth", "**/sitecustomize.py", "**/usercustomize.py",
+      # a virtual environment's interpreter and scripts, which the editor's
+      # Python extension and the test runners start outside any sandbox; with
+      # the folder itself, a rename away and back edits it
+      "**/.venv/bin/**", "**/venv/bin/**", "**/.venv/bin", "**/venv/bin",
+      # a dev container's `initializeCommand`, which the editor runs on this
+      # machine, not in the container, when the folder is opened
+      "**/.devcontainer/**", "**/.devcontainer", "**/.devcontainer.json"]
     shell:
       # `opencode plugin` adds a plugin to the project's configuration (with
       # `--global`, which `kernel-self` denies, to the person's)

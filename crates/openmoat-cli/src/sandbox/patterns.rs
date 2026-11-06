@@ -122,6 +122,15 @@ pub const RUNS_LATER: &[&str] = &[
     "**/dist-packages/*.pth",
     "**/sitecustomize.py",
     "**/usercustomize.py",
+    // a virtual environment's interpreter, which the editor starts; a dev
+    // container's `initializeCommand`, which the editor runs on this machine
+    "**/.venv/bin/**",
+    "**/venv/bin/**",
+    "**/.venv/bin",
+    "**/venv/bin",
+    "**/.devcontainer/**",
+    "**/.devcontainer",
+    "**/.devcontainer.json",
 ];
 
 /// The [`RUNS_LATER`] files an agent host loads as its own configuration when
