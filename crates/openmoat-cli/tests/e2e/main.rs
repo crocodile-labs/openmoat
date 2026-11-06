@@ -14,6 +14,7 @@ mod approvals;
 mod audit;
 #[cfg(unix)]
 mod binary_path;
+mod blocks;
 mod canary;
 mod check_diff;
 mod cli;

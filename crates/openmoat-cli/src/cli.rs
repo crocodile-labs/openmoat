@@ -10,6 +10,8 @@ mod mcp;
 mod policy;
 mod provenance;
 
+mod timeline;
+
 pub use audit::{AnchorArgs, AuditCommand, EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
@@ -17,6 +19,8 @@ pub use policy::{
     PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,
 };
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
+
+pub use timeline::{Only, WatchArgs, WhyArgs};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -52,6 +56,13 @@ pub enum Command {
     Guard(GuardArgs),
     /// Show one audit event, a session, or the most recent events.
     Show(ShowArgs),
+    /// Follow the agents' calls as they happen, one line each, in a second terminal
+    /// pane: what ran, what was denied and what waits for you. Reads the audit log
+    /// only. Ctrl-C stops it.
+    Watch(WatchArgs),
+    /// Explain one decision in full: the call, the rules that decided it and where
+    /// they are in your policy, the session's context, and how to change it.
+    Why(WhyArgs),
     /// Report installation health: policy, hooks, each agent's protection level, recent activity.
     Status(StatusArgs),
     /// Verify policy lock, hooks and binary; `--accept` re-pins edits made by a person.

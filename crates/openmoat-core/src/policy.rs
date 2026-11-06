@@ -71,6 +71,9 @@ use crate::verdict::Verdict;
 
 mod hook_only;
 mod old_names;
+mod text;
+
+pub use text::{TITLE_MAX_CHARS, WHY_MAX_CHARS};
 
 pub use old_names::OldNames;
 
@@ -151,6 +154,14 @@ pub struct RuleGroup {
     /// Text prepended to the reason when this group decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// What the rule stops or holds, in the person's words ("reading your SSH
+    /// private key"): the first line of the message an agent and its person
+    /// see when this group denies or holds a call (ADR-059). One line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Why the rule exists, in one line, shown under [`Self::title`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
     /// Shell patterns (token prefixes, `*`, `!`, trailing `$`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shell: Vec<String>,
@@ -515,6 +526,7 @@ impl Policy {
             if group.is_empty() {
                 return Err(PolicyError::EmptyRule(group.id.clone()));
             }
+            text::check(group)?;
         }
         hook_only::check(self)?;
         for (name, paths) in &self.executables {

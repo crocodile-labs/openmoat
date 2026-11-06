@@ -136,6 +136,37 @@ fn a_removed_pattern_and_a_reworded_reason_are_told_apart() {
     assert_eq!(summary.wording, 1, "{summary:?}");
 }
 
+/// ADR-059: the titles an upgrade adds change the words shown, nothing decided;
+/// a new rule is named by its title.
+#[test]
+fn a_title_added_is_a_wording_update_and_names_a_new_rule() {
+    let after = BEFORE.replace(
+        "    reason: secret material\n",
+        "    reason: secret material\n    title: reading your keys\n    why: they cannot be taken back\n",
+    );
+    let changes = [change("a\n", "b\n")];
+    let applied: Vec<&Change> = changes.iter().collect();
+    let summary = summarise(BEFORE, &after, &applied, false);
+    assert_eq!(summary.wording, 1, "{summary:?}");
+    assert_eq!(summary.unexplained, 0, "{summary:?}");
+    assert!(
+        summary.protections.is_empty() && summary.other.is_empty(),
+        "{summary:?}"
+    );
+
+    let titled = AFTER.replace(
+        "    reason: sends a payment card number to a host off this machine\n",
+        "    reason: r\n    title: sending a payment card number off this machine\n",
+    );
+    let summary = summarise(BEFORE, &titled, &[], false);
+    assert!(
+        summary.protections.contains(
+            &"Denied: sending a payment card number off this machine (`card-egress`)".to_owned()
+        ),
+        "{summary:?}"
+    );
+}
+
 #[test]
 fn a_change_it_cannot_name_is_counted_for_d_to_show() {
     // The same patterns in another order: the policy decides the same.

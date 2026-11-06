@@ -109,9 +109,13 @@ pub(crate) fn answer(spec: &HostSpec, event: &HookEvent, decision: &Decision) ->
         && decision.verdict == Verdict::Review
     {
         answer.verdict = Verdict::Deny;
-        answer.reasons.push(format!(
-            "this needs your approval and {why}: {HOW_TO_APPROVE}"
-        ));
+        // A block message says how to approve on its `next` line (ADR-059).
+        match &mut answer.notice {
+            Some(notice) => notice.unasked = Some(why.to_owned()),
+            None => answer.reasons.push(format!(
+                "this needs your approval and {why}: {HOW_TO_APPROVE}"
+            )),
+        }
     }
     answer
 }

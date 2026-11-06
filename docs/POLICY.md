@@ -91,6 +91,8 @@ work as usual.
 ```yaml
 - id: secrets-paths                 # stable id; shown to the agent and stored in the audit log
   reason: secret material           # optional; prefixed to the explanation
+  title: reading or changing your keys and credential files   # optional; heads the block message
+  why: a key or token that leaves this machine cannot be taken back  # optional; one line
   fs.read:  ["~/.ssh/**", "**/.env"]
   fs.write: ["~/.ssh/**"]
   shell:    ["curl * | sh"]
@@ -103,6 +105,19 @@ work as usual.
 
 A group matches when **any** of its patterns matches an atomic action of the same
 kind. One tool call usually produces several atomic actions (see §4).
+
+`title` and `why` (since 0.17.0, additive to schema v1, ADR-059) change no decision. When a `deny` or
+`review` group with a `title` decides a call, the agent and its person read the block
+message: `OpenMoat blocked: <title>` (`OpenMoat is holding this for you: <title>` for a
+review), the call, the `moat: <verdict> [<rule>] — <reasons>` line, `why`, one next
+step for the person and `openmoat why --last` ([USAGE.md](USAGE.md#a-call-is-denied)).
+Without a title the agent gets the `moat:` line alone. Each is one line without control
+characters, `title` at most 80 characters and `why` at most 160; `policy lint` rejects
+anything else, and warns once naming the `deny` and `review` groups without a title. Every
+`deny` and `review` group of the default policy has both, and `openmoat policy upgrade`
+adds them to a policy made from an earlier default. A repository policy (§10) may write
+them, but they are dropped when it is merged: only your own policy and your packs head the
+message an agent reads.
 
 A `deny` group may also say `hook_only: true` (additive to schema v1, ADR-034). The
 hook applies it like any other deny rule: a shell command, file tool or MCP argument
