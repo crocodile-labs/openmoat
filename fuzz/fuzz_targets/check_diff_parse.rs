@@ -47,6 +47,14 @@ fuzz_target!(|data: &[u8]| {
         for (_, line) in &file.added {
             assert!(text.contains(line.as_str()), "{line:?}");
         }
+        // What the content checks read names a path the diff names.
+        if let Some(change) = file.content() {
+            assert!(
+                text.contains(change.path) || text.contains('"'),
+                "{:?}",
+                change.path
+            );
+        }
     }
     // Cut the diff right after each hunk header that promises lines: what is
     // left must not read as a complete diff, with or without the line's end.

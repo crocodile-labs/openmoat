@@ -98,7 +98,7 @@ struct FuzzGate {
 
 impl Gate for FuzzGate {
     fn check(&self, call: &Call<'_>, _held: Option<&str>) -> anyhow::Result<Option<String>> {
-        let _ = call.arguments;
+        let _ = (call.arguments, call.request);
         self.checked
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
