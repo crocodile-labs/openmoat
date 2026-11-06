@@ -7,7 +7,7 @@
 //! network: the same change gives the same findings on every machine.
 //!
 //! - Supply chain (`manifest.rs`, `lockfile.rs`): a new dependency that is a
-//!   near miss of a popular name (the bundled lists of [`crate::packages`],
+//!   near miss of a popular name (the bundled lists of `packages.rs`,
 //!   the ones the shell classifier uses), an npm install script, a dependency
 //!   or a locked package fetched from outside its registry, and a lockfile
 //!   hash that changes while the version stays.
