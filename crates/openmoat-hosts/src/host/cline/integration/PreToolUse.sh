@@ -7,7 +7,18 @@
 # fails, so this script answers `cancel` itself whenever `openmoat guard` does
 # not: it is missing, crashes, or exits without the reply it owes. `openmoat
 # init` writes this file and the lock pins it; `openmoat uninstall` deletes it.
+#
+# The same file is Cline's `PostToolUse`, run after each call with what it
+# returned (injected input, ADR-057). There it prints nothing, whatever
+# `openmoat guard` answers: Cline would stop the whole run on a `cancel` after
+# the call, which has already run. A failure goes to standard error only.
 MOAT=__MOAT_BINARY__
+case ${0##*/} in
+PostToolUse)
+    "$MOAT" guard --host cline >/dev/null || echo "openmoat: guard could not keep what this call returned; run openmoat doctor in a terminal" >&2
+    exit 0
+    ;;
+esac
 reply=$("$MOAT" guard --host cline)
 status=$?
 case $status in

@@ -83,9 +83,11 @@ These hold for the current code. Each is a design consequence or a tracked gap, 
 something OpenMoat claims to stop.
 
 - **Injected input is linked only where the host reports output, and only exactly.**
-  - Only Claude Code (and the Continue CLI, which runs Claude Code's hooks) reports what a
-    call returned. On every other host a planted host, path or command is not linked to
-    the later call that uses it, and only session taint applies.
+  - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
+    report what a call returned; the MCP gateway keeps what a wrapped server's tool
+    returned for every agent (ADR-063, proposed). On every other host a planted host,
+    path or command from a call that is not a wrapped MCP tool is not linked to the later
+    call that uses it, and only session taint applies.
   - Matches are exact: a host written as an IP address or another subdomain, a reworded
     command, or a relative path is not linked.
   - A command in plain prose is linked by its hosts and paths only.

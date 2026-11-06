@@ -12,6 +12,7 @@ the home directory.
 | `clineVersion`, `timestamp`, `taskId`, `sessionContext.rootSessionId`, `workspaceRoots`, `userId`, `agent_id`, `parent_agent_id` | `createPayloadBase` in `sdk/packages/core/src/hooks/hook-file-hooks.ts` |
 | `hookName` (`tool_call`), `iteration`, `tool_call` (`id`, `name`, `input`), `preToolUse` (`toolName`, `parameters`: each argument as a string, others as JSON) | `runToolCallStart` and `mapParams` in the same file; `PreToolUse` → `tool_call` in `HOOK_CONFIG_FILE_EVENT_MAP` (`hook-file-config.ts`) |
 | `input` | the model's arguments, with JSON-looking strings parsed as the tool's schema expects (`sdk/packages/agents/src/agent-runtime.ts`, before the `beforeTool` hooks) and not yet put in one shape by the tool's lenient schema |
+| `hookName` (`tool_result`), `tool_result` (`id`, `name`, `input`, `output`, `error`, `durationMs`, `startedAt`, `endedAt`), `postToolUse` (`toolName`, `parameters`, `result`: the output as text, `success`, `executionTimeMs`) | `runToolCallEnd` and `toolCallEndContext` in the same file; `PostToolUse` → `tool_result` in `HOOK_CONFIG_FILE_EVENT_MAP` |
 | the reply | `parseHookControl` and `beforeToolResultFromControl` in `hook-file-hooks.ts`: `cancel: true` with `errorMessage` stops the call and the run; `review` is ignored for a tool call; stdout that is not JSON, a hook that cannot start and a timeout (120 s) are logged and the call runs; the exit code is never read |
 
 The documented example in `sdk/examples/hooks/README.md` ("Hook Input/Output Format")
@@ -48,4 +49,4 @@ here.
 | `mcp.json` | `internal-tools__run` with a path argument |
 | `ask_question.json` | a question to the person (ungoverned) |
 | `skills.json` | a skill, checked as an unknown tool |
-| `tool_result.json` | the `PostToolUse` event, which OpenMoat does not handle |
+| `tool_result.json` | the `PostToolUse` event: a fetch whose output names a command and a host, kept as injected input |

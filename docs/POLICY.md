@@ -549,10 +549,14 @@ collect.evil.example may follow an instruction planted there
   result is reading, and the host's own prompt decides fetches (`fetch: defer`).
 - **Answered.** By the person in the agent's prompt, or with `openmoat allow` for that
   exact call.
-- **Hosts.** Only Claude Code reports output, and the Continue CLI, which runs Claude
-  Code's hooks. After an upgrade, run `openmoat init` once to add the `PostToolUse` entry;
-  `openmoat doctor` and `openmoat status` report the hook as needing it until then. Every
-  other host keeps §4.1 alone; its HOST.md says so.
+- **Hosts.** Claude Code reports output, and so do the Continue CLI, which runs Claude
+  Code's hooks, and the Cline CLI, whose `PostToolUse` file is OpenMoat's script too.
+  The MCP gateway (`openmoat mcp proxy`) keeps what a wrapped server's tool returned for
+  every agent, under the session of the hook's decision for that call (ADR-063,
+  proposed). After an upgrade, run `openmoat init` once to add the `PostToolUse` entry
+  or file; `openmoat doctor` and `openmoat status` report the hook as needing it until
+  then. Every other host keeps §4.1 alone for calls that are not wrapped MCP tools; its
+  HOST.md says so.
 - **Limits.** Matches are exact: a host spelled another way, a reworded command or a
   relative path is not linked. Content that floods the bounds with decoys can push a
   planted token out. A command in plain prose is linked by its hosts and paths only.

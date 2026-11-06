@@ -1,4 +1,5 @@
-//! Cline (`@cline/cli`, the `cline` command): its `PreToolUse` file hook.
+//! Cline (`@cline/cli`, the `cline` command): its `PreToolUse` file hook, and
+//! its `PostToolUse` file for what a call returned ([`result`]).
 //!
 //! Behaviour checked against the source of `cline/cline` at tag `cli-v3.0.74`
 //! (2026-10-26; the SDK files below are the same at `v4.1.26`), 2026-11-03:
@@ -38,8 +39,8 @@ use serde_json::Value;
 
 use crate::bench::{Answer, Call as BenchCall, Exit, Place};
 use crate::contract::{
-    Reviews, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
-    McpServersJson, McpSpec, OtherHooks, wrong_event,
+    ExtraFile, Reviews, GUARD_BUDGET_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec,
+    McpFile, McpServersJson, McpSpec, OtherHooks, wrong_event,
 };
 use crate::wire::owned_file::{OwnedFile, Syntax};
 use crate::{HookEvent, HookRequest, Host, HostError};
@@ -48,6 +49,7 @@ mod bench;
 mod doc;
 mod mcp;
 mod protect;
+mod result;
 mod tools;
 
 /// The event name Cline's payload carries for a `PreToolUse` file.
@@ -63,7 +65,8 @@ const _: () = assert!(GUARD_BUDGET_S < HOOK_TIMEOUT_S);
 const HOOKS: &[HookSpec] = &[HookSpec::new("PreToolUse", "", HOOK_TIMEOUT_S, false)];
 
 /// OpenMoat's hook script, which is Cline's hook file: `moat init` writes it to
-/// `<config dir>/hooks/PreToolUse` with the binary's path filled in.
+/// `<config dir>/hooks/PreToolUse` with the binary's path filled in, and the
+/// same script to `hooks/PostToolUse`, where it never stops the run.
 static SCRIPT: OwnedFile = OwnedFile {
     name: "Cline hook script",
     source: include_str!("cline/integration/PreToolUse.sh"),
@@ -102,6 +105,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         config_file: "hooks/PreToolUse",
         hooks: HOOKS,
         hook_file: HookLayout::Script(&SCRIPT),
+        // the same script as Cline's `PostToolUse` file, for injected input
+        // (ADR-057); the lock pins it with the hook file
+        extra_files: &[ExtraFile::InConfigDir(&["hooks", "PostToolUse"])],
         ..InstallSpec::BASE
     }),
     // `<data dir>/settings/cline_mcp_settings.json`, `{"mcpServers": {…}}`,
@@ -165,12 +171,28 @@ impl HostAdapter for Adapter {
         let p: Payload = serde_json::from_str(payload)?;
         match p.hook_name.as_deref() {
             Some(EVENT) => parse(host, p),
+            Some(result::EVENT) => result::parse(host, p),
             other => Err(wrong_event(other)),
         }
     }
 
-    fn render(&self, _event: &HookEvent, decision: &Decision) -> String {
-        render(decision)
+    /// `tool_result` is what a call returned (ADR-057).
+    fn event_of(&self, event: &str) -> HookEvent {
+        match event {
+            result::EVENT => HookEvent::PostToolUse {
+                output: String::new(),
+            },
+            _ => HookEvent::PreToolUse,
+        }
+    }
+
+    /// Nothing at all for what a call returned, whatever was decided: Cline
+    /// would stop the whole run on a `cancel` there.
+    fn render(&self, event: &HookEvent, decision: &Decision) -> String {
+        match event {
+            HookEvent::PostToolUse { .. } => String::new(),
+            _ => render(decision),
+        }
     }
 
     fn bench_payload(&self, call: &BenchCall, at: &Place<'_>) -> Option<String> {
@@ -199,6 +221,10 @@ struct Payload {
     workspace_roots: Vec<String>,
     #[serde(default, rename = "tool_call")]
     tool_call: Option<ToolCall>,
+    #[serde(default, rename = "tool_result")]
+    tool_result: Option<result::ToolResult>,
+    #[serde(default, rename = "postToolUse")]
+    post_tool_use: Option<result::PostToolUse>,
 }
 
 #[derive(Deserialize)]
