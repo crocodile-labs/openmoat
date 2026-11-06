@@ -425,6 +425,7 @@ dependencies = [
  "openmoat-core",
  "openmoat-hosts",
  "openmoat-proxy",
+ "serde",
  "serde_json",
 ]
 

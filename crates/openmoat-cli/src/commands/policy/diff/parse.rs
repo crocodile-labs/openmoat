@@ -122,7 +122,11 @@ pub fn parse(text: &str) -> Result<Vec<FileChange>, ParseError> {
     let mut current: Option<Current> = None;
     let mut hunk: Option<Hunk> = None;
     let mut last = 0;
-    for (index, raw) in text.split('\n').enumerate() {
+    // The `\n` that ends the last line starts no line of its own: read as one,
+    // the empty text after it was a kept empty line, and a diff cut off after
+    // a hunk header (`@@ -1 +1 @@\n`) read as complete.
+    let lines = text.strip_suffix('\n').unwrap_or(text);
+    for (index, raw) in lines.split('\n').enumerate() {
         let number = index + 1;
         last = number;
         let line = raw.strip_suffix('\r').unwrap_or(raw);
@@ -219,7 +223,7 @@ fn read_hunk_line(
                     block.added.end = end;
                 }
             }
-            hunk.line += 1;
+            hunk.line = hunk.line.saturating_add(1);
         }
         Some('-') => {
             taken(&mut hunk.old)?;
@@ -231,7 +235,7 @@ fn read_hunk_line(
         Some(' ') | None => {
             taken(&mut hunk.old)?;
             taken(&mut hunk.new)?;
-            hunk.line += 1;
+            hunk.line = hunk.line.saturating_add(1);
             hunk.changing = false;
         }
         Some('\\') => {}

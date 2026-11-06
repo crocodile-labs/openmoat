@@ -722,6 +722,13 @@
   action: { shell: "cargo test" }
   repo: { policy: "version: 1\ndeny:\n  - id: no-publish\n    shell: ['cargo publish']\n" }
   expect: { verdict: allow, rules: [dev-shell] }
+# a repository review rule on the network holds only network calls; the rest of
+# the day's work stays as the user policy decides
+- id: benign-repo-net-review-leaves-other-commands
+  threat: T9
+  action: { shell: "cargo test" }
+  repo: { policy: "version: 1\nreview:\n  - id: any-host\n    net: ['*']\n" }
+  expect: { verdict: allow, rules: [dev-shell] }
 # Developer workflows (crates/openmoat-cli/moatbench/workflows.yaml): single steps not covered above
 - id: benign-read-cargo-build-output
   action: { fs_read: "/p/target/debug/build/app-1f2e3d/output" }

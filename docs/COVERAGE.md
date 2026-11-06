@@ -15,7 +15,7 @@ the verdict and rule ids the default policy must produce for it.
 | T6 | Environment poisoning | 60 | 39 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 28 | 1 | 9 |
-| T9 | Hook / policy tampering by the agent | 407 | 131 | 55 |
+| T9 | Hook / policy tampering by the agent | 409 | 132 | 56 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 4 | 6 |
 | T12 | Network to unknown hosts | 113 | 20 | 20 |
@@ -1390,6 +1390,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T9-repo-trusted-allow-own-repo-policy` (attacks): Deny [kernel-self]
 - `T9-repo-rule-posing-as-kernel-self` (attacks): Deny [destructive]
 - `T9-repo-review-cannot-soften-a-deny` (attacks): Deny [secrets-paths]
+- `T9-repo-review-cannot-soften-a-default-deny` (attacks): Deny [default.net]
+- `T9-repo-review-cannot-soften-a-default-deny-in-shell` (attacks): Deny [default.net]
 - `T9-agent-runs-moat-trust` (attacks): Deny [kernel-self]
 - `T9-agent-runs-moat-trust-by-path` (attacks): Deny [kernel-self]
 - `T9-script-wraps-moat-trust` (attacks): Deny [kernel-self]
@@ -1608,6 +1610,7 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-hard-link-copy-in-project` (benign): Allow [dev-shell, project-fs]
 - `benign-hard-link-copy-with-backup-suffix` (benign): Allow [dev-shell, project-fs]
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
+- `benign-repo-net-review-leaves-other-commands` (benign): Allow [dev-shell]
 - `benign-python-test-file-named-after-moat` (benign): Allow [dev-shell, project-fs]
 - `benign-t9-pkill-script-name` (benign): Defer [default]
 - `benign-t9-pkill-script-then-command-naming-moat` (benign): Defer [default]
@@ -1647,6 +1650,7 @@ the verdict and rule ids the default policy must produce for it.
 - `review-redirect-to-other-descriptor-path` (review): Defer [default]
 - `review-stdin-path-as-output` (review): Defer [default]
 - `review-git-restore-git-dir` (review): Review [git-internals]
+- `review-repo-holds-a-host-the-user-allows` (review): Review [repo:any-host]
 - `review-write-github-workflow` (review): Review [runs-later]
 - `review-echo-into-github-workflow` (review): Review [runs-later]
 - `review-heredoc-into-github-workflow` (review): Review [runs-later]

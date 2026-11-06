@@ -416,7 +416,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # nine targets: the weekly run gives each 600 s, a pull request a short smoke
+    timeout-minutes: ${{ github.event_name == 'schedule' && 120 || 30 }}
     env:
       # One minute per target on pull requests; ten on the weekly run.
       SECONDS_PER_TARGET: ${{ github.event_name == 'schedule' && '600' || '60' }}
@@ -439,7 +440,7 @@ jobs:
       - name: run every target
         working-directory: fuzz
         run: |
-          for target in decide_shell policy_parse host_payload literal_pattern proxy_parse openclaw_json5; do
+          for target in decide_shell policy_parse host_payload literal_pattern proxy_parse openclaw_json5 repo_policy_merge mcp_relay_framing check_diff_parse; do
             cargo fuzz run -O "$target" "corpus/$target" -- -max_total_time="$SECONDS_PER_TARGET"
           done
       - name: keep crashing inputs

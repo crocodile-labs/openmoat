@@ -46,7 +46,12 @@ impl Relay {
                 self.server_message(method, fields, out).then_some(message)
             }
             (None, true) => {
-                let id = fields.get("id").cloned().unwrap_or(Value::Null);
+                // A response names the request it answers, `null` included
+                // (JSON-RPC 2.0 §5); one without an `id` answers nothing.
+                let Some(id) = fields.get("id").cloned() else {
+                    out.push(dropped("a response from the server without an id"));
+                    return None;
+                };
                 if !self.response_of(&id, fields, out) {
                     return None;
                 }
