@@ -26,7 +26,10 @@ pub use upgrade::run as upgrade;
 
 pub fn lint(args: &LintArgs) -> Result<Code> {
     let (policy, path) = load(args.file.clone())?;
-    let warnings = openmoat_core::lint::warnings(&policy);
+    let mut warnings = openmoat_core::lint::warnings(&policy);
+    // Only here: the commands that write a policy print the other warnings
+    // after every change, and a policy from before titles would print this each time.
+    warnings.extend(openmoat_core::lint::untitled(&policy));
     let mut out = io::stdout().lock();
     for warning in &warnings {
         writeln!(out, "warning: {warning}")?;

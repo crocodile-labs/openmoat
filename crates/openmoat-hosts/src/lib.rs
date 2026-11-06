@@ -9,6 +9,7 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 pub mod bench;
+mod block;
 mod contract;
 mod glob;
 mod host;
@@ -17,6 +18,7 @@ mod registry;
 mod request;
 mod wire;
 
+pub use block::{RULE_PAGE, rule_page};
 pub use contract::{
     Activity, Advisories, Advisory, AlsoDir, AutoStart, ConsentFile, Detect, ExtraFile,
     GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookTrust,
@@ -55,18 +57,13 @@ pub use host::Host;
 /// Session id recorded when a host omits it.
 const UNKNOWN_SESSION: &str = "unknown";
 
-/// One line the model can act on: verdict, rule ids, then the reasons.
+/// What the agent and its person read about `decision`, in every host's
+/// reason field: the block message (ADR-059) for a `deny` or `review` whose
+/// decision carries a [`openmoat_core::Notice`], else one line: verdict, rule
+/// ids, then the reasons. The block's `rule` line is that one line.
 #[must_use]
 pub fn reason_line(decision: &Decision) -> String {
-    let verdict = decision.verdict.as_str();
-    let rules = decision.rules.join(", ");
-    let reasons = decision.reasons.join("; ");
-    match (rules.is_empty(), reasons.is_empty()) {
-        (true, true) => format!("moat: {verdict}"),
-        (false, true) => format!("moat: {verdict} [{rules}]"),
-        (true, false) => format!("moat: {verdict} — {reasons}"),
-        (false, false) => format!("moat: {verdict} [{rules}] — {reasons}"),
-    }
+    block::message(decision).unwrap_or_else(|| block::line(decision, &decision.reasons.join("; ")))
 }
 
 /// Words that make a tool name write-shaped (`write_file`, `DeleteDirectory`):

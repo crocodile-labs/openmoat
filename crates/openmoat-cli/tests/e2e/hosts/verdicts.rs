@@ -20,6 +20,11 @@ fn a_secret_read_is_denied_in_the_hosts_format() {
         assert_eq!(out.status.code(), Some(DENY), "{}: {}", row.id, text(&out));
         assert_eq!(verdict(&row, &out), "deny", "{}: {}", row.id, text(&out));
         assert_reason(&row, &out, "secrets-paths", "secret read");
+        // ADR-059: the block message, headed by the rule's title, with the
+        // line earlier releases sent as its `rule` line.
+        assert_reason(&row, &out, "OpenMoat blocked: ", "block message");
+        assert_reason(&row, &out, "rule   moat: deny [", "block message");
+        assert_reason(&row, &out, "more   openmoat why --last", "block message");
     }
 }
 

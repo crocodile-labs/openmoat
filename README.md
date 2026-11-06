@@ -103,7 +103,10 @@ covers what they leave out:
 - **The agent cannot switch it off.** The policy and hooks are locked; the agent cannot
   edit them, approve its own blocked call or uninstall OpenMoat.
 - **Audit log.** Every decision in a local, hash-chained log: `openmoat show`, `report`,
-  `audit export`, `audit anchor`.
+  `audit export`, `audit anchor`; `openmoat watch` follows it live and `openmoat why`
+  explains one decision.
+- **Readable blocks.** A deny or review tells the agent and you what was stopped, why, and
+  the one thing you can do, never a way around it.
 - **Team rules.** A committed `.moat/policy.yaml`, or a policy pack signed with an SSH key.
   A repository's rules only add: its `review` rule never turns a `deny` from your own
   policy into a review.
@@ -166,8 +169,19 @@ openmoat policy check "cat ~/.ssh/id_rsa"
 
 Start your agent in a new session and work as usual. `openmoat status` shows, for each
 agent, whether it has the hook and an OS sandbox, the hook only, or nothing. When
-OpenMoat blocks a call, the agent gets the rule and the reason:
-`moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa`.
+OpenMoat blocks a call, the agent and you read what was stopped and what you can do:
+
+```
+OpenMoat blocked: reading or changing your keys and credential files
+  call   cat ~/.ssh/id_rsa
+  rule   moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa
+  why    a key or token that leaves this machine cannot be taken back
+  next   if you need this, do it yourself in your own terminal
+  more   openmoat why --last · https://openmoat.dev/r/secrets-paths
+```
+
+`openmoat watch` in a second pane shows every call as it happens, and `openmoat why --last`
+explains the newest deny or review ([docs/USAGE.md](docs/USAGE.md#review-what-the-agent-did)).
 A `review` the agent cannot show (Codex, for one) arrives as a deny that says what to run in
 your own terminal: `openmoat`, which shows the call and allows it for the session or for
 good, or `openmoat allow --last`. A deny rule changes only in the policy (`openmoat edit`);
@@ -380,6 +394,7 @@ Run these in your own terminal. Agents are denied all of them.
 | Allow the command an agent was just stopped on, for this session or for good | `openmoat allow --last` · `openmoat allow --last --always` |
 | Allow a site or a whole directory | `openmoat allow --site docs.rs` · `openmoat allow --dir ~/work/shared` |
 | See what the agents did | `openmoat show` · `openmoat report --since today` |
+| Follow the agents' calls live, or see why a call was blocked | `openmoat watch` · `openmoat why --last` |
 | Keep a token from the agent | `openmoat secret add gh` |
 | Change any rule (checked, and the diff shown before it applies) | `openmoat edit` |
 | See and undo what you allowed | `openmoat allowed` |

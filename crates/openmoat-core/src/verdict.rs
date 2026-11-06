@@ -109,6 +109,32 @@ pub struct Decision {
     /// Matches that did not determine the verdict (weaker outcomes), for display/audit.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub context: Vec<String>,
+    /// How the agent and its person are told about a `deny` or `review`
+    /// (ADR-059), when the rule that decided it has a title. Presentation
+    /// only: the engine never sets it, no decision reads it, and it is never
+    /// serialised, so JSON output and the audit log stay as they were.
+    #[serde(skip)]
+    pub notice: Option<Box<Notice>>,
+}
+
+/// The words of the block message for one decision (ADR-059): filled by the
+/// program that answers the host from the deciding rule's `title` and `why`
+/// and the call, already made safe to show (secrets masked, one line each).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Notice {
+    /// The deciding rule's title: "reading your SSH private key".
+    pub title: String,
+    /// The deciding rule's `why`, when it has one.
+    pub why: Option<String>,
+    /// The call as the person would describe it: a command, or a tool and
+    /// what it names (`Read ~/.ssh/id_ed25519`).
+    pub call: Option<String>,
+    /// The decision's reasons as they may be shown, in place of
+    /// [`Decision::reasons`] in the message.
+    pub detail: Option<String>,
+    /// Set where a `review` reaches a host that cannot put it to the person,
+    /// as a `deny`: why it cannot ("Codex hooks cannot prompt").
+    pub unasked: Option<String>,
 }
 
 impl Decision {
@@ -120,6 +146,7 @@ impl Decision {
             rules: Vec::new(),
             reasons: Vec::new(),
             context: Vec::new(),
+            notice: None,
         }
     }
 
@@ -198,6 +225,20 @@ mod tests {
             serde_json::from_str(r#"{"verdict":"ask","rules":["installs"],"reasons":["r"]}"#)
                 .unwrap();
         assert_eq!(d.verdict, Verdict::Review);
+    }
+
+    /// ADR-059: the notice is presentation only; JSON never carries it.
+    #[test]
+    fn a_notice_is_never_serialised() {
+        let mut d = Decision::single(Verdict::Deny, "secrets-paths", "secret material");
+        let plain = serde_json::to_string(&d).unwrap();
+        d.notice = Some(Box::new(super::Notice {
+            title: "reading your SSH private key".into(),
+            ..super::Notice::default()
+        }));
+        assert_eq!(serde_json::to_string(&d).unwrap(), plain);
+        let read: Decision = serde_json::from_str(&plain).unwrap();
+        assert_eq!(read.notice, None);
     }
 
     #[test]
