@@ -374,6 +374,7 @@ pub fn warnings_here(home: &Home) -> Vec<Warning> {
         .collect()
 }
 
+pub mod git_config;
 pub mod other_hooks;
 mod plugins;
 

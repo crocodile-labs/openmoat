@@ -165,7 +165,7 @@ not change the exit code. The version is read once with `<program> --version`, a
 show them, `openmoat status --format json` prints the levels (`agents`), a policy update
 waiting for `openmoat policy upgrade` (`policy_update`, or `null`), the pinned files that
 changed (`lock_drift`), the MCP server definitions that differ from their pins
-(`mcp_changes`), the project settings warnings (`project_settings`) and whether each
+(`mcp_changes`), the project settings warnings (`project_settings`), the current repository's git configuration that runs programs (`repo_git_config`) and whether each
 agent loaded OpenMoat's plugin (`plugins`, below), and `openmoat doctor --format json` every check (`ok`, `problem`, `warning` or `note`, with its name and detail), with the same
 exit code as the text:
 
