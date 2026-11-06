@@ -46,6 +46,8 @@ your search path.
 | `getDiagnostics` (`mcp__ide__getDiagnostics`, and `mcp__claude-vscode__getDiagnostics` in the VS Code chat panel): the editor's errors and warnings, which quote the file's lines | a read of the file its `uri` names, else of the project: a secret's diagnostics are denied, a project file's are left to Claude Code as before |
 | `executeCode` (`mcp__ide__executeCode`, VS Code): Python run in the open notebook's kernel | needs review; OpenMoat does not read Python. The editor still asks Execute or Cancel |
 | A write to the editors' project configuration: `.vscode/` (tasks, launch configurations, MCP servers, settings that name a program), `*.code-workspace`, `.idea/`, JetBrains' shared `*.run.xml` | needs review (`runs-later`): the editor runs what these name, outside any prompt. Reading them stays allowed |
+| A write to a virtual environment's interpreter and scripts (`.venv/bin/`, `venv/bin/`) | needs review (`runs-later`): the editor's Python extension and test runners start them outside any sandbox; an install still writes them |
+| A write to dev container configuration (`.devcontainer/`, `.devcontainer.json`) | needs review (`runs-later`): its `initializeCommand` runs on this machine, not in the container, when the editor opens the folder |
 
 Try it against your policy:
 
@@ -57,6 +59,13 @@ openmoat policy check "$PWD/.vscode/tasks.json" --kind fs-read    # exit 0: allo
 
 ## Not covered
 
+- **A repository's own git configuration.** `.git/config` can name programs git runs
+  (`core.fsmonitor` on every `git status`, a hooks folder, a pager, filters, `!` aliases).
+  The editor's git extension and the agent run git in the background when the folder
+  opens, before any hook, so OpenMoat cannot stop it; `openmoat status` and `openmoat
+  doctor` name each such key of the current repository (`repo_git_config` in
+  `status --format json`). Under `openmoat run` the agent's git runs inside the sandbox;
+  the editor's does not.
 - **The editor selection and the open file.** Claude Code adds the text you select, and
   the path of the file you have open, to each prompt you send. That is no tool call, so no
   hook sees it. Claude Code's own `Read` deny rules keep a matching file's selection out;
