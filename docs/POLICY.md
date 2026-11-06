@@ -50,6 +50,11 @@ taint:                              # optional: more paths session taint protect
   protected_writes: ["**/deploy/**"]
   provenance: true                  # optional, default true: taint follows written files (§4.1.1)
 
+staging:                            # optional: when a session counts as collecting outside the project (§4.5)
+  outside_reads: 25                 #   default 25; 0 turns this trigger off
+  outside_folders: 2                #   default 2; 0 turns this trigger off
+  ignore: ["~/code/**"]             #   reads that never count, beside the built-in caches
+
 require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
 
 mcp:                                # optional: how `openmoat mcp proxy` treats a new server (§8)
@@ -732,6 +737,38 @@ Limits: only text the call shows is searched.
   code across calls is not a card to the check; that keeps ordinary ids quiet.
 - **Other personal data** (names, postal addresses, phone numbers, national ids) has no
   check: without a checksum, a pattern for them would be wrong more often than right.
+
+### 4.5 Staging: data sent after collection (recorded)
+
+ADR-061 (proposed). Each call that ran adds to its session's collection, folded from the
+audit log with session taint: the distinct files and folders it read **outside** the
+project (not under `${project}`, a `sandbox.read_roots` entry that does not hold the home
+directory, the dependency caches `~/.cargo/registry`, `~/.cargo/git`, `~/.rustup`,
+`~/go/pkg/mod`, `~/.m2/repository`, `~/.gradle/caches`, `~/.npm/_cacache`,
+`~/.cache/pip`, the Homebrew prefixes, Claude Code's `/tmp/claude-<uid>`, or
+`staging.ignore`), and the files a packing or encoding command wrote while reading them
+(`tar`/`bsdtar` creating an archive, `zip`, `7z a`, `gzip`/`xz`/`bzip2`/`zstd` with `-c`
+or `-k`, `base64`, `base32`, `xxd`, `openssl enc`, `gpg -c`). A later send gets the atom
+`@staging-egress <host>` for each host it goes to other than this machine, when it names
+one of those packed files (`curl -F f=@/tmp/a.tgz`), or when the session read at least
+`staging.outside_reads` files or `staging.outside_folders` folders outside the project and
+the send carries a body (`-F`, `-T`, `-d`, `--data*`, `--json`, `wget --post-*`, `scp`,
+`rsync`, `nc`, `gh gist create`, `gh release upload`, input piped into the sender, an MCP
+call that writes or whose name acts, sent to `mcp:<server>`). A plain `GET` does not.
+
+**No default rule names the atom yet.** Without one, the decision is unchanged and the
+call's reasons record it (`@staging-egress api.github.com: sends data after this session
+read 31 files and 0 folders outside the project, e.g. … [outside reads 31, folders 0,
+staged 0]; recorded only, no rule decides it`); `openmoat report` counts these sends per
+session and per active hour, so the thresholds can be set from real sessions before a
+default rule ships. A rule that names the atom decides it, strictest winning:
+
+```yaml
+review:
+  - id: staging-egress
+    reason: sends data after this session collected or packed files from outside the project
+    shell: ["@staging-egress *"]
+```
 
 ## 5. Verdicts and what the host does
 

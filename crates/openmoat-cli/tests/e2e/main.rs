@@ -75,6 +75,7 @@ mod sandbox_exec;
 mod sandbox_sync;
 mod secret;
 mod session_code;
+mod staging;
 mod taint;
 mod taint_answered;
 mod team;

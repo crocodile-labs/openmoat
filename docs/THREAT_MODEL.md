@@ -143,6 +143,15 @@ something OpenMoat claims to stop.
   agent's spec, `advisories.rs`, and is only as current as the OpenMoat release). A
   server the person adds is trusted by them, and the sign-in itself runs unchecked.
 
+- **Collection before a send is recorded, not decided (ADR-061, proposed).** Data that is
+  sensitive without being a secret (documents, other repositories, an export), read file by
+  file outside the project, packed and sent to a host the policy allows, is `allow` or
+  `defer` call by call. Each call's collection outside the project is folded from the audit
+  log, and a later send carries `@staging-egress <host>` (POLICY.md §4.5), but no default
+  rule names it yet: the call's reasons record it and `openmoat report` counts it, so the
+  thresholds can be measured first. A policy that adds a rule for it decides it; a
+  collection spread over several sessions, or sent by a script the agent wrote, is not
+  linked.
 - **Package checks are offline and name-based (ADR-030).** `package-near-miss` compares
   each installed name with a bundled list of popular names per registry, written by
   hand and refreshed with `scripts/refresh-top-packages.py`; nothing asks a registry.
