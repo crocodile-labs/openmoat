@@ -70,7 +70,6 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
                 .into_iter()
                 .map(|warning| warning.text)
                 .collect::<Vec<_>>(),
-            "repo_git_config": crate::project_settings::git_config::warnings_here(),
         }))?;
         return Ok(Code::Ok);
     }
@@ -99,13 +98,6 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     for warning in crate::project_settings::other_hooks::warnings_here(&home) {
         let text = format!("other hook {}", warning.text);
         shown.needs(Mark::Attention, warning.host.display_name(), text);
-    }
-    for warning in crate::project_settings::git_config::warnings_here() {
-        shown.needs(
-            Mark::Attention,
-            "Repository",
-            format!("git config {warning}"),
-        );
     }
     if let Ok(policy) = home.load_policy() {
         healthy &= agents::sandboxes(&mut shown, &home, &Plan::new(&home, &policy)?, &binary);
