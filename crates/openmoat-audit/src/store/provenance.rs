@@ -143,6 +143,31 @@ impl Store {
         Ok(row)
     }
 
+    /// The untrusted content the session had read when the call recorded as
+    /// `event` wrote `path`, as its tainted-write row says; `None` when the
+    /// call left no such row (a clean session, or provenance turned off).
+    pub fn tainted_write_at(
+        &self,
+        event: EventId,
+        path: &str,
+    ) -> Result<Option<String>, StoreError> {
+        if !self.provenance() {
+            return Ok(None);
+        }
+        let path = self.secrets.redact(path);
+        let source = self
+            .conn
+            .query_row(
+                "SELECT source FROM provenance
+                 WHERE path = ?1 AND event_id = ?2 AND kind = 'tainted-write'
+                 ORDER BY id LIMIT 1",
+                params![path, event.0],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(source)
+    }
+
     /// What reads of tainted files did to `session_id` on `host`, if any.
     pub fn exposure(&self, session_id: &str, host: &str) -> Result<Option<Exposure>, StoreError> {
         if !self.provenance() {

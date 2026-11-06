@@ -55,6 +55,17 @@ pub struct Written {
     pub before: Option<String>,
 }
 
+/// A session's newest write of a file, with the session that made it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedWrite {
+    /// The host of the session, as stored (redacted).
+    pub host: String,
+    /// The session, as stored (redacted).
+    pub session_id: String,
+    /// The write; its `path` is the stored lookup form.
+    pub written: Written,
+}
+
 impl Store {
     /// Record that the call recorded as `event` of `session_id` on `host`
     /// writes `writes`, in one transaction, and remove rows past the bounds.
@@ -134,6 +145,38 @@ impl Store {
             )
             .optional()?;
         Ok(found.is_some())
+    }
+
+    /// Every session's newest write of every file recorded at or before `to_ms`,
+    /// oldest first: what `openmoat provenance` (ADR-056) matches a commit's
+    /// files against. One pass over the table, which its bounds keep small.
+    pub fn writes_up_to(&self, to_ms: i64) -> Result<Vec<RecordedWrite>, StoreError> {
+        if !self.session_writes() {
+            return Ok(Vec::new());
+        }
+        let before = if self.write_before() {
+            "before_sha256"
+        } else {
+            "NULL"
+        };
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT host, session_id, path, event_id, ts_ms, sha256, {before} FROM session_writes
+             WHERE ts_ms <= ?1 ORDER BY ts_ms, id"
+        ))?;
+        let rows = stmt.query_map(params![to_ms], |r| {
+            Ok(RecordedWrite {
+                host: r.get(0)?,
+                session_id: r.get(1)?,
+                written: Written {
+                    path: r.get(2)?,
+                    event_id: EventId(r.get(3)?),
+                    ts_ms: r.get(4)?,
+                    sha256: r.get(5)?,
+                    before: r.get(6)?,
+                },
+            })
+        })?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
     }
 
     /// Which of `paths` `session_id` on `host` wrote, each with its newest write.

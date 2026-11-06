@@ -127,7 +127,7 @@ records of that control operating on an agent's tool calls.
 | `code-execution` | `pipe-to-shell`, `opaque-code`, `session-written-code`, `executables` | LLM05 | CC6.8 | A.8.7 |
 | `packages` | `package-near-miss` | LLM03 | CC6.8 | A.8.19 |
 | `runs-later` | `runs-later`, `persistence`, `shell-rc`, `git-internals`, `env-poison`, `push-runs-later` | | CC6.8 | A.8.7 |
-| `self-protection` | `kernel-self`, `agent-folders`, `stops-openmoat` | LLM06 | CC8.1 | A.8.9 |
+| `self-protection` | `kernel-self`, `agent-folders`, `stops-openmoat`, `provenance-notes` | LLM06 | CC8.1 | A.8.9 |
 | `integrity` | `kernel-integrity`, `settings-drift`, `project-settings` | | CC7.1, CC8.1 | A.8.9 |
 | `mcp` | `mcp-server-changed`, `mcp-tool-held`, `mcp-unattributed` | LLM03 | CC6.8, CC7.1 | A.8.19 |
 | `destructive` | `destructive`, `destructive-recoverable` | LLM06 | | |

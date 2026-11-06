@@ -33,6 +33,10 @@ inputs:
     description: The revision with the change.
     required: false
     default: ${{ github.event.pull_request.head.sha }}
+  provenance:
+    description: "Show what provenance notes (`refs/notes/openmoat`, docs/PROVENANCE.md) say agents wrote: `review` (warnings), `info` (notices) or `off`. Never fails the step. `info` and `off` need a release whose `check-diff` has `--provenance`."
+    required: false
+    default: review
   token:
     description: Token `gh attestation verify` reads the release's attestation with.
     required: false
@@ -93,6 +97,16 @@ runs:
         echo "binary=$dir/openmoat" >> "$GITHUB_OUTPUT"
         "$dir/openmoat" --version
 
+    # Notes are not fetched by actions/checkout. A repository without them, or a fork
+    # whose remote has none, gets nothing here and the check stays as it was.
+    - name: Fetch provenance notes
+      if: inputs.provenance != 'off'
+      shell: bash
+      run: |
+        set -uo pipefail
+        git fetch --no-tags --quiet origin '+refs/notes/openmoat:refs/notes/openmoat' 2>/dev/null \
+          || echo "no provenance notes on origin"
+
     - name: Check the change
       id: check
       shell: bash
@@ -102,12 +116,20 @@ runs:
         OPENMOAT_HEAD: ${{ inputs.head }}
         OPENMOAT_POLICY: ${{ inputs.policy }}
         OPENMOAT_FAIL_ON: ${{ inputs.fail-on }}
+        OPENMOAT_PROVENANCE: ${{ inputs.provenance }}
       run: |
         set -uo pipefail
         case "$OPENMOAT_FAIL_ON" in
           review | deny | never) ;;
           *)
             echo "::error title=OpenMoat::fail-on must be review, deny or never, not '$OPENMOAT_FAIL_ON'"
+            exit 1
+            ;;
+        esac
+        case "$OPENMOAT_PROVENANCE" in
+          review | info | off) ;;
+          *)
+            echo "::error title=OpenMoat::provenance must be review, info or off, not '$OPENMOAT_PROVENANCE'"
             exit 1
             ;;
         esac
@@ -118,6 +140,10 @@ runs:
         args=(policy check-diff "--base=$OPENMOAT_BASE" "--head=$OPENMOAT_HEAD" --format github)
         if [ -n "$OPENMOAT_POLICY" ]; then
           args+=("--policy=$OPENMOAT_POLICY")
+        fi
+        # `review` is the binary's own default, so older releases still run
+        if [ "$OPENMOAT_PROVENANCE" != review ]; then
+          args+=("--provenance=$OPENMOAT_PROVENANCE")
         fi
         "$OPENMOAT" "${args[@]}"
         code=$?

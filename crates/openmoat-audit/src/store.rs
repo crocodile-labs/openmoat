@@ -35,7 +35,7 @@ pub use mcp_flow::{MAX_AGE_MS as MCP_FLOW_MAX_AGE_MS, MAX_SESSION_ROWS as MCP_FL
 pub use mcp_tickets::{MAX_AGE_MS as MCP_TICKET_MAX_AGE_MS, NewTicket, Ticket};
 pub use provenance::{Exposure, FileProvenance, NewProvenance, ProvenanceKind};
 pub use session_cache::Cached;
-pub use session_writes::{SessionWrite, Written};
+pub use session_writes::{RecordedWrite, SessionWrite, Written};
 
 const BUSY_TIMEOUT_MS: u64 = 2000;
 

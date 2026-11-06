@@ -8,6 +8,7 @@ use openmoat_hosts::Host;
 mod audit;
 mod mcp;
 mod policy;
+mod provenance;
 
 pub use audit::{AnchorArgs, AuditCommand, EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
@@ -15,6 +16,7 @@ pub use policy::{
     ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffFormat, InstallArgs, LintArgs,
     PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,
 };
+pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -76,6 +78,10 @@ pub enum Command {
     Replay(ReplayArgs),
     /// Summarise decisions over a window: verdicts, hosts, top rules, reviews per hour.
     Report(ReportArgs),
+    /// Show which files and lines of commits agent sessions wrote, as this machine's audit
+    /// log recorded them, and whether each session had read untrusted content first;
+    /// `--write-notes` keeps it in git notes, `--verify` checks those notes.
+    Provenance(ProvenanceArgs),
     /// Run the default-deny egress proxy, or install/uninstall it as a user service
     /// so it stays up without a person running it (macOS launchd, Linux systemd user unit).
     /// `openmoat proxy` alone runs the proxy; `install`, `uninstall` and `status` manage the service.

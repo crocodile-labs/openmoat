@@ -2459,3 +2459,24 @@
   why: no untrusted content was read, so nothing could have planted the edit
   action: { fs_write: "/p/.agents/skills/deploy/SKILL.md" }
   expect: { verdict: allow, rules: [project-fs] }
+
+# provenance (ADR-056): only writes to OpenMoat's notes ref need review; other notes,
+# reading history with notes, and the read-only provenance report stay as they were
+- id: benign-git-notes-other-ref
+  action: { shell: "git notes add -m 'reviewed by alice' HEAD" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-notes-show
+  action: { shell: "git notes show HEAD" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-git-log-with-provenance-notes
+  action: { shell: "git log --notes=openmoat --oneline -5" }
+  expect: { verdict: allow, rules: [dev-shell] }
+- id: benign-git-update-ref-branch
+  action: { shell: "git update-ref refs/heads/topic HEAD" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-openmoat-provenance-report
+  action: { shell: "openmoat provenance --range main..HEAD --format json" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-openmoat-provenance-verify
+  action: { shell: "openmoat provenance --verify" }
+  expect: { verdict: defer, rules: [default] }

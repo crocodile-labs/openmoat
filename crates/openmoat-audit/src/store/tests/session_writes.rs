@@ -232,3 +232,30 @@ fn a_session_that_wrote_nothing_is_told_from_one_that_did() {
     assert!(!store.session_wrote_any("pi", "b").unwrap());
     assert!(!store.session_wrote_any("codex", "a").unwrap());
 }
+
+/// `openmoat provenance` (ADR-056) reads every session's writes up to a time,
+/// with the session that made each, oldest first.
+#[test]
+fn writes_up_to_a_time_list_every_session_s_newest_write() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.writes_up_to(i64::MAX).unwrap().len(), 0);
+    let a = event(&store, "a");
+    let mut first = write("/p/x.py", Some("cd"));
+    first.before = Some(String::new());
+    store.add_session_writes(a, "pi", "a", &[first]).unwrap();
+    let b = event(&store, "b");
+    store
+        .add_session_writes(b, "codex", "b", &[write("/p/x.py", None)])
+        .unwrap();
+    let all = store.writes_up_to(i64::MAX).unwrap();
+    let seen: Vec<(&str, &str, EventId)> = all
+        .iter()
+        .map(|w| (w.host.as_str(), w.session_id.as_str(), w.written.event_id))
+        .collect();
+    assert_eq!(seen, [("pi", "a", a), ("codex", "b", b)]);
+    assert_eq!(all[0].written.sha256.as_deref(), Some("cd"));
+    assert_eq!(all[0].written.before.as_deref(), Some(""));
+    assert_eq!(all[0].written.path, "/p/x.py");
+    // nothing recorded before the epoch
+    assert_eq!(store.writes_up_to(0).unwrap().len(), 0);
+}

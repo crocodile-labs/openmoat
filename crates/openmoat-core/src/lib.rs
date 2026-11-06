@@ -17,6 +17,7 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 mod action;
+pub mod attribution;
 pub mod diffscan;
 mod engine;
 mod expand;
@@ -51,7 +52,7 @@ pub use action::{Action, AtomicAction, UNCHECKED_RULE};
 // from the policy's brokered `Secret`.
 pub use engine::{
     CompiledPolicy, EvalContext, HOLDS_PROTECTED_RULE, Secret as TaintSecret, TAINT_RULE, Taint,
-    evaluate,
+    UntrustedKind, evaluate,
 };
 pub use host::{
     MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN, file_url_path, malformed_port_pattern, port_pattern,
