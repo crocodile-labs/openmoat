@@ -71,8 +71,10 @@ covers what they leave out:
   pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, set up with `openmoat init`.
 - **Secret files are closed to the agent's tool calls.** SSH keys, `.env`, cloud
   credentials and each agent's own login files are denied, however the path is spelt;
-  the OS sandboxes deny the same files to the programs the agent's commands run (see
-  Limits for what `openmoat run` keeps).
+  the OS sandboxes deny the same files, every agent's login included, to the programs
+  the agent's commands run, so a test or package script cannot read an agent's token;
+  `openmoat sandbox show` lists them (see Limits for what `openmoat run` keeps,
+  [docs/SANDBOX.md](docs/SANDBOX.md)).
 - **Recognised secrets and card numbers in a call are denied:** known token formats sent
   to the wrong host, encoded secrets after a secret was read, payment card numbers. File
   contents and encoded data are not read.
@@ -82,9 +84,18 @@ covers what they leave out:
   and inline code that builds its own targets are held for review.
 - **What runs later.** CI workflows, git hooks, login items and `PATH` folders are held for review;
   shell startup files are denied.
+- **Instructions planted in what the agent reads.** With Claude Code, when a fetched
+  page, a search result, an MCP result, `gh issue view` or a `curl` of an unlisted host
+  names a host, a path or a command, a later command or write that uses it needs review,
+  and the reason names the source (`injected-input`). After such a read, writes to the
+  instruction and skills files other agents load need review too. Run `openmoat init`
+  once after upgrading to add the hook entry this needs
+  ([docs/POLICY.md](docs/POLICY.md#412-injected-input)).
 - **MCP servers.** Tool calls are checked by their paths and URLs; server definitions and
   tool descriptions are pinned; `openmoat mcp wrap` starts only accepted servers, in a
-  sandbox.
+  sandbox. A call that carries text one wrapped server returned into another server's
+  tool that writes or sends needs review (`mcp-cross-server`); `mcp.flow_trusted` exempts
+  a server ([docs/POLICY.md](docs/POLICY.md#cross-server-data-flow-mcp-cross-server-adr-058)).
 - **OS sandboxes.** The same policy writes Claude Code's, Codex's and Cursor's sandbox
   settings; `openmoat run` sandboxes any agent on macOS and Linux.
 - **Tokens the agent never sees.** `openmoat secret add` gives the agent a placeholder; the
@@ -94,20 +105,31 @@ covers what they leave out:
 - **Audit log.** Every decision in a local, hash-chained log: `openmoat show`, `report`,
   `audit export`, `audit anchor`.
 - **Team rules.** A committed `.moat/policy.yaml`, or a policy pack signed with an SSH key.
+  A repository's rules only add: its `review` rule never turns a `deny` from your own
+  policy into a review.
 - **Pull request check.** `openmoat policy check-diff` and a GitHub Action flag a change to
   CI, git hooks, agent settings, the policy or secret files before it is merged, and,
   line by line and offline, typo-squatted dependencies, swapped lockfile hashes, CI
   workflows a fork can take over, downloaded or decoded code that runs, private keys
-  and new hosts your allow list does not name
-  ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
+  and new hosts your allow list does not name; `check_diff.levels` in the policy sets
+  each check to `deny`, `review` or `off` ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
 - **Which lines an agent wrote.** `openmoat provenance` shows which files and lines of
   your commits an agent session wrote, and whether it had read a web page or an MCP
-  result first; kept in git notes, shown on the pull request. Only commits made with
-  OpenMoat running have a record ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
+  result first. `openmoat provenance --write-notes` keeps it in git notes, `--verify`
+  checks them against the audit log, and `check-diff` shows them on the pull request.
+  Only commits made with OpenMoat running have a record
+  ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
+- **Readable status.** `openmoat status`, `openmoat doctor` and `openmoat init` show
+  what needs you first, each item with its fix, then one line per agent; `--verbose`
+  shows every check. `openmoat policy upgrade` groups what a new default changes
+  (`--diff` shows the full diff) ([docs/USAGE.md](docs/USAGE.md)).
 - **In your own agent.** The Rust and JavaScript SDKs give your product the same
   decisions ([docs/SDK.md](docs/SDK.md)).
 - **Measured.** MoatBench runs attack scenarios against OpenMoat and other tools
-  ([docs/MOATBENCH.md](docs/MOATBENCH.md)).
+  ([docs/MOATBENCH.md](docs/MOATBENCH.md)); fuzz targets cover the shell parser, policy
+  parsing, repository-policy merging, host payloads, the proxy, the MCP gateway's
+  framing and `check-diff`'s diff parser
+  ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).
 
 Details of each check are under [What it checks](#what-it-checks).
 
@@ -166,7 +188,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 <!-- generated:hosts-agents -->
 | Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |
 |---|---|---|---|
-| Claude Code | `PreToolUse`, `ConfigChange` and `SessionStart` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
+| Claude Code | `PreToolUse`, `PostToolUse`, `ConfigChange` and `SessionStart` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
 | Codex | `PreToolUse` hook in `hooks.json`; a `review` becomes a deny you approve with `openmoat allow --last` | hook + OS sandbox | `codex` |
 | Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` hooks, fail-closed | hook + OS sandbox (macOS, Linux); hook only on Windows | `cursor` |
 | OpenClaw | OpenMoat's plugin on OpenClaw's `before_tool_call` hook | hook only | `openclaw` |
@@ -456,8 +478,25 @@ The main gaps:
   instead ([BROKER_LOGINS.md](docs/BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md)).
 - **Injected input is linked only with Claude Code, and only exactly.** Other agents
-  report no call output, and a planted host spelled another way or a reworded command
-  is not linked to its source ([ADR-057](docs/adr/ADR-057-injected-input-and-instruction-files.md)).
+  report no call output, and a planted host spelled another way, a reworded command or
+  a relative path is not linked to its source. Only the output of `Bash`, `WebFetch`,
+  `WebSearch`, MCP resource reads and MCP tools is read, each kept up to fixed bounds,
+  so a page full of decoys can push a planted host out. Fetches, searches and MCP
+  calls themselves are not checked against it, and an install without the
+  `PostToolUse` entry (`openmoat init` adds it) links nothing
+  ([ADR-057](docs/adr/ADR-057-injected-input-and-instruction-files.md)).
+- **The MCP flow check sees wrapped servers and exact text only.** Results of a server
+  not run through `openmoat mcp wrap` (remote HTTP, plugin or managed servers) are not
+  recorded, and text the agent rewrites, encodes, splits or shortens below eight words
+  is not found; a tool's own annotations or its name decide whether it writes or sends
+  ([ADR-058](docs/adr/ADR-058-mcp-cross-server-flow.md)).
+- **The pull request check reads added lines, not programs.** It matches the text a
+  change adds (and the lockfile lines it removes), offline, without parsing each
+  language or looking anything up: a payload built from pieces at run time, a script
+  the change does not touch and a package's age or owner are not checked, and a benign
+  line can match (set its level in `check_diff.levels`). A finding is a report: it
+  holds a merge only where the job is a required status check
+  ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md#limits)).
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote needs review before an interpreter runs it, but a test runner, build tool or
@@ -471,9 +510,12 @@ The main gaps:
   scripts, links and redirects lead next, nor where its name resolves. What the page says
   marks the session as untrusted, so writes to files that run later need review; installs and
   later pages do not.
-- **Provenance covers only what the hook saw.** `openmoat provenance` knows the writes
-  agent sessions made through calls OpenMoat decided, on the machine that made them;
-  a commit without a note, or with no record, is not shown to be a person's
+- **Provenance notes are local evidence of what the hook saw.** `openmoat provenance`
+  knows the writes agent sessions made through calls OpenMoat decided, on the machine
+  that made them; a script, an editor or an agent without OpenMoat leaves no record.
+  Notes are not signed and can be stripped or left unpushed: a missing note proves
+  nothing, a commit with no record is not shown to be a person's, and only the machine
+  that wrote a note can verify it; in CI it is a claim
   ([docs/PROVENANCE.md](docs/PROVENANCE.md#limits)).
 - **Tools no hook exposes are not seen**, such as Codex web search and hosted tools,
   and the shell commands you type yourself in OpenCode (`!`).
@@ -561,6 +603,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 | [Usage](docs/USAGE.md) | Every command, reviewing what the agent did, changing the policy |
 | [Policy](docs/POLICY.md) | The rule format, pattern syntax, evaluation order and the policy lock |
 | [Sandboxes](docs/SANDBOX.md) | The agents' own sandboxes, `openmoat run` and `openmoat run --isolate` |
+| [Broker logins](docs/BROKER_LOGINS.md) | Keeping an agent's API key out of `openmoat run` with `openmoat secret add` |
 | [SDK](docs/SDK.md) | OpenMoat's decisions in your own agent product, from Rust or JavaScript |
 | [Merge check](docs/MERGE_CHECK.md) | Checking a pull request before merge: `openmoat policy check-diff` and the GitHub Action |
 | [Provenance](docs/PROVENANCE.md) | Which files and lines of your commits an agent wrote, after reading what: `openmoat provenance` and its git notes |
@@ -581,6 +624,9 @@ From 0.13.x to 0.14.0 also run `openmoat init` once if you use goose or the Clin
 `openmoat policy upgrade` renames the `ask` verdict to `review` and adds `card-egress`.
 From 0.14.0 to 0.15.0 run `openmoat policy upgrade` for the changed default rules, and if
 you use Codex, `openmoat init` again and trust OpenMoat's hook in Codex's `/hooks`.
+From 0.15.0 to 0.16.0 run `openmoat init` once if you use Claude Code, which adds the
+`PostToolUse` entry injected input needs, and `openmoat policy upgrade` for the new
+default rules (`agent-credentials` in the sandboxes, `provenance-notes`).
 Each release's own steps are in its [CHANGELOG](CHANGELOG.md) "Upgrading" line.
 
 ## Contributing
