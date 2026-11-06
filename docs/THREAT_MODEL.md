@@ -142,6 +142,17 @@ something OpenMoat claims to stop.
   on the search path has a published advisory with a fixed version (the list is in each
   agent's spec, `advisories.rs`, and is only as current as the OpenMoat release). A
   server the person adds is trusted by them, and the sign-in itself runs unchecked.
+- **A repository's own git configuration runs before any hook.** `.git/config` (and a
+  worktree's `config.worktree`) can name programs git runs: `core.fsmonitor` on every
+  `git status`, a hooks folder, a pager, an editor, a diff or merge driver, a filter, a
+  credential helper, an `alias` starting with `!`, a file to include. The agents run git
+  in the background when a session starts, often before their trust question, and a
+  repository that arrives as files (an archive, a shared drive) keeps the `.git` it was
+  made with. No hook sees that git; under `openmoat run` it runs inside the sandbox.
+  `openmoat doctor` and `openmoat status` name each such key of the current repository
+  (`repo_git_config` in `status --format json`), reading the files as text; a hooks
+  folder `runs-later` already holds (`.husky/_`, `.githooks`) and Git LFS's filters are
+  left out.
 
 - **Package checks are offline and name-based (ADR-030).** `package-near-miss` compares
   each installed name with a bundled list of popular names per registry, written by
