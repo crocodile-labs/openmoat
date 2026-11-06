@@ -247,7 +247,8 @@ fn the_old_name_ask_is_warned_about_and_renamed_by_upgrade() {
     assert!(
         text(&out).contains("`ask:` is the old name of `review:`")
             && text(&out).contains("`ask` is the old name of the `review` verdict")
-            && text(&out).contains("2 warnings"),
+            // the third: `deploy` has no `title` (ADR-059)
+            && text(&out).contains("3 warnings"),
         "{}",
         text(&out)
     );

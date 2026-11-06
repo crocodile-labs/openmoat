@@ -31,13 +31,18 @@ impl Style {
 
     /// The mark's symbol, green, yellow, red or dim.
     pub fn mark(self, mark: Mark) -> String {
+        self.tint(mark, mark.symbol())
+    }
+
+    /// `text` in the colour of `mark`: green, yellow, red or dim.
+    pub fn tint(self, mark: Mark, text: &str) -> String {
         let code = match mark {
             Mark::Ok => "32",
             Mark::Attention => "33",
             Mark::Broken => "31",
             Mark::Info | Mark::Absent => "2",
         };
-        self.paint(code, mark.symbol())
+        self.paint(code, text)
     }
 
     pub fn bold(self, text: &str) -> String {

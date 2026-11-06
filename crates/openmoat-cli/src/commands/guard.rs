@@ -25,7 +25,7 @@ use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
 use crate::integrity::{self, Drift};
 use crate::realpath::FsPathResolver;
-use crate::{push, render, secrets, session_code, taint, time};
+use crate::{notice, push, render, secrets, session_code, taint, time};
 
 mod config_change;
 mod drift;
@@ -177,7 +177,10 @@ fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<C
         // `Deny`, and any verdict added to the core later, blocks the call.
         _ => {
             // Hosts may show hook stderr in a terminal; the reason quotes the call.
-            eprintln!("{}", render::clean(&openmoat_hosts::reason_line(decision)));
+            eprintln!(
+                "{}",
+                render::clean_lines(&openmoat_hosts::reason_line(decision))
+            );
             Code::Deny
         }
     })
@@ -227,6 +230,13 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     if let Some(r) = &request {
         decision = host.decided(&r.event, decision);
     }
+    // What the agent and its person read about a deny or review (ADR-059);
+    // presentation only, never recorded. A deny that replaces the decision
+    // below has no notice, and keeps the one line.
+    let call = request
+        .as_ref()
+        .map(|r| (r.tool.as_str(), r.action.as_ref()));
+    decision.notice = notice::of(&decision, &out.titles, call, &out.known);
     // The audit log is part of the decision: a call that cannot be recorded
     // is not allowed, so a missing or unwritable log cannot hide activity.
     let recorded = Recorded {
@@ -327,6 +337,9 @@ struct Evaluated {
     /// A session start's `openmoat proxy` credential, written to the
     /// session's environment file once its row is recorded (ADR-044).
     proxy_credential: Option<session_start::Pending>,
+    /// The titles the person's policy gives the decision's rules, for the
+    /// block message (ADR-059).
+    titles: notice::Titles,
 }
 
 /// Decide one hook payload, filling `out` as it goes. `started` is when the
@@ -518,6 +531,7 @@ fn evaluate(
     let tainted = session.taint.untrusted.is_some() || !session.taint.secrets.is_empty();
     let pushes = compiled.pushes(action);
     let decision = push::check(&pushes, &snapshot, &out.known, tainted, decision);
+    out.titles = notice::Titles::of(compiled.policy(), &decision);
     Ok((Some(request), decision))
 }
 

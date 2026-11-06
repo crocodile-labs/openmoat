@@ -62,7 +62,13 @@ fn lint_warns_about_unreachable_rules_without_failing() {
         text.contains("warning: rule `push`: review shell pattern `cargo publish*` is unreachable"),
         "{text}"
     );
-    assert!(text.contains("2 warnings)"), "{text}");
+    // ADR-059: a review rule without a `title`.
+    assert!(
+        text.contains("warning: rule `title`: 1 deny or review rule is without a `title`")
+            && text.contains("`push`;"),
+        "{text}"
+    );
+    assert!(text.contains("3 warnings)"), "{text}");
 }
 
 /// A project and a file inside it, written the same way, must match

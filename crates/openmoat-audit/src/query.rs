@@ -4,10 +4,10 @@
 use std::collections::BTreeMap;
 
 use openmoat_core::Verdict;
-use rusqlite::params;
+use rusqlite::{OptionalExtension as _, params};
 use serde::{Deserialize, Serialize};
 
-use crate::store::{Event, Store, StoreError, row_to_event};
+use crate::store::{Event, EventId, Store, StoreError, row_to_event};
 
 const MS_PER_HOUR: i64 = 3_600_000;
 const TOP_RULES: usize = 10;
@@ -84,6 +84,47 @@ impl Store {
         ))?;
         let rows = stmt.query_map(params![since_ms, host], row_to_event)?;
         rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    /// Up to `limit` events recorded after the event `after` (all events when
+    /// `None`), oldest first: what `openmoat watch` reads on each look. One
+    /// short read by row id, which never waits on a writer in WAL mode.
+    pub fn after(&self, after: Option<EventId>, limit: usize) -> Result<Vec<Event>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "{} WHERE id > ?1 ORDER BY id LIMIT ?2",
+            self.select()
+        ))?;
+        let after = after.map_or(0, |id| id.0);
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let rows = stmt.query_map(params![after, limit], row_to_event)?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    /// Events recorded from `start_ms` up to but not including `end_ms`,
+    /// oldest first.
+    pub fn between(&self, start_ms: i64, end_ms: i64) -> Result<Vec<Event>, StoreError> {
+        let mut stmt = self.conn.prepare(&format!(
+            "{} WHERE ts_ms >= ?1 AND ts_ms < ?2 ORDER BY id",
+            self.select()
+        ))?;
+        let rows = stmt.query_map(params![start_ms, end_ms], row_to_event)?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    /// The newest event that denied a call or held it for review (`ask`, the
+    /// old name of `review`, included), as `openmoat why --last` explains.
+    pub fn latest_held(&self) -> Result<Option<Event>, StoreError> {
+        self.conn
+            .query_row(
+                &format!(
+                    "{} WHERE verdict IN ('deny', 'review', 'ask') ORDER BY id DESC LIMIT 1",
+                    self.select()
+                ),
+                [],
+                row_to_event,
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     /// Events since `since_ms` grouped into sessions, oldest session first.
@@ -229,6 +270,34 @@ mod tests {
         assert_eq!(store.since(0, Some("cursor")).unwrap().len(), 2);
         let first = &store.since(0, None).unwrap()[0];
         assert_eq!(first.ts_ms, 1_000, "oldest first");
+    }
+
+    /// `openmoat watch` reads on from the last row it showed; `why --last`
+    /// takes the newest deny or review; `why <time>` reads one window.
+    #[test]
+    fn after_between_and_latest_held_read_what_watch_and_why_need() {
+        let store = Store::open_in_memory().unwrap();
+        assert!(store.latest_held().unwrap().is_none());
+        seed(&store);
+        let all = store.after(None, 100).unwrap();
+        assert_eq!(all.len(), 6);
+        let rest = store.after(Some(all[3].id), 100).unwrap();
+        assert_eq!(
+            rest.iter().map(|e| e.id).collect::<Vec<_>>(),
+            [all[4].id, all[5].id]
+        );
+        assert_eq!(store.after(None, 2).unwrap().len(), 2);
+        assert_eq!(
+            store.after(Some(all[5].id), 10).unwrap(),
+            Vec::<Event>::new()
+        );
+        let held = store.latest_held().unwrap().unwrap();
+        assert_eq!(
+            (held.host.as_str(), held.verdict),
+            ("codex", Verdict::Review)
+        );
+        let hour = store.between(MS_PER_HOUR, 2 * MS_PER_HOUR).unwrap();
+        assert_eq!(hour.len(), 2, "the end is not included");
     }
 
     #[test]

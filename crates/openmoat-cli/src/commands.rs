@@ -26,6 +26,8 @@ mod status;
 mod team;
 mod trust;
 mod uninstall;
+mod watch;
+mod why;
 
 use anyhow::Result;
 
@@ -48,6 +50,8 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Uninstall(args) => uninstall::run(&args),
         Command::Guard(args) => Ok(guard::run(&args)),
         Command::Show(args) => show::run(&args),
+        Command::Watch(args) => watch::run(&args),
+        Command::Why(args) => why::run(&args),
         Command::Status(args) => status::run(&args),
         Command::Doctor(args) => doctor::run(&args),
         Command::Allow(args) => allow::run(&args),
