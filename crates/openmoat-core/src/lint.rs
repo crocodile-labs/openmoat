@@ -10,6 +10,9 @@ use std::fmt;
 
 mod check_diff;
 mod ports;
+mod titles;
+
+pub use titles::untitled;
 
 use crate::kind::Kind;
 use crate::paths;

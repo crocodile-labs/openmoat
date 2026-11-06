@@ -206,11 +206,27 @@ is information for you, not a check: nothing is decided from it.
 
 ## A call is denied
 
-The agent gets the rule and the reason, and usually tells you:
+The agent gets what was stopped and why, and usually tells you (since 0.17.0, ADR-059):
 
 ```
-moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa
+OpenMoat blocked: reading or changing your keys and credential files
+  call   Read ~/.ssh/id_rsa
+  rule   moat: deny [secrets-paths] — secret material: read /Users/you/.ssh/id_rsa
+  why    a key or token that leaves this machine cannot be taken back
+  next   if you need this, do it yourself in your own terminal
+  more   openmoat why --last · https://openmoat.dev/r/secrets-paths
 ```
+
+- The first line is the rule's `title`; `why` is the rule's `why` ([POLICY.md](POLICY.md)
+  §3.1). A rule without a title, and OpenMoat's own checks (`kernel-integrity`,
+  `session-taint`, `default.net`, …), send only the `rule` line.
+- The `rule` line is the line earlier releases sent: `moat: <verdict> [<rule ids>] —
+  <reasons>`. Scripts that look for it still find it.
+- The call is shown with secrets masked as the audit log masks them, on one line, cut in
+  the middle when it is long. The message is plain text, at most six lines.
+- `next` is one step for you. It never tells the agent another way to do the same thing:
+  the agent reads the message too.
+- `openmoat why --last` explains the newest deny or review in full (below).
 
 ```
 $ openmoat show
@@ -221,12 +237,22 @@ id     time (UTC) host         verdict rules          action
 
 ## A call needs review
 
-`review` shows the agent's own permission prompt, tagged with the rule
-(`moat: review [git-internals] — git runs what its config, hooks and refs name …`). Approve
-it there. Codex, Cursor for file tools, pi in print and JSON mode, OpenCode 1, goose, the
-Cline CLI, Claude Code in
+`review` shows the agent's own permission prompt with what is held:
+
+```
+OpenMoat is holding this for you: changing git's config, hooks or refs
+  call   git config core.pager less
+  rule   moat: review [git-internals] — git runs what its config, hooks and refs name …
+  why    git runs what they name later, outside any sandbox
+  next   approve it in this prompt only if you expected it
+  more   openmoat why --last
+```
+
+Approve it there. Codex, Cursor for file tools, pi in print and JSON mode, OpenCode 1,
+goose, the Cline CLI, Claude Code in
 `bypassPermissions` and `dontAsk` modes, and Continue CLI cannot prompt: there the call is
-denied with a message that says to run `openmoat` or `openmoat allow --last`. GitHub
+denied with a message whose `next` line says why and to run `openmoat` or `openmoat allow
+--last` ("Codex hooks cannot prompt, so approve it in your terminal: …"). GitHub
 Copilot CLI in autopilot turns a `review` into a deny itself; `openmoat allow --last`
 approves that call too. To stop reviewing the same command or file, run
 `openmoat` and answer `o` or `a`, or:
@@ -337,10 +363,81 @@ without a credential and drops their session taint; `openmoat run -- codex` keep
 ## Review what the agent did
 
 ```bash
+openmoat watch                   # follow every agent's calls as they happen (Ctrl-C stops)
+openmoat why --last              # the newest deny or review, explained in full
 openmoat replay --since today    # one tree per agent session: every call, verdict and rule
 openmoat report --since 7d       # totals, hosts, top rules, reviews per active hour
 openmoat show 1                  # one event in full
 ```
+
+### Watch the agents live
+
+Run `openmoat watch` (since 0.17.0) in a second terminal pane:
+
+```
+$ openmoat watch
+OpenMoat 0.17.0 · watching Claude Code, Codex · policy 16 deny · 10 allow · 12 review
+
+10:42:01  claude-code  ✓ Bash   cargo test -p openmoat-core            allow · dev-shell
+10:42:07  claude-code  ✓ Edit   src/lib.rs                             allow · project-fs
+10:42:15  claude-code  ? Bash   git config core.pager less             review · git-internals
+                         ↳ changing git's config, hooks or refs · approve: openmoat allow --last
+10:42:31  claude-code  ✕ Read   ~/.ssh/id_ed25519                      deny · secrets-paths
+                         ↳ reading or changing your keys and credential files
+10:42:40  codex        · Bash   make deploy                            defer · agent asks
+```
+
+- `✓` allowed, `?` held for review, `✕` denied, `·` left to the agent's own prompt (dim).
+  Times are UTC, as in `openmoat show`.
+- `--host <id>`, `--only deny` or `--only review`, and `--session <id>` show fewer calls;
+  `--recent N` sets how many earlier calls it shows first (10), `--no-follow` stops after them.
+- Colour only on a terminal, never with `NO_COLOR`. Piped, each call is one plain line
+  (the verdict after the call), for `grep`. A terminal narrower than 80 columns drops the
+  verdict column; the mark still shows it. The width is read from `COLUMNS`.
+- It only reads the audit log, a short read twice a second that never waits on the hook
+  nor makes it wait. Ctrl-C exits 0.
+
+### Why was this blocked?
+
+`openmoat why` (since 0.17.0) explains one decision: `--last` (the default) for the newest deny or
+review, an event id from `openmoat show` or `openmoat watch`, or a time today (UTC) as
+`watch` shows it, `10:42` or `10:42:31`.
+
+```
+$ openmoat why --last
+OpenMoat blocked: reading or changing your keys and credential files
+  event   1f · 2026-11-06 10:42:31 UTC · claude-code · session 7c1e4b2a
+  call    Read ~/.ssh/id_ed25519
+  answer  moat: deny [secrets-paths] — secret material: read ~/.ssh/id_ed25519
+
+Rules that decided it
+  deny secrets-paths  reading or changing your keys and credential files
+      why     a key or token that leaves this machine cannot be taken back
+      reason  secret material: read ~/.ssh/id_ed25519
+      from    your policy, ~/.moat/policy.yaml:17
+
+Your policy now decides each part of the call as
+  deny    read ~/.ssh/id_ed25519  (secrets-paths)
+
+How to change it
+  · `secrets-paths` is a deny rule of your policy (~/.moat/policy.yaml:17); only you can change it, with `openmoat edit`. An allow rule never overrides a deny
+
+More: https://openmoat.dev/r/secrets-paths
+```
+
+- **Rules that decided it**: each rule's title, `why`, the recorded reason, and where it
+  is: your policy and line, your `openmoat allow` rules, the repository's
+  `.moat/policy.yaml`, a policy pack, the policy's `defaults:` (no rule matched), or a
+  built-in check.
+- **Your policy now decides**: the call decided again, part by part, with the policy as it
+  is now (after the same lock check as `openmoat policy check`). If you changed the policy
+  since, this says what would happen now.
+- **Context**: what else shaped it: session taint, code the session wrote, text from
+  another MCP server, a changed MCP server, OpenMoat's own files changed.
+- **How to change it**: `openmoat edit` for a deny of your policy, `openmoat allow --last`
+  (or `--always`) for the newest review, the repository's owners for its rules.
+- `--format json` prints the same as one document (`rules`, `decided_now`, `context`,
+  `change`, `page`).
 
 Credentials are redacted before anything is stored. The log is a SQLite file in
 `~/.moat`; nothing leaves your machine.
@@ -770,6 +867,8 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists every check with its paths, each agent's known gaps and where each sandbox is stricter or wider than the policy) |
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |
 | `openmoat show [id] [--session …] [--since …] [--recent N]` | see events |
+| `openmoat watch [--host …] [--only deny\|review] [--session …] [--recent N] [--no-follow]` | follow the agents' calls live, one line each; reads the audit log only ([Watch the agents live](#watch-the-agents-live)) |
+| `openmoat why [--last \| <id> \| HH:MM[:SS]] [--format json]` | explain one deny or review: its rules and where they are, how the policy decides the call now, the context, and how to change it ([Why was this blocked?](#why-was-this-blocked)) |
 | `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary |
 | `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |

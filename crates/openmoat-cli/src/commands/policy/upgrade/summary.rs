@@ -153,11 +153,16 @@ fn rules(before: &Policy, after: &Policy, summary: &mut Summary) -> usize {
             )),
             Some((_, was)) => {
                 let patterns = pattern_changes(*list, id, was, group, summary);
+                // A reason, title or why (ADR-059) changes the words shown, not what is decided.
                 let rest_same = RuleGroup {
                     reason: group.reason.clone(),
+                    title: group.title.clone(),
+                    why: group.why.clone(),
                     ..(*was).clone()
                 } == **group;
-                if !patterns && was.reason != group.reason && rest_same {
+                let words = (&was.reason, &was.title, &was.why)
+                    != (&group.reason, &group.title, &group.why);
+                if !patterns && words && rest_same {
                     reworded += 1;
                 } else if was.hook_only != group.hook_only {
                     summary.other.push(format!("`{id}`: `hook_only` changed"));
@@ -179,8 +184,9 @@ fn rules(before: &Policy, after: &Policy, summary: &mut Summary) -> usize {
 /// A rule group the policy did not have.
 fn added_group(list: List, group: &RuleGroup, summary: &mut Summary) {
     let what = group
-        .reason
+        .title
         .clone()
+        .or_else(|| group.reason.clone())
         .unwrap_or_else(|| patterns_phrase(&all_patterns(group)));
     let id = &group.id;
     match list {

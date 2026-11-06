@@ -68,7 +68,7 @@ pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
 pub use policy::{
     BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, RuleGroup,
-    SUPPORTED_VERSION, SandboxSettings,
+    SUPPORTED_VERSION, SandboxSettings, TITLE_MAX_CHARS, WHY_MAX_CHARS,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};
@@ -81,7 +81,7 @@ pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
 pub use taint::TaintSettings;
-pub use verdict::{Decision, OLD_REVIEW, UnknownVerdict, Verdict};
+pub use verdict::{Decision, Notice, OLD_REVIEW, UnknownVerdict, Verdict};
 
 /// The shipped default policy, as YAML: what `moat init` installs and what the
 /// conformance suite pins. Parse it with [`Policy::parse`].

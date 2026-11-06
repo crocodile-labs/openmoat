@@ -16,6 +16,8 @@ defaults:
 deny:
   - id: secrets-paths
     reason: secret material
+    title: reading or changing your keys and credential files
+    why: a key or token that leaves this machine cannot be taken back
     fs.read: &secret-paths
       - "~/.ssh/**"
       - "~/.aws/**"
@@ -109,6 +111,8 @@ deny:
   # the sandboxes as they are; the build commands themselves keep their verdict.
   - id: build-credentials
     reason: build tool credentials
+    title: reading or changing your build tools' credentials
+    why: these files hold the passwords and tokens that publish under your name
     hook_only: true
     fs.read: &build-credentials
       - "~/.m2/settings.xml"
@@ -126,6 +130,8 @@ deny:
   # (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, …) is followed as for `kernel-self`
   - id: agent-credentials
     reason: an AI agent's own login, API keys or OAuth tokens
+    title: reading or changing an AI agent's login or API keys
+    why: with them anyone can act as that agent, on your account
     fs.read: &agent-credentials
       # Claude Code: its login where it keeps it in a file (Linux and Windows, and
       # macOS when the Keychain refuses it) and the Anthropic profiles `ant auth
@@ -185,12 +191,16 @@ deny:
       - "{opencode,*/opencode,opencode2,*/opencode2} auth export*"
   - id: env-secrets
     reason: secret environment variable
+    title: reading a secret environment variable
+    why: its value is a credential, and once printed it stays in the agent's context
     env.read: ["*_KEY", "*_TOKEN", "*_SECRET", "*_PASSWORD", "AWS_*", "GITHUB_TOKEN", "NPM_TOKEN",
       # passwords and connection strings that carry one; other `*_URL`s are not secret
       "*_PASS", "*_PASSWD", "*_PWD", "PGPASSWORD", "*_CREDENTIALS", "*_DSN",
       "DATABASE_URL", "*_DATABASE_URL", "REDIS_URL", "MONGODB_URI", "MONGO_URL"]
   - id: env-dump
     reason: prints every environment variable, secrets included
+    title: printing every environment variable
+    why: the output includes every secret the environment holds
     shell:
       - "env $"
       - "env -0 $"
@@ -216,6 +226,8 @@ deny:
       - "@env-dump *"
   - id: env-poison
     reason: changes how later commands resolve or load code
+    title: changing how later commands find or load code
+    why: a changed PATH, preload or editor makes later commands run other code
     # the classifier leaves out an assignment whose value changes nothing: an editor
     # set to `true`, `:` or `cat`, and `PATH` kept as `$PATH` or set to system
     # directories only (`shell/tokens.rs`)
@@ -227,6 +239,8 @@ deny:
       "CURL_HOME", "XDG_CONFIG_HOME", "WGETRC", "SYSTEM_WGETRC"]
   - id: pipe-to-shell
     reason: executes remote or decoded content
+    title: running downloaded or decoded code
+    why: what runs is not what anyone read
     # a pipeline whose consumer runs its stdin as its program is also reported
     # as `<stages> | <interpreter>` with the consumer's options dropped
     # (shell/commands/pipelines.rs; `source`/`.` of stdin and `xargs <interpreter>`
@@ -244,6 +258,8 @@ deny:
       - "eval *"
   - id: destructive
     reason: irreversible damage
+    title: something that cannot be undone
+    why: it erases work, history or a disk, or runs as the administrator, with no way back
     # removing, moving or replacing the home directory or the root itself, however the
     # command spells the path (`~/`, `$HOME`, `${HOME}`, `/Users/me/`, `~/x/..`); paths
     # below them are not matched
@@ -280,6 +296,8 @@ deny:
       - "reboot"
   - id: kernel-self
     reason: OpenMoat protects its own policy, hooks and binary
+    title: changing or stopping OpenMoat itself
+    why: an agent that can change its own checks is no longer checked
     # the state an agent has no reason to read: the audit log, the lock and what
     # it pins of trust, approvals and MCP pins. The policy itself stays readable;
     # moat's own commands read these as the person, outside any sandbox
@@ -564,6 +582,8 @@ deny:
   # sandboxed command may still create a `.github` (a clone, a package that has one)
   - id: agent-folders
     reason: renaming or removing this folder moves agent settings OpenMoat protects
+    title: moving or removing an agent's settings folder
+    why: it would take settings OpenMoat protects out of its sight
     hook_only: true
     fs.write: ["**/.github", "**/.github/copilot"]
   # the agents' system-wide settings, which outrank the user's and the project's:
@@ -575,12 +595,16 @@ deny:
   # (ADR-034): the OS sandboxes grant no write there anyway
   - id: managed-settings
     reason: an agent's system-wide settings outrank the user's and can turn OpenMoat's hooks off; an administrator deploys them
+    title: changing an agent's system-wide settings
+    why: they outrank your own and can switch OpenMoat's hooks off for every later session
     hook_only: true
     fs.write: ["/Library/Application Support/ClaudeCode/**", "/etc/claude-code/**", "C:/Program Files/ClaudeCode/**",
       "/Library/Application Support/GeminiCli/**", "/etc/gemini-cli/**", "C:/ProgramData/gemini-cli/**",
       "/etc/codex/**", "C:/ProgramData/OpenAI/Codex/**"]
   - id: shell-rc
     reason: edits persist into every future shell session
+    title: editing your shell's start-up files
+    why: what is written there runs in every shell you open from now on
     # the login and logout files, the other shells' startup files (fish, csh, tcsh,
     # ksh, mksh) and the drop-in folders many rc files source, which run on the
     # same schedule; and the files curl and wget read on every run, which can add
@@ -593,27 +617,37 @@ deny:
       "~/.curlrc", "~/_curlrc", "~/.config/curlrc", "~/.wgetrc", "~/.config/wget/**"]
   - id: cloud-metadata
     reason: instance metadata and link-local services hand out cloud credentials
+    title: reaching the cloud metadata service
+    why: it hands out this machine's cloud credentials
     # a `net` deny also covers `fetch` (ADR-017), so a fetch tool cannot read them either
     net: ["169.254.*", "fe80:*", "fd00:ec2::254", "100.100.100.200", "metadata.google.internal", "metadata.goog"]
   - id: token-egress
     reason: sends a known kind of token to a host that is not its service's
+    title: sending a token to a host that is not its service's
+    why: whoever receives a token can use it
     # `@token-egress <service> <host>` atoms: a GitHub, OpenAI/Anthropic, AWS, Slack,
     # Google, npm or GitLab token in a URL, a web search, or the arguments of a
     # command that connects to a host (POLICY.md §3)
     shell: ["@token-egress *"]
   - id: placeholder-egress
     reason: sends a brokered secret's placeholder to a host the proxy does not put that secret in
+    title: sending a brokered secret's placeholder to another host
+    why: the placeholder stands for a secret only its own host may receive
     # `@placeholder-egress <id> <host>` atoms: `moat-secret:<id>:placeholder` going
     # anywhere but the secret's `host` (POLICY.md §2.1)
     shell: ["@placeholder-egress *"]
   - id: encoded-egress
     reason: sends a long encoded value in a URL after the session read secret material
+    title: sending a long encoded value after reading a secret
+    why: it may be that secret, encoded so it is not recognised
     # `@encoded-egress <host>` atoms, added only once the session read a secret: a URL a
     # fetch, browser or MCP tool opens that carries 80 or more characters of base64 or
     # hex (POLICY.md §4.1, ADR-047)
     shell: ["@encoded-egress *"]
   - id: card-egress
     reason: sends a payment card number to a host off this machine
+    title: sending a payment card number off this machine
+    why: a card number an agent sends out cannot be taken back
     # `@pii-egress card <host>` atoms: 13 to 19 digits with a card brand's prefix and
     # length that pass the Luhn check, in the places `token-egress` reads, written in
     # a card's printed groups or in a card's context (a card field's value, or sent
@@ -1033,6 +1067,8 @@ allow:
 review:
   - id: git-internals
     reason: git runs what its config, hooks and refs name, later and outside any sandbox
+    title: changing git's config, hooks or refs
+    why: git runs what they name later, outside any sandbox
     # a `.git` at any depth is a repository git follows (a `gitdir:` file, a planted directory)
     fs.write: ["${project}/.git", "${project}/.git/**", "${project}/**/.git", "${project}/**/.git/**"]
     # `dev-shell` allows the forms that only read; the rest of these change what git runs.
@@ -1048,11 +1084,15 @@ review:
   # (`git-internals`); `update-ref --stdin` reads which refs it moves from its input
   - id: provenance-notes
     reason: OpenMoat's provenance notes record what agents wrote; a person writes them with `openmoat provenance --write-notes`
+    title: rewriting OpenMoat's record of what agents wrote
+    why: the notes are your record of which changes an agent made; an agent that edits them can hide its own work
     shell: ["git notes * *openmoat*", "git update-ref * *notes/openmoat*", "git update-ref * --stdin*"]
   # deleting a local branch loses nothing the reflog does not keep for weeks, so it
   # needs review where a force push or `reset --hard` is denied
   - id: destructive-recoverable
     reason: deletes local work that the reflog still holds for a while
+    title: deleting local work
+    why: git keeps it for a while only, in the reflog
     shell: ["git branch -D *", "git branch --delete --force *", "git branch --force --delete *",
       "git branch -d -f *", "git branch -f -d *", "git branch -df *", "git branch -fd *"]
   # CI configuration runs with the repository's secrets once a branch is pushed, and
@@ -1063,6 +1103,8 @@ review:
   # home files are the hosts' own state, which `moat run --write` may grant
   - id: runs-later
     reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
+    title: changing something that runs later, outside any sandbox
+    why: CI, commit hooks, your editor or the agent run it later with your permissions
     fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json",
       # package-manager and build configuration that runs code on the next install,
       # script or build (`.npmrc` `node-options`/`script-shell`, `.yarnrc.yml`
@@ -1163,6 +1205,8 @@ review:
       - "{hermes,*/hermes} * mcp {add*,install*,picker*,configure*,login*,reauth*}"
   - id: persistence
     reason: runs again later, outside this session
+    title: setting up something that runs again later
+    why: a scheduled job or service keeps running after this session ends
     fs.write: ["~/Library/LaunchAgents/**", "~/.gitconfig", "~/.config/git/**", "~/.config/autostart/**", "~/.config/systemd/user/**",
       # folders on `PATH`: a file named after `git`, `ls` or `node` there runs in
       # its place later, with the person's rights. Installers (`pipx`, `cargo
@@ -1178,6 +1222,8 @@ review:
     shell: ["crontab *", "at *", "batch *"]
   - id: stops-openmoat
     reason: stops a running OpenMoat process, such as the egress proxy service
+    title: stopping a running OpenMoat process
+    why: its protection, such as the egress proxy, stops with it
     # `@kills <name>` atoms: a `pkill` or `killall` pattern that could match the
     # process name `openmoat` or `moat`, read as the regular expression it is
     # (`pkill -f 'open.*'`, `killall moat`; not `pkill -f my-server.js`, shell/kills.rs);
@@ -1188,14 +1234,20 @@ review:
       - "{kill,*/kill} * *moat*"
   - id: home-sweep
     reason: reads the whole home folder, secrets included
+    title: reading your whole home folder
+    why: your secrets are in it too
     # the folder itself: a recursive read of an ancestor of the guarded paths (POLICY.md §3)
     fs.read: ["~", "~/.config"]
   - id: other-home
     reason: names another user's home, which OpenMoat cannot place
+    title: touching another user's home folder
+    why: OpenMoat cannot tell what is in it
     # `@other-home <word>` atoms: `~alice/.ssh/id_rsa` may hold that user's secrets
     shell: ["@other-home *"]
   - id: secret-names
     reason: names a secret's file in a directory OpenMoat cannot see
+    title: naming a secret's file in a folder OpenMoat cannot see
+    why: the file there may be a secret your policy denies
     # `@unknown-path <word>` atoms: a path through a variable whose value is not known
     # (`cat $X/id_rsa`); its file name is that of a key, a token or a `.env`
     shell:
@@ -1206,6 +1258,8 @@ review:
       - "@unknown-path *.{pem,key,p12,pfx}"
   - id: opaque-code
     reason: a program OpenMoat cannot read may open any file or variable
+    title: running a program OpenMoat cannot read
+    why: it may open any file or variable
     # `<program> @<text>` atoms: an awk or sed program, or a text-tool option, not understood
     # and `<shell> @stdin`: text piped into a shell that the command line does not show;
     # `@opaque-code <interpreter>`: inline code (`python3 -c`, `node -e`, a here-document)
@@ -1218,9 +1272,13 @@ review:
   # common trick away from one on it. Other installs defer, unknown names included
   - id: package-near-miss
     reason: looks like a typo of a popular package's name, as typo-squats and made-up names do; check which one you meant
+    title: installing a package whose name looks like a typo
+    why: typo-squats and made-up names are how malicious packages get installed
     shell: ["@package-near-miss *"]
   - id: docker-secrets
     reason: hands secrets, the SSH agent or the host to a build
+    title: handing secrets or this machine to a container build
+    why: the build can read and keep what it is given
     # `dev-shell` allows `docker build` without these options
     shell: ["docker build *"]
   # a container handed the host: privileged mode, the host's process, network or
@@ -1230,6 +1288,8 @@ review:
   # as before; a key folder mounted in is decided by its path (`secrets-paths`)
   - id: container-host
     reason: gives a container the host's root, devices, namespaces or Docker socket, so it can change this machine outside any sandbox
+    title: giving a container the host's root, devices or Docker socket
+    why: code in that container can change this machine outside any sandbox, as root where the daemon runs as root
     shell:
       - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --privileged*"
       - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network}=host*"
@@ -1254,6 +1314,8 @@ review:
   # (`agent-credentials`)
   - id: agent-token
     reason: makes a new login token for an AI agent and prints it
+    title: making a new login token for an AI agent
+    why: the command prints a long-lived token into the agent's context
     shell: ["{claude,*/claude} setup-token*"]
 
 # Installs, publishing and pushes are not listed: they match no rule, so the agent's
