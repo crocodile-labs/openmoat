@@ -1549,6 +1549,32 @@
   threat: T9
   action: { fs_write: "/p/.vscode/tasks.json" }
   expect: { verdict: review, rules: [runs-later] }
+# a virtual environment's interpreter, which the editor's Python extension starts
+# outside any sandbox, and a dev container's `initializeCommand`, which runs on this machine
+- id: review-write-project-venv-interpreter
+  threat: T6
+  action: { fs_write: "/p/.venv/bin/python" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-redirect-into-venv-script
+  threat: T6
+  action: { shell: "printf x > venv/bin/pytest" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-rename-venv-bin-folder
+  threat: T6
+  action: { shell: "mv .venv/bin .venv/b" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-devcontainer-config
+  threat: T9
+  action: { fs_write: "/p/.devcontainer/devcontainer.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-root-devcontainer-json
+  threat: T9
+  action: { fs_write: "/p/.devcontainer.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-rename-devcontainer-folder
+  threat: T9
+  action: { shell: "mv .devcontainer dc" }
+  expect: { verdict: review, rules: [runs-later] }
 - id: review-workflow-through-a-symlinked-dir
   threat: T11
   action: { shell: "echo x > ci/ci.yml" }
