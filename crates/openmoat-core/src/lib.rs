@@ -43,6 +43,7 @@ mod repo;
 mod route;
 mod secret;
 mod shell;
+mod staging;
 mod taint;
 pub mod token;
 mod verdict;
@@ -52,8 +53,8 @@ pub use action::{Action, AtomicAction, UNCHECKED_RULE};
 // The taint `Secret` (material a session read) is exported as `TaintSecret`, apart
 // from the policy's brokered `Secret`.
 pub use engine::{
-    CompiledPolicy, EvalContext, HOLDS_PROTECTED_RULE, Secret as TaintSecret, TAINT_RULE, Taint,
-    UntrustedKind, evaluate,
+    CompiledPolicy, EvalContext, HOLDS_PROTECTED_RULE, STAGING_ATOM, Secret as TaintSecret,
+    Staging, TAINT_RULE, Taint, UntrustedKind, evaluate,
 };
 pub use host::{
     MAX_DNS_LABEL_LEN, MAX_DNS_NAME_LEN, file_url_path, malformed_port_pattern, port_pattern,
@@ -81,6 +82,7 @@ pub use secret::{
 pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
+pub use staging::{DEFAULT_OUTSIDE_FOLDERS, DEFAULT_OUTSIDE_READS, StagingSettings};
 pub use taint::TaintSettings;
 pub use verdict::{Decision, OLD_REVIEW, UnknownVerdict, Verdict};
 

@@ -338,7 +338,8 @@ without a credential and drops their session taint; `openmoat run -- codex` keep
 
 ```bash
 openmoat replay --since today    # one tree per agent session: every call, verdict and rule
-openmoat report --since 7d       # totals, hosts, top rules, reviews per active hour
+openmoat report --since 7d       # totals, hosts, top rules, reviews per active hour,
+                                 # sends after collecting outside the project (POLICY.md §4.5)
 openmoat show 1                  # one event in full
 ```
 

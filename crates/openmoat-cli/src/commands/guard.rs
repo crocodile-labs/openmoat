@@ -481,6 +481,16 @@ fn evaluate(
         tainted,
         crate::time::now_ms(),
     )?;
+    // A send of data after the session collected files outside the project
+    // (ADR-061, proposed): decided where a rule names `@staging-egress`,
+    // otherwise only recorded in the reasons.
+    let decision = compiled.with_staging(
+        decision,
+        action,
+        &FsPathResolver,
+        &session.staging,
+        &taint::is_dir,
+    );
     // Code this session wrote, run with no OS sandbox below the hook; only
     // tightens (ADR-039). Part of the taint phase: it reads the audit log.
     let code = session_code::Call {
