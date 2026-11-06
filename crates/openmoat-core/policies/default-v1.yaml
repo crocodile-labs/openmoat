@@ -566,6 +566,19 @@ deny:
     reason: renaming or removing this folder moves agent settings OpenMoat protects
     hook_only: true
     fs.write: ["**/.github", "**/.github/copilot"]
+  # the agents' system-wide settings, which outrank the user's and the project's:
+  # Claude Code's managed settings (`managed-settings.json`, `managed-settings.d/`,
+  # `managed-mcp.json`), Gemini CLI's system settings and defaults, Codex's
+  # `requirements.toml`. One can turn every hook off or add its own. An
+  # administrator deploys them; where the folder is writable (`/etc/claude-code` on
+  # WSL, a loosely permissioned `ProgramData`) the agent could too. `hook_only`
+  # (ADR-034): the OS sandboxes grant no write there anyway
+  - id: managed-settings
+    reason: an agent's system-wide settings outrank the user's and can turn OpenMoat's hooks off; an administrator deploys them
+    hook_only: true
+    fs.write: ["/Library/Application Support/ClaudeCode/**", "/etc/claude-code/**", "C:/Program Files/ClaudeCode/**",
+      "/Library/Application Support/GeminiCli/**", "/etc/gemini-cli/**", "C:/ProgramData/gemini-cli/**",
+      "/etc/codex/**", "C:/ProgramData/OpenAI/Codex/**"]
   - id: shell-rc
     reason: edits persist into every future shell session
     # the login and logout files, the other shells' startup files (fish, csh, tcsh,

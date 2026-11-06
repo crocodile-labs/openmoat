@@ -257,6 +257,7 @@ pub const GROUPS: &[Group] = &[
         covers: Covers::Rules(&[
             "kernel-self",
             "agent-folders",
+            "managed-settings",
             "stops-openmoat",
             "provenance-notes",
         ]),
