@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-core`: `McpSettings` has a new public field `flow_trusted` (start from `McpSettings::default()` where you build one yourself). Added: the `mcp_flow` module (`ToolEffect`, `ToolHints`, `pieces`, `cross_server`, `FLOW_RULE`) and `Policy::mcp_flow_trusted`. `openmoat-hosts`: added `mcp_tool_acts`. `openmoat-audit`: added `Store::add_mcp_flow`, `Store::mcp_flow_sources`, `MCP_FLOW_MAX_AGE_MS` and `MCP_FLOW_SESSION_ROWS`, schema version 9 ([#733](https://github.com/crocodile-labs/openmoat/pull/733)).
