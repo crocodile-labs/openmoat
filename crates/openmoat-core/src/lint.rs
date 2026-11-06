@@ -8,6 +8,7 @@
 
 use std::fmt;
 
+mod check_diff;
 mod ports;
 
 use crate::kind::Kind;
@@ -111,6 +112,7 @@ pub fn warnings(policy: &Policy) -> Vec<Warning> {
                 .to_owned(),
         });
     }
+    check_diff::turned_off(policy, &mut out);
     if policy.trust_mcp_first_sight() {
         out.push(Warning {
             rule: "mcp.trust_first_sight".to_owned(),

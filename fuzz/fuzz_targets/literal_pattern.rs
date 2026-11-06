@@ -44,6 +44,7 @@ fuzz_target!(|data: &[u8]| {
         require_signed_repo_policy: false,
         mcp: None,
         old_names: openmoat_core::OldNames::default(),
+        check_diff: None,
     };
     if let Err(e) = policy.lint() {
         panic!("pattern {pattern:?} for {command:?} does not lint: {e}");

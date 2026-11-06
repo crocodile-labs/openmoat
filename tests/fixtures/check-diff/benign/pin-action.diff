@@ -1,0 +1,20 @@
+# expect: review
+# rules:
+# Actions pinned from tags to full commit SHAs, and an expression moved into
+# `env:`. The review is the path rule for workflows (`runs-later`).
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 1111111..2222222 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -12,6 +12,8 @@ jobs:
+     steps:
+-      - uses: actions/checkout@v4
+-      - uses: actions/setup-node@v4
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+       - run: npm ci
+-      - run: echo "Building ${{ github.event.pull_request.title }}"
++      - run: echo "Building $TITLE"
++        env:
++          TITLE: ${{ github.event.pull_request.title }}
+       - run: npm test

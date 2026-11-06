@@ -1,0 +1,2 @@
+### Changed
+- **Breaking** `openmoat-core`: `Policy` has a new public field `check_diff` (`Option<diffscan::Settings>`), and the new public module `diffscan` holds the content checks of `openmoat policy check-diff` (`scan`, `new_hosts`, `RULES`, `Block`, `Change`, `Hit`, `Level`, `Settings`). The policy format gains the optional `check_diff:` section; an older OpenMoat rejects a policy that uses it ([#736](https://github.com/crocodile-labs/openmoat/pull/736)).

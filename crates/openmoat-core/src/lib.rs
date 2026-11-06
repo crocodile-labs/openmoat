@@ -17,6 +17,7 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 mod action;
+pub mod diffscan;
 mod engine;
 mod expand;
 mod host;

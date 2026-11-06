@@ -56,6 +56,10 @@ mcp:                                # optional: how `openmoat mcp proxy` treats 
   trust_first_sight: false          # optional, default false: pin its first tool listing unseen
   browser_open: fetch               # optional, default fetch: a browser MCP page open is a `fetch` (§4); `net` keeps it `net`
   flow_trusted: []                  # optional: servers whose results may reach other servers' acting tools unreviewed (§8)
+
+check_diff:                         # optional: levels of `openmoat policy check-diff`'s content checks
+  levels:                           #   rule id → deny, review or off (MERGE_CHECK.md, ADR-055)
+    diff-ci-unpinned: off
 ```
 
 `approval:` (`channel`, `remember`, `timeout_s`) and `scope:` (`project_roots`) are reserved:
@@ -714,6 +718,7 @@ These appear in responses and in `openmoat show` alongside the ids from `policy.
 | `push-unchecked` | review | what a push would publish could not be checked within 10 s or 8 MiB, or where it runs is not known (§4.2) |
 | `diff-path`, `diff-secret` | deny | `openmoat policy check-diff` only ([MERGE_CHECK.md](MERGE_CHECK.md), ADR-050): a changed path that leaves the repository or is not a file name; an added line that holds a known token format (the push check's scanner, §4.2) |
 | `diff-policy`, `diff-link`, `diff-submodule`, `diff-unchecked` | review | `openmoat policy check-diff` only: a change to a policy file the check read; a symbolic link the change makes, with where it points; a submodule it changes; a diff too large to search its added lines |
+| `diff-package-near-miss`, `diff-install-script`, `diff-package-source`, `diff-lock-integrity`, `diff-ci-pr-target`, `diff-ci-permissions`, `diff-ci-unpinned`, `diff-ci-injection`, `diff-ci-secret-out`, `diff-pipe-to-shell`, `diff-decode-exec`, `diff-python-startup`, `diff-docker-remote-add`, `diff-encoded-blob`, `diff-private-key`, `diff-env-secret`, `diff-new-host` | each its own; `check_diff.levels` sets them | `openmoat policy check-diff` only: the content checks of an added line ([MERGE_CHECK.md](MERGE_CHECK.md#content-checks), ADR-055) |
 | `approved-session` | allow | a `review` for a shell command that a person granted with `openmoat allow` for this host session (§8.2) |
 | `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` |
 | `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret`, `proxy-secret-route`, `proxy-tls`, `proxy-port`, `proxy-session`, `proxy-capacity`, `proxy-audit` | deny | `openmoat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, a brokered secret sent to a host other than its own, a request to a secret's host that its `allow` rules do not name (§2.1, ADR-043), a terminated tunnel whose TLS handshake failed or whose upstream certificate did not verify (§2.1), an allowed host on a port no rule names, a request without a valid session credential, or over its session's share of the connections (§9, ADR-044), (counted, without a host) connections over its capacity, or a connection it could not record (§2.1, §5.2) |

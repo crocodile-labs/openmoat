@@ -58,6 +58,80 @@ fn a_diff_on_stdin_reports_each_level_with_its_exit_code() {
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
 }
 
+/// The content checks (ADR-055) on fixture diffs: each finding on its added
+/// line, in every format, and benign daily changes left as before.
+#[test]
+fn content_checks_report_the_added_line_in_every_format() {
+    let sb = Sandbox::bare(&[]);
+    let check = |diff: &str, format: &str| {
+        sb.moat_stdin(&["policy", "check-diff", "--format", format], diff)
+    };
+    let pwn = include_str!("../../../../tests/fixtures/check-diff/attack/pwn-request.diff");
+    let out = check(pwn, "json");
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    let report = json(&out);
+    let findings = report["findings"].as_array().unwrap();
+    let pr_target = findings
+        .iter()
+        .find(|f| f["rules"][0] == "diff-ci-pr-target")
+        .unwrap_or_else(|| panic!("{report:#}"));
+    assert_eq!(pr_target["level"], "deny");
+    assert_eq!(pr_target["line"], 11, "{report:#}");
+
+    let out = check(pwn, "github");
+    assert!(
+        stdout(&out).contains(
+            "::error file=.github/workflows/preview.yml,line=11,title=OpenMoat deny%3A diff-ci-pr-target::"
+        ),
+        "{}",
+        text(&out)
+    );
+    let out = check(pwn, "text");
+    assert!(
+        stdout(&out).contains("deny    .github/workflows/preview.yml:11 [diff-ci-pr-target]"),
+        "{}",
+        text(&out)
+    );
+
+    let endpoint = include_str!("../../../../tests/fixtures/check-diff/attack/new-endpoint.diff");
+    let out = check(endpoint, "json");
+    assert_eq!(out.status.code(), Some(REVIEW), "{}", text(&out));
+    let report = json(&out);
+    let hosts: Vec<_> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rules"][0] == "diff-new-host")
+        .collect();
+    assert_eq!(hosts.len(), 1, "{report:#}");
+    assert_eq!(hosts[0]["path"], "src/telemetry.ts");
+
+    let benign = include_str!("../../../../tests/fixtures/check-diff/benign/docs-and-code.diff");
+    let out = check(benign, "text");
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let key = include_str!("../../../../tests/fixtures/check-diff/benign/test-fixture-key.diff");
+    assert_eq!(check(key, "text").status.code(), Some(REVIEW));
+}
+
+/// A policy given with `--policy` sets the content checks' levels.
+#[test]
+fn the_policy_file_sets_the_content_checks_levels() {
+    let sb = Sandbox::bare(&[]);
+    let policy = sb.home.join("team.yaml");
+    std::fs::write(
+        &policy,
+        format!(
+            "{}\ncheck_diff:\n  levels:\n    diff-new-host: off\n",
+            openmoat_core::DEFAULT_POLICY
+        ),
+    )
+    .unwrap();
+    let endpoint = include_str!("../../../../tests/fixtures/check-diff/attack/new-endpoint.diff");
+    let policy = policy.to_str().unwrap();
+    let out = sb.moat_stdin(&["policy", "check-diff", "--policy", policy], endpoint);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+}
+
 /// `cmd` working in the repository `dir`, whose git directory is beside it
 /// rather than `dir/.git`: some sandboxes the suite runs in (macOS 12's
 /// Seatbelt under an agent) refuse to create a `.git` directory.

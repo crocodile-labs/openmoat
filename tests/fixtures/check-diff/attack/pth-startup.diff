@@ -1,0 +1,11 @@
+# expect: deny
+# rules: diff-python-startup diff-decode-exec
+# A .pth file that a package installs into site-packages: Python runs its
+# `import` line on every start, and this one runs a decoded payload.
+diff --git a/src/fastjson/fastjson_init.pth b/src/fastjson/fastjson_init.pth
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/fastjson/fastjson_init.pth
+@@ -0,0 +1 @@
++import base64; exec(base64.b64decode("aW1wb3J0IG9zO29zLnN5c3RlbSgiaWQiKQ=="))
