@@ -233,7 +233,7 @@ fn status_and_doctor_name_servers_that_start_outside_openmoat() {
     assert!(said.contains("starts outside OpenMoat"), "{said}");
     let doctor = sb.moat(&["doctor"]);
     assert!(
-        stdout(&doctor).contains("! mcp servers      `gh`"),
+        crate::common::squash(&stdout(&doctor)).contains("! MCP servers `gh`"),
         "{}",
         text(&doctor)
     );

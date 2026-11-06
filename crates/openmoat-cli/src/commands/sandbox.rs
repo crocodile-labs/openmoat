@@ -119,31 +119,50 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
 /// host's files are left as they are. A re-pin accepts what it pins, so like
 /// `moat allow` it refuses over a drifted lock (#163) and without a person.
 pub fn sync() -> Result<Code> {
-    crate::terminal::refuse_agent("openmoat sandbox sync")?;
-    if !crate::terminal::interactive() {
-        bail!(
-            "`openmoat sandbox sync` must be run by a person in a terminal, not from a hook or script"
-        );
-    }
     let home = Home::locate()?;
-    integrity::refuse_drift(&home, "sync")?;
-    let plan = Plan::new(&home, &home.load_policy()?)?;
-    let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
+    sync_checked(&home, "openmoat sandbox sync", &mut out)?;
+    out.finish()?;
+    Ok(Code::Ok)
+}
+
+/// What [`sync_checked`] did: how many agents' sandbox settings changed.
+pub struct Synced {
+    pub updated: usize,
+}
+
+/// `moat sandbox sync` as `command` runs it (`openmoat policy upgrade` runs it
+/// after writing the policy): refused from an agent, without a terminal and
+/// over a drifted lock, as `sync` is; one line per host to `out`.
+pub fn sync_checked(home: &Home, command: &str, out: &mut impl io::Write) -> Result<Synced> {
+    crate::terminal::refuse_agent(command)?;
+    if !crate::terminal::interactive() {
+        bail!("`{command}` must be run by a person in a terminal, not from a hook or script");
+    }
+    integrity::refuse_drift(home, "sync")?;
+    write_all(home, out)
+}
+
+/// Write every set-up host's sandbox settings and re-pin them, after the
+/// checks of [`sync_checked`].
+fn write_all(home: &Home, out: &mut impl io::Write) -> Result<Synced> {
+    let plan = Plan::new(home, &home.load_policy()?)?;
+    let binary = crate::install::hook_binary()?;
+    let mut updated = 0;
     let (mut files, mut codex_configs) = (Vec::new(), Vec::new());
-    if crate::install::migrate_hooks::update(&home, &binary)? {
+    if crate::install::migrate_hooks::update(home, &binary)? {
         writeln!(
             out,
             "✔ existing hooks updated; review and trust changed OpenMoat hooks in your agent"
         )?;
     }
     for host in install::hosts() {
-        let path = install::settings_path(&home, host)?;
+        let path = install::settings_path(home, host)?;
         if !path.parent().is_some_and(std::path::Path::is_dir) {
             writeln!(out, "· {:<16} host not found", host.display_name())?;
             continue;
         }
-        let config = HostConfig::for_host(&home, host)?;
+        let config = HostConfig::for_host(home, host)?;
         if !config.set_up(&binary) {
             let why = match config.state(&binary) {
                 HookState::Missing => "not set up",
@@ -156,7 +175,7 @@ pub fn sync() -> Result<Code> {
             )?;
             continue;
         }
-        let changed = install::write(&home, host, &plan, false)?;
+        let changed = install::write(home, host, &plan, false)?;
         if let Some(note) = install::unavailable(host) {
             if changed {
                 let removed = install::OLD_SANDBOX_REMOVED;
@@ -166,6 +185,7 @@ pub fn sync() -> Result<Code> {
             writeln!(out, "· {:<16} {note}", host.display_name())?;
             continue;
         }
+        updated += usize::from(changed);
         let verb = if changed { "updated" } else { "unchanged" };
         writeln!(
             out,
@@ -173,7 +193,7 @@ pub fn sync() -> Result<Code> {
             host.display_name(),
             path.display()
         )?;
-        write_report(&mut out, install::report(host, &plan))?;
+        write_report(out, install::report(host, &plan))?;
         // The lock pins a Codex profile by the part OpenMoat owns, any other
         // sandbox file whole.
         if install::backend(host).is_some_and(SandboxBackend::pinned_by_part) {
@@ -182,7 +202,7 @@ pub fn sync() -> Result<Code> {
             files.push(path);
         }
     }
-    let lock = integrity::repin_with(&home, &binary, HookPins::Keep, &files, &codex_configs)?;
+    let lock = integrity::repin_with(home, &binary, HookPins::Keep, &files, &codex_configs)?;
     writeln!(
         out,
         "✔ lock             {} files and {} Codex profile(s) pinned",
@@ -192,7 +212,7 @@ pub fn sync() -> Result<Code> {
     // The proxy reads the policy once at start-up, so a policy change needs a
     // reload. An installed service is restarted; a missing one is fine
     // (service routing is opt-in, #272).
-    match super::proxy::restart_if_installed(&home) {
+    match super::proxy::restart_if_installed(home) {
         Ok(Some(message)) => writeln!(out, "✔ service          {message}")?,
         Ok(None) => {}
         Err(e) => writeln!(
@@ -200,8 +220,7 @@ pub fn sync() -> Result<Code> {
             "! service          restart failed: {e:#}; `openmoat proxy install` restarts it by hand"
         )?,
     }
-    out.finish()?;
-    Ok(Code::Ok)
+    Ok(Synced { updated })
 }
 
 /// One line per policy secret: where its value is read (never the value) and

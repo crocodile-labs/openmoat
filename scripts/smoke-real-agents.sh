@@ -500,7 +500,8 @@ except ValueError:
     agents = []
 mine = [a for a in agents if a.get("host") == host]
 level = mine[0].get("level") if mine else "missing"
-line = re.compile(r"·\s+" + re.escape(name) + r"\s+protection: hook only")
+# The agent's row in doctor's Agents section; the second form is the one before 0.16.0.
+line = re.compile(r"[✔!]\s+" + re.escape(name) + r"\s+hook only|·\s+" + re.escape(name) + r"\s+protection: hook only")
 in_doctor = any(line.search(l) for l in open(doctor, encoding="utf-8", errors="replace"))
 if level == "hook-only" and in_doctor:
     print(f"  PASS  status and doctor: {name} protection: hook only")

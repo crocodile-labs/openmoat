@@ -18,7 +18,13 @@ fn init_creates_state_and_installs_claude_code_hook() {
     let sb = Sandbox::bare(&[".claude"]);
     let out = sb.moat(&["init", "--yes"]);
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
-    assert!(stdout(&out).contains("installed: PreToolUse, ConfigChange, SessionStart →"));
+    // The hook's events and command only with --verbose.
+    assert!(!stdout(&out).contains("PreToolUse"), "{}", stdout(&out));
+    assert!(
+        stdout(&out).contains("✔ 1 agent protected"),
+        "{}",
+        stdout(&out)
+    );
     assert!(sb.home.join(".moat/policy.yaml").is_file());
     assert!(sb.home.join(".moat/audit.db").is_file());
 
@@ -40,10 +46,11 @@ fn init_creates_state_and_installs_claude_code_hook() {
         "{command}"
     );
 
-    let again = sb.moat(&["init", "--yes"]);
+    let again = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(again.status.code(), Some(0));
-    assert!(stdout(&again).contains("unchanged"));
+    assert!(stdout(&again).contains("(unchanged: PreToolUse, ConfigChange, SessionStart →"));
     assert!(stdout(&again).contains("(kept)"));
+    assert!(!stdout(&again).contains("Restart your agents"));
     assert_eq!(
         settings(&sb)["hooks"]["PreToolUse"]
             .as_array()
@@ -54,7 +61,9 @@ fn init_creates_state_and_installs_claude_code_hook() {
 
     let status = sb.moat(&["status"]);
     assert_eq!(status.status.code(), Some(0), "{}", stdout(&status));
-    assert!(stdout(&status).contains("✔ installed"));
+    let shown = crate::common::squash(&stdout(&status));
+    assert!(shown.contains(" Claude Code hook"), "{shown}");
+    assert!(!shown.contains("✗ Claude Code"), "{shown}");
 }
 
 #[test]

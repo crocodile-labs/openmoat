@@ -36,7 +36,7 @@ fn sandbox_json(dir: &Path) -> Value {
 #[test]
 fn init_writes_and_pins_sandbox_json_and_uninstall_gives_it_back() {
     let (sb, dir) = moved_cursor();
-    let init = moat(&sb, &dir, &["init", "--yes"]);
+    let init = moat(&sb, &dir, &["init", "--yes", "--verbose"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     assert!(
         stdout(&init).contains("sandbox.json (sandbox updated;"),
@@ -58,26 +58,18 @@ fn init_writes_and_pins_sandbox_json_and_uninstall_gives_it_back() {
     assert!(lock.contains("sandbox.json"), "pinned: {lock}");
 
     // Later commands find the directory through the record, without the variable.
-    let status = stdout(&sb.moat(&["status"]));
-    for line in [
-        "Cursor           ✔ sandbox matches the policy",
-        "Cursor           ✔ protection: hook + OS sandbox",
-        "Cursor           · known gaps: commands Cursor runs outside its sandbox",
-    ] {
-        assert!(status.contains(line), "{line:?} in {status}");
-    }
+    let status = crate::common::squash(&stdout(&sb.moat(&["status"])));
+    assert!(status.contains(" Cursor hook + OS sandbox\n"), "{status}");
     let doctor = sb.moat(&["doctor", "--verbose"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
+    let shown = crate::common::squash(&stdout(&doctor));
     for line in [
-        "Cursor           sandbox matches the policy",
-        "wider:    shell `cursor.unsandboxed`",
+        "Cursor sandbox matches the policy",
+        "Cursor known gaps: commands Cursor runs outside its sandbox",
+        "wider: shell `cursor.unsandboxed`",
         "stricter: fs.read `sandbox.read_roots`: `",
     ] {
-        assert!(
-            stdout(&doctor).contains(line),
-            "{line:?} in {}",
-            text(&doctor)
-        );
+        assert!(shown.contains(line), "{line:?} in {shown}");
     }
     let show = stdout(&sb.moat(&["sandbox", "show"]));
     assert!(show.contains("\"readBoundary\": \"workspace\""), "{show}");
@@ -118,11 +110,9 @@ fn a_weakened_sandbox_json_denies_every_call_and_drops_to_hook_only() {
     );
     assert_eq!(read.status.code(), Some(DENY), "{}", text(&read));
     assert!(text(&read).contains("kernel-integrity"), "{}", text(&read));
-    let status = stdout(&sb.moat(&["status"]));
+    let status = crate::common::squash(&stdout(&sb.moat(&["status"])));
     assert!(
-        status.contains(
-            "Cursor           ! protection: hook only: sandbox: readBoundary is not workspace"
-        ),
+        status.contains("! Cursor hook only (sandbox: readBoundary is not workspace"),
         "{status}"
     );
 

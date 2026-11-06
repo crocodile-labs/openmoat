@@ -318,7 +318,7 @@ fn doctor_reports_the_service_state_once_installed() {
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(
-        text.contains("service"),
+        text.contains("Service"),
         "`doctor` should name the service now; got {text}"
     );
 }

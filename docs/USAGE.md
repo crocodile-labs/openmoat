@@ -122,10 +122,38 @@ changes nothing.
 
 ## How each agent is protected
 
-`openmoat status` and `openmoat doctor` print one protection level per agent, derived from the
-hook and sandbox checks above them, and one line of what that agent's hook and sandbox
-do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5). When the
-agent's program on the search path reports a version with a published security
+`openmoat status` and `openmoat doctor` print the same layout: what needs you first
+(`Needs your attention`, each with its fix after `→`), then one line per agent with its
+protection level, derived from the hook and sandbox checks, then OpenMoat's own policy,
+lock and audit log. The marks are the same everywhere: `✔` fine, `!` needs you, `✗`
+broken or not protected, `·` information, `–` not installed; colour only on a terminal
+and never with `NO_COLOR` set. For example:
+
+```
+OpenMoat 0.15.0 · doctor
+
+Needs your attention (2)
+  ! Codex     hook installed but not trusted → open Codex and trust OpenMoat's hook in /hooks
+  ! OpenClaw  2026.5.2 has 5 security advisories; upgrade to 2026.8.1 or later
+
+Agents
+  ✔ Claude Code         hook + OS sandbox
+  ! Codex               hook + OS sandbox
+  ! OpenClaw            hook only
+  ✔ GitHub Copilot CLI  hook only
+  – Not installed: Cursor, pi, OpenCode, Hermes Agent, Cline CLI, goose
+
+OpenMoat
+  ✔ Policy     16 deny · 20 allow · 12 review rules
+  ✔ Lock       12 files pinned, all intact
+  ✔ Audit log  37485 events, hash chain intact
+
+2 things need you · known gaps per agent: openmoat doctor --verbose
+```
+
+`openmoat doctor --verbose` adds every check with its paths and, for each agent, what its
+hook and sandbox do not cover (the full list is in [THREAT_MODEL.md](THREAT_MODEL.md) §5).
+When the agent's program on the search path reports a version with a published security
 advisory that a later version fixes, both print a warning line (`!`) naming the
 advisory, how many more apply, the version to upgrade to and where it is published,
 for example `OpenCode 1.18.0 has a known security advisory, Pillar Security, MCP OAuth
@@ -147,7 +175,7 @@ exit code as the text:
 | `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
 | `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or its entry lacks the agent's fail-closed key (`fail_closed: true` for Hermes Agent, `failClosed: true` for Cursor: the agent would run a call whose hook failed; run `openmoat init`), or the agent ran without loading OpenMoat's plugin (below), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
-Agents that are not set up or not found keep their `·` line. `openmoat status --format
+An agent not set up gets a `·` line; the agents not found share the `Not installed` line. `openmoat status --format
 json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `level` is
 `hook-and-os-sandbox`, `hook-only`, `not-protected`, `not-set-up` or `not-found`) and
 exits 0; the text form exits 64 when something needs fixing.
@@ -274,8 +302,12 @@ to other hosts; `/clear` or a new session starts clean. Check it with `openmoat 
 ```console
 $ openmoat status
 ...
-Claude Code      ✔ proxy sessions: each session's sandboxed commands send their own credential (session-start hook), so its taint and connection share apply
-Codex            ! proxy sessions: its proxy sends no session credential, so `openmoat proxy` refuses what it hands on (407); `openmoat run` gives each run its own
+Needs your attention (1)
+  ! Codex  proxy sessions: its proxy sends no session credential, so `openmoat proxy` refuses what it hands on (407); `openmoat run` gives each run its own
+...
+OpenMoat
+  ...
+  ✔ Claude Code     proxy sessions: each session's sandboxed commands send their own credential (session-start hook), so its taint and connection share apply
 ```
 
 A program that is not one of those sessions gets `407 Proxy Authentication Required`
@@ -409,10 +441,32 @@ agents' own sandboxes do not decrypt: there the HTTPS request keeps the placehol
 terminal `openmoat` offers to show them. The same, explicitly:
 
 ```bash
-openmoat policy upgrade --dry-run   # what the new default adds, as a diff; changes nothing
-openmoat policy upgrade             # shows the diff, asks, keeps a backup and re-pins
+openmoat policy upgrade --dry-run   # what the new default adds, grouped; changes nothing
+openmoat policy upgrade --diff      # the same, then the full diff of the policy
+openmoat policy upgrade             # shows the changes, asks, keeps a backup, re-pins and syncs the sandboxes
 openmoat policy upgrade --undo      # put the previous policy back
 ```
+
+The changes are grouped by what they do, read from the policy before and after:
+
+```
+OpenMoat 0.15.0 has new default rules for your policy
+
+  New protections
+    + Denied: sends a payment card number to a host off this machine (`card-egress`)
+    + `secrets-paths` now also denies `~/.cline/data/secrets.json`
+  Fewer interruptions
+    − `dev-readonly` now also allows `git config user.name`
+  Renamed
+    ~ `ask` is now `review` (same behaviour)
+  + 24 comment and wording updates
+
+Apply these changes? [y/N/d]   (d = show the full diff)
+```
+
+A change it cannot name is counted as `Other changes: N (d to see)`. After a yes it writes
+the agents' sandbox settings from the upgraded policy, as `openmoat sandbox sync` does and
+after the same checks; when they cannot be written it says to run `openmoat sandbox sync`.
 
 Lines you changed are never touched; a change that would overlap them is listed for you to
 make with `openmoat edit` if you want it. From 0.12.0 the default policy adds the deny
@@ -692,7 +746,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat demo [--format json]` | see what your policy (or the default one) decides for a fixed list of example agent calls; nothing runs, no hook or file is touched |
 | `openmoat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy [--mcp-no-sandbox]]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions). Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
 | `openmoat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
-| `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists where each sandbox is stricter or wider than the policy) |
+| `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists every check with its paths, each agent's known gaps and where each sandbox is stricter or wider than the policy) |
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |
 | `openmoat show [id] [--session …] [--since …] [--recent N]` | see events |
 | `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary |
@@ -717,7 +771,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
 | `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy check-diff [--base <rev> [--head <rev>]] [--policy <file>] [--format text\|json\|github]` | check a change before it is merged: from `--base` to `--head` (`HEAD`), or a unified diff on stdin; exit 0 nothing found, 2 something the policy denies, 3 something for review ([MERGE_CHECK.md](MERGE_CHECK.md)) |
-| `openmoat policy upgrade [--dry-run] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
+| `openmoat policy upgrade [--dry-run] [--diff] [--yes] [--undo]` | add what a new release's default policy changed, keeping your edits · undo the last upgrade |
 | `openmoat policy trust-key <key.pub> --name <who>` | trust an SSH public key to sign policy packs (and signed repository policies, where the policy asks for them); signatures are made with `ssh-keygen -Y sign -n openmoat-pack` for a pack and `-n openmoat-repo-policy` for a repository policy |
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
 | `openmoat sandbox show` · `openmoat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |

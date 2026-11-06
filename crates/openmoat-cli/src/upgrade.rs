@@ -15,7 +15,7 @@ use crate::home::Home;
 mod merge;
 mod rename;
 
-pub use merge::Merge;
+pub use merge::{Change, Merge};
 
 /// The default OpenMoat 0.1.1 to 0.3.0 wrote: what a policy created before
 /// `policy.base.yaml` existed is compared with. A policy 0.4.0 wrote has the

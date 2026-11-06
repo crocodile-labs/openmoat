@@ -6,11 +6,13 @@ use std::path::Path;
 use openmoat_core::Policy;
 use openmoat_hosts::Host;
 
+use super::human::Place;
 use super::{Area, Report};
 use crate::commands::sandbox::write_report;
 use crate::home::Home;
 use crate::install::{HostConfig, read_or_empty};
 use crate::integrity::Lock;
+use crate::report::{Mark, Row};
 use crate::sandbox::backend::SandboxBackend;
 use crate::sandbox::claude::mask::{self, Mask};
 use crate::sandbox::{Plan, install as host_sandbox};
@@ -81,7 +83,11 @@ pub(super) fn sandboxes(
             masks(report, home, host, policy, &plan);
         }
         if verbose {
-            let _ = write_report(&mut report.out, translation);
+            let mut text = Vec::new();
+            let _ = write_report(&mut text, translation);
+            for line in String::from_utf8_lossy(&text).lines() {
+                report.human(Place::Details, Row::new(Mark::Info, name, line.trim()));
+            }
         }
     }
     if let Some(port) = plan.proxy_port.filter(|_| present) {

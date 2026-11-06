@@ -1,5 +1,6 @@
 //! `moat doctor --format json`: every check as one document, for tools that
-//! show them (the `MoatBar` app). The same rows and exit code as the text output.
+//! show them (the `MoatBar` app). The same checks and exit code as the text
+//! output, which groups and words them for a person (`human.rs`).
 
 use anyhow::Result;
 use openmoat_hosts::Host;
@@ -30,9 +31,9 @@ pub(super) struct Row {
     #[serde(skip_serializing_if = "Option::is_none")]
     area: Option<Area>,
     /// The left column (`policy`, `lock`, `Claude Code`), without its padding.
-    name: String,
+    pub name: String,
     /// The rest of the line.
-    detail: String,
+    pub detail: String,
 }
 
 impl Row {

@@ -1,7 +1,9 @@
-//! `moat status`: is the kernel installed, current and active?
+//! `moat status`: is the kernel installed, current and active? The short form
+//! of `openmoat doctor`: what needs the person, one line per agent, OpenMoat's
+//! own state and the latest decisions.
 
 use std::fs;
-use std::io::{self, Write as _};
+use std::io;
 use std::path::Path;
 
 use anyhow::Result;
@@ -12,13 +14,35 @@ use crate::approvals::{self, GRANT_TTL_MS, Grants};
 use crate::cli::{Format, StatusArgs};
 use crate::exit::Code;
 use crate::home::Home;
-use crate::install::{HookState, HostConfig, Recorded};
-use crate::integrity::{self, HookPinGap, Lock};
-use crate::sandbox::{Plan, install as host_sandbox};
+use crate::integrity::{HookPinGap, Lock};
+use crate::report::{Attention, Mark, Printer, Row};
+use crate::sandbox::Plan;
 use crate::{protection, render, time};
+
+mod agents;
 
 /// How many of the newest audit events `status` lists.
 const RECENT_EVENTS: usize = 5;
+
+/// The rows `status` prints, by section.
+#[derive(Default)]
+struct Shown {
+    attention: Attention,
+    /// Under the agent rows: agents OpenMoat finds but cannot hook.
+    agents: Vec<Row>,
+    openmoat: Vec<Row>,
+}
+
+impl Shown {
+    /// A problem (`✗`) or a warning (`!`) in `Needs your attention`.
+    fn needs(&mut self, mark: Mark, label: &str, text: impl Into<String>) {
+        self.attention.push(Row::new(mark, label, text));
+    }
+
+    fn state(&mut self, mark: Mark, label: &str, text: impl Into<String>) {
+        self.openmoat.push(Row::new(mark, label, text));
+    }
+}
 
 pub fn run(args: &StatusArgs) -> Result<Code> {
     let home = Home::locate()?;
@@ -49,43 +73,57 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
         }))?;
         return Ok(Code::Ok);
     }
-    let mut out = io::stdout().lock();
-
-    writeln!(out, "state directory  {}", home.root().display())?;
-    let mut healthy = policies(&mut out, &home)?;
+    let mut shown = Shown::default();
+    let mut healthy = policies(&mut shown, &home)?;
     if let Some(update) = &update {
-        writeln!(
-            out,
-            "policy update    · {update}: `openmoat policy upgrade` shows them and asks"
-        )?;
+        let row = Row::new(Mark::Attention, "Policy", format!("{update} to review"))
+            .fix("openmoat policy upgrade");
+        shown.attention.push(row);
     }
-    healthy &= lock(&mut out, &home, &binary)?;
-    healthy &= mcp_line(&mut out, &home, &binary)?;
+    healthy &= lock(&mut shown, &home, &binary)?;
+    healthy &= mcp_line(&mut shown, &home, &binary);
     // Warnings that leave `healthy` alone: servers that start outside what
     // OpenMoat checks are the person's choice to wrap (ADR-049).
     for line in mcp_outside(&home, &binary) {
-        writeln!(out, "mcp servers      ! {line}")?;
+        shown.needs(Mark::Attention, "MCP servers", line);
     }
-    healthy &= approvals(&mut out, &home)?;
-    let recorded = Recorded::load(&home).unwrap_or_default();
-    healthy &= hooks(&mut out, &home, &binary, &recorded)?;
+    healthy &= approvals(&mut shown, &home);
+    healthy &= agents::hooks(&mut shown, &home, &binary)?;
     // A warning that leaves `healthy` alone: OpenMoat is installed as it should
     // be, and only the person can judge a project's own settings.
     for warning in crate::project_settings::warnings_here(&home) {
-        let name = warning.host.display_name();
-        writeln!(out, "{name:<16} ! project settings {}", warning.text)?;
+        let text = format!("project settings {}", warning.text);
+        shown.needs(Mark::Attention, warning.host.display_name(), text);
     }
     for warning in crate::project_settings::other_hooks::warnings_here(&home) {
-        let name = warning.host.display_name();
-        writeln!(out, "{name:<16} ! other hook {}", warning.text)?;
+        let text = format!("other hook {}", warning.text);
+        shown.needs(Mark::Attention, warning.host.display_name(), text);
     }
     if let Ok(policy) = home.load_policy() {
-        healthy &= sandboxes(&mut out, &home, &Plan::new(&home, &policy)?, &binary)?;
+        healthy &= agents::sandboxes(&mut shown, &home, &Plan::new(&home, &policy)?, &binary);
     }
-    // Derived from the hook and sandbox lines above, so it leaves `healthy` alone.
-    protection_lines(&mut out, &home, &binary)?;
-    healthy &= audit(&mut out, &home)?;
+    let audit = audit(&mut shown, &home)?;
+    healthy &= audit.is_some();
 
+    let table = crate::report::agent_table(
+        &protection::report(&home, &binary)?,
+        &shown.attention,
+        false,
+    );
+    let mut out = io::stdout().lock();
+    let mut printer = Printer::stdout(&mut out);
+    printer.title("status")?;
+    printer.attention(&shown.attention)?;
+    let mut table = table;
+    table.rows.append(&mut shown.agents);
+    printer.agents(&table)?;
+    printer.heading("OpenMoat")?;
+    printer.rows(&shown.openmoat)?;
+    if let Some(recent) = audit.filter(|r| !r.is_empty()) {
+        printer.heading("Latest decisions")?;
+        drop(printer);
+        render::event_table(&recent)?;
+    }
     Ok(if healthy { Code::Ok } else { Code::Usage })
 }
 
@@ -93,7 +131,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
 fn hook_warnings(home: &Home, binary: &Path) -> Result<Vec<String>> {
     let mut warnings = Vec::new();
     for host in Host::ALL {
-        let config = HostConfig::for_host(home, host)?;
+        let config = crate::install::HostConfig::for_host(home, host)?;
         if config.set_up(binary)
             && let Some(warning) = config.trust_warning()
         {
@@ -161,34 +199,31 @@ fn mcp_outside(home: &Home, binary: &Path) -> Vec<String> {
 }
 
 /// The MCP line; `false` when something waits for `moat mcp accept`.
-fn mcp_line(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
+fn mcp_line(shown: &mut Shown, home: &Home, binary: &Path) -> bool {
     match mcp_changes(home, binary) {
         Ok(lines) if lines.is_empty() => {
-            writeln!(
-                out,
-                "mcp servers      ✔ nothing waits for `openmoat mcp accept`"
-            )?;
-            Ok(true)
+            let text = "nothing waits for `openmoat mcp accept`";
+            shown.state(Mark::Ok, "MCP servers", text);
+            true
         }
         Ok(lines) => {
             for line in lines {
-                writeln!(
-                    out,
-                    "mcp servers      ✗ {line}; `openmoat mcp accept` shows it and asks"
-                )?;
+                let row = Row::new(Mark::Broken, "MCP servers", line)
+                    .fix("`openmoat mcp accept` shows it and asks");
+                shown.attention.push(row);
             }
-            Ok(false)
+            false
         }
         Err(error) => {
-            writeln!(out, "mcp servers      ✗ {error:#}")?;
-            Ok(false)
+            shown.needs(Mark::Broken, "MCP servers", format!("{error:#}"));
+            false
         }
     }
 }
 
 /// The policy line and, in a project with one, the repository policy line;
 /// `false` on any problem.
-fn policies(out: &mut impl io::Write, home: &Home) -> Result<bool> {
+fn policies(shown: &mut Shown, home: &Home) -> Result<bool> {
     let mut healthy = true;
     let policy_path = home.policy_path();
     match home.load_policy() {
@@ -196,26 +231,25 @@ fn policies(out: &mut impl io::Write, home: &Home) -> Result<bool> {
             let bytes = fs::read(&policy_path)?;
             let digest = crate::integrity::sha256_hex(&bytes);
             let (deny, allow, review) = policy.rule_count();
-            writeln!(
-                out,
-                "policy           {}  sha256:{digest}  ({deny} deny, {allow} allow, {review} review)",
-                policy_path.display()
-            )?;
+            let text = format!(
+                "{} · {deny} deny · {allow} allow · {review} review rules · sha256:{}",
+                policy_path.display(),
+                digest.get(..12).unwrap_or(&digest)
+            );
+            shown.state(Mark::Ok, "Policy", text);
         }
         Err(error) => {
             healthy = false;
-            writeln!(out, "policy           ✗ {error:#}")?;
+            shown.needs(Mark::Broken, "Policy", format!("{error:#}"));
         }
     }
     match crate::repo::summary(home) {
-        Ok(Some(line)) => writeln!(out, "repo policy      {line}")?,
+        Ok(Some(line)) => shown.state(Mark::Info, "Repo policy", line),
         Ok(None) => {}
         Err(error) => {
             healthy = false;
-            writeln!(
-                out,
-                "repo policy      ✗ {error:#}; every call in this project is denied"
-            )?;
+            let text = format!("{error:#}; every call in this project is denied");
+            shown.needs(Mark::Broken, "Repo policy", text);
         }
     }
     Ok(healthy)
@@ -223,305 +257,100 @@ fn policies(out: &mut impl io::Write, home: &Home) -> Result<bool> {
 
 /// The lock lines: drift, and hook files the lock does not pin; `false` on any
 /// problem.
-fn lock(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<bool> {
+fn lock(shown: &mut Shown, home: &Home, binary: &Path) -> Result<bool> {
     let lock_path = home.lock_path();
     let lock = match Lock::load(&lock_path) {
         Ok(lock) => lock,
         Err(_) if !lock_path.exists() => {
-            writeln!(out, "lock             ✗ missing (run `openmoat init`)")?;
+            let row = Row::new(Mark::Broken, "Lock", "missing").fix("openmoat init");
+            shown.attention.push(row);
             return Ok(false);
         }
         Err(error) => {
-            writeln!(out, "lock             ✗ {error:#}")?;
+            shown.needs(Mark::Broken, "Lock", format!("{error:#}"));
             return Ok(false);
         }
     };
     let mut healthy = true;
     let drift = lock.verify();
     if drift.is_empty() {
-        writeln!(
-            out,
-            "lock             ✔ {} files pinned, intact",
-            lock.entries.len()
-        )?;
+        let text = format!("{} files pinned, intact", lock.entries.len());
+        shown.state(Mark::Ok, "Lock", text);
     } else {
         healthy = false;
         for d in drift {
-            writeln!(out, "lock             ✗ {d} (run `openmoat doctor`)")?;
+            let row = Row::new(Mark::Broken, "Lock", d.to_string()).fix("openmoat doctor");
+            shown.attention.push(row);
         }
     }
-    let installed = integrity::installed_hook_files(home, binary)?;
+    let installed = crate::integrity::installed_hook_files(home, binary)?;
     let gap = HookPinGap::new(&lock, home, &installed);
     for path in gap.unpinned {
         healthy = false;
-        writeln!(
-            out,
-            "lock             ✗ {} is not pinned (run `openmoat init` to pin it)",
-            path.display()
-        )?;
+        let row = Row::new(
+            Mark::Broken,
+            "Lock",
+            format!("{} is not pinned", path.display()),
+        )
+        .fix("openmoat init to pin it");
+        shown.attention.push(row);
     }
     for path in gap.elsewhere {
-        writeln!(
-            out,
-            "lock             · {} is pinned but not this shell's hook file ({})",
+        let text = format!(
+            "{} is pinned but not this shell's hook file ({})",
             path.display(),
             HookPinGap::moved_by()
-        )?;
+        );
+        shown.state(Mark::Info, "Lock", text);
     }
     Ok(healthy)
 }
 
 /// The session grants line; `false` when the grants file is unreadable.
-fn approvals(out: &mut impl io::Write, home: &Home) -> Result<bool> {
+fn approvals(shown: &mut Shown, home: &Home) -> bool {
     let grants = match Grants::load(&home.grants_path()) {
         Ok(grants) => grants,
         Err(error) => {
-            writeln!(out, "approvals        ✗ {error:#}")?;
-            return Ok(false);
+            shown.needs(Mark::Broken, "Approvals", format!("{error:#}"));
+            return false;
         }
     };
     let now = time::now_ms();
     let ages: Vec<i64> = grants.active(now).map(|g| now - g.granted_at_ms).collect();
-    match ages.iter().max() {
-        Some(oldest) => writeln!(
-            out,
-            "approvals        {} active session grant(s), oldest {} old (each expires after {})",
+    let text = match ages.iter().max() {
+        Some(oldest) => format!(
+            "{} active session grant(s), oldest {} old (each expires after {})",
             ages.len(),
             time::duration(*oldest),
             time::duration(GRANT_TTL_MS)
-        )?,
-        None => writeln!(out, "approvals        no active session grants")?,
-    }
+        ),
+        None => "no active session grants".to_owned(),
+    };
+    shown.state(Mark::Info, "Approvals", text);
     // Written before grants named their project: they apply nowhere now.
     for grant in grants.active(now).filter(|g| g.unbound()) {
-        render::line(
-            out,
-            &format!(
-                "approvals        ! {} session {}: {} needs approving again: it names no \
-                 project, so it no longer applies (`openmoat allow --last` after its next review)",
-                grant.host,
-                grant.session_id,
-                approvals::describe(&grant.action)
-            ),
-        )?;
+        let text = format!(
+            "{} session {}: {} needs approving again: it names no project, so it no longer \
+             applies (`openmoat allow --last` after its next review)",
+            grant.host,
+            grant.session_id,
+            approvals::describe(&grant.action)
+        );
+        shown.needs(Mark::Attention, "Approvals", text);
     }
-    Ok(true)
+    true
 }
 
-/// One line per host's hook, then the Continue CLI warning; `false` on any
-/// problem.
-fn hooks(
-    out: &mut impl io::Write,
-    home: &Home,
-    binary: &Path,
-    recorded: &Recorded,
-) -> Result<bool> {
-    let mut healthy = true;
-    // Agents with no folder on this machine share one line at the end.
-    let mut not_found = Vec::new();
-    crate::install::host_version::prefetch_present(home);
-    for host in Host::ALL {
-        let config = HostConfig::for_host(home, host)?;
-        // A version with a published advisory, a flaw no hook sees: a warning
-        // under the host's line, which does not make the status unhealthy.
-        let advisory = config
-            .host_present()
-            .then(|| crate::install::host_version::advisory(host))
-            .flatten();
-        // A version that does not load OpenMoat's hook (OpenCode before
-        // 1.3.4), whatever the hook file says.
-        let unsupported = config
-            .host_present()
-            .then(|| crate::install::host_version::unsupported(host))
-            .flatten();
-        let state = config.state(binary);
-        let installed = state == HookState::Installed && unsupported.is_none();
-        let line = match (state, unsupported) {
-            (_, Some(why)) => {
-                healthy = false;
-                format!("✗ not protected: {why}")
-            }
-            // The hook a version runs OpenMoat through, where versions differ
-            // (OpenCode 1's and 2's).
-            (HookState::Installed, None) => match crate::install::host_version::hook_api(host) {
-                Some(through) => format!("✔ installed ({through})"),
-                None => "✔ installed".to_owned(),
-            },
-            (HookState::Missing, None) if recorded.skipped(host) && config.host_present() => {
-                format!(
-                    "· not set up (`openmoat init --hosts {}` adds it)",
-                    host.id()
-                )
-            }
-            (HookState::Missing, None) if !config.host_present() => {
-                not_found.push(host.display_name());
-                continue;
-            }
-            (HookState::Missing, None) => {
-                healthy = false;
-                "✗ hook missing (run `openmoat init`)".to_owned()
-            }
-            (HookState::Stale { command }, None) => {
-                healthy = false;
-                format!("✗ {}", crate::install::stale_hint(&command))
-            }
-            (
-                HookState::Unreadable(error)
-                | HookState::Unapproved(error)
-                | HookState::FailsOpen(error),
-                None,
-            ) => {
-                healthy = false;
-                format!("✗ {error}")
-            }
-        };
-        writeln!(
-            out,
-            "{:<16} {line}  {}",
-            host.display_name(),
-            config.settings_path.display()
-        )?;
-        if let Some(advisory) = advisory {
-            writeln!(out, "{:<16} ! {advisory}", host.display_name())?;
-        }
-        if installed && let Some(warning) = config.trust_warning() {
-            writeln!(out, "{:<16} ! {warning}", host.display_name())?;
-        }
-        // Whether the host loaded the plugin (ADR-042): a warning, like the
-        // protection line it changes, that leaves `healthy` alone.
-        if let Some(loaded) = installed
-            .then(|| crate::heartbeat::check(home, &config))
-            .flatten()
-        {
-            let (mark, text) = crate::heartbeat::line(host.display_name(), &loaded);
-            let mark = match mark {
-                crate::heartbeat::Mark::Note => "·",
-                crate::heartbeat::Mark::Warning => "!",
-            };
-            render::line(out, &format!("{:<16} {mark} {text}", host.display_name()))?;
-        }
-    }
-    if !not_found.is_empty() {
-        writeln!(out, "{:<16} · {}", "not found", not_found.join(", "))?;
-    }
-    for (host, found) in crate::install::detected()? {
-        writeln!(
-            out,
-            "{:<16} · {}  {}",
-            host.display_name(),
-            host.spec().gaps,
-            found.display()
-        )?;
-    }
-    Ok(healthy)
-}
-
-/// Each agent's protection level and known gaps.
-fn protection_lines(out: &mut impl io::Write, home: &Home, binary: &Path) -> Result<()> {
-    for agent in protection::report(home, binary)? {
-        if let Some(summary) = agent.summary() {
-            let mark = match agent.level {
-                protection::Level::HookAndOsSandbox => "✔",
-                protection::Level::HookOnly => "!",
-                _ => "✗",
-            };
-            writeln!(out, "{:<16} {mark} protection: {summary}", agent.name)?;
-            if let Some(limit) = agent.limit {
-                writeln!(out, "{:<16} ! limit: {limit}", agent.name)?;
-            }
-            writeln!(out, "{:<16} · known gaps: {}", agent.name, agent.gaps)?;
-        }
-    }
-    Ok(())
-}
-
-/// The audit log line and the most recent events; `false` when the log is
-/// missing.
-fn audit(out: &mut impl io::Write, home: &Home) -> Result<bool> {
+/// The audit log line; the most recent events, `None` when the log is missing.
+fn audit(shown: &mut Shown, home: &Home) -> Result<Option<Vec<openmoat_audit::Event>>> {
     let audit_path = home.audit_path();
     if !audit_path.is_file() {
-        writeln!(out, "audit log        ✗ missing (run `openmoat init`)")?;
-        return Ok(false);
+        let row = Row::new(Mark::Broken, "Audit log", "missing").fix("openmoat init");
+        shown.attention.push(row);
+        return Ok(None);
     }
     let store = Store::open_read_only(&audit_path)?;
-    writeln!(
-        out,
-        "audit log        {}  ({} events)",
-        audit_path.display(),
-        store.count()?
-    )?;
-    let recent = store.recent(RECENT_EVENTS)?;
-    if !recent.is_empty() {
-        writeln!(out)?;
-        render::event_table(&recent)?;
-    }
-    Ok(true)
-}
-
-/// One line per present host's sandbox (Standard tier); `false` on any problem.
-fn sandboxes(out: &mut impl io::Write, home: &Home, plan: &Plan, binary: &Path) -> Result<bool> {
-    let lock = Lock::load(&home.lock_path()).ok();
-    let mut healthy = true;
-    let mut present = false;
-    let mut with_sandbox = Vec::new();
-    for host in host_sandbox::hosts()
-        .filter(|h| HostConfig::for_host(home, *h).is_ok_and(|c| c.set_up(binary)))
-    {
-        let name = host.display_name();
-        let problems = host_sandbox::problems(home, host, plan, lock.as_ref());
-        if let (Ok(Some(_)), Some(note)) = (&problems, host_sandbox::unavailable(host)) {
-            writeln!(out, "{name:<16} · {note}")?;
-            continue;
-        }
-        present |= !matches!(problems, Ok(None));
-        if !matches!(problems, Ok(None)) {
-            with_sandbox.push(host);
-        }
-        match problems {
-            Ok(None) => {}
-            Ok(Some(problems)) if problems.is_empty() => {
-                let report = host_sandbox::report(host, plan);
-                writeln!(
-                    out,
-                    "{name:<16} ✔ sandbox matches the policy ({} stricter, {} wider: `openmoat sandbox show`)",
-                    report.losses.len(),
-                    report.allowances.len()
-                )?;
-            }
-            Ok(Some(problems)) => {
-                healthy = false;
-                for problem in problems {
-                    writeln!(out, "{name:<16} ✗ sandbox: {problem}")?;
-                }
-            }
-            Err(error) => {
-                healthy = false;
-                writeln!(out, "{name:<16} ✗ sandbox: {error:#}")?;
-            }
-        }
-    }
-    if let Some(port) = plan.proxy_port.filter(|_| present) {
-        // A warning that leaves `healthy` alone: a stopped proxy fails closed.
-        let (ok, text) = super::proxy::listening_line(port);
-        writeln!(
-            out,
-            "openmoat proxy   {} {text}",
-            if ok { "✔" } else { "!" }
-        )?;
-        // Warnings too: a request without a credential fails closed.
-        let lines = super::proxy::session_lines(&with_sandbox, plan.serve_without_credential);
-        for (ok, label, text) in lines {
-            writeln!(out, "{label:<16} {} {text}", if ok { "✔" } else { "!" })?;
-        }
-    }
-    let home = Home::locate()?;
-    if let Some((ok, text)) = super::proxy::service_line(&home) {
-        writeln!(
-            out,
-            "openmoat proxy   {} {text}",
-            if ok { "✔" } else { "!" }
-        )?;
-        healthy &= ok;
-    }
-    Ok(healthy)
+    let text = format!("{} · {} events", audit_path.display(), store.count()?);
+    shown.state(Mark::Ok, "Audit log", text);
+    Ok(Some(store.recent(RECENT_EVENTS)?))
 }

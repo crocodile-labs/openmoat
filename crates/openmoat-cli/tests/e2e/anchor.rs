@@ -51,7 +51,7 @@ fn anchors_hold_until_truncated(sb: &Sandbox, place: &[&str], against: &Path) {
         text(&doctor)
     );
     assert!(
-        stdout(&doctor).contains("audit anchor     last made"),
+        crate::common::squash(&stdout(&doctor)).contains("· Audit anchor last made"),
         "{}",
         text(&doctor)
     );

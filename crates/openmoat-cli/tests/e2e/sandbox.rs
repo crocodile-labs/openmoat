@@ -110,12 +110,12 @@ fn doctor_says_whether_claude_code_masks_each_secret() {
     let sync = sb.moat_as_person(&["sandbox", "sync"]);
     assert_eq!(sync.status.code(), Some(OK), "{}", text(&sync));
 
-    let doctor = sb.moat(&["doctor"]);
+    let doctor = sb.moat(&["doctor", "--verbose"]);
     assert_eq!(doctor.status.code(), Some(OK), "{}", text(&doctor));
-    let shown = stdout(&doctor);
+    let shown = crate::common::squash(&stdout(&doctor));
     for expected in [
-        "✔ Claude Code      secret `gh` (api.github.com): Claude Code masks it",
-        "· Claude Code      secret `other` (api.example.org): Claude Code skips it: ",
+        "✔ Claude Code secret `gh` (api.github.com): Claude Code masks it",
+        "· Claude Code secret `other` (api.example.org): Claude Code skips it: ",
     ] {
         assert!(shown.contains(expected), "{expected}: {shown}");
     }

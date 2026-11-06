@@ -116,6 +116,7 @@ fn offer_upgrade(update: &str, person: bool) -> Result<Option<Code>> {
     }
     super::policy::upgrade(&UpgradeArgs {
         dry_run: false,
+        diff: false,
         yes: false,
         undo: false,
     })

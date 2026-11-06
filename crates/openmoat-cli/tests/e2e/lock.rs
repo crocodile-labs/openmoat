@@ -166,7 +166,11 @@ fn doctor_reports_health_drift_and_refuses_to_accept_outside_a_terminal() {
     let sb = sandbox();
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(text(&out).contains("healthy"), "{}", text(&out));
+    assert!(
+        !text(&out).contains("re-installs and re-pins"),
+        "{}",
+        text(&out)
+    );
 
     let mut policy = std::fs::read_to_string(policy_path(&sb)).unwrap();
     policy.push_str("\n# edited by hand\n");
@@ -174,9 +178,12 @@ fn doctor_reports_health_drift_and_refuses_to_accept_outside_a_terminal() {
     let out = sb.moat(&["doctor"]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     let report = text(&out);
-    assert!(report.contains("✗"), "{report}");
+    assert!(report.contains("✗ Lock"), "{report}");
     assert!(report.contains("policy.yaml"), "{report}");
-    assert!(report.contains("problem(s)"), "{report}");
+    assert!(
+        report.contains("`openmoat doctor --accept` accepts"),
+        "{report}"
+    );
 
     let out = sb.moat(&["doctor", "--accept"]);
     assert_eq!(
@@ -254,7 +261,7 @@ fn status_reports_lock_state() {
     let sb = sandbox();
     let out = sb.moat(&["status"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    assert!(text(&out).contains("lock"));
+    assert!(text(&out).contains("✔ Lock"), "{}", text(&out));
     std::fs::write(policy_path(&sb), "version: 1\n").unwrap();
     let out = sb.moat(&["status"]);
     assert_eq!(out.status.code(), Some(USAGE));
@@ -350,8 +357,8 @@ fn repin_from_another_config_dir_keeps_the_pinned_hook_file() {
     let mut policy = std::fs::read_to_string(policy_path(&sb)).unwrap();
     policy.push_str("\n# edited by the owner\n");
     std::fs::write(policy_path(&sb), policy).unwrap();
-    let out = run(&shell, &["doctor", "--accept"]);
-    let report = text(&out);
+    let out = run(&shell, &["doctor", "--accept", "--verbose"]);
+    let report = crate::common::squash(&text(&out));
     assert!(report.contains("lock re-pinned"), "{report}");
     assert!(
         pinned(&agent),
@@ -366,10 +373,7 @@ fn repin_from_another_config_dir_keeps_the_pinned_hook_file() {
         report.contains("CLAUDE_CONFIG_DIR is") && report.contains("which OpenMoat uses"),
         "{report}"
     );
-    assert!(
-        report.contains("Claude Code      hook installed"),
-        "{report}"
-    );
+    assert!(report.contains("Claude Code hook installed"), "{report}");
     assert!(!report.contains("not pinned"), "{report}");
 
     let out = run(&shell, &["allow", "npm install left-pad", "--always"]);
