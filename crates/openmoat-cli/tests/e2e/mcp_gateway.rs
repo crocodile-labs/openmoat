@@ -19,6 +19,7 @@ use serde_json::{Value, json};
 use crate::common::{OK, Sandbox, output, stdout, text};
 
 mod flow;
+mod injected;
 
 const FIXTURES: &str = include_str!("mcp_gateway/fixtures.json");
 

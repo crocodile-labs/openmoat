@@ -18,6 +18,7 @@ call rather than check it.
 | Event | File | Timeout | Fail closed |
 |---|---|---|---|
 | `PreToolUse` (`tool_call`) | `~/.cline/hooks/PreToolUse` | 120 s (Cline's, fixed) | by OpenMoat's script; Cline has no setting |
+| `PostToolUse` (`tool_result`) | `~/.cline/hooks/PostToolUse` | 120 s (Cline's, fixed) | never blocks: it prints nothing |
 
 Cline has no hook entries in a settings file: every file named after an event in a
 hooks directory is that event's hook (`hook-file-config.ts`). The directories are
@@ -32,6 +33,18 @@ up first and given back by `openmoat uninstall`, which deletes OpenMoat's. The s
 runs `openmoat guard --host cline` with the call on stdin and prints its reply; when
 `openmoat` is missing, crashes or exits without the reply it owes, the script prints
 `{"cancel": true, …}` itself, since Cline runs the call when a hook fails.
+
+The same script is written to `<CLINE_DIR>/hooks/PostToolUse`, pinned and removed with
+it. Cline runs that file after each call with `hookName` `tool_result`, the call as
+`tool_result` (`id`, `name`, `input`, `output`, `error`, `durationMs`, `startedAt`,
+`endedAt`) and again as `postToolUse` (`toolName`, `parameters`, `result`: the output
+as text, `success`, `executionTimeMs`; `runToolCallEnd` in `hook-file-hooks.ts`), and
+waits for it. `openmoat guard` keeps the fingerprints of what an untrusted call returned
+(injected input, ADR-057; ADR-063, proposed), so a later call of the session that uses a
+host, path or command it named needs review. Cline would stop the whole run on a
+`cancel` after the call, so the script prints nothing there, whatever `openmoat`
+answers, and a failure goes to stderr only. After an upgrade, `openmoat init` adds the
+file; `openmoat status` reports the hook out of date until then.
 
 Input is `hookName` (`tool_call`), `clineVersion`, `timestamp`, `taskId`,
 `sessionContext.rootSessionId` (the session, used as the session id), `workspaceRoots`
@@ -96,9 +109,6 @@ malformed (a deny). The full table is in
 
 ## Known gaps
 
-- Injected input (ADR-057): OpenMoat does not install Cline's `PostToolUse` hook, so it never
-  sees what a call returned. A host, path or command untrusted output named is not linked to
-  the later call that uses it; only session taint applies.
 - No OS sandbox from OpenMoat (`openmoat run` sandboxes the whole agent).
 - `--yolo` runs no hooks; `--config`, `--hooks-dir` or a moved `CLINE_DIR` that OpenMoat
   did not install into skip OpenMoat's script.

@@ -7,13 +7,15 @@
 //! binary's path filled in, to its hook file (`<agent dir>/extensions/openmoat.js`).
 //! The whole file is OpenMoat's: it is written whole, pinned whole by the lock
 //! and deleted by `moat uninstall`. A file of the person's at that name is
-//! backed up first and given back by `moat uninstall`.
+//! backed up first and given back by `moat uninstall`. A host's extra files
+//! ([`HostConfig::extra_files`]) get the same file: Cline runs the script as
+//! its `PostToolUse` too.
 //!
 //! [`HookLayout::Owned`]: openmoat_hosts::HookLayout::Owned
 //! [`HookLayout::Script`]: openmoat_hosts::HookLayout::Script
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use openmoat_hosts::OwnedFile;
@@ -26,8 +28,16 @@ pub fn text(file: &OwnedFile, binary: &Path) -> Result<String> {
     Ok(file.text(&binary.to_string_lossy())?)
 }
 
-/// Write `file` for `binary`, backing up a file of the person's at its name
-/// first.
+/// Where `file` goes: the hook file, then the host's extra files (Cline's
+/// `PostToolUse`); the other hosts' owned files have none.
+fn paths(config: &HostConfig) -> Vec<PathBuf> {
+    std::iter::once(config.settings_path.clone())
+        .chain(config.extra_files())
+        .collect()
+}
+
+/// Write `file` for `binary` at each of its [`paths`], backing up a file of
+/// the person's at a name first.
 pub fn install(
     home: &Home,
     config: &HostConfig,
@@ -35,21 +45,29 @@ pub fn install(
     binary: &Path,
     dry_run: bool,
 ) -> Result<Outcome> {
-    let path = &config.settings_path;
     let wanted = text(file, binary)?;
-    let current = fs::read_to_string(path).ok();
-    let outcome = match &current {
-        Some(text) if *text == wanted => Outcome::Unchanged,
-        Some(text) if file.is_ours(text) => Outcome::Updated,
-        _ => Outcome::Installed,
-    };
-    if outcome == Outcome::Unchanged || dry_run {
-        return Ok(outcome);
+    let mut outcome = Outcome::Unchanged;
+    for path in paths(config) {
+        let current = fs::read_to_string(&path).ok();
+        let this = match &current {
+            Some(text) if *text == wanted => Outcome::Unchanged,
+            Some(text) if file.is_ours(text) => Outcome::Updated,
+            _ => Outcome::Installed,
+        };
+        outcome = outcome.max(this);
+        if this == Outcome::Unchanged || dry_run {
+            continue;
+        }
+        if current.as_deref().is_some_and(|text| !file.is_ours(text)) {
+            super::back_up(home, &path, HOOK_BACKUP)?;
+        }
+        write_like(
+            &path,
+            wanted.as_bytes(),
+            &path,
+            KeepMode::NotWritableByOthers,
+        )?;
     }
-    if current.as_deref().is_some_and(|text| !file.is_ours(text)) {
-        super::back_up(home, path, HOOK_BACKUP)?;
-    }
-    write_like(path, wanted.as_bytes(), path, KeepMode::NotWritableByOthers)?;
     Ok(outcome)
 }
 
@@ -70,16 +88,33 @@ pub fn render(file: &OwnedFile, binary: &Path, current: &str) -> Result<Option<S
 }
 
 /// Whether `config`'s hook file is `file` as `init` writes it for `binary`. A
-/// file there that `init` did not write is no hook of OpenMoat's.
+/// file there that `init` did not write is no hook of OpenMoat's. With the
+/// hook file in place, an extra file that is not (Cline's `PostToolUse`,
+/// added in a later release) leaves the hook out of date, for `init` to write.
 pub fn state(config: &HostConfig, file: &OwnedFile, binary: &Path) -> HookState {
-    let current = match fs::read_to_string(&config.settings_path) {
+    let state = state_at(&config.settings_path, file, binary);
+    if state != HookState::Installed {
+        return state;
+    }
+    let extra_missing = config
+        .extra_files()
+        .iter()
+        .any(|path| state_at(path, file, binary) != HookState::Installed);
+    if extra_missing {
+        return HookState::Stale {
+            command: binary.to_string_lossy().into_owned(),
+        };
+    }
+    state
+}
+
+/// [`state`] of the one file at `path`.
+fn state_at(path: &Path, file: &OwnedFile, binary: &Path) -> HookState {
+    let current = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return HookState::Missing,
         Err(e) => {
-            return HookState::Unreadable(format!(
-                "reading {}: {e}",
-                config.settings_path.display()
-            ));
+            return HookState::Unreadable(format!("reading {}: {e}", path.display()));
         }
     };
     if text(file, binary).is_ok_and(|wanted| wanted == current) {

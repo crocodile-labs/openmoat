@@ -79,6 +79,13 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             }
         };
         let mut files = vec![(path.clone(), hook)];
+        // The same whole file at the host's extra paths (Cline's `PostToolUse`).
+        if let HookLayout::Owned(file) | HookLayout::Script(file) = config.layout {
+            for extra in config.extra_files() {
+                let undone = undo_whole(&extra, ours, |text| file.is_ours(text))?;
+                files.push((extra, undone));
+            }
+        }
         // The host's record of consent to OpenMoat's hook (Hermes Agent's allowlist).
         if let Some((consent_path, consent)) = install::consent::of(&config) {
             let id = host.id();

