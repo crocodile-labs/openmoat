@@ -171,6 +171,20 @@ GraphQL, Codex outside `run`); ARCHITECTURE §13; INSTALL "Teams"; CHANGELOG.
 
 ## Pull requests (each ≤ 500 lines)
 
+Termination, certificate trust and client compatibility carry most of the risk, so the
+work starts with a proof of concept that tests them where OpenMoat already terminates,
+and the standalone half (5 and 6) starts only if it holds.
+
+0. **Proof of concept, `openmoat run` only, behind an unlisted setting.** One `requests:`
+   host (`api.github.com`, `deny: POST /gists`) on the existing ADR-043 path, with no new
+   policy schema beyond that entry. It measures, on macOS and Linux: that `gh`, `git`
+   over HTTPS, `curl`, Node's `fetch`, Python's `requests` and the agents' own clients
+   accept the per-session CA or fail closed with a clear message; the latency added per
+   request (median and p95); and that a refused request leaves an audit row and never
+   reaches the host. Exit criteria: no client sends a request the rule denies, every
+   failure is a refusal (none is a silent pass), and the p95 is within the `guard
+   latency` budget. Results go into this ADR before step 1; if they fail, the standalone
+   half is dropped and `requests:` stays `openmoat run` only.
 1. `refactor(core)`: move `secret/route.rs` to `route.rs`, shared; no behaviour change.
 2. `feat(policy)`: `requests:` schema, lint and docs; parsed but not yet enforced
    (`policy lint` notes "enforced from the next release").
@@ -178,7 +192,7 @@ GraphQL, Codex outside `run`); ARCHITECTURE §13; INSTALL "Teams"; CHANGELOG.
    rows; taint read-only rule (§3).
 4. `feat(proxy)`: CA name constraints cover `requests:` hosts; `ca init` and start-up
    messages.
-5. `feat(proxy)`: `v2` session credentials with the trust mark; standalone proxy terminates
+5. *(only if step 0 held)* `feat(proxy)`: `v2` session credentials with the trust mark; standalone proxy terminates
    for them; `requests_untrusted`.
-6. `feat(cli)`: `SessionStart` writes the per-session trust files and variables; e2e.
+6. *(only if step 0 held)* `feat(cli)`: `SessionStart` writes the per-session trust files and variables; e2e.
 7. `policy`: the `exfil-endpoints` pack, `status` note, MoatBench scenario, THREAT_MODEL.
