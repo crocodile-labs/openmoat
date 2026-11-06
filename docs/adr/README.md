@@ -69,6 +69,7 @@ each ADR records the outcome it needs.
 | [058](ADR-058-mcp-cross-server-flow.md) | A call that carries text one wrapped MCP server returned (an address, an email, a long token, eight words) into another server's tool that writes or sends needs review (`mcp-cross-server`); the gateway keeps hashed pieces of each result per session (audit schema 9), the hook checks the arguments; pinned annotations or the one name-and-argument reading decide what acts; same server, reading tools and `mcp.flow_trusted` stay quiet | accepted; builds on ADR-020, ADR-032 and ADR-045 |
 | [059](ADR-059-staging-chain.md) | A send that carries a body, a file or an MCP write, after the session read many files outside the project or packed what it read into an archive or an encoding, needs review (`staging-egress`; thresholds in `staging:`) | proposed; builds on ADR-020, ADR-029, ADR-047 and ADR-052 |
 | [060](ADR-060-standalone-proxy-request-rules.md) | Per-host method and path rules (`requests:`) for allowed hosts, enforced by TLS termination in `openmoat run` and, for sessions that received OpenMoat's CA, in the standalone proxy | proposed; builds on ADR-020, ADR-027, ADR-043 and ADR-044 |
+| [061](ADR-061-injected-input-for-more-agents.md) | After-call hooks of more agents, and the MCP gateway for every agent, feed injected-input links, which also match after safe normalisation (host spelling, parent domains, command wrappers) | proposed; builds on ADR-020, ADR-029, ADR-057 and ADR-058 |
 
 ## Names in older ADRs
 
