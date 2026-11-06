@@ -397,7 +397,7 @@ unlisted hosts. The atom never appears in a session that read no secret.
   `.githooks/**`, `.git-hooks/**`, `githooks/**`, `git-hooks/**` and those folders,
   `.pre-commit-config.yaml`, `lefthook.yml`), editor tasks (`.vscode/**`), the build and test
   definitions of every ecosystem whose commands the default policy runs: JavaScript
-  (`package.json`, `.npmrc`, `.yarnrc`, `.yarnrc.yml`, `pnpm-workspace.yaml`), make, just
+  (`package.json`, `.npmrc`, `.yarnrc`, `.yarnrc.yml`, `pnpm-workspace.yaml`, Bun's `bunfig.toml`), make, just
   and task (`Makefile`, `makefile`, `GNUmakefile`, `*.mk`, `justfile`, `Taskfile.yml`),
   Rust (`build.rs`, `Cargo.toml`, `.cargo/config.toml`), Go (`go.mod`, `go.work`), CMake
   (`CMakeLists.txt`, `*.cmake`, `CMakePresets.json`), Maven (`pom.xml`, `.mvn/**`, `mvnw`),
