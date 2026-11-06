@@ -68,7 +68,11 @@ fn diagnostics(tool: &str, input: &Value, cwd: Option<&str>) -> Option<Result<Ac
         unchecked: None,
     };
     let map = match input {
-        Value::Null => return Some(Ok(cwd.map_or_else(|| Action::mcp(tool), |d| reading(d.to_owned())))),
+        Value::Null => {
+            return Some(Ok(
+                cwd.map_or_else(|| Action::mcp(tool), |d| reading(d.to_owned()))
+            ));
+        }
         Value::Object(map) => map,
         _ => return None,
     };
@@ -76,7 +80,9 @@ fn diagnostics(tool: &str, input: &Value, cwd: Option<&str>) -> Option<Result<Ac
         return None;
     }
     let Some(uri) = map.get("uri") else {
-        return Some(Ok(cwd.map_or_else(|| Action::mcp(tool), |d| reading(d.to_owned()))));
+        return Some(Ok(
+            cwd.map_or_else(|| Action::mcp(tool), |d| reading(d.to_owned()))
+        ));
     };
     let Some(uri) = uri.as_str() else {
         return Some(Err(malformed(tool, "`uri` is not a string")));
@@ -86,14 +92,31 @@ fn diagnostics(tool: &str, input: &Value, cwd: Option<&str>) -> Option<Result<Ac
     }
     // An editor-only scheme (`untitled:`, a notebook cell) names no file on
     // disk; a `file:` URI without an absolute path names none that can be
-    // checked, so it is refused; a bare absolute path is read as written.
-    if uri.get(..5).is_some_and(|s| s.eq_ignore_ascii_case("file:")) {
+    // checked, so it is refused; a path without a scheme, absolute or
+    // relative (`.env`, `../.aws/credentials`), is read as written, a relative
+    // one from the session's directory, as the model may write either.
+    if uri
+        .get(..5)
+        .is_some_and(|s| s.eq_ignore_ascii_case("file:"))
+    {
         return Some(Err(malformed(tool, "a file URI without an absolute path")));
     }
-    if uri.starts_with('/') || uri.starts_with('~') || is_windows_path(uri) {
+    if is_windows_path(uri) || !has_scheme(uri) {
         return Some(Ok(reading(uri.to_owned())));
     }
     Some(Ok(Action::mcp(tool)))
+}
+
+/// `untitled:Untitled-1`, `vscode-notebook-cell:…`: a URI scheme of two
+/// characters or more, so a drive letter (`C:`) is not one.
+fn has_scheme(text: &str) -> bool {
+    text.split_once(':').is_some_and(|(scheme, _)| {
+        scheme.len() > 1
+            && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    })
 }
 
 /// `C:\…` or `C:/…`.
@@ -161,6 +184,13 @@ mod tests {
             reads(&at(json!({"uri": "/etc/passwd"})).unwrap().unwrap()),
             ["/etc/passwd"]
         );
+        for relative in [".env", "../.aws/credentials", "src/main.rs"] {
+            assert_eq!(
+                reads(&at(json!({"uri": relative})).unwrap().unwrap()),
+                [relative],
+                "a path without a scheme is a read, relative ones too"
+            );
+        }
         assert!(at(json!({"uri": "file:relative.rs"})).unwrap().is_err());
         assert!(at(json!({"uri": 7})).unwrap().is_err());
         assert!(
@@ -176,7 +206,11 @@ mod tests {
     fn execute_code_needs_review_and_stays_an_mcp_call() {
         let input = json!({"code": "import os; os.system('id')"});
         let held = action(EXECUTE_CODE, &input, Some("/p")).unwrap().unwrap();
-        let Action::Unchecked { action: shown, reason } = held else {
+        let Action::Unchecked {
+            action: shown,
+            reason,
+        } = held
+        else {
             panic!("not unchecked")
         };
         assert_eq!(reason, EXECUTE_CODE_UNCHECKED);

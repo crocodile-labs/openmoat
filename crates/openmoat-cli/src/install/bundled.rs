@@ -83,7 +83,17 @@ fn listed(dir: &Path, bundle: &Bundle, bytes: &[u8]) -> Vec<BundledCopy> {
         .filter_map(|value| serde_json::from_value::<Entry>(value).ok())
         .filter(|e| e.identifier.id.eq_ignore_ascii_case(bundle.extension_id))
         .filter_map(|e| {
-            let folder = dir.join(e.relative_location?);
+            // a folder inside the extensions directory: `extensions.json` is a
+            // file in the home, and an absolute path or `..` would point a copy
+            // anywhere
+            let location = e.relative_location?;
+            let inside = Path::new(&location)
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_)));
+            if !inside {
+                return None;
+            }
+            let folder = dir.join(location);
             let version = parse(&e.version)?;
             folder.is_dir().then_some(BundledCopy {
                 editor: bundle.editor,
@@ -145,8 +155,12 @@ mod tests {
              "relativeLocation": "anthropic.claude-code-2.1.100-darwin-arm64"},
             {"identifier": {"id": "ms-python.python"}, "version": "2026.1.0",
              "relativeLocation": "ms-python.python-2026.1.0"},
+            // a folder outside the extensions directory is no copy, even one that exists
+            {"identifier": {"id": "anthropic.claude-code"}, "version": "9.9.9",
+             "relativeLocation": "../../outside"},
             {"not": "an entry"}
         ]);
+        std::fs::create_dir(home.path().join("outside")).unwrap();
         std::fs::write(dir.join("extensions.json"), list.to_string()).unwrap();
         let found = in_home(home.path(), &BUNDLE);
         assert_eq!(found.len(), 1, "{found:?}");
