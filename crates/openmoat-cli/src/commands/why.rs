@@ -18,6 +18,17 @@ use crate::render;
 use crate::report::Paths;
 
 mod explain;
+
+/// A shown path with `/` as its separator on Windows too (`~/.moat/policy.yaml`),
+/// as every path OpenMoat prints (`docs/POLICY.md` §3.2).
+fn slashed(shown: String) -> String {
+    if cfg!(windows) {
+        shown.replace('\\', "/")
+    } else {
+        shown
+    }
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -42,12 +53,12 @@ pub fn run(args: &WhyArgs) -> Result<Code> {
         .and_then(|ctx| ctx.project.as_deref())
         .and_then(|root| crate::repo::find(&home, Path::new(root)).ok().flatten())
         .map(|found| File {
-            shown: paths.path(&found.path),
+            shown: slashed(paths.path(&found.path)),
             text: found.text,
         });
     let read = |path: &Path| {
         std::fs::read_to_string(path).ok().map(|text| File {
-            shown: paths.path(path),
+            shown: slashed(paths.path(path)),
             text,
         })
     };
