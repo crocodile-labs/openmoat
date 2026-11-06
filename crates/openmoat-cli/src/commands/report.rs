@@ -91,13 +91,14 @@ fn staging(
     let mut sessions = BTreeSet::new();
     for event in events {
         let reasons: Vec<String> = serde_json::from_str(event.reasons.get()).unwrap_or_default();
-        let marked: Vec<&String> = reasons.iter().filter(|r| r.contains(&marker)).collect();
-        if marked.is_empty() {
+        let staging_reasons: Vec<&String> =
+            reasons.iter().filter(|r| r.contains(&marker)).collect();
+        if staging_reasons.is_empty() {
             continue;
         }
         out.sends += 1;
         sessions.insert((event.host, event.session_id));
-        for (reads, folders, staged) in marked.iter().filter_map(|r| counts(r)) {
+        for (reads, folders, staged) in staging_reasons.iter().filter_map(|r| counts(r)) {
             out.most_outside_reads = out.most_outside_reads.max(reads);
             out.most_outside_folders = out.most_outside_folders.max(folders);
             out.most_staged = out.most_staged.max(staged);
