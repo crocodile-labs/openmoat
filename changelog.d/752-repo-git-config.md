@@ -1,2 +1,0 @@
-### Security
-- `openmoat doctor` and `openmoat status` name the current repository's git configuration that makes git run a program (`core.fsmonitor`, a hooks path, a pager or editor, diff and merge drivers, filters, a credential helper command, `!` aliases, includes), which the agent's own background git runs before any hook; `status --format json` lists them as `repo_git_config` ([#752](https://github.com/crocodile-labs/openmoat/pull/752)).
