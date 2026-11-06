@@ -5,8 +5,8 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` \
-         hooks, fail-closed",
+    hooked_by: "`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` \
+         and `beforeTabFileRead` hooks, fail-closed",
     protection: "hook + OS sandbox (macOS, Linux); hook only on Windows",
     tools: TOOLS,
 };
@@ -14,6 +14,11 @@ pub(super) const DOCS: HostDocs = HostDocs {
 const TOOLS: &[ToolRow] = &[
     ToolRow::new("`beforeShellExecution`", "`command`", "`Shell`"),
     ToolRow::new("`beforeReadFile`", "`file_path`", "`FsRead`"),
+    ToolRow::new(
+        "`beforeTabFileRead` (Tab, the inline completion)",
+        "`file_path`; answered `allow` or `deny` only, a `defer` as `allow`",
+        "`FsRead`",
+    ),
     ToolRow::new(
         "`beforeMCPExecution`",
         "`mcp_server_name`, `tool_name`, `tool_input`",

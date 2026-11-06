@@ -7,17 +7,17 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Reviews | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 159 | 72 | 10 |
+| T1 | Secret exfiltration via shell | 159 | 73 | 10 |
 | T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
 | T5 | Supply-chain execution | 29 | 67 | 15 |
 | T6 | Environment poisoning | 60 | 39 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 34 | 1 | 13 |
-| T9 | Hook / policy tampering by the agent | 413 | 140 | 57 |
+| T8 | MCP tool poisoning / over-privileged tools | 36 | 1 | 13 |
+| T9 | Hook / policy tampering by the agent | 413 | 153 | 57 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
-| T11 | Time-of-check / time-of-use, symlinks | 31 | 4 | 6 |
+| T11 | Time-of-check / time-of-use, symlinks | 31 | 6 | 6 |
 | T12 | Network to unknown hosts | 114 | 20 | 23 |
 
 ## T1: Secret exfiltration via shell
@@ -240,6 +240,7 @@ the verdict and rule ids the default policy must produce for it.
 - `defer-copy-from-command-output` (review): Defer [unparseable]
 - `review-key-under-command-output` (review): Review [secret-names]
 - `review-home-search-as-operand` (review): Review [home-sweep]
+- `review-ide-execute-code` (review): Review [unchecked]
 - `review-curl-form-uploads-project-file` (review): Defer [default]
 - `review-xargs-here-string-project-files` (review): Defer [default]
 - `review-cp-r-codex-folder` (review): Review [protected-contents]
@@ -1140,6 +1141,8 @@ the verdict and rule ids the default policy must produce for it.
 - `T8-mcp-shaped-tool-runs-a-secret-read` (attacks): Deny [secrets-paths]
 - `T8-mcp-filesystem-reads-aws-credentials` (attacks): Deny [secrets-paths]
 - `T8-mcp-resource-file-uri-reads-ssh-key` (attacks): Deny [secrets-paths]
+- `T8-ide-diagnostics-of-aws-credentials` (attacks): Deny [secrets-paths]
+- `T8-ide-diagnostics-of-ssh-key` (attacks): Deny [secrets-paths]
 - `T8-mcp-filesystem-writes-shell-rc` (attacks): Deny [shell-rc]
 - `T8-mcp-fetch-unknown-host` (attacks): Deny [default.net]
 - `T8-mcp-path-nested-past-walk-limit` (attacks): Defer [unparseable]
@@ -1702,6 +1705,19 @@ the verdict and rule ids the default policy must produce for it.
 - `review-write-lefthook` (review): Review [runs-later]
 - `review-write-dot-lefthook` (review): Review [runs-later]
 - `review-write-vscode-tasks` (review): Review [runs-later]
+- `review-write-vscode-launch` (review): Review [runs-later]
+- `review-write-vscode-settings` (review): Review [runs-later]
+- `review-write-vscode-mcp-servers` (review): Review [runs-later]
+- `review-write-vscode-settings-in-a-subproject` (review): Review [runs-later]
+- `review-write-code-workspace` (review): Review [runs-later]
+- `review-write-idea-workspace` (review): Review [runs-later]
+- `review-write-idea-run-configuration` (review): Review [runs-later]
+- `review-write-shared-run-configuration` (review): Review [runs-later]
+- `review-write-vscode-launch-relative` (review): Review [runs-later]
+- `review-write-idea-workspace-relative-dotdot` (review): Review [runs-later]
+- `review-shell-writes-vscode-tasks-relative` (review): Review [runs-later]
+- `review-rename-folder-onto-vscode` (review): Review [runs-later]
+- `review-rename-folder-onto-idea` (review): Review [runs-later]
 - `review-workflow-in-an-allowed-directory` (review): Review [runs-later]
 - `review-husky-in-an-allowed-directory` (review): Review [runs-later]
 - `review-write-claude-code-hook-script` (review): Review [runs-later]
@@ -1853,6 +1869,8 @@ the verdict and rule ids the default policy must produce for it.
 - `review-create-symlink-and-read-through-it` (review): Defer [default]
 - `review-linked-project-read-through-link-outside` (review): Defer [default]
 - `review-python-script-through-link-outside-project` (review): Defer [default]
+- `review-vscode-launch-through-a-symlinked-dir` (review): Review [runs-later]
+- `review-idea-workspace-through-a-symlinked-file` (review): Review [runs-later]
 - `review-workflow-through-a-symlinked-dir` (review): Review [runs-later]
 
 ## T12: Network to unknown hosts

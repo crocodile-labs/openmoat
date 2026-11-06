@@ -618,7 +618,11 @@ allow:
     # directory), so writing one needs review like the root's own `.git`
     fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
       # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` needs review)
-      "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
+      "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml",
+      # the editors' project configuration, whose tasks, launch and run configurations and
+      # program settings the editor runs (`runs-later` needs review)
+      "!${project}/**/.vscode/**", "!${project}/**/.vscode", "!${project}/**/*.code-workspace",
+      "!${project}/**/.idea/**", "!${project}/**/.idea", "!${project}/**/*.run.xml",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
       "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
       "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json",
@@ -1048,7 +1052,15 @@ review:
   # home files are the hosts' own state, which `moat run --write` may grant
   - id: runs-later
     reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
-    fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json",
+    fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml",
+      # the editors' project configuration and the folders that hold it: VS Code's (and
+      # its forks') `.vscode/` and `.code-workspace` files, whose tasks, launch
+      # configurations, MCP servers and settings that name a program (a terminal
+      # profile, an interpreter, a formatter's path) the editor runs; JetBrains' `.idea/`
+      # and shared `*.run.xml` run configurations, which it runs, and which an agent's
+      # accepted edit could otherwise turn into a command no prompt asked about
+      # (code.claude.com/docs/en/jetbrains, "Security considerations")
+      "**/.vscode/**", "**/.vscode", "**/*.code-workspace", "**/.idea/**", "**/.idea", "**/*.run.xml",
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights

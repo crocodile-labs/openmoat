@@ -1,0 +1,9 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "mcp__ide__getDiagnostics",
+  "tool_input": { "uri": "file:///p/src/lib.rs" },
+  "tool_use_id": "toolu_11IDE"
+}

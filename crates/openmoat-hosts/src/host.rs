@@ -14,7 +14,8 @@ crate::registry::hosts! {
     ClaudeCode => claude_code,
     /// The Codex CLI (`PreToolUse`).
     Codex => codex,
-    /// Cursor (`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse`).
+    /// Cursor (`beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse`,
+    /// `beforeTabFileRead`).
     Cursor => cursor,
     /// The Continue CLI (`cn`), which runs the Claude Code hooks. It has no hook
     /// of its own to install, so it is not in [`Host::ALL`]; `guard` recognises

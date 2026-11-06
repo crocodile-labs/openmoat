@@ -25,10 +25,11 @@ pub(super) fn hooks(shown: &mut Shown, home: &Home, binary: &Path) -> Result<boo
         let name = host.display_name();
         // A version with a published advisory, a flaw no hook sees: a warning,
         // which does not make the status unhealthy.
-        let advisory = config
-            .host_present()
-            .then(|| crate::install::host_version::advisory(host))
-            .flatten();
+        let advisories = if config.host_present() {
+            crate::install::host_version::advisories(host)
+        } else {
+            Vec::new()
+        };
         // A version that does not load OpenMoat's hook (OpenCode before
         // 1.3.4), whatever the hook file says.
         let unsupported = config
@@ -64,8 +65,16 @@ pub(super) fn hooks(shown: &mut Shown, home: &Home, binary: &Path) -> Result<boo
             healthy = false;
             shown.attention.push(row);
         }
-        if let Some(advisory) = advisory {
+        for advisory in advisories {
             shown.needs(Mark::Attention, name, advisory);
+        }
+        // The copies editor extensions bundle, which read the same hook file.
+        for (fine, line) in crate::install::host_version::bundled_lines(host) {
+            if fine {
+                shown.agents.push(Row::new(Mark::Info, name, line));
+            } else {
+                shown.needs(Mark::Attention, name, line);
+            }
         }
         if installed && let Some(warning) = config.trust_warning() {
             let row = Row::new(Mark::Attention, name, warning);

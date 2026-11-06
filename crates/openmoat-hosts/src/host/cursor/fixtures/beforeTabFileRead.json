@@ -1,0 +1,7 @@
+{
+  "conversation_id": "conv-42", "generation_id": "gen-9", "hook_event_name": "beforeTabFileRead",
+  "cursor_version": "3.29.0", "workspace_roots": ["/p"],
+  "user_email": null, "transcript_path": null,
+  "file_path": "/p/.env",
+  "content": "API_TOKEN=not-a-real-value\n"
+}

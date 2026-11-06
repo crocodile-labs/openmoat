@@ -1477,6 +1477,79 @@
   threat: T9
   action: { fs_write: "/p/.vscode/tasks.json" }
   expect: { verdict: review, rules: [runs-later] }
+# The editors run what their project configuration names: VS Code's launch
+# configurations, MCP servers and settings that name a program (a terminal
+# profile, an interpreter), a `.code-workspace` file holding all of them, and
+# JetBrains' run configurations in `.idea/` or a shared `*.run.xml`. An accepted
+# edit of one turns into a command no prompt asked about (code.claude.com/docs/en/jetbrains).
+- id: review-write-vscode-launch
+  threat: T9
+  action: { fs_write: "/p/.vscode/launch.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-vscode-settings
+  threat: T9
+  action: { fs_write: "/p/.vscode/settings.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-vscode-mcp-servers
+  threat: T9
+  action: { fs_write: "/p/.vscode/mcp.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-vscode-settings-in-a-subproject
+  threat: T9
+  action: { fs_write: "/p/packages/app/.vscode/settings.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-code-workspace
+  threat: T9
+  action: { fs_write: "/p/app.code-workspace" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-idea-workspace
+  threat: T9
+  action: { fs_write: "/p/.idea/workspace.xml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-idea-run-configuration
+  threat: T9
+  action: { fs_write: "/p/.idea/runConfigurations/Server.xml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-shared-run-configuration
+  threat: T9
+  action: { fs_write: "/p/.run/Server.run.xml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-vscode-launch-relative
+  threat: T9
+  action: { fs_write: ".vscode/launch.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-write-idea-workspace-relative-dotdot
+  threat: T9
+  action: { fs_write: "src/../.idea/workspace.xml" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-shell-writes-vscode-tasks-relative
+  threat: T9
+  action: { shell: "echo '{}' > .vscode/tasks.json" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-vscode-launch-through-a-symlinked-dir
+  threat: T11
+  action: { fs_write: "/p/editor/launch.json" }
+  links: { /p/editor: /p/.vscode }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-idea-workspace-through-a-symlinked-file
+  threat: T11
+  action: { shell: "echo x > notes.xml" }
+  links: { /p/notes.xml: /p/.idea/workspace.xml }
+  expect: { verdict: review, rules: [runs-later] }
+# VS Code's `executeCode` runs Python in the notebook's kernel, which OpenMoat
+# does not read: held for review, never passed on as an MCP call by name
+- id: review-ide-execute-code
+  threat: T1
+  action: { mcp_tool: { name: mcp__ide__executeCode }, unchecked: "runs Python code in the notebook's kernel, which OpenMoat does not read" }
+  expect: { verdict: review, rules: [unchecked] }
+- id: review-rename-folder-onto-vscode
+  threat: T9
+  action: { shell: "mv staged .vscode" }
+  expect: { verdict: review, rules: [runs-later] }
+- id: review-rename-folder-onto-idea
+  threat: T9
+  action: { shell: "mv staged .idea" }
+  expect: { verdict: review, rules: [runs-later] }
 - id: review-workflow-through-a-symlinked-dir
   threat: T11
   action: { shell: "echo x > ci/ci.yml" }

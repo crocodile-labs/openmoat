@@ -1,6 +1,6 @@
 # Cursor (`cursor`)
 
-Cursor, through four of its hooks. Every fact here comes from [`cursor.rs`](../cursor.rs)
+Cursor, through five of its hooks. Every fact here comes from [`cursor.rs`](../cursor.rs)
 and [`doc.rs`](doc.rs); if they disagree, the code wins.
 
 ## Hooks OpenMoat installs
@@ -11,6 +11,7 @@ and [`doc.rs`](doc.rs); if they disagree, the code wins.
 | `beforeMCPExecution` | 600 s |
 | `beforeReadFile` | 600 s |
 | `preToolUse` | 600 s |
+| `beforeTabFileRead` | 600 s |
 
 Each entry sets `failClosed`. Output is `{"permission", "user_message", "agent_message"}`;
 exit 2 also denies.
@@ -19,6 +20,12 @@ exit 2 also denies.
 
 - `beforeShellExecution` (`Shell`), `beforeReadFile` (`FsRead`), `beforeMCPExecution`
   (`McpTool` `mcp__<server>__<tool>`).
+- `beforeTabFileRead` (`FsRead`, recorded as `TabRead`): Tab, the inline completion, reads
+  a file it sends to Cursor's model. Its output is `permission` alone, and a response that
+  does not match that schema blocks the read, so OpenMoat answers only
+  `{"permission":"allow"|"deny"}` ([`tab.rs`](tab.rs)): `allow` for `allow` and `defer`,
+  `deny` for the rest. Tab has no question to ask, and holding every file outside the
+  project would only stop completions there.
 - `preToolUse`: `Read` (`FsRead`); `Write`, `Edit`, `MultiEdit`, `StrReplace`, `Delete`
   (`FsWrite`); `Grep`, `Glob` and the listing and search tools that name a path
   (`FsRead`, `ReadFiles`); any other tool that names a path (`FsWrite`, `Patch`);
@@ -63,6 +70,28 @@ Cursor runs the call when the hook is missing, crashes or times out, unless the 
 sets `failClosed: true`; then it blocks the call. `openmoat status` and `openmoat doctor`
 report an entry of OpenMoat's without it as "not protected", and `openmoat init` puts it
 back.
+
+## Claude Code's hooks in Cursor
+
+Cursor loads `~/.claude/settings.json` and a project's `.claude/settings*.json` hooks by
+default and runs them beside its own, ranking its own above them
+(<https://cursor.com/docs/reference/third-party-hooks>). So OpenMoat's Claude Code hook
+runs in Cursor too, fail-open. It reads such a payload as Cursor's `preToolUse`
+([claude_code HOST.md](../claude_code/HOST.md#run-by-cursor)); the Cursor hooks here remain
+Cursor's protection. With both set up, a call is recorded twice.
+
+## Cloud agents and tools without a hook name
+
+Cursor's cloud agents do not load `~/.cursor/hooks.json`, so OpenMoat checks none of
+their calls; a project's `.cursor/hooks.json` runs there, but it is the repository's.
+`beforeTabFileRead` and `beforeMCPExecution` do not run in cloud agents at all
+(<https://cursor.com/docs/agent/hooks>, checked 2026-11-06).
+
+The hook docs name no browser, web or memory tool among `preToolUse`'s tools (`Shell`,
+`Read`, `Write`, `Grep`, `Delete`, `Task`, `MCP:<tool>`). A tool that reaches `preToolUse` is decided (an unnamed one as
+`tool.unknown`, with every path and URL it names checked); whether the browser tools reach
+it is not documented and not confirmed by a capture, so THREAT_MODEL §5 lists them as not
+confirmed hooked.
 
 ## Known gaps
 

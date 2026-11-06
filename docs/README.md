@@ -12,6 +12,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 |---|---|
 | [README](../README.md) | What OpenMoat is, the quick start, supported agents and the main limits |
 | [INSTALL.md](INSTALL.md) | Install and upgrade on macOS, Linux and Windows; `openmoat init`; what each agent's hook covers; other config directories |
+| [IDE.md](IDE.md) | Claude Code in VS Code and JetBrains, and Cursor's editor: what the hook covers there, the setup and checks, what is not covered |
 | [DEMO.md](DEMO.md) | The launch demo, run in a throwaway home |
 
 ## Use

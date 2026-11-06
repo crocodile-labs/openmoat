@@ -1422,6 +1422,18 @@
   threat: T8
   action: { mcp_tool: { name: mcp__filesystem__read_resource, reads: ["~/.ssh/id_ed25519"] } }
   expect: { verdict: deny, rules: [secrets-paths] }
+# Claude Code's editor tools in VS Code and JetBrains: `getDiagnostics` with a
+# `uri` reads that file's errors and warnings, which quote its lines; the
+# adapter reads it as a read of the file, which a `Read` deny rule of Claude
+# Code's own does not cover (code.claude.com/docs/en/vs-code).
+- id: T8-ide-diagnostics-of-aws-credentials
+  threat: T8
+  action: { mcp_tool: { name: mcp__claude-vscode__getDiagnostics, reads: ["~/.aws/credentials"] } }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T8-ide-diagnostics-of-ssh-key
+  threat: T8
+  action: { mcp_tool: { name: mcp__ide__getDiagnostics, reads: ["/Users/me/.ssh/id_ed25519"] } }
+  expect: { verdict: deny, rules: [secrets-paths] }
 - id: T8-mcp-filesystem-writes-shell-rc
   threat: T8
   action: { mcp_tool: { name: mcp__filesystem__write_file, writes: ["~/.zshrc"] } }

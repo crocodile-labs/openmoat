@@ -164,6 +164,68 @@ fn an_older_claude_code_gets_no_on_failure_until_it_is_updated() {
     assert!(!doctor.contains("onFailure"), "{doctor}");
 }
 
+/// The Claude Code extension for VS Code bundles its own Claude Code and puts
+/// no `claude` on `PATH`: `init` reads the extension's version from VS Code's
+/// `extensions.json` and writes `onFailure` for it, and `doctor` and `status`
+/// name the copy. An older copy beside it leaves the key out, as an older
+/// `claude` on `PATH` does.
+#[test]
+fn the_vs_code_extensions_claude_code_gets_on_failure() {
+    for (versions, blocks) in [
+        (&["2.1.318"][..], true),
+        (&["2.1.318", "2.1.200"][..], false),
+    ] {
+        let sb = Sandbox::bare(&[".claude"]);
+        let extensions = sb.home.join(".vscode/extensions");
+        let entries: Vec<Value> = versions
+            .iter()
+            .map(|version| {
+                let folder = format!("anthropic.claude-code-{version}-darwin-arm64");
+                fs::create_dir_all(extensions.join(&folder)).unwrap();
+                serde_json::json!({"identifier": {"id": "anthropic.claude-code"},
+                    "version": version, "relativeLocation": folder})
+            })
+            .collect();
+        fs::write(
+            extensions.join("extensions.json"),
+            Value::from(entries).to_string(),
+        )
+        .unwrap();
+        // No `claude` on `PATH`: only the extension's copies.
+        let no_cli = |args: &[&str]| {
+            output(
+                sb.command().args(args).env("MOAT_CLAUDE_CODE_VERSION", ""),
+                None,
+            )
+        };
+        let out = no_cli(&["init", "--yes"]);
+        assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+        let settings = sb.home.join(".claude/settings.json");
+        let doc: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        let handler = &doc["hooks"]["PreToolUse"][0]["hooks"][0];
+        assert_eq!(
+            handler.get("onFailure").is_some(),
+            blocks,
+            "{versions:?}: {handler}"
+        );
+        let doctor = stdout(&no_cli(&["doctor"]));
+        for version in versions {
+            let copy = format!("Claude Code {version} bundled by the VS Code extension");
+            assert!(doctor.contains(&copy), "{doctor}");
+        }
+        assert_eq!(
+            doctor.contains("no `onFailure: \"block\"`"),
+            !blocks,
+            "{doctor}"
+        );
+        let status = squash(&stdout(&no_cli(&["status"])));
+        assert!(
+            status.contains("bundled by the VS Code extension"),
+            "{status}"
+        );
+    }
+}
+
 /// #327: Claude Code's sandbox cannot run on native Windows, so its hook is all
 /// OpenMoat gives it there.
 #[cfg(windows)]

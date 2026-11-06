@@ -78,20 +78,61 @@ pub fn hook_api(host: Host) -> Option<String> {
     Some(format!("{} {}: {hook}", gate.program, dotted(version)))
 }
 
-/// One line on the published security advisories `host`'s version on the
-/// search path is affected by on this system; `None` when its spec names
-/// none, the program is not found, its version cannot be read, or none
-/// applies.
-pub fn advisory(host: Host) -> Option<String> {
+/// One line for each copy of `host`'s program affected by published security
+/// advisories on this system: the one on the search path, then each an
+/// editor extension bundles ([`super::bundled`]), named with its editor.
+/// Empty when its spec names none, no copy is found or none applies.
+pub fn advisories(host: Host) -> Vec<String> {
     let advisories = &host.spec().advisories;
     if advisories.program.is_empty() {
-        return None;
+        return Vec::new();
     }
-    let version = version(advisories.program)?;
-    let affecting: Vec<&Advisory> = advisories
-        .affecting(version, crate::os_version::platform())
-        .collect();
-    advisory_line(host.display_name(), version, &affecting)
+    let platform = crate::os_version::platform();
+    let line = |name: &str, version: Version| {
+        let affecting: Vec<&Advisory> = advisories.affecting(version, platform).collect();
+        advisory_line(name, version, &affecting)
+    };
+    let on_path = version(advisories.program).and_then(|v| line(host.display_name(), v));
+    let bundled = super::bundled::copies(host).into_iter().filter_map(|copy| {
+        let name = format!("{} in the {} extension", host.display_name(), copy.editor);
+        line(&name, copy.version)
+    });
+    on_path.into_iter().chain(bundled).collect()
+}
+
+/// One line for each copy of `host`'s program an editor extension bundles
+/// ([`super::bundled`]), for `moat status` and `moat doctor`: the editor, its
+/// version and where it is, and, when the host's entries ask for `onFailure`,
+/// whether the copy is too old to read it; `false` with such a line.
+pub fn bundled_lines(host: Host) -> Vec<(bool, String)> {
+    let blocks = host
+        .spec()
+        .install
+        .as_ref()
+        .is_some_and(|i| i.hooks.iter().any(|h| h.block_on_failure));
+    super::bundled::copies(host)
+        .into_iter()
+        .map(|copy| {
+            let old = blocks && !super::claude_version::supports_on_failure(copy.version);
+            let note = if old {
+                format!(
+                    "; older than {}, so a failed hook runs the call: update the extension, \
+                     then run `openmoat init`",
+                    super::claude_version::on_failure_since()
+                )
+            } else {
+                String::new()
+            };
+            let line = format!(
+                "{} {} bundled by the {} extension at {}{note}",
+                host.display_name(),
+                dotted(copy.version),
+                copy.editor,
+                copy.dir.display()
+            );
+            (!old, line)
+        })
+        .collect()
 }
 
 /// [`prefetch`] for every host whose directory is on this machine (in
@@ -107,7 +148,7 @@ pub fn prefetch_present(home: &crate::home::Home) {
     );
 }
 
-/// Ask every host in `hosts` for its version at once, so the [`advisory`]
+/// Ask every host in `hosts` for its version at once, so the [`advisories`]
 /// and [`unsupported`] calls that follow find them known: each program may
 /// take up to the probe's limit to answer.
 pub fn prefetch(hosts: impl IntoIterator<Item = Host>) {

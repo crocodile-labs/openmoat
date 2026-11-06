@@ -1,0 +1,2 @@
+### Changed
+- **Breaking** `openmoat-hosts`: `HostSpec` has a new public field `bundled` (`&'static [Bundle]`), and the new public type `Bundle` names an editor's extensions folder and the extension that bundles a host's program; Claude Code's `HostSpec` lists the VS Code extension's folders, and Cursor's hooks include `beforeTabFileRead` ([#752](https://github.com/crocodile-labs/openmoat/pull/752)).

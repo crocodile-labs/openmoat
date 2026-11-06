@@ -21,8 +21,14 @@ Anthropic's Claude Code. Its `PreToolUse` format is also what the Continue CLI s
 - `WebFetch` (`Fetch`), `WebSearch` (`WebSearch`).
 - `Artifact`, `ArtifactData` (`ReadFiles`, `Patch`, `Fetch`; `FsRead`).
 - `ReadMcpResourceTool` (`McpTool` `mcp__<server>__read_resource`), `mcp__<server>__<tool>` (`McpTool`).
+- The editor tools of VS Code and JetBrains ([`ide_tools.rs`](ide_tools.rs)):
+  `mcp__ide__getDiagnostics` and `mcp__claude-vscode__getDiagnostics` (`McpTool` reading the
+  file its `uri` names, else the working directory), `mcp__ide__executeCode` (`Unchecked`
+  `McpTool`: at least `review`).
 - `EnterWorktree` with a `path` (`FsRead`).
 - Ungoverned: `Task`, `Skill`, `EnterWorktree` without a `path`, and any other tool.
+- A payload Cursor sends to this hook (it carries `cursor_version`) is read as Cursor's
+  `preToolUse` ([`from_cursor.rs`](from_cursor.rs), below).
 
 The full table is in [ARCHITECTURE.md](../../../../../docs/ARCHITECTURE.md) §3.
 
@@ -56,14 +62,60 @@ search path is a version with a published advisory (`advisories.rs`).
 
 Before 2.1.295 Claude Code runs the call when the hook is missing, cannot start, exits
 non-zero other than 2, or times out (default 600 s); from 2.1.295 it blocks it
-(`openmoat init` sets `onFailure: "block"`).
+(`openmoat init` sets `onFailure: "block"`). On Windows without Git for Windows or Git
+Bash, before 2.1.310 a hook's block, its exit 2 included, can still let the call through
+(changelog 2.1.299, 2.1.309, 2.1.310); `openmoat status` and `openmoat doctor` warn about
+such a version as an advisory.
 
-`openmoat init` writes `onFailure` only when the `claude` on the search path reports
-2.1.295 or later, since older versions reject the key. A person who runs Claude Code only
-from the desktop app or an IDE extension, with no `claude` on the search path, gets
-entries without it, so a hook that fails runs the call. `openmoat doctor` warns about
-that ("runs a tool call when its hook fails to start, crashes or times out"); install the
-CLI, or put its `claude` on the search path, and run `openmoat init` again.
+`openmoat init` writes `onFailure` only when every Claude Code it finds reads it (2.1.295
+or later), since a key an older version rejects can stop every hook in the file: the
+`claude` on the search path and each copy an editor extension bundles. The VS Code
+extension bundles its own Claude Code and puts no `claude` on the search path; OpenMoat
+reads its version, which is the extension's, from `extensions.json` in the extensions
+folder of VS Code, VS Code Insiders, VS Code Server, Cursor, Windsurf and VSCodium
+(`BUNDLED` in [`claude_code.rs`](../claude_code.rs)), without running it. `status` and
+`doctor` name each copy, and warn about one older than 2.1.295. A person who runs Claude
+Code only from the desktop app, with no `claude` on the search path and no extension,
+gets entries without the key, so a hook that fails runs the call; `doctor` warns about
+that ("runs a tool call when its hook fails to start, crashes or times out"). Once
+written, the key stays on a later `init`.
+
+## In VS Code and JetBrains
+
+The same hook protects Claude Code in the VS Code extension and the JetBrains plugin:
+both read `~/.claude/settings.json` ([IDE.md](../../../../../docs/IDE.md) has the steps).
+
+- **JetBrains** bundles no Claude Code: the plugin runs the `claude` on the search path,
+  or the command its settings name, which OpenMoat does not read. Name the same `claude`
+  in both, or `init` cannot see its version.
+- **Editor tools**: `getDiagnostics` returns errors and warnings that quote the file's
+  lines, so a secret's are denied as a `Read` of it is; `executeCode` runs Python in the
+  VS Code notebook's kernel and needs review, before the editor's own Execute or Cancel
+  question. The argument names (`uri`, `code`) are the tools' schema as Claude Code shows
+  it to the model; the docs do not list them.
+- **The editors' own files**: `.vscode/`, `.idea/`, `*.code-workspace` and `*.run.xml`
+  are `runs-later`, so an agent's write there needs review (ADR-060).
+- **Not covered**: the editor selection and open-file context Claude Code adds to each
+  prompt is no tool call, so no hook sees it (Claude Code's own `Read` deny rules keep a
+  file's selection out); `claudeCode.claudeProcessWrapper` runs another program as
+  Claude Code.
+
+A project's `.claude/settings.json` can set `disableAllHooks`, which turns OpenMoat's
+user-level hook off for that project; `openmoat status` and `openmoat doctor` report it
+([`project_settings.rs`](project_settings.rs)) whichever front end runs the session.
+Hooks in managed settings are the one tier a project cannot turn off; put OpenMoat's
+entries there for a machine a repository must not be able to unhook.
+
+## Run by Cursor
+
+Cursor loads Claude Code's hooks by default ("Include Third-Party Plugins, Skills, and
+Other Configs"), maps `PreToolUse` to `preToolUse`, runs every matching hook and lets its
+own hooks win a conflict; it fails open on any exit but 0 and 2 for them and does not read
+`onFailure` (<https://cursor.com/docs/reference/third-party-hooks>). A payload with
+`cursor_version` is read as Cursor's `preToolUse`, its `Shell` as the command, and
+answered as a call that cannot prompt: a `review` is a deny, a `defer` no answer. A Cursor
+`sessionStart` decides nothing. This hook is not Cursor's protection: the Cursor hooks
+`openmoat init` installs are. With both set up, a call is recorded twice, once by each.
 
 ## Known gaps
 

@@ -28,7 +28,8 @@ struct Payload {
 }
 
 pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
-    let mut request = pre_tool_use::parse(host, payload)?;
+    // The same mapping as the call's `PreToolUse`, editor tools included.
+    let mut request = pre_tool_use::parse_with(host, payload, super::ide_tools::action)?;
     let p: Payload = serde_json::from_str(payload)?;
     let mut output = String::new();
     collect_text(&p.tool_response, &mut output);

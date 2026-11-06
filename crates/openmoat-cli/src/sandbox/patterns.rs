@@ -55,7 +55,13 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.pre-commit-config.yaml",
     "**/lefthook.yml",
     "**/.lefthook.yml",
-    "**/.vscode/tasks.json",
+    // the editors' project configuration, with the folders that hold it
+    "**/.vscode/**",
+    "**/.vscode",
+    "**/*.code-workspace",
+    "**/.idea/**",
+    "**/.idea",
+    "**/*.run.xml",
     "**/.claude/hooks/**",
     "**/.mcp.json",
     "**/.cursor/mcp.json",
@@ -332,7 +338,8 @@ mod tests {
         for file in [
             "**/.github/workflows/**",
             "**/.husky/**",
-            "**/.vscode/tasks.json",
+            "**/.vscode/**",
+            "**/.idea/**",
         ] {
             assert!(!AGENT_CONFIG.contains(&file), "{file}");
         }

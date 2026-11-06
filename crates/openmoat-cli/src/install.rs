@@ -1,6 +1,7 @@
 //! Host hook installation.
 
 mod binary;
+pub mod bundled;
 mod claude_version;
 pub mod consent;
 mod dirs;
@@ -22,6 +23,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::{ExtraFile, Host, InstallSpec, Locate, Located};
 
 pub use binary::{alias_of, hook_binary, other_name, stale_hint};
+pub use claude_version::on_failure_since;
 pub use dirs::{Recorded, also_dirs};
 pub use hook_file::{HookState, Outcome, read_or_empty};
 pub use openmoat_hosts::{GUARD_BUDGET_S, HookLayout, HookSpec};

@@ -695,7 +695,7 @@ something OpenMoat claims to stop.
   docs`); do not edit the list:
 
   <!-- generated:hosts-gaps -->
-  - **Claude Code.** Known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295 calls run unchecked if the hook binary is missing or crashes. When the hook fails: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`openmoat init` sets `onFailure: "block"`).
+  - **Claude Code.** Known gaps: file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude Code 2.1.295 calls run unchecked if the hook binary is missing or crashes. When the hook fails: before 2.1.295 runs the call when the hook is missing, cannot start, exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it (`openmoat init` sets `onFailure: "block"`); on Windows without Git for Windows or Git Bash, before 2.1.310 a hook's block, its exit 2 included, can still let the call through.
   - **Codex.** Known gaps: web search, hosted tools, code mode's `exec`/`wait` and `request_permissions` are not hooked; what `write_stdin` types into a running command is not hooked, so a command that starts a shell, REPL, editor or login without its own commands needs review; reviews become denies; Codex skips a new or changed hook until the person trusts it in `/hooks`, and `[features] hooks = false` turns hooks off (`openmoat status` and `doctor` report that); calls run unchecked if the hook binary is missing or crashes. When the hook fails: runs the call when the hook is missing, cannot start, exits non-zero other than 2 (or 2 with nothing on stderr), or times out (default 600 s).
   - **Cursor.** Known gaps: commands Cursor runs outside its sandbox (a rerun or call its Auto-review classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) are not confined; file-tool reviews become denies; Task and tools that name no path are not hooked; a failed hook blocks the call. When the hook fails: runs the call when the hook is missing, crashes or times out, unless the hook entry sets `failClosed: true`; then it blocks the call.
   - **OpenClaw.** Known gaps: no OS sandbox from OpenMoat; parameters another plugin changes are undone, except where that plugin also asks for approval (OpenClaw then keeps the parameters the person approved) or runs after OpenMoat's last handler, at the same lowest priority or a lower one (`-Infinity`); OpenClaw's process input is not checked; calls run unchecked if the Gateway does not load the plugin (`openmoat status` and `doctor` say when it has not reported loading since it or OpenClaw changed); a failed or slow hook blocks the call. When the hook fails: blocks the call when OpenMoat's plugin throws or times out (OpenClaw's `before_tool_call` fails closed), and the plugin blocks when `openmoat` is missing, crashes or does not answer; runs the call unchecked when the Gateway does not load the plugin (a load error leaves the plugin `status: "error"` and the Gateway running).
@@ -989,11 +989,15 @@ something OpenMoat claims to stop.
   fail-closed setting. Claude Code has one since 2.1.295 (`onFailure: "block"` on a
   `command` hook: a hook that cannot start, crashes, exits other than 0 or 2, or times
   out then blocks the call as exit 2 does). `openmoat init` writes it on the `PreToolUse`
-  entry only when the `claude` on `PATH` reports 2.1.295 or later, because the docs do
-  not say what an older Claude Code does with a key it does not know, and one hook entry
-  its settings schema rejects can stop every hook from running. With an older Claude
-  Code, or none on `PATH` (an IDE-only install), the key is left out and `openmoat doctor`
-  warns. A key already written is kept, also after a downgrade below 2.1.295, which then
+  entry only when every Claude Code it finds reports 2.1.295 or later (the `claude` on
+  `PATH` and each copy a VS Code extension bundles, read from the editor's
+  `extensions.json`), because the docs do not say what an older Claude Code does with a
+  key it does not know, and one hook entry its settings schema rejects can stop every
+  hook from running. With an older copy, or none found (the desktop app only, or the
+  JetBrains plugin running a `claude` not on `PATH`), the key is left out and `openmoat
+  doctor` warns. On Windows without Git for Windows or Git Bash, Claude Code before
+  2.1.310 can let a call through that the hook blocked (exit 2 included); `status` and
+  `doctor` warn about such a version. A key already written is kept, also after a downgrade below 2.1.295, which then
   depends on that older version ignoring it. `ConfigChange` gets no `onFailure`: a broken
   `openmoat` would then block every settings reload. Before 2.1.295, Claude Code's own deny
   rules for secrets and OpenMoat's files, which `openmoat init` writes on every OS, still
@@ -1071,6 +1075,18 @@ something OpenMoat claims to stop.
   there as a deny. A file write or read that needs approval is blocked until a person
   approves that exact file with `openmoat` or `openmoat allow --last`, or a policy allow rule
   covers it.
+- **Claude Code in VS Code and JetBrains, and Cursor's editor** ([IDE.md](IDE.md),
+  ADR-060). The `claude-code` hook covers the editors' Claude Code as the CLI; `init`
+  reads the VS Code extension's bundled copy for `onFailure`. Not covered: the editor
+  selection and open-file context Claude Code adds to each prompt (no tool call; Claude
+  Code's own `Read` deny rules keep a file's selection out); a VS Code
+  `claudeCode.claudeProcessWrapper`; the JetBrains plugin's own command setting, which
+  OpenMoat does not read. `mcp__ide__executeCode` runs Python OpenMoat does not read, so
+  it needs review. In Cursor: cloud agents load no user hooks, so OpenMoat checks none of
+  their calls; browser, web and memory tools have no documented `preToolUse` name and are
+  not confirmed hooked; Tab reads (`beforeTabFileRead`) are checked, with a `defer`
+  allowed; Claude Code's hook, which Cursor also runs fail-open, is read as Cursor's
+  `preToolUse` and is not Cursor's protection.
 - **Ungoverned tools.** Claude Code orchestration tools whose own calls are hooked;
   Codex web search (a hosted tool its hook never sees) and other hosted tools;
   Cursor `Shell` and `MCP:<tool>` under `preToolUse` (governed by `beforeShellExecution`

@@ -30,6 +30,7 @@ fn init_installs_fail_closed_hooks_for_every_cursor_event() {
         "beforeMCPExecution",
         "beforeReadFile",
         "preToolUse",
+        "beforeTabFileRead",
     ] {
         let entries = root["hooks"][event]
             .as_array()
@@ -328,4 +329,61 @@ fn a_sandboxed_cursor_command_no_rule_decides_runs_without_a_question() {
         sb.home.display()
     );
     assert_ne!(permission(&persistence, true), "allow");
+}
+
+/// Tab reads a file to complete what the person types: a secret is refused,
+/// any other file read, the project's or one outside it, and the answer is
+/// `permission` alone.
+#[test]
+fn tab_reads_of_a_secret_are_denied_and_others_allowed() {
+    let sb = sandbox();
+    let project = sb.project();
+    let tab = |path: &std::path::Path| {
+        let payload = serde_json::json!({
+            "conversation_id": "c", "hook_event_name": "beforeTabFileRead",
+            "cursor_version": "3.29.0", "workspace_roots": [project.to_string_lossy()],
+            "file_path": path.to_string_lossy(), "content": "x"
+        })
+        .to_string();
+        let out = sb.guard("cursor", &payload);
+        (
+            out.status.code(),
+            crate::common::stdout(&out).trim().to_owned(),
+        )
+    };
+    let (code, answer) = tab(&sb.home.join(".ssh/id_rsa"));
+    assert_eq!(
+        (code, answer.as_str()),
+        (Some(DENY), r#"{"permission":"deny"}"#)
+    );
+    let (code, answer) = tab(&project.join("src/main.rs"));
+    assert_eq!(
+        (code, answer.as_str()),
+        (Some(OK), r#"{"permission":"allow"}"#)
+    );
+    let (_, answer) = tab(&sb.home.join("notes/todo.md"));
+    assert_eq!(answer, r#"{"permission":"allow"}"#, "a defer is allowed");
+}
+
+/// Cursor runs Claude Code's hook too, with its own input: the call is read as
+/// Cursor reads it, so a `Grep` naming a secret in `file_path` is denied
+/// rather than read as a search of the project.
+#[test]
+fn claude_codes_hook_run_by_cursor_reads_cursors_input() {
+    let sb = Sandbox::installed(&[".claude", ".cursor"]);
+    let payload = serde_json::json!({
+        "conversation_id": "c", "hook_event_name": "preToolUse", "cursor_version": "3.29.0",
+        "workspace_roots": [sb.home.to_string_lossy()], "cwd": sb.home.to_string_lossy(),
+        "tool_name": "Grep",
+        "tool_input": {"file_path": sb.home.join(".aws/credentials").to_string_lossy(), "pattern": "k"}
+    })
+    .to_string();
+    let out = sb.guard("claude-code", &payload);
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    let doc = json(&out);
+    assert_eq!(
+        doc["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{doc}"
+    );
+    assert!(doc.to_string().contains("secrets-paths"), "{doc}");
 }

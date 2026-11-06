@@ -1,12 +1,43 @@
 //! Claude Code's published security advisories that name a fixed version
 //! (anthropics/claude-code security advisories, read 2026-10-25), newest fix
-//! first.
+//! first, after the fixes of its changelog (read 2026-11-06) without which
+//! OpenMoat's hook can be passed: on Windows without Git for Windows or Git
+//! Bash, a `PreToolUse` hook that sets no shell, as OpenMoat's does, could let
+//! the call through, exit 2 included. The PowerShell fix of 2.1.316 (a
+//! command that begins with a type cast) and the Monitor fix of 2.1.314
+//! (hooks matching only `Bash`) do not touch OpenMoat's hook, whose command
+//! is its binary and whose matcher names `Monitor`.
 
 use crate::contract::{Advisories, Advisory, Platform};
+
+/// The changelog, where the hook fixes are published.
+const CHANGELOG: &str = "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md";
 
 pub(super) const ADVISORIES: Advisories = Advisories {
     program: "claude",
     list: &[
+        Advisory::new(
+            "changelog 2.1.310",
+            "a PreToolUse hook could let a call through on Windows without Git Bash",
+            ((0, 0, 0), (2, 1, 310)),
+            &[Platform::Windows],
+            CHANGELOG,
+        ),
+        Advisory::new(
+            "changelog 2.1.309",
+            "a hook's exit 2 did not block a call on Windows without Git for Windows",
+            ((0, 0, 0), (2, 1, 309)),
+            &[Platform::Windows],
+            CHANGELOG,
+        ),
+        Advisory::new(
+            "changelog 2.1.299",
+            "a PreToolUse hook that sets no shell failed open on Windows without Git for \
+             Windows",
+            ((0, 0, 0), (2, 1, 299)),
+            &[Platform::Windows],
+            CHANGELOG,
+        ),
         Advisory::new(
             "GHSA-gfvf-j8jh-jxxw",
             "managed settings not applied when a stored API key was preferred",

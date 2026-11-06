@@ -52,7 +52,8 @@ fn sites_dirs_and_removal() {
         "!/real/a/**/.git/**",
         "!/w/a/**/.github/workflows/**",
         "!/real/a/**/.husky/**",
-        "!/w/a/**/.vscode/tasks.json",
+        "!/w/a/**/.vscode/**",
+        "!/real/a/**/.idea/**",
     ] {
         assert!(
             dir.fs_write.iter().any(|p| p == left_out),

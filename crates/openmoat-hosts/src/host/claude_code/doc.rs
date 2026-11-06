@@ -65,9 +65,27 @@ const TOOLS: &[ToolRow] = &[
         "`FsRead`",
     ),
     ToolRow::new(
+        "`mcp__ide__getDiagnostics`, `mcp__claude-vscode__getDiagnostics` (the editor's \
+         errors and warnings, VS Code and JetBrains)",
+        "`uri`: a `file:` URI or an absolute path is a read of that file, without one a read \
+         of the working directory; a `file:` URI without an absolute path is an adapter \
+         error, so `deny`; any other argument is read as for any MCP tool",
+        "`McpTool` with that read",
+    ),
+    ToolRow::new(
+        "`mcp__ide__executeCode` (Python in the VS Code notebook's kernel)",
+        "`code`, which OpenMoat does not read: at least `review`",
+        "`Unchecked` `McpTool`",
+    ),
+    ToolRow::new(
         "`mcp__<server>__<tool>`",
         "tool name and arguments",
         "`McpTool`",
+    ),
+    ToolRow::new(
+        "a payload Cursor sends to this hook (it carries `cursor_version`)",
+        "read as Cursor's `preToolUse` (its `Shell` as the command); cannot prompt",
+        "as Cursor's rows",
     ),
     ToolRow::new(
         "any other tool (`Task`, `Skill`, …)",

@@ -9,6 +9,7 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 
 mod advisory;
 mod base;
+mod bundle;
 mod consent;
 mod docs;
 mod heartbeat;
@@ -22,6 +23,7 @@ mod reviews;
 mod settings;
 
 pub use advisory::{Advisories, Advisory, Platform, Version};
+pub use bundle::Bundle;
 pub use consent::ConsentFile;
 pub use docs::{HostDocs, ToolRow};
 pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
@@ -164,6 +166,11 @@ pub struct HostSpec {
     /// for a host whose other hooks are its project settings' business
     /// ([`Self::project_settings`]) or that has none.
     pub other_hooks: Option<OtherHooks>,
+    /// Editor extensions that ship their own copy of the host's program, off
+    /// the search path (the Claude Code extension for VS Code): `moat init`
+    /// asks their versions too before writing a key only newer versions know,
+    /// and `moat status` and `moat doctor` report each one.
+    pub bundled: &'static [Bundle],
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own
