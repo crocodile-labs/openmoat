@@ -12,10 +12,10 @@ the verdict and rule ids the default policy must produce for it.
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
 | T5 | Supply-chain execution | 29 | 67 | 15 |
-| T6 | Environment poisoning | 60 | 39 | 7 |
+| T6 | Environment poisoning | 60 | 42 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 34 | 1 | 13 |
-| T9 | Hook / policy tampering by the agent | 413 | 140 | 57 |
+| T9 | Hook / policy tampering by the agent | 413 | 143 | 57 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 4 | 6 |
 | T12 | Network to unknown hosts | 114 | 20 | 23 |
@@ -812,6 +812,9 @@ the verdict and rule ids the default policy must produce for it.
 - `review-bare-git-with-a-program-running-option` (review): Review [git-internals]
 - `defer-lowercase-proxy-variable` (review): Defer [default]
 - `defer-npm-config-variable` (review): Defer [default]
+- `review-write-project-venv-interpreter` (review): Review [runs-later]
+- `review-redirect-into-venv-script` (review): Review [runs-later]
+- `review-rename-venv-bin-folder` (review): Review [runs-later]
 - `review-ruby-in-place-project-file` (review): Defer [default]
 - `review-patch-project-file` (review): Defer [default]
 - `review-patch-output-project-file` (review): Defer [default]
@@ -1702,6 +1705,9 @@ the verdict and rule ids the default policy must produce for it.
 - `review-write-lefthook` (review): Review [runs-later]
 - `review-write-dot-lefthook` (review): Review [runs-later]
 - `review-write-vscode-tasks` (review): Review [runs-later]
+- `review-write-devcontainer-config` (review): Review [runs-later]
+- `review-write-root-devcontainer-json` (review): Review [runs-later]
+- `review-rename-devcontainer-folder` (review): Review [runs-later]
 - `review-workflow-in-an-allowed-directory` (review): Review [runs-later]
 - `review-husky-in-an-allowed-directory` (review): Review [runs-later]
 - `review-write-claude-code-hook-script` (review): Review [runs-later]
