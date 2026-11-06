@@ -124,7 +124,7 @@ records of that control operating on an agent's tool calls.
 | `secrets` | `secrets-paths`, `build-credentials`, `agent-credentials`, `env-secrets`, `env-dump`, `home-sweep`, `other-home`, `secret-names`, `docker-secrets`, `agent-token`, `protected-contents` | LLM02 | CC6.1 | A.5.17, A.8.3 |
 | `secret-egress` | `token-egress`, `placeholder-egress`, `encoded-egress`, `card-egress`, `session-taint`, `push-secret`, `proxy-secret`, `proxy-secret-route`, `proxy-tls` | LLM02 | CC6.7 | A.5.14, A.8.12 |
 | `network` | `default.net`, `cloud-metadata`, `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-port`, `proxy-session` | | CC6.6 | A.8.23 |
-| `code-execution` | `pipe-to-shell`, `opaque-code`, `session-written-code`, `executables` | LLM05 | CC6.8 | A.8.7 |
+| `code-execution` | `pipe-to-shell`, `opaque-code`, `session-written-code`, `executables`, `container-host` | LLM05 | CC6.8 | A.8.7 |
 | `packages` | `package-near-miss` | LLM03 | CC6.8 | A.8.19 |
 | `runs-later` | `runs-later`, `persistence`, `shell-rc`, `git-internals`, `env-poison`, `push-runs-later` | | CC6.8 | A.8.7 |
 | `self-protection` | `kernel-self`, `agent-folders`, `stops-openmoat`, `provenance-notes` | LLM06 | CC8.1 | A.8.9 |

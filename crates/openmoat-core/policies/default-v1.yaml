@@ -1199,6 +1199,31 @@ review:
     reason: hands secrets, the SSH agent or the host to a build
     # `dev-shell` allows `docker build` without these options
     shell: ["docker build *"]
+  # a container handed the host: privileged mode, the host's process, network or
+  # user namespaces, added capabilities, devices, a weaker security profile, the
+  # host's root or the Docker socket mounted in. Code in it can change this machine
+  # outside any sandbox, as root where the daemon runs as root. Other runs defer,
+  # as before; a key folder mounted in is decided by its path (`secrets-paths`)
+  - id: container-host
+    reason: gives a container the host's root, devices, namespaces or Docker socket, so it can change this machine outside any sandbox
+    shell:
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --privileged*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network}=host*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --{pid,ipc,uts,userns,cgroupns,net,network} host*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --cap-add*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --device*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --security-opt*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} /"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} /:*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v,--volume} *docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v/:*,-v=/:*,--volume=/:*,-v/,-v=/,--volume=/}"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * {-v*docker.sock*,--volume=*docker.sock*}"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*docker.sock*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *{source,src}=/,*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount *{source,src}=/"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*{source,src}=/,*"
+      - "{docker,podman,nerdctl,*/docker,*/podman,*/nerdctl} * --mount=*{source,src}=/"
   # `claude setup-token` signs in and prints a new long-lived login token
   # without saving it; the person may mean to (a CI secret), the agent should
   # not do it unasked. Commands that print a stored token are denied
