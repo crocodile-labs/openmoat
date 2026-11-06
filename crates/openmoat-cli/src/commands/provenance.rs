@@ -125,7 +125,7 @@ pub fn text(out: &mut impl std::io::Write, attributed: &[Attributed]) -> std::io
     Ok(())
 }
 
-/// "src/a.rs: <host> session 1a2b… wrote the whole change (3 lines: 3-5), after
+/// "src/a.rs: `<host>` session 1a2b… wrote the whole change (3 lines: 3-5), after
 /// reading web content (fetch x.example) — event 1f, 2026-11-05 10:00".
 pub fn describe(file: &FileRecord) -> String {
     let how = match file.evidence {

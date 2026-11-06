@@ -2,7 +2,7 @@
 //!
 //! The one interface check-diff has to it: [`section`] reads the notes of
 //! the commits from where `--head` left `--base` to `--head` (none with a diff
-//! on stdin), and [`write`] prints the report check-diff built with that
+//! on stdin), and [`write()`] prints the report check-diff built with that
 //! section beside it: one more `provenance` key in JSON, `::warning` (or
 //! `::notice`) workflow commands and lines after the text. It never changes
 //! check-diff's exit code, and a commit range whose notes cannot be read is a
