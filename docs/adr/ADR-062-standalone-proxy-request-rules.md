@@ -1,4 +1,4 @@
-# ADR-060: Method and path rules for allowed hosts, in `openmoat run` and the standalone proxy
+# ADR-062: Method and path rules for allowed hosts, in `openmoat run` and the standalone proxy
 
 Status: proposed · Date: 2026-11-06 · Builds on ADR-020 (egress proxy), ADR-027 and
 ADR-044 (proxy sessions) and ADR-043 (TLS termination) · Follows up #247

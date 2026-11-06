@@ -1,4 +1,4 @@
-# ADR-059: A send after the session collected or packed files from outside the project needs review
+# ADR-061: A send after the session collected or packed files from outside the project needs review
 
 Status: proposed · Date: 2026-11-06 · Builds on ADR-020, ADR-029, ADR-047 and ADR-052
 

@@ -1,4 +1,4 @@
-# ADR-061: Injected input for more agents, and safe normalised links
+# ADR-063: Injected input for more agents, and safe normalised links
 
 Status: proposed · Date: 2026-11-06 · Builds on ADR-020, ADR-029, ADR-057 and ADR-058
 
