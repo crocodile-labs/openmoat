@@ -42,9 +42,13 @@ const LIST_SEPARATORS: &[&str] = &[";", "&&", "||", "&", "\n"];
 const PIPES: &[&str] = &["|", "|&"];
 
 /// Text sent out, and the hosts it goes to.
-struct Send<'a> {
-    texts: Vec<&'a str>,
-    hosts: Vec<String>,
+pub(super) struct Send<'a> {
+    pub(super) texts: Vec<&'a str>,
+    pub(super) hosts: Vec<String>,
+    /// Whether it carries a file or a body beyond the URL: an upload, form or
+    /// data option, a file-copying program, or input piped into the sender
+    /// (ADR-061). A plain `GET` does not.
+    pub(super) body: bool,
 }
 
 /// The `@token-egress`, `@placeholder-egress` and `@pii-egress` atoms of
@@ -99,12 +103,13 @@ fn push(out: &mut Vec<AtomicAction>, first: &str, what: &str, host: &str) {
     }
 }
 
-fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
+pub(super) fn sends<'a>(action: &'a Action, atoms: &'a [AtomicAction]) -> Vec<Send<'a>> {
     match action {
         Action::Fetch { url } | Action::Net { url } => vec![url_send(url)],
         Action::WebSearch { query } => vec![Send {
             texts: vec![query],
             hosts: vec![WEB_SEARCH.to_owned()],
+            body: false,
         }],
         // A tool's arguments: each URL it names, and what each shell command
         // among them sends.
@@ -148,6 +153,7 @@ fn url_send(url: &str) -> Send<'_> {
     Send {
         texts: vec![url],
         hosts: web::readings(url),
+        body: false,
     }
 }
 
@@ -160,6 +166,7 @@ fn open_send(url: &str) -> Send<'_> {
     Send {
         texts: vec![url],
         hosts,
+        body: false,
     }
 }
 
@@ -170,6 +177,7 @@ fn command_sends(atom: &AtomicAction) -> Vec<Send<'_>> {
         AtomicAction::Shell { argv } if shell::names_hosts(argv) => vec![Send {
             texts: argv.iter().skip(1).map(String::as_str).collect(),
             hosts: argument_hosts(argv),
+            body: carries_body(argv),
         }],
         AtomicAction::Pipeline { argv } => argv
             .split(|w| LIST_SEPARATORS.contains(&w.as_str()))
@@ -199,6 +207,53 @@ fn pipeline_send(words: &[String]) -> Option<Send<'_>> {
             .map(String::as_str)
             .collect(),
         hosts: connecting.iter().flat_map(|c| argument_hosts(c)).collect(),
+        // what runs before the sender reaches it through the pipe
+        body: true,
+    })
+}
+
+/// Options that put a file or data in a request, as `curl` and `wget` spell
+/// them; a value may follow attached (`-d@x`, `--data=x`).
+const BODY_OPTIONS: &[&str] = &[
+    "-F",
+    "--form",
+    "-T",
+    "--upload-file",
+    "-d",
+    "--data",
+    "--json",
+    "--post-data",
+    "--post-file",
+    "--body-data",
+    "--body-file",
+];
+
+/// Programs that copy files to where their arguments say.
+const FILE_SENDERS: &[&str] = &["scp", "sftp", "rsync", "nc", "ncat", "netcat", "socat"];
+
+/// Whether the command `argv` sends a file or a body (ADR-061): a file-copying
+/// program, a data or upload option of `curl` or `wget`, or `gh gist create`
+/// and `gh release upload`.
+fn carries_body(argv: &[String]) -> bool {
+    let program = shell::program_name(argv);
+    if FILE_SENDERS.contains(&program) {
+        return true;
+    }
+    let words: Vec<&str> = argv.iter().skip(1).map(String::as_str).collect();
+    if program == "gh" {
+        return matches!(
+            words.as_slice(),
+            ["gist", "create", ..] | ["release", "upload", ..]
+        );
+    }
+    words.iter().any(|&word| {
+        word.starts_with("--data")
+            || BODY_OPTIONS.iter().any(|&option| {
+                word == option
+                    || word.strip_prefix(option).is_some_and(|rest| {
+                        rest.starts_with('=') || (!option.starts_with("--") && !rest.is_empty())
+                    })
+            })
     })
 }
 

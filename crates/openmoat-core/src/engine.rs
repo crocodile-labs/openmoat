@@ -21,10 +21,12 @@ mod contents;
 mod context;
 mod egress;
 mod injection;
+mod staging;
 mod taint;
 
 use atoms::checked_atoms;
 pub use contents::HOLDS_PROTECTED_RULE;
+pub use staging::{STAGING_ATOM, Staging};
 pub use taint::{Secret, TAINT_RULE, Taint, UntrustedKind};
 
 /// Everything the engine needs from the environment. Supplied by the caller.
@@ -79,6 +81,9 @@ pub struct CompiledPolicy<'p> {
     protected: Vec<GlobPattern>,
     /// The folders deny rules' paths lie in, which reading or writing needs review for.
     folders: contents::ProtectedFolders,
+    /// Where a read is not collection (ADR-061, proposed): the project, read
+    /// roots, caches, temporary folders and `staging.ignore`.
+    inside: Vec<GlobPattern>,
 }
 
 #[derive(Debug)]
@@ -137,6 +142,7 @@ impl<'p> CompiledPolicy<'p> {
             defer: compile_list(&policy.defer, false)?,
             protected: taint::compile_protected(&policy, ctx)?,
             folders: contents::ProtectedFolders::compile(&policy.deny, ctx),
+            inside: staging::compile_inside(&policy, ctx)?,
             policy,
         })
     }

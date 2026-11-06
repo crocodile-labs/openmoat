@@ -5,6 +5,7 @@ mod glob;
 mod installs;
 mod moved_dirs;
 mod personal;
+mod staging;
 mod taint;
 mod unparseable;
 

@@ -19,14 +19,18 @@
 //!
 //! The result of each `tools/call` passed on a hook decision has its pieces
 //! kept under that decision's session (`mcp/flow.rs`, ADR-058), so the hook
-//! can tell when a later call carries them to another server.
+//! can tell when a later call carries them to another server, and the
+//! fingerprints of what it names kept as injected input (ADR-057), so a later
+//! call that acts on a host, path or command it planted needs review. That
+//! works for every agent, also one whose host reports no call output
+//! (ADR-063, proposed).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{KnownSecrets, NewEvent, Store, Ticket};
 use openmoat_core::{Action, CompiledPolicy, Decision, Verdict};
 use openmoat_hosts::Host;
@@ -60,10 +64,14 @@ pub struct Gateway {
     awaiting: Mutex<HashMap<String, Awaiting>>,
 }
 
-/// Whose tool call a result answers.
+/// Whose tool call a result answers, and the call itself.
 struct Awaiting {
     host: String,
     session: String,
+    /// The call as the policy read it, for injected input (ADR-057).
+    action: Action,
+    /// The directory the hook decided it in.
+    cwd: Option<String>,
 }
 
 /// The most passed calls awaiting a result the gateway keeps, as many as the
@@ -98,9 +106,10 @@ impl Gateway {
         })
     }
 
-    /// Remember that the tool call `request` was passed on for the hook's
-    /// decision `ticket`, so its result is kept under that session.
-    fn await_result(&self, request: &str, ticket: &Ticket) {
+    /// Remember that the tool call `request`, `action` decided in `cwd`, was
+    /// passed on for the hook's decision `ticket`, so its result is kept under
+    /// that session.
+    fn await_result(&self, request: &str, ticket: &Ticket, action: Action, cwd: Option<String>) {
         let mut awaiting = self.awaiting.lock().unwrap_or_else(PoisonError::into_inner);
         if awaiting.len() >= MAX_AWAITING
             && let Some(any) = awaiting.keys().next().cloned()
@@ -113,6 +122,8 @@ impl Gateway {
             Awaiting {
                 host: ticket.host.clone(),
                 session: ticket.session_id.clone(),
+                action,
+                cwd,
             },
         );
     }
@@ -306,19 +317,25 @@ impl Gate for Gateway {
             _ => None,
         };
         let awaits = match (&outcome.ticket, call.request, &refused) {
-            (Some(ticket), Some(request), None) => Some((request, ticket.clone())),
+            (Some(ticket), Some(request), None) => Some((
+                request,
+                ticket.clone(),
+                outcome.action.clone(),
+                outcome.cwd.clone(),
+            )),
             _ => None,
         };
         self.record(store, &name, outcome, started)?;
-        if let Some((request, ticket)) = awaits {
-            self.await_result(request, &ticket);
+        if let Some((request, ticket, action, cwd)) = awaits {
+            self.await_result(request, &ticket, action, cwd);
         }
         Ok(refused)
     }
 
-    /// Keep the pieces of a passed tool call's result under the session the
-    /// hook's decision named (ADR-058); a response to anything else is not a
-    /// tool result of a session and is let through as it is.
+    /// Keep the pieces of a passed tool call's result (ADR-058) and the
+    /// fingerprints of what it names (ADR-057) under the session the hook's
+    /// decision named; a response to anything else is not a tool result of a
+    /// session and is let through as it is.
     fn result(&self, request: &str, result: &Value) -> Result<()> {
         let awaiting = self
             .awaiting
@@ -328,15 +345,14 @@ impl Gate for Gateway {
         let Some(awaiting) = awaiting else {
             return Ok(());
         };
-        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(result));
-        if pieces.is_empty() {
-            return Ok(());
-        }
         let store = self.store()?.with_secrets(self.known());
-        store
-            .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
-            .context("recording what the tool's result held")?;
-        Ok(())
+        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(result));
+        if !pieces.is_empty() {
+            store
+                .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
+                .context("recording what the tool's result held")?;
+        }
+        self.injected(&store, &awaiting, result)
     }
 
     fn server_request(&self, method: &str) -> Result<()> {
@@ -356,6 +372,48 @@ impl Gate for Gateway {
             decision: &decision,
             latency_us: 0,
         })?;
+        Ok(())
+    }
+}
+
+impl Gateway {
+    /// Keep the injected-input fingerprints of a passed call's result, as the
+    /// hook keeps those of a host's `PostToolUse` (`taint::injected`), with
+    /// the policy of the directory the hook decided the call in. Under a
+    /// drifted lock nothing is kept and the host gets an error in place of
+    /// the result, as the hook denies every call then.
+    fn injected(&self, store: &Store, awaiting: &Awaiting, result: &Value) -> Result<()> {
+        let text = crate::mcp::flow::value_text(result);
+        if text.trim().is_empty() {
+            return Ok(());
+        }
+        let Ok(host) = awaiting.host.parse::<Host>() else {
+            bail!(
+                "the hook's decision names no known host (`{}`)",
+                awaiting.host
+            );
+        };
+        let verified = integrity::check(&self.home)?;
+        if verified.checked.deny.is_some() {
+            bail!("the policy lock does not match, so this tool's result is not kept");
+        }
+        let home = verified.home;
+        let cwd = awaiting
+            .cwd
+            .as_deref()
+            .map_or_else(|| self.cwd.clone(), PathBuf::from);
+        let ctx = context::eval_context(&home, Some(&cwd), None)?;
+        let policy = crate::repo::effective_policy(&home, &ctx)?;
+        let compiled = CompiledPolicy::compile(&policy, &ctx)?;
+        let output = crate::taint::injected::Output {
+            host,
+            session: &awaiting.session,
+            action: &awaiting.action,
+            cwd: &ctx.cwd,
+            text: &text,
+        };
+        crate::taint::injected::record(&home, store, &compiled, &output)
+            .context("keeping what the tool's result named")?;
         Ok(())
     }
 }

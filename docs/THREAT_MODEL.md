@@ -83,9 +83,11 @@ These hold for the current code. Each is a design consequence or a tracked gap, 
 something OpenMoat claims to stop.
 
 - **Injected input is linked only where the host reports output, and only exactly.**
-  - Only Claude Code (and the Continue CLI, which runs Claude Code's hooks) reports what a
-    call returned. On every other host a planted host, path or command is not linked to
-    the later call that uses it, and only session taint applies.
+  - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
+    report what a call returned; the MCP gateway keeps what a wrapped server's tool
+    returned for every agent (ADR-063, proposed). On every other host a planted host,
+    path or command from a call that is not a wrapped MCP tool is not linked to the later
+    call that uses it, and only session taint applies.
   - Matches are exact: a host written as an IP address or another subdomain, a reworded
     command, or a relative path is not linked.
   - A command in plain prose is linked by its hosts and paths only.
@@ -164,6 +166,15 @@ something OpenMoat claims to stop.
   folder `runs-later` already holds (`.husky/_`, `.githooks`) and Git LFS's filters are
   left out.
 
+- **Collection before a send is recorded, not decided (ADR-061, proposed).** Data that is
+  sensitive without being a secret (documents, other repositories, an export), read file by
+  file outside the project, packed and sent to a host the policy allows, is `allow` or
+  `defer` call by call. Each call's collection outside the project is folded from the audit
+  log, and a later send carries `@staging-egress <host>` (POLICY.md §4.5), but no default
+  rule names it yet: the call's reasons record it and `openmoat report` counts it, so the
+  thresholds can be measured first. A policy that adds a rule for it decides it; a
+  collection spread over several sessions, or sent by a script the agent wrote, is not
+  linked.
 - **Package checks are offline and name-based (ADR-030).** `package-near-miss` compares
   each installed name with a bundled list of popular names per registry, written by
   hand and refreshed with `scripts/refresh-top-packages.py`; nothing asks a registry.

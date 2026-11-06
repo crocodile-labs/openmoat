@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{Cached, Event, EventId, Store};
-use openmoat_core::{Action, CompiledPolicy, Decision, TAINT_RULE, Taint, Verdict};
+use openmoat_core::{Action, CompiledPolicy, Decision, Staging, TAINT_RULE, Taint, Verdict};
 use openmoat_hosts::{HookEvent, Host};
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +42,16 @@ pub struct SessionTaint {
     /// newest row it saw is ordered against the read even if the clock stepped
     /// back.
     pub untrusted_last_row: Option<i64>,
+    /// What the session collected outside the project and packed (ADR-061,
+    /// proposed), for the `@staging-egress` atom of a later send.
+    #[serde(default)]
+    pub staging: Staging,
+}
+
+/// Whether `path` is a folder now: how a read the session made counts toward
+/// its collection (ADR-061). A path that is gone counts as a file.
+pub fn is_dir(path: &str) -> bool {
+    Path::new(path).is_dir()
 }
 
 /// What the earlier calls of `session` on `host` exposed it to. A call
@@ -201,7 +211,7 @@ struct Pass {
     /// What each distinct call, in its working directory, exposed the
     /// session to: agents repeat calls (`git status`, the same file reads),
     /// and each is classified once per fold.
-    seen: HashMap<(String, String), Taint>,
+    seen: HashMap<(String, String), (Taint, Staging)>,
     /// When the fold stops; `None` folds every event it is given.
     deadline: Option<Instant>,
     /// The events classified so far.
@@ -238,11 +248,13 @@ fn fold(
             .as_deref()
             .map_or_else(|| cwd.to_owned(), |c| context::path_string(Path::new(c)));
         let key = (serde_json::to_string(action)?, cwd);
-        let exposure = match pass.seen.entry(key) {
+        let (exposure, collection) = match pass.seen.entry(key) {
             Entry::Occupied(known) => known.get().clone(),
             Entry::Vacant(slot) => {
-                let exposure = policy.exposure(action, &slot.key().1, &FsPathResolver);
-                slot.insert(exposure).clone()
+                let cwd = &slot.key().1;
+                let exposure = policy.exposure(action, cwd, &FsPathResolver);
+                let collection = policy.collection(action, cwd, &FsPathResolver, &is_dir);
+                slot.insert((exposure, collection)).clone()
             }
         };
         if exposure.untrusted.is_some() {
@@ -250,6 +262,7 @@ fn fold(
             out.untrusted_last_row = out.untrusted_last_row.max(Some(event.id.0));
         }
         out.taint.absorb(exposure);
+        out.staging.absorb(collection);
     }
     Ok(events.len())
 }
