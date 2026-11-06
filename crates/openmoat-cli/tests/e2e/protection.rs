@@ -208,7 +208,8 @@ fn the_vs_code_extensions_claude_code_gets_on_failure() {
             blocks,
             "{versions:?}: {handler}"
         );
-        let doctor = stdout(&no_cli(&["doctor"]));
+        // each copy is a detail line, shown with `--verbose`; a warning shows either way
+        let doctor = stdout(&no_cli(&["doctor", "--verbose"]));
         for version in versions {
             let copy = format!("Claude Code {version} bundled by the VS Code extension");
             assert!(doctor.contains(&copy), "{doctor}");

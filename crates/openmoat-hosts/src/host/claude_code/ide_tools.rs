@@ -144,7 +144,7 @@ mod tests {
     fn reads(action: &Action) -> Vec<String> {
         match action {
             Action::McpTool { reads, .. } => reads.clone(),
-            other => panic!("not an MCP action: {other:?}"),
+            _ => panic!("not an MCP action"),
         }
     }
 
