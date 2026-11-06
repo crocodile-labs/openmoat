@@ -632,6 +632,8 @@ allow:
     fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/**/.git/**", "!${project}/.moat/**",
       # what CI, a commit or the agent host runs later, outside any sandbox (`runs-later` needs review)
       "!${project}/**/.github/workflows/**", "!${project}/**/.gitlab-ci.yml", "!${project}/**/.circleci/**", "!${project}/**/azure-pipelines.yml", "!${project}/**/Jenkinsfile", "!${project}/**/.buildkite/**", "!${project}/**/.husky/**", "!${project}/**/.pre-commit-config.yaml", "!${project}/**/lefthook.yml", "!${project}/**/.lefthook.yml", "!${project}/**/.vscode/tasks.json",
+      # package-manager and build configuration that runs code (`runs-later` needs review)
+      "!${project}/**/.npmrc", "!${project}/**/.yarnrc", "!${project}/**/.yarnrc.yml", "!${project}/**/.cargo/config.toml", "!${project}/**/.cargo/config", "!${project}/**/bunfig.toml",
       "!${project}/**/.claude/hooks/**", "!${project}/**/.mcp.json", "!${project}/**/.cursor/mcp.json", "!${project}/**/.codex/config.toml",
       "!${project}/**/.openclaw/extensions/**", "!${project}/**/.github/hooks/**", "!${project}/**/.github/mcp.json",
       "!${project}/**/.pi/extensions/**", "!${project}/**/.pi/mcp.json", "!${project}/**/.pi/settings.json",
@@ -1065,6 +1067,11 @@ review:
   - id: runs-later
     reason: CI, commit hooks, the editor or the agent host run this later, outside any sandbox
     fs.write: ["**/.github/workflows/**", "**/.gitlab-ci.yml", "**/.circleci/**", "**/azure-pipelines.yml", "**/Jenkinsfile", "**/.buildkite/**", "**/.husky/**", "**/.pre-commit-config.yaml", "**/lefthook.yml", "**/.lefthook.yml", "**/.vscode/tasks.json",
+      # package-manager and build configuration that runs code on the next install,
+      # script or build (`.npmrc` `node-options`/`script-shell`, `.yarnrc.yml`
+      # `yarnPath`, `.cargo/config.toml` `rustc-wrapper`/`runner`, `bunfig.toml`
+      # `preload`), in the project or the home
+      "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/.cargo/config.toml", "**/.cargo/config", "**/bunfig.toml",
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights
@@ -1171,7 +1178,11 @@ review:
       # its place later, with the person's rights. Installers (`pipx`, `cargo
       # install`, `brew`) are commands, not writes, and keep their verdict;
       # `kernel-self` denies OpenMoat's own binary names in any `bin`
-      "~/.local/bin/**", "~/bin/**", "~/.cargo/bin/**", "/usr/local/bin/**", "/opt/homebrew/bin/**"]
+      "~/.local/bin/**", "~/bin/**", "~/.cargo/bin/**", "/usr/local/bin/**", "/opt/homebrew/bin/**",
+      # where every later install fetches packages from, and what every Bun start
+      # preloads: pip's and uv's user configuration, Bun's global configuration
+      "~/.config/pip/pip.conf", "~/.pip/pip.conf", "~/Library/Application Support/pip/pip.conf",
+      "~/.config/uv/uv.toml", "~/.bunfig.toml"]
     # `at` and `batch` run the job on their stdin or in `-f FILE` later; the job's
     # commands are classified too, so a denied one stays denied
     shell: ["crontab *", "at *", "batch *"]

@@ -81,13 +81,24 @@ fn fetched_content_makes_later_build_definition_writes_need_review() {
         "build.gradle",
         "src/App/App.csproj",
         "Rakefile",
-        ".cargo/config.toml",
     ] {
         let (verdict, reason) = write("s1", file);
         assert_eq!(verdict, "ask", "{file}: {reason}");
         assert!(reason.contains("[session-taint]"), "{file}: {reason}");
         assert_eq!(write("s2", file).0, "allow", "{file} in a clean session");
     }
+    // `.cargo/config.toml` can name a `rustc-wrapper` or `runner` that the next
+    // `cargo build` runs, so it needs review in a clean session too (`runs-later`);
+    // after untrusted content the taint is added to that review
+    let (verdict, reason) = write("s1", ".cargo/config.toml");
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(reason.contains("[runs-later, session-taint]"), "{reason}");
+    let (verdict, reason) = write("s2", ".cargo/config.toml");
+    assert_eq!(verdict, "ask", "in a clean session: {reason}");
+    assert!(
+        reason.contains("[runs-later]"),
+        "in a clean session: {reason}"
+    );
 }
 
 #[test]

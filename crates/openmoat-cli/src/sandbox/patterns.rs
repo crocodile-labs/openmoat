@@ -56,6 +56,13 @@ pub const RUNS_LATER: &[&str] = &[
     "**/lefthook.yml",
     "**/.lefthook.yml",
     "**/.vscode/tasks.json",
+    // package-manager and build configuration that runs code on the next install or build
+    "**/.npmrc",
+    "**/.yarnrc",
+    "**/.yarnrc.yml",
+    "**/.cargo/config.toml",
+    "**/.cargo/config",
+    "**/bunfig.toml",
     "**/.claude/hooks/**",
     "**/.mcp.json",
     "**/.cursor/mcp.json",

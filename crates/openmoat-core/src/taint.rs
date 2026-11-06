@@ -16,7 +16,7 @@ use crate::policy::PolicyError;
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 156] = [
+const PROTECTED_WRITES: [&str; 157] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -40,6 +40,7 @@ const PROTECTED_WRITES: [&str; 156] = [
     // JavaScript: scripts, and package-manager settings that pick the script shell
     "**/package.json",
     "**/.npmrc",
+    "**/bunfig.toml",
     "**/.yarnrc",
     "**/.yarnrc.yml",
     "**/pnpm-workspace.yaml",

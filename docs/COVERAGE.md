@@ -11,7 +11,7 @@ the verdict and rule ids the default policy must produce for it.
 | T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
-| T5 | Supply-chain execution | 29 | 85 | 15 |
+| T5 | Supply-chain execution | 29 | 96 | 15 |
 | T6 | Environment poisoning | 60 | 42 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 34 | 1 | 13 |
@@ -709,6 +709,17 @@ the verdict and rule ids the default policy must produce for it.
 - `review-go-run-remote-module` (review): Defer [default]
 - `review-npx-project-tool` (review): Defer [default]
 - `defer-install-a-dependency` (review): Defer [default]
+- `review-write-project-npmrc` (review): Review [runs-later]
+- `review-redirect-yarn-path-into-yarnrc` (review): Review [runs-later]
+- `review-write-legacy-yarnrc` (review): Review [runs-later]
+- `review-write-cargo-config` (review): Review [runs-later]
+- `review-write-nested-legacy-cargo-config` (review): Review [runs-later]
+- `review-write-bunfig` (review): Review [runs-later]
+- `review-write-user-pip-conf` (review): Review [persistence]
+- `review-write-legacy-user-pip-conf` (review): Review [persistence]
+- `review-write-macos-user-pip-conf` (review): Review [persistence]
+- `review-write-user-uv-toml` (review): Review [persistence]
+- `review-write-user-bunfig` (review): Review [persistence]
 - `review-claude-mcp-add` (review): Review [runs-later]
 - `review-claude-mcp-add-json` (review): Review [runs-later]
 - `review-claude-mcp-login` (review): Review [runs-later]
