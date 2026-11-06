@@ -19,10 +19,10 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | Document | What it covers |
 |---|---|
 | [USAGE.md](USAGE.md) | Handling a deny or a review, reviewing what the agent did, changing the policy, team rules; every command and exit code |
-| [POLICY.md](POLICY.md) | The policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy, the lock |
-| [SANDBOX.md](SANDBOX.md) | The OS sandboxes: the agents' own (Standard tier), `openmoat run` (Lightweight) and `openmoat run --isolate` (Isolated) |
+| [POLICY.md](POLICY.md) | The policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy, the lock; session taint and [injected input](POLICY.md#412-injected-input) (`injected-input`), MCP [cross-server data flow](POLICY.md#cross-server-data-flow-mcp-cross-server-adr-058) (`mcp-cross-server`, `mcp.flow_trusted`), `check_diff.levels` |
+| [SANDBOX.md](SANDBOX.md) | The OS sandboxes: the agents' own (Standard tier), `openmoat run` (Lightweight) and `openmoat run --isolate` (Isolated); agents' logins denied to the commands they run, and the running agent's own kept under `openmoat run` (`run.own-login`) |
 | [BROKER_LOGINS.md](BROKER_LOGINS.md) | Keeping an agent's API key out of `openmoat run` with `openmoat secret add`: steps, providers' hosts and headers, limits |
-| [MERGE_CHECK.md](MERGE_CHECK.md) | Checking pull requests before merge: `openmoat policy check-diff` and the GitHub Action, with an example workflow, output and limits |
+| [MERGE_CHECK.md](MERGE_CHECK.md) | Checking pull requests before merge: `openmoat policy check-diff` and the GitHub Action, the content checks of added lines (supply chain, CI takeover, decoded or downloaded code, keys, new hosts) and `check_diff.levels`, with an example workflow, output and limits |
 | [PROVENANCE.md](PROVENANCE.md) | Agent provenance for commits: which files and lines agent sessions wrote, after reading what, from the audit log; `openmoat provenance`, notes on `refs/notes/openmoat`, `--verify`, what check-diff shows, limits |
 | [COMPLIANCE.md](COMPLIANCE.md) | `openmoat audit evidence`: the audit log as evidence per control of OWASP LLM 2025, SOC 2 and ISO/IEC 27001; the rule → control map and its limits |
 | [SDK.md](SDK.md) | The SDK for your own agent product: Rust and JavaScript, verdict handling, actions, facts, sessions, the stability contract |

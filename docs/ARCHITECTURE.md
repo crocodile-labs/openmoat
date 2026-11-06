@@ -129,7 +129,7 @@ exits. There is no daemon.
     its audit row.
     **MCP cross-server flow.** For an MCP call, `mcp/flow.rs` reads its arguments to
     pieces (addresses, email addresses, long tokens, runs of eight words; core
-    `mcp_flow.rs`) and looks their hashes up in the audit log's `mcp_flow` table, which
+    `mcp_flow.rs`) and looks their hashes up in the audit log's `mcp_flow` table (schema 9), which
     `openmoat mcp proxy` fills from each wrapped server's results for the session of the
     hook decision it matched. When another server returned one, the tool acts (its pinned
     annotations, else `openmoat_hosts::mcp_tool_acts`) and neither server is in
