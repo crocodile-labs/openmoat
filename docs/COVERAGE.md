@@ -11,7 +11,7 @@ the verdict and rule ids the default policy must produce for it.
 | T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
-| T5 | Supply-chain execution | 29 | 77 | 15 |
+| T5 | Supply-chain execution | 29 | 85 | 15 |
 | T6 | Environment poisoning | 60 | 39 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 34 | 1 | 13 |
@@ -679,6 +679,14 @@ the verdict and rule ids the default policy must produce for it.
 - `review-docker-run-mounts-docker-socket` (review): Review [container-host]
 - `review-docker-run-bind-mount-root` (review): Review [container-host]
 - `review-docker-exec-privileged` (review): Review [container-host]
+- `review-docker-container-run-privileged` (review): Review [container-host]
+- `review-docker-run-cap-add-all-spaced` (review): Review [container-host]
+- `review-docker-run-mounts-host-root-read-only` (review): Review [container-host]
+- `review-docker-run-mounts-host-root-attached-short` (review): Review [container-host]
+- `review-docker-run-detached-host-pid-spaced` (review): Review [container-host]
+- `review-nerdctl-run-host-network` (review): Review [container-host]
+- `review-podman-run-unconfined-seccomp` (review): Review [container-host]
+- `review-docker-run-bind-mount-root-attached` (review): Review [container-host]
 - `review-docker-run-published-port` (review): Defer [default]
 - `review-npm-ci` (review): Defer [default]
 - `review-pip-install-editable` (review): Defer [default]

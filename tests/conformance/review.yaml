@@ -295,6 +295,38 @@
   threat: T5
   action: { shell: "docker exec --privileged web id" }
   expect: { verdict: review, rules: [container-host] }
+- id: review-docker-container-run-privileged
+  threat: T5
+  action: { shell: "docker container run --privileged alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-docker-run-cap-add-all-spaced
+  threat: T5
+  action: { shell: "docker run --cap-add ALL alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-docker-run-mounts-host-root-read-only
+  threat: T5
+  action: { shell: "docker run -v /:/host:ro alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-docker-run-mounts-host-root-attached-short
+  threat: T5
+  action: { shell: "docker run -v/:/host alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-docker-run-detached-host-pid-spaced
+  threat: T5
+  action: { shell: "docker run -d --name x --pid host alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-nerdctl-run-host-network
+  threat: T5
+  action: { shell: "nerdctl run --net=host alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-podman-run-unconfined-seccomp
+  threat: T5
+  action: { shell: "podman run --security-opt seccomp=unconfined alpine" }
+  expect: { verdict: review, rules: [container-host] }
+- id: review-docker-run-bind-mount-root-attached
+  threat: T5
+  action: { shell: "docker run --mount=type=bind,src=/,dst=/h alpine" }
+  expect: { verdict: review, rules: [container-host] }
 - id: review-docker-run-published-port
   threat: T5
   action: { shell: "docker run --rm -p 8080:80 nginx" }
