@@ -82,8 +82,18 @@ log has every step, but nothing connects them.
        shell: ["@staging-egress *"]
    ```
 
-   `openmoat policy upgrade` offers it. Review, not deny: a person exporting their own
-   notes to a gist is real work, and the review names what was collected and the host.
+   Review, not deny: a person exporting their own notes to a gist is real work, and the
+   review names what was collected and the host.
+
+   **Measured before it decides.** The thresholds are estimates, so the rule does not
+   ship in the default policy at first. The atom is recorded with the call in the audit
+   log either way, and `openmoat report` counts, per session and per active hour, the
+   sends that carried it and how many outside reads and folders led there. The default
+   rule (and its `policy upgrade` offer) lands only once those counts, from the
+   maintainer's and volunteers' daily sessions and from MoatBench's staging scenarios,
+   show it catches the scenarios and adds under one review per active hour of ordinary
+   work; the thresholds are set from the same data. Until then a person can add the
+   rule above to their own policy.
 
 4. **Settings.** A new optional `staging:` section, additive to schema v1:
    `outside_reads` (integer, default 25, `0` turns this trigger off), `outside_folders`
@@ -152,8 +162,12 @@ log has every step, but nothing connects them.
 2. **cli: fold and cache.** Extend `SessionTaint` with `Staging` (cache digest bumps, so
    old cache rows are refolded); pass it to the engine in `openmoat guard`; the reason
    text; e2e test over the audit log.
-3. **policy: `staging-egress`.** The default rule, `policy upgrade`, conformance
-   fixtures (the cases above, with `session:`), compliance mapping, docs.
-4. **Later, separate ADR:** `openmoat run`'s proxy records request body bytes per session
+3. **report: measure.** `openmoat report` counts `@staging-egress` sends per session and
+   per active hour, with the outside reads and folders behind them; MoatBench gains the
+   staging scenarios above. No decision changes.
+4. **policy: `staging-egress`, after measuring.** The default rule, `policy upgrade`,
+   conformance fixtures (the cases above, with `session:`), compliance mapping, docs,
+   with thresholds taken from step 3's data.
+5. **Later, separate ADR:** `openmoat run`'s proxy records request body bytes per session
    host (ADR-044 credentials) so `openmoat report` can show volume, and a byte threshold
    could become a refusal there.
