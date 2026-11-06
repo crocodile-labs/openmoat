@@ -48,7 +48,10 @@ fn init_creates_state_and_installs_claude_code_hook() {
 
     let again = sb.moat(&["init", "--yes", "--verbose"]);
     assert_eq!(again.status.code(), Some(0));
-    assert!(stdout(&again).contains("(unchanged: PreToolUse, ConfigChange, SessionStart →"));
+    assert!(
+        stdout(&again)
+            .contains("(unchanged: PreToolUse, ConfigChange, SessionStart, PostToolUse →")
+    );
     assert!(stdout(&again).contains("(kept)"));
     assert!(!stdout(&again).contains("Restart your agents"));
     assert_eq!(

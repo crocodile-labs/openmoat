@@ -3,7 +3,7 @@
 //! Uninstall: `uninstall.rs`; an edited hook file: `lock.rs`; a secret
 //! read and a review: `guard.rs`.
 
-use super::{PRE_TOOL_USE, Row, post_tool_use, pre_tool_use};
+use super::{PRE_TOOL_USE, Row, notification, pre_tool_use};
 use crate::common::fixture;
 
 pub fn row() -> Row {
@@ -12,7 +12,7 @@ pub fn row() -> Row {
         hook: "claude-code",
         governed: "claude-code/bash.json",
         unknown_tool: || pre_tool_use("FutureTool"),
-        unknown_event: post_tool_use,
+        unknown_event: notification,
         ungoverned: &[|_| fixture("claude-code/ungoverned.json")],
         // MCP servers: `mcp.rs`.
         ..PRE_TOOL_USE
