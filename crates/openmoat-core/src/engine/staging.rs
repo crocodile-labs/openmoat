@@ -361,26 +361,23 @@ fn sends<'a>(
 
 /// The reason for one host: what was sent, what led there, and the counts.
 fn detail(state: &Staging, host: &str, staged: Option<&str>) -> String {
-    let what = match staged {
-        Some(file) => {
-            format!("sends {file}, which this session packed from files outside the project")
-        }
-        None => {
-            let examples: Vec<&str> = state
-                .folders
-                .iter()
-                .chain(&state.reads)
-                .take(2)
-                .map(String::as_str)
-                .collect();
-            format!(
-                "sends data after this session read {} files and {} folders outside the project, \
-                 e.g. {}",
-                state.reads.len(),
-                state.folders.len(),
-                examples.join(", ")
-            )
-        }
+    let what = if let Some(file) = staged {
+        format!("sends {file}, which this session packed from files outside the project")
+    } else {
+        let examples: Vec<&str> = state
+            .folders
+            .iter()
+            .chain(&state.reads)
+            .take(2)
+            .map(String::as_str)
+            .collect();
+        format!(
+            "sends data after this session read {} files and {} folders outside the project, \
+             e.g. {}",
+            state.reads.len(),
+            state.folders.len(),
+            examples.join(", ")
+        )
     };
     format!("{STAGING_ATOM} {host}: {what} {}", state.counts())
 }
