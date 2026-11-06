@@ -1,4 +1,4 @@
-//! Cline (`@cline/cli`, the `cline` command): its `PreToolUse` file hook.
+//! Cline (npm `cline`, the `cline` command): its `PreToolUse` file hook.
 //!
 //! Behaviour checked against the source of `cline/cline` at tag `cli-v3.0.74`
 //! (2026-10-26; the SDK files below are the same at `v4.1.26`), 2026-11-03:
