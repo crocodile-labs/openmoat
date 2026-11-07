@@ -70,7 +70,7 @@ fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {
             Some(_) => broken.kind.describe(),
             None => "not a moat-audit-export-v1 event line",
         };
-        writeln!(out, "⛔ line {}{event}: {why}", broken.line)?;
+        writeln!(out, "✗ line {}{event}: {why}", broken.line)?;
         writeln!(out, "   {} lines before it verified", report.events)?;
         return Ok(());
     }
@@ -106,11 +106,11 @@ fn verify_text(report: &ExportReport, require_anchor: bool) -> Result<()> {
         AnchorCheck::Found => writeln!(out, "✔ anchor found")?,
         AnchorCheck::Missing => writeln!(
             out,
-            "⛔ the anchor is not in this export: events up to it were rewritten or dropped, or the export covers another log or window"
+            "✗ the anchor is not in this export: events up to it were rewritten or dropped, or the export covers another log or window"
         )?,
         AnchorCheck::NotAnchored if require_anchor => writeln!(
             out,
-            "⛔ not anchored and --require-anchor was given: pass the head recorded earlier as --anchor"
+            "✗ not anchored and --require-anchor was given: pass the head recorded earlier as --anchor"
         )?,
         AnchorCheck::NotAnchored => writeln!(
             out,

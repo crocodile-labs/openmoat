@@ -152,7 +152,7 @@ pub fn verify_against(path: &Path, format: Format) -> Result<Code> {
             let record = &failed.record;
             writeln!(
                 out,
-                "⛔ anchor {} of {} (event {}, anchored {}) no longer matches: {}",
+                "✗ anchor {} of {} (event {}, anchored {}) no longer matches: {}",
                 failed.number,
                 report.anchors,
                 record.event,

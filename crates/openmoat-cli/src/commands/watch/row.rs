@@ -73,15 +73,17 @@ pub fn rows(event: &Event, view: &View<'_>) -> Vec<String> {
     lines
 }
 
-/// The mark of a verdict and its symbol.
+/// The colour of a verdict and its symbol, the one every command shows
+/// ([`crate::render::verdict_symbol`]).
 fn mark(verdict: Verdict) -> (Mark, &'static str) {
-    match verdict {
-        Verdict::Allow => (Mark::Ok, "✓"),
-        Verdict::Defer => (Mark::Info, "·"),
-        Verdict::Review => (Mark::Attention, "?"),
+    let colour = match verdict {
+        Verdict::Allow => Mark::Ok,
+        Verdict::Defer => Mark::Info,
+        Verdict::Review => Mark::Attention,
         // `Deny`, and any verdict added to the core later.
-        _ => (Mark::Broken, "✕"),
-    }
+        _ => Mark::Broken,
+    };
+    (colour, crate::render::verdict_symbol(verdict))
 }
 
 /// `allow · dev-shell`, `deny · secrets-paths`, `defer · agent asks`.

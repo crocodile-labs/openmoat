@@ -107,7 +107,7 @@ openmoat policy check "cat ~/.ssh/id_rsa"
 
 <!-- ci:quickstart output: the output of the command before, with the home directory as /Users/you -->
 ```
-⛔ deny
+✕ deny
    rules : secrets-paths
    reason: secret material: read /Users/you/.ssh/id_rsa
    also  : shell "cat ~/.ssh/id_rsa"
