@@ -67,7 +67,7 @@ What exists:
   A payment card number sent off the machine is denied (`card-egress`, ADR-052). With
   Claude Code, the Cline CLI and wrapped MCP servers, a later command or write that uses
   a host, path or command untrusted output named needs review (`injected-input`,
-  ADR-057; the first steps of ADR-063, proposed). A send after the session collected
+  ADR-057), also in another spelling of the same request (ADR-063, proposed). A send after the session collected
   files outside the project is recorded and counted in `openmoat report`, with no
   verdict yet (ADR-061, proposed).
 - **Package installs.** A name one typo away from a popular package needs review (ADR-030);
@@ -125,7 +125,7 @@ Making what exists solid in daily use, in the order of
   ([CHALLENGE.md](CHALLENGE.md), #323).
 - The proposed ADRs' next steps: a default `staging-egress` rule once `openmoat report`
   has measured real sessions (ADR-061); method and path rules (`requests:`) for allowed
-  hosts (ADR-062); after-call hooks of more agents and normalised injected-input matches
+  hosts (ADR-062); after-call hooks of more agents, each once a real payload is captured
   (ADR-063).
 
 ## Later
