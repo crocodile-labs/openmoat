@@ -188,7 +188,7 @@ fn text_output_names_rule_and_reason() {
     let sb = Sandbox::bare(&[]);
     let out = check(&sb, "cat ~/.ssh/id_rsa", &[]);
     let text = stdout(&out);
-    assert!(text.contains("⛔ deny"));
+    assert!(text.contains("✕ deny"), "{text}");
     assert!(text.contains("secrets-paths"));
     let expanded = format!("{}/.ssh/id_rsa", sb.home.display()).replace('\\', "/");
     assert!(text.contains(&expanded), "{text}");

@@ -238,7 +238,7 @@ pub fn replay(sessions: &[SessionSummary]) -> Result<()> {
                 "  {branch} {:<8} {:<52} {} {}",
                 kind,
                 truncate(&describe(event), REPLAY_ACTION_WIDTH),
-                verdict_glyph(event.verdict),
+                verdict_symbol(event.verdict),
                 event.rules.join(", "),
             );
             line(&mut out, &row)?;
@@ -286,13 +286,17 @@ pub fn report(summary: &Summary, window: &str) -> Result<()> {
     Ok(())
 }
 
-fn verdict_glyph(verdict: Verdict) -> &'static str {
+/// The one mark a verdict has in every command's text output (`policy check`,
+/// `demo`, `show`, `replay`, `watch`): `✓` allow, `→` defer, `?` review, `✕`
+/// deny. Each is a single column wide, so the tables that pad by characters
+/// line up in a terminal.
+pub(crate) fn verdict_symbol(verdict: Verdict) -> &'static str {
     match verdict {
-        Verdict::Allow => "✔",
+        Verdict::Allow => "✓",
         Verdict::Defer => "→",
-        Verdict::Review => "❓",
+        Verdict::Review => "?",
         // `Deny`, and any verdict added to the core later.
-        _ => "⛔",
+        _ => "✕",
     }
 }
 
@@ -333,14 +337,9 @@ pub fn event_detail(event: &Event) -> Result<()> {
     Ok(())
 }
 
-fn verdict_mark(verdict: Verdict) -> &'static str {
-    match verdict {
-        Verdict::Allow => "✔ allow",
-        Verdict::Defer => "→ defer",
-        Verdict::Review => "❓ review",
-        Verdict::Deny => "⛔ deny",
-        _ => "⛔ unknown",
-    }
+/// `✓ allow`, `→ defer`, `? review`, `✕ deny` ([`verdict_symbol`]).
+fn verdict_mark(verdict: Verdict) -> String {
+    format!("{} {}", verdict_symbol(verdict), verdict.as_str())
 }
 
 pub fn describe(event: &Event) -> String {

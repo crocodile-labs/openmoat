@@ -221,7 +221,7 @@ pub fn verify_text(out: &mut impl std::io::Write, checked: &[Checked]) -> std::i
             (true, problems) => {
                 writeln!(
                     out,
-                    "⛔ {} note does not match the audit log:",
+                    "✗ {} note does not match the audit log:",
                     short(&c.commit)
                 )?;
                 for problem in problems {
@@ -312,7 +312,7 @@ mod tests {
         let text = String::from_utf8(out).unwrap();
         assert!(text.contains("✔  aaaaaaaaaaaa note matches"), "{text}");
         assert!(
-            text.contains("⛔ bbbbbbbbbbbb note does not match"),
+            text.contains("✗ bbbbbbbbbbbb note does not match"),
             "{text}"
         );
         assert!(

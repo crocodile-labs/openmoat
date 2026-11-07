@@ -66,8 +66,8 @@ The full list of what is in scope is in [SECURITY.md](../SECURITY.md#what-counts
 
 ## What does not count
 
-The known limits in [SECURITY.md](../SECURITY.md#out-of-scope-today) and the README's
-[Limits](../README.md#limits) are not bypasses, because they are documented gaps rather
+The known limits in [SECURITY.md](../SECURITY.md#out-of-scope-today) and
+[LIMITS.md](LIMITS.md) are not bypasses, because they are documented gaps rather
 than mistakes. The main ones:
 
 - What code inside an allowed command does where no OS sandbox applies (the hook-only

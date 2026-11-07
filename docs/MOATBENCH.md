@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Read this when** you want to run the attack and everyday scenarios per agent, read the scorecard, or score another hook.
 
-**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario) · [Comparison with other Claude Code guards](#comparison-with-other-claude-code-guards)
+**On this page:** [Reproduce it: openmoat bench](#reproduce-it-openmoat-bench) · [Scenario format](#scenario-format) · [Known gaps](#known-gaps) · [Developer workflows](#developer-workflows) · [Adding a scenario](#adding-a-scenario) · [Scorecard: OpenMoat 0.12.0 on every agent](#scorecard-openmoat-0120-on-every-agent) · [Comparison with other Claude Code guards](#comparison-with-other-claude-code-guards)
 
 End-to-end scenarios of what a steered agent tries, run through the real `openmoat`
 binary with each host's own payload shape. The conformance suite
@@ -224,6 +224,32 @@ fixture in `tests/conformance/benign.yaml` or `review.yaml`.
 3. Run `cargo run -p openmoat -- bench`. A mismatch is either a wrong expectation or a finding: fix
    it with a conformance fixture, or open an issue and mark the gap. Never change the
    default policy just to make a scenario pass.
+
+## Scorecard: OpenMoat 0.12.0 on every agent
+
+The full set on OpenMoat 0.12.0 (2026-10-30, macOS, `openmoat bench`), every scenario
+run as each of the nine agents' hook payloads (the Cline CLI and goose, added in 0.14.0,
+are not in these counts):
+
+| Category | Runs | Blocked | Reviewed | Allowed | OS sandbox | Left to the agent |
+|---|---|---|---|---|---|---|
+| benign | 70 | 0 | 0 | 70 | 0 | 0 |
+| destructive | 36 | 27 | 0 | 0 | 0 | 9 |
+| exfiltration | 86 | 53 | 18 | 0 | 9 | 6 |
+| mcp | 104 | 72 | 8 | 0 | 0 | 24 |
+| obfuscation | 72 | 54 | 18 | 0 | 0 | 0 |
+| persistence | 45 | 27 | 18 | 0 | 0 | 0 |
+| self-protection | 45 | 45 | 0 | 0 | 0 | 0 |
+| supply-chain | 27 | 9 | 9 | 0 | 0 | 9 |
+| workflows | 66 | 0 | 17 | 8 | 0 | 41 |
+| **total** | **551** | **287** | **88** | **78** | **9** | **89** |
+
+0 false positives, 0 known gaps, 0 mismatches with the expected answers. The eight
+developer workflows (git feature branch, Node app, Python package, Rust crate, Go
+module, Docker image, make targets, editing project files) ran 556 steps with 17 reviews,
+all of them expected. "Left to the agent" (`passthrough`) means OpenMoat returned no
+decision and the agent's own checks decide: a deferred call, or an allow on OpenClaw,
+Gemini CLI, OpenCode and Hermes Agent, which read it that way.
 
 ## Comparison with other Claude Code guards
 

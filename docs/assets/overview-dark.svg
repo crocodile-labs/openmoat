@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 600" width="980" height="600" role="img" aria-label="OpenMoat sits between your AI coding agents and your machine. Eleven agents (Claude Code, Codex, Cursor and eight more) send every tool call through OpenMoat. Its parts: a policy engine that decides each call before it runs, OS sandboxes for the code an allowed call runs, an egress proxy that lets network reach only allowed hosts, a secret broker that keeps your tokens out of the agent, an MCP gateway that pins servers and tools, an audit trail of every decision, a merge check for pull requests and a policy lock the agent cannot change. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors. One policy, on your machine, no AI model.">
+<defs>
+<marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8b949e"/></marker>
+<pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#30363d"/></pattern>
+</defs>
+<rect width="980" height="600" fill="#0d1117"/>
+<rect width="980" height="600" fill="url(#dots)" opacity="0.55"/>
+<rect x="20" y="96" width="170" height="404" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="105" y="128" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">Your AI agents</text>
+<text x="38" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">Claude Code</text>
+<text x="38" y="184" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">Codex</text>
+<text x="38" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">Cursor</text>
+<text x="38" y="232" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">GitHub Copilot CLI</text>
+<text x="38" y="256" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">Gemini CLI</text>
+<text x="38" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">OpenCode</text>
+<text x="38" y="304" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">OpenClaw</text>
+<text x="38" y="328" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">Cline CLI</text>
+<text x="38" y="352" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">goose</text>
+<text x="38" y="376" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">Hermes Agent</text>
+<text x="38" y="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3" text-anchor="start">pi</text>
+<text x="38" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">+ VS Code, JetBrains</text>
+<text x="38" y="448" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">  and Cursor Tab</text>
+<line x1="192" y1="298" x2="232" y2="298" stroke="#8b949e" stroke-width="1.6" marker-end="url(#head)"/>
+<rect x="232" y="40" width="516" height="520" rx="22" fill="#68a1cb" fill-opacity="0.12"/>
+<rect x="240" y="48" width="500" height="504" rx="20" fill="#1a2230" stroke="#68a1cb" stroke-width="2"/>
+<text x="490" y="86" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="24" font-weight="800" fill="#e6edf3" text-anchor="middle">OpenMoat</text>
+<text x="490" y="110" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#8b949e" text-anchor="middle">one policy · on your machine · no AI model decides</text>
+<rect x="258" y="128" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="278" cy="150" r="5" fill="#68a1cb"/>
+<text x="292" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Policy engine</text>
+<text x="274" y="177" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">decides every tool call</text>
+<text x="274" y="192" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">before it runs</text>
+<text x="274" y="210" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat init</text>
+<rect x="502" y="128" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="522" cy="150" r="5" fill="#68a1cb"/>
+<text x="536" y="155" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">OS sandboxes</text>
+<text x="518" y="177" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">confine the code an</text>
+<text x="518" y="192" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">allowed call runs</text>
+<text x="518" y="210" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat run</text>
+<rect x="258" y="232" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="278" cy="254" r="5" fill="#68a1cb"/>
+<text x="292" y="259" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Egress proxy</text>
+<text x="274" y="281" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">network only to the</text>
+<text x="274" y="296" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">hosts you allow</text>
+<text x="274" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat proxy</text>
+<rect x="502" y="232" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="522" cy="254" r="5" fill="#68a1cb"/>
+<text x="536" y="259" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Secret broker</text>
+<text x="518" y="281" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">the agent sees a placeholder,</text>
+<text x="518" y="296" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">never your token</text>
+<text x="518" y="314" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat secret add</text>
+<rect x="258" y="336" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="278" cy="358" r="5" fill="#68a1cb"/>
+<text x="292" y="363" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">MCP gateway</text>
+<text x="274" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">pins servers and tools,</text>
+<text x="274" y="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">checks what crosses</text>
+<text x="274" y="418" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat mcp wrap</text>
+<rect x="502" y="336" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="522" cy="358" r="5" fill="#68a1cb"/>
+<text x="536" y="363" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Audit trail</text>
+<text x="518" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">every decision, explained</text>
+<text x="518" y="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">and hash-chained</text>
+<text x="518" y="418" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat watch · why</text>
+<rect x="258" y="440" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="278" cy="462" r="5" fill="#68a1cb"/>
+<text x="292" y="467" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Merge check</text>
+<text x="274" y="489" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">pull requests checked for</text>
+<text x="274" y="504" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">what changes do</text>
+<text x="274" y="522" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat policy check-diff</text>
+<rect x="502" y="440" width="230" height="92" rx="12" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<circle cx="522" cy="462" r="5" fill="#68a1cb"/>
+<text x="536" y="467" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#e6edf3" text-anchor="start">Policy lock</text>
+<text x="518" y="489" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">the agent cannot change</text>
+<text x="518" y="504" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#8b949e" text-anchor="start">the rules or switch it off</text>
+<text x="518" y="522" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#68a1cb" text-anchor="start">openmoat doctor</text>
+<line x1="748" y1="298" x2="788" y2="298" stroke="#8b949e" stroke-width="1.6" marker-end="url(#head)"/>
+<rect x="790" y="96" width="170" height="404" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="875" y="128" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">Your machine</text>
+<rect x="806" y="148" width="138" height="54" rx="10" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<text x="818" y="168" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3" text-anchor="start">Files and secrets</text>
+<text x="818" y="187" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#8b949e" text-anchor="start">keys, .env, agent logins</text>
+<rect x="806" y="214" width="138" height="54" rx="10" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<text x="818" y="234" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3" text-anchor="start">Shell and programs</text>
+<text x="818" y="253" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#8b949e" text-anchor="start">what really runs</text>
+<rect x="806" y="280" width="138" height="54" rx="10" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<text x="818" y="300" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3" text-anchor="start">Network</text>
+<text x="818" y="319" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#8b949e" text-anchor="start">where data goes</text>
+<rect x="806" y="346" width="138" height="54" rx="10" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<text x="818" y="366" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3" text-anchor="start">MCP servers</text>
+<text x="818" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#8b949e" text-anchor="start">tools and their output</text>
+<rect x="806" y="412" width="138" height="54" rx="10" fill="#0f1620" stroke="#30363d" stroke-width="1"/>
+<text x="818" y="432" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3" text-anchor="start">Git, CI and editors</text>
+<text x="818" y="451" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#8b949e" text-anchor="start">what runs later</text>
+<text x="490.0" y="586" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#8b949e" text-anchor="middle">Every call is checked before it runs; what an allowed call does is bounded and recorded.</text>
+</svg>

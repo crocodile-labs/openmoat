@@ -168,19 +168,20 @@ impl CompiledPolicy<'_> {
             }
             _ => false,
         });
-        atoms
+        let found = atoms
             .iter()
             .filter(|atom| reaches_outside || !matches!(atom, AtomicAction::Shell { .. }))
             .filter_map(|atom| self.injected(atom, seen))
-            .fold(decision, |mut acc, next| {
-                acc.merge(next);
-                acc
-            })
+            .collect();
+        planted(found).into_iter().fold(decision, |mut acc, next| {
+            acc.merge(next);
+            acc
+        })
     }
 
-    /// The review `atom` needs when one of its parts came from untrusted
-    /// content; `None` when none did or the policy allows the atom.
-    fn injected(&self, atom: &AtomicAction, seen: &dyn InjectedLookup) -> Option<Decision> {
+    /// The part of `atom` that came from untrusted content, unless the policy
+    /// allows the atom; `None` when no part did.
+    fn injected(&self, atom: &AtomicAction, seen: &dyn InjectedLookup) -> Option<Found> {
         let (token, source) = match atom {
             AtomicAction::Net { host } | AtomicAction::Fetch { host } => {
                 let kinds = [TokenKind::UrlHost, TokenKind::WordHost];
@@ -218,16 +219,10 @@ impl CompiledPolicy<'_> {
             TokenKind::Path => "path",
             TokenKind::Command => "command",
         };
-        Some(Decision::single(
-            Verdict::Review,
-            injection::INJECTED_RULE,
-            format!(
-                "the {what} `{}` came from {source}, untrusted content this session read; {} may \
-                 follow an instruction planted there",
-                token.text,
-                atom.describe()
-            ),
-        ))
+        Some(Found {
+            part: format!("the {what} `{}`", token.text),
+            source,
+        })
     }
 
     /// The kept URL host a parent domain of `host` matches, and its source:
@@ -309,6 +304,51 @@ impl CompiledPolicy<'_> {
 fn command_text(argv: &[String]) -> Option<String> {
     let text = argv.join(" ");
     (argv.len() >= 2 && (MIN_COMMAND_LEN..=MAX_COMMAND_LEN).contains(&text.len())).then_some(text)
+}
+
+/// One part of a call that came from untrusted content, worded as the reason
+/// names it (the host `x`), and where it came from.
+struct Found {
+    part: String,
+    source: String,
+}
+
+/// One review per source of `found`, naming each part once: "the command `x`,
+/// the host `h` and the path `p` came from …". A planted command makes several
+/// atoms (the command, the host it reaches, the file it writes), and the
+/// person reads one sentence for them, not one per atom.
+fn planted(found: Vec<Found>) -> Vec<Decision> {
+    let mut sources: Vec<(String, Vec<String>)> = Vec::new();
+    for Found { part, source } in found {
+        match sources.iter_mut().find(|(known, _)| *known == source) {
+            Some((_, parts)) if !parts.contains(&part) => parts.push(part),
+            Some(_) => {}
+            None => sources.push((source, vec![part])),
+        }
+    }
+    sources
+        .into_iter()
+        .map(|(source, parts)| {
+            Decision::single(
+                Verdict::Review,
+                injection::INJECTED_RULE,
+                format!(
+                    "{} came from {source}, untrusted content this session read; the call may \
+                     follow an instruction planted there",
+                    listed(&parts)
+                ),
+            )
+        })
+        .collect()
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn listed(parts: &[String]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
 }
 
 /// The first of `tokens` the session kept, with its source.

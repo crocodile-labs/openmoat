@@ -115,7 +115,7 @@ fn piped_rows_are_plain_whole_lines() {
             "                         ↳ pushing to a remote · approve: openmoat allow --last",
             "10:42:13  claude-code  ✕ Read   ~/.ssh/id_ed25519  deny · secrets-paths",
             "                         ↳ reading your keys",
-            "10:42:19  codex        · Bash   make deploy  defer · agent asks",
+            "10:42:19  codex        → Bash   make deploy  defer · agent asks",
             "10:42:25  codex        ✕ Bash   env  deny · env-dump",
             "                         ↳ prints every environment variable",
         ]

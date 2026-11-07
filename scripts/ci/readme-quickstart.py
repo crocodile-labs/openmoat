@@ -28,6 +28,10 @@ from pathlib import Path
 MARKER = re.compile(r"^\s*<!--\s*ci:quickstart\s+(run|output)\b.*-->\s*$")
 FENCE = re.compile(r"^\s{0,3}(```|~~~)")
 
+# The verdict marks of releases before 0.17.0, which the clean install still
+# runs until the next release is out, and the marks the README shows now.
+EARLIER_MARKS = {"⛔ ": "✕ ", "✔ ": "✓ ", "❓ ": "? "}
+
 
 def blocks(text):
     """(kind, lines) for each marked fenced block, in order."""
@@ -56,11 +60,14 @@ def blocks(text):
 
 def compare(expected_path, actual_path, home):
     """The README shows the home as /Users/you; the run's own home (as given
-    and resolved) reads that way before the comparison, line endings aside."""
+    and resolved) reads that way before the comparison, line endings aside, and
+    an earlier release's verdict mark reads as the current one (EARLIER_MARKS)."""
     expected = Path(expected_path).read_text(encoding="utf-8").splitlines()
     actual = Path(actual_path).read_text(encoding="utf-8")
     for spelling in sorted({home, os.path.realpath(home)}, key=len, reverse=True):
         actual = actual.replace(spelling, "/Users/you")
+    for earlier, now in EARLIER_MARKS.items():
+        actual = actual.replace(earlier, now)
     actual_lines = [line.rstrip() for line in actual.splitlines()]
     if [line.rstrip() for line in expected] != actual_lines:
         print("FAIL  the output is not the one the README shows")
