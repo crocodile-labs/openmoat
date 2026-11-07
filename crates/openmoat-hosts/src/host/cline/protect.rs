@@ -41,9 +41,11 @@ pub(super) const PROTECT: Protect = Protect {
     )],
 };
 
-/// The CLI is the `cline` bin of `@cline/cli`, run by Node.
+/// The CLI is the `cline` bin of the npm package `cline`, a Node wrapper that
+/// waits on the compiled binary it starts: the copy `postinstall` caches as
+/// `bin/.cline`, or `bin/cline` of the `@cline/cli-<platform>` package.
 pub(super) const PROCESS: ProcessSpec = ProcessSpec {
     names: &["cline"],
-    package_dirs: &[&["@cline", "cli"]],
+    package_dirs: &[&["node_modules", "cline", "bin"]],
     helper: None,
 };

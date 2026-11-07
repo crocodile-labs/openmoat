@@ -24,6 +24,18 @@
   steps:
     - { write: ".git/hooks/pre-commit", expect: review }
 
+- id: editor-configuration-plant
+  threat: T9
+  why: >-
+    The editor runs what its project configuration names: a VS Code task or debug
+    launch, a JetBrains run configuration. An accepted edit there becomes a command
+    no prompt asked about (code.claude.com/docs/en/jetbrains, "Security
+    considerations"), so the write needs review; the source file beside it does not.
+  steps:
+    - { write: ".vscode/launch.json", expect: review, rule: runs-later }
+    - { edit: ".idea/workspace.xml", expect: review, rule: runs-later }
+    - { write: "src/editor.rs", expect: allow, rule: project-fs }
+
 - id: launch-agent-plant
   threat: T9
   why: >-

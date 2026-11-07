@@ -55,7 +55,20 @@ pub const RUNS_LATER: &[&str] = &[
     "**/.pre-commit-config.yaml",
     "**/lefthook.yml",
     "**/.lefthook.yml",
-    "**/.vscode/tasks.json",
+    // the editors' project configuration, with the folders that hold it
+    "**/.vscode/**",
+    "**/.vscode",
+    "**/*.code-workspace",
+    "**/.idea/**",
+    "**/.idea",
+    "**/*.run.xml",
+    // package-manager and build configuration that runs code on the next install or build
+    "**/.npmrc",
+    "**/.yarnrc",
+    "**/.yarnrc.yml",
+    "**/.cargo/config.toml",
+    "**/.cargo/config",
+    "**/bunfig.toml",
     "**/.claude/hooks/**",
     "**/.mcp.json",
     "**/.cursor/mcp.json",
@@ -116,6 +129,15 @@ pub const RUNS_LATER: &[&str] = &[
     "**/dist-packages/*.pth",
     "**/sitecustomize.py",
     "**/usercustomize.py",
+    // a virtual environment's interpreter, which the editor starts; a dev
+    // container's `initializeCommand`, which the editor runs on this machine
+    "**/.venv/bin/**",
+    "**/venv/bin/**",
+    "**/.venv/bin",
+    "**/venv/bin",
+    "**/.devcontainer/**",
+    "**/.devcontainer",
+    "**/.devcontainer.json",
 ];
 
 /// The [`RUNS_LATER`] files an agent host loads as its own configuration when
@@ -332,7 +354,8 @@ mod tests {
         for file in [
             "**/.github/workflows/**",
             "**/.husky/**",
-            "**/.vscode/tasks.json",
+            "**/.vscode/**",
+            "**/.idea/**",
         ] {
             assert!(!AGENT_CONFIG.contains(&file), "{file}");
         }

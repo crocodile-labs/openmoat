@@ -21,12 +21,19 @@ pub(super) fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<V
         let config = HostConfig::for_host(home, host)?;
         let name = host.display_name();
         // A version with a published advisory: a flaw no hook sees.
-        if let Some(line) = config
-            .host_present()
-            .then(|| crate::install::host_version::advisory(host))
-            .flatten()
-        {
-            report.warn(&line);
+        if config.host_present() {
+            for line in crate::install::host_version::advisories(host) {
+                report.warn(&line);
+            }
+        }
+        // The copies editor extensions bundle, which read the same hook file.
+        for (fine, line) in crate::install::host_version::bundled_lines(host) {
+            let line = format!("{name:<16} {line}");
+            if fine {
+                report.note(&line);
+            } else {
+                report.warn(&line);
+            }
         }
         location(report, host, &config, &recorded)?;
         let state = config.state(binary);
@@ -161,8 +168,10 @@ fn installed(report: &mut Report, home: &Home, config: &HostConfig, hook_files: 
     if config.runs_calls_when_hook_fails() {
         report.warn(&format!(
             "{name:<16} runs a tool call when its hook fails to start, crashes or \
-             times out: no `claude` 2.1.295 or later on PATH, so the hook has no \
-             `onFailure: \"block\"`; update Claude Code, then run `openmoat init`"
+             times out: no `claude` {since} or later on PATH or in an editor extension, \
+             or an older copy beside it, so the hook has no `onFailure: \"block\"`; \
+             update Claude Code, then run `openmoat init`",
+            since = crate::install::on_failure_since()
         ));
     }
 }

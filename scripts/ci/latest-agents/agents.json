@@ -113,7 +113,7 @@
     "host": "cline",
     "name": "Cline CLI",
     "install": "npm",
-    "package": "@cline/cli",
+    "package": "cline",
     "binary": "node_modules/.bin/cline",
     "checked": {"version": "3.0.74", "source": "crates/openmoat-hosts/src/host/cline/HOST.md"},
     "config": [["{CLINE_DIR}/hooks/PreToolUse", "shell"]],

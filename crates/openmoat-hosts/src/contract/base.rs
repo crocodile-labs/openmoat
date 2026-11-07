@@ -32,6 +32,7 @@ impl HostSpec {
         payload_copies: 1,
         limit: None,
         other_hooks: None,
+        bundled: &[],
     };
 }
 

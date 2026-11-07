@@ -351,6 +351,7 @@ impl Covering {
             },
             untrusted_last_ms: Some(1_000),
             untrusted_last_row: Some(read_row.0),
+            ..SessionTaint::default()
         }
     }
 

@@ -125,6 +125,10 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         let name = warning.host.display_name();
         report.warn(&format!("{name:<16} other hook {}", warning.text));
     }
+    // Run by the agent's own git when a session starts, before any hook.
+    for warning in crate::project_settings::git_config::warnings_here() {
+        report.warn(&format!("{:<16} git config {warning}", "Repository"));
+    }
     protections(&mut report, &home, &binary)?;
     match Store::open_read_only(&home.audit_path()).and_then(|store| store.verify_chain()) {
         Ok(chain) => audit_line(&mut report, &chain),

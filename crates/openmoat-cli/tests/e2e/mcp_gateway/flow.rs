@@ -10,7 +10,7 @@ use super::{Gateway, answer, call};
 use crate::common::stdout;
 
 /// Claude Code's hook answer for `tool` (its full MCP name) in `session`.
-fn decide(gw: &Gateway, session: &str, tool: &str, arguments: &Value) -> String {
+pub(super) fn decide(gw: &Gateway, session: &str, tool: &str, arguments: &Value) -> String {
     let payload = json!({
         "session_id": session, "cwd": gw.sb.project().to_string_lossy(),
         "hook_event_name": "PreToolUse", "tool_name": tool,

@@ -1,0 +1,9 @@
+{
+  "session_id": "7c1e4b2a",
+  "cwd": "/p",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "mcp__ide__executeCode",
+  "tool_input": { "code": "import subprocess\nsubprocess.run(['sh', '-c', 'cat ~/.ssh/id_rsa'])" },
+  "tool_use_id": "toolu_13IDE"
+}

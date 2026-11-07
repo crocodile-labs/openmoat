@@ -1,0 +1,2 @@
+### Fixed
+- The Cline CLI's npm package is `cline` (it was named as `@cline/cli`, Cline's separate experimental CLI, in its host notes and the weekly latest-agents check, which installed the wrong package); OpenMoat also recognises the compiled Cline binary that the `cline` wrapper starts (`node_modules/cline/bin/.cline`) as Cline, not only the wrapper ([#754](https://github.com/crocodile-labs/openmoat/pull/754)).

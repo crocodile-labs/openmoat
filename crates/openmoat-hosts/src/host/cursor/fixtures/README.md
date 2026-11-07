@@ -7,6 +7,12 @@ What each fixture is based on, so a guess is never mistaken for a capture.
 | `preToolUse-shell-3.13.json` | Shape of a real Cursor 3.13.25 `preToolUse` payload posted in <https://forum.cursor.com/t/inconsistent-hook-payload/166997> (values replaced): top-level `cwd` may be empty, `tool_input` carries `cwd`, not the documented `working_directory`. A Cursor staff reply in that thread confirms `cwd` is the right key. |
 | `preToolUse-grep-file-path.json` | Shape of a live cursor-agent `2026.09.26-dd393fe` `preToolUse` `Grep` payload (captured 2026-09-27, values replaced), published as a third-party fixture in <https://github.com/noamsto/dispatcher/pull/529>: the target is `tool_input.file_path`, with `pattern`; no `path`, `glob` or `output_mode`. The same capture shows `Read` sends `tool_input.file_path`. |
 | `preToolUse-*.json`, `before*.json` | Field names from <https://cursor.com/docs/hooks> (common fields, `beforeReadFile` `file_path`, `beforeMCPExecution` `tool_input` as a JSON string, `preToolUse` `tool_name`/`tool_input`/`tool_use_id`/`cwd`). |
+| `beforeTabFileRead.json` | Field names from <https://cursor.com/docs/agent/hooks> (checked 2026-11-06): the common fields, `file_path` and `content`, no `attachments`; the output is `permission` (`allow` or `deny`) only. Not a capture. |
+
+The Claude Code hook Cursor also runs gets an input Cursor does not document
+(<https://cursor.com/docs/reference/third-party-hooks>); `claude_code/fixtures/cursor-*.json`
+assume it is Cursor's own `preToolUse` input with `cursor_version`, which every Cursor
+hook input carries.
 
 ## What the docs settle (checked 2026-10-06)
 

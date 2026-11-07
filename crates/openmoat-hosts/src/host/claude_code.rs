@@ -7,7 +7,7 @@ use serde_json::json;
 
 use crate::bench::{Answer, CONTENT, Call, Exit, Place};
 use crate::contract::{
-    Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
+    Bundle, Reviews, CONFIG_HOOK_TIMEOUT_S, HookLayout, HookSpec, HostAdapter, HostSpec, InstallSpec, McpFile,
     McpSpec, McpServersJson, Prefixed, ProjectSettingsSpec, ProxySessions, SandboxFormat, SandboxSpec, TOOL_HOOK_TIMEOUT_S, wrong_event,
 };
 use crate::wire::pre_tool_use::{self, bench};
@@ -16,6 +16,8 @@ use crate::{HookEvent, HookRequest, Host, HostError};
 pub(crate) mod config_change;
 mod advisories;
 mod doc;
+mod from_cursor;
+mod ide_tools;
 mod mcp;
 mod post_tool_use;
 pub(crate) mod project_settings;
@@ -75,7 +77,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     resume_hint: Some("`claude --continue` resumes this one"),
     on_hook_failure: "before 2.1.295 runs the call when the hook is missing, cannot start, \
          exits non-zero other than 2, or times out (default 600 s); from 2.1.295 blocks it \
-         (`openmoat init` sets `onFailure: \"block\"`)",
+         (`openmoat init` sets `onFailure: \"block\"`); on Windows without Git for Windows \
+         or Git Bash, before 2.1.310 a hook's block, its exit 2 included, can still let \
+         the call through",
     gaps: "file tools, WebFetch and MCP servers run outside the OS sandbox; before Claude \
          Code 2.1.295 calls run unchecked if the hook binary is missing or crashes",
     install: Some(InstallSpec {
@@ -144,8 +148,30 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    bundled: BUNDLED,
     ..HostSpec::BASE
 };
+
+/// The Claude Code extension for VS Code bundles its own Claude Code for its
+/// chat panel and puts no `claude` on the search path; its version is the
+/// version of the Claude Code it bundles (<https://code.claude.com/docs/en/vs-code>).
+/// The same extension installs into VS Code's forks, each with its own
+/// extensions folder. The JetBrains plugin bundles none: it runs the `claude`
+/// on the search path, or the command its settings name
+/// (<https://code.claude.com/docs/en/jetbrains>).
+const BUNDLED: &[Bundle] = &[
+    Bundle::new("VS Code", &[".vscode", "extensions"], EXTENSION),
+    Bundle::new("VS Code Insiders", &[".vscode-insiders", "extensions"], EXTENSION),
+    // A remote host's VS Code Server, where the extension runs over SSH,
+    // in a container or in WSL.
+    Bundle::new("VS Code Server", &[".vscode-server", "extensions"], EXTENSION),
+    Bundle::new("Cursor", &[".cursor", "extensions"], EXTENSION),
+    Bundle::new("Windsurf", &[".windsurf", "extensions"], EXTENSION),
+    Bundle::new("VSCodium", &[".vscode-oss", "extensions"], EXTENSION),
+];
+
+/// The Claude Code extension's identifier on the VS Code Marketplace.
+const EXTENSION: &str = "anthropic.claude-code";
 
 /// Claude Code's format, also sent by the Continue CLI.
 pub(crate) struct Adapter;
@@ -157,15 +183,21 @@ impl HostAdapter for Adapter {
         &SPEC
     }
 
-    /// `PreToolUse` may come without its event name.
+    /// `PreToolUse` may come without its event name. Cursor runs this hook
+    /// too, with its own input ([`from_cursor`]).
     fn parse(
         &self,
         host: Host,
         event: Option<&str>,
         payload: &str,
     ) -> Result<HookRequest, HostError> {
+        if from_cursor::sent_by_cursor(payload) {
+            return from_cursor::parse(event, payload);
+        }
         match event {
-            None | Some(pre_tool_use::EVENT) => pre_tool_use::parse(host, payload),
+            None | Some(pre_tool_use::EVENT) => {
+                pre_tool_use::parse_with(host, payload, ide_tools::action)
+            }
             Some(config_change::EVENT) => config_change::parse(host, payload),
             Some(session_start::EVENT) => session_start::parse(host, payload),
             Some(post_tool_use::EVENT) => post_tool_use::parse(host, payload),
@@ -179,12 +211,16 @@ impl HostAdapter for Adapter {
                 source: String::new(),
                 change_type: None,
             },
-            session_start::EVENT => HookEvent::SessionStart {
+            // Cursor's name for it, when Cursor runs this hook (`from_cursor`).
+            session_start::EVENT | "sessionStart" => HookEvent::SessionStart {
                 source: String::new(),
             },
-            post_tool_use::EVENT => HookEvent::PostToolUse {
+            // Cursor's name for it too, when Cursor runs this hook (`from_cursor`).
+            post_tool_use::EVENT | "postToolUse" => HookEvent::PostToolUse {
                 output: String::new(),
             },
+
+            "preToolUse" => HookEvent::PreToolUseNoPrompt,
             _ => HookEvent::PreToolUse,
         }
     }

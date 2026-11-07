@@ -25,6 +25,7 @@ mod doc;
 pub(crate) mod hook_file;
 mod project_settings;
 mod pre_tool;
+mod tab;
 
 use pre_tool::pre_tool_action;
 
@@ -35,6 +36,7 @@ const HOOKS: &[HookSpec] = &[
     HookSpec::new("beforeMCPExecution", "", TOOL_HOOK_TIMEOUT_S, false),
     HookSpec::new("beforeReadFile", "", TOOL_HOOK_TIMEOUT_S, false),
     HookSpec::new("preToolUse", "", TOOL_HOOK_TIMEOUT_S, false),
+    HookSpec::new(tab::EVENT, "", TOOL_HOOK_TIMEOUT_S, false),
 ];
 
 /// `preToolUse` accepts `review` but runs the call, and `beforeReadFile` takes
@@ -134,7 +136,7 @@ impl HostAdapter for Adapter {
         payload: &str,
     ) -> Result<HookRequest, HostError> {
         match event {
-            Some(event) if EVENTS.contains(&event) => parse(host, payload),
+            Some(event) if EVENTS.contains(&event) => parse_as(host, payload, event),
             other => Err(wrong_event(other)),
         }
     }
@@ -148,6 +150,9 @@ impl HostAdapter for Adapter {
     /// otherwise), runs without a question when no hook answers: there a
     /// `defer` is `allow`, as Cursor would decide it, not a prompt.
     fn render_for(&self, request: &HookRequest, decision: &Decision) -> String {
+        if request.tool == tab::TOOL {
+            return tab::render(decision);
+        }
         if request.sandboxed && decision.verdict == Verdict::Defer {
             let mut allowed = decision.clone();
             allowed.verdict = Verdict::Allow;
@@ -174,11 +179,12 @@ pub(crate) const EVENTS: &[&str] = &[
     "beforeMCPExecution",
     "beforeReadFile",
     "preToolUse",
+    tab::EVENT,
 ];
 
 #[derive(Deserialize)]
+/// One hook's input; its `hook_event_name` is read by [`Host::parse_request`].
 struct Payload {
-    hook_event_name: String,
     #[serde(default)]
     conversation_id: Option<String>,
     #[serde(default)]
@@ -204,9 +210,15 @@ struct Payload {
     sandbox: bool,
 }
 
-pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
+/// The call in `payload` as the hook `event` reads it, whatever event name
+/// the payload carries: Claude Code's hook, which Cursor also runs, may get
+/// its `preToolUse` under Claude Code's name (`PreToolUse`).
+fn parse_as(host: Host, payload: &str, event: &str) -> Result<HookRequest, HostError> {
     let p: Payload = serde_json::from_str(payload)?;
-    let event = p.hook_event_name.as_str();
+    parse_payload(host, p, event)
+}
+
+fn parse_payload(host: Host, p: Payload, event: &str) -> Result<HookRequest, HostError> {
     let required = |value: Option<String>, field: &'static str| {
         value
             .filter(|v| !v.is_empty())
@@ -252,6 +264,12 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
                 path: required(p.file_path, "file_path")?,
             }),
         ),
+        tab::EVENT => (
+            tab::TOOL.to_owned(),
+            Some(Action::FsRead {
+                path: required(p.file_path, "file_path")?,
+            }),
+        ),
         "preToolUse" => {
             let tool = required(p.tool_name, "tool_name")?;
             let action = pre_tool_action(&tool, &p.tool_input, cwd.as_deref())?;
@@ -286,7 +304,9 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
 /// event not known to prompt is treated as one that does not.
 fn event_kind(event: &str) -> HookEvent {
     match event {
-        "beforeShellExecution" | "beforeMCPExecution" => HookEvent::PreToolUse,
+        // A Tab read is answered by its own rule ([`tab::render`]), so its
+        // `defer` stays one.
+        "beforeShellExecution" | "beforeMCPExecution" | tab::EVENT => HookEvent::PreToolUse,
         _ => HookEvent::PreToolUseNoPrompt,
     }
 }

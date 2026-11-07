@@ -122,3 +122,80 @@ fn an_untouched_old_default_upgrades_to_the_new_one_renamed() {
     let p = openmoat_core::Policy::parse(&merged.text).unwrap();
     assert!(!p.old_names.any());
 }
+
+/// The 0.3.0 default with a rule added at the top of its `ask:` list and a
+/// changed line: the merge with this release's default must stay one valid
+/// policy. A whole-file line diff once lined the old `ask:` list up with the
+/// new `defer:` and added the default's `review:` header beside the person's.
+#[test]
+fn an_edit_next_to_a_section_header_never_repeats_the_header() {
+    let fs_write = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**"]"#;
+    let mine = r#"fs.write: ["${project}/**", "!${project}/.git/**", "!${project}/.moat/**", "!${project}/keys/**"]"#;
+    let rule = "  - id: my-rule\n    shell: [\"make deploy\"]\n";
+    let edited = DEFAULT_V0_3_0
+        .replace(fs_write, mine)
+        .replace("ask:\n", &format!("ask:\n{rule}"));
+    let (yours, _) = rename::old_names(&edited);
+    let base = rename::old_names(DEFAULT_V0_3_0).0;
+    let merged = merge(&base, &yours, openmoat_core::DEFAULT_POLICY);
+    for key in ["defaults:", "deny:", "allow:", "review:", "defer:"] {
+        let n = merged.text.lines().filter(|l| *l == key).count();
+        assert_eq!(n, 1, "{key} appears {n} times");
+    }
+    assert!(merged.text.contains(mine) && merged.text.contains(rule));
+    assert!(
+        merged.conflicts().next().is_some(),
+        "the edit next to the header is reported"
+    );
+    openmoat_core::Policy::parse(&merged.text).unwrap();
+}
+
+#[test]
+fn blocks_split_at_top_level_keys_and_rules_only() {
+    let text = "# head\nversion: 1\ndeny:\n  - id: a\n    shell: [\"x: y\", \"  - id: z\"]\n# about allow\nallow:\n  - id: b\n    # - id: c\n";
+    let blocks = super::merge::blocks(text);
+    let keys: Vec<(&str, &str)> = blocks
+        .iter()
+        .map(|((s, id), _)| (s.as_str(), id.as_str()))
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            ("", ""),
+            ("version", ""),
+            ("deny", ""),
+            ("deny", "a"),
+            ("allow", ""),
+            ("allow", "b")
+        ]
+    );
+    let whole: String = blocks.iter().map(|(_, t)| *t).collect();
+    assert_eq!(whole, text);
+}
+
+/// A policy nobody changed becomes this release's default exactly, rule order
+/// included, from the 0.3.0 default and from a base in another order.
+#[test]
+fn an_unchanged_policy_becomes_the_new_default_exactly() {
+    let base = rename::old_names(DEFAULT_V0_3_0).0;
+    let new = openmoat_core::DEFAULT_POLICY;
+    assert_eq!(merge(&base, &base, new).text, new);
+    let reordered = "review:\n  - id: b\n  - id: a\n";
+    let start = "review:\n  - id: a\n  - id: b\n";
+    assert_eq!(merge(start, start, reordered).text, reordered);
+}
+
+/// A rule the default moves from one list to another leaves the old list and
+/// joins the new one, even beside the person's own rule.
+#[test]
+fn a_rule_the_default_moves_to_another_list_moves() {
+    let base = "review:\n  - id: a\n  - id: moved\ndefer:\n  - id: d\n";
+    let yours = "review:\n  - id: mine\n  - id: a\n  - id: moved\ndefer:\n  - id: d\n";
+    let new = "review:\n  - id: a\ndefer:\n  - id: d\n  - id: moved\n";
+    let merged = merge(base, yours, new);
+    assert_eq!(
+        merged.text,
+        "review:\n  - id: mine\n  - id: a\ndefer:\n  - id: d\n  - id: moved\n"
+    );
+    assert_eq!(merged.conflicts().count(), 0);
+}

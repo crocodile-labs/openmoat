@@ -1257,7 +1257,10 @@
           fs.write: ["/w/lib", "/w/lib/**", "!/w/lib/.git/**", "!/w/lib/**/.git/**"]
   expect: { verdict: allow, rules: [repo:approved-1] }
 # `runs-later` names only files CI, commit hooks or the editor run: the rest of
-# `.github` and `.vscode`, build files and reading workflows stay allowed
+# `.github`, build files and reading workflows stay allowed. The editors'
+# configuration folders (`.vscode`, `.idea`) need review whole, since their
+# settings can name a program; reading them, and files that only share a name
+# with them, stay allowed
 - id: benign-read-a-github-workflow
   action: { shell: "cat .github/workflows/ci.yml" }
   expect: { verdict: allow, rules: [dev-shell, project-fs] }
@@ -1267,8 +1270,43 @@
 - id: benign-write-codeowners
   action: { fs_write: "/p/.github/CODEOWNERS" }
   expect: { verdict: allow, rules: [project-fs] }
-- id: benign-write-vscode-settings
-  action: { fs_write: "/p/.vscode/settings.json" }
+- id: benign-read-vscode-settings
+  action: { fs_read: "/p/.vscode/settings.json" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-read-idea-workspace
+  action: { shell: "cat .idea/workspace.xml" }
+  expect: { verdict: allow, rules: [dev-shell, project-fs] }
+- id: benign-write-a-folder-named-vscode
+  action: { fs_write: "/p/src/vscode/settings.json" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-vscode-test-config
+  action: { fs_write: "/p/.vscode-test.mjs" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-a-file-named-like-idea
+  action: { fs_write: "/p/docs/.idea-notes.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-a-run-xml-build-file
+  action: { fs_write: "/p/build/run.xml" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-a-workspace-doc
+  action: { fs_write: "/p/docs/code-workspace.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+# Claude Code's editor diagnostics of a project file: no rule of OpenMoat's
+# names the tool, so Claude Code's own permission flow decides, as before
+- id: benign-ide-diagnostics-of-a-project-file
+  action: { mcp_tool: { name: mcp__ide__getDiagnostics, reads: ["/p/src/lib.rs"] } }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-write-devcontainer-notes
+  action: { fs_write: "/p/docs/devcontainer.md" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-module-under-venv-named-folder
+  action: { fs_write: "/p/src/venv/binaries.py" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-cargo-audit-config
+  action: { fs_write: "/p/.cargo/audit.toml" }
+  expect: { verdict: allow, rules: [project-fs] }
+- id: benign-write-package-json-beside-npmrc
+  action: { fs_write: "/p/web/package.json" }
   expect: { verdict: allow, rules: [project-fs] }
 - id: benign-write-package-json
   action: { fs_write: "/p/package.json" }

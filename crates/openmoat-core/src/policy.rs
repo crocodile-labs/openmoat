@@ -66,6 +66,7 @@ use thiserror::Error;
 use crate::kind::Kind;
 use crate::pattern::{GlobPattern, ShellPattern};
 use crate::secret::{self, Secret};
+use crate::staging::{self, StagingSettings};
 use crate::taint::{self, TaintSettings};
 use crate::verdict::Verdict;
 
@@ -346,6 +347,11 @@ pub struct Policy {
     /// What session taint protects beyond the built-in list. Absent in older policies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub taint: Option<TaintSettings>,
+    /// When a session counts as having collected files outside the project
+    /// (ADR-061, proposed): the `@staging-egress` atom's thresholds. Absent in
+    /// older policies, which means the defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging: Option<StagingSettings>,
     /// Trust a repository policy only when its detached signature
     /// (`policy.yaml.sig`) verifies against a key the person trusted (ADR-031):
     /// a signed one needs no `moat trust`, and an unsigned one is not trusted even
@@ -547,6 +553,7 @@ impl Policy {
             lint_read_root(root)?;
         }
         taint::check(self.taint.as_ref())?;
+        staging::check(self.staging.as_ref())?;
         crate::diffscan::check(self.check_diff.as_ref())?;
         secret::check(&self.secrets)
     }

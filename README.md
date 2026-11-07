@@ -204,7 +204,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 |---|---|---|---|
 | Claude Code | `PreToolUse`, `PostToolUse`, `ConfigChange` and `SessionStart` hooks in `settings.json` | hook + OS sandbox (macOS, Linux, WSL2); hook only on native Windows | `claude-code` |
 | Codex | `PreToolUse` hook in `hooks.json`; a `review` becomes a deny you approve with `openmoat allow --last` | hook + OS sandbox | `codex` |
-| Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile` and `preToolUse` hooks, fail-closed | hook + OS sandbox (macOS, Linux); hook only on Windows | `cursor` |
+| Cursor | `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` and `beforeTabFileRead` hooks, fail-closed | hook + OS sandbox (macOS, Linux); hook only on Windows | `cursor` |
 | OpenClaw | OpenMoat's plugin on OpenClaw's `before_tool_call` hook | hook only | `openclaw` |
 | GitHub Copilot CLI | `preToolUse` hook in a hook file of OpenMoat's own | hook only | `copilot-cli` |
 | pi | OpenMoat's extension on pi's `tool_call` event | hook only | `pi` |
@@ -215,6 +215,10 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 | goose | `PreToolUse` hook in OpenMoat's plugin, `~/.agents/plugins/openmoat/hooks/hooks.json`, with `on_failure: block` | hook only | `goose` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
+
+Claude Code in the VS Code extension and the JetBrains plugin uses the same hook as the
+CLI; the editor selection sent with a prompt is no tool call and is not checked
+([docs/IDE.md](docs/IDE.md)).
 
 "Hook + OS sandbox" means `openmoat init` also writes the agent's own sandbox settings
 from the same policy, so the operating system confines the commands that agent runs in
@@ -492,9 +496,10 @@ The main gaps:
   there; other agents' logins stay denied. An API-key login can go through the broker
   instead ([BROKER_LOGINS.md](docs/BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md)).
-- **Injected input is linked only with Claude Code, and only exactly.** Other agents
-  report no call output, and a planted host spelled another way, a reworded command or
-  a relative path is not linked to its source. Only the output of `Bash`, `WebFetch`,
+- **Injected input is linked only with Claude Code, the Cline CLI and wrapped MCP
+  servers, and only exactly.** Other agents report no call output (their wrapped MCP
+  servers' results are read by the gateway), and a planted host spelled another way, a
+  reworded command or a relative path is not linked to its source. Only the output of `Bash`, `WebFetch`,
   `WebSearch`, MCP resource reads and MCP tools is read, each kept up to fixed bounds,
   so a page full of decoys can push a planted host out. Fetches, searches and MCP
   calls themselves are not checked against it, and an install without the

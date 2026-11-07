@@ -20,7 +20,7 @@ mod wire;
 
 pub use block::{RULE_PAGE, rule_page};
 pub use contract::{
-    Activity, Advisories, Advisory, AlsoDir, AutoStart, ConsentFile, Detect, ExtraFile,
+    Activity, Advisories, Advisory, AlsoDir, AutoStart, Bundle, ConsentFile, Detect, ExtraFile,
     GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookTrust,
     HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location,
     McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax, OtherHooks, Paths,
@@ -212,10 +212,16 @@ impl Host {
     pub fn event_of(self, payload: &str) -> HookEvent {
         #[derive(serde::Deserialize)]
         struct Envelope {
-            hook_event_name: String,
+            hook_event_name: Option<String>,
+            /// Cline names the event in `hookName`.
+            #[serde(rename = "hookName")]
+            hook_name: Option<String>,
         }
         match serde_json::from_str::<Envelope>(payload) {
-            Ok(e) => registry::adapter(self).event_of(&e.hook_event_name),
+            Ok(e) => match e.hook_event_name.or(e.hook_name) {
+                Some(event) => registry::adapter(self).event_of(&event),
+                None => HookEvent::PreToolUse,
+            },
             Err(_) => HookEvent::PreToolUse,
         }
     }

@@ -44,6 +44,13 @@ const HASH_HEX_CHARS: usize = 32;
 /// The pieces of every string in `value` (object keys left out), read as one
 /// text, at most [`mcp_flow::MAX_PIECES`].
 pub fn value_pieces(value: &Value) -> Vec<String> {
+    mcp_flow::pieces(&value_text(value))
+}
+
+/// Every string in `value` (object keys left out), one per line, as one text
+/// of at most [`MAX_TEXT_BYTES`]: what a tool's result says, for the flow
+/// pieces and for injected input (ADR-057).
+pub fn value_text(value: &Value) -> String {
     let mut text = String::new();
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
@@ -65,7 +72,7 @@ pub fn value_pieces(value: &Value) -> Vec<String> {
             _ => {}
         }
     }
-    mcp_flow::pieces(&text)
+    text
 }
 
 /// `pieces` as the audit database keeps them: a domain-separated SHA-256 of

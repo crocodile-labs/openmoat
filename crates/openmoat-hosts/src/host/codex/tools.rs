@@ -17,8 +17,12 @@ mod stdin;
 mod tests;
 
 /// The action of one of Codex's own tools; `None` for a tool the shared
-/// mapping reads.
-pub(super) fn own(tool: &str, input: &Value) -> Option<Result<Action, HostError>> {
+/// mapping reads; the payload's `cwd` changes none of them.
+pub(super) fn own(
+    tool: &str,
+    input: &Value,
+    _cwd: Option<&str>,
+) -> Option<Result<Action, HostError>> {
     match tool {
         "read_mcp_resource" => Some(crate::wire::mcp::read_resource(tool, input)),
         "view_image" => Some(view_image(input)),

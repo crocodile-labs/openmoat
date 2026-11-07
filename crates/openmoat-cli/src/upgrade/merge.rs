@@ -90,7 +90,140 @@ pub fn merge(base: &str, yours: &str, new: &str) -> Merge {
     merged
 }
 
+/// One pass, block by block ([`blocks`]): a top-level key's own lines
+/// (`review:` and what follows it up to the first rule) and each rule
+/// (`  - id: name` up to the next) are merged only with the same block on the
+/// other sides. A line diff of the whole file can line one list up with
+/// another (the 0.3.0 `ask:` list with a later default's `defer:`) and then add
+/// the default's `review:` header beside the person's, which no YAML reader
+/// accepts. By block, a rule the default moves to another list leaves the old
+/// one and joins the new one, a rule the person added stays where they put it,
+/// and only a rule both changed is held back. A block only the new default has
+/// goes in after the block it follows there. Texts that repeat a block are
+/// merged as lines.
 fn merge_once(base: &str, yours: &str, new: &str) -> Merge {
+    let (b, y, n) = (blocks(base), blocks(yours), blocks(new));
+    if [&b, &y, &n].into_iter().any(|s| repeats_a_key(s)) {
+        return merge_lines(base, yours, new);
+    }
+    // The new default's order, with each block only the policy has (the
+    // person's own rules, and rules the default dropped) after the block it
+    // follows in the policy.
+    let mut order: Vec<&Key> = n.iter().map(|(k, _)| k).collect();
+    for (i, (key, _)) in y.iter().enumerate() {
+        if !order.contains(&key) {
+            let after = y[..i]
+                .iter()
+                .rev()
+                .find_map(|(prev, _)| order.iter().position(|o| *o == prev));
+            order.insert(after.map_or(0, |p| p + 1), key);
+        }
+    }
+    let mut merged = Merge {
+        text: String::new(),
+        base: String::new(),
+        changes: Vec::new(),
+        kept: 0,
+        base_lines: 0,
+    };
+    // `Change::line` counts the person's lines, as the whole-file merge did: a
+    // block's own lines where the policy has it, else after the policy's
+    // block written before it.
+    let mut starts = Vec::with_capacity(y.len());
+    let mut line_count = 0;
+    for (key, text) in &y {
+        starts.push((key, line_count));
+        line_count += text.split_inclusive('\n').count();
+    }
+    let mut after_yours = 0;
+    for key in order {
+        let yours = text_of(&y, key);
+        let start = starts
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map_or(after_yours, |(_, s)| *s);
+        after_yours = start + yours.split_inclusive('\n').count();
+        let one = merge_lines(text_of(&b, key), yours, text_of(&n, key));
+        merged
+            .changes
+            .extend(one.changes.into_iter().map(|c| Change {
+                line: c.line + start,
+                ..c
+            }));
+        merged.text.push_str(&one.text);
+        merged.base.push_str(&one.base);
+        merged.kept += one.kept;
+        merged.base_lines += one.base_lines;
+    }
+    merged
+}
+
+/// A block's place in a policy: the top-level key it is under (`""` before the
+/// first) and the rule's id (`""` for the key's own lines).
+type Key = (String, String);
+
+/// `text` cut into blocks in order: at each top-level key (`review:`) and each
+/// rule (`  - id: name`). Comments above a rule stay with the block before it.
+pub(super) fn blocks(text: &str) -> Vec<(Key, &str)> {
+    let mut out = Vec::new();
+    let (mut section, mut key) = (String::new(), (String::new(), String::new()));
+    let (mut start, mut at) = (0, 0);
+    for line in text.split_inclusive('\n') {
+        let next = if let Some(top) = top_level_key(line) {
+            top.clone_into(&mut section);
+            Some((section.clone(), String::new()))
+        } else {
+            rule_id(line).map(|id| (section.clone(), id.to_owned()))
+        };
+        if let Some(next) = next {
+            if at > start {
+                out.push((key, &text[start..at]));
+            }
+            (key, start) = (next, at);
+        }
+        at += line.len();
+    }
+    if at > start {
+        out.push((key, &text[start..]));
+    }
+    out
+}
+
+/// The key a line starts a top-level mapping entry with (`review:`), if it does.
+fn top_level_key(line: &str) -> Option<&str> {
+    let first = line.chars().next()?;
+    if first.is_whitespace() || matches!(first, '#' | '-') {
+        return None;
+    }
+    let (key, _) = line.split_once(':')?;
+    let plain = key
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'));
+    (!key.is_empty() && plain).then_some(key)
+}
+
+/// The id a line starts a rule with (`  - id: name`), if it does.
+fn rule_id(line: &str) -> Option<&str> {
+    let id = line.strip_prefix("  - id:")?.trim();
+    (!id.is_empty()).then_some(id)
+}
+
+/// The lines of `key`'s block, empty where `blocks` has no such block.
+fn text_of<'t>(blocks: &[(Key, &'t str)], key: &Key) -> &'t str {
+    blocks
+        .iter()
+        .find(|(k, _)| k == key)
+        .map_or("", |(_, t)| *t)
+}
+
+fn repeats_a_key(blocks: &[(Key, &str)]) -> bool {
+    blocks
+        .iter()
+        .enumerate()
+        .any(|(i, (key, _))| blocks[..i].iter().any(|(k, _)| k == key))
+}
+
+fn merge_lines(base: &str, yours: &str, new: &str) -> Merge {
     let base_lines: Vec<&str> = base.split_inclusive('\n').collect();
     let your_lines: Vec<&str> = yours.split_inclusive('\n').collect();
     let new_lines: Vec<&str> = new.split_inclusive('\n').collect();
