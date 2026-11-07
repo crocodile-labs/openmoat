@@ -15,13 +15,14 @@ use crate::upstream::{self, Refusal};
 
 impl Proxy<'_> {
     /// The termination a CONNECT to `host` gets: TLS is set up for this proxy,
-    /// one of the host's secrets says `tls: terminate`, and the request is an
-    /// authenticated session's (ADR-044), whose taint then applies inside the
-    /// tunnel. A request served without a credential is never terminated: it is
-    /// relayed as any tunnel, and HTTPS there keeps the placeholder.
+    /// one of the host's secrets says `tls: terminate` or the host has request
+    /// rules (ADR-062), and the request is an authenticated session's
+    /// (ADR-044), whose taint then applies inside the tunnel. A request served
+    /// without a credential is never terminated: it is relayed as any tunnel,
+    /// and HTTPS there keeps the placeholder.
     pub(super) fn terminating(&self, host: &str, turn: Turn<'_>) -> Option<&Tls> {
-        self.tls
-            .filter(|_| turn.session.is_some() && self.broker.terminates(host))
+        let listed = self.broker.terminates(host) || self.requests.names(host);
+        self.tls.filter(|_| turn.session.is_some() && listed)
     }
 
     /// Serve a terminated tunnel. `allowed` is the host's decision; `rest`
@@ -42,9 +43,14 @@ impl Proxy<'_> {
     ) {
         let (host, port) = (request.host(), request.port());
         let mut opened = allowed.clone();
+        let why = if self.broker.terminates(host) {
+            "its brokered secrets"
+        } else {
+            "its request rules"
+        };
         opened.reasons.push(format!(
-            "TLS to {host} is terminated for its brokered secrets: each request in the tunnel \
-             is read, checked and recorded"
+            "TLS to {host} is terminated for {why}: each request in the tunnel is read, checked \
+             and recorded"
         ));
         let Some(hello) = self.check_tunnel(client, host, rest, &opened, request, turn) else {
             return;
@@ -64,6 +70,7 @@ impl Proxy<'_> {
             host,
             port,
             broker: self.broker,
+            requests: self.requests,
             tls,
             limits: self.limits,
             allowed,

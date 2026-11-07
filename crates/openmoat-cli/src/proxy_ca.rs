@@ -11,6 +11,7 @@
 //! - `openmoat run` uses the CA only while both files are pinned and intact,
 //!   and only when it signs leaves that verify today for every terminated host.
 
+pub mod request_poc;
 mod trust;
 
 use std::path::PathBuf;
@@ -43,13 +44,15 @@ pub fn files(home: &Home) -> Vec<PathBuf> {
     vec![cert_path(home), key_path(home)]
 }
 
-/// The hosts of `policy`'s secrets that say `tls: terminate`, sorted, once each.
+/// The hosts of `policy`'s secrets that say `tls: terminate`, and the host of
+/// the ADR-062 proof of concept while its setting is on, sorted, once each.
 pub fn terminated_hosts(policy: &Policy) -> Vec<String> {
     let mut hosts: Vec<String> = policy
         .secrets
         .iter()
         .filter(|s| s.terminates())
         .map(|s| s.host.clone())
+        .chain(request_poc::hosts())
         .collect();
     hosts.sort();
     hosts.dedup();
@@ -102,10 +105,15 @@ pub fn load(home: &Home, policy: &Policy) -> Result<Option<Loaded>> {
     let again = "run `openmoat proxy ca init` in a terminal";
     let lock = Lock::load(&home.lock_path())?;
     if !files(home).iter().all(|f| lock.pins(f) && f.is_file()) {
+        let poc = if request_poc::enabled() {
+            format!(" or {}=1", request_poc::ENV)
+        } else {
+            String::new()
+        };
         bail!(
-            "{} {} `tls: terminate`, but there is no pinned proxy CA yet: {again}",
-            hosts.join(", "),
-            if hosts.len() == 1 { "says" } else { "say" }
+            "TLS to {} is terminated (`tls: terminate`{poc}), but there is no pinned proxy CA \
+             yet: {again}",
+            hosts.join(", ")
         );
     }
     let cert = std::fs::read_to_string(cert_path(home))

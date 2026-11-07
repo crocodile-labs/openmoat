@@ -369,6 +369,8 @@ pub(super) struct Exit {
     local: Option<crate::guard_relay::Service>,
     /// `moat run`'s TLS termination for secrets that say `tls: terminate` (ADR-043).
     tls: Option<openmoat_proxy::Tls>,
+    /// `moat run`'s request rules (the ADR-062 proof of concept).
+    requests: openmoat_proxy::Requests,
 }
 
 /// Session mode (ADR-027): the one session `moat run` serves, and the
@@ -436,6 +438,7 @@ impl Exit {
             issued,
             local: None,
             tls: None,
+            requests: openmoat_proxy::Requests::default(),
         })
     }
 
@@ -453,6 +456,13 @@ impl Exit {
     /// Terminate TLS with `tls` for the secrets that say `tls: terminate`.
     pub(super) fn with_tls(mut self, tls: Option<openmoat_proxy::Tls>) -> Self {
         self.tls = tls;
+        self
+    }
+
+    /// Check requests against `requests`, terminating their hosts with the TLS
+    /// [`Exit::with_tls`] set.
+    pub(super) fn with_requests(mut self, requests: openmoat_proxy::Requests) -> Self {
+        self.requests = requests;
         self
     }
 
@@ -495,6 +505,7 @@ impl Exit {
                 .as_ref()
                 .map(|s| s as &dyn openmoat_proxy::LocalService),
             tls: self.tls.as_ref(),
+            requests: &self.requests,
         };
         let serve_without = self.serves_without_credential();
         let Some(run) = self.run else {
