@@ -35,11 +35,9 @@ pub fn row() -> Row {
                 "tool_call": {"id": "c", "name": "future_tool",
                               "input": {"path": "~/.ssh/id_rsa"}}})
         },
-        unknown_event: || {
-            json!({"hookName": "tool_result", "taskId": "s", "workspaceRoots": ["/p"],
-                "tool_result": {"id": "c", "name": "run_commands",
-                                "input": {"commands": ["ls"]}}})
-        },
+        // `tool_result` is handled since ADR-063 (Cline's `PostToolUse` file),
+        // so the unknown event is one OpenMoat installs no hook for.
+        unknown_event: || json!({"hookName": "task_start", "taskId": "s", "workspaceRoots": ["/p"]}),
         checks_unknown_tools: true,
         secret_read: Some(|sb| {
             let secret = sb.home.join(".aws").join("credentials");

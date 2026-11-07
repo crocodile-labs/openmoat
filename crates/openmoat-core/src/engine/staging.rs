@@ -150,13 +150,18 @@ impl CompiledPolicy<'_> {
             ..self.ctx.clone()
         };
         let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
-        self.collected(&atoms, &ctx, is_dir)
+        self.collected(&atoms, &ctx, paths, is_dir)
     }
 
+    /// Each read is kept as the file it resolves to: the checked atoms carry a
+    /// path through a symlink both as written and as its target (`/var/…` and
+    /// `/private/var/…` on macOS, a short and a long name on Windows), which is
+    /// one file read, not two.
     fn collected(
         &self,
         atoms: &[AtomicAction],
         ctx: &EvalContext,
+        paths: &dyn PathResolver,
         is_dir: &dyn Fn(&str) -> bool,
     ) -> Staging {
         let mut out = Staging::default();
@@ -169,8 +174,9 @@ impl CompiledPolicy<'_> {
                 } else {
                     &mut out.reads
                 };
-                if !list.contains(path) {
-                    list.push(path.clone());
+                let file = paths.resolve(path).unwrap_or_else(|| path.clone());
+                if !list.contains(&file) {
+                    list.push(file);
                 }
             }
         }
@@ -227,7 +233,7 @@ impl CompiledPolicy<'_> {
         }
         let (atoms, _) = checked_atoms(action, &self.ctx, self.opens_as(), paths);
         let mut state = staging.clone();
-        state.absorb(self.collected(&atoms, &self.ctx, is_dir));
+        state.absorb(self.collected(&atoms, &self.ctx, paths, is_dir));
         if state.reads.is_empty() && state.folders.is_empty() {
             return decision;
         }

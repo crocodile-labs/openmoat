@@ -39,6 +39,31 @@ fn recorded(d: &Decision, host: &str) -> bool {
         .any(|r| r.starts_with(&format!("@staging-egress {host}:")))
 }
 
+/// A home behind a symlink (`/var` → `/private/var` on macOS): each read is
+/// checked as written and at its target, and counted once, as one file.
+#[test]
+fn a_read_through_a_symlink_counts_once() {
+    let policy = policy(OPEN);
+    let p = CompiledPolicy::compile(&policy, &ctx()).unwrap();
+    let paths = crate::realpath::MapPathResolver {
+        links: [("/h".to_owned(), "/private/h".to_owned())].into(),
+        files: Vec::new(),
+    };
+    let mut state = Staging::default();
+    for i in 0..3 {
+        let call = read(&format!("/h/Documents/f{i}.txt"));
+        state.absorb(p.collection(&call, "/p", &paths, &files));
+    }
+    assert_eq!(
+        state.reads,
+        [
+            "/private/h/Documents/f0.txt",
+            "/private/h/Documents/f1.txt",
+            "/private/h/Documents/f2.txt"
+        ]
+    );
+}
+
 #[test]
 fn a_send_with_a_body_after_collection_is_recorded_and_changes_no_decision() {
     let policy = policy(OPEN);
