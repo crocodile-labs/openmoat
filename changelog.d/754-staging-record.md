@@ -1,2 +1,0 @@
-### Added
-- Collection before a send is recorded (ADR-061, proposed): each session's reads outside the project and the files packed from them are folded from the audit log, a later send of data carries `@staging-egress <host>`, and `openmoat report` counts these sends per session and per active hour. No default rule names the atom, so no decision changes; a policy can add one, and the new optional `staging:` section sets the thresholds (`outside_reads`, default 25; `outside_folders`, default 2) and `ignore` paths ([#754](https://github.com/crocodile-labs/openmoat/pull/754)).
