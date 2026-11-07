@@ -7,7 +7,7 @@
 <rect width="800" height="790" fill="url(#dots)"/>
 <rect x="40" y="24" width="720" height="96" rx="12" fill="#ffffff" stroke="#dad8d3" stroke-width="1"/>
 <text x="400.0" y="54" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#171717">AI coding agent</text>
-<text x="400.0" y="78" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#525252">Claude Code · Codex · Cursor · OpenClaw · Copilot CLI · pi · Gemini CLI</text>
+<text x="400.0" y="78" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#525252">Claude Code · Codex · Cursor · Copilot CLI · Gemini CLI · and six more agents</text>
 <text x="400.0" y="102" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#171717">wants to run a command, read or write a file, open a URL or call an MCP tool</text>
 <line x1="400.0" y1="120" x2="400.0" y2="168" stroke="#a3a3a3" stroke-width="1.5" marker-end="url(#head)"/>
 <text x="412.0" y="149" text-anchor="start" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#525252">the agent's own hook, before the call runs</text>

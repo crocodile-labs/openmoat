@@ -23,6 +23,10 @@ DEMO_PACE=0 scripts/demo/launch-demo.sh    # no pauses
 
 To record it: `asciinema rec -c scripts/demo/launch-demo.sh moat-demo.cast`. The README's
 demo video is a separate recording; this script is the reproducible terminal version.
+Every OpenMoat line in the video is the real output of the `openmoat` binary built from
+`main`, run on Claude Code hook payloads in a throwaway home: the block messages,
+`openmoat watch` and `openmoat why --last`. Lines too long for the frame are cut with
+"…", and the throwaway home is shown as `/Users/you`.
 
 ## It never touches your configuration
 
