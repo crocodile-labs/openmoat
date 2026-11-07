@@ -83,14 +83,29 @@ covers what they leave out:
 - **Risky installs and scripts.** Typo-squatted package names, scripts the session wrote,
   and inline code that builds its own targets are held for review.
 - **What runs later.** CI workflows, git hooks, login items and `PATH` folders are held for review;
-  shell startup files are denied.
-- **Instructions planted in what the agent reads.** With Claude Code, when a fetched
-  page, a search result, an MCP result, `gh issue view` or a `curl` of an unlisted host
-  names a host, a path or a command, a later command or write that uses it needs review,
-  and the reason names the source (`injected-input`). After such a read, writes to the
-  instruction and skills files other agents load need review too. Run `openmoat init`
-  once after upgrading to add the hook entry this needs
-  ([docs/POLICY.md](docs/POLICY.md#412-injected-input)).
+  so are the editors' project configuration (`.vscode/`, `.idea/`, `*.code-workspace`),
+  package-manager and build configuration that runs code (`.npmrc`, `.yarnrc.yml`,
+  `.cargo/config.toml`, `bunfig.toml`), a virtual environment's `bin/` and a dev
+  container's configuration. Shell startup files and the agents' system-wide settings
+  (Claude Code's managed settings, Gemini CLI's and Codex's system files) are denied
+  (`managed-settings`).
+- **Containers handed the host.** A `docker`, `podman` or `nerdctl` command with
+  `--privileged`, a host namespace, `--cap-add`, `--device`, `--security-opt`, the host's
+  root or the Docker socket mounted in needs review (`container-host`); other container
+  runs defer as before.
+- **Claude Code in VS Code and JetBrains, and Cursor's Tab.** The same hook covers the
+  editors: `openmoat init` finds the Claude Code the VS Code extension bundles, the
+  editor's `getDiagnostics` is decided as a read of the file it names and `executeCode`
+  needs review. In Cursor, Tab is refused a secret file
+  ([docs/IDE.md](docs/IDE.md)).
+- **Instructions planted in what the agent reads.** With Claude Code and the Cline CLI,
+  when a fetched page, a search result, an MCP result, `gh issue view` or a `curl` of an
+  unlisted host names a host, a path or a command, a later command or write that uses it
+  needs review, and the reason names the source (`injected-input`); the MCP gateway does
+  the same with any agent for the results of servers run through `openmoat mcp wrap`.
+  After such a read, writes to the instruction and skills files other agents load need
+  review too. Run `openmoat init` once after upgrading to add the hook entry or file this
+  needs ([docs/POLICY.md](docs/POLICY.md#412-injected-input)).
 - **MCP servers.** Tool calls are checked by their paths and URLs; server definitions and
   tool descriptions are pinned; `openmoat mcp wrap` starts only accepted servers, in a
   sandbox. A call that carries text one wrapped server returned into another server's
@@ -104,9 +119,13 @@ covers what they leave out:
   edit them, approve its own blocked call or uninstall OpenMoat.
 - **Audit log.** Every decision in a local, hash-chained log: `openmoat show`, `report`,
   `audit export`, `audit anchor`; `openmoat watch` follows it live and `openmoat why`
-  explains one decision.
+  explains one decision ([docs/USAGE.md](docs/USAGE.md#review-what-the-agent-did)).
+  `openmoat report` also counts sends of data after a session read many files outside
+  the project; these are recorded only, no rule decides them yet
+  ([docs/POLICY.md](docs/POLICY.md#45-staging-data-sent-after-collection-recorded)).
 - **Readable blocks.** A deny or review tells the agent and you what was stopped, why, and
-  the one thing you can do, never a way around it.
+  the one thing you can do, never a way around it. Your own rules can carry a `title:`
+  and a `why:` for that message ([docs/POLICY.md](docs/POLICY.md#2-rule-groups)).
 - **Team rules.** A committed `.moat/policy.yaml`, or a policy pack signed with an SSH key.
   A repository's rules only add: its `review` rule never turns a `deny` from your own
   policy into a review.
@@ -124,7 +143,9 @@ covers what they leave out:
   ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
 - **Readable status.** `openmoat status`, `openmoat doctor` and `openmoat init` show
   what needs you first, each item with its fix, then one line per agent; `--verbose`
-  shows every check. `openmoat policy upgrade` groups what a new default changes
+  shows every check. `status` and `doctor` also name the current repository's git
+  configuration that makes git run a program (`core.fsmonitor`, a hooks path, filters,
+  `!` aliases). `openmoat policy upgrade` groups what a new default changes
   (`--diff` shows the full diff) ([docs/USAGE.md](docs/USAGE.md)).
 - **In your own agent.** The Rust and JavaScript SDKs give your product the same
   decisions ([docs/SDK.md](docs/SDK.md)).
@@ -211,7 +232,7 @@ are in [docs/INSTALL.md](docs/INSTALL.md). Releases up to 0.7.0 called the comma
 | Gemini CLI | `BeforeTool` hook in `settings.json` | hook only | `gemini-cli` |
 | OpenCode | OpenMoat's plugin on OpenCode 1's `tool.execute.before` (1.3.4 and later) and OpenCode 2's `execute.before` hook | hook only | `opencode` |
 | Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
-| Cline CLI | OpenMoat's `PreToolUse` hook script in `~/.cline/hooks` | hook only | `cline` |
+| Cline CLI | OpenMoat's `PreToolUse` and `PostToolUse` hook scripts in `~/.cline/hooks` | hook only | `cline` |
 | goose | `PreToolUse` hook in OpenMoat's plugin, `~/.agents/plugins/openmoat/hooks/hooks.json`, with `on_failure: block` | hook only | `goose` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
@@ -255,8 +276,10 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   opens, the hosts it contacts or the programs it runs needs review too (`opaque-code`).
 - **Persistence.** Writes to what runs again later need review: login items and user services,
   `crontab` and `at`, `~/.gitconfig`, folders on `PATH` such as `~/.local/bin`
-  (`persistence`), CI workflows and git hooks (`runs-later`, `git-internals`); writes to
-  shell startup files are denied (`shell-rc`).
+  (`persistence`), CI workflows, git hooks, the editors' project configuration and
+  package-manager configuration that runs code (`runs-later`, `git-internals`); writes to
+  shell startup files are denied (`shell-rc`), and so are writes to the agents'
+  system-wide settings (`managed-settings`).
 - **Secrets.** Secret-shaped environment variables and environment dumps are denied.
   With `openmoat secret add`, the agent holds a placeholder and the proxy puts the real
   token into requests to one host only; with `--tls-terminate --allow 'GET /repos/**'`,
@@ -287,9 +310,9 @@ tool by tool: [docs/INSTALL.md](docs/INSTALL.md#set-up-with-openmoat-init).
   until you review it ([what the lock is not](docs/POLICY.md#what-the-lock-is-not)).
 - **Session taint.** After a session reads a secret, its network and MCP calls need review.
   After it reads web content or an MCP result, writes to CI, git hooks, build files and
-  agent instructions and skills need review. With Claude Code, a later command or write
-  that uses a host, path or command the content named needs review too, with the source
-  named (`injected-input`).
+  agent instructions and skills need review. With Claude Code, the Cline CLI and wrapped
+  MCP servers, a later command or write that uses a host, path or command the content
+  named needs review too, with the source named (`injected-input`).
 - **Audit.** Every decision goes into a local, hash-chained log (tamper-evident, not
   tamper-proof) that you read with `openmoat show`, `openmoat replay` and
   `openmoat report`, and export and verify with `openmoat audit`. `openmoat audit anchor`
@@ -507,6 +530,21 @@ The main gaps:
   calls themselves are not checked against it, and an install without the
   `PostToolUse` entry (`openmoat init` adds it) links nothing
   ([ADR-057](docs/adr/ADR-057-injected-input-and-instruction-files.md)).
+- **Sending what a session collected is recorded, not stopped.** A send after the session
+  read many files outside the project, or packed them into an archive or an encoding,
+  carries `@staging-egress` in the audit log and in `openmoat report`, but no default rule
+  decides it yet. Only reads that went through OpenMoat's hook are counted, not files a
+  script or program read on its own ([ADR-061](docs/adr/ADR-061-staging-chain.md),
+  proposed).
+- **The container check reads the flags as written.** `container-host` matches the
+  options a `docker`, `podman` or `nerdctl` command line shows; another spelling, or the
+  same options in a compose file or a script, is not caught by it
+  ([docs/POLICY.md](docs/POLICY.md#6-the-default-policy-in-one-table)).
+- **A repository's git configuration runs before any hook.** A `.git/config` that names a
+  program (`core.fsmonitor`, a pager, a filter) runs when the editor's or the agent's own
+  background git starts; `openmoat status` and `openmoat doctor` name such keys but
+  cannot stop them. In the editors, the selection and open file Claude Code adds to a
+  prompt are no tool call and are not checked ([docs/IDE.md](docs/IDE.md#not-covered)).
 - **The MCP flow check sees wrapped servers and exact text only.** Results of a server
   not run through `openmoat mcp wrap` (remote HTTP, plugin or managed servers) are not
   recorded, and text the agent rewrites, encodes, splits or shortens below eight words
@@ -622,6 +660,7 @@ Each agent's gaps and the reasons: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5
 |---|---|
 | [Guides on openmoat.dev](https://openmoat.dev/docs/) | Step by step: get going, handle a block, allow a site, keep a token from the agent |
 | [Install](docs/INSTALL.md) | Install and upgrade on macOS, Linux and Windows; what each agent's hook covers |
+| [Editors](docs/IDE.md) | Claude Code in VS Code and JetBrains, and Cursor's Tab: what the hook covers there and what it does not |
 | [Usage](docs/USAGE.md) | Every command, reviewing what the agent did, changing the policy |
 | [Policy](docs/POLICY.md) | The rule format, pattern syntax, evaluation order and the policy lock |
 | [Sandboxes](docs/SANDBOX.md) | The agents' own sandboxes, `openmoat run` and `openmoat run --isolate` |
@@ -649,6 +688,10 @@ you use Codex, `openmoat init` again and trust OpenMoat's hook in Codex's `/hook
 From 0.15.0 to 0.16.0 run `openmoat init` once if you use Claude Code, which adds the
 `PostToolUse` entry injected input needs, and `openmoat policy upgrade` for the new
 default rules (`agent-credentials` in the sandboxes, `provenance-notes`).
+From 0.16.0 to 0.17.0 run `openmoat policy upgrade` for the new default rules
+(`managed-settings`, `container-host`, more `runs-later` and `persistence` paths) and the
+rules' titles, then `openmoat init`, which adds Cursor's `beforeTabFileRead` hook and the
+Cline CLI's `PostToolUse` file, and reads the VS Code extension's bundled Claude Code.
 Each release's own steps are in its [CHANGELOG](CHANGELOG.md) "Upgrading" line.
 
 ## Contributing

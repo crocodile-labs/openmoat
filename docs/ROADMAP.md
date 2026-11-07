@@ -31,16 +31,22 @@ What exists:
 - **Agents.** One policy for Claude Code, Codex, Cursor, OpenClaw (a `before_tool_call`
   plugin, ADR-033), GitHub Copilot CLI, pi (an extension), Gemini CLI, OpenCode 1 and 2
   (one plugin on `tool.execute.before` and `execute.before`, ADR-040), Hermes Agent (a
-  `pre_tool_call` shell hook, approved in its hook allowlist), the Cline CLI (a
-  `PreToolUse` hook script) and goose (a `PreToolUse` hook in a plugin), each through its
-  own hooks; the Continue CLI adapter waits for a `cn` release that runs hooks.
+  `pre_tool_call` shell hook, approved in its hook allowlist), the Cline CLI (`PreToolUse`
+  and `PostToolUse` hook scripts) and goose (a `PreToolUse` hook in a plugin), each through
+  its own hooks; the Continue CLI adapter waits for a `cn` release that runs hooks. Claude
+  Code in the VS Code extension and the JetBrains plugin goes through the same hook, and
+  Cursor's Tab reads through `beforeTabFileRead` (ADR-060, [IDE.md](IDE.md)).
 - **Policy.** Kinds `shell`, `fs.read`, `fs.write`, `net`, `fetch`, `env.read`, `env.set`,
   `mcp`, `web.search` and `tool.unknown`; verdicts `allow`, `defer` (the default for
   anything no rule names, ADR-025), `review` and `deny`.
 - **Shell parsing.** OpenMoat's own POSIX lexer and classifier, executable pins
   (ADR-008) and symlink resolution (ADR-009).
 - **Audit.** A redacted, hash-chained local log with `show`, `replay` and `report`;
-  `openmoat audit export`, `verify` and `report` for a team; audit anchors (ADR-031).
+  `openmoat audit export`, `verify` and `report` for a team; audit anchors (ADR-031);
+  `openmoat watch` follows the log live and `openmoat why` explains one decision.
+- **Block messages.** A deny or review from a rule with a `title` tells the agent and the
+  person what was stopped, why and the next step; every default deny and review rule has
+  one (ADR-059).
 - **Compliance evidence.** `openmoat audit evidence` reports the log per control of
   OWASP LLM 2025, SOC 2 and ISO/IEC 27001 (ADR-051, [COMPLIANCE.md](COMPLIANCE.md)).
 - **Merge check.** `openmoat policy check-diff` and a composite GitHub Action report a
@@ -59,8 +65,11 @@ What exists:
   need review (ADR-020), also across the files a tainted session writes (ADR-029); after a
   secret read, a URL carrying a long encoded value is denied (`encoded-egress`, ADR-047).
   A payment card number sent off the machine is denied (`card-egress`, ADR-052). With
-  Claude Code, a later command or write that uses a host, path or command untrusted
-  output named needs review (`injected-input`, ADR-057).
+  Claude Code, the Cline CLI and wrapped MCP servers, a later command or write that uses
+  a host, path or command untrusted output named needs review (`injected-input`,
+  ADR-057; the first steps of ADR-063, proposed). A send after the session collected
+  files outside the project is recorded and counted in `openmoat report`, with no
+  verdict yet (ADR-061, proposed).
 - **Package installs.** A name one typo away from a popular package needs review (ADR-030);
   `openmoat run` keeps npm and uv off versions published in the last 7 days.
 - **MCP.** Server definitions pinned in the lock (ADR-026); `openmoat mcp proxy`, opt-in
@@ -114,6 +123,10 @@ Making what exists solid in daily use, in the order of
 - The Continue CLI checked end to end once a released `cn` runs hooks (#264).
 - A bypass round with security people (#131); the public challenge is open
   ([CHALLENGE.md](CHALLENGE.md), #323).
+- The proposed ADRs' next steps: a default `staging-egress` rule once `openmoat report`
+  has measured real sessions (ADR-061); method and path rules (`requests:`) for allowed
+  hosts (ADR-062); after-call hooks of more agents and normalised injected-input matches
+  (ADR-063).
 
 ## Later
 

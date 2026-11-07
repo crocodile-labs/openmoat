@@ -5,7 +5,7 @@
 use crate::contract::{HostDocs, ToolRow};
 
 pub(super) const DOCS: HostDocs = HostDocs {
-    hooked_by: "OpenMoat's `PreToolUse` hook script in `~/.cline/hooks`",
+    hooked_by: "OpenMoat's `PreToolUse` and `PostToolUse` hook scripts in `~/.cline/hooks`",
     protection: "hook only",
     tools: TOOLS,
 };

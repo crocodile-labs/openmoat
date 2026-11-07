@@ -25,6 +25,7 @@ every change:
 | `grep -r token ~`, `echo x > ~/Library/LaunchAgents/a.plist` | review | `home-sweep`, `persistence`, `protected-contents` |
 | `cp -r ~/.codex /tmp/c`, `ls ~/.gemini` | review | `protected-contents` (the folder holds files a deny rule names) |
 | `git checkout main -- .github/workflows/ci.yml` | review | `runs-later` |
+| `docker run --privileged alpine`, `docker run -v /var/run/docker.sock:/var/run/docker.sock alpine` | review | `container-host` (the container gets the host) |
 | `python3 -c "print(open('~/.s'+'sh/id_rsa').read())"` | review | `opaque-code` (inline code opens a path it builds) |
 | `tar xf e.tar -C ~/.claude`, `unzip e.zip -d ~/.moat` | deny | `kernel-self` |
 | `cat ~/.ssh/id_rsa`, `cat .env` | deny | `secrets-paths` |
@@ -595,6 +596,14 @@ From 0.14.0 the verdict `ask` is named `review`, and the rule group `ask:` is `r
 (ADR-053). A policy that still says `ask` works as before: `openmoat policy lint` warns
 about the old name, and `openmoat policy upgrade` renames it, in the same diff. A policy
 with both `ask:` and `review:` is an error.
+From 0.17.0 the default policy gives every deny and review rule a `title` and a `why`
+(the block message, ADR-059), adds the deny group `managed-settings` and the review group
+`container-host`, and holds more writes for review: all of `.vscode/` and `.idea/`,
+package-manager configuration that runs code, a virtual environment's `bin/` and dev
+container configuration (`runs-later`), pip's, uv's and Bun's user configuration
+(`persistence`); `openmoat policy upgrade` offers them, and now merges each rule with
+the same rule of the new default, so an edit near the top of a rule list no longer stops
+the upgrade.
 
 ## Share rules with your team
 
@@ -870,7 +879,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat show [id] [--session …] [--since …] [--recent N]` | see events |
 | `openmoat watch [--host …] [--only deny\|review] [--session …] [--recent N] [--no-follow]` | follow the agents' calls live, one line each; reads the audit log only ([Watch the agents live](#watch-the-agents-live)) |
 | `openmoat why [--last \| <id> \| HH:MM[:SS]] [--format json]` | explain one deny or review: its rules and where they are, how the policy decides the call now, the context, and how to change it ([Why was this blocked?](#why-was-this-blocked)) |
-| `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary |
+| `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary, with the sends after collecting outside the project per session and per active hour (recorded only, [POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection-recorded)) |
 | `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
