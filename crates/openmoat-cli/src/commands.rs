@@ -7,7 +7,7 @@ mod bench;
 mod demo;
 mod doctor;
 mod edit;
-mod guard;
+pub(crate) mod guard;
 mod init;
 mod mcp;
 mod miswired_hook;

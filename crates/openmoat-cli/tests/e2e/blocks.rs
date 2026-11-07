@@ -118,6 +118,33 @@ fn a_review_is_held_with_one_way_to_approve_it() {
     );
 }
 
+/// OpenMoat's own check reads like a policy rule: a changed policy file denies
+/// every call with the check's title, the old line and the person's own step.
+#[test]
+fn a_built_in_check_reaches_claude_code_as_the_block_message() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let policy = sb.home.join(".moat/policy.yaml");
+    let text_now = std::fs::read_to_string(&policy).unwrap();
+    std::fs::write(&policy, format!("{text_now}\n# changed outside OpenMoat\n")).unwrap();
+    let out = sb.guard("claude-code", &bash("claude-code", "d1", "cargo test"));
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    let block = reason(&out);
+    assert!(
+        block.starts_with(
+            "OpenMoat blocked: any call while OpenMoat's own files differ from their pins\n"
+        ),
+        "{block}"
+    );
+    assert!(
+        block.contains("\n  rule   moat: deny [kernel-integrity] — "),
+        "{block}"
+    );
+    assert!(
+        block.contains("\n  next   run `openmoat doctor` in your terminal to see what changed\n"),
+        "{block}"
+    );
+}
+
 /// `openmoat why` explains the newest deny or review; `--format json` too.
 #[test]
 fn why_explains_the_newest_deny_with_its_rule_and_source() {

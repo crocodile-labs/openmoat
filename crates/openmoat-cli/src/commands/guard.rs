@@ -35,8 +35,8 @@ mod record;
 mod session_start;
 mod unseen;
 
-const UNGOVERNED_RULE: &str = "ungoverned";
-const KERNEL_ERROR_RULE: &str = "kernel-error";
+pub(crate) const UNGOVERNED_RULE: &str = "ungoverned";
+pub(crate) const KERNEL_ERROR_RULE: &str = "kernel-error";
 const SESSION_GRANT_RULE: &str = "approved-session";
 
 /// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
@@ -232,7 +232,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     }
     // What the agent and its person read about a deny or review (ADR-059);
     // presentation only, never recorded. A deny that replaces the decision
-    // below has no notice, and keeps the one line.
+    // below carries its own, without the call ([`kernel_error`]).
     let call = request
         .as_ref()
         .map(|r| (r.tool.as_str(), r.action.as_ref()));
@@ -592,5 +592,13 @@ fn kernel_error(error: &anyhow::Error) -> Decision {
     decision
         .reasons
         .push(format!("kernel could not evaluate this action: {error:#}"));
+    // Its words are OpenMoat's own (ADR-059), so the deny that answers a
+    // panic, the budget or an unwritable log reads as every other one does.
+    decision.notice = notice::of(
+        &decision,
+        &notice::Titles::default(),
+        None,
+        &KnownSecrets::default(),
+    );
     decision
 }

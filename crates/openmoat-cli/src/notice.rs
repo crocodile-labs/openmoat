@@ -1,14 +1,17 @@
 //! The words of the block message (ADR-059) for one call: the deciding rule's
-//! `title` and `why` from the person's policy, and the call and the reasons as
-//! they may be shown. `openmoat-hosts` lays them out in each host's reason
-//! field ([`openmoat_hosts::reason_line`]); `openmoat watch` and `openmoat
-//! why` show calls the same way.
+//! `title` and `why` from the person's policy, or those of OpenMoat's own
+//! check ([`builtin`]), and the call and the reasons as they may be shown.
+//! `openmoat-hosts` lays them out in each host's reason field
+//! ([`openmoat_hosts::reason_line`]); `openmoat watch` and `openmoat why` show
+//! calls and titles the same way.
 
 use openmoat_audit::KnownSecrets;
 use openmoat_core::{Action, Decision, Notice, Policy, Verdict};
 
 use crate::render::clean;
 use crate::report::Paths;
+
+mod builtin;
 
 /// The longest call shown, in characters; a longer one loses its middle.
 pub const CALL_CHARS: usize = 100;
@@ -18,10 +21,42 @@ pub const CALL_CHARS: usize = 100;
 /// the second one's source included.
 const DETAIL_CHARS: usize = 300;
 
-/// The title and `why` of each rule of a decision that has one, in the
-/// decision's rule order.
+/// What heads the message of one rule: its title and `why`, and for one of
+/// OpenMoat's own checks the person's step for a decision of that verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Words<'a> {
+    pub title: &'a str,
+    pub why: Option<&'a str>,
+    pub next: Option<(Verdict, &'a str)>,
+}
+
+/// The words of `rule`: the person's title for it when it is one of their own
+/// rule groups ([`Policy::own_group`]), else those of OpenMoat's own check of
+/// that id. A rule of theirs without a title has none: the check's words
+/// would describe another rule.
+pub fn words<'a>(policy: Option<&'a Policy>, rule: &str) -> Option<Words<'a>> {
+    match policy.and_then(|p| p.own_group(rule)) {
+        Some(group) => group.title.as_deref().map(|title| Words {
+            title,
+            why: group.why.as_deref(),
+            next: None,
+        }),
+        None => builtin::words(rule),
+    }
+}
+
+/// The person's own words for each rule of a decision that is one of their
+/// rule groups, in the decision's rule order: `None` for one without a title.
+/// Owned, so the guard can drop the compiled policy before it answers.
 #[derive(Debug, Default)]
-pub struct Titles(Vec<(String, String, Option<String>)>);
+pub struct Titles(Vec<(String, Option<Own>)>);
+
+/// A title and `why` from the person's policy.
+#[derive(Debug)]
+struct Own {
+    title: String,
+    why: Option<String>,
+}
 
 impl Titles {
     /// The titles `policy` gives the rules of `decision`: only from the
@@ -33,27 +68,34 @@ impl Titles {
                 .iter()
                 .filter_map(|id| {
                     let group = policy.own_group(id)?;
-                    let title = group.title.clone()?;
-                    Some((id.clone(), title, group.why.clone()))
+                    let own = group.title.clone().map(|title| Own {
+                        title,
+                        why: group.why.clone(),
+                    });
+                    Some((id.clone(), own))
                 })
                 .collect(),
         )
     }
 
-    /// The title and `why` of `rule`, when it has a title.
-    pub fn get(&self, rule: &str) -> Option<(&str, Option<&str>)> {
-        self.0
-            .iter()
-            .find(|(id, _, _)| id == rule)
-            .map(|(_, title, why)| (title.as_str(), why.as_deref()))
+    /// The words of `rule`, as [`words`] finds them.
+    pub fn get(&self, rule: &str) -> Option<Words<'_>> {
+        match self.0.iter().find(|(id, _)| id == rule) {
+            Some((_, own)) => own.as_ref().map(|own| Words {
+                title: &own.title,
+                why: own.why.as_deref(),
+                next: None,
+            }),
+            None => builtin::words(rule),
+        }
     }
 }
 
 /// The notice for `decision` on a call of `tool` doing `action`: `None` unless
-/// it is a `deny` or `review` and one of its rules has a title, so every other
-/// decision keeps the one line earlier releases sent. Every text is masked
-/// with `known` and the token shapes `openmoat_audit::redact` knows, the home
-/// directory shown as `~`, and cleaned of control characters.
+/// it is a `deny` or `review` and one of its rules has words ([`words`]), so
+/// every other decision keeps the one line earlier releases sent. Every text
+/// is masked with `known` and the token shapes `openmoat_audit::redact` knows,
+/// the home directory shown as `~`, and cleaned of control characters.
 pub fn of(
     decision: &Decision,
     titles: &Titles,
@@ -63,7 +105,11 @@ pub fn of(
     if !matches!(decision.verdict, Verdict::Deny | Verdict::Review) {
         return None;
     }
-    let (title, why) = decision.rules.iter().find_map(|r| titles.get(r))?;
+    let words = decision.rules.iter().find_map(|r| titles.get(r))?;
+    let next = words
+        .next
+        .filter(|(verdict, _)| *verdict == decision.verdict)
+        .map(|(_, next)| next.to_owned());
     let paths = Paths::detect();
     let call = call
         .map(|(tool, action)| middle(&shown(&paths, known, &call_text(tool, action)), CALL_CHARS));
@@ -76,10 +122,11 @@ pub fn of(
         .collect::<Vec<_>>()
         .join("; ");
     Some(Box::new(Notice {
-        title: clean(title).into_owned(),
-        why: why.map(|w| clean(w).into_owned()),
+        title: clean(words.title).into_owned(),
+        why: words.why.map(|w| clean(w).into_owned()),
         call,
         detail: (!detail.is_empty()).then_some(detail),
+        next,
         unasked: None,
     }))
 }

@@ -8,6 +8,9 @@ use serde::Serialize;
 use crate::notice;
 use crate::report::Paths;
 
+/// Where a rule no policy file holds comes from: one of OpenMoat's own checks.
+const BUILT_IN: &str = "built-in check";
+
 /// A policy file as read, for finding where a rule is.
 pub struct File {
     /// The path as shown (`~/.moat/policy.yaml`).
@@ -105,7 +108,7 @@ pub fn explain(event: &Event, inputs: &Inputs<'_>) -> Explanation {
         .iter()
         .enumerate()
         .map(|(n, id)| {
-            let group = inputs.policy.and_then(|p| p.own_group(id));
+            let words = notice::words(inputs.policy, id);
             let reason = if aligned {
                 event.reasons.get(n).cloned()
             } else {
@@ -114,8 +117,8 @@ pub fn explain(event: &Event, inputs: &Inputs<'_>) -> Explanation {
             let (origin, source) = origin(id, &inputs.files);
             Rule {
                 id: show(id),
-                title: group.and_then(|g| g.title.clone()),
-                why: group.and_then(|g| g.why.clone()),
+                title: words.map(|w| w.title.to_owned()),
+                why: words.and_then(|w| w.why).map(str::to_owned),
                 reason: reason.filter(|r| !r.is_empty()).map(|r| show(&r)),
                 origin,
                 source,
@@ -193,7 +196,7 @@ fn origin(id: &str, files: &Files) -> (String, Option<String>) {
             source,
         );
     }
-    ("built-in check".to_owned(), None)
+    (BUILT_IN.to_owned(), None)
 }
 
 /// The 1-based line of `- id: <id>` in a policy's text.
@@ -216,7 +219,7 @@ fn context(rule: &str) -> Option<&'static str> {
             "this session read untrusted content or a secret earlier, so calls that write \
              or send need review (session taint)"
         }
-        "session-code" => {
+        crate::session_code::RULE => {
             "the command runs code this session wrote, with no OS sandbox below the hook"
         }
         "mcp-cross-server" => "the call carries text another MCP server returned (ADR-058)",
@@ -277,6 +280,17 @@ fn deny_change(rule: &Rule) -> String {
         _ if id.starts_with("kernel-") => {
             "run `openmoat doctor` in your terminal to see what OpenMoat found".to_owned()
         }
-        _ => format!("`{id}`: change your policy with `openmoat edit`"),
+        _ => built_in_step(rule)
+            .unwrap_or_else(|| format!("`{id}`: change your policy with `openmoat edit`")),
     }
+}
+
+/// The person's step for a deny of OpenMoat's own check `rule`, as its block
+/// message gives it.
+fn built_in_step(rule: &Rule) -> Option<String> {
+    if rule.origin != BUILT_IN {
+        return None;
+    }
+    let (verdict, next) = notice::words(None, &rule.id)?.next?;
+    (verdict == Verdict::Deny).then(|| next.to_owned())
 }

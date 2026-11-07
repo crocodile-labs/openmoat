@@ -219,8 +219,10 @@ OpenMoat blocked: reading or changing your keys and credential files
 ```
 
 - The first line is the rule's `title`; `why` is the rule's `why` ([POLICY.md](POLICY.md)
-  §3.1). A rule without a title, and OpenMoat's own checks (`kernel-integrity`,
-  `session-taint`, `default.net`, …), send only the `rule` line.
+  §3.1). OpenMoat's own checks (`injected-input`, `session-taint`, `kernel-integrity`, …)
+  have a title and `why` of their own, and some a `next` step of their own ("run
+  `openmoat doctor` in your terminal to see what changed"; [POLICY.md](POLICY.md) §5.1).
+  A rule without a title, and the defaults (`default.net`), send only the `rule` line.
 - The `rule` line is the line earlier releases sent: `moat: <verdict> [<rule ids>] —
   <reasons>`. Scripts that look for it still find it.
 - The call is shown with secrets masked as the audit log masks them, on one line, cut in
@@ -437,7 +439,8 @@ More: https://openmoat.dev/r/secrets-paths
 - **Context**: what else shaped it: session taint, code the session wrote, text from
   another MCP server, a changed MCP server, OpenMoat's own files changed.
 - **How to change it**: `openmoat edit` for a deny of your policy, `openmoat allow --last`
-  (or `--always`) for the newest review, the repository's owners for its rules.
+  (or `--always`) for the newest review, the repository's owners for its rules, and for a
+  deny of a built-in check the step its block message gives.
 - `--format json` prints the same as one document (`rules`, `decided_now`, `context`,
   `change`, `page`).
 
