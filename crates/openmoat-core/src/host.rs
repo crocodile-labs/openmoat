@@ -14,7 +14,10 @@
 
 use crate::shell::tables::{FILE_EXTENSIONS, KNOWN_TLDS};
 
+mod canonical;
 pub(crate) mod web;
+
+pub(crate) use canonical::{canonical, parents};
 
 /// Whether `host` is a domain name a fetch may name: dotted, ending in a
 /// letters-only top-level label, with no all-digit label. IP literals in any
