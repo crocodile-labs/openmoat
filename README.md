@@ -21,10 +21,8 @@ one policy that stays on your machine.
   <a href="#what-openmoat-is">What it is</a> · <a href="#why-openmoat">Why</a> · <a href="#see-it-decide">See it decide</a> · <a href="#supported-agents">Agents</a> · <a href="#features">Features</a> · <a href="#how-a-call-is-decided">How it decides</a> · <a href="#limits">Limits</a> · <a href="#contributing">Contributing</a>
 </p>
 
-<!-- demo-video: replaced by the uploaded video URL -->
-<p align="center">
-  <a href="docs/assets/demo.mp4"><img src="docs/assets/demo-poster.png" width="760" alt="Demo video: an agent's normal work is allowed; a look-alike package is held for review; an attempt to send an SSH key off the machine is denied; a command planted in a web page the agent read is held for review; openmoat watch shows each call as it happens and openmoat why explains the last one."></a>
-</p>
+<!-- demo video (52 s): normal work allowed; a look-alike package held for review; an SSH key sent off the machine denied; a command planted in a web page held for review; openmoat watch and openmoat why. Real openmoat output (docs/DEMO.md). -->
+https://github.com/user-attachments/assets/017fbe34-b743-477f-b4a1-faa5216ee956
 
 ## What OpenMoat is
 
