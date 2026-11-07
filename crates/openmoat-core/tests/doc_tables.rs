@@ -3,10 +3,11 @@
 //! default policy, so a policy change that moves a verdict also has to update the
 //! table that shows it to users.
 //!
-//! A table is the one with the header `| Command | Verdict | Rule |`. Each row lists
-//! commands and rule ids in backticks; the verdict is the first word of its column.
-//! Every command must get that verdict, and every rule id its decision names must
-//! be listed in the row.
+//! A table is the one whose header starts `| Command | Verdict | Rule |`; columns
+//! after those three (the README explains each row) are not read. Each row lists
+//! commands and rule ids in backticks, beside any plain words; the verdict is the
+//! first word of its column, bold or not. Every command must get that verdict, and
+//! every rule id its decision names must be listed in the row.
 
 use std::fs;
 use std::path::Path;
@@ -37,7 +38,7 @@ fn rows(doc: &str) -> Vec<Row> {
             .join(doc),
     )
     .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
-    let mut lines = text.lines().skip_while(|line| line.trim() != HEADER);
+    let mut lines = text.lines().skip_while(|line| !line.trim().starts_with(HEADER));
     assert!(lines.next().is_some(), "{doc}: no `{HEADER}` table");
     lines
         .skip(1)
@@ -49,8 +50,13 @@ fn rows(doc: &str) -> Vec<Row> {
                 .split('|')
                 .map(|cell| cell.replace('\u{0}', "\\|"))
                 .collect();
-            assert_eq!(cells.len(), 5, "{doc}: row `{line}` needs three cells");
-            let word = cells[2].trim().split([' ', ':']).next().unwrap_or_default();
+            assert!(cells.len() >= 5, "{doc}: row `{line}` needs three cells");
+            let word = cells[2]
+                .trim()
+                .trim_start_matches('*')
+                .split([' ', ':', '*'])
+                .next()
+                .unwrap_or_default();
             Row {
                 commands: code_spans(&cells[1]),
                 verdict: word
