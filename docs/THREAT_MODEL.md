@@ -82,14 +82,21 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 These hold for the current code. Each is a design consequence or a tracked gap, not
 something OpenMoat claims to stop.
 
-- **Injected input is linked only where the host reports output, and only exactly.**
+- **Injected input is linked only where the host reports output, and only for the same
+  request.**
   - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
     report what a call returned; the MCP gateway keeps what a wrapped server's tool
     returned for every agent (ADR-063, proposed). On every other host a planted host,
     path or command from a call that is not a wrapped MCP tool is not linked to the later
     call that uses it, and only session taint applies.
-  - Matches are exact: a host written as an IP address or another subdomain, a reworded
-    command, or a relative path is not linked.
+  - Linked beyond exact matches are only spellings of the same request (ADR-063 §4): a
+    host in other case or with a trailing dot, an IPv4 address in another numeric form,
+    an IPv6 address uncompressed, a subdomain of a host a URL named (unless the policy
+    allows the parent), and a planted command run through `sudo`, `env`, `nohup`,
+    `sh -c` or after `VAR=value`.
+  - Not linked: a host by another name (an IP address for a domain name, which would
+    need DNS), a subdomain of a host named only in prose, a reworded command
+    (`rm -r -f x` for `rm -rf x`), or a relative path.
   - A command in plain prose is linked by its hosts and paths only.
   - Content that floods the bounds with decoys pushes a planted token out: 256 tokens per
     output, 4096 per session, the first 1 MiB.
