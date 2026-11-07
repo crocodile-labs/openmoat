@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-core`: `Policy` has a new public field `staging` (`Option<StagingSettings>`; set it to `None` where you build a policy yourself, or use `Policy::parse`), and `StagingSettings`, `Staging`, `STAGING_ATOM`, `DEFAULT_OUTSIDE_READS`, `DEFAULT_OUTSIDE_FOLDERS`, `CompiledPolicy::collection` and `CompiledPolicy::with_staging` are new ([#754](https://github.com/crocodile-labs/openmoat/pull/754)).
