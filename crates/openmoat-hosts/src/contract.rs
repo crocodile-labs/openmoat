@@ -109,9 +109,9 @@ pub struct HostSpec {
     pub on_hook_failure: &'static str,
     /// What the hook and sandbox do not cover for this host, and what it does
     /// when the hook fails, as `moat status` and `moat doctor` report it.
-    /// Mirrors README "Limits" and `docs/THREAT_MODEL.md` §5, whose per-host
+    /// Mirrors `docs/LIMITS.md` and `docs/THREAT_MODEL.md` §5, whose per-host
     /// list of it and of [`Self::on_hook_failure`] is generated (`tests/docs.rs`);
-    /// change README with it.
+    /// change `docs/LIMITS.md` with it.
     pub gaps: &'static str,
     /// Where `moat init` installs the hook; `None` for a host that runs another
     /// host's hook.

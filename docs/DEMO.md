@@ -22,10 +22,7 @@ DEMO_PACE=0 scripts/demo/launch-demo.sh    # no pauses
 ```
 
 To record it: `asciinema rec -c scripts/demo/launch-demo.sh moat-demo.cast`. The README's
-`docs/assets/demo.gif` tells a shorter story (normal work allowed, the injection blocked in
-plain form, in base64 and through a shell variable, a package install left to the agent's
-own prompt, switching OpenMoat off blocked, the log); every verdict in it comes
-from the real `openmoat guard`, run the same way in a throwaway home.
+demo video is a separate recording; this script is the reproducible terminal version.
 
 ## It never touches your configuration
 

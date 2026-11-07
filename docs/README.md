@@ -32,6 +32,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 
 | Document | What it covers |
 |---|---|
+| [LIMITS.md](LIMITS.md) | What OpenMoat does not stop: approvals and prompts, sandboxes and allowed code, what the hook does not see, agents that skip or change the check, the limits of single checks |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | What is defended, how the hook and the OS layers answer each threat class, and the known limits |
 | [EVIDENCE.md](EVIDENCE.md) | What the OS layer stops in an allowed project script, per OS (generated; do not edit) |
 | [COVERAGE.md](COVERAGE.md) | The conformance fixtures per threat class (generated; do not edit) |
