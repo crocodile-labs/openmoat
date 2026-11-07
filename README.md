@@ -18,7 +18,7 @@ one policy that stays on your machine.
 </p>
 
 <p align="center">
-  <a href="#what-openmoat-is">What it is</a> · <a href="#why-openmoat">Why</a> · <a href="#see-it-decide">See it decide</a> · <a href="#supported-agents">Agents</a> · <a href="#what-it-stops">What it stops</a> · <a href="#how-a-call-is-decided">How it decides</a> · <a href="#limits">Limits</a> · <a href="#contributing">Contributing</a>
+  <a href="#what-openmoat-is">What it is</a> · <a href="#why-openmoat">Why</a> · <a href="#see-it-decide">See it decide</a> · <a href="#supported-agents">Agents</a> · <a href="#features">Features</a> · <a href="#how-a-call-is-decided">How it decides</a> · <a href="#limits">Limits</a> · <a href="#contributing">Contributing</a>
 </p>
 
 <!-- demo-video: replaced by the uploaded video URL -->
@@ -198,7 +198,11 @@ week CI installs every agent's latest release and checks that it still loads Ope
 hook ([what is checked per agent](scripts/ci/latest-agents/README.md)). Your agent is not
 listed? [docs/ADDING_AN_AGENT.md](docs/ADDING_AN_AGENT.md) shows how one is added.
 
-## What it stops
+## Features
+
+Everything OpenMoat does, by area. Each links to the page that explains it.
+
+### What it stops
 
 | Risk | What OpenMoat does | Rules |
 |---|---|---|
@@ -218,6 +222,97 @@ content or a secret read, the session itself is watched more closely
 ([session taint](docs/POLICY.md#41-session-taint)), and `openmoat report` counts sends
 after a session read many files outside the project (recorded only,
 [docs/POLICY.md](docs/POLICY.md#45-staging-data-sent-after-collection-recorded)).
+
+### Containment and secrets
+
+- **The agents' own sandboxes, from your policy.** `openmoat init` writes Claude Code's,
+  Codex's and Cursor's sandbox settings from the same policy; `openmoat sandbox show`
+  prints what each denies, and `openmoat sandbox sync` rewrites them after a change. They
+  also deny every agent's login files to the programs an agent's commands run, so a test
+  or a package script cannot read a token ([docs/SANDBOX.md](docs/SANDBOX.md)).
+- **Any agent in one sandbox.** `openmoat run -- <agent>` confines the agent and
+  everything it starts (Seatbelt on macOS; Landlock and seccomp on Linux, bubblewrap with
+  `--isolate`), with network only through OpenMoat's proxy; inside it, npm and uv skip
+  package versions published in the last 7 days.
+- **An egress proxy.** `openmoat proxy` lets network reach only the hosts the policy
+  lists; `openmoat proxy install` keeps it running as a user service.
+- **Tokens the agent never sees.** `openmoat secret add` gives the agent a placeholder; the
+  proxy adds the real token for its one host
+  ([docs/USAGE.md](docs/USAGE.md#keep-a-token-from-the-agent)).
+
+### MCP servers
+
+- **Pinned definitions.** The agents' MCP server definitions are pinned; a new or changed
+  server's tool calls are refused until you run `openmoat mcp accept`.
+- **A gateway.** `openmoat mcp wrap` points the agents' servers at `openmoat mcp proxy`,
+  which starts only accepted servers, sandboxed where it can, pins every tool's
+  definition, records every call, and holds data one server returned that is sent into
+  another server's writing tool (`mcp-cross-server`,
+  [docs/USAGE.md](docs/USAGE.md#mcp-servers-through-the-gateway)).
+
+### See what happened
+
+- **Block messages** tell the agent and you what was stopped, why, and the one thing you
+  can do; your own rules can carry a `title:` and `why:` for them.
+- **`openmoat watch`** follows every agent's calls live; **`openmoat why --last`**
+  explains a decision with the rule and where it is in your policy; `openmoat show`,
+  `replay` and `report` read the log by event, session or time window.
+- **A hash-chained audit log**, local and with secrets redacted: `openmoat audit export`,
+  `verify` and `anchor` (record its head outside the log), and `audit report` across
+  several machines' exports.
+- **Which lines an agent wrote.** `openmoat provenance` maps your commits to the agent
+  sessions that wrote each file and line, and whether they had read a web page or an MCP
+  result first; `--write-notes` keeps it in git notes ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
+- **Compliance evidence.** `openmoat audit evidence` maps a time window of the log to OWASP
+  LLM Top 10, SOC 2 and ISO 27001 controls; evidence, not a certification
+  ([docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
+- **Readable status.** `openmoat`, `status` and `doctor` show what needs you first, with
+  its fix, then one line per agent; they also warn about agent versions with a published
+  security advisory and about repository git configuration that runs a program.
+  [OpenMoat Bar](https://github.com/crocodile-labs/openmoat-bar) shows the same in your
+  menu bar or tray.
+
+### Teams and CI
+
+- **Repository rules.** A committed `.moat/policy.yaml` adds deny and review rules for
+  everyone who clones it; its allow rules apply only after `openmoat trust`, and its
+  review never softens a deny of your own policy
+  ([docs/POLICY.md](docs/POLICY.md#10-repository-policy)).
+- **Signed policy packs.** `openmoat policy trust-key` and `policy install` share a team's
+  rules, signed with an SSH key.
+- **Pull request check.** `openmoat policy check-diff` and the GitHub Action flag a change
+  to CI, git hooks, agent settings, the policy or secret files before it merges, and,
+  line by line and offline, look-alike dependencies, swapped lockfile hashes, workflows a
+  fork can take over, downloaded code that runs, private keys and new hosts
+  ([docs/MERGE_CHECK.md](docs/MERGE_CHECK.md)).
+
+### Everyday commands
+
+Run these in your own terminal; the ones that change protection refuse to run for an agent.
+
+| Command | What it does |
+|---|---|
+| `openmoat` | Shows protection, today's decisions and anything that needs you |
+| `openmoat status` | Shows each agent's protection and what to fix |
+| `openmoat watch` | Follows the agents' calls live |
+| `openmoat why --last` | Explains the newest deny or review |
+| `openmoat allow --last` | Allows the call an agent was just stopped on (`--always` for good); `openmoat allowed` lists what you allowed |
+| `openmoat policy check "<command>"` · `openmoat demo` | Shows a verdict without running anything |
+| `openmoat edit` | Edits the policy: checks it, shows the diff and asks before applying |
+| `openmoat policy upgrade` | Takes the new default rules after an upgrade, keeping every line you changed (`--undo` to go back) |
+| `openmoat doctor` | Checks the install and the policy lock, and what drifted |
+| `openmoat uninstall` | Removes OpenMoat and restores the files it changed |
+
+Every command, and what to do when OpenMoat gets in your way: [docs/USAGE.md](docs/USAGE.md).
+
+### Build on it
+
+- **SDKs.** The Rust crate `openmoat-sdk` and the npm package `@openmoat/sdk` give your
+  own agent the same decisions ([docs/SDK.md](docs/SDK.md)).
+- **Measured.** `openmoat bench` runs the MoatBench attack scenarios against OpenMoat or
+  any other hook ([docs/MOATBENCH.md](docs/MOATBENCH.md)); fuzz targets cover the shell
+  parser, policy parsing, repository-policy merging, host payloads, the proxy, the MCP
+  gateway's framing and the pull request check's diff parser.
 
 ## How a call is decided
 
@@ -261,25 +356,6 @@ openmoat run --write ~/.claude --write ~/.claude.json -- claude
 | `openmoat-sdk`, `openmoat-wasm` | The same decisions as a library for Rust and JavaScript. |
 
 More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/SANDBOX.md](docs/SANDBOX.md).
-
-## Everyday use
-
-Run these in your own terminal; the ones that change protection refuse to run for an agent.
-
-| Command | What it does |
-|---|---|
-| `openmoat` | Shows protection, today's decisions and anything that needs you |
-| `openmoat status` | Shows each agent's protection and what to fix |
-| `openmoat watch` | Follows the agents' calls live |
-| `openmoat why --last` | Explains the newest deny or review |
-| `openmoat allow --last` | Allows the call an agent was just stopped on (`--always` for good) |
-| `openmoat policy upgrade` | Takes the new default rules after an upgrade, with a diff first |
-| `openmoat doctor` | Checks the install and the policy lock, and what drifted |
-| `openmoat uninstall` | Removes OpenMoat and restores the files it changed |
-
-Every command, and what to do when OpenMoat gets in your way:
-[docs/USAGE.md](docs/USAGE.md). [OpenMoat Bar](https://github.com/crocodile-labs/openmoat-bar)
-shows the same in your menu bar or tray, read-only.
 
 ## Limits
 
