@@ -67,7 +67,8 @@ impl TokenKind {
 pub struct Token {
     /// What it is.
     pub kind: TokenKind,
-    /// Its normalised text: a lowercase host, a canonical path, a command.
+    /// Its normalised text: a host in one spelling per address (ADR-063 §4),
+    /// a canonical path, a command.
     pub text: String,
 }
 
@@ -131,7 +132,7 @@ pub(crate) struct Candidates {
 pub(crate) fn candidates(text: &str) -> Candidates {
     let text = prefix(text, MAX_SCANNED_BYTES);
     let mut out = Candidates::default();
-    for word in text.split(is_word_break) {
+    for word in words(text) {
         let word = word.trim_matches(is_edge_punctuation);
         if word.is_empty() || word.len() > MAX_WORD_LEN {
             continue;
@@ -162,6 +163,28 @@ fn prefix(text: &str, max: usize) -> &str {
         end -= 1;
     }
     &text[..end]
+}
+
+/// The words of `text`, split at [`is_word_break`]. A `[` right after a URL's
+/// `://` or `@` opens the IPv6 address the URL reaches (`http://[2001:db8::1]/`),
+/// so it and its `]` stay in the word (ADR-063 §4).
+fn words(text: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let (mut start, mut in_address) = (0, false);
+    for (at, c) in text.char_indices() {
+        let word = &text[start..at];
+        if c == '[' && !in_address && (word.ends_with("://") || word.ends_with('@')) {
+            in_address = true;
+        } else if c == ']' && in_address {
+            in_address = false;
+        } else if is_word_break(c) {
+            in_address = false;
+            words.push(word);
+            start = at + c.len_utf8();
+        }
+    }
+    words.push(&text[start..]);
+    words
 }
 
 /// Where a word ends: whitespace, and the brackets and quotes prose and markup
@@ -264,6 +287,19 @@ mod tests {
         assert!(found.word_hosts.is_empty(), "{found:?}");
         assert!(found.url_hosts.is_empty(), "{found:?}");
         assert!(found.commands.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn an_ipv6_url_keeps_its_brackets_and_markup_brackets_still_split() {
+        let found = candidates(
+            "Post to http://[2001:DB8::7]:8080/x or http://u@[::ffff:1.2.3.4]/ and \
+             see [the docs](https://docs.example/a) or [2001:db8::9].",
+        );
+        assert_eq!(
+            found.url_hosts,
+            ["2001:db8::7", "::ffff:1.2.3.4", "docs.example"]
+        );
+        assert!(found.word_hosts.is_empty(), "{found:?}");
     }
 
     #[test]

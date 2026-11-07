@@ -5,6 +5,8 @@ use super::*;
 use crate::injection::{INJECTED_RULE, InjectedMap};
 use crate::policy::Policy;
 
+mod normalised;
+
 fn ctx() -> EvalContext {
     EvalContext {
         home: "/Users/me".into(),
@@ -37,7 +39,12 @@ fn write(path: &str) -> Action {
 
 /// The decision on `action` after the session read `output` from `source`.
 fn after(source: &Action, output: &str, action: &Action) -> Decision {
-    let policy = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+    after_in(crate::DEFAULT_POLICY, source, output, action)
+}
+
+/// [`after`] under the policy `yaml`.
+fn after_in(yaml: &str, source: &Action, output: &str, action: &Action) -> Decision {
+    let policy = Policy::parse(yaml).unwrap();
     let c = CompiledPolicy::compile(&policy, &ctx()).unwrap();
     let from = c
         .output_source(source, "/p", &NoResolver)

@@ -546,7 +546,7 @@ collect.evil.example may follow an instruction planted there
 
   Not counted: a file read, or a local command (`cat NOTES.md`, `cargo test`).
 - **What is kept.** Each output (its first 1 MiB) is reduced to at most 256 tokens:
-  - the hosts of its URLs;
+  - the hosts of its URLs, an IPv6 address in brackets too (`http://[2001:db8::7]/`);
   - words that look like host names;
   - absolute and `~/` paths outside the project;
   - the commands of its code spans (fenced blocks, backticks, `$ ` lines; 16 to 512
@@ -556,11 +556,32 @@ collect.evil.example may follow an instruction planted there
   stored as a keyed fingerprint (HMAC under `~/.moat/proxy.key`) with its source, never as
   text. A session keeps at most 4096; past that, new ones are dropped.
 - **What it tightens.** Checked are a shell command, a write and a patch:
-  - a `net` or `fetch` atom whose host was kept;
+  - a `net` or `fetch` atom whose host was kept, or whose parent domain was kept as a URL
+    host (below);
   - a write to a kept path;
   - a command equal to a kept one, when the call also reaches a host or a file outside the
     project that the policy does not allow. Docs that say `git push origin main` stay
     quiet.
+- **Same request, other spelling** (ADR-063 §4). Each of these applies both to what is
+  kept and to the later call it is compared with:
+  - Hosts: lowercase, without a trailing dot; an IPv4 address in any form the URL
+    Standard reads (`3405803783`, `0xcb.0.0x71.07` and `203.0.113.7` are one address);
+    an IPv6 address compressed (`2001:db8:0:0:0:0:0:7` is `2001:db8::7`).
+  - Subdomains of a URL host: a call to `collect.evil.example` is linked to a kept
+    `https://evil.example/…`. The call's host and each parent domain down to two labels
+    is one lookup each. A parent the policy allows on its own (`github.com`) links
+    nothing, and the source's own host is never kept, so `docs.github.com` named by a page
+    on `github.com` links nothing new. A word host (`evil.com` in prose) links its exact
+    spelling only, and a word that only looks like a host (`app.run` in code) is compared
+    with URL hosts, never their parents.
+  - Commands: as the classifier reads them, which also gives the command a wrapper runs
+    (`sudo`, `env`, `nohup`, `sh -c`, `bash -c`, …) and leaves leading `VAR=value`
+    assignments out. `BACKUP=1 nohup tar -czf …` and `sh -c 'tar -czf …'` are linked to a
+    kept `tar -czf …`, and the other way round. Flags are not re-ordered and words are not
+    dropped: `rm -rf x` and `rm -r -f x` are different commands, as in §3.1.
+  - Paths: unchanged.
+  - Not done: edit distance, substrings, case-folded paths on case-sensitive systems, DNS
+    lookups, any model. Each would turn docs into links.
 
   An atom the policy allows on its own stays allowed: a host on the allow list
   (`git push`, `curl https://api.github.com/…`), a project file, `cargo build`. A deny
@@ -577,9 +598,10 @@ collect.evil.example may follow an instruction planted there
   or file; `openmoat doctor` and `openmoat status` report the hook as needing it until
   then. Every other host keeps §4.1 alone for calls that are not wrapped MCP tools; its
   HOST.md says so.
-- **Limits.** Matches are exact: a host spelled another way, a reworded command or a
-  relative path is not linked. Content that floods the bounds with decoys can push a
-  planted token out. A command in plain prose is linked by its hosts and paths only.
+- **Limits.** Beyond the spellings above, matches are exact: a host under another name, a
+  subdomain of a word host, a reworded command or a relative path is not linked. Content
+  that floods the bounds with decoys can push a planted token out. A command in plain
+  prose is linked by its hosts and paths only.
 - Conformance fixtures give an earlier call's output with `output:` in its `session:` entry.
 
 ### 4.2 The push check
