@@ -38,7 +38,9 @@ fn rows(doc: &str) -> Vec<Row> {
             .join(doc),
     )
     .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
-    let mut lines = text.lines().skip_while(|line| !line.trim().starts_with(HEADER));
+    let mut lines = text
+        .lines()
+        .skip_while(|line| !line.trim().starts_with(HEADER));
     assert!(lines.next().is_some(), "{doc}: no `{HEADER}` table");
     lines
         .skip(1)
