@@ -11,16 +11,16 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | Document | What it covers |
 |---|---|
 | [README](../README.md) | What OpenMoat is, the quick start, supported agents and the main limits |
-| [INSTALL.md](INSTALL.md) | Install and upgrade on macOS, Linux and Windows; `openmoat init`; what each agent's hook covers; other config directories |
-| [IDE.md](IDE.md) | Claude Code in VS Code and JetBrains, and Cursor's editor: what the hook covers there, the setup and checks, what is not covered |
+| [INSTALL.md](INSTALL.md) | Install and upgrade on macOS, Linux and Windows; `openmoat init`; what each agent's hook covers (Cursor's `beforeTabFileRead`, the Cline CLI's `PostToolUse` file); other config directories |
+| [IDE.md](IDE.md) | Claude Code in VS Code and JetBrains, and Cursor's editor and Tab: what the hook covers there (`getDiagnostics`, `executeCode`, the editors' project files), the setup and checks, what is not covered (a repository's git configuration, the editor selection) |
 | [DEMO.md](DEMO.md) | The launch demo, run in a throwaway home |
 
 ## Use
 
 | Document | What it covers |
 |---|---|
-| [USAGE.md](USAGE.md) | Handling a deny or a review, reviewing what the agent did, changing the policy, team rules; every command and exit code |
-| [POLICY.md](POLICY.md) | The policy file: schema, rule kinds, pattern syntax, evaluation order, the default policy, the lock; session taint and [injected input](POLICY.md#412-injected-input) (`injected-input`), MCP [cross-server data flow](POLICY.md#cross-server-data-flow-mcp-cross-server-adr-058) (`mcp-cross-server`, `mcp.flow_trusted`), `check_diff.levels` |
+| [USAGE.md](USAGE.md) | Handling a deny or a review and reading the block message, reviewing what the agent did ([`openmoat watch`](USAGE.md#watch-the-agents-live), [`openmoat why`](USAGE.md#why-was-this-blocked), `openmoat report`), changing the policy, team rules; every command and exit code |
+| [POLICY.md](POLICY.md) | The policy file: schema, rule kinds and a rule's [`title` and `why`](POLICY.md#2-rule-groups), pattern syntax, evaluation order, the default policy (`managed-settings`, `container-host` among its rules), the lock, [`policy upgrade`](POLICY.md#82-approvals)'s merge; [staging](POLICY.md#45-staging-data-sent-after-collection-recorded) (`staging:`, recorded only); session taint and [injected input](POLICY.md#412-injected-input) (`injected-input`), MCP [cross-server data flow](POLICY.md#cross-server-data-flow-mcp-cross-server-adr-058) (`mcp-cross-server`, `mcp.flow_trusted`), `check_diff.levels` |
 | [SANDBOX.md](SANDBOX.md) | The OS sandboxes: the agents' own (Standard tier), `openmoat run` (Lightweight) and `openmoat run --isolate` (Isolated); agents' logins denied to the commands they run, and the running agent's own kept under `openmoat run` (`run.own-login`) |
 | [BROKER_LOGINS.md](BROKER_LOGINS.md) | Keeping an agent's API key out of `openmoat run` with `openmoat secret add`: steps, providers' hosts and headers, limits |
 | [MERGE_CHECK.md](MERGE_CHECK.md) | Checking pull requests before merge: `openmoat policy check-diff` and the GitHub Action, the content checks of added lines (supply chain, CI takeover, decoded or downloaded code, keys, new hosts) and `check_diff.levels`, with an example workflow, output and limits |
