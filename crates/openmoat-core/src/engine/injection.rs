@@ -74,7 +74,9 @@ impl CompiledPolicy<'_> {
     /// [`Self::output_source`] names), worth keeping: hosts other than the
     /// ones `source` itself reached and than loopback, absolute paths outside
     /// the project, and commands of its code spans as the classifier reads
-    /// them. De-duplicated, at most [`MAX_TOKENS_PER_OUTPUT`]: URL hosts
+    /// them. Hosts are kept in their canonical spelling
+    /// (`host::canonical`, ADR-063 §4), as a later call's hosts are
+    /// compared. De-duplicated, at most [`MAX_TOKENS_PER_OUTPUT`]: URL hosts
     /// first, then commands, paths, and words that look like hosts.
     #[must_use]
     pub fn injected_tokens(&self, source: &Action, cwd: &str, output: &str) -> Vec<Token> {
@@ -84,13 +86,19 @@ impl CompiledPolicy<'_> {
             ..self.ctx.clone()
         };
         let (source_atoms, _) = checked_atoms(source, &ctx, self.opens_as(), &NoResolver);
-        let own_hosts: Vec<&str> = source_atoms.iter().filter_map(host_of).collect();
+        // Never kept, so never a parent a later call links to (ADR-063 §4):
+        // `docs.github.com` named by a page on `github.com` links nothing new.
+        let own_hosts: Vec<String> = source_atoms
+            .iter()
+            .filter_map(host_of)
+            .map(crate::host::canonical)
+            .collect();
         let host_token = |kind: TokenKind| {
             let own_hosts = &own_hosts;
             move |host: String| {
-                let foreign = !own_hosts.iter().any(|h| h.eq_ignore_ascii_case(&host))
-                    && !crate::host::is_loopback(&host);
-                foreign.then_some(Token { kind, text: host })
+                let text = crate::host::canonical(&host);
+                let foreign = !own_hosts.contains(&text) && !crate::host::is_loopback(&host);
+                foreign.then_some(Token { kind, text })
             }
         };
         let commands = found
@@ -173,37 +181,35 @@ impl CompiledPolicy<'_> {
     /// The review `atom` needs when one of its parts came from untrusted
     /// content; `None` when none did or the policy allows the atom.
     fn injected(&self, atom: &AtomicAction, seen: &dyn InjectedLookup) -> Option<Decision> {
-        let candidates: Vec<Token> = match atom {
+        let (token, source) = match atom {
             AtomicAction::Net { host } | AtomicAction::Fetch { host } => {
-                [TokenKind::UrlHost, TokenKind::WordHost]
-                    .map(|kind| Token {
-                        kind,
-                        text: host.to_ascii_lowercase(),
-                    })
-                    .to_vec()
+                let kinds = [TokenKind::UrlHost, TokenKind::WordHost];
+                probe(seen, host_tokens(host, &kinds))
+                    .or_else(|| self.parent_source(atom, host, seen))
             }
             // a word that only looks like a host (`app.run`) is compared with
-            // hosts of URLs alone, which prose does not invent
-            AtomicAction::NetWord { host } => vec![Token {
-                kind: TokenKind::UrlHost,
-                text: host.to_ascii_lowercase(),
-            }],
-            AtomicAction::FsWrite { path } => vec![Token {
-                kind: TokenKind::Path,
-                text: self.path_key(path),
-            }],
-            AtomicAction::Shell { argv } => command_text(argv)
-                .map(|text| Token {
+            // hosts of URLs alone, which prose does not invent, and not with
+            // their parents: it is not a request to any of them
+            AtomicAction::NetWord { host } => probe(seen, host_tokens(host, &[TokenKind::UrlHost])),
+            AtomicAction::FsWrite { path } => probe(
+                seen,
+                [Token {
+                    kind: TokenKind::Path,
+                    text: self.path_key(path),
+                }],
+            ),
+            // a command is compared as the classifier reads it, which also
+            // yields the command a wrapper runs (`sudo`, `env`, `nohup`,
+            // `sh -c`) and leaves `VAR=value` out, at keep and at check alike
+            AtomicAction::Shell { argv } => probe(
+                seen,
+                command_text(argv).map(|text| Token {
                     kind: TokenKind::Command,
                     text,
-                })
-                .into_iter()
-                .collect(),
-            _ => return None,
-        };
-        let (token, source) = candidates
-            .into_iter()
-            .find_map(|token| seen.source_of(&token).map(|source| (token, source)))?;
+                }),
+            ),
+            _ => None,
+        }?;
         if self.allows(atom) {
             return None;
         }
@@ -222,6 +228,29 @@ impl CompiledPolicy<'_> {
                 atom.describe()
             ),
         ))
+    }
+
+    /// The kept URL host a parent domain of `host` matches, and its source:
+    /// a kept URL host links a request to any of its subdomains (ADR-063 §4).
+    /// One probe per parent, nearest first; a parent the policy allows on its
+    /// own (`github.com`) links nothing, so a page naming an allowed site
+    /// does not tighten every call to its subdomains. Word hosts are compared
+    /// exactly: a name in prose is weaker evidence than a URL (ADR-057 §4).
+    fn parent_source(
+        &self,
+        atom: &AtomicAction,
+        host: &str,
+        seen: &dyn InjectedLookup,
+    ) -> Option<(Token, String)> {
+        let host = crate::host::canonical(host);
+        crate::host::parents(&host).find_map(|parent| {
+            let token = Token {
+                kind: TokenKind::UrlHost,
+                text: parent.to_owned(),
+            };
+            let source = seen.source_of(&token)?;
+            (!self.allows(&with_host(atom, parent))).then_some((token, source))
+        })
     }
 
     /// Whether the policy decides `atom` `allow` on its own.
@@ -280,6 +309,49 @@ impl CompiledPolicy<'_> {
 fn command_text(argv: &[String]) -> Option<String> {
     let text = argv.join(" ");
     (argv.len() >= 2 && (MIN_COMMAND_LEN..=MAX_COMMAND_LEN).contains(&text.len())).then_some(text)
+}
+
+/// The first of `tokens` the session kept, with its source.
+fn probe(
+    seen: &dyn InjectedLookup,
+    tokens: impl IntoIterator<Item = Token>,
+) -> Option<(Token, String)> {
+    tokens
+        .into_iter()
+        .find_map(|token| seen.source_of(&token).map(|source| (token, source)))
+}
+
+/// The tokens a call's `host` is compared with, one per kind of `kinds`: in
+/// its canonical spelling ([`crate::host::canonical`]), which tokens are kept
+/// in, then as written (lowercase, no trailing dot) when that differs, which
+/// rows kept before ADR-063 hold for an address spelled another way.
+fn host_tokens(host: &str, kinds: &[TokenKind]) -> Vec<Token> {
+    let canonical = crate::host::canonical(host);
+    let written = host.trim_end_matches('.').to_ascii_lowercase();
+    let spellings = if written == canonical {
+        vec![canonical]
+    } else {
+        vec![canonical, written]
+    };
+    spellings
+        .iter()
+        .flat_map(|text| {
+            kinds.iter().map(|kind| Token {
+                kind: *kind,
+                text: text.clone(),
+            })
+        })
+        .collect()
+}
+
+/// `atom`, a `Net` or `Fetch` atom, reaching `host` instead.
+fn with_host(atom: &AtomicAction, host: &str) -> AtomicAction {
+    let host = host.to_owned();
+    if matches!(atom, AtomicAction::Fetch { .. }) {
+        AtomicAction::Fetch { host }
+    } else {
+        AtomicAction::Net { host }
+    }
 }
 
 /// The host a network atom reaches.

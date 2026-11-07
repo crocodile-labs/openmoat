@@ -20,6 +20,10 @@ Two modes, chosen by `--base`:
   worse than base's: above base x RATIO and above base + MARGIN_MS. Above
   CEILING_MS it fails whatever base measured, the backstop for a guard so
   slow that nothing about the runner explains it.
+
+A call that writes no audit row (`PostToolUse`) has no own time: it fails
+above CEILING_MS end to end in either mode and otherwise only warns
+(judge_end_to_end).
 """
 
 import os
@@ -148,6 +152,24 @@ def judge(what, head, base=None):
         warnings.append(f"guard end to end p95 {what} is {wall:.1f} ms against {base_wall:.1f} "
                         f"ms for the commit this lands on (process start or binary size?)")
     return errors, warnings
+
+
+def judge_end_to_end(what, wall, base_wall=None):
+    """(errors, warnings) for a call that writes no audit row (`PostToolUse`,
+    ADR-057), whose only time is end to end. It fails above CEILING_MS, the
+    guard's p95 budget an after-call hook is held to (ADR-063 §2), in either
+    mode; above FAIL_MS, or clearly slower than base, it only warns, since on
+    a shared runner end to end is mostly process start."""
+    if wall > CEILING_MS:
+        return [f"guard end to end p95 {what} is {wall:.1f} ms, over the {CEILING_MS:.0f} ms "
+                f"budget of an after-call hook"], []
+    if base_wall is not None and regressed(wall, base_wall):
+        return [], [f"guard end to end p95 {what} is {wall:.1f} ms against {base_wall:.1f} ms "
+                    f"for the commit this lands on (no audit row, so no own time to compare)"]
+    if base_wall is None and wall > FAIL_MS:
+        return [], [f"guard end to end p95 {what} is {wall:.1f} ms, over {FAIL_MS:.0f} ms "
+                    f"(no audit row, so no own time to tell a slow runner apart)"]
+    return [], []
 
 
 def regressed(head_ms, base_ms):

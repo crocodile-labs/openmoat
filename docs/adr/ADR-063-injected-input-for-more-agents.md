@@ -180,4 +180,9 @@ real release (the latest-agents job records one per host before its PR) waits fo
    enough?
 4. Is a parent-domain probe acceptable for word hosts too, or only for URL hosts (ADR-057
    already treats word hosts more strictly)?
+   Proposed answer: URL hosts only. A kept word host links its exact spelling, and a call's
+   word that only looks like a host (`NetWord`) is compared with URL hosts exactly, not
+   with their parents: a name in prose (`evil.com`) and a word in code (`app.run`) are
+   weaker evidence than a URL, and probing their parents would link every subdomain of a
+   name docs mention in passing. Step 3 ships this.
 5. Number: 061 assumes the staging-chain and proxy-path drafts take 059 and 060.

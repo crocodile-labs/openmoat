@@ -497,9 +497,11 @@ The main gaps:
   instead ([BROKER_LOGINS.md](docs/BROKER_LOGINS.md)); an OAuth login cannot
   ([ADR-054](docs/adr/ADR-054-agent-credentials-in-sandboxes.md)).
 - **Injected input is linked only with Claude Code, the Cline CLI and wrapped MCP
-  servers, and only exactly.** Other agents report no call output (their wrapped MCP
-  servers' results are read by the gateway), and a planted host spelled another way, a
-  reworded command or a relative path is not linked to its source. Only the output of `Bash`, `WebFetch`,
+  servers, and only for the same request.** Other agents report no call output (their
+  wrapped MCP servers' results are read by the gateway). Another spelling of a planted
+  address, a subdomain of a planted URL host and a planted command run through a wrapper
+  are linked; a host by another name, a reworded command or a relative path is not
+  ([docs/POLICY.md](docs/POLICY.md#412-injected-input)). Only the output of `Bash`, `WebFetch`,
   `WebSearch`, MCP resource reads and MCP tools is read, each kept up to fixed bounds,
   so a page full of decoys can push a planted host out. Fetches, searches and MCP
   calls themselves are not checked against it, and an install without the
