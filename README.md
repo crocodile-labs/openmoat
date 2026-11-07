@@ -15,27 +15,41 @@ before it runs, and answers `allow`, `defer`, `review` or `deny`.
   <a href="https://openmoat.dev">Website</a> · <a href="https://openmoat.dev/docs/">Docs</a> · <a href="#quick-start">Quick start</a> · <a href="docs/LIMITS.md">Limits</a>
 </p>
 
+<p align="center">
+  <a href="#why-openmoat">Why</a> · <a href="#supported-agents">Agents</a> · <a href="#what-it-protects">What it protects</a> · <a href="#how-it-works">How it works</a> · <a href="#everyday-use">Everyday use</a> · <a href="#limits">Limits</a> · <a href="#contributing">Contributing</a>
+</p>
+
 <!-- demo-video: replaced by the uploaded video URL -->
 <p align="center">
   <a href="docs/assets/demo.mp4"><img src="docs/assets/demo-poster.png" width="760" alt="Demo video: an agent's normal work is allowed; a command planted in a web page the agent read is held for review; an attempt to send an SSH key off the machine is denied; openmoat watch shows each call as it happens and openmoat why explains the block."></a>
 </p>
 
-## What it does
+## Why OpenMoat
 
-- **One policy for every agent.** Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot
-  CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, all set up with
-  `openmoat init`.
-- **Decides from what a call really does.** It reads the shell the way a shell does
-  (variables, quoting, base64, `$(…)`, `bash -c`) and checks the files, hosts and
-  programs a call touches. No AI model decides.
-- **Stops what must never happen, asks about what lasts.** Secrets read or sent, unknown
-  hosts and destructive commands are denied; git hooks, CI files and login items wait for
-  you; everything else your agent asks about as usual.
-- **The agent cannot switch it off.** The policy and hook files are locked; the agent
-  cannot edit them, approve its own blocked call or uninstall OpenMoat.
-- **Everything stays on your machine.** One Rust binary for macOS, Linux and Windows.
-  Every decision goes into a local, hash-chained audit log; OpenMoat sends nothing off
-  the machine.
+AI coding agents run shell commands, edit files, fetch web pages and call MCP tools with
+your permissions. Three things go wrong:
+
+- **Approvals become a habit.** After the hundredth prompt you click yes, or switch on
+  auto-approve, and then nothing is asked at all.
+- **What the agent reads can steer it.** A README, an issue or a web page can carry an
+  instruction, and the agent may follow it.
+- **Every agent has its own rules.** Each has its own settings format and sandbox; three
+  agents mean three policies to keep in step.
+
+OpenMoat adds one check in front of every agent, through the agent's own hook:
+
+| | The agent's own prompt | With OpenMoat |
+|---|---|---|
+| Auto-approve, CI, background agents | nothing is asked | a deny still holds |
+| `echo … \| base64 -d \| sh`, a path in a variable | you read the text as written | decided by what it really does |
+| A command planted in a page the agent read | looks like any other request | held for review, the page named (Claude Code, Cline CLI, wrapped MCP servers) |
+| The agent's own guardrails | settings the agent may be able to change | locked: the agent cannot edit the policy or approve its own block |
+| Several agents | a different setup in each | one policy and one audit log |
+
+It does not replace the agent's prompt or sandbox. Anything the policy has no rule for
+goes back to the agent's own prompt, and the same policy writes the agents' own OS
+sandboxes. It is one Rust binary for macOS, Linux and Windows; no AI model decides, and
+OpenMoat sends nothing off your machine.
 
 ## Quick start
 
@@ -87,6 +101,9 @@ to 0.7.0 called the command `moat`; that name still runs `openmoat` for a few re
 
 ## Supported agents
 
+Eleven agents, one policy. `openmoat init` finds the ones installed and asks before it
+sets up each:
+
 <!-- generated:hosts-agents -->
 | Agent | How OpenMoat is hooked | Protection | `openmoat init --hosts` |
 |---|---|---|---|
@@ -104,14 +121,25 @@ to 0.7.0 called the command `moat`; that name still runs `openmoat` for a few re
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 
-**Editors:** Claude Code in VS Code and JetBrains uses the same hook as the CLI, and
-Cursor's Tab is refused secret files ([docs/IDE.md](docs/IDE.md)).
+| Protection | What it means |
+|---|---|
+| **hook + OS sandbox** | Every tool call is checked, and `openmoat init` also writes the agent's own sandbox settings from the same policy, so the operating system confines the commands it runs. |
+| **hook only** | Every tool call the agent's hook reports is checked; the hook's decision is the only check. For OS confinement too, start the agent with `openmoat run` (macOS, Linux). |
 
-"Hook + OS sandbox" means `openmoat init` also writes the agent's own sandbox settings
-from the same policy, so the operating system confines the commands the agent runs.
-"Hook only" means the hook's decision is the only check. Each week CI installs every
-agent's latest release and checks that it loads OpenMoat's hook
-([what is checked per agent](scripts/ci/latest-agents/README.md)).
+**In your editor:**
+
+| Editor | What protects it |
+|---|---|
+| VS Code, JetBrains | Claude Code's extension and plugin use the same hook as the CLI; `openmoat init` also finds the Claude Code the extension bundles. |
+| Cursor | Cursor's own hooks for the agent, and Tab (inline completion) is refused secret files. |
+
+Details and what the editors do not report: [docs/IDE.md](docs/IDE.md).
+
+Set up one agent only with `openmoat init --hosts <id>` (for example
+`openmoat init --hosts codex`). Each week CI installs every agent's latest release and
+checks that it still loads OpenMoat's hook
+([what is checked per agent](scripts/ci/latest-agents/README.md)). Your agent is not
+listed? [docs/ADDING_AN_AGENT.md](docs/ADDING_AN_AGENT.md) shows how one is added.
 
 ## What it protects
 
@@ -200,23 +228,27 @@ the full table is in [docs/USAGE.md](docs/USAGE.md#what-the-default-policy-does)
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg">
-    <img src="docs/assets/how-it-works-light.svg" width="760" alt="An AI coding agent wants to run a tool call. Through the agent's own hook, OpenMoat checks it against one local policy before it runs: npm test is allowed, a call with no rule is left to the agent's own prompt, a git hook write is held for you to review, and reading ~/.ssh/id_rsa is denied. Allowed code still runs inside the OS sandbox and the egress proxy, and every decision goes into a local hash-chained audit log.">
+    <img src="docs/assets/how-it-works-light.svg" width="860" alt="How OpenMoat works. An AI coding agent wants to run a tool call. Through the agent's own hook, before the call runs, OpenMoat reads what the call really does, checks it against one local policy and answers: allow (npm test runs), defer (an unknown install goes to the agent's own prompt), review (a git hook change waits for you) or deny (reading ~/.ssh/id_rsa never runs). Allowed code is still confined by the OS sandbox and the egress proxy, the policy is locked against the agent, and every decision goes into a local hash-chained audit log.">
   </picture>
 </p>
 
-- **Allow** is normal development work.
-- **Defer** is anything the policy has no rule for: the agent's own prompt decides, as it
-  would without OpenMoat.
-- **Review** is for effects that outlive the session, such as a git hook or a login item.
-- **Deny** is what must never happen. When one call does several things, the strictest
-  verdict wins, and an allow rule never overrides a deny rule. If OpenMoat's own check
-  fails, the call is denied.
+Every call gets one of four answers:
 
-The hook decides each call, but an allowed `npm test` can run any code. That is what the
-OS sandboxes are for: the agents' own (written from the same policy), or `openmoat run`,
-which puts the whole agent in one sandbox (Seatbelt on macOS 13 or later; Landlock and
-seccomp on Linux, or bubblewrap with `--isolate`) with network only through
-`openmoat proxy`:
+| Verdict | For | What happens |
+|---|---|---|
+| **allow** | normal development work | the call runs |
+| **defer** | anything the policy has no rule for | the agent's own prompt decides, as it would without OpenMoat |
+| **review** | effects that outlive the session: a git hook, a CI file, a login item | the call waits for you |
+| **deny** | what must never happen: secrets read or sent, OpenMoat switched off | the call never runs, and the agent is told why |
+
+When one call does several things, the strictest verdict wins, and an allow rule never
+overrides a deny rule. If OpenMoat's own check fails, the call is denied.
+
+The hook decides each call, but an allowed `npm test` can run any code. The layers in the
+lower half of the picture bound what it can do: the agents' own OS sandboxes (written
+from the same policy), or `openmoat run`, which puts the whole agent in one sandbox
+(Seatbelt on macOS 13 or later; Landlock and seccomp on Linux, or bubblewrap with
+`--isolate`) with network only through `openmoat proxy`:
 
 ```bash
 openmoat run --write ~/.claude --write ~/.claude.json -- claude
@@ -324,18 +356,29 @@ Each release's own steps are in its [CHANGELOG](CHANGELOG.md) "Upgrading" line.
 
 ## Contributing
 
+Contributions are welcome, small or large. Good places to start:
+
+| You want to | Start here |
+|---|---|
+| Report a safe command that was blocked (a false positive) | the [false-positive issue form](https://github.com/crocodile-labs/openmoat/issues/new/choose), with the `openmoat policy check` output |
+| Add or change a rule | `crates/openmoat-core/policies/default-v1.yaml`, with one attack and one benign fixture in `tests/conformance/` ([docs/POLICY.md](docs/POLICY.md)) |
+| Support another agent | [docs/ADDING_AN_AGENT.md](docs/ADDING_AN_AGENT.md) |
+| Find a way past OpenMoat | [Break OpenMoat](docs/CHALLENGE.md); report it privately ([SECURITY.md](SECURITY.md)) |
+| Pick up an open task | issues labelled [`good first issue`](https://github.com/crocodile-labs/openmoat/labels/good%20first%20issue) and [`help wanted`](https://github.com/crocodile-labs/openmoat/labels/help%20wanted) |
+
+Set up and check your change the way CI does:
+
 ```bash
 git clone https://github.com/crocodile-labs/openmoat && cd openmoat
 git config core.hooksPath .githooks        # runs the quality gate before every push
 scripts/ci/quality-gate.sh                 # fmt, clippy -D warnings, doc, tests, policy lint
 ```
 
-Rust 1.99, pinned in `rust-toolchain.toml`. A false positive or a new rule goes in
-`crates/openmoat-core/policies/default-v1.yaml` with a fixture in `tests/conformance/`;
-another agent follows [docs/ADDING_AN_AGENT.md](docs/ADDING_AN_AGENT.md). Read
-[CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before your first pull
-request. AI-assisted pull requests are welcome; each gets an automated first-pass review,
-and a maintainer makes the call.
+Rust 1.99, pinned in `rust-toolchain.toml`. Read [CONTRIBUTING.md](CONTRIBUTING.md) (pull
+request standards, changelog fragments, testing with real agents) and
+[AGENTS.md](AGENTS.md) (the repository's rules) before your first pull request.
+AI-assisted pull requests are welcome: each gets an automated first-pass review, and a
+maintainer makes the call. Everyone follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 
