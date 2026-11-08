@@ -301,12 +301,15 @@ fn relay_variables_outside_a_run_are_not_followed() {
     assert!(text(&out).contains("secrets-paths"), "{}", text(&out));
     assert!(!text(&out).contains("did not decide"), "{}", text(&out));
     let decided = rows(&sb, "stray");
-    let found: Vec<Vec<String>> = decided.iter().map(rules).collect();
+    // The call's row and the `run-guard-outside` row are written by the same
+    // call, so their order is not fixed.
+    let mut found: Vec<Vec<String>> = decided.iter().map(rules).collect();
+    found.sort();
     assert_eq!(
         found,
         [
-            vec!["secrets-paths".to_owned()],
-            vec!["run-guard-outside".to_owned()]
+            vec!["run-guard-outside".to_owned()],
+            vec!["secrets-paths".to_owned()]
         ]
     );
     // The heartbeat is recorded here too, not skipped as inside a run.
