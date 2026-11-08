@@ -97,6 +97,35 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
     Ok(())
 }
 
+/// A row beside the call's: the hook's environment named `openmoat run`'s
+/// relay, but the guard was in no run's sandbox (`guard_relay::Relay::Outside`),
+/// so it decided the call itself. Best effort: the call has its own row, or
+/// its deny for the log that could not take it.
+pub(super) fn relay_outside(host: Host, request: Option<&HookRequest>) {
+    let decision = Decision::single(
+        Verdict::Deny,
+        crate::guard_relay::RULE_OUTSIDE,
+        "the hook's environment set MOAT_GUARD_SOCKET and MOAT_GUARD_TOKEN, but it runs in no \
+         `openmoat run` sandbox, so the call was decided here and not sent there; find the \
+         setting that gives the hook these variables",
+    );
+    let note = |home: Home| -> Result<()> {
+        let store = Store::open_existing(&home.audit_path())?;
+        store.record(&NewEvent {
+            host: host.id(),
+            session_id: request.map_or("unknown", |r| r.session_id.as_str()),
+            call_id: request.and_then(|r| r.call_id.as_deref()),
+            cwd: request.and_then(|r| r.cwd.as_deref()),
+            tool: "guard",
+            action: None,
+            decision: &decision,
+            latency_us: 0,
+        })?;
+        Ok(())
+    };
+    let _ = Home::locate().and_then(note);
+}
+
 /// Record `event`, then what goes with its row (`with_row`: provenance, the
 /// MCP ticket, the `openmoat run` link). When that fails the host is answered
 /// with a deny (`decide_and_respond`), while the committed row says what was

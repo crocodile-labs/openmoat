@@ -10,6 +10,7 @@
 //! with its own access ([`service`]). Whatever goes wrong denies.
 
 mod client;
+mod inside;
 mod service;
 mod wire;
 
@@ -22,8 +23,35 @@ use anyhow::{Context as _, Result};
 use zeroize::Zeroizing;
 
 pub use client::{Endpoint, configured};
+pub use inside::RULE_OUTSIDE;
 pub use service::Service;
 pub use wire::Reply;
+
+/// What a guard does with the relay variables of its environment.
+pub enum Relay {
+    /// Neither is set: it decides by itself.
+    Unset,
+    /// It runs in `openmoat run`'s sandbox: it sends the call to the endpoint
+    /// they name (an error when they name none it may use).
+    Inside(Result<Endpoint>),
+    /// They are set, but the guard can open its lock or is in no sandbox of
+    /// `openmoat run`: it decides by itself and records that they were there.
+    Outside,
+}
+
+/// [`Relay`] for an environment read by `var`, with the state directory
+/// `home` names (`None` when none can be named).
+pub fn relay(var: &dyn Fn(&str) -> Option<String>, home: Option<&crate::home::Home>) -> Relay {
+    let Some(endpoint) = configured(var) else {
+        return Relay::Unset;
+    };
+    let lock = home.map(crate::home::Home::lock_path);
+    if inside::in_run_sandbox(lock.as_deref()) {
+        Relay::Inside(endpoint)
+    } else {
+        Relay::Outside
+    }
+}
 
 /// Where `moat run` answers hook calls: `127.0.0.1:<port>`.
 pub const SOCKET_ENV: &str = "MOAT_GUARD_SOCKET";

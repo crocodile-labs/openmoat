@@ -600,6 +600,20 @@ something OpenMoat claims to stop.
     own, which then answers that guard. That gains nothing: the command could skip the
     guard altogether, a forged answer leaves no audit row, and the hooks the host
     starts keep the host's environment.
+  - *The sandbox, for the relay itself (ADR-069).* The two variables alone do not make a
+    guard relay. A host that builds its hooks' environment from a file or setting
+    OpenMoat does not guard could hand them to a hook outside any run, and a listener
+    that repeats the nonce would answer every call. So the guard relays only when it
+    cannot open its own lock and the refusal is the run's sandbox's: `EPERM` from
+    Seatbelt on macOS, or, on Linux, a lock it cannot open while a seccomp filter holds
+    the process (`Seccomp: 2`, which `openmoat run` always applies and no process can
+    drop). Anywhere else it decides the call itself and records a `run-guard-outside`
+    row beside it. Not covered: the same hook environment can also set `MOAT_HOME`, which
+    picks the state directory, its policy and its lock; on Linux, inside another
+    seccomp sandbox (a container's default profile) such an environment can still
+    point `MOAT_HOME` at a directory it cannot open and get the relay. The agent's own
+    shell cannot set either (`env-poison` denies `MOAT_*`), and the known hosts'
+    settings files are under `kernel-self`.
   - Everything that goes wrong denies in the sandboxed guard, and the sandbox stays
     closed to `~/.moat` (tested in `tests/e2e/run_guard.rs`).
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**
