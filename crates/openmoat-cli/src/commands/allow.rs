@@ -1,6 +1,6 @@
 //! `moat allow`: turn a `review` (a shell command or a file action) into a session
-//! grant or a permanent rule, allow a site or a directory permanently, or remove a
-//! permanent rule.
+//! grant or a standing rule, allow a site or a directory, until removed or for a
+//! while (`--for`), remove a standing rule, or remove those that ended (`--prune`).
 
 use std::io::Write as _;
 use std::path::Path;
@@ -18,12 +18,23 @@ use crate::integrity::{self, HookPins};
 use crate::realpath::FsPathResolver;
 use crate::render::{self, Deferred};
 
+mod expiry;
+
 /// How many recent events `--last` searches for the newest `review` it can approve.
 const LAST_ASK_SEARCH: usize = 200;
 
 pub fn run(args: &AllowArgs) -> Result<Code> {
     let (home, checkpoint) = checked_home()?;
     let mut out = Deferred::default();
+    expiry::check_for(args)?;
+    if args.prune {
+        if !expiry::prune(&home, &mut out)? {
+            out.finish()?;
+            return Ok(Code::Ok);
+        }
+        repin(&home, &checkpoint, out)?;
+        return sync_sandboxes();
+    }
     if args.site.is_some() || args.dir.is_some() || args.remove.is_some() {
         change_overlay(&home, args, &mut out)?;
         repin(&home, &checkpoint, out)?;
@@ -92,6 +103,7 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
             let approval = Approval {
                 always: args.always,
                 covers_taint,
+                for_ms: args.for_ms,
             };
             return approve(&home, &checkpoint, who, &action, approval, out);
         }
@@ -100,16 +112,19 @@ pub fn run(args: &AllowArgs) -> Result<Code> {
     let approval = Approval {
         always: args.always,
         covers_taint: false,
+        for_ms: args.for_ms,
     };
     approve(&home, &checkpoint, who, &action, approval, out)
 }
 
-/// What an approval writes: a permanent rule (`always`) or a session grant,
-/// which with `covers_taint` also answers the session's other taint reviews.
+/// What an approval writes: a standing rule (`always`), which ends after
+/// `for_ms` when given, or a session grant, which with `covers_taint` also
+/// answers the session's other taint reviews.
 #[derive(Clone, Copy)]
 struct Approval {
     always: bool,
     covers_taint: bool,
+    for_ms: Option<i64>,
 }
 
 /// Approve exactly `action` (from [`reviewed`]) of `event` for its host session,
@@ -121,6 +136,7 @@ pub(super) fn run_for(event: &Event, action: &Action, always: bool) -> Result<Co
     let approval = Approval {
         always,
         covers_taint: false,
+        for_ms: None,
     };
     approve(
         &home,
@@ -202,6 +218,7 @@ fn approve(
     let Approval {
         always,
         covers_taint,
+        for_ms,
     } = approval;
     if always {
         let path = home.overlay_path();
@@ -214,10 +231,12 @@ fn approve(
                 .allow_files(&spellings(reads), &spellings(writes))?
                 .clone()
         };
+        let ends = expiry::set(&mut overlay, &rule.id, for_ms);
         render::line(&mut out, &will_allow(&rule))?;
         overlay.save(&path)?;
         if let Action::Shell { command } = action {
-            let added = format!("✔ permanent rule {} allows shell \"{command}\"", rule.id);
+            let kind = if for_ms.is_some() { "" } else { "permanent " };
+            let added = format!("✔ {kind}rule {} allows shell \"{command}\"", rule.id);
             render::line(&mut out, &added)?;
         } else {
             writeln!(out, "✔ added to {}:", path.display())?;
@@ -229,6 +248,7 @@ fn approve(
                 "  `openmoat allow --dir <dir>` allows a whole directory, `openmoat edit` any pattern"
             )?;
         }
+        writeln!(out, "  {ends}")?;
         writeln!(out, "  undo: openmoat allow --remove {}", rule.id)?;
         warn_if_shadowed(home, &rule.id, &mut out)?;
     } else {
@@ -395,6 +415,16 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
         let grant = overlay.allow_dir(&dir_spellings(dir)?).clone();
         ("added to", Entry::Dir(grant))
     };
+    let ends = args
+        .remove
+        .is_none()
+        .then(|| expiry::set(&mut overlay, rule.id(), args.for_ms));
+    // The same site or directory allowed again keeps its id: say so.
+    let verb = if ends.is_some() && before.ids().any(|id| id == rule.id()) {
+        "updated in"
+    } else {
+        verb
+    };
     overlay.save(&path)?;
     if let Err(error) = home.load_policy() {
         before.save(&path)?;
@@ -404,7 +434,8 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
     for line in openmoat_core::yaml::to_string(&[&rule])?.lines() {
         writeln!(out, "    {line}")?;
     }
-    if args.remove.is_none() {
+    if let Some(ends) = ends {
+        writeln!(out, "  {ends}")?;
         if args.dir.is_some() {
             writeln!(
                 out,

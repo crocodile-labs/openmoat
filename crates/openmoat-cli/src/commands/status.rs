@@ -348,6 +348,14 @@ fn approvals(shown: &mut Shown, home: &Home) -> bool {
         None => "no active session grants".to_owned(),
     };
     shown.state(Mark::Info, "Approvals", text);
+    // Standing grants `--for` gave an end: those that ended or end soon.
+    let overlay = approvals::Overlay::load(&home.overlay_path());
+    if let Some(text) = overlay
+        .ok()
+        .and_then(|o| approvals::expiry_summary(&o, now))
+    {
+        shown.state(Mark::Info, "Approvals", text);
+    }
     // Written before grants named their project: they apply nowhere now.
     for grant in grants.active(now).filter(|g| g.unbound()) {
         let text = format!(

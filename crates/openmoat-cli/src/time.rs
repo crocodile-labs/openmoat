@@ -1,4 +1,5 @@
-//! Time helpers: UTC formatting for output and parsing of `--since` windows.
+//! Time helpers: UTC formatting for output, and parsing of `--since` windows,
+//! `--for` spans and the RFC 3339 times grants are stored with.
 //! No external crates; the kernel's time needs are small and must stay cheap.
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -78,21 +79,8 @@ pub fn parse_since(text: &str, now_ms: i64) -> Result<i64> {
         "yesterday" => return Ok(today_start - MS_PER_DAY),
         _ => {}
     }
-    if let Some((n, unit)) = text
-        .char_indices()
-        .find(|(_, c)| !c.is_ascii_digit())
-        .map(|(i, _)| text.split_at(i))
-        && let Ok(n) = n.parse::<i64>()
-    {
-        let unit_ms = match unit {
-            "h" => MS_PER_HOUR,
-            "d" => MS_PER_DAY,
-            "w" => 7 * MS_PER_DAY,
-            _ => 0,
-        };
-        if unit_ms > 0 && n > 0 {
-            return Ok(now_ms - n.saturating_mul(unit_ms));
-        }
+    if let Some(span) = parse_span(&text) {
+        return Ok(now_ms.saturating_sub(span));
     }
     if let Some(days) = parse_date(&text) {
         return Ok(days * MS_PER_DAY);
@@ -100,6 +88,44 @@ pub fn parse_since(text: &str, now_ms: i64) -> Result<i64> {
     bail!(
         "cannot parse `{text}` as a time window; use all, today, yesterday, 12h, 7d, 2w or YYYY-MM-DD"
     )
+}
+
+/// A span in milliseconds: `<n>s`, `<n>m`, `<n>h`, `<n>d` or `<n>w` with `n`
+/// above 0, any case (`90m`, `3d`, `1W`); `None` for anything else.
+#[must_use]
+pub fn parse_span(text: &str) -> Option<i64> {
+    let text = text.trim().to_ascii_lowercase();
+    let (n, unit) = text.split_at(text.find(|c: char| !c.is_ascii_digit())?);
+    let n: i64 = n.parse().ok()?;
+    let unit_ms = match unit {
+        "s" => 1000,
+        "m" => 60_000,
+        "h" => MS_PER_HOUR,
+        "d" => MS_PER_DAY,
+        "w" => 7 * MS_PER_DAY,
+        _ => return None,
+    };
+    (n > 0).then(|| n.saturating_mul(unit_ms))
+}
+
+/// Milliseconds since the epoch of a time exactly as [`rfc3339`] writes it
+/// (`2026-10-25T10:15:00Z`, years 0 to 9999); `None` for any other text.
+#[must_use]
+pub fn parse_rfc3339(text: &str) -> Option<i64> {
+    let (day, clock) = text.trim().split_once('T')?;
+    let clock = clock.strip_suffix('Z')?;
+    if day.len() != 10 || clock.len() != 8 {
+        return None;
+    }
+    let mut parts = clock.split(':').map(|p| p.parse::<i64>().ok());
+    let (h, m, s) = (parts.next()??, parts.next()??, parts.next()??);
+    if parts.next().is_some() || h > 23 || m > 59 || s > 59 || h.min(m).min(s) < 0 {
+        return None;
+    }
+    let secs = parse_date(day)?
+        .checked_mul(SECS_PER_DAY)?
+        .checked_add(h * 3600 + m * 60 + s)?;
+    secs.checked_mul(1000)
 }
 
 /// Civil date for a day count since 1970-01-01 (Howard Hinnant's algorithm).
@@ -122,7 +148,12 @@ fn parse_date(text: &str) -> Option<i64> {
     let year: i64 = parts.next()?.parse().ok()?;
     let month: i64 = parts.next()?.parse().ok()?;
     let day: i64 = parts.next()?.parse().ok()?;
-    if parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    // Four-digit years only: the arithmetic below cannot overflow on them.
+    if parts.next().is_some()
+        || !(0..=9999).contains(&year)
+        || !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+    {
         return None;
     }
     let y = if month <= 2 { year - 1 } else { year };
@@ -175,6 +206,51 @@ mod tests {
         for bad in ["", "soon", "0h", "3x", "2026-13-01", "2026-10-03T00:00"] {
             assert!(parse_since(bad, now).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn parses_spans() {
+        assert_eq!(parse_span("1s"), Some(1000));
+        assert_eq!(parse_span("90m"), Some(90 * 60_000));
+        assert_eq!(parse_span("2h"), Some(2 * MS_PER_HOUR));
+        assert_eq!(parse_span(" 3D "), Some(3 * MS_PER_DAY));
+        assert_eq!(parse_span("1w"), Some(7 * MS_PER_DAY));
+        assert_eq!(parse_span("99999999999999999w"), Some(i64::MAX));
+        for bad in [
+            "", "0h", "h", "-1h", "1", "1.5h", "1h30m", "2 h", "3y", "1hh",
+        ] {
+            assert_eq!(parse_span(bad), None, "{bad}");
+        }
+        let now = OCT_3_2026 + 5 * MS_PER_HOUR;
+        assert_eq!(parse_since("30m", now).unwrap(), now - 30 * 60_000);
+    }
+
+    #[test]
+    fn rfc3339_round_trips_and_rejects_anything_else() {
+        for ms in [0, OCT_3_2026, OCT_3_2026 + 86_399_000, 253_402_300_799_000] {
+            assert_eq!(parse_rfc3339(&rfc3339(ms)), Some(ms));
+        }
+        assert_eq!(
+            parse_rfc3339("2026-10-03T10:15:00Z"),
+            Some(OCT_3_2026 + 10 * MS_PER_HOUR + 15 * 60_000)
+        );
+        for bad in [
+            "",
+            "2026-10-03",
+            "2026-10-03T10:15:00",
+            "2026-10-03T10:15Z",
+            "2026-10-03 10:15:00Z",
+            "2026-10-03T24:00:00Z",
+            "2026-10-03T-1:00:00Z",
+            "2026-13-03T10:15:00Z",
+            "99999-10-03T10:15:00Z",
+            "2026-10-03T10:15:00+01:00",
+            "soon",
+        ] {
+            assert_eq!(parse_rfc3339(bad), None, "{bad}");
+        }
+        assert!(parse_since("99999999999999999999-01-01", 0).is_err());
+        assert!(parse_since("9223372036854775807-01-01", 0).is_err());
     }
 
     #[test]

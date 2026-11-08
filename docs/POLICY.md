@@ -892,7 +892,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `diff-policy`, `diff-link`, `diff-submodule`, `diff-unchecked` | review | `openmoat policy check-diff` only: a change to a policy file the check read; a symbolic link the change makes, with where it points; a submodule it changes; a diff too large to search its added lines |
 | `diff-package-near-miss`, `diff-install-script`, `diff-package-source`, `diff-lock-integrity`, `diff-ci-pr-target`, `diff-ci-permissions`, `diff-ci-unpinned`, `diff-ci-injection`, `diff-ci-secret-out`, `diff-pipe-to-shell`, `diff-decode-exec`, `diff-python-startup`, `diff-docker-remote-add`, `diff-encoded-blob`, `diff-private-key`, `diff-env-secret`, `diff-new-host` | each its own; `check_diff.levels` sets them | `openmoat policy check-diff` only: the content checks of an added line ([MERGE_CHECK.md](MERGE_CHECK.md#content-checks), ADR-055) |
 | `approved-session` | allow | a `review` for a shell command that a person granted with `openmoat allow` for this host session (§8.2) |
-| `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` or `--site`, or a directory grant from `--dir` (§8.2) |
+| `approved-<n>` | allow | a standing rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` or `--site`, or a directory grant from `--dir`, while it is in force (`--for`, §8.2) |
 | `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret`, `proxy-secret-route`, `proxy-tls`, `proxy-port`, `proxy-session`, `proxy-capacity`, `proxy-audit` | deny | `openmoat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, a brokered secret sent to a host other than its own, a request to a secret's host that its `allow` rules do not name (§2.1, ADR-043), a terminated tunnel whose TLS handshake failed or whose upstream certificate did not verify (§2.1), an allowed host on a port no rule names, a request without a valid session credential, or over its session's share of the connections (§9, ADR-044), (counted, without a host) connections over its capacity, or a connection it could not record (§2.1, §5.2) |
 | `proxy-credential`, `session-start` | allow (audit only) | the row Claude Code's `SessionStart` hook records when it issues the session its credential for `openmoat proxy`, which the proxy folds the session's taint with (§9, ADR-044); or a session start that issued none (the reason says why) |
 
@@ -1338,7 +1338,7 @@ so a grant expires 24 hours after `openmoat allow` wrote it (granting the same c
 restarts it); `guard` ignores expired grants, every write of `approvals.json` drops them,
 and `openmoat status` shows how many are active and the age of the oldest. A grant written
 without a creation time (files from before grants expired) counts as expired.
-Permanent rules (`--always`) never expire; they are appended to
+Standing rules (`--always`) last until removed unless `--for` gives them an end (below); they are appended to
 `~/.moat/policy.d/approved.yaml` with ids `approved-1`, `approved-2`, … and a provenance
 comment, and are merged into your policy at load time so `policy.yaml` is never rewritten.
 The command is stored as a literal pattern: glob characters and `$` are escaped (`cat *` is
@@ -1392,6 +1392,42 @@ applied with the answer to the rest and re-pinned with it. An exclusion of the o
 the policy no longer names is kept in the grant's `except:` list, so the change only adds
 protection. Until then `openmoat doctor`, `openmoat status` and the home screen list it as a
 directory grant to bring up to date. `--undo` puts back the policy, not the old rule.
+
+A rule or directory grant can end (ADR-007, amendment of 2026-11-08): `--for <n>s|m|h|d|w`
+on `--always`, `--site` or `--dir` (above 0, at most 366 days) stores a window under
+`expires:`, keyed by the entry's id, and writes the file as `version: 2`:
+
+```yaml
+version: 2
+allow:
+  - id: approved-4
+    reason: approved with `openmoat allow --site` on 2026-11-08 09:00:00 UTC
+    net: [docs.rs]
+expires:
+  approved-4:
+    from: 2026-11-08T09:00:00Z    # when it was granted, rounded down to the second
+    until: 2026-11-08T11:00:00Z   # when it ends, rounded up
+```
+
+Each time the policy is loaded, an entry is merged only while the clock reads at or after
+`from` and before `until`; otherwise it is left out and the call gets the policy's own
+decision. Fail closed throughout: a window that cannot be read (anything but two
+`YYYY-MM-DDTHH:MM:SSZ` times, `until` after `from`) counts as ended, and so does a clock
+that reads earlier than `from` (set back since the grant), so moving the clock back never
+stretches a grant past the span it was given from the time it was made. Moving the clock
+forward ends it early. The check costs no file read: the overlay is read with the policy as
+before. Granting the same site, directory or command again (same `net`, `dir`, or patterns)
+keeps the entry's id and replaces its window with the new one, or removes it without
+`--for`; nothing extends a window by itself. `--remove` removes the entry's window with it;
+`openmoat allow --prune` removes every entry not in force and every window naming no entry,
+re-pins and updates the sandbox settings. `openmoat allowed` shows each window (JSON:
+`expires.<id>.until`, `until_ms`, `in_force`), and `openmoat status` and `openmoat doctor`
+name entries that ended or end within 24 hours. A file without windows stays `version: 1`;
+a release that does not know windows refuses a `version: 2` file, so after a downgrade the
+policy fails to load and calls are denied rather than every grant lasting for good.
+The agents' sandbox settings, a running `openmoat run` session and a running `openmoat
+proxy` compiled the policy when they started or were last synced, and keep an ended grant
+until then ([LIMITS.md](LIMITS.md)).
 
 `openmoat edit` opens `~/.moat/policy.yaml` in `$VISUAL`, `$EDITOR` or `vi` (`notepad` on
 Windows) on a copy inside `~/.moat`. When the editor exits, an unchanged copy changes
