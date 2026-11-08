@@ -357,7 +357,12 @@ impl Plan {
             checker.check_os(&read) == Some(Effect::Allow)
         });
         if cfg!(target_os = "linux") {
-            codex::read_own_binary(&mut codex, codex::own_binary().as_deref(), codex_home);
+            codex::read_own_binary(
+                &mut codex,
+                codex::own_binary().as_deref(),
+                codex_home,
+                &homes,
+            );
             codex::deny_names(&mut codex);
         }
         Ok(Self {
