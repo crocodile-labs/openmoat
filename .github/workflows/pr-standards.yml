@@ -72,7 +72,9 @@ jobs:
 
           risk="risk: low"
           if has '^(crates/openmoat-hosts/|crates/openmoat-cli/src/install/|crates/openmoat-audit/)'; then risk="risk: medium"; fi
-          if has '^(crates/openmoat-core/src/(engine|policy|shell|lexer|pattern|paths)|crates/openmoat-core/policies/|\.github/workflows/|SECURITY\.md|crates/openmoat-cli/src/commands/guard\.rs|crates/openmoat-cli/src/exit\.rs|crates/openmoat-proxy/src/|crates/openmoat-cli/src/(sandbox|integrity|secrets)/|crates/openmoat-cli/src/commands/run(\.rs|/))'; then risk="risk: high"; fi
+          # The CLI files that decide, enforce or pin: each as `name.rs` and its
+          # `name/` folder, so a change to either half is high risk.
+          if has '^(crates/openmoat-core/src/(engine|policy|shell|lexer|pattern|paths)|crates/openmoat-core/policies/|\.github/workflows/|SECURITY\.md|crates/openmoat-cli/src/exit\.rs|crates/openmoat-proxy/src/|crates/openmoat-cli/src/(sandbox|integrity|secrets|approvals|taint|trust|proxy_session|mcp|realpath|terminal)(\.rs|/)|crates/openmoat-cli/src/commands/(guard|allow|run)(\.rs|/))'; then risk="risk: high"; fi
 
           behaviour_change=false
           has '^crates/openmoat-core/(src|policies)/' && behaviour_change=true
