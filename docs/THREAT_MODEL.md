@@ -559,7 +559,12 @@ something OpenMoat claims to stop.
   (ADR-044): the session id, an expiry 24 hours after issue and an HMAC-SHA-256 under
   `~/.moat/proxy.key`, which `kernel-self` keeps every agent and sandboxed command from
   reading. A credential names one session, cannot be edited into another or stretched,
-  and is refused once it expires; replacing the key revokes them all. A sandboxed
+  and is refused once it expires; replacing the key revokes them all. A key others may
+  read (any group or other bit) or replace (a folder others may write) is refused, not
+  used, by `openmoat proxy`, the guard and `openmoat run`, and `doctor` names it: a backup
+  restored with other modes, or a state directory on a shared disk, may already have
+  handed it to another user. A key loaded before its mode changed stays in use by a
+  running proxy until the key file itself changes. A sandboxed
   command cannot issue one itself by running the hook: it can read neither the key nor
   the audit log the issue must be recorded in first. What it does not stop: Claude Code keeps the credential in the session's environment file
   (`CLAUDE_ENV_FILE`, under `~/.claude/session-env/`) and runs that file's lines before
@@ -677,7 +682,9 @@ something OpenMoat claims to stop.
     agent's run of it, also under the pseudo-terminal wrappers); the key is owner-only in
     `~/.moat/proxy-ca/`, which `kernel-self` denies reading and no sandbox OpenMoat writes
     grants (Seatbelt, Landlock and bubblewrap in `openmoat run`; Claude Code's
-    `denyRead`; Codex and Cursor grant named paths only). Both files are pinned in the
+    `denyRead`; Codex and Cursor grant named paths only). `openmoat run` refuses to start
+    with a key others may read or a folder others may write, and `doctor` names it.
+    Both files are pinned in the
     lock; a changed one is drift. The CA's name constraints limit it to the terminated
     hosts, so even a leaked key cannot sign for any other name, and nothing outside a run
     trusts it.

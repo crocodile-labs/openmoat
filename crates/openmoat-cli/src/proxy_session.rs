@@ -90,11 +90,10 @@ impl Key {
         Self::load(&path)
     }
 
-    /// The key in `path`; an error when it is missing or malformed.
+    /// The key in `path`; an error when it is missing or malformed, or when
+    /// others may read it or replace it (`key_file::read`).
     pub fn load(path: &Path) -> Result<Self> {
-        let text = Zeroizing::new(
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?,
-        );
+        let text = crate::key_file::read(path)?;
         let text = text.trim();
         let mut key = Zeroizing::new([0u8; 32]);
         if text.len() != 64 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {

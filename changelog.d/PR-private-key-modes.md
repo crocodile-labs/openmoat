@@ -1,0 +1,2 @@
+### Security
+- The proxy session key (`~/.moat/proxy.key`) and the proxy CA's key are refused, not used, when others may read them (any group or other mode bit) or replace them (a folder others may write). `openmoat proxy`, the guard and `openmoat run` stop with the file, its mode and the fix (`chmod 600`, or make a new key), and `openmoat doctor` lists such a key. Before, a key restored from a backup with other modes, or kept on a shared disk, was used as it was, and another user who could read it could sign session credentials or certificates.

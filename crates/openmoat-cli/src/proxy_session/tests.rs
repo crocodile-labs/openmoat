@@ -192,6 +192,26 @@ fn the_key_is_made_once_owner_only_and_kept() {
     assert!(Key::load(&path).is_err());
 }
 
+/// A key others may read could already be in their hands: it is refused,
+/// not used, until it is owner-only again.
+#[cfg(unix)]
+#[test]
+fn a_key_others_may_read_is_refused() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let (_dir, home) = home();
+    Key::load_or_create(&home).unwrap();
+    let path = key_path(&home);
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let error = Key::load(&path).unwrap_err();
+    assert!(format!("{error:#}").contains("mode 644"), "{error:#}");
+    assert!(
+        Key::load_or_create(&home).is_err(),
+        "not replaced, not used"
+    );
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(Key::load(&path).is_ok());
+}
+
 /// Replacing the key revokes every credential at once, without a restart of
 /// the proxy; until then an old credential stays valid.
 #[test]
