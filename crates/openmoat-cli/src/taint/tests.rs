@@ -7,8 +7,8 @@ use openmoat_core::{
 use openmoat_hosts::{Host, Replacement};
 
 use super::{
-    CacheWrite, Call, Pass, Progress, SessionTaint, after_read, answered, digest, fold, of_session,
-    provenance,
+    CacheWrite, Call, Pass, Progress, SessionTaint, after_read, answered, behind, catch_up, digest,
+    fold, of_session, provenance,
 };
 use crate::home::Home;
 use crate::realpath::FsPathResolver;
@@ -600,4 +600,50 @@ fn a_secret_taint_is_not_answered_by_an_earlier_write() {
     let decision = t.decide("s1", &fetch, &taint);
     assert_eq!(decision.verdict, Verdict::Review, "{decision:?}");
     assert!(decision.rules.iter().any(|r| r == TAINT_RULE));
+}
+
+/// A long session whose cache is far behind: a call's own fold may run out of
+/// time and is denied (fail closed), with a message that says the next call
+/// reads on. Once a `PostToolUse` caught the session up, the next call is
+/// decided, folding only what came after, well within its budget, and it
+/// answers what a full fold would.
+#[test]
+fn a_long_backlog_caught_up_after_a_call_lets_the_next_call_be_decided() {
+    const EVENTS: usize = 3_000;
+    let store = Store::open_in_memory().unwrap();
+    for i in 0..EVENTS {
+        record(&store, CWDS[0], &read(format!("/p/a/f{i}.rs")));
+    }
+    record(
+        &store,
+        CWDS[0],
+        &Action::Fetch {
+            url: "https://example.com/page".to_owned(),
+        },
+    );
+    let stopped = call(&store, CWDS[0], Instant::now())
+        .unwrap_err()
+        .to_string();
+    assert!(stopped.contains("run it again"), "{stopped}");
+    assert!(stopped.contains("not judged"), "{stopped}");
+
+    let policy = Policy::parse(POLICY).unwrap();
+    let compiled = CompiledPolicy::compile(&policy, &ctx(CWDS[0])).unwrap();
+    catch_up(&store, Host::ClaudeCode, "s1", &compiled, CWDS[0], far());
+    record(&store, CWDS[0], &read("/p/a/next.rs".to_owned()));
+    let started = Instant::now();
+    let (taint, folded) = call(&store, CWDS[0], started + Duration::from_secs(5)).unwrap();
+    assert!(folded <= 2, "the next call folded {folded} events");
+    assert_eq!(taint, reference(&store, CWDS[0]));
+    assert!(
+        taint.taint.untrusted.is_some(),
+        "the fetch before the catch-up counts"
+    );
+}
+
+#[test]
+fn the_behind_message_says_the_call_was_not_judged_and_to_run_it_again() {
+    let message = behind(512);
+    assert!(message.contains("512 more"), "{message}");
+    assert!(message.contains("the next call reads on"), "{message}");
 }

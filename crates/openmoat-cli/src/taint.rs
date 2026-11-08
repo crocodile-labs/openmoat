@@ -123,10 +123,7 @@ pub fn of_session(
             if upto != start {
                 (progress.save)(&write(&out, upto)?);
             }
-            bail!(
-                "this session has more earlier calls than one call has time to read; what was \
-                 read is kept, so a later call reads on from there"
-            );
+            bail!("{}", behind(pass.folded));
         }
         if events.len() < PAGE_LEN {
             break;
@@ -151,6 +148,44 @@ pub fn of_session(
         out.untrusted_last_row = out.untrusted_last_row.max(Some(exposure.last_event.0));
     }
     Ok((out, write))
+}
+
+/// Why a call whose fold ran out of time is denied, after it read `folded`
+/// more of the session's earlier calls: said so that a person knows nothing
+/// is wrong and that trying again goes on from there.
+pub fn behind(folded: usize) -> String {
+    format!(
+        "OpenMoat was still reading this session's earlier calls from its audit log (it read \
+         {folded} more for this call) and ran out of time to decide it, so this call was \
+         stopped, not judged; what was read is kept and the next call reads on from there, so \
+         run it again"
+    )
+}
+
+/// Read on through `session`'s earlier calls after a call ran (Claude Code's
+/// `PostToolUse`), until `deadline`, keeping what was read in the cache, so
+/// the next call's fold starts close to its own event and does not run out
+/// of time where the cache is far behind (after an upgrade or a policy
+/// change, or in a directory the session had no row for). Best effort: no
+/// decision rests on it, and a fold it leaves unfinished is read on by the
+/// next call as before.
+pub fn catch_up(
+    store: &Store,
+    host: Host,
+    session: &str,
+    policy: &CompiledPolicy<'_>,
+    cwd: &str,
+    deadline: Instant,
+) {
+    let mut save = |write: &CacheWrite| write.write(store);
+    let mut progress = Progress {
+        deadline,
+        save: &mut save,
+        folded: 0,
+    };
+    if let Ok((_, Some(write))) = of_session(store, host, session, policy, cwd, &mut progress) {
+        write.write(store);
+    }
 }
 
 /// How many events [`of_session`] reads from the log at a time.

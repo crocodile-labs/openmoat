@@ -848,8 +848,15 @@ its first event. A fold reads the events 512 at a time; one that runs long saves
 what it has reached every 2 s, on a writable handle of its own, and at 20 s into
 the guard's 30 s budget it stops, saves, and the call is denied (`kernel-error`,
 recorded) rather than answered from part of the session, which may lack the event
-that tainted it. The next call reads on from the saved row, so a session too long to
-fold in one call catches up over a few calls instead of timing out on every one. The
+that tainted it. Its message says the call was stopped, not judged, and that running
+it again reads on. The next call reads on from the saved row, so a session too long to
+fold in one call catches up over a few calls instead of timing out on every one.
+Where the cache is far behind (after an upgrade or a policy change, which change the
+digest, or in a directory the session had no row for), Claude Code's `PostToolUse`
+hook catches it up after the call ran (`taint::catch_up`, with the same budget, for
+the digest of that call's directory), so the next `PreToolUse` folds only the events
+since and is decided within its own budget; hosts without that hook catch up over
+calls as before. The
 cache is outside the hash chain and never a source of truth: it can only hold what
 the events folded to. The table is created on first use, without changing the schema
 version, so older builds still open the database (they keep using the one-row
