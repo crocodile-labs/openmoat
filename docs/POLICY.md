@@ -934,7 +934,9 @@ first. Differences from the hook:
   share it.
 - Private and shared addresses are refused unless the policy names them: `10.0.0.0/8`,
   `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10` (CGNAT), `198.18.0.0/15`
-  (benchmarking) and `fc00::/7` (unique local), including IPv4-mapped,
+  (benchmarking), `192.0.0.0/24` (IETF protocol), `240.0.0.0/4` (reserved; some clouds
+  use it inside a private network), `fc00::/7` (unique local) and `fec0::/10`
+  (deprecated site-local), including IPv4-mapped,
   IPv4-compatible, IPv4-translated (`::ffff:0:a.b.c.d`) and NAT64 spellings, and the IPv4 addresses a 6to4 (`2002::/16`) or
   Teredo (`2001::/32`: client and server) address leads to. This is checked on the name as written and on
   every address it resolves to. One such address refuses the whole name, so a wildcard
@@ -1472,7 +1474,8 @@ start and `kernel-self` keeps from every agent; replacing the file revokes every
 credential within a second.
 
 `openmoat proxy` refuses a TLS tunnel whose `ClientHello` carries an encrypted server name
-(ECH, extension `0xfe0d`, or the older ESNI, `0xffce`), rule `proxy-sni`: the server acts
+(ECH, extension `0xfe0d`, the codepoints `0xfe08` to `0xfe0c` of its drafts 08 to 12, or
+the older ESNI, `0xffce`), rule `proxy-sni`: the server acts
 on the encrypted inner name, so a site the policy does not allow could be reached
 behind an allowed host on the same provider. Browsers send an ECH extension even
 without an ECH key ("GREASE"), so a browser driven through the proxy is refused too.

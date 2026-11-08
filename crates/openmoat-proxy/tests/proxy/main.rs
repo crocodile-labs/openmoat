@@ -25,7 +25,7 @@ allow:
     # `loop.test:1`: a port the policy allows where no listed server listens
     net: ["allowed.test", "rebind.test", "mixed.test", "loop.test", "loop.test:1", "169.254.169.254", "owner.test", "127.0.0.1"]
   - id: lan-names
-    net: ["lan.test", "mixed-lan.test", "*.wild.test"]
+    net: ["lan.test", "mixed-lan.test", "*.wild.test", "reserved.test", "site-local.test"]
 "#;
 
 const UPSTREAM_REPLY: &[u8] =
@@ -166,6 +166,8 @@ fn launch_with(
             vec![ip("93.184.215.14"), ip("::ffff:192.168.1.1")],
         ),
         ("x.wild.test", vec![ip("fd12::1")]),
+        ("reserved.test", vec![ip("240.0.0.5")]),
+        ("site-local.test", vec![ip("fec0::5")]),
         ("owner.test", vec![local]),
         ("denied.test", vec![ip("203.0.113.7")]),
         // the listed local server first: it passes, the denied address after it does not

@@ -224,8 +224,9 @@ fn ordinary_addresses_are_not_forbidden() {
         "198.17.255.255",
         "198.20.0.0",
         "2606:4700::1111",
-        "fec0::1",
+        "223.255.255.255",
         "fe00::1",
+        "fe7f:ffff::1",
         "::ffff:8.8.8.8",
     ] {
         assert_eq!(forbidden(ip.parse().unwrap()), None, "{ip}");
@@ -271,6 +272,30 @@ fn private_ranges_are_forbidden_in_every_spelling() {
             private("an IETF protocol address (192.0.0.0/24)"),
         ),
         ("64:ff9b:1::a00:5", private(ten)),
+        // reserved for future use; broadcast is not a server at all
+        ("240.0.0.0", private("a reserved address (240.0.0.0/4)")),
+        (
+            "254.255.255.255",
+            private("a reserved address (240.0.0.0/4)"),
+        ),
+        (
+            "::ffff:240.0.0.1",
+            private("a reserved address (240.0.0.0/4)"),
+        ),
+        (
+            "64:ff9b::f000:1",
+            private("a reserved address (240.0.0.0/4)"),
+        ),
+        ("255.255.255.255", Some(Forbidden::NotUnicast)),
+        // deprecated site-local: local network, never a public server
+        (
+            "fec0::1",
+            private("a deprecated site-local address (fec0::/10)"),
+        ),
+        (
+            "feff:ffff::1",
+            private("a deprecated site-local address (fec0::/10)"),
+        ),
         // a local-use NAT64 address in a layout other than /96, public inside
         (
             "64:ff9b:1:5db8:d7:e00:808:808",
@@ -292,7 +317,7 @@ deny:
   - { id: no-lab, net: ["10.9.*"] }
 allow:
   - { id: wide, net: ["*", "*.example", "?0.0.0.1"] }
-  - { id: lan, net: ["10.0.0.5", "192.168.1.*", "10.9.0.1", "fd12::*"] }
+  - { id: lan, net: ["10.0.0.5", "192.168.1.*", "10.9.0.1", "fd12::*", "240.0.0.7", "fec0::7"] }
   - { id: docs, fetch: ["172.16.0.9"] }
 review:
   - { id: lab, net: ["100.64.0.1"] }
@@ -306,6 +331,10 @@ review:
         ("192.168.1.77", true),
         ("172.16.0.9", true),
         ("fd12::1", true),
+        ("240.0.0.7", true),
+        ("fec0::7", true),
+        ("240.0.0.8", false),
+        ("fec0::8", false),
         ("10.0.0.6", false),
         ("192.168.2.1", false),
         ("20.0.0.1", false),

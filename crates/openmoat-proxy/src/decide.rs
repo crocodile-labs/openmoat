@@ -45,7 +45,7 @@ const NAT64_LOCAL: [u16; 3] = [0x64, 0xff9b, 1];
 /// RFC 2765 IPv4-translated prefix: `::ffff:0:a.b.c.d` reaches `a.b.c.d`.
 const SIIT: [u16; 6] = [0, 0, 0, 0, 0xffff, 0];
 /// Ranges on the local network (or the carrier's), each with its description.
-const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
+const PRIVATE_V4: [(Ipv4Addr, u8, &str); 7] = [
     (
         Ipv4Addr::new(10, 0, 0, 0),
         8,
@@ -75,6 +75,14 @@ const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
         Ipv4Addr::new(192, 0, 0, 0),
         24,
         "an IETF protocol address (192.0.0.0/24)",
+    ),
+    // Reserved for future use (RFC 1112 §4, RFC 6890): no public server has
+    // one, while some clouds hand it out inside a private network (GKE uses
+    // it for pod ranges). `255.255.255.255` is broadcast, refused before this.
+    (
+        Ipv4Addr::new(240, 0, 0, 0),
+        4,
+        "a reserved address (240.0.0.0/4)",
     ),
 ];
 
@@ -188,7 +196,8 @@ pub enum Forbidden {
     ThisMachine,
     /// Unspecified, broadcast, multicast or `0.0.0.0/8`: never a server.
     NotUnicast,
-    /// Private, CGNAT, benchmarking or unique-local (`fc00::/7`): reachable
+    /// Private, CGNAT, benchmarking, reserved (`240.0.0.0/4`), unique-local
+    /// (`fc00::/7`) or deprecated site-local (`fec0::/10`): reachable
     /// only when an allow rule names the address ([`named`]). Carries the
     /// description naming the range.
     Private(&'static str),
@@ -250,6 +259,12 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
         )))
     } else if seg[0] & 0xfe00 == 0xfc00 {
         Some(Forbidden::Private("a unique local address (fc00::/7)"))
+    } else if seg[0] & 0xffc0 == 0xfec0 {
+        // Deprecated (RFC 3879) but still routed inside networks that kept it:
+        // local network all the same, and never a public server.
+        Some(Forbidden::Private(
+            "a deprecated site-local address (fec0::/10)",
+        ))
     } else {
         None
     }

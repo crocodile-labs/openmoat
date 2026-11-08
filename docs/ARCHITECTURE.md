@@ -1171,8 +1171,9 @@ terminate`, and only in `openmoat run` (step 4, ADR-043).
      connection when any resolved address is loopback, link-local, a cloud metadata
      address (`100.100.100.200`, `fd00:ec2::254`; NAT64, IPv4-mapped, IPv4-translated,
      6to4 and Teredo forms included)
-     or not unicast. Also refuse it when an address is private, CGNAT, benchmarking or
-     unique-local and no allow rule names that address (POLICY.md §5.2). Those rules are
+     or not unicast. Also refuse it when an address is private, CGNAT, benchmarking,
+     reserved (`240.0.0.0/4`), unique-local or site-local (`fec0::/10`) and no allow
+     rule names that address (POLICY.md §5.2). Those rules are
      compiled once at start-up into a second policy that holds only address patterns.
      Each resolved address is also matched against the policy's deny rules (in canonical
      text form, and a NAT64, IPv4-translated, 6to4 or Teredo address also as the IPv4 addresses it
