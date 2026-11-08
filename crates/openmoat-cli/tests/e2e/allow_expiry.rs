@@ -2,7 +2,7 @@
 //!
 //! The binary reads the real clock, so a grant that must end is given `--for 1s`
 //! and the test waits a little over two seconds (the end is rounded up to the
-//! second); nothing here waits longer.
+//! second); nothing here waits more than about six seconds.
 
 use std::time::Duration;
 
@@ -22,6 +22,12 @@ fn wait_past_one_second() {
     std::thread::sleep(Duration::from_millis(2_200));
 }
 
+/// Long enough for a `--for 5s` grant to have ended: five seconds leave a slow
+/// runner time to give two grants and run the hook while they hold.
+fn wait_past_five_seconds() {
+    std::thread::sleep(Duration::from_millis(6_200));
+}
+
 #[test]
 fn a_site_allowed_for_a_while_ends_and_the_call_is_back_to_its_decision() {
     let sb = Sandbox::installed_with_review(&[".claude"]);
@@ -30,6 +36,8 @@ fn a_site_allowed_for_a_while_ends_and_the_call_is_back_to_its_decision() {
         Some(DENY),
         "default.net denies"
     );
+    // A fetch of an unlisted host is the policy's `fetch: defer`, whatever its code.
+    let fetch_before = check(&sb, "fetch", "https://docs.rs/serde");
 
     let out = sb.moat_as_person(&["allow", "--site", "docs.rs", "--for", "1h"]);
     let message = text(&out);
@@ -60,7 +68,7 @@ fn a_site_allowed_for_a_while_ends_and_the_call_is_back_to_its_decision() {
         Some(DENY),
         "an ended grant is left out: back to default.net"
     );
-    assert_eq!(check(&sb, "fetch", "https://docs.rs/serde"), Some(DENY));
+    assert_eq!(check(&sb, "fetch", "https://docs.rs/serde"), fetch_before);
     let listed = sb.moat(&["allowed"]);
     assert!(
         text(&listed).contains("EXPIRED") && text(&listed).contains("allow --prune"),
@@ -107,14 +115,14 @@ fn a_directory_and_a_command_allowed_for_a_while_end_too() {
     let notes = shared.join("notes.md").to_str().unwrap().to_owned();
     assert_eq!(check(&sb, "fs-write", &notes), Some(3));
 
-    let out = sb.moat_as_person(&["allow", "--dir", shared.to_str().unwrap(), "--for", "1s"]);
+    let out = sb.moat_as_person(&["allow", "--dir", shared.to_str().unwrap(), "--for", "5s"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
-    let out = sb.moat_as_person(&["allow", "npm install left-pad", "--always", "--for", "1s"]);
+    let out = sb.moat_as_person(&["allow", "npm install left-pad", "--always", "--for", "5s"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let (verdict, _) = sb.guard_bash("s1", &sb.project(), "npm install left-pad");
     assert_eq!(verdict, "allow", "in force right after it is given");
 
-    wait_past_one_second();
+    wait_past_five_seconds();
     assert_eq!(check(&sb, "fs-write", &notes), Some(3), "back to review");
     let (verdict, _) = sb.guard_bash("s1", &sb.project(), "npm install left-pad");
     assert_eq!(verdict, "ask", "the hook's decision is back to review");
@@ -127,14 +135,14 @@ fn an_end_that_cannot_be_read_counts_as_ended() {
     std::fs::write(
         &overlay,
         "version: 2\nallow:\n  - id: approved-1\n    net: [docs.rs]\n  - id: approved-2\n    \
-         net: [crates.io]\nexpires:\n  approved-1:\n    from: 2026-01-01T00:00:00Z\n    \
+         net: [mirror.example.org]\nexpires:\n  approved-1:\n    from: 2026-01-01T00:00:00Z\n    \
          until: next week\n  approved-2: forever\n",
     )
     .unwrap();
     let out = sb.moat_as_person(&["doctor", "--accept"]);
     assert!(text(&out).contains("lock re-pinned"), "{}", text(&out));
     assert_eq!(check(&sb, "net", "docs.rs"), Some(DENY));
-    assert_eq!(check(&sb, "net", "crates.io"), Some(DENY));
+    assert_eq!(check(&sb, "net", "mirror.example.org"), Some(DENY));
     let listed = sb.moat(&["allowed"]);
     assert!(
         text(&listed).contains("cannot be read"),
