@@ -1,0 +1,2 @@
+### Security
+- `openmoat proxy` refuses the reserved range `240.0.0.0/4` and the deprecated site-local range `fec0::/10` unless an allow rule names the address, as it refuses `10.0.0.0/8`; before, both were reachable through a wildcard allow, and `fec0::/10` was treated as public space. It also refuses a TLS tunnel whose `ClientHello` carries an encrypted server name under the codepoints of ECH drafts 08 to 12 (`0xfe08` to `0xfe0c`), rule `proxy-sni`, as it already did for `0xfe0d` and ESNI ([#767](https://github.com/crocodile-labs/openmoat/pull/767)).

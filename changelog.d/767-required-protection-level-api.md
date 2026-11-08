@@ -1,0 +1,2 @@
+### Changed
+- **Breaking** `openmoat-core`: `Policy` has new public fields `require` (`Option<Require>`) and `require_added` (the requirements a repository policy or pack merged in), and `RepoPolicy` a new public field `require` (`Option<Require>`); set them to `None` and an empty `Vec` where you build one field by field. New exports `Require`, `RequiredLevel`, `RequiredBy`, `Requirement` and `Policy::required_for`, `Policy::add_requirement` ([#767](https://github.com/crocodile-labs/openmoat/pull/767)).

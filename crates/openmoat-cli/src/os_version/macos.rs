@@ -1,4 +1,4 @@
-//! The macOS version, from `SystemVersion.plist` ([`super::macos`]).
+//! The macOS version, from `SystemVersion.plist` ([`super::macos()`]).
 
 /// `macOS 14.5`, or the version said to be unknown.
 pub fn system() -> String {

@@ -1,0 +1,2 @@
+### Security
+- On Linux, the Codex profile lets commands read Codex's own executable only where Codex's installers put it (its standalone installer, npm's global packages, Homebrew, Nix, `cargo install`, `~/.local/bin`, `/usr/bin`), found in the absolute `PATH` entries only; a `codex` anywhere else gets no read grant and `openmoat sandbox show` reports it (`codex.own-binary`) ([#767](https://github.com/crocodile-labs/openmoat/pull/767)).

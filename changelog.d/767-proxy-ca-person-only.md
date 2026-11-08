@@ -1,0 +1,2 @@
+### Security
+- `openmoat proxy ca init` is person-only in the default policy too (`kernel-self`), by either name, by path and under the pseudo-terminal wrappers; `expect`, Python's `pty`, `tmux`, `screen` and `osascript` running `proxy ca`, `proxy install` or `proxy uninstall` in a quoted command line are denied as well. The command already refused an agent among its parents; the hook now denies it before it starts. `openmoat policy upgrade` adds the lines to an existing policy ([#767](https://github.com/crocodile-labs/openmoat/pull/767)).
