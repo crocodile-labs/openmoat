@@ -77,7 +77,18 @@ pub(super) fn push(tokens: &[Token], sink: &mut Sink) -> Result<(), ClassifyErro
 pub(super) fn pipe_chains(tokens: &[Token]) -> Vec<Vec<Vec<&str>>> {
     let mut chains = vec![vec![Vec::new()]];
     let mut skip_target = false;
+    // A newline right after `|` continues the pipe (`curl URL |⏎ruby`), as
+    // `pipelines::push` reads it; a `;` there is a syntax error the shell
+    // refuses, read the same way, which only keeps a chain.
+    let mut after_pipe = false;
     for token in tokens {
+        let pipe = matches!(token, Token::Operator(Operator::Pipe));
+        if after_pipe
+            && matches!(token, Token::Operator(op) if op.is_separator() && *op != Operator::Pipe)
+        {
+            continue;
+        }
+        after_pipe = pipe;
         match token {
             Token::Word(_) if skip_target => skip_target = false,
             Token::Word(w) => {
