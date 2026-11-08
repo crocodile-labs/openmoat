@@ -15,7 +15,6 @@ mod service;
 mod wire;
 
 use std::fmt::Write as _;
-use std::io::Read as _;
 use std::net::TcpStream;
 use std::time::Duration;
 
@@ -101,8 +100,10 @@ impl Stream for TcpStream {
 /// `bytes` random bytes from the system's random source, as hex.
 pub fn random_hex(bytes: usize) -> Result<Zeroizing<String>> {
     let mut raw = Zeroizing::new(vec![0u8; bytes]);
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut random| random.read_exact(&mut raw))
+    // The operating system's random source on every platform (Windows has no
+    // `/dev/urandom`).
+    getrandom::fill(raw.as_mut_slice())
+        .map_err(|e| anyhow::Error::msg(e.to_string()))
         .context("reading random bytes")?;
     let mut out = Zeroizing::new(String::with_capacity(bytes * 2));
     for byte in raw.iter() {

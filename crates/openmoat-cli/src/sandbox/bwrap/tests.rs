@@ -406,7 +406,10 @@ fn isolate_pins_the_folders_holding_agent_configuration() {
 /// With `~/.claude` a link, `--write ~/.claude` grants the directory it points
 /// to (`openmoat run` resolves its grants), and the deny of
 /// `~/.claude/settings.json` is masked there: compared as text, it lay below
-/// no grant and stayed writable to every command.
+/// no grant and stayed writable to every command. Linux, where bubblewrap
+/// runs: on macOS the temp directory itself resolves elsewhere
+/// (`/var` → `/private/var`), which no grant written here does.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
     let dir = tempfile::tempdir().unwrap();
