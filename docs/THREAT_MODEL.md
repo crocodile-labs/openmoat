@@ -1181,7 +1181,11 @@ something OpenMoat claims to stop.
   Code managed settings make hooks immune: with OpenMoat's hook in managed settings,
   a `disableAllHooks` outside them cannot turn it off, and `allowManagedHooksOnly`
   also blocks user, project and local hooks and narrows `statusLine` to managed
-  settings (INSTALL.md "Teams: managed settings"). Whether Claude Code's workspace
+  settings (INSTALL.md "Teams: managed settings"). `openmoat status` and `openmoat doctor`
+  read the managed settings, Gemini CLI's system settings and Codex's `requirements.toml`
+  read-only, and call the agent not protected when one turns hooks off or runs only its
+  own hooks without OpenMoat's (ADR-068); settings an MDM profile delivers to Codex are
+  not read. Whether Claude Code's workspace
   trust dialog holds back a project's `env` or command settings is not documented
   where OpenMoat could check (*unverified*).
 

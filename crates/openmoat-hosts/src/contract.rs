@@ -21,6 +21,7 @@ mod protect;
 mod relaxed;
 mod reviews;
 mod settings;
+mod system_settings;
 
 pub use advisory::{Advisories, Advisory, Platform, Version};
 pub use bundle::Bundle;
@@ -40,6 +41,7 @@ pub use reviews::{Reviews, Unseen};
 pub(crate) use reviews::{answer, decided};
 pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
+pub use system_settings::{SystemFile, SystemSettingsSpec};
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -171,6 +173,9 @@ pub struct HostSpec {
     /// asks their versions too before writing a key only newer versions know,
     /// and `moat status` and `moat doctor` report each one.
     pub bundled: &'static [Bundle],
+    /// The settings an administrator deploys for the whole machine, which
+    /// outrank the person's own; `None` for a host OpenMoat reads none of.
+    pub system_settings: Option<SystemSettingsSpec>,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

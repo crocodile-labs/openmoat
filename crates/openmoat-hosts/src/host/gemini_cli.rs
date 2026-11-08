@@ -109,6 +109,47 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     workspace_dirs: Some(settings::include_directories),
+    // System settings outrank the person's own, and system defaults sit
+    // under them; each has a variable that moves it
+    // (`packages/cli/src/config/settings.ts`). `hooksConfig` there turns
+    // hooks off as in the person's file.
+    system_settings: Some(crate::contract::SystemSettingsSpec {
+        files: &[
+            crate::contract::SystemFile::at(
+                "/Library/Application Support/GeminiCli/settings.json",
+                &[crate::contract::Platform::MacOs],
+            )
+            .moved_by("GEMINI_CLI_SYSTEM_SETTINGS_PATH"),
+            crate::contract::SystemFile::at(
+                "/Library/Application Support/GeminiCli/system-defaults.json",
+                &[crate::contract::Platform::MacOs],
+            )
+            .moved_by("GEMINI_CLI_SYSTEM_DEFAULTS_PATH"),
+            crate::contract::SystemFile::at(
+                "/etc/gemini-cli/settings.json",
+                &[crate::contract::Platform::Linux, crate::contract::Platform::Wsl],
+            )
+            .moved_by("GEMINI_CLI_SYSTEM_SETTINGS_PATH"),
+            crate::contract::SystemFile::at(
+                "/etc/gemini-cli/system-defaults.json",
+                &[crate::contract::Platform::Linux, crate::contract::Platform::Wsl],
+            )
+            .moved_by("GEMINI_CLI_SYSTEM_DEFAULTS_PATH"),
+            crate::contract::SystemFile::at(
+                "C:/ProgramData/gemini-cli/settings.json",
+                &[crate::contract::Platform::Windows],
+            )
+            .moved_by("GEMINI_CLI_SYSTEM_SETTINGS_PATH"),
+            crate::contract::SystemFile::at(
+                "C:/ProgramData/gemini-cli/system-defaults.json",
+                &[crate::contract::Platform::Windows],
+            )
+            .moved_by("GEMINI_CLI_SYSTEM_DEFAULTS_PATH"),
+        ],
+        drop_ins: None,
+        managed_only: None,
+        hooks_key: "hooks",
+    }),
     ..HostSpec::BASE
 };
 

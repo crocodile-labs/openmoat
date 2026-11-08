@@ -33,6 +33,7 @@ impl HostSpec {
         limit: None,
         other_hooks: None,
         bundled: &[],
+        system_settings: None,
     };
 }
 

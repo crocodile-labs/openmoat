@@ -377,6 +377,7 @@ pub fn warnings_here(home: &Home) -> Vec<Warning> {
 pub mod git_config;
 pub mod other_hooks;
 mod plugins;
+pub mod system;
 
 pub use plugins::replaced_here;
 
