@@ -202,7 +202,10 @@ impl Generated {
             };
             matches!(spot(pattern), Spot::Anywhere(_))
                 || within(pattern)
-                || links::real_spelling(pattern).is_some_and(|real| within(&real))
+                // Landlock runs on Linux only; on another OS a made-up path
+                // would resolve by the machine (macOS links `/home`).
+                || (cfg!(target_os = "linux")
+                    && links::real_spelling(pattern).is_some_and(|real| within(&real)))
         };
         let excluded = access.allow.iter().flat_map(|r| split(&r.patterns).1);
         let denied = access.deny.iter().flat_map(|r| split(&r.patterns).0);

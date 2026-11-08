@@ -281,8 +281,13 @@ pub fn kernel_self_in_writes(
             // `dir/**` denies the whole tree, so a write path inside it is held too.
             let tree = pattern.strip_suffix("/**") == Some(base);
             // The writes are resolved: compare where the rule's path resolves
-            // (`~/.claude/settings.json` with `~/.claude` a link).
+            // (`~/.claude/settings.json` with `~/.claude` a link). Linux only,
+            // where this refusal applies; elsewhere a made-up path in a test
+            // would resolve by the machine (macOS links `/home`).
+            #[cfg(target_os = "linux")]
             let base = links::real_path(base);
+            #[cfg(not(target_os = "linux"))]
+            let base = base.to_owned();
             let base = base.as_str();
             let holder = writes
                 .iter()

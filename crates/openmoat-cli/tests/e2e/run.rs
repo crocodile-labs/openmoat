@@ -20,6 +20,9 @@ mod agent_config;
 /// The running agent keeps its login; other agents' stay denied (ADR-054).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod agent_logins;
+/// `--isolate` never runs a `bwrap` found through `PATH`.
+#[cfg(target_os = "linux")]
+mod isolate_path;
 /// Linux without bubblewrap: the port-only path a stock system takes.
 #[cfg(target_os = "linux")]
 mod stock_linux;
@@ -139,35 +142,6 @@ fn isolate_is_refused_on_macos() {
     assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(stderr(&out).contains("#175"), "{}", text(&out));
     assert!(!text(&out).contains("ran\n"), "{}", text(&out));
-}
-
-/// bubblewrap starts unconfined, so it comes from the system's directories,
-/// never from `PATH`: a `bwrap` the project ships on a relative entry does
-/// not run. Without a system one the agent does not start at all.
-#[cfg(target_os = "linux")]
-#[test]
-fn isolate_never_runs_a_bwrap_from_path() {
-    use std::os::unix::fs::PermissionsExt as _;
-
-    let (sb, project) = installed_with_secret();
-    let marker = project.join("project-bwrap-ran");
-    let fake = project.join("bin/bwrap");
-    std::fs::create_dir_all(project.join("bin")).unwrap();
-    std::fs::write(&fake, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
-    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let out = output(
-        sb.command()
-            .current_dir(&project)
-            .env("PATH", "bin:/usr/bin:/bin")
-            .args(["run", "--isolate", "--", "/bin/sh", "-c", "echo ran"]),
-        None,
-    );
-    assert!(!marker.exists(), "the project's bwrap ran: {}", text(&out));
-    let system = ["/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap"];
-    if !system.iter().any(|p| Path::new(p).exists()) {
-        assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
-        assert!(stderr(&out).contains("needs bubblewrap"), "{}", text(&out));
-    }
 }
 
 /// Plain `moat run` on Linux says, before the agent starts, what Landlock

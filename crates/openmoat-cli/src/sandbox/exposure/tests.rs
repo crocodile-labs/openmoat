@@ -315,7 +315,9 @@ fn nested_rules_and_denied_trees_hold_write_paths_outside_the_project() {
 
 /// With `~/.claude` a link, `--write ~/.claude` is resolved to the folder it
 /// points to; the run still refuses without a namespace, since the rule's
-/// `~/.claude/settings.json` is compared where it resolves.
+/// `~/.claude/settings.json` is compared where it resolves (Linux, where the
+/// refusal applies).
+#[cfg(target_os = "linux")]
 #[test]
 fn a_linked_agent_folder_in_a_write_path_is_refused_without_a_namespace() {
     let dir = tempfile::tempdir().unwrap();
