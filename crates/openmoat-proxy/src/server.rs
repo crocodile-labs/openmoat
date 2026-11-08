@@ -15,6 +15,7 @@ mod capacity;
 mod limits;
 mod recheck;
 mod terminate;
+mod unauthenticated;
 mod wire;
 
 use std::io::{self, ErrorKind, Write as _};
@@ -29,6 +30,7 @@ use zeroize::Zeroizing;
 pub use self::capacity::RULE_CAPACITY;
 use self::capacity::{Full, Refusals};
 pub use self::limits::Limits;
+use self::unauthenticated::{Noise, Unauthenticated};
 pub(crate) use self::wire::response;
 use self::wire::{read_head, read_hello, refuse, respond, summary};
 use crate::audit::{Connection, Recorder};
@@ -107,6 +109,8 @@ struct Served<'s> {
     /// [`decide::port_policy`] of the policy, compiled.
     ports: &'s CompiledPolicy<'s>,
     shares: Shares,
+    /// Refusals before a credential was verified, recorded at a bounded rate.
+    noise: Noise,
 }
 
 /// One connection's session (`None` without session mode) and start time,
@@ -132,6 +136,7 @@ impl Proxy<'_> {
             addresses: &addresses,
             ports: &ports,
             shares: Shares::new(self.limits.max_connections),
+            noise: Noise::default(),
         };
         let served = &served;
         let active = AtomicUsize::new(0);
@@ -144,6 +149,7 @@ impl Proxy<'_> {
                     Err(e) => return Err(e),
                 };
                 refusals.flush(self.recorder, Instant::now());
+                served.noise.flush(self.recorder, Instant::now());
                 let _ = client.set_write_timeout(Some(self.limits.handshake_timeout));
                 let full = |kind: Full| {
                     respond(&client, 503, kind.reply());
@@ -200,7 +206,10 @@ impl Proxy<'_> {
                     session: None,
                     started,
                 };
-                self.record(turn, None, &decision);
+                // Before any credential: counted, not one row each.
+                if let Some(row) = served.noise.row(Unauthenticated::Head, &decision, started) {
+                    self.record(turn, None, &row);
+                }
                 refuse(client, 400, &decision.reasons[0]);
                 return;
             }
@@ -390,7 +399,13 @@ impl Proxy<'_> {
             }
             Err(why) => {
                 let decision = Decision::single(Verdict::Deny, RULE_SESSION, why.to_string());
-                self.record(unnamed, Some(request), &decision);
+                // Before any credential: counted, not one row each.
+                if let Some(row) = served
+                    .noise
+                    .row(Unauthenticated::Credential, &decision, started)
+                {
+                    self.record(unnamed, Some(request), &row);
+                }
                 refuse(client, 407, &summary(&decision));
                 return None;
             }

@@ -78,6 +78,7 @@ fn exchange_with(
         addresses: &addresses,
         ports: &ports,
         shares: Shares::new(limits.max_connections),
+        noise: Noise::default(),
     };
     let _held: Vec<_> = (0..held)
         .map(|_| served.shares.take("run-a").unwrap())

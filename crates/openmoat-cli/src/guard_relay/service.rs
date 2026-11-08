@@ -20,12 +20,13 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{EventId, NewEvent, Store};
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookEvent, Host};
+use openmoat_proxy::coalesce::{Coalesce, INTERVAL, counted};
 use openmoat_proxy::{LocalService, constant_time_eq};
 use zeroize::Zeroizing;
 
@@ -69,6 +70,17 @@ pub struct Service {
     token: Zeroizing<Vec<u8>>,
     moat: PathBuf,
     scope: Mutex<Scope>,
+    /// Calls with a wrong token not in a row yet.
+    wrong_tokens: Coalesce<1>,
+}
+
+impl Drop for Service {
+    /// The run ends: the wrong tokens still counted get their row.
+    fn drop(&mut self) {
+        for (_, count) in self.wrong_tokens.rest() {
+            let _ = self.record_wrong_tokens(count);
+        }
+    }
 }
 
 impl Service {
@@ -85,6 +97,7 @@ impl Service {
                 host: agent,
                 sessions: Vec::new(),
             }),
+            wrong_tokens: Coalesce::default(),
         }
     }
 
@@ -92,9 +105,17 @@ impl Service {
     /// the sandboxed guard then denies.
     pub fn answer(&self, mut stream: impl Stream) -> Result<()> {
         stream.set_timeouts(Duration::from_secs(GUARD_BUDGET_S))?;
+        // Wrong tokens counted since their last row, once that row is old enough.
+        for (_, count) in self.wrong_tokens.due(Instant::now()) {
+            self.record_wrong_tokens(count)?;
+        }
         let request = Request::read_from(&mut stream)?;
         if !constant_time_eq(&request.token, &self.token) {
-            self.record_refused(&request.host)?;
+            // Any local process can send these: a row for the first, then
+            // one per interval with the count (`openmoat_proxy::coalesce`).
+            if let Some(count) = self.wrong_tokens.refused(0, Instant::now()) {
+                self.record_refused(&request.host, count)?;
+            }
             bail!("a hook call with a wrong token");
         }
         let host: Host = request.host.parse()?;
@@ -223,17 +244,34 @@ impl Service {
         Ok(reply)
     }
 
-    /// A row in the run's session for a call with a wrong token. The host it
-    /// claimed is named only when it is one OpenMoat knows.
-    fn record_refused(&self, claimed: &str) -> Result<()> {
+    /// A row in the run's session for a call with a wrong token, standing for
+    /// `count` such calls since the last row. The host it claimed is named
+    /// only when it is one OpenMoat knows.
+    fn record_refused(&self, claimed: &str, count: u64) -> Result<()> {
         let host = claimed
             .parse::<Host>()
             .map_or("an unknown host", |h| h.id());
+        if count > 1 {
+            return self.record_wrong_tokens(count);
+        }
         self.record_row(
             RULE_TOKEN,
             format!(
                 "a hook call for {host} came with a wrong token for this `openmoat run`, so it was \
                  not decided"
+            ),
+        )
+    }
+
+    /// One row for `count` calls with a wrong token since the last such row.
+    fn record_wrong_tokens(&self, count: u64) -> Result<()> {
+        self.record_row(
+            RULE_TOKEN,
+            format!(
+                "{} came with a wrong token for this `openmoat run` since the last such row (at \
+                 most one per {} s), so none was decided",
+                counted(count, "hook call", "hook calls"),
+                INTERVAL.as_secs()
             ),
         )
     }

@@ -217,7 +217,33 @@ fn a_request_without_a_credential_gets_407() {
         .iter()
         .filter(|r| r["host"] == "proxy" && rules(r) == ["proxy-session"])
         .count();
-    assert_eq!(refused, 2, "{shown}");
+    // The first has its row; the second, within 10 s, is counted in the next
+    // row of its kind, so a flood of them cannot fill the log.
+    assert_eq!(refused, 1, "{shown}");
+}
+
+/// Any local process may send the proxy requests with no credential: a
+/// flood of them is a bounded number of rows, and a request with a valid
+/// credential is still served after it.
+#[test]
+fn a_flood_of_requests_without_a_credential_is_a_few_rows() {
+    let (sb, port, _project) = setup();
+    let _proxy = sb.start_proxy();
+    for _ in 0..300 {
+        let reply = ask(port, "GET http://evil.example/ HTTP/1.1\r\n");
+        assert!(reply.starts_with("HTTP/1.1 407"), "{reply}");
+    }
+    let shown = json_of(&sb.moat(&["show", "--since", "all", "--format", "json"]));
+    let refused = shown
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["host"] == "proxy" && rules(r) == ["proxy-session"])
+        .count();
+    assert!(
+        (1..=4).contains(&refused),
+        "{refused} rows for 300 refusals"
+    );
 }
 
 /// Attack: session B presents session A's password under its own name, or A's

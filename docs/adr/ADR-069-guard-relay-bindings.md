@@ -54,6 +54,18 @@ repeats the nonce would then answer every call.
    run pass a call that no hook outside decided. So `openmoat guard --relayed` writes
    none. The call's row is still written.
 
+4. **Refusals before authentication are coalesced.** Any local process can connect to
+   the run's port, and to `openmoat proxy`'s. A row for every wrong relay token
+   (`run-guard-token`), every `407` (`proxy-session`) and every head the proxy cannot
+   read (`400`, `proxy-request`) let such a process grow the audit log without limit.
+   A log that can no longer be written makes the proxy and the guard refuse
+   everything. These refusals now go through `openmoat_proxy::coalesce`, which the
+   capacity refusals at accept already used: the first of a kind is recorded as it
+   was, and the ones in the next 10 seconds are counted. The next row of the kind
+   says how many it stands for and keeps the last one's reason. That row is written
+   by the next refusal of the kind, by the next connection, or when the service ends.
+   Refusals after a credential is verified keep one row each.
+
 ## Consequences
 
 - Code in the run's sandbox can still add rows to the run's own sessions, with payloads

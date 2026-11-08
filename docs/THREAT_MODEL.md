@@ -740,6 +740,18 @@ something OpenMoat claims to stop.
   row at once and then one per 10 seconds with the count, written when the next
   connection arrives after that time, so the count of a burst's end can be missing
   until then.
+- **Refusals before a credential is verified are counted, not listed (ADR-069).** Any
+  local process can send the proxy requests with no or a wrong credential (`407`,
+  `proxy-session`) or a head it cannot read (`400`, `proxy-request`), and the hook relay
+  of `openmoat run` calls with a wrong token (`run-guard-token`). A row for each would
+  let that process grow the audit log without limit, and a log that can no longer be
+  written makes the proxy and the guard refuse everything. So the first of each kind
+  is recorded as it was, and the ones in the 10 seconds after it are counted in the
+  next row of the kind, which keeps the last one's reason. The rows of a flood are
+  bounded by time, not by the number of requests. Every request is still refused;
+  only the requests a later row counts have no row with their destination of their
+  own. The count of the last interval before the proxy or the run stops can be
+  missing.
 - **A miswired command can skip the guard.** Codex 0.160.1–0.166.0 ignores `args`
   in command hooks. OpenMoat writes the guard arguments in `command` and supplies
   `commandWindows`; `init`, `policy upgrade` and `sandbox sync` repair legacy entries.
