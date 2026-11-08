@@ -20,11 +20,13 @@ use zeroize::Zeroizing;
 
 use super::{Tunnel, Wire};
 use crate::broker::Broker;
+use crate::requests::Requests;
 use crate::server::Limits;
 use crate::sni::{self, Hello};
 use crate::tls::{Roots, Tls, new_ca};
 
 mod attacks;
+mod requests;
 
 impl Wire for &UnixStream {
     fn timeouts(&self, read: Duration, write: Duration) -> std::io::Result<()> {
@@ -103,6 +105,8 @@ fn upstream_pki(name: &str) -> (String, Arc<ServerConfig>) {
 struct Setup {
     tls: Tls,
     broker: Broker,
+    /// The hosts' request rules (ADR-062); none unless a test sets them.
+    requests: Requests,
     /// The proxy's CA, which the agent trusts.
     agent_trusts: String,
     upstream: Arc<ServerConfig>,
@@ -121,6 +125,7 @@ fn setup() -> Setup {
     Setup {
         tls,
         broker: broker(),
+        requests: Requests::default(),
         agent_trusts: ca.cert_pem,
         upstream,
     }
@@ -222,6 +227,7 @@ fn exchange_with(s: &Setup, request: &str, reply: &[u8], run: &Run<'_>) -> Outco
         host: HOST,
         port: 443,
         broker: &s.broker,
+        requests: &s.requests,
         tls: &s.tls,
         limits: &limits,
         allowed: &allowed,

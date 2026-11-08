@@ -67,13 +67,14 @@ def arguments(usage, default_runs):
 class Guard:
     """One `openmoat` binary installed in its own throwaway HOME."""
 
-    def __init__(self, name, binary, prefix, project_dirs=()):
+    def __init__(self, name, binary, prefix, project_dirs=(), parent=None):
         self.name = name
         self.binary = os.path.abspath(binary)
         # Set when the base binary answers a call differently from head (a
         # case added with the feature it times): its numbers are not comparable.
         self.mismatch = None
-        self.home = tempfile.mkdtemp(prefix=prefix)
+        # In the system's temp directory unless `parent` says where.
+        self.home = tempfile.mkdtemp(prefix=prefix, dir=parent)
         self.project = os.path.join(self.home, "project")
         os.makedirs(os.path.join(self.project, ".git"))
         for folder in project_dirs:

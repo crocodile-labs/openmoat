@@ -72,6 +72,7 @@ fn exchange_with(
         sessions: Some(sessions),
         local: None,
         tls: None,
+        requests: &Requests::default(),
     };
     let served = Served {
         addresses: &addresses,
