@@ -1,7 +1,7 @@
 //! What earlier calls of one agent session brought into it (session taint,
 //! ADR-020): after a secret read, network to any other host needs review; after
-//! untrusted content (a fetch, a web search, an MCP result), a write to a
-//! protected path needs review. Taint only ever makes a decision stricter.
+//! untrusted content (a fetch, a web search, an MCP result other than a
+//! browser's tab list), a write to a protected path needs review. Taint only ever makes a decision stricter.
 
 use serde::{Deserialize, Serialize};
 

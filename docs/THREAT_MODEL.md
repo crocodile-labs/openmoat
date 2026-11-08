@@ -443,7 +443,12 @@ something OpenMoat claims to stop.
   after a secret read every open needs review. The page can carry a prompt injection: opening it
   marks the session as having read untrusted content, so writes to files that run later
   and pushes that change them need review, but package installs and later opens of new pages do
-  not (a follow-up weighs that against everyday work). The adapter's allowlist trusts a
+  not (a follow-up weighs that against everyday work). A browser's tab list (Claude in
+  Chrome's `tabs_context_mcp` and its other tab, window, browser and shortcut lists,
+  POLICY.md §4.1) does not mark the session: it shows each open page's title and URL,
+  which the page sets, so an instruction written into a title does not make later writes
+  to those files need review. A host, path or command in a title or URL is still kept as
+  injected input (T15). The adapter's allowlist trusts a
   server's tool name for what the tool does; `mcp: { browser_open: net }` keeps every
   page open `net`.
 - **Token shapes are checked where the guard sees them, and only the known ones.**

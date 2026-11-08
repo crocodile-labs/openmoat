@@ -48,6 +48,7 @@ secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§
 
 taint:                              # optional: more paths session taint protects (§4.1)
   protected_writes: ["**/deploy/**"]
+  metadata_tools: []                # optional: more MCP tools whose results are metadata, not content (§4.1)
   provenance: true                  # optional, default true: taint follows written files (§4.1.1)
 
 staging:                            # optional, since 0.17.0: when a session counts as collecting outside the project (§4.5)
@@ -390,7 +391,7 @@ other atomic action, so an `allow` becomes `review` and a `deny` stays `deny`.
 | Once the session has… | …these atomic actions need review |
 |---|---|
 | read secret material: an `fs.read` that the group with id `secrets-paths` names, in whichever list it sits | `net` and `fetch` to every host except the secret's own, and every `mcp` call, `web.search` and `tool.unknown` (OpenMoat cannot see the hosts they reach) |
-| read untrusted content: a `fetch`, a `web.search`, or the result of an `mcp` call or a `tool.unknown` (a browser's page open among them) | `fs.write` to a protected path |
+| read untrusted content: a `fetch`, a `web.search`, or the result of an `mcp` call or a `tool.unknown` (a browser's page open among them), except a metadata tool's (below) | `fs.write` to a protected path |
 
 Once the session has read secret material, a URL that a fetch tool, a network tool or an
 MCP call opens or names and that carries one run of 80 or more characters of base64,
@@ -474,6 +475,25 @@ unlisted hosts. The atom never appears in a session that read no secret.
   included) to that list. It only extends: a policy cannot remove a built-in path, and
   `openmoat policy lint` rejects a `!` exclusion as well as a glob that does not compile.
   Without the key, the built-in list applies alone.
+- **Metadata tools.** A few MCP tools return the browser's own bookkeeping,
+  not what a page says: their result does not taint the session, and a file the session
+  writes after only such a result carries no provenance (§4.1.1). The built-in list
+  (`taint.rs`) is Claude in Chrome's tab, window, browser and shortcut lists:
+  `mcp__claude-in-chrome__tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp`,
+  `list_connected_browsers`, `select_browser`, `switch_browser`, `resize_window` and
+  `shortcuts_list`. A page sets its own title and URL, so their output is still read for
+  injected input (§4.1.2): a host, path or command in a tab's title or URL is kept with the
+  tool as its source, and a later `curl` to that host needs review (`injected-input`).
+  Every tool that returns a page's content still taints the session as before:
+  `get_page_text`, `read_page`, `find`, `navigate`, `javascript_tool`,
+  `read_console_messages`, `read_network_requests`, `computer` (screenshots),
+  `gif_creator`, `upload_image`, `form_input`, `file_upload`, `shortcuts_execute`, and every
+  tool of every other server, a tool of the same name on another server included.
+  `taint: { metadata_tools: [<name>, …] }` adds another server's tools, each by its full
+  name (`mcp__<server>__<tool>`, compared exactly; `openmoat policy lint` rejects a
+  wildcard and warns while the list names a tool). List only a tool whose result is the
+  server's own metadata (ids, names, a list of what is open), never one that returns text
+  someone else wrote. The list only adds: a policy cannot remove a built-in tool.
 - Shell network to an allowed host (`git fetch`, `gh pr view`) is not counted as untrusted
   content, except a `curl` or `wget` that sends nothing, which is a `fetch` (§4), and a command OpenMoat cannot classify taints nothing it can name.
 - `openmoat guard` reads the history from the audit log: the earlier events of the same host
@@ -538,7 +558,8 @@ collect.evil.example may follow an instruction planted there
 
 - **Untrusted output.** Counted:
   - the output of what §4.1 calls untrusted content: a `fetch`, a `web.search`, an `mcp`
-    result, a `tool.unknown`;
+    result, a `tool.unknown`; a metadata tool's result too (a browser's tab list), which
+    does not taint the session but names the titles and URLs pages set;
   - a shell command that reads from a host the policy does not allow on its own
     (`curl -s https://evil.example/notes.txt`);
   - a forge's client (`gh`, `glab`, `tea`), whose issue, pull-request and comment text

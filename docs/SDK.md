@@ -162,8 +162,8 @@ and report the ones that differ in `links`. Both examples do this.
 ## Sessions
 
 After a session reads secret material, network to any other host needs review; after it reads
-untrusted content (a fetch, a web search, an MCP result), a write to a protected path
-needs review (session taint, [POLICY.md](POLICY.md)). Record each call after it ran and pass the
+untrusted content (a fetch, a web search, an MCP result other than a browser's tab list), a
+write to a protected path needs review (session taint, [POLICY.md](POLICY.md)). Record each call after it ran and pass the
 session to the next decision. Taint only ever makes a decision stricter.
 
 ```js

