@@ -206,11 +206,18 @@ fn missing_hook_settings_cannot_be_created() {
             "CI must run `openmoat run` in a network namespace: {shown}"
         );
         if port_only {
-            // Nothing covers them; the run names each when the agent exits.
-            assert!(
-                stderr(&out).contains(".gemini/settings.json did not exist"),
-                "{shown}"
-            );
+            // Nothing covers them; the run names each that is still there when
+            // the agent exits (the script moves `.gemini` away again).
+            for left in [
+                ".claude/settings.local.json",
+                ".codex/hooks.json",
+                ".github/copilot/settings.local.json",
+            ] {
+                assert!(
+                    stderr(&out).contains(&format!("{left} did not exist")),
+                    "{left}: {shown}"
+                );
+            }
             continue;
         }
         for denied in ["gemini", "copilot", "claude", "codex", "move"] {
