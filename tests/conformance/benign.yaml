@@ -1408,6 +1408,11 @@
 - id: benign-redirect-to-tmp-file
   action: { shell: "echo hi > /tmp/out.txt" }
   expect: { verdict: defer, rules: [default] }
+# only the Kerberos caches are secret in the temp directory, not a file that
+# merely mentions them
+- id: benign-read-tmp-file-named-like-krb5
+  action: { shell: "cat /tmp/build-krb5cc.log" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-cat-dev-null
   action: { shell: "cat /dev/null" }
   expect: { verdict: defer, rules: [default] }

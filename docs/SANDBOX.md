@@ -415,7 +415,27 @@ bubblewrap.
   outside `openmoat run`.
 - The agent and every command it starts may read the project, `sandbox.read_roots`,
   the temp directory and the agent's own executable; never the keychain. They may
-  write the project, the temp directory and each `--write` path (the agent's state).
+  write the project, the run's own temp directory and each `--write` path (the agent's
+  state). That temp directory is new for each run: `openmoat-run-<random>` (mode `0700`)
+  inside the system's, given to the agent as `TMPDIR` and removed with everything in it
+  when the run ends. The shared temp directory (`/tmp` on Linux, `/var/folders/…/T` on
+  macOS) holds other programs' state and other sessions' files, so it is no longer
+  writable; it stays readable where `sandbox.read_roots` lists it. A tool that honours
+  `TMPDIR` (compilers, `npm`, `pip`, `cargo`, `go`, `mktemp`) works as before; a
+  command that writes a fixed `/tmp/<name>` fails with "permission denied", as it did on
+  macOS already:
+
+  ```bash
+  openmoat run -- sh -c 'echo x > "$TMPDIR/f" && echo ok'   # ok
+  openmoat run -- sh -c 'echo x > /tmp/f'                    # Permission denied
+  ```
+
+  Kerberos ticket caches stay closed: `kerberos-tickets` denies `/tmp/krb5cc_*`, where MIT
+  Kerberos and Heimdal keep them by default (`hook_only` for the host sandboxes), and
+  `openmoat run` applies it in its sandbox and adds the cache `KRB5CCNAME` names
+  (`FILE:` or `DIR:`) for the run. On Linux the network namespace
+  hides each cache that exists in a read root when the agent starts; without one,
+  Landlock cannot deny inside the read root `/tmp`, and they stay readable there.
   Deny rules still win (`~/.claude/settings.json` stays unwritable; on Linux only where
   the agent gets a network namespace, above).
 - **Agent logins.** The agent reads its own login inside the sandbox, so `openmoat run`

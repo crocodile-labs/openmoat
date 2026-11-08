@@ -1,0 +1,3 @@
+### Security
+- `openmoat run` gives each run a temp directory of its own (`openmoat-run-<random>`, mode `0700`, the agent's `TMPDIR`, removed when the run ends) instead of granting the shared one, so commands no longer write other programs' and sessions' temp files ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
+- A new deny rule, `kerberos-tickets`, denies Kerberos ticket caches (`/tmp/krb5cc_*`) to the agent's tools (`hook_only` for the host sandboxes), and `openmoat run` applies it in its sandbox with the cache `KRB5CCNAME` names added; on Linux the network namespace hides the ones in a read root ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

@@ -24,6 +24,7 @@ mod linux;
 mod macos;
 mod release_age;
 mod required;
+mod temp;
 pub mod tier;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
@@ -59,8 +60,10 @@ use crate::proxy_ca::{Trust, request_poc};
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
+use crate::sandbox::kerberos;
 use crate::sandbox::own_login::{self, Owner};
 use crate::taint::run::RUN_SESSION_ENV;
+use temp::RunTemp;
 
 /// What a proxy-aware program reads to find its proxy.
 const PROXY_VARS: [&str; 6] = [
@@ -94,18 +97,28 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let port = listener.local_addr()?.port();
     let mut policy = home.load_policy()?;
     crate::install::self_paths::protect_recorded(&home, &mut policy)?;
+    // Kerberos tickets: the default caches and the session's own, wherever
+    // `KRB5CCNAME` puts it, denied in this sandbox too.
+    let ccname = std::env::var("KRB5CCNAME").ok();
+    kerberos::for_run(&mut policy, ccname.as_deref());
+    // A temp directory of the run's own instead of the shared one; under
+    // `--isolate` the shared one is an empty `tmpfs` already.
+    let run_temp = (!args.isolate).then(RunTemp::create).transpose()?;
     // TLS termination (ADR-043), checked before anything starts: a CA that is
     // missing, not pinned or not covering a host stops the run here. The
     // agent's clients trust it through files in the run's temp directory.
     let terminating = crate::proxy_ca::load(&home, &policy)?;
     let trust = terminating
         .as_ref()
-        .map(|t| Trust::write(&t.cert_pem))
+        .map(|t| match &run_temp {
+            Some(temp) => Trust::write_in(&t.cert_pem, Path::new(&temp.path())),
+            None => Trust::write(&t.cert_pem),
+        })
         .transpose()?;
     let ca_notice = terminating.as_ref().and_then(|t| t.notice.clone());
     let grants = Grants {
         proxy_port: Some(port),
-        tmpdir: None,
+        tmpdir: run_temp.as_ref().map(RunTemp::path),
         program: Some(path_string(&program)),
         writes: args.writes.iter().map(|w| resolved(w)).collect(),
         // The person's other terminals stay out of reach of the agent's commands.
@@ -177,6 +190,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .env_remove("NO_PROXY")
         .env_remove("no_proxy");
     agent.command().envs(git);
+    if let Some(temp) = &run_temp {
+        agent.command().env(temp::TMPDIR, temp.path());
+    }
     // Set last, over any the person had: what the agent's clients trust.
     for (var, path) in trust.iter().flat_map(Trust::env) {
         agent.command().env(var, path);

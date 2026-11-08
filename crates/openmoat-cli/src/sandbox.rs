@@ -31,6 +31,7 @@ pub mod git_env;
 #[cfg(test)]
 mod hook_only;
 pub mod install;
+pub mod kerberos;
 pub mod landlock;
 mod links;
 pub mod own_login;
@@ -122,7 +123,9 @@ fn with_read_roots(policy: &Policy) -> anyhow::Result<(Policy, bool)> {
 pub struct Grants {
     /// The loopback port of OpenMoat's egress proxy, the only network destination.
     pub proxy_port: Option<u16>,
-    /// The temp directory, resolved, which commands may read and write.
+    /// The temp directory, resolved, which commands may read and write: the
+    /// run's own (`commands/run/temp.rs`), or, when `None`, this process's
+    /// (`--isolate`, which covers it with an empty `tmpfs`).
     pub tmpdir: Option<String>,
     /// The program `moat run` starts, resolved: it must be readable to start.
     pub program: Option<String>,
@@ -143,25 +146,23 @@ pub struct Grants {
     pub trust: Option<String>,
 }
 
-/// The IR of a `moat run` session in `ctx`, and `grants` plus this process's
-/// temp directory.
+/// The IR of a `moat run` session in `ctx`, and `grants` with this process's
+/// temp directory where they name none of the run's own.
 fn lower_for_session(
     policy: &Policy,
     ctx: &EvalContext,
     grants: Grants,
 ) -> anyhow::Result<(Enforcement, Grants)> {
     let (policy, _) = with_read_roots(policy)?;
+    let tmpdir = grants.tmpdir.clone().or_else(session_tmpdir);
     Ok((
         openmoat_core::ir::lower(&policy, ctx)?,
-        Grants {
-            tmpdir: session_tmpdir(),
-            ..grants
-        },
+        Grants { tmpdir, ..grants },
     ))
 }
 
-/// This process's temp directory, resolved: what a `moat run` session grants
-/// (and `--isolate` covers with an empty `tmpfs`).
+/// This process's temp directory, resolved: what `moat run --isolate` covers
+/// with an empty `tmpfs`, and what holds the run's own.
 pub fn session_tmpdir() -> Option<String> {
     std::fs::canonicalize(std::env::temp_dir())
         .ok()
@@ -210,7 +211,7 @@ pub fn netns_masks(
     rules: &landlock::Rules,
 ) -> anyhow::Result<Vec<bwrap::Mount>> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
-    Ok(bwrap::grant_masks(&ir, rules, &project_spellings(ctx)))
+    bwrap::grant_masks(&ir, rules, &project_spellings(ctx))
 }
 
 /// The binds `moat run`'s network namespace on Linux adds over the agent

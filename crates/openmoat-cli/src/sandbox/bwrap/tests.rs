@@ -230,7 +230,7 @@ allow:
         write: vec![p("proj"), p(".agent")],
         connect_port: Some(18080),
     };
-    let masks = grant_masks(&ir, &rules, &[p("proj")]);
+    let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
     assert_eq!(
         masks,
         [
@@ -414,7 +414,7 @@ fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
         write: vec![p("proj"), p("real-claude")],
         connect_port: Some(18080),
     };
-    let masks = grant_masks(&ir, &rules, &[p("proj")]);
+    let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
     assert!(
         masks.contains(&Mount::ReadOnly(p("real-claude/settings.json"))),
         "{masks:?}"
@@ -437,4 +437,64 @@ fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
         .flat_map(|a| a.patterns.clone())
         .collect();
     assert!(inside.contains(&p(".claude/settings.json")), "{inside:?}");
+}
+
+/// The network namespace hides the Kerberos ticket caches in a read root
+/// (`/tmp/krb5cc_*`): Landlock grants `/tmp` whole. Other files there stay
+/// readable, and a policy's default never masks an entry, only a deny rule.
+#[test]
+fn ticket_caches_in_a_read_root_are_hidden_and_nothing_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", root.display());
+    for d in ["proj", "tmp/krb5cc_1000_dir"] {
+        std::fs::create_dir_all(p(d)).unwrap();
+    }
+    for f in ["tmp/krb5cc_1000", "tmp/build.log", "tmp/my-krb5cc_1000"] {
+        std::fs::write(p(f), "x").unwrap();
+    }
+    let ctx = EvalContext {
+        home: "/nowhere/home".into(),
+        project: Some(p("proj")),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: p("proj"),
+        case_insensitive_paths: false,
+    };
+    let tmp = p("tmp");
+    let policy = Policy::parse(&format!(
+        r#"
+version: 1
+defaults: {{ "*": deny }}
+deny:
+  - id: secrets-paths
+    fs.read: ["{tmp}/krb5cc_*", "{tmp}/krb5cc_*/**"]
+allow:
+  - id: work
+    fs.write: ["${{project}}/**"]
+"#
+    ))
+    .expect("test policy");
+    let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
+    let rules = Rules {
+        read: vec![tmp.clone()],
+        write: vec![p("proj")],
+        connect_port: Some(18080),
+    };
+    let mut masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
+    masks.sort_by(|a, b| path_of(a).cmp(path_of(b)));
+    assert_eq!(
+        masks,
+        [
+            Mount::Hide {
+                path: p("tmp/krb5cc_1000"),
+                dir: false,
+            },
+            Mount::Hide {
+                path: p("tmp/krb5cc_1000_dir"),
+                dir: true,
+            },
+        ]
+    );
 }

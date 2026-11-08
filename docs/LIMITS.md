@@ -68,6 +68,13 @@ Each agent's gaps and the reasons are in
   commands the agent starts can read and write `.env`, create `.envrc`, and write `.moat`
   and `.git/hooks`. `openmoat run` says so when it starts and `openmoat doctor` warns about
   it; `openmoat run --isolate` (bubblewrap) closes it.
+- **The shared temp directory stays readable under `openmoat run`.** The run writes only
+  its own temp directory (`TMPDIR`), but `/tmp` and `/var/folders` stay read roots, so a
+  command can read what other programs left there, except the Kerberos ticket caches
+  `kerberos-tickets` names (`/tmp/krb5cc_*` and the `KRB5CCNAME` file). On Linux without a
+  network namespace those caches stay readable too, and one created after the agent
+  starts is not hidden. A ticket cache that is no file (`KCM:`, the `sssd-kcm` socket) is
+  not covered; the kernel keyring (`KEYRING:`) is closed by the seccomp filter.
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote needs review before an interpreter runs it, but a test runner, build tool

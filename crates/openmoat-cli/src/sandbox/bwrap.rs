@@ -29,6 +29,9 @@ use super::patterns::{
 };
 use super::{Grants, Report};
 
+/// Deny rules with a glob in the last name, in a granted folder.
+mod globs;
+
 /// A name below a directory that only a rule for the whole subtree (`dir/**`)
 /// matches: no policy names it.
 const PROBE: &str = "__moat_probe__";
@@ -126,6 +129,9 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
         }
     }
     masks.mounts.extend(literal_masks(ir, &trees, real));
+    masks
+        .mounts
+        .extend(globs::name_glob_masks(ir, &trees, real)?);
     let mut mounts = trees;
     mounts.extend(respelled(&masks.mounts, project));
     Ok(Generated {
@@ -142,8 +148,10 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
 /// made read-only as under `--isolate`. Landlock alone cannot deny inside those
 /// grants, so `--write ~/.claude` would leave `~/.claude/settings.json`, and a
 /// read root `~/.cargo` its `credentials.toml`, open to every command. The
-/// project (`project`, its resolved spelling first) is left to the hook.
-pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<Mount> {
+/// project (`project`, its resolved spelling first) is left to the hook. A
+/// deny with a glob in its last name only (`/tmp/krb5cc_*`) masks the entries
+/// that match when the session starts ([`globs`]).
+pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Result<Vec<Mount>> {
     let trees = |paths: &[String], mount: fn(String) -> Mount| {
         paths
             .iter()
@@ -157,7 +165,10 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<M
         held.push(tree);
     }
     held.sort_by_key(|m| depth(path_of(m)));
-    literal_masks(ir, &held, project.first().map(String::as_str))
+    let real = project.first().map(String::as_str);
+    let mut masks = literal_masks(ir, &held, real);
+    masks.extend(globs::name_glob_masks(ir, &held, real)?);
+    Ok(masks)
 }
 
 /// The masks `moat run`'s network namespace adds in the project (`project`,

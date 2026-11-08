@@ -16,7 +16,9 @@
 //! The home folder and the folders above it (`/`, `/Users`) are left out: they
 //! hold every protected path, so a bare `/` word (`tr '/' '_'`) would need review, and a
 //! read of the home itself already needs review (`home-sweep`) while a write of it is
-//! denied (`destructive`).
+//! denied (`destructive`). So is the shared temp folder itself ([`SHARED_TEMP`]): it
+//! holds every program's temp files, so `cd /tmp` would need review for the ticket
+//! caches `secrets-paths` names in it; a folder below it is checked as anywhere.
 
 use super::EvalContext;
 use crate::action::AtomicAction;
@@ -27,6 +29,10 @@ use crate::verdict::{Decision, Verdict};
 
 /// The rule id of a review for a folder that holds paths a deny rule names.
 pub const HOLDS_PROTECTED_RULE: &str = "protected-contents";
+
+/// The shared temp folder in each spelling (macOS links `/tmp` to
+/// `/private/tmp`), left out as the home is.
+const SHARED_TEMP: [&str; 2] = ["/tmp", "/private/tmp"];
 
 /// The literal folders of the deny rules' path patterns, per kind, compiled
 /// once with the policy so that a decision is a scan of short strings.
@@ -97,7 +103,7 @@ impl ProtectedFolders {
             _ => return None,
         };
         let dir = fold(path.trim_end_matches('/'), self.case_insensitive);
-        if self.homes.iter().any(|home| holds(&dir, home)) {
+        if self.homes.iter().any(|home| holds(&dir, home)) || SHARED_TEMP.contains(&dir.as_str()) {
             return None;
         }
         let mut rules: Vec<&str> = Vec::new();
@@ -164,7 +170,7 @@ version: 1
 deny:
   - id: creds
     hook_only: true
-    fs.read: ["~/.codex/{auth.json,x}", "**/.env", "!~/.codex/ok/**", "/", "/srv/a.key"]
+    fs.read: ["~/.codex/{auth.json,x}", "**/.env", "!~/.codex/ok/**", "/", "/srv/a.key", "/tmp/krb5cc_*", "/tmp/k/x"]
     fs.write: ["~/.moat/**"]
   - id: keys
     fs.read: ["~/.ssh/**"]
@@ -199,6 +205,8 @@ deny:
                 "/Volumes/h/me/.ssh/",
                 "/srv/",
                 "/srv/codex/",
+                "/tmp/",
+                "/tmp/k/",
             ]
         );
         let writes: Vec<&str> = f.writes.iter().map(|x| x.path.as_str()).collect();
@@ -218,6 +226,9 @@ deny:
         assert!(rules(&f, &read("/Volumes/h/me/.ssh")).is_some());
         // `/srv` holds the moved `/srv/codex` and is not above the home.
         assert!(rules(&f, &read("/srv")).is_some());
+        // The shared temp folder itself is left out; a folder below it is not.
+        assert!(rules(&f, &read("/tmp/k")).is_some());
+        assert_eq!(rules(&f, &read("/private/tmp")), None);
         // The home and the folders above it, in either spelling, are left to
         // `home-sweep` and `destructive`: a bare `/` word must not need review.
         for above in [
@@ -231,6 +242,7 @@ deny:
             assert_eq!(rules(&f, &read(above)), None, "{above}");
         }
         for below in [
+            "/tmp",
             "/Users/me/.codex/sessions",
             "/Users/me/.codexx",
             "/Users/me/.cod",
