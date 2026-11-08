@@ -54,10 +54,12 @@ const CODEX_STATE: &[&str] = &[
 /// on Linux expands to the files present when each command starts.
 const CODEX_DATABASES: &str = "**/*.sqlite*";
 
-/// The executable `codex` on `PATH` runs, symlinks resolved.
+/// The executable `codex` on `PATH` runs, symlinks resolved; found in absolute
+/// `PATH` entries only (ADR-067), so a `codex` planted in the working directory
+/// through `.` is never granted. Where Codex is installed is not checked: it
+/// runs from wherever the person put it (a version manager, `/opt`, a CI cache).
 pub fn own_binary() -> Option<PathBuf> {
-    let path: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("PATH")?).collect();
-    native(&std::fs::canonicalize(crate::environment::find_in(&path, &[], "codex")?).ok()?)
+    native(&std::fs::canonicalize(crate::environment::find_on_path("codex")?).ok()?)
 }
 
 /// `found` itself, or for npm's launcher (`<package>/bin/codex.js`) the

@@ -97,29 +97,36 @@ fn agent_name(argv: &[String]) -> Option<String> {
     {
         return Some(helper.name.to_owned());
     }
-    candidates(argv).find_map(|word| {
-        // `openmoat` itself by its program name; the hosts as their specs say.
-        let lower = word.trim_start_matches('-').to_ascii_lowercase();
-        let base = lower.rsplit(['/', '\\']).find(|s| !s.is_empty())?;
-        let stem = base.strip_suffix(".exe").unwrap_or(base);
-        if let Some(name) = OPENMOAT.iter().find(|name| **name == stem) {
-            return Some((*name).to_owned());
-        }
-        Host::by_program(word).map(|(_, name)| name.to_owned())
-    })
+    let (mut program_words, mut paths) = candidates(argv);
+    program_words
+        .find_map(|word| {
+            // `openmoat` itself by its program name; the hosts as their specs say.
+            let lower = word.trim_start_matches('-').to_ascii_lowercase();
+            let base = lower.rsplit(['/', '\\']).find(|s| !s.is_empty())?;
+            let stem = base.strip_suffix(".exe").unwrap_or(base);
+            if let Some(name) = OPENMOAT.iter().find(|name| **name == stem) {
+                return Some((*name).to_owned());
+            }
+            Host::by_program(word).map(|(_, name)| name.to_owned())
+        })
+        // Any other path after an interpreter names an agent only as an
+        // agent's package does: a script handed OpenMoat's own binary as an
+        // argument (`python3 check.py --bin target/debug/openmoat`) is not
+        // OpenMoat running.
+        .or_else(|| paths.find_map(|word| Host::by_program(word).map(|(_, name)| name.to_owned())))
 }
 
 /// Programs that run an agent's script given after their own options
 /// (`node --no-warnings /…/@github/copilot/index.js`).
 const INTERPRETERS: &[&str] = &["node", "nodejs", "bun", "deno", "tsx", "python", "python3"];
 
-/// The words of `argv` that may name the agent: the first two, and after an
-/// interpreter ([`INTERPRETERS`], also `python3.12`) the first word that is no
-/// option and every word that is a path. An option's value (`--require
-/// /x/hook.js`) cannot be told from the script without knowing each
-/// interpreter's options, so every path counts: a path naming an agent's
-/// package makes the command an agent's, which only adds a refusal.
-fn candidates(argv: &[String]) -> impl Iterator<Item = &String> {
+/// The words of `argv` that may name the agent: the program words (the first
+/// two, and after an interpreter ([`INTERPRETERS`], also `python3.12`) the
+/// first word that is no option), then every other word after an interpreter
+/// that is a path. An option's value (`--require /x/hook.js`) cannot be told
+/// from the script without knowing each interpreter's options, so every path
+/// counts as an agent's package would: that only adds a refusal.
+fn candidates(argv: &[String]) -> (impl Iterator<Item = &String>, impl Iterator<Item = &String>) {
     let interpreter = argv.first().is_some_and(|program| {
         let lower = program.to_ascii_lowercase();
         let base = lower.rsplit(['/', '\\']).next().unwrap_or(&lower);
@@ -132,7 +139,7 @@ fn candidates(argv: &[String]) -> impl Iterator<Item = &String> {
     let rest = argv.iter().skip(1).filter(move |_| interpreter);
     let operand = rest.clone().find(|word| !word.starts_with('-'));
     let paths = rest.filter(|word| word.contains(['/', '\\']));
-    argv.iter().take(2).chain(operand).chain(paths)
+    (argv.iter().take(2).chain(operand), paths)
 }
 
 #[cfg(test)]

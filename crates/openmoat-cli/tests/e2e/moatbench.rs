@@ -207,9 +207,10 @@ fn moatbench_report_answers_every_promise_per_layer() {
         "{report:#}"
     );
     // The OS rows ran the attack, or say why not; never a pass without a run.
-    // CI's macOS and Linux jobs run the sandbox, so there they must pass.
-    let must_run =
-        std::env::var_os("CI").is_some() && cfg!(any(target_os = "macos", target_os = "linux"));
+    // CI's macOS jobs run Seatbelt, so there they must pass. On Linux a row
+    // may be NOT TESTED HERE with its reason (the runner's namespaces and
+    // Landlock vary), never a pass without a run.
+    let must_run = std::env::var_os("CI").is_some() && cfg!(target_os = "macos");
     for promise in [
         "read-ssh-key",
         "build-script-reads-agent-login",
@@ -218,10 +219,15 @@ fn moatbench_report_answers_every_promise_per_layer() {
         let os = rows(&report, promise, "os-sandbox");
         assert_eq!(os.len(), 1, "{promise}");
         let status = os[0]["status"].as_str().unwrap();
+        // The reason first: a CI annotation shows only the first line.
+        let reason = os[0]["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .replace('\n', " ");
         if must_run {
-            assert_eq!(status, "pass", "{promise}: {report:#}");
+            assert_eq!(status, "pass", "{promise}: {reason}\n{report:#}");
         } else if status != "pass" {
-            assert_eq!(status, "not-tested-here", "{promise}: {report:#}");
+            assert_eq!(status, "not-tested-here", "{promise}: {reason}\n{report:#}");
             assert_ne!(os[0]["reason"].as_str().unwrap(), "");
             eprintln!("{promise}: OS sandbox not tested here: {}", os[0]["reason"]);
         }

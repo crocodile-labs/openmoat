@@ -110,7 +110,8 @@ fn below_the_required_level_every_call_is_denied_and_status_says_why() {
         "{home}"
     );
     // The audit log has the deny under its rule id.
-    let shown = stdout(&sb.moat(&["show", "--limit", "1"]));
+    // `status`, `doctor` and the home screen above add their own rows.
+    let shown = stdout(&sb.moat(&["show", "--limit", "50"]));
     assert!(shown.contains("protection-required"), "{shown}");
 }
 

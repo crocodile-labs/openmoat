@@ -112,6 +112,8 @@ fn a_persons_shell_and_tools_are_not_agents() {
         "node --inspect ./server.js --port 3000",
         "python3 -m http.server 8000",
         "/usr/bin/node /Users/me/app/node_modules/.bin/vite build",
+        "python3 scripts/ci/adr062-poc.py --bin /Users/me/src/openmoat/target/debug/openmoat",
+        "node scripts/check.js /usr/local/bin/moat",
     ] {
         assert_eq!(agent_name(&argv(line)), None, "{line}");
     }
