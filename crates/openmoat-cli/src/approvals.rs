@@ -5,10 +5,12 @@
 //! - `approvals.json`: session grants, an exact command or exact files for one host
 //!   session, valid for [`GRANT_TTL_MS`] after they are written; a command only in
 //!   the project it was approved in;
-//! - `policy.d/approved.yaml`: permanent allow rules appended by `moat allow --always`
+//! - `policy.d/approved.yaml`: standing allow rules appended by `moat allow --always`
 //!   and `--site`, and the directories `--dir` allowed (`dirs.rs`), merged into the
-//!   user policy at load time so `policy.yaml` is never rewritten.
+//!   user policy at load time so `policy.yaml` is never rewritten; each lasts until
+//!   removed, or until the end `--for` gave it (`expiry.rs`).
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -20,13 +22,19 @@ use crate::home::{Home, write_private};
 use crate::time;
 
 mod dirs;
+mod expiry;
 mod reviewed;
 pub use dirs::{DirGrant, Places};
+pub use expiry::{State, Window, parse_for, summary as expiry_summary};
 pub use reviewed::{approvable, describe, files};
 
 /// Version 2 grants an [`Action`]; version 1 granted only a `command` string.
 const GRANTS_VERSION: u32 = 2;
 const OVERLAY_VERSION: u32 = 1;
+/// The overlay's version while an entry in it ends ([`Overlay::expires`]): a
+/// release that does not know the field refuses the file, failing closed,
+/// rather than reading every entry as permanent.
+const EXPIRING_OVERLAY_VERSION: u32 = 2;
 pub const OVERLAY_PREFIX: &str = "approved-";
 /// How long a session grant stays valid. Hosts do not tell OpenMoat when a session
 /// ends, so a fixed lifetime is what bounds a grant.
@@ -317,6 +325,11 @@ pub struct Overlay {
     /// know the field reads the file without them, allowing less.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dirs: Vec<DirGrant>,
+    /// When the entry with each id holds, for those `--for` gave an end; an
+    /// entry without one lasts until removed. Outside its window an entry is
+    /// left out of the policy ([`Overlay::in_force`]).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub expires: BTreeMap<String, Window>,
 }
 
 impl Default for Overlay {
@@ -325,6 +338,7 @@ impl Default for Overlay {
             version: OVERLAY_VERSION,
             allow: Vec::new(),
             dirs: Vec::new(),
+            expires: BTreeMap::new(),
         }
     }
 }
@@ -367,9 +381,10 @@ impl Overlay {
     pub fn parse(text: &str, path: &Path) -> Result<Self> {
         let overlay: Self = openmoat_core::yaml::from_str(text)
             .with_context(|| format!("parsing {}", path.display()))?;
-        if overlay.version != OVERLAY_VERSION {
+        if ![OVERLAY_VERSION, EXPIRING_OVERLAY_VERSION].contains(&overlay.version) {
             bail!(
-                "{} has version {}; this build supports {OVERLAY_VERSION}",
+                "{} has version {}; this build supports {OVERLAY_VERSION} and \
+                 {EXPIRING_OVERLAY_VERSION}",
                 path.display(),
                 overlay.version
             );
@@ -398,12 +413,21 @@ impl Overlay {
         write_private(path, self.text()?.as_bytes())
     }
 
-    /// The file as [`Overlay::save`] writes it.
+    /// The file as [`Overlay::save`] writes it: at [`EXPIRING_OVERLAY_VERSION`]
+    /// while an entry ends, else at [`OVERLAY_VERSION`], which every release reads.
     pub fn text(&self) -> Result<String> {
+        let version = if self.expires.is_empty() {
+            OVERLAY_VERSION
+        } else {
+            EXPIRING_OVERLAY_VERSION
+        };
         Ok(format!(
-            "# Permanent allow rules added with `openmoat allow`. Remove one with\n\
+            "# Allow rules added with `openmoat allow`. Remove one with\n\
              # `openmoat allow --remove <id>`, or edit freely, then run `openmoat doctor --accept`.\n{}",
-            openmoat_core::yaml::to_string(self)?
+            openmoat_core::yaml::to_string(&Self {
+                version,
+                ..self.clone()
+            })?
         ))
     }
 
@@ -411,6 +435,47 @@ impl Overlay {
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         let rules = self.allow.iter().map(|g| g.id.as_str());
         rules.chain(self.dirs.iter().map(|g| g.id.as_str()))
+    }
+
+    /// Whether the entry `id` is in force at `now_ms`: it has no end, or
+    /// `now_ms` is inside its window ([`Window::holds`]).
+    #[must_use]
+    pub fn holds(&self, id: &str, now_ms: i64) -> bool {
+        self.expires.get(id).is_none_or(|w| w.holds(now_ms))
+    }
+
+    /// Only the entries in force at `now_ms` ([`Overlay::holds`]): what the
+    /// policy merges. The windows are kept.
+    #[must_use]
+    pub fn in_force(mut self, now_ms: i64) -> Self {
+        let expires = &self.expires;
+        let holds = |id: &str| expires.get(id).is_none_or(|w| w.holds(now_ms));
+        self.allow.retain(|g| holds(&g.id));
+        self.dirs.retain(|g| holds(&g.id));
+        self
+    }
+
+    /// Give the entry `id` the window `window`, or with `None` no end: a grant
+    /// made again gets the end it is made with, never the longer of the two.
+    pub fn set_window(&mut self, id: &str, window: Option<Window>) {
+        match window {
+            Some(window) => self.expires.insert(id.to_owned(), window),
+            None => self.expires.remove(id),
+        };
+    }
+
+    /// Remove every entry not in force at `now_ms` ([`Overlay::holds`]), and
+    /// any window naming no entry; the entries removed.
+    pub fn prune(&mut self, now_ms: i64) -> Vec<Entry> {
+        let ended: Vec<String> = self
+            .ids()
+            .filter(|id| !self.holds(id, now_ms))
+            .map(str::to_owned)
+            .collect();
+        let removed = ended.iter().filter_map(|id| self.remove(id)).collect();
+        let ids: Vec<String> = self.ids().map(str::to_owned).collect();
+        self.expires.retain(|id, _| ids.contains(id));
+        removed
     }
 
     /// The allow rule each directory grant is under `policy` ([`DirGrant::rule`]),
@@ -523,42 +588,74 @@ impl Overlay {
     /// the policy holds for review there (a `.git`, the files CI, a commit hook
     /// or the editor runs later) stays held, by the policy of the day it is
     /// loaded with, not the policy of the day it was made.
+    ///
+    /// The same directory allowed again is the same grant, with a new reason:
+    /// its id, and what it already left out, stay.
     pub fn allow_dir(&mut self, spellings: &[String]) -> &DirGrant {
-        let grant = DirGrant {
-            id: self.next_id(),
-            reason: Some(approved_with("openmoat allow --dir")),
-            dir: spellings.to_vec(),
-            except: Vec::new(),
+        let reason = Some(approved_with("openmoat allow --dir"));
+        let index = if let Some(index) = self.dirs.iter().position(|g| g.dir == spellings) {
+            index
+        } else {
+            let grant = DirGrant {
+                id: self.next_id(),
+                reason: None,
+                dir: spellings.to_vec(),
+                except: Vec::new(),
+            };
+            self.dirs.push(grant);
+            self.dirs.len() - 1
         };
-        self.dirs.push(grant);
-        &self.dirs[self.dirs.len() - 1]
+        self.dirs[index].reason = reason;
+        &self.dirs[index]
     }
 
-    /// Remove the rule or directory grant with this id, returning it.
+    /// Remove the rule or directory grant with this id, and its window,
+    /// returning it.
     pub fn remove(&mut self, id: &str) -> Option<Entry> {
-        if let Some(index) = self.allow.iter().position(|g| g.id == id) {
-            return Some(Entry::Rule(self.allow.remove(index)));
-        }
-        let index = self.dirs.iter().position(|g| g.id == id)?;
-        Some(Entry::Dir(self.dirs.remove(index)))
+        let entry = if let Some(index) = self.allow.iter().position(|g| g.id == id) {
+            Entry::Rule(self.allow.remove(index))
+        } else {
+            let index = self.dirs.iter().position(|g| g.id == id)?;
+            Entry::Dir(self.dirs.remove(index))
+        };
+        self.expires.remove(id);
+        Some(entry)
     }
 
+    /// Append the rule `fill` makes; one that only differs from it in id and
+    /// reason is the same grant made again, and gets the new reason instead.
     fn push(&mut self, how: &str, fill: impl FnOnce(&mut RuleGroup)) -> &RuleGroup {
         let mut rule = RuleGroup {
-            id: self.next_id(),
             reason: Some(approved_with(how)),
             ..RuleGroup::default()
         };
         fill(&mut rule);
-        self.allow.push(rule);
-        &self.allow[self.allow.len() - 1]
+        let same = |g: &RuleGroup| {
+            *g == RuleGroup {
+                id: g.id.clone(),
+                reason: g.reason.clone(),
+                ..rule.clone()
+            }
+        };
+        let index = if let Some(index) = self.allow.iter().position(same) {
+            self.allow[index].reason = rule.reason;
+            index
+        } else {
+            rule.id = self.next_id();
+            self.allow.push(rule);
+            self.allow.len() - 1
+        };
+        &self.allow[index]
     }
 
-    /// One past the highest number of any id: ids stay unique after a person
-    /// deletes an earlier entry, and a duplicate id would fail the policy lint.
+    /// One past the highest number of any id, a window's included: ids stay
+    /// unique after a person deletes an earlier entry, a duplicate id would
+    /// fail the policy lint, and a window left behind never applies to a new
+    /// entry.
     fn next_id(&self) -> String {
         let n = self
             .ids()
+            .chain(self.expires.keys().map(String::as_str))
             .filter_map(|id| id.strip_prefix(OVERLAY_PREFIX)?.parse::<u64>().ok())
             .max()
             .unwrap_or(0)

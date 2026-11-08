@@ -26,6 +26,13 @@ Each agent's gaps and the reasons are in
 - **OpenCode 2's `--auto` approves OpenMoat's reviews** as it approves OpenCode's own,
   and OpenMoat's plugin cannot tell. OpenCode before 1.3.4 is not supported:
   `openmoat init` does not set it up and `openmoat status` says to upgrade.
+- **A rule given `--for` ends for the hook first.** The hook leaves it out from the moment
+  its time is up. The agents' sandbox settings keep it until `openmoat allow --prune` or
+  `openmoat sandbox sync` rewrites them (`openmoat doctor` shows them as out of date), and
+  an `openmoat run` session or `openmoat proxy` started before the end keeps it until it
+  stops. The end follows the machine's clock: moving the clock forward ends a rule early,
+  moving it back makes it last longer by as much, and moving it back to before the rule
+  was given ends it.
 
 ## Sandboxes and allowed code
 

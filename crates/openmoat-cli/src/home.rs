@@ -217,9 +217,12 @@ impl Home {
         self.with_merged(context::load_policy(path)?)
     }
 
-    /// `policy` with the `moat allow` rules and installed packs merged in.
+    /// `policy` with the `moat allow` rules in force now and installed packs
+    /// merged in. A rule or directory grant whose `--for` ended, or whose window
+    /// cannot be read, is left out (ADR-007, amendment of 2026-11-08); the
+    /// clock is the only thing this adds to a load, no file.
     fn with_merged(&self, mut policy: Policy) -> Result<Policy> {
-        let mut overlay = crate::approvals::Overlay::load_in(self)?;
+        let mut overlay = crate::approvals::Overlay::load_in(self)?.in_force(crate::time::now_ms());
         let merging = || format!("merging {}", self.overlay_path().display());
         merge_allow(&mut policy, std::mem::take(&mut overlay.allow)).with_context(merging)?;
         crate::packs::merge_installed(self, &mut policy)?;

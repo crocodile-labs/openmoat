@@ -78,6 +78,14 @@ pub(super) fn state_in_grant(home: &Home, policy: &Policy, linux: bool) -> Optio
     Some(format!("openmoat run     {why}"))
 }
 
+/// A warning on the standing grants that `--for` ended or ends within a day
+/// ([`crate::approvals::expiry_summary`]); an unreadable overlay has its own row.
+pub(super) fn grant_expiry(home: &Home, now_ms: i64) -> Option<String> {
+    let overlay = crate::approvals::Overlay::load(&home.overlay_path()).ok()?;
+    let summary = crate::approvals::expiry_summary(&overlay, now_ms)?;
+    Some(format!("approvals        {summary}"))
+}
+
 /// The row that says the `moat` name goes away.
 pub(super) const RENAMED: &str = "command          `moat` is the old name of `openmoat`; it still \
                                   works for now and will be removed in a later release";

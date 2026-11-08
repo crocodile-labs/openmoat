@@ -270,6 +270,7 @@ approves that call too. To stop reviewing the same command or file, run
 ```bash
 openmoat allow --last            # the last review: allowed for the rest of that agent session
 openmoat allow --last --always   # or a permanent rule in ~/.moat/policy.d/approved.yaml
+openmoat allow --last --always --for 3d   # or a rule that ends after three days
 ```
 
 On an agent without an OS sandbox from OpenMoat (OpenClaw, GitHub Copilot CLI, pi,
@@ -513,6 +514,39 @@ openmoat allow --site docs.rs          # network access to docs.rs, web fetches 
 openmoat allow --dir ~/work/shared     # read and write in that directory; .env files and keys stay denied, and what the policy holds for review (a .git, CI and editor files) still needs review there
 openmoat allow --remove approved-3     # undo: take a rule openmoat allow added out again
 ```
+
+Any of these, and `--always`, can end on its own: add `--for` and a duration (`30m`, `2h`,
+`3d`, `1w`; at most 366 days). Without `--for` a rule lasts until you remove it, as before.
+
+```bash
+openmoat allow --site docs.rs --for 2h           # network access to docs.rs for two hours
+openmoat allow --dir ~/work/scratch --for 3d     # that directory, for three days
+openmoat allow --last --always --for 1w          # the last review's command or files, for a week
+openmoat allowed                                 # each rule with when it ends, or EXPIRED
+openmoat allow --prune                           # remove the rules whose time is up
+```
+
+```text
+✔ added to /Users/me/.moat/policy.d/approved.yaml:
+    - id: approved-4
+      reason: approved with `openmoat allow --site` on 2026-11-08 09:00:00 UTC
+      net:
+      - docs.rs
+  ends 2026-11-08 11:00:00 UTC (in 2h); `openmoat allow --prune` removes it after that
+  undo: openmoat allow --remove approved-4
+```
+
+The end is stored as a time in `approved.yaml`. Once it has passed, the rule no longer
+applies: the call gets the decision it would get without it (a call to docs.rs is denied
+again by `default.net`). `openmoat allowed` still lists it, marked `EXPIRED`,
+until `openmoat allow --prune` removes it; `openmoat status` and `openmoat doctor` say
+when one has ended or ends within a day. The agents' sandbox settings keep an ended
+rule until `openmoat allow --prune` or `openmoat sandbox sync` rewrites them (`openmoat
+doctor` shows them as out of date); the hook decides without it from the moment it ends.
+Granting the same site, directory or command again replaces its end with the one you give
+now, or with none when you leave out `--for`: a rule is never extended on its own. A
+session grant (`openmoat allow --last` without `--always`) already ends after 24 hours and
+takes no `--for`.
 
 `--dir` stores the directory only. What the policy holds for review inside it is worked out
 from the policy each time it is loaded, so a protection a later upgrade adds also holds in
@@ -936,8 +970,9 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat audit evidence [--since …] [--until …] [--host …] [--samples N] [--format json]` | evidence for a window per control of OWASP Top 10 for LLM Applications 2025, SOC 2 and ISO/IEC 27001:2022 Annex A: rules that fired, decisions by verdict, redacted samples, the chain head, and the policy, lock and protections now; evidence, not a certification ([COMPLIANCE.md](COMPLIANCE.md)) |
 | `openmoat allow --last [--always]` | turn the last `review` (a command or a file action) into a session grant (24 h; a command's only in the project it was held in) or a permanent rule for exactly that command or those paths |
 | `openmoat allow "<command>" --host <id> --session <id> [--project <dir>]` | approve one exact command for one agent session, in the project of the current directory or `--project` |
-| `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory permanently · take such a rule out again |
-| `openmoat allowed [--format json]` | list what you allowed: permanent rules, session grants still in force, trusted repositories, each with how to take it back |
+| `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory until you remove it · take such a rule out again |
+| `openmoat allow … --for <duration>` · `openmoat allow --prune` | end an `--always`, `--site` or `--dir` rule after `30m`, `2h`, `3d`, `1w` (at most 366 days) · remove the rules whose time is up ([Change the policy](#change-the-policy)) |
+| `openmoat allowed [--format json]` | list what you allowed: standing rules (with when each ends, or `EXPIRED`), session grants still in force, trusted repositories, each with how to take it back |
 | `openmoat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
 | `openmoat secret add gh` · `openmoat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only (`--file <path>` reads it from a file, `--header <name>` names the request header) |
 | `openmoat secret add <id> … --tls-terminate [--allow 'METHOD /path']…` | also put the value into HTTPS to the host inside `openmoat run`, which decrypts it with its own CA, and only into the requests the rules name; any other request to the host is refused ([ADR-043](adr/ADR-043-tls-termination-for-brokered-secrets.md)) |

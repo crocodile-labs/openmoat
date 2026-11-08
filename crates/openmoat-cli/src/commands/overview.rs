@@ -181,7 +181,9 @@ fn pending_review(
         project: &project,
     };
     let granted = Grants::load(&home.grants_path())?.matches(scope, &action, now);
-    let permanent = Overlay::load(&home.overlay_path())?.covers(&action);
+    let permanent = Overlay::load(&home.overlay_path())?
+        .in_force(now)
+        .covers(&action);
     Ok((!granted && !permanent).then_some((event, host, action)))
 }
 

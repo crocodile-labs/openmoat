@@ -66,3 +66,53 @@ without review.
   else) and offers to turn it into a grant with the same id, re-pinned with the rest. An
   old exclusion the policy no longer names is kept in the grant's `except:`, so the change
   never allows more. `moat doctor` and `moat status` list such a rule until then.
+
+## Amendment 2026-11-08: standing grants can end
+
+Session grants end 24 hours after they are written (`GRANT_TTL_MS`), but every entry of
+`approved.yaml`, an `--always` rule for a command or files, a `--site` rule and a `--dir`
+grant, lasted until a person removed it. A site or directory needed for an afternoon stayed
+open for good unless someone remembered to take it out.
+
+- `moat allow --always`, `--site` and `--dir` take `--for <n>s|m|h|d|w` (above 0, at most
+  366 days; the span parser `report --since` uses, which now also reads `s` and `m`). The
+  overlay stores an absolute window under `expires:`, keyed by the entry's id: `from`, when
+  it was granted (rounded down to the second), and `until`, when it ends (rounded up), both
+  RFC 3339 UTC. Without `--for` nothing changes: no window, the entry lasts until removed.
+  A map beside the entries, rather than a field in each, keeps `RuleGroup` (the core's
+  policy shape, `deny_unknown_fields`) free of a time concept the core does not have, and
+  covers rules and directory grants alike.
+- When the policy is loaded (`Home::with_merged`), an entry with a window is merged only
+  while `from <= now < until`. The overlay is already read with the policy, so the only cost
+  per hook call is reading the clock. A window that cannot be read (any other text or shape,
+  or `until` not after `from`) counts as ended: a hand edit that breaks one ends the grant
+  rather than making it permanent, and it does not stop the overlay from loading.
+- Clock: the window is wall-clock time, as session grants are. A clock that reads earlier
+  than `from` (set back since the grant) ends the grant too, as a session grant whose
+  creation time lies in the future is invalid; so moving the clock back can stretch a grant
+  by at most the amount the clock moved and never revive it from before it was made, and
+  moving it forward only ends grants early. A monotonic or audit-row order (as session grants
+  use for taint answers) does not survive the process and is not needed for a bound that
+  the person set. Setting the system clock needs administrator rights, which already reach
+  past every protection here, so the clock is trusted, not a boundary.
+- Granting the same thing again (same `net` host, same directory spellings, or a rule with
+  the same patterns) keeps the entry's id and replaces its window with the one given now, or
+  removes it without `--for`. Nothing extends a window by itself, and two entries for the
+  same thing, one ended and one not, never arise from `moat allow`.
+- `moat allow --prune` removes every entry not in force and every window that names no
+  entry, checks that the policy still lints, re-pins and updates the sandbox settings, as
+  `--remove` does; it is part of `moat allow` because that is the command that writes the
+  overlay and holds the terminal and lock checks, while `moat allowed` stays read-only.
+  `moat allowed` shows each window and marks ended ones `EXPIRED`; `moat status` and
+  `moat doctor` name entries that ended or end within 24 hours. Ids are numbered past every
+  id a window names, so a window left behind never lands on a new entry.
+- The file is written as `version: 2` while it holds a window and as `version: 1` otherwise.
+  A release that does not know windows refuses version 2, so after a downgrade the policy
+  fails to load and the hook denies (invariant 4) instead of reading every grant as
+  permanent; a person removes the windows or upgrades again.
+- An ended grant leaves the hook's decision at once. The OS layers compiled from the policy
+  earlier keep it until rewritten: the agents' sandbox settings until `moat allow --prune`
+  or `moat sandbox sync` (`moat doctor` reports them out of date), and a running `moat run`
+  session or `moat proxy` until it restarts (`docs/LIMITS.md`). `--session` scoping for
+  sites and directories was not added: hosts do not report when a session ends, so it would
+  be the 24-hour lifetime again, which `--for 24h` already gives without a second store.

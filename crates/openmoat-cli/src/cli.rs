@@ -345,18 +345,30 @@ pub struct AllowArgs {
     #[arg(long)]
     pub always: bool,
 
-    /// Permanently allow network access to this host (`net`), web fetches included.
+    /// Allow network access to this host (`net`), web fetches included, until removed
+    /// or for --for.
     #[arg(long, value_name = "HOST", conflicts_with_all = ["command", "last", "session", "dir", "remove"])]
     pub site: Option<String>,
 
-    /// Permanently allow reading and writing in this directory and below it; deny
-    /// rules (secrets, OpenMoat's own files) still win.
+    /// Allow reading and writing in this directory and below it, until removed or for
+    /// --for; deny rules (secrets, OpenMoat's own files) still win.
     #[arg(long, value_name = "PATH", conflicts_with_all = ["command", "last", "session", "remove"])]
     pub dir: Option<PathBuf>,
 
     /// Remove a rule from ~/.moat/policy.d/approved.yaml by id (`approved-3`).
     #[arg(long, value_name = "RULE_ID", conflicts_with_all = ["command", "last", "session"])]
     pub remove: Option<String>,
+
+    /// End the --always, --site or --dir grant after this long: 30m, 2h, 3d, 1w (at
+    /// most 366 days). Without it the grant lasts until removed; granting the same
+    /// thing again sets its end anew.
+    #[arg(long = "for", value_name = "DURATION", value_parser = crate::approvals::parse_for,
+          conflicts_with_all = ["session", "remove", "prune"])]
+    pub for_ms: Option<i64>,
+
+    /// Remove the grants in ~/.moat/policy.d/approved.yaml whose --for has ended.
+    #[arg(long, conflicts_with_all = ["command", "last", "session", "always", "site", "dir", "remove"])]
+    pub prune: bool,
 }
 
 #[derive(Debug, Args)]
