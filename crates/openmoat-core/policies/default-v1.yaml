@@ -1136,6 +1136,10 @@ review:
       # `yarnPath`, `.cargo/config.toml` `rustc-wrapper`/`runner`, `bunfig.toml`
       # `preload`), in the project or the home
       "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/.cargo/config.toml", "**/.cargo/config", "**/bunfig.toml",
+      # a project's Codex, pi and OpenCode settings (here and below) need review;
+      # a write whose content turns that host's hook off (`[features] hooks =
+      # false`, a pi `extensions` entry or an OpenCode plugin entry that removes
+      # OpenMoat's) is denied before the file changes (`project-settings`)
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights

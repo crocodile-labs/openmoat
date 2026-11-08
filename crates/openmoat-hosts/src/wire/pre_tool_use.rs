@@ -69,6 +69,15 @@ pub(crate) fn parse_with(
             .unwrap_or_default(),
         _ => Vec::new(),
     };
+    // Codex `apply_patch`: the envelope, for the guard to replay.
+    let patch = match p.tool_name.as_str() {
+        "apply_patch" => p
+            .tool_input
+            .get("command")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        _ => None,
+    };
     // A permission mode in which no question reaches a person
     // (`Reviews::prompt_free_modes`): a `review` there is answered as a deny that
     // says how to approve it.
@@ -88,6 +97,7 @@ pub(crate) fn parse_with(
         action,
         content,
         edits,
+        patch,
         mcp_arguments,
         sandboxed: false,
         event,

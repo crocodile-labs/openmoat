@@ -906,7 +906,11 @@ something OpenMoat claims to stop.
   the lock pins the extension, so an edit of it stops every call. Under `openmoat run`
   the sandbox denies those writes to pi itself too, so pi cannot save its settings or
   a trust decision there. A project's
-  `.pi/settings.json`, `.pi/extensions/` and `.pi/mcp.json` need review (`runs-later`).
+  `.pi/settings.json`, `.pi/extensions/` and `.pi/mcp.json` need review (`runs-later`);
+  a write of `.pi/settings.json` whose content excludes OpenMoat's extension is denied
+  (`project-settings`), as are a Codex `.codex/config.toml` with `[features] hooks =
+  false` and an OpenCode `opencode.json` that removes OpenMoat's plugin, when the
+  content the write leaves is known ([LIMITS.md](LIMITS.md)).
   An extension that fails to load is a diagnostic and the session starts without it.
   The extension reports loading (`openmoat guard --heartbeat --host pi`, ADR-042):
   `openmoat status` and `openmoat doctor` say "plugin not loaded yet", a note, until it

@@ -324,11 +324,25 @@ fn parse(host: Host, api: Api, payload: &str) -> Result<HookRequest, HostError> 
         windows: cfg!(windows) || p.platform.as_deref() == Some("win32"),
     };
     let action = tools::map(&call)?;
-    // `write` replaces the whole file with `content`.
-    let content = match (p.tool.as_str(), &action) {
-        ("write", Some(Action::FsWrite { .. })) => {
-            args.get("content").and_then(Value::as_str).map(str::to_owned)
-        }
+    let text = |name: &str| args.get(name).and_then(Value::as_str).map(str::to_owned);
+    // `write` replaces the whole file with `content`; an `edit` whose
+    // `oldString` is empty writes `newString` as the whole file, any other
+    // replaces `oldString` (every occurrence with `replaceAll`).
+    let (content, edits) = match (p.tool.as_str(), &action) {
+        ("write", Some(Action::FsWrite { .. })) => (text("content"), Vec::new()),
+        ("edit", Some(Action::FsWrite { .. })) => match (text("oldString"), text("newString")) {
+            (Some(old), Some(new)) if old.is_empty() => (Some(new), Vec::new()),
+            (Some(old), Some(new)) => {
+                let all = args.get("replaceAll").and_then(Value::as_bool) == Some(true);
+                (None, vec![crate::Replacement { old, new, all }])
+            }
+            _ => (None, Vec::new()),
+        },
+        _ => (None, Vec::new()),
+    };
+    // `apply_patch` (OpenCode 1) and `patch` (OpenCode 2) send the envelope.
+    let patch = match (p.tool.as_str(), &action) {
+        ("apply_patch" | "patch", Some(Action::Patch { .. })) => text("patchText"),
         _ => None,
     };
     let mcp_arguments = crate::wire::mcp_call::hook_arguments(action.as_ref(), args);
@@ -340,7 +354,8 @@ fn parse(host: Host, api: Api, payload: &str) -> Result<HookRequest, HostError> 
         tool: p.tool,
         action,
         content,
-        edits: Vec::new(),
+        edits,
+        patch,
         mcp_arguments,
         sandboxed: false,
         event: hook_event(api),

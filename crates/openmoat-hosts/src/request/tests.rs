@@ -13,6 +13,7 @@ fn request(cwd: &str, action: Action) -> HookRequest {
         action: Some(action),
         content: None,
         edits: Vec::new(),
+        patch: None,
         mcp_arguments: None,
         sandboxed: false,
         event: HookEvent::PreToolUse,

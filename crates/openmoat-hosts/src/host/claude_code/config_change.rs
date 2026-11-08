@@ -47,6 +47,7 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         action: p.file_path.map(|path| Action::FsWrite { path }),
         content: None,
         edits: Vec::new(),
+        patch: None,
         mcp_arguments: None,
         sandboxed: false,
         event: HookEvent::ConfigChange {

@@ -18,6 +18,10 @@
 //! patch does not touch only makes the decision stricter, while missing one
 //! that Codex writes would let it through unchecked.
 
+mod replay;
+
+pub use replay::{Replayed, replay};
+
 const HEADERS: &[&str] = &[
     "*** Add File:",
     "*** Update File:",

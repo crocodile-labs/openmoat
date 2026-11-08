@@ -291,6 +291,7 @@ fn parse(host: Host, p: Payload) -> Result<HookRequest, HostError> {
         action: mapped.action,
         content: None,
         edits: Vec::new(),
+        patch: None,
         mcp_arguments,
         sandboxed: false,
         event: HookEvent::PreToolUse,

@@ -82,3 +82,23 @@ So the hook needs evidence of the person's answer that the agent cannot forge:
   whose row was pruned needs review again, which is the safe direction.
 - `openmoat allow --last` and its `s` answer keep working as ADR-020 describes; they
   are checked first.
+
+## Amendment 2026-11-08: the replayed content also decides hook-off project settings
+
+The content a write leaves, worked out as above, now also decides a write of a
+project settings file that the policy only reviews (`runs-later`): Codex's
+`.codex/config.toml`, pi's `.pi/settings.json`, OpenCode's `opencode.json[c]` and
+`.opencode/opencode.json[c]`. A content that turns that host's hook off, as the host's
+own settings reader names it (`SettingsReader::project_switched_off`, the reader
+`openmoat status` uses), is denied with `project-settings` before the file changes.
+Every other change keeps its review: most edits there (a model, an MCP server) are the
+person's to make, and a review an agent may answer on its own (OpenCode 2 `--auto`)
+must not be what stands between a repository and an unprotected next session.
+
+The replay covers more tools than before: pi's and OpenCode's `edit` send their
+replacements (an OpenCode `edit` with an empty `oldString` writes the whole file), and
+an `apply_patch` envelope (Codex, OpenCode) is replayed hunk by hunk on the files as
+they are (`openmoat_core::patch_replay`), matching lines as Codex does: exactly, then
+without trailing white space, then without white space at either end. A write whose
+outcome cannot be worked out (a shell redirect, a hunk or replacement not found) keeps
+the policy's verdict; `docs/LIMITS.md` names that gap.

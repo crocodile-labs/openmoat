@@ -434,6 +434,9 @@ fn evaluate(
         binary: &verified.lock.binary,
     };
     let decision = compiled.decide_with(action, &programs, &FsPathResolver);
+    // A write that leaves a project settings file turning its host's hook off;
+    // only tightens, and before the grant, which cannot lift a deny.
+    let decision = crate::project_settings::written::checked(&home, &request, &ctx, decision);
     hangs::enter(Phase::Taint);
     let store = home.open_audit()?;
     // A part of the call that came from untrusted output the session read

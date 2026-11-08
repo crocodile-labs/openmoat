@@ -378,6 +378,7 @@ pub mod git_config;
 pub mod other_hooks;
 mod plugins;
 pub mod system;
+pub mod written;
 
 pub use plugins::replaced_here;
 

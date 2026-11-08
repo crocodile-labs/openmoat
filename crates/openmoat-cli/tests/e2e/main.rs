@@ -59,6 +59,7 @@ mod paths;
 mod permission_mode;
 mod pi;
 mod policy_upgrade;
+mod project_settings_writes;
 mod protection;
 mod provenance;
 mod provenance_notes;

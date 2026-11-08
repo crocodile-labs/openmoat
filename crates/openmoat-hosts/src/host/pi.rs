@@ -227,6 +227,28 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
             .map(str::to_owned),
         _ => None,
     };
+    // `edit` replaces each `oldText` (which must occur once) with its
+    // `newText`; none when an entry lacks either, as the outcome is unknown.
+    let edits = match p.tool_name.as_str() {
+        "edit" => p
+            .input
+            .get("edits")
+            .and_then(Value::as_array)
+            .and_then(|edits| {
+                edits
+                    .iter()
+                    .map(|e| {
+                        Some(crate::Replacement {
+                            old: e.get("oldText")?.as_str()?.to_owned(),
+                            new: e.get("newText")?.as_str()?.to_owned(),
+                            all: false,
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
     // Without a screen a `review` cannot be put to the person (`Reviews::on_no_prompt`).
     let event = if p.has_ui {
         HookEvent::PreToolUse
@@ -242,7 +264,8 @@ pub(crate) fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError>
         tool: p.tool_name,
         action,
         content,
-        edits: Vec::new(),
+        edits,
+        patch: None,
         mcp_arguments,
         sandboxed: false,
         event,

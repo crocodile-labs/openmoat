@@ -728,7 +728,13 @@ away. Codex has no such key: a failed hook "continues the tool call"
   is read and blocked with `project-settings` when it sets a key that turns hooks off,
   runs a program or redirects the agent, or cannot be parsed (`project_settings.rs`);
   `openmoat doctor` and `openmoat status` warn about such a file in the current project, which
-  Claude Code loads at session start without a `ConfigChange`.
+  Claude Code loads at session start without a `ConfigChange`. For the project files the
+  policy only reviews (Codex's `.codex/config.toml`, pi's `.pi/settings.json`,
+  OpenCode's `opencode.json[c]` and `.opencode/opencode.json[c]`), the guard works out
+  the content a write leaves (the whole file a `Write` sends, an `Edit` replayed on the
+  file as ADR-048 does, an `apply_patch` replayed by `openmoat_core::patch_replay`) and
+  denies it with `project-settings` when the host's reader says it turns the hook off
+  (`project_settings/written.rs`, `SettingsReader::project_switched_off`).
 - **`kernel-self` rules.** The default policy denies agent writes to the state and
   host directories (also where `MOAT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
   `CURSOR_CONFIG_DIR` moved them, and where `openmoat init` recorded them in `hosts.json`), hook
