@@ -1590,11 +1590,22 @@ written or changed:
 | `npm_config_before` | npm (its `before` setting) | resolves each package to the newest version published before that time; a package with no such version fails to install |
 | `UV_EXCLUDE_NEWER` | uv (`--exclude-newer`) | leaves out distributions uploaded after that time |
 
-A cut-off the person set is kept: either variable already in `openmoat run`'s
-environment (`NPM_CONFIG_BEFORE` too), a `before=` line in the project's `.npmrc`,
-or `exclude-newer` in the project's `pyproject.toml` or `uv.toml`. A project with a
-`uv.lock` gets no `UV_EXCLUDE_NEWER`: uv records the setting in its lockfile, so a
-cut-off that moves every day would make uv resolve the lockfile again. pip, pnpm,
+A cut-off you set is kept: either variable already in `openmoat run`'s environment
+(`NPM_CONFIG_BEFORE` too), `before=` in your `~/.npmrc` (or the file
+`npm_config_userconfig` names), or `exclude-newer` in your `~/.config/uv/uv.toml`
+(`$XDG_CONFIG_HOME/uv/uv.toml`). The project's own files are the repository's, so they
+cannot switch the cut-off off: a `before=` in its `.npmrc`, or `exclude-newer` under
+`[tool.uv]` in its `pyproject.toml` or at the top of its `uv.toml`, is kept only when it is
+a date before the policy's cut-off (stricter); a later date or a duration gets the
+policy's, which both tools read over the project's files. A project with a `uv.lock` gets
+no `UV_EXCLUDE_NEWER`, and `openmoat run` says so when it starts: uv records the setting
+in its lockfile, so a cut-off that moves every day would make uv resolve the lockfile
+again. To keep one there, set `exclude-newer` in `pyproject.toml` yourself:
+
+```bash
+openmoat run -- claude
+# moat run: uv gets no release-age cut-off (7 days): the project has a uv.lock, ...
+``` pip, pnpm,
 Yarn and Bun are not covered, and the host sandboxes of the Standard tier set nothing.
 To install a version released this week inside `openmoat run`, start `openmoat run` with
 your own cut-off in the variable, or set the key to `0`.

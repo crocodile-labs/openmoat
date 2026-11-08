@@ -124,9 +124,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     own_login::report(agent.report_mut(), &kept, &ctx);
     refuse_port_only(args.netns, agent.warning())?;
     agent.command().args(rest);
-    agent
-        .command()
-        .envs(package_release_age(&policy, ctx.project.as_deref()));
+    let release_age = package_release_age(&policy, ctx.project.as_deref());
+    agent.command().envs(release_age.vars);
     // The proxy reads a brokered secret from this process's environment; the
     // agent gets only the placeholder, never the variable that holds the value.
     for name in env_secrets(&policy) {
@@ -154,6 +153,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     notice(&program, port, exit.session(), &agent, args)?;
     let notices = ca_notice
         .into_iter()
+        .chain(release_age.notices)
         .chain(request_poc::notice())
         .chain(trust.iter().filter_map(Trust::notice));
     for line in notices {
@@ -235,19 +235,23 @@ const MAX_PACKAGE_CONFIG_BYTES: u64 = 1 << 20;
 
 /// npm and uv skip versions published within the policy's release age
 /// (ADR-030), unless the person set their own cut-off.
-fn package_release_age(policy: &Policy, project: Option<&str>) -> Vec<(&'static str, String)> {
+fn package_release_age(policy: &Policy, project: Option<&str>) -> release_age::ReleaseAge {
     let in_project = |file: &str| project.map(|p| Path::new(p).join(file));
+    let small = |path: &Path| {
+        let small = std::fs::metadata(path).is_ok_and(|m| m.len() < MAX_PACKAGE_CONFIG_BYTES);
+        small.then(|| std::fs::read_to_string(path).ok()).flatten()
+    };
+    let var = |name: &str| std::env::var(name).ok();
     release_age::env(
         policy.package_min_release_age_days(),
         crate::time::now_ms(),
         &release_age::Found {
-            inherited: &|name| std::env::var_os(name).is_some(),
+            inherited: &|name| std::env::var_os(name).map(|v| v.to_string_lossy().into_owned()),
             project_has: &|file| in_project(file).is_some_and(|p| p.exists()),
-            project_file: &|file| {
-                let path = in_project(file)?;
-                let small =
-                    std::fs::metadata(&path).is_ok_and(|m| m.len() < MAX_PACKAGE_CONFIG_BYTES);
-                small.then(|| std::fs::read_to_string(&path).ok()).flatten()
+            project_file: &|file| small(&in_project(file)?),
+            user_file: &|tool| {
+                let home = crate::home::user_home().ok();
+                small(&release_age::user_config_path(tool, &var, home)?)
             },
         },
     )

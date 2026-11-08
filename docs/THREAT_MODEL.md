@@ -207,7 +207,9 @@ something OpenMoat claims to stop.
   are not checked; nor are `npx`, `uvx`, `pnpm dlx` and `bunx`, which download and run
   a package. The release age `openmoat run` asks for (`sandbox.package_min_release_age_days`)
   reaches only npm (`npm_config_before`) and uv (`UV_EXCLUDE_NEWER`), not pip, pnpm,
-  Yarn or Bun, nothing outside `openmoat run`, and not uv in a project with a `uv.lock`;
+  Yarn or Bun, nothing outside `openmoat run`, and not uv in a project with a `uv.lock`
+  (`openmoat run` says so when it starts); a project's own `.npmrc` or `pyproject.toml`
+  can make the cut-off stricter, not switch it off;
   it delays a malicious version rather than detecting it, and a program that resets
   the variables escapes it.
 

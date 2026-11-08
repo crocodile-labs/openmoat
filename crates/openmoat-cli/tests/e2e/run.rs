@@ -526,6 +526,36 @@ print("io_uring=" + str(ctypes.get_errno()))
         assert!(stdout(&own).contains("uv=2026-01-01\n"), "{}", text(&own));
     }
 
+    /// The repository's own files cannot switch the cut-off off: a far
+    /// `before=` in its `.npmrc` still gets npm's, and a `uv.lock`, which keeps
+    /// uv as it is, is named on standard error.
+    #[test]
+    fn the_projects_files_do_not_switch_the_release_age_off() {
+        let (sb, project) = installed_with_secret();
+        std::fs::write(project.join(".npmrc"), "before=2099-01-01\n").unwrap();
+        std::fs::write(project.join("uv.lock"), "version = 1\n").unwrap();
+        let script =
+            "echo \"npm=${npm_config_before-unset}\"; echo \"uv=${UV_EXCLUDE_NEWER-unset}\"";
+        let out = run_sh(&sb, &project, script);
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        let npm = stdout(&out)
+            .lines()
+            .find_map(|l| l.strip_prefix("npm="))
+            .map(str::to_owned);
+        assert!(
+            npm.is_some_and(|v| v.ends_with("T00:00:00Z") && !v.starts_with("2099")),
+            "{shown}"
+        );
+        assert!(stdout(&out).contains("uv=unset\n"), "{shown}");
+        assert!(
+            shown.contains("uv gets no release-age cut-off") && shown.contains("uv.lock"),
+            "{shown}"
+        );
+    }
+
     #[test]
     fn a_failing_agent_exits_1() {
         let (sb, project) = installed_with_secret();
