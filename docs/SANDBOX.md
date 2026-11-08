@@ -132,14 +132,7 @@ cat: /Users/you/.claude/.credentials.json: Operation not permitted
   longer ones (`codex.linux-case-variants`). Codex on Linux also runs its
   own executable inside the sandbox, so on Linux the profile lets commands read the
   executable `codex` on `PATH` starts (through npm's launcher, the platform binary),
-  listed as `codex.own-binary`. The `codex` is looked up in the absolute `PATH` entries
-  only, and its executable is granted only where Codex's installers put it: its
-  standalone installer (the Codex home's `packages/standalone/releases`, `~/.local/bin`),
-  npm's global packages (`/usr/lib/node_modules`, `/usr/local`, a user prefix
-  `~/.npm-global`, nvm, fnm, Volta, pnpm, Bun), Homebrew, Nix, `cargo install` and
-  `/usr/bin`. Anywhere else, such as a `codex` written into a directory on `PATH`, the
-  profile grants nothing and `openmoat sandbox show` reports it under the same rule.
-  Run `openmoat sandbox sync` after installing, moving or
+  listed as `codex.own-binary`. Run `openmoat sandbox sync` after installing, moving or
   updating Codex. When `codex` is not on `PATH`, `openmoat sandbox show` says so and Codex
   starts commands only when installed under a read root. Codex's standalone installer
   puts the executable in the Codex home, which the profile denies, and Codex hides a

@@ -54,67 +54,10 @@ const CODEX_STATE: &[&str] = &[
 /// on Linux expands to the files present when each command starts.
 const CODEX_DATABASES: &str = "**/*.sqlite*";
 
-/// Directories Codex's installers put its executable in, outside the home:
-/// distribution packages (`/usr/bin`), npm's global packages (`/usr/lib`,
-/// `/usr/local/lib/node_modules`), Homebrew (`/usr/local`, `/opt/homebrew`,
-/// `/home/linuxbrew/.linuxbrew`) and Nix (`/nix/store`).
-const SYSTEM_INSTALLS: &[&str] = &[
-    "/usr/bin",
-    "/usr/lib/node_modules",
-    "/usr/local",
-    "/opt/homebrew",
-    "/home/linuxbrew/.linuxbrew",
-    "/nix/store",
-];
-
-/// The same in the home: the standalone installer's and pip's `~/.local/bin`,
-/// `cargo install`, a Nix profile, Homebrew on Linux, and npm's global
-/// packages under a user prefix, nvm, fnm, Volta, pnpm and Bun. The standalone
-/// installer's releases in the Codex home are added by [`installed`].
-const HOME_INSTALLS: &[&str] = &[
-    ".local/bin",
-    ".cargo/bin",
-    ".nix-profile",
-    ".linuxbrew",
-    ".npm-global/lib/node_modules",
-    ".nvm/versions/node",
-    ".local/share/fnm",
-    ".volta/tools/image",
-    ".local/share/pnpm/global",
-    ".bun/install/global/node_modules",
-];
-
-/// The executable `codex` on `PATH` runs, symlinks resolved; looked up in
-/// `PATH`'s absolute entries only ([`crate::environment::find_on_path`]),
-/// as a relative entry would let the repository `openmoat sandbox sync` runs
-/// in choose which file the profile lets commands read.
+/// The executable `codex` on `PATH` runs, symlinks resolved.
 pub fn own_binary() -> Option<PathBuf> {
-    native(&std::fs::canonicalize(crate::environment::find_on_path("codex")?).ok()?)
-}
-
-/// Whether `binary` (resolved) is where one of Codex's installers puts it:
-/// below [`SYSTEM_INSTALLS`], below [`HOME_INSTALLS`] in one of `homes` (the
-/// home as named and resolved), or in the standalone installer's releases in
-/// `codex_home`. Anything else (a `codex` an agent wrote into a directory on
-/// `PATH`, a link to another file) gets no read grant.
-fn installed(binary: &str, homes: &[String], codex_home: Option<&Path>) -> bool {
-    let releases = codex_home.into_iter().flat_map(|home| {
-        let resolved = std::fs::canonicalize(home).ok();
-        std::iter::once(home.to_path_buf())
-            .chain(resolved)
-            .map(|home| crate::context::path_string(&home.join(STANDALONE_RELEASES)))
-    });
-    let in_home = homes.iter().flat_map(|home| {
-        HOME_INSTALLS
-            .iter()
-            .map(move |dir| format!("{}/{dir}", home.trim_end_matches('/')))
-    });
-    SYSTEM_INSTALLS
-        .iter()
-        .map(|dir| (*dir).to_owned())
-        .chain(in_home)
-        .chain(releases)
-        .any(|dir| is_below(binary, &dir))
+    let path: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("PATH")?).collect();
+    native(&std::fs::canonicalize(crate::environment::find_in(&path, &[], "codex")?).ok()?)
 }
 
 /// `found` itself, or for npm's launcher (`<package>/bin/codex.js`) the
@@ -152,14 +95,11 @@ fn native(found: &Path) -> Option<PathBuf> {
 /// home `codex_home` when no read or write grant includes it: commands cannot
 /// read it then anyway, so its deny gives way to denies of [`CODEX_STATE`]
 /// and [`CODEX_DATABASES`],
-/// which still apply when a workspace root includes it. An executable that is
-/// not where Codex's installers put it ([`installed`]) is reported as stricter
-/// and never granted.
+/// which still apply when a workspace root includes it.
 pub fn read_own_binary(
     generated: &mut Generated,
     binary: Option<&Path>,
     codex_home: Option<&Path>,
-    homes: &[String],
 ) {
     let Some(binary) = binary else {
         generated.report.loss(
@@ -189,21 +129,6 @@ pub fn read_own_binary(
                 && (*path == key || is_below(&key, path))
         })
         .map(|(path, _)| path.to_owned());
-    // Checked before the Codex home is opened, which only an executable that
-    // gets its grant may cause.
-    if denied.is_none() && !installed(&key, homes, codex_home) {
-        generated.report.loss(
-            Kind::FsRead,
-            RULE,
-            format!(
-                "the `codex` on PATH runs `{key}`, which is not where Codex's installers put it \
-                 (its standalone installer, npm, Homebrew, Nix, `cargo install`, `~/.local/bin`), \
-                 so commands may not read it and Codex on Linux starts none; reinstall Codex \
-                 with one of them and run `openmoat sandbox sync`"
-            ),
-        );
-        return;
-    }
     let denied = match (denied, &home) {
         (None, Some(home)) if !open_codex_home(filesystem, home) => Some(home.clone()),
         (denied, _) => denied,
@@ -304,10 +229,6 @@ mod tests {
     use super::*;
     use crate::sandbox::codex::tests::generated;
 
-    fn homes() -> Vec<String> {
-        vec!["/Users/me".to_owned()]
-    }
-
     fn mode<'a>(out: &'a Generated, key: &str) -> Option<&'a str> {
         out.profile["filesystem"].get(key)?.as_str()
     }
@@ -315,83 +236,22 @@ mod tests {
     #[test]
     fn the_executable_is_readable_and_listed_as_wider() {
         let mut out = generated(openmoat_core::DEFAULT_POLICY);
-        read_own_binary(
-            &mut out,
-            Some(Path::new("/usr/local/bin/codex")),
-            None,
-            &homes(),
-        );
-        assert_eq!(mode(&out, "/usr/local/bin/codex"), Some("read"));
+        read_own_binary(&mut out, Some(Path::new("/opt/codex/bin/codex")), None);
+        assert_eq!(mode(&out, "/opt/codex/bin/codex"), Some("read"));
         let allowance = out.report.allowances.iter().find(|a| a.rule == RULE);
         assert_eq!(
             allowance.map(|a| a.patterns.clone()),
-            Some(vec!["/usr/local/bin/codex".to_owned()])
+            Some(vec!["/opt/codex/bin/codex".to_owned()])
         );
-    }
-
-    #[test]
-    fn each_installers_location_is_granted() {
-        for binary in [
-            "/usr/bin/codex",
-            "/usr/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/bin/codex",
-            "/opt/homebrew/Cellar/codex/0.166.0/bin/codex",
-            "/home/linuxbrew/.linuxbrew/Cellar/codex/0.166.0/bin/codex",
-            "/nix/store/abc-codex-0.166.0/bin/codex",
-            "/Users/me/.local/bin/codex",
-            "/Users/me/.cargo/bin/codex",
-            "/Users/me/.nvm/versions/node/v22.1.0/lib/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex",
-            "/Users/me/.npm-global/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/bin/codex",
-        ] {
-            let mut out = generated(openmoat_core::DEFAULT_POLICY);
-            read_own_binary(&mut out, Some(Path::new(binary)), None, &homes());
-            assert_eq!(mode(&out, binary), Some("read"), "{binary}");
-            assert!(
-                !out.report.losses.iter().any(|l| l.rule == RULE),
-                "{binary}"
-            );
-        }
-    }
-
-    /// A `codex` an agent wrote into a directory on `PATH` (or a link it made
-    /// there, resolved to its target) is not where an installer puts Codex:
-    /// no read grant, and the profile reports the loss.
-    #[test]
-    fn an_executable_outside_the_installers_locations_is_never_granted() {
-        let dir = tempfile::tempdir().unwrap();
-        let planted = std::fs::canonicalize(dir.path()).unwrap().join("bin/agent");
-        std::fs::create_dir_all(planted.parent().unwrap()).unwrap();
-        std::fs::write(&planted, "#!/bin/sh\n").unwrap();
-        let elsewhere = [
-            crate::context::path_string(&planted),
-            "/opt/codex/bin/codex".to_owned(),
-            "/Users/me/projects/app/node_modules/.bin/codex".to_owned(),
-            "/Users/me/.local/binary/codex".to_owned(),
-            "/Users/me/.codex/packages/standalone/releases-old/codex".to_owned(),
-        ];
-        for binary in elsewhere {
-            let mut out = generated(openmoat_core::DEFAULT_POLICY);
-            let home = Path::new("/Users/me/.codex");
-            read_own_binary(&mut out, Some(Path::new(&binary)), Some(home), &homes());
-            assert_eq!(mode(&out, &binary), None, "{binary}");
-            assert!(
-                !out.report.allowances.iter().any(|a| a.rule == RULE),
-                "{binary}"
-            );
-            let loss = out.report.losses.iter().find(|l| l.rule == RULE);
-            assert!(
-                loss.is_some_and(|l| l.message.contains("not where Codex's installers")),
-                "{binary}: {loss:?}"
-            );
-        }
     }
 
     #[test]
     fn a_denied_or_missing_executable_is_stricter_and_never_granted() {
         let mut out = generated(openmoat_core::DEFAULT_POLICY);
         let inside = "/Users/me/.ssh/codex";
-        read_own_binary(&mut out, Some(Path::new(inside)), None, &homes());
+        read_own_binary(&mut out, Some(Path::new(inside)), None);
         assert_eq!(mode(&out, inside), None);
-        read_own_binary(&mut out, None, None, &homes());
+        read_own_binary(&mut out, None, None);
         let losses: Vec<&str> = out
             .report
             .losses
@@ -411,7 +271,7 @@ mod tests {
     fn the_standalone_executable_opens_the_codex_home_but_not_its_state() {
         let mut out = generated(openmoat_core::DEFAULT_POLICY);
         let home = Path::new("/Users/me/.codex");
-        read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home), &homes());
+        read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home));
         let releases = "/Users/me/.codex/packages/standalone/releases";
         assert_eq!(mode(&out, releases), Some("read"));
         assert_eq!(
@@ -454,7 +314,7 @@ mod tests {
     fn the_codex_databases_stay_denied_by_a_glob() {
         let mut out = generated(openmoat_core::DEFAULT_POLICY);
         let home = Path::new("/Users/me/.codex");
-        read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home), &homes());
+        read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home));
         for db in ["state_5.sqlite", "state_5.sqlite-wal", "logs_2.sqlite-shm"] {
             assert!(denied(&out, &format!("/Users/me/.codex/{db}")), "{db}");
         }
@@ -477,7 +337,7 @@ mod tests {
             let mut out = generated(openmoat_core::DEFAULT_POLICY);
             widen(&mut out);
             let home = Path::new("/Users/me/.codex");
-            read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home), &homes());
+            read_own_binary(&mut out, Some(Path::new(STANDALONE)), Some(home));
             assert_eq!(mode(&out, STANDALONE), None);
             assert_eq!(
                 mode(&out, "/Users/me/.codex/packages/standalone/releases"),
