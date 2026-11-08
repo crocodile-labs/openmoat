@@ -2,6 +2,7 @@
 //! Over Unix socket pairs, so no port is bound.
 
 use std::io::Cursor;
+use std::io::Read as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
