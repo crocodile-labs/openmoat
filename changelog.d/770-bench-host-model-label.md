@@ -1,0 +1,2 @@
+### Changed
+- `openmoat bench --report` names its hook rows "host model (golden payloads)" (`host-model` in JSON): they come from OpenMoat's own model of each host's payload and reply, not from running the host. The host's own handling of a failed hook is its own "real host" row, always NOT TESTED HERE, and the report no longer prints the version of a program named like the host, since no host program ran ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

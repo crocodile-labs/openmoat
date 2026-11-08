@@ -1,0 +1,2 @@
+### Security
+- `openmoat mcp wrap` now writes `--host <agent>` into each wrapped definition (and adds it to one wrapped before, the next time you run it), and the MCP gateway takes only that agent's hook decisions, preferring the session it already served, so two agents or two sessions sending the same call each have the result kept for their own session ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

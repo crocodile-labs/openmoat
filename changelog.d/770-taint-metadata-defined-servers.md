@@ -1,0 +1,2 @@
+### Security
+- Claude in Chrome's tab lists no longer escape session taint when the tool comes from a server an agent's MCP configuration defines under the name `claude-in-chrome`: the real one is provided by Claude Code itself, so a configured server of that name is another program, and once accepted every result of it taints the session; `openmoat mcp accept` says so when it shows such a server, and `taint: { defined_servers: [...] }` turns the built-in list off by hand (POLICY.md §4.1, ADR-069) ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

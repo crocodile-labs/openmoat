@@ -1,2 +1,0 @@
-### Changed
-- CI runs `openmoat run` as a stock Ubuntu gets it, Landlock and seccomp without bubblewrap, end to end: the port-only notice, `--netns=require` exiting 64, the refused `--isolate` and `--write` outside the project, and the hostile project scripts of `docs/EVIDENCE.md`. Every other Linux job installs bubblewrap, so that path had not run in CI before ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

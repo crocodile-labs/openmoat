@@ -1,0 +1,2 @@
+### Changed
+- **Breaking** `openmoat-hosts`: `HookRequest` has a new public field `patch` (`Option<String>`, the `apply_patch` envelope a call applies; set it to `None` where you build a request yourself). `SettingsReader` has a new method `project_switched_off` with a default; `openmoat-core` exports `patch_replay` and `PatchReplayed`, which work out the content a patch leaves in each file ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).
