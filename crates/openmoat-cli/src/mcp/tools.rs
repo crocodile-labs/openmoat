@@ -34,6 +34,10 @@ use super::pins::canonical;
 use crate::home::{Home, write_private};
 use crate::integrity::sha256_hex;
 
+pub mod surface;
+
+use surface::{Kind, Surface};
+
 /// The format version of a server's tool-pin file this build reads and writes.
 const VERSION: u32 = 1;
 
@@ -148,6 +152,11 @@ pub struct ToolPins {
     /// Listed definitions not accepted yet, by tool name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub held: BTreeMap<String, Held>,
+    /// The server's instructions and prompt and resource listings
+    /// ([`surface`], ADR-069); `None` in a file written before they were
+    /// pinned, until the server first answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<Surface>,
 }
 
 /// What one `tools/list` result did to the pins.
@@ -166,6 +175,7 @@ impl ToolPins {
             server: server.to_owned(),
             tools: BTreeMap::new(),
             held: BTreeMap::new(),
+            surface: Some(Surface::default()),
         }
     }
 
@@ -176,7 +186,7 @@ impl ToolPins {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
         };
-        let pins: Self =
+        let mut pins: Self =
             serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
         if pins.version != VERSION {
             bail!(
@@ -184,6 +194,14 @@ impl ToolPins {
                 path.display(),
                 pins.version
             );
+        }
+        if pins.surface.is_none() {
+            // Written before the surface was pinned: what a person accepted
+            // of this server stands for what it says besides (`surface`).
+            pins.surface = Some(Surface {
+                adopt: !pins.tools.is_empty(),
+                ..Surface::default()
+            });
         }
         Ok(Some(pins))
     }
@@ -261,23 +279,53 @@ impl ToolPins {
         self.held.contains_key(tool)
     }
 
-    /// Accept every held tool.
+    /// The server's other pins ([`surface`]).
+    pub fn surface(&self) -> std::borrow::Cow<'_, Surface> {
+        match &self.surface {
+            Some(surface) => std::borrow::Cow::Borrowed(surface),
+            None => std::borrow::Cow::Owned(Surface::default()),
+        }
+    }
+
+    pub fn surface_mut(&mut self) -> &mut Surface {
+        self.surface.get_or_insert_with(Surface::default)
+    }
+
+    /// Whether the part `kind` of the surface (`None`: the `initialize`
+    /// answer) is pinned as the server first says it: it was never read, and
+    /// the policy trusts first sight of a server never seen (`trust_unseen`)
+    /// or a person accepted this server before its file had these pins.
+    pub fn trusts(&self, kind: Option<Kind>, trust_unseen: bool) -> bool {
+        let surface = self.surface();
+        surface.unseen(kind) && (trust_unseen || surface.adopt)
+    }
+
+    /// How many tools and other entries are held.
+    pub fn held_count(&self) -> usize {
+        self.held.len() + self.surface().held_count()
+    }
+
+    /// Accept every held tool and entry.
     pub fn accept_held(&mut self) {
         for (name, held) in std::mem::take(&mut self.held) {
             self.tools.insert(name, held.pin);
         }
+        self.surface_mut().accept_held();
     }
 
-    /// What accepting each held tool changes, for a person to read.
+    /// What accepting each held tool and entry changes, for a person to read.
     pub fn describe_held(&self) -> Vec<String> {
-        self.held
+        let mut out: Vec<String> = self
+            .held
             .iter()
             .map(|(name, held)| {
                 let old = self.tools.get(name);
                 let again = self.held_again(name, &held.pin);
                 describe(&self.server, name, old, &held.pin, again)
             })
-            .collect()
+            .collect();
+        out.extend(self.surface().describe_held(&self.server));
+        out
     }
 
     /// Why tools are held, for `status` and `doctor`: how many, and how many
@@ -289,6 +337,13 @@ impl ToolPins {
             .filter(|(name, held)| self.held_again(name, &held.pin))
             .count();
         let mut text = format!("{} tool(s) that changed or are new", self.held.len());
+        let others = self.surface().held_count();
+        if others > 0 {
+            let _ = write!(
+                text,
+                ", and {others} of its instructions, prompts or resources that changed or are new"
+            );
+        }
         if again > 0 {
             let _ = write!(
                 text,

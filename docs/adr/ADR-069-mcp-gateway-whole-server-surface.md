@@ -10,6 +10,11 @@ tool's result names for the session that called it. A review of the gateway foun
 channels those decisions did not reach, each a way for a server to put text in front of
 the model, or to have it counted for the wrong session, that a person never reviewed:
 
+- the `instructions` of a server's `initialize` answer, which Claude Code puts in the
+  model's system prompt, and its `serverInfo` reached the host unpinned, unrecorded and
+  without taint, so a server could change what it tells the model at any start and no
+  hold, review or audit row followed; the descriptions in `prompts/list`,
+  `resources/list` and `resources/templates/list` were unpinned too;
 - the review a person reads in `openmoat mcp accept` showed some invisible characters
   as `?` but not all of them: tag characters (U+E0000 to U+E007F) spell ASCII text no
   terminal draws, so a description could look harmless and still carry instructions;
@@ -71,7 +76,40 @@ the model, or to have it counted for the wrong session, that a person never revi
    policy names in `taint.metadata_tools` keeps its exemption: a person listed it by
    its full name.
 
+5. **The whole server surface is pinned with the tools.** The pin file of a server
+   (`mcp/tools.rs`) also pins (`mcp/tools/surface.rs`) its `initialize` answer's
+   `instructions` and `serverInfo` as one entry, and each entry of its prompt, resource
+   and resource-template listings by its name, URI or URI template, each by the SHA-256
+   of the whole entry in canonical JSON. One that differs from the accepted pin, or has
+   none, is held as a tool is (ADR-032): held instructions are taken out of the answer
+   and the host gets the accepted `serverInfo` (or one naming only the server), a held
+   listing entry is left out, and a `prompts/get` of a held prompt is refused; a prompt
+   never listed is not refused, since its content is the server's output either way.
+   `openmoat mcp accept` shows each with a diff and accepts it with the tools, so a
+   server is reviewed once, not per part. A `version` that reads as a version number
+   (at most 32 letters, digits, `.`, `+`, `-`, `_`) is pinned as any version: an upgrade
+   alone does not ask again; any other text there is pinned. Under
+   `mcp.trust_first_sight`, a part never read is pinned as first read, unless it holds
+   invisible characters (§1).
+6. **A server accepted before this is not asked about again.** A pin file without
+   these pins, of a server whose tools a person accepted, has each part pinned as the
+   server first says it after the upgrade; listings the server's `initialize`
+   capabilities do not offer then count as read, so ones it offers later are held. A
+   server nobody accepted has everything held.
+7. **Accepted instructions are still untrusted content.** The relay hands the gate the
+   instructions it passes on; the gateway keeps them, and before it passes the first
+   call of each session it serves, it records for that session a row that marks it
+   untrusted (rule `mcp-server-text`, under the session's own host, as the hook's
+   `mcp__<server>__<tool>` rows do), the instructions' pieces (ADR-058) and the
+   fingerprints of what they name (ADR-057), with `mcp__<server>__initialize` as the
+   source. A failure to record refuses the call. The proxy learns a session only from
+   the hook decision a call matches, so a session that never calls one of the server's
+   tools is not marked; what its model read is only text a person accepted.
+
 ## Consequences
 
+- A server's first start through the proxy holds its instructions with its tools: the
+  agent runs without them until a person accepts the server, as it runs without its
+  tools.
 - An emoji's variation selector or zero-width joiner shows as `?` in reviews and logs;
   OpenMoat's own output uses none.

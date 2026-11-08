@@ -770,6 +770,19 @@ Through the gateway:
   and its calls are refused (error -32602, rule `mcp-tool-held`), the first time the server
   starts too (ADR-032). When the server says its tools changed, the gateway reads them
   again itself, so a changed tool is held even if the agent keeps its old list.
+- **The server's instructions, prompts and resources are pinned with its tools.** A host
+  puts the `instructions` of a server's `initialize` answer in the model's prompt, and
+  shows it the descriptions of its prompts and resources. The gateway passes on only the
+  ones you accepted ([ADR-069](adr/ADR-069-mcp-gateway-whole-server-surface.md)): new or
+  changed instructions are taken out of the answer (and the server information is the one
+  you accepted), a new or changed prompt, resource or resource template is left out of its
+  listing, and a `prompts/get` of a held prompt is refused (rule `mcp-tool-held`), until
+  `openmoat mcp accept` shows you what changed. A new version number alone is not a
+  change. A server you accepted before this release has what it says now pinned as it is
+  the first time it starts, without asking again. Accepted instructions are still the
+  server's text: each session that calls one of the server's tools has them kept as
+  untrusted content (a host they name is injected input, `injected-input`, and the
+  session is marked untrusted, rule `mcp-server-text` in the audit log).
 - **What you accept is what the model reads.** `openmoat mcp accept` shows each character
   a terminal does not draw as `?`: control characters, zero-width, bidirectional and other
   format characters, the soft hyphen, invisible operators, tag characters (U+E0000 to

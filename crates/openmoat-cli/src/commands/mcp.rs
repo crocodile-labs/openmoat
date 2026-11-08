@@ -88,7 +88,7 @@ pub(super) fn review_and_accept(
         .collect();
     let mut held: Vec<(std::path::PathBuf, ToolPins)> = tools::all(home)?
         .into_iter()
-        .filter(|(_, p)| !p.held.is_empty() && wanted(&p.server))
+        .filter(|(_, p)| p.held_count() > 0 && wanted(&p.server))
         .collect();
     if changes.is_empty() && held.is_empty() {
         return Ok(false);
@@ -131,13 +131,13 @@ pub(super) fn review_and_accept(
     mcp::accept(home, &changes)?;
     let mut count = 0;
     for (path, pins) in &mut held {
-        count += pins.held.len();
+        count += pins.held_count();
         pins.accept_held();
         pins.save(path)?;
     }
     writeln!(
         out,
-        "✔ accepted {} server definition(s) and {count} tool(s)",
+        "✔ accepted {} server definition(s) and {count} held tool(s), instructions, prompts or resources",
         changes.len()
     )?;
     Ok(true)

@@ -31,7 +31,11 @@
 //!   flow check (ADR-058) and what it names as injected input (ADR-057); one
 //!   it cannot keep reaches the host as OpenMoat's error;
 //! - a response that lists tools (`result.tools`) leaves out the tools the pins
-//!   hold;
+//!   hold, and one that lists prompts, resources or resource templates the
+//!   entries they hold; the answer to `initialize` reaches the host without
+//!   `instructions`, and with the accepted `serverInfo`, while the pins hold
+//!   them (ADR-069); a `prompts/get` of a held prompt is refused as a held
+//!   tool's call is;
 //! - `notifications/tools/list_changed` has the relay read the tools again
 //!   itself, so a changed tool is held even when the host never lists again
 //!   (a call the relay forwarded before it read the notification reaches the
@@ -50,6 +54,7 @@ use super::tools::ToolPins;
 mod frame;
 mod host;
 mod server;
+mod surface;
 
 pub use frame::{pump_host, pump_server, refuse_all};
 
@@ -105,6 +110,12 @@ pub trait Gate: Send + Sync {
         let _ = (request, result);
         Ok(())
     }
+    /// The `instructions` of the server's `initialize` answer, which the
+    /// host is passed (they match the pins): the gate keeps them as untrusted
+    /// content for each session it serves (ADR-069).
+    fn instructions(&self, text: &str) {
+        let _ = text;
+    }
 }
 
 /// Saves the pins after a listing changed them.
@@ -123,6 +134,12 @@ struct State {
     /// No pins existed when the session started, the policy trusts first
     /// sight, and no listing came yet: the first listing is pinned as it is.
     first: bool,
+    /// No pins existed when the session started and the policy trusts first
+    /// sight: each part of the server's surface is pinned as first read.
+    trust_unseen: bool,
+    /// The id ([`id_key`]) of the host's `initialize` request the server has
+    /// not answered yet.
+    initialize: Option<String>,
     /// Why the pins could not be saved; every call is refused then.
     broken: Option<String>,
     /// The ids ([`id_key`]) of the host's requests the server has not
@@ -164,6 +181,8 @@ impl Relay {
             state: Mutex::new(State {
                 pins: pins.unwrap_or_else(|| ToolPins::new(server)),
                 first,
+                trust_unseen: first,
+                initialize: None,
                 broken: None,
                 pending: HashSet::new(),
                 relist: None,

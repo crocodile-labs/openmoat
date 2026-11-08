@@ -68,6 +68,9 @@ pub struct Gateway {
     /// host starts a stdio server for one session, so a decision of that
     /// session is taken before another's with the same arguments.
     served: Mutex<Option<(String, String)>>,
+    /// What the server sent outside its tool results, and the sessions that
+    /// have it (`surface.rs`, ADR-069).
+    sent: Mutex<surface::Sent>,
     /// The host and session of each tool call passed on and not answered
     /// yet, by request id: where its result's pieces go (ADR-058).
     awaiting: Mutex<HashMap<String, Awaiting>>,
@@ -113,6 +116,7 @@ impl Gateway {
             ),
             host,
             served: Mutex::new(None),
+            sent: Mutex::default(),
             awaiting: Mutex::new(HashMap::new()),
         })
     }
@@ -351,6 +355,11 @@ impl Gate for Gateway {
             Verdict::Deny => Some(refusal(&outcome.decision)),
             _ => None,
         };
+        if let (Some(ticket), None) = (&outcome.ticket, &refused) {
+            // The session's model read the server's instructions before this
+            // call: they are its untrusted content before the result is.
+            self.credit(ticket, outcome.cwd.as_deref())?;
+        }
         let awaits = match (&outcome.ticket, call.request, &refused) {
             (Some(ticket), Some(request), None) => Some((
                 request,
@@ -382,13 +391,11 @@ impl Gate for Gateway {
             return Ok(());
         };
         let store = self.store()?.with_secrets(self.known());
-        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(result));
-        if !pieces.is_empty() {
-            store
-                .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
-                .context("recording what the tool's result held")?;
-        }
-        self.injected(&store, &awaiting, result)
+        self.keep(&store, &awaiting, result)
+    }
+
+    fn instructions(&self, text: &str) {
+        self.keep_instructions(text);
     }
 
     fn server_request(&self, method: &str) -> Result<()> {
@@ -413,6 +420,19 @@ impl Gate for Gateway {
 }
 
 impl Gateway {
+    /// Keep what `value`, untrusted content the server sent for `awaiting`'s
+    /// session, holds: its pieces for the cross-server flow check (ADR-058)
+    /// and the fingerprints of what it names (ADR-057).
+    fn keep(&self, store: &Store, awaiting: &Awaiting, value: &Value) -> Result<()> {
+        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(value));
+        if !pieces.is_empty() {
+            store
+                .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
+                .context("recording what the tool's result held")?;
+        }
+        self.injected(store, awaiting, value)
+    }
+
     /// Keep the injected-input fingerprints of a passed call's result, as the
     /// hook keeps those of a host's `PostToolUse` (`taint::injected`), with
     /// the policy of the directory the hook decided the call in. Under a
@@ -460,6 +480,8 @@ fn refusal(decision: &Decision) -> String {
     let reasons = decision.reasons.join("; ");
     format!("OpenMoat refused this call [{rules}]: {reasons}")
 }
+
+mod surface;
 
 #[cfg(test)]
 mod tests;

@@ -76,7 +76,7 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
     }
     match tools::all(home) {
         Ok(all) => {
-            for (_, pins) in all.iter().filter(|(_, p)| !p.held.is_empty()) {
+            for (_, pins) in all.iter().filter(|(_, p)| p.held_count() > 0) {
                 report.line(
                     Area::Mcp,
                     false,
@@ -106,7 +106,7 @@ pub(super) fn accept(report: &mut Report, home: &Home, binary: &Path) -> Result<
         &mcp::set_up_hosts(home, binary),
         cwd.as_deref(),
     )?;
-    let held = tools::all(home)?.iter().any(|(_, p)| !p.held.is_empty());
+    let held = tools::all(home)?.iter().any(|(_, p)| p.held_count() > 0);
     if found.changes.is_empty() && found.unreadable.is_empty() && !held {
         report.problems.retain(|(area, _)| *area != Area::Mcp);
     }
