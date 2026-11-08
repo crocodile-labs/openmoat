@@ -191,3 +191,9 @@ Each agent's gaps and the reasons are in
   nothing, a commit with no record is not shown to be a person's, and only the machine
   that wrote a note can verify it; in CI it is a claim
   ([PROVENANCE.md](PROVENANCE.md#limits)).
+- **`openmoat serve`'s link reads the audit log while it runs.** Whoever holds the link
+  can read every recorded call until the server stops; it stays in the browser's history,
+  where it no longer works once the server has stopped. The server is plain HTTP on
+  loopback, so a program running as you could read the log file directly anyway; it adds
+  nothing for that program, and nothing for another user, a web page or another machine
+  without the token ([ADR-066](adr/ADR-066-openmoat-serve.md)).

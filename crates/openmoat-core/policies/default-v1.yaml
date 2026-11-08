@@ -497,6 +497,10 @@ deny:
       # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
       - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
       - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      # the read-only browser view: its link opens the audit log to whoever holds it,
+      # and it listens until stopped (ADR-066)
+      - "{moat,openmoat} serve*"
+      - "*/{moat,openmoat} serve*"
       # taken out again: the read-only forms `openmoat-readonly` allows. `policy lint`
       # and `policy check` read a file or a command and the policy, which stays
       # readable; `--help`/`-h` right after a one- or two-word command prints the
@@ -534,6 +538,9 @@ deny:
       - "{expect,*/expect} * '*spawn {moat,*/moat,openmoat,*/openmoat}{;,\n,'}*"
       - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat,openmoat,*/openmoat}\"{],)}*'"
       - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
+      # `openmoat serve` inside a quoted command line of the same wrappers (ADR-066)
+      - "{script,*/script,tmux,*/tmux,screen,*/screen,expect,*/expect,osascript,*/osascript} * '*moat serve*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*serve*'"
       # the hook and the MCP gateway themselves, which only a host runs (as its hook, from
       # its plugin, or as an MCP server's command) where no hook sees it. Run by an
       # agent, `guard` records decisions and MCP tickets for payloads the agent wrote and

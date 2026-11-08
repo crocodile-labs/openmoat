@@ -51,27 +51,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     // upgrade`; say so wherever the installation is looked at.
     let update = crate::upgrade::available(&home);
     if args.format == Format::Json {
-        let drift: Vec<String> = Lock::load(&home.lock_path())
-            .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
-            .unwrap_or_default();
-        render::json(&serde_json::json!({
-            "agents": protection::report(&home, &binary)?,
-            "plugins": crate::heartbeat::all(&home, &binary),
-            "hook_warnings": hook_warnings(&home, &binary)?,
-            "policy_update": update,
-            "lock_drift": drift,
-            "mcp_changes": mcp_changes(&home, &binary).unwrap_or_default(),
-            "mcp_outside": mcp_outside(&home, &binary),
-            "project_settings": crate::project_settings::warnings_here(&home)
-                .into_iter()
-                .map(|warning| warning.text)
-                .collect::<Vec<_>>(),
-            "other_hooks": crate::project_settings::other_hooks::warnings_here(&home)
-                .into_iter()
-                .map(|warning| warning.text)
-                .collect::<Vec<_>>(),
-            "repo_git_config": crate::project_settings::git_config::warnings_here(),
-        }))?;
+        render::json(&report(&home, &binary, update.as_ref())?)?;
         return Ok(Code::Ok);
     }
     let mut shown = Shown::default();
@@ -132,6 +112,40 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
         render::event_table(&recent)?;
     }
     Ok(if healthy { Code::Ok } else { Code::Usage })
+}
+
+/// What `status --format json` prints, which `openmoat serve` sends too.
+pub(super) fn json() -> Result<serde_json::Value> {
+    let home = Home::locate()?;
+    let binary = crate::install::hook_binary()?;
+    let update = crate::upgrade::available(&home);
+    report(&home, &binary, update.as_ref())
+}
+
+/// The status document: each agent's protection level, the plugins, the
+/// warnings, and what waits for a person. Reads files only.
+fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_json::Value> {
+    let drift: Vec<String> = Lock::load(&home.lock_path())
+        .map(|lock| lock.verify().iter().map(ToString::to_string).collect())
+        .unwrap_or_default();
+    Ok(serde_json::json!({
+        "agents": protection::report(home, binary)?,
+        "plugins": crate::heartbeat::all(home, binary),
+        "hook_warnings": hook_warnings(home, binary)?,
+        "policy_update": update,
+        "lock_drift": drift,
+        "mcp_changes": mcp_changes(home, binary).unwrap_or_default(),
+        "mcp_outside": mcp_outside(home, binary),
+        "project_settings": crate::project_settings::warnings_here(home)
+            .into_iter()
+            .map(|warning| warning.text)
+            .collect::<Vec<_>>(),
+        "other_hooks": crate::project_settings::other_hooks::warnings_here(home)
+            .into_iter()
+            .map(|warning| warning.text)
+            .collect::<Vec<_>>(),
+        "repo_git_config": crate::project_settings::git_config::warnings_here(),
+    }))
 }
 
 /// Advisory trust diagnostics, separate from protection levels and exit codes.

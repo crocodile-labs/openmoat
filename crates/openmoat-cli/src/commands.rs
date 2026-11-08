@@ -20,6 +20,7 @@ mod report;
 mod run;
 mod sandbox;
 mod secret;
+mod serve;
 mod service;
 mod show;
 mod status;
@@ -64,6 +65,7 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Trust(args) => trust::run(&args),
         Command::Replay(args) => replay::run(&args),
         Command::Report(args) => report::run(&args),
+        Command::Serve(args) => serve::run(&args),
         Command::Provenance(args) => provenance::run(&args),
         Command::Proxy(args) => match args.command {
             None => proxy::run(&args),

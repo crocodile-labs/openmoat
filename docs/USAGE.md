@@ -451,6 +451,37 @@ More: https://openmoat.dev/r/secrets-paths
 - `--format json` prints the same as one document (`rules`, `decided_now`, `context`,
   `change`, `page`).
 
+### In a browser
+
+`openmoat serve` shows the same in a browser tab on this machine: `openmoat status` with the
+latest decisions, `openmoat show` (each event linked to its explanation and its session),
+`openmoat report` and `openmoat why`. It changes nothing; reload the page for new calls.
+
+```
+$ openmoat serve
+openmoat serve: read-only, on this machine only. Open
+  http://127.0.0.1:52817/?token=3f9c…e1
+The link works until this stops (Ctrl-C). Anyone holding it can read what `openmoat status`, `show`, `report` and `why` show; do not share it.
+```
+
+- It listens on 127.0.0.1 only; `--listen 127.0.0.1:8080` or `--listen '[::1]:8080'` picks
+  the port, and any other address is refused.
+- The token in the link is made for this run, printed once and kept only in memory; every
+  request needs it. A request that names the server by another name than `127.0.0.1`,
+  `localhost` or `[::1]` (the trick a web page uses to reach local servers), or that comes
+  from another site, is refused even with it.
+- The same views as JSON, exactly as the commands' `--format json` prints them, for a script:
+
+  ```bash
+  curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/show?recent=50
+  curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8080/api/report?since=24h&host=codex"
+  ```
+
+  The paths are `/api/status`, `/api/show` (`id`, `session`, `since`, `recent`),
+  `/api/report` (`since`, `host`) and `/api/why` (`event`).
+- Run it yourself, in a terminal: like `openmoat allow`, it refuses when an agent started
+  it, and the default policy denies it to agents ([ADR-066](adr/ADR-066-openmoat-serve.md)).
+
 Credentials are redacted before anything is stored. The log is a SQLite file in
 `~/.moat`; nothing leaves your machine.
 
@@ -895,6 +926,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat show [id] [--session …] [--since …] [--recent N]` | see events |
 | `openmoat watch [--host …] [--only deny\|review] [--session …] [--recent N] [--no-follow]` | follow the agents' calls live, one line each; reads the audit log only ([Watch the agents live](#watch-the-agents-live)) |
 | `openmoat why [--last \| <id> \| HH:MM[:SS]] [--format json]` | explain one deny or review: its rules and where they are, how the policy decides the call now, the context, and how to change it ([Why was this blocked?](#why-was-this-blocked)) |
+| `openmoat serve [--listen 127.0.0.1:<port>]` | see `status`, `show`, `report` and `why` in a browser on this machine: 127.0.0.1 only, a link with a token made for this run, read-only; person-only ([In a browser](#in-a-browser)) |
 | `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary, with the sends after collecting outside the project per session and per active hour (recorded only, [POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection-recorded)) |
 | `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |

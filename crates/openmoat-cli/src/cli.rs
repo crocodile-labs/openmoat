@@ -9,6 +9,7 @@ mod audit;
 mod mcp;
 mod policy;
 mod provenance;
+mod serve;
 
 mod timeline;
 
@@ -19,6 +20,7 @@ pub use policy::{
     PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,
 };
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
+pub use serve::ServeArgs;
 
 pub use timeline::{Only, WatchArgs, WhyArgs};
 
@@ -89,6 +91,11 @@ pub enum Command {
     Replay(ReplayArgs),
     /// Summarise decisions over a window: verdicts, hosts, top rules, reviews per hour.
     Report(ReportArgs),
+    /// Show what `status`, `show`, `report` and `why` show in a browser on this machine:
+    /// listens on 127.0.0.1 only, prints a link with a token made for this run, and
+    /// answers only requests that carry it. Read-only; Ctrl-C stops it. Refused unless
+    /// run by a person at an interactive terminal.
+    Serve(ServeArgs),
     /// Show which files and lines of commits agent sessions wrote, as this machine's audit
     /// log recorded them, and whether each session had read untrusted content first;
     /// `--write-notes` keeps it in git notes, `--verify` checks those notes.

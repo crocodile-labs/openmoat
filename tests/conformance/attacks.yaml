@@ -2346,6 +2346,44 @@
   threat: T9
   action: { shell: "osascript -e 'tell app \"Terminal\" to do script \"openmoat proxy ca init\"'" }
   expect: { verdict: deny, rules: [kernel-self] }
+# `openmoat serve`'s link opens the audit log to whoever holds it, and it listens
+# until stopped: a person's to start (ADR-066)
+- id: T9-agent-runs-openmoat-serve
+  threat: T9
+  action: { shell: "openmoat serve" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-moat-serve-on-a-port
+  threat: T9
+  action: { shell: "moat serve --listen 127.0.0.1:8080" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-serve-by-path
+  threat: T9
+  action: { shell: "/opt/homebrew/bin/openmoat serve" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-serve-in-background
+  threat: T9
+  action: { shell: "nohup openmoat serve > /tmp/link.txt 2>&1 &" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-agent-runs-openmoat-serve-through-sh-c
+  threat: T9
+  action: { shell: "sh -c 'openmoat serve'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-openmoat-serve
+  threat: T9
+  action: { shell: "script -q /dev/null openmoat serve" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-script-quoted-openmoat-serve
+  threat: T9
+  action: { shell: "script -q /dev/null 'cd /tmp && openmoat serve'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-expect-spawn-openmoat-serve
+  threat: T9
+  action: { shell: "expect -c 'spawn openmoat serve; interact'" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-python-pty-spawn-openmoat-serve
+  threat: T9
+  action: { shell: "python3 -c 'import pty; pty.spawn([\"openmoat\", \"serve\"])'" }
+  expect: { verdict: deny, rules: [kernel-self] }
 
 # T12 hosts written in forms a dotted-name heuristic misses
 - id: T12-decimal-encoded-loopback

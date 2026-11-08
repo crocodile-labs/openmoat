@@ -688,6 +688,7 @@ dependencies = [
  "clap",
  "getrandom 0.4.3",
  "globset",
+ "httparse",
  "landlock",
  "libc",
  "openmoat-audit",

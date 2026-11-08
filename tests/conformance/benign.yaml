@@ -2402,6 +2402,10 @@
   threat: T9
   action: { shell: "target/debug/openmoat init -h" }
   expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-serve-help
+  threat: T9
+  action: { shell: "openmoat serve --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
 - id: benign-openmoat-policy-upgrade-help
   threat: T9
   action: { shell: "openmoat policy upgrade --help" }
