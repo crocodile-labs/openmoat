@@ -22,6 +22,7 @@ use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 
 use super::landlock::{self, INSIDE_GRANTS_ALLOWANCE, Rules, TCP_PORT_ALLOWANCE};
+use super::links;
 use super::patterns::{
     AGENT_CONFIG, folders_above, has_glob, is_below, literal_tree, push_unique,
     runs_later_exclusion, split,
@@ -245,7 +246,10 @@ fn push_mount(mounts: &mut Vec<Mount>, mount: Mount) {
 }
 
 /// The masks for the absolute paths deny rules name without a glob that exist
-/// inside `trees` (outermost first), outside the project `real`.
+/// inside `trees` (outermost first), outside the project `real`. The trees are
+/// resolved paths, so each deny is compared where it resolves
+/// ([`links::real_path`]): with `~/.claude` a link and `--write ~/.claude`
+/// granting its target, `~/.claude/settings.json` is masked there.
 fn literal_masks(ir: &Enforcement, trees: &[Mount], real: Option<&str>) -> Vec<Mount> {
     let mut masks = Vec::new();
     for (path, kind, subtree) in denied_literals(ir) {
@@ -346,16 +350,17 @@ fn denied_names(ir: &Enforcement) -> Vec<String> {
     names
 }
 
-/// Absolute paths deny rules name without a glob, outermost first: the
-/// access they deny (a read deny first) and whether the rule covers the
-/// subtree (`dir/**`).
+/// Absolute paths deny rules name without a glob, outermost first, each
+/// where it resolves ([`links::real_path`]): the access they deny (a read
+/// deny first) and whether the rule covers the subtree (`dir/**`).
 fn denied_literals(ir: &Enforcement) -> Vec<(String, Kind, bool)> {
     let mut found: Vec<(String, Kind, bool)> = Vec::new();
     for (access, kind) in [(&ir.fs.read, Kind::FsRead), (&ir.fs.write, Kind::FsWrite)] {
         for pattern in denials(access).filter(|p| p.starts_with('/')) {
-            let Some(path) = literal_tree(pattern) else {
+            let Some(path) = literal_tree(pattern).map(links::real_path) else {
                 continue;
             };
+            let path = path.as_str();
             if !found
                 .iter()
                 .any(|(p, k, _)| p == path && *k == Kind::FsRead)

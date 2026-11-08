@@ -383,3 +383,58 @@ fn isolate_pins_the_folders_holding_agent_configuration() {
         );
     }
 }
+
+/// With `~/.claude` a link, `--write ~/.claude` grants the directory it points
+/// to (`openmoat run` resolves its grants), and the deny of
+/// `~/.claude/settings.json` is masked there: compared as text, it lay below
+/// no grant and stayed writable to every command.
+#[test]
+fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", home.display());
+    for d in ["proj", "real-claude"] {
+        std::fs::create_dir_all(p(d)).unwrap();
+    }
+    std::fs::write(p("real-claude/settings.json"), "{}").unwrap();
+    std::os::unix::fs::symlink(p("real-claude"), p(".claude")).unwrap();
+    let ctx = EvalContext {
+        home: home.to_string_lossy().into_owned(),
+        project: Some(p("proj")),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: p("proj"),
+        case_insensitive_paths: false,
+    };
+    let policy = Policy::parse(DEFAULT_POLICY).expect("default policy");
+    let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
+    let rules = Rules {
+        read: Vec::new(),
+        write: vec![p("proj"), p("real-claude")],
+        connect_port: Some(18080),
+    };
+    let masks = grant_masks(&ir, &rules, &[p("proj")]);
+    assert!(
+        masks.contains(&Mount::ReadOnly(p("real-claude/settings.json"))),
+        "{masks:?}"
+    );
+    // the link's own spelling is no mount of its own: bubblewrap follows it
+    assert!(
+        !masks.iter().any(|m| path_of(m).starts_with(&p(".claude/"))),
+        "{masks:?}"
+    );
+    // and Landlock reports the deny as one it cannot enforce in that grant
+    let grants = Grants {
+        writes: vec![p("real-claude")],
+        ..Grants::default()
+    };
+    let report = landlock::generate(&ir, &grants).expect("generates").report;
+    let inside: Vec<String> = report
+        .allowances
+        .iter()
+        .filter(|a| a.rule == INSIDE_GRANTS_ALLOWANCE && a.kind == Kind::FsWrite)
+        .flat_map(|a| a.patterns.clone())
+        .collect();
+    assert!(inside.contains(&p(".claude/settings.json")), "{inside:?}");
+}

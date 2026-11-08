@@ -361,7 +361,9 @@ bubblewrap.
   glob inside a read root or a `--write` path is covered for the session as under
   `--isolate` (hidden, or bound read-only for a write deny): `~/.cargo/credentials.toml`
   stays unreadable and, with `--write ~/.claude`, `~/.claude/settings.json` unwritable.
-  Without a namespace these stay open, and `openmoat run` names them on every start;
+  `openmoat run` grants a `--write` path where it resolves, so each deny is compared
+  where it resolves too: with `~/.claude` a link to another folder, the mask is put on
+  `settings.json` in that folder. Without a namespace these stay open, and `openmoat run` names them on every start;
   a `--write` path that holds what `kernel-self` protects (OpenMoat's state, an
   agent's hook settings, existing or not) or lies inside a tree it protects whole
   (`~/.codex/sessions`) refuses to start instead (exit 64), naming the paths. So does

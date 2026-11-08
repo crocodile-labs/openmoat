@@ -379,37 +379,15 @@ fn network(p: &mut Generated, net: &Access, port: Option<u16>) {
     p.report.proxy_only(net);
 }
 
-/// `pattern` (an absolute glob, `!` for an exclusion) with its literal
-/// directory prefix written as the filesystem resolves it, when that differs:
-/// `/tmp/x/**` → `/private/tmp/x/**` on macOS. The deepest existing directory
-/// of the prefix is resolved; `None` when nothing changes.
+/// `pattern` with its literal directory prefix written as the filesystem
+/// resolves it, when that differs ([`super::links::real_spelling`]).
 fn through_links(pattern: &str) -> Option<String> {
     // Seatbelt runs on macOS only; elsewhere the profile is shown, not enforced,
     // and resolving there would only write that machine's links into it.
     if !cfg!(target_os = "macos") {
         return None;
     }
-    let (bang, body) = match pattern.strip_prefix('!') {
-        Some(rest) => ("!", rest),
-        None => ("", pattern),
-    };
-    if !body.starts_with('/') {
-        return None;
-    }
-    let literal_end = body.find(['*', '?', '[', '{', '\\']).unwrap_or(body.len());
-    let literal = &body[..literal_end];
-    let dir_end = literal.rfind('/')?;
-    let mut dir = std::path::Path::new(&literal[..dir_end.max(1)]);
-    loop {
-        if let Ok(real) = std::fs::canonicalize(dir) {
-            let (dir, real) = (dir.to_str()?, real.to_str()?.to_owned());
-            if real == dir {
-                return None;
-            }
-            return Some(format!("{bang}{real}{}", &body[dir.len()..]));
-        }
-        dir = dir.parent()?;
-    }
+    super::links::real_spelling(pattern)
 }
 
 #[cfg(test)]

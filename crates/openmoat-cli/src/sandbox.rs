@@ -32,6 +32,7 @@ pub mod git_env;
 mod hook_only;
 pub mod install;
 pub mod landlock;
+mod links;
 pub mod own_login;
 mod patterns;
 pub(crate) use patterns::RUNS_LATER;
@@ -268,6 +269,10 @@ pub fn kernel_self_in_writes(
             }
             // `dir/**` denies the whole tree, so a write path inside it is held too.
             let tree = pattern.strip_suffix("/**") == Some(base);
+            // The writes are resolved: compare where the rule's path resolves
+            // (`~/.claude/settings.json` with `~/.claude` a link).
+            let base = links::real_path(base);
+            let base = base.as_str();
             let holder = writes
                 .iter()
                 .find(|w| exposure::within(base, w, ci) || (tree && exposure::within(w, base, ci)));

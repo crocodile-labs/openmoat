@@ -18,6 +18,7 @@ use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 use serde::{Deserialize, Serialize};
 
+use super::links;
 use super::patterns::{Spot, literal_tree, push_unique, split, spot};
 use super::{Grants, Report};
 
@@ -186,16 +187,22 @@ impl Generated {
     fn unenforced(&mut self, access: &Access, kind: Kind) {
         let granted = self.list(kind).clone();
         // A pattern is inside a grant when the part before its first glob
-        // character is the granted path or below it; `**/x` is anywhere.
+        // character is the granted path or below it; `**/x` is anywhere. The
+        // grants are resolved, so the pattern is compared where it resolves
+        // too (`~/.claude/settings.json` with `~/.claude` a link).
         let inside = |pattern: &str| {
-            let base = pattern
-                .split(['*', '?', '[', '{'])
-                .next()
-                .unwrap_or(pattern);
-            matches!(spot(pattern), Spot::Anywhere(_))
-                || granted.iter().any(|g| {
+            let within = |pattern: &str| {
+                let base = pattern
+                    .split(['*', '?', '[', '{'])
+                    .next()
+                    .unwrap_or(pattern);
+                granted.iter().any(|g| {
                     base == g || base.starts_with(&format!("{}/", g.trim_end_matches('/')))
                 })
+            };
+            matches!(spot(pattern), Spot::Anywhere(_))
+                || within(pattern)
+                || links::real_spelling(pattern).is_some_and(|real| within(&real))
         };
         let excluded = access.allow.iter().flat_map(|r| split(&r.patterns).1);
         let denied = access.deny.iter().flat_map(|r| split(&r.patterns).0);

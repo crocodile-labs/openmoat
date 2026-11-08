@@ -112,3 +112,53 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
     );
     assert!(project.join(".github/hooks").is_dir(), "{shown}");
 }
+
+/// On Linux, with `~/.claude` a link to another folder, `--write ~/.claude`
+/// grants the folder it points to; Claude Code's `settings.json` there stays
+/// read-only to commands in the network namespace, and without one the run
+/// refuses, as for an unlinked folder. Compared as text, the deny lay below
+/// no grant and the file was writable.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_linked_agent_folder_keeps_its_hook_settings_out_of_reach() {
+    use crate::common::{USAGE, output, stderr};
+
+    let (sb, project) = installed_with_secret();
+    let real = sb.home.join("real-claude");
+    std::fs::create_dir_all(&real).unwrap();
+    std::fs::write(real.join("settings.json"), "{}").unwrap();
+    std::os::unix::fs::symlink(&real, sb.home.join(".claude")).unwrap();
+    let tmp = sb.home.with_file_name("tmp");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let out = output(
+        sb.command()
+            .current_dir(&project)
+            .env("TMPDIR", &tmp)
+            .arg("run")
+            .arg("--write")
+            .arg(sb.home.join(".claude"))
+            .args(["--", "/bin/sh", "-c"])
+            .arg("echo x >> \"$HOME/.claude/settings.json\"; echo \"w=$?\""),
+        None,
+    );
+    if !ran(&out) {
+        return;
+    }
+    let shown = text(&out);
+    if stderr(&out).contains("Install bubblewrap") {
+        // no namespace: refused before anything starts
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "CI must run in a namespace: {shown}"
+        );
+        assert_eq!(out.status.code(), Some(USAGE), "{shown}");
+    } else {
+        assert!(stdout(&out).contains("w="), "{shown}");
+        assert!(!stdout(&out).contains("w=0\n"), "{shown}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(real.join("settings.json")).unwrap(),
+        "{}",
+        "{shown}"
+    );
+}
