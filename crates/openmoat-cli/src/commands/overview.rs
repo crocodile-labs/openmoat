@@ -129,7 +129,16 @@ fn health(home: &Home, today: &[Event]) -> Result<String> {
     let protected: Vec<String> = crate::protection::report(home, &binary)?
         .into_iter()
         .filter(|agent| agent.level.hooked())
-        .map(|agent| format!("{} ({})", agent.name, agent.level.label()))
+        .map(|agent| match agent.required.as_ref().filter(|r| !r.met) {
+            // Every call of it is denied (ADR-064); `openmoat status` says why.
+            Some(required) => format!(
+                "{} ({}, below the required {})",
+                agent.name,
+                agent.level.label(),
+                required.label()
+            ),
+            None => format!("{} ({})", agent.name, agent.level.label()),
+        })
         .collect();
     let agents = if protected.is_empty() {
         "No agent is protected (run `openmoat init`)".to_owned()

@@ -5,7 +5,7 @@
 use openmoat_hosts::Host;
 
 use super::{Attention, Mark, Row};
-use crate::protection::{Level, Protection};
+use crate::protection::{Level, Protection, Required};
 use crate::sandbox::install as host_sandbox;
 
 /// The agent rows and the names of the agents not installed here.
@@ -48,6 +48,9 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
         } else {
             mark
         };
+        // Below the level the policy requires, every call is denied (ADR-064).
+        let below = agent.required.as_ref().filter(|r| !r.met);
+        let mark = if below.is_some() { Mark::Broken } else { mark };
         // The hook a version runs OpenMoat through, where versions differ
         // (OpenCode 1's and 2's).
         let through = host
@@ -58,6 +61,9 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
             None => text,
         };
         table.rows.push(Row::new(mark, agent.name, text));
+        if let Some(required) = &agent.required {
+            table.rows.push(required_row(agent.name, required));
+        }
         if let Some(limit) = agent.limit.filter(|_| agent.level.hooked()) {
             table.rows.push(Row::new(
                 Mark::Attention,
@@ -67,6 +73,20 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
         }
     }
     table
+}
+
+/// The row under an agent's for the level the policy requires of it: met, or
+/// what is missing and the step that brings the agent there.
+fn required_row(name: &str, required: &Required) -> Row {
+    let head = format!("required: {} ({})", required.label(), required.by);
+    match (&required.missing, &required.fix) {
+        (Some(missing), Some(fix)) => Row::new(
+            Mark::Broken,
+            name,
+            format!("{head}, not met, so every call is denied: {missing}; to meet it, {fix}"),
+        ),
+        _ => Row::new(Mark::Ok, name, format!("{head}, met")),
+    }
 }
 
 /// Whether hook only is all OpenMoat gives `host` here: it writes no sandbox

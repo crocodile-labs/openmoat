@@ -13,6 +13,7 @@ fn agent(id: &str, level: Level) -> Protection {
         reason: None,
         gaps: "",
         limit: None,
+        required: None,
     }
 }
 

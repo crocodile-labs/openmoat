@@ -9,15 +9,16 @@
 
 use serde::Deserialize;
 
-use crate::policy::{Policy, PolicyError, RuleGroup};
+use crate::policy::{Policy, PolicyError, Require, RequiredBy, RuleGroup};
 
 /// Prefix of every rule id a repository policy contributes, so decisions and
 /// the audit log say where a rule came from, and a repository rule can never
 /// pass for one of the user's (`kernel-self`) or collide with it.
 pub const REPO_RULE_PREFIX: &str = "repo:";
 
-/// A repository policy. Only rules: `defaults`, `executables` and `sandbox`
-/// stay the user's, so any other key is a parse error.
+/// A repository policy. Only rules and a protection requirement: `defaults`,
+/// `executables` and `sandbox` stay the user's, so any other key is a parse
+/// error.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RepoPolicy {
@@ -33,6 +34,11 @@ pub struct RepoPolicy {
     /// before ADR-053.
     #[serde(default, alias = "ask")]
     pub review: Vec<RuleGroup>,
+    /// A protection level the project requires of its agents (ADR-064). It
+    /// can only raise the level the user policy requires
+    /// ([`Policy::required_for`] takes the strictest), trusted or not.
+    #[serde(default)]
+    pub require: Option<Require>,
 }
 
 impl RepoPolicy {
@@ -49,7 +55,7 @@ impl RepoPolicy {
     /// The user's deny rules still come first, so even a trusted repository
     /// cannot allow what the user denies.
     pub fn merge(&self, user: &Policy, trusted: bool) -> Result<Policy, PolicyError> {
-        let mut merged = user.clone();
+        let mut merged = self.with_requirement(user);
         merged.deny.extend(prefixed(&self.deny));
         merged.repo_review.extend(prefixed(&self.review));
         if trusted {
@@ -57,6 +63,16 @@ impl RepoPolicy {
         }
         self.lint_merged(&merged)?;
         Ok(merged)
+    }
+
+    /// `user` with this policy's `require:` added: a tightening, so it needs
+    /// no trust, and it can only raise a level ([`Policy::required_for`]).
+    fn with_requirement(&self, user: &Policy) -> Policy {
+        let mut merged = user.clone();
+        if let Some(require) = &self.require {
+            merged.add_requirement(RequiredBy::Repository, require);
+        }
+        merged
     }
 
     /// Lint `merged` as a whole for what a merge can break (a duplicate id),
@@ -76,8 +92,9 @@ impl RepoPolicy {
     /// proxy decides hosts with. Its review rules are left out, since the proxy
     /// cannot prompt and a team's "review before any network" would cut the run off,
     /// and its allow rules too, trusted or not: they would widen the proxy.
+    /// Its `require:` is added as by [`Self::merge`]: it only raises a level.
     pub fn merge_deny(&self, user: &Policy) -> Result<Policy, PolicyError> {
-        let mut merged = user.clone();
+        let mut merged = self.with_requirement(user);
         merged.deny.extend(prefixed(&self.deny));
         self.lint_merged(&merged)?;
         Ok(merged)

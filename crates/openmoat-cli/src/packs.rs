@@ -8,14 +8,15 @@
 //! a repository policy (only `version`, `deny`, `review`, `allow`) and merges like
 //! a trusted one: its rule ids get the `pack:<name>:` prefix, its deny rules join
 //! the user's, its review rules are tried before the user's allow rules, and its
-//! allow rules widen the policy, never past a deny.
+//! allow rules widen the policy, never past a deny. Its `require:` level
+//! raises the level the policy requires of an agent, never lowers it (ADR-064).
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_core::{Policy, RepoPolicy, RuleGroup};
+use openmoat_core::{Policy, RepoPolicy, RequiredBy, RuleGroup};
 use serde::{Deserialize, Serialize};
 
 use crate::home::{Home, write_private};
@@ -129,9 +130,12 @@ pub fn installed_files(home: &Home) -> Vec<PathBuf> {
 
 /// Parse a pack's text: a repository policy's shape, linted the same way.
 pub fn parse(text: &str) -> Result<RepoPolicy> {
-    RepoPolicy::parse(text).context(
-        "not a policy pack: a pack holds only `version`, `deny`, `review` and `allow` rules",
-    )
+    let pack = RepoPolicy::parse(text).context(
+        "not a policy pack: a pack holds only `version`, `deny`, `review` and `allow` rules \
+         and a `require` level",
+    )?;
+    crate::protection::required::check_agents(pack.require.as_ref())?;
+    Ok(pack)
 }
 
 /// `policy` with `pack`'s rules merged in under `pack:<name>:` ids.
@@ -148,6 +152,10 @@ pub fn apply(policy: &mut Policy, name: &str, pack: &RepoPolicy) -> Result<()> {
     policy.deny.extend(prefixed(&pack.deny));
     policy.repo_review.extend(prefixed(&pack.review));
     policy.allow.extend(prefixed(&pack.allow));
+    // A pack's level only raises the one the policy requires (ADR-064).
+    if let Some(require) = &pack.require {
+        policy.add_requirement(RequiredBy::Pack(name.to_owned()), require);
+    }
     // Only the pack's patterns are new; the policy's were parsed with it.
     pack.deny
         .iter()

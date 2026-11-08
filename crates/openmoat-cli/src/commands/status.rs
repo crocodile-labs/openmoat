@@ -113,11 +113,10 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     let audit = audit(&mut shown, &home)?;
     healthy &= audit.is_some();
 
-    let table = crate::report::agent_table(
-        &protection::report(&home, &binary)?,
-        &shown.attention,
-        false,
-    );
+    let agents = protection::report(&home, &binary)?;
+    // An agent below the level the policy requires has every call denied.
+    healthy &= agents.iter().all(protection::Protection::meets_required);
+    let table = crate::report::agent_table(&agents, &shown.attention, false);
     let mut out = io::stdout().lock();
     let mut printer = Printer::stdout(&mut out);
     printer.title("status")?;

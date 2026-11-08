@@ -174,6 +174,20 @@ fn protections(report: &mut Report, home: &Home, binary: &Path) -> Result<()> {
             }
             report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
         }
+        // Below the level the policy requires, every call is denied (ADR-064):
+        // a problem, shown under the agent's row (`report::agent_table`).
+        if let Some(required) = &agent.required {
+            let head = format!("required: {} ({})", required.label(), required.by);
+            match (&required.missing, &required.fix) {
+                (Some(missing), Some(fix)) => {
+                    let detail = format!("{head}, not met: {missing}; to meet it, {fix}");
+                    let row = Row::new(Mark::Broken, agent.name, detail.clone());
+                    let text = format!("{:<16} {detail}", agent.name);
+                    report.line_as(Area::Hook, false, text, Place::Details, row);
+                }
+                _ => report.note(&format!("{:<16} {head}, met", agent.name)),
+            }
+        }
     }
     report.agents = agents;
     Ok(())

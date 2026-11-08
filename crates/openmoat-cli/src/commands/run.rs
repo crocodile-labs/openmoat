@@ -23,6 +23,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod release_age;
+mod required;
 pub mod tier;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
@@ -83,6 +84,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let (name, rest) = args.command.split_first().context("no agent to run")?;
     // The sandbox checks the file it starts, not a link to it.
     let program = resolve(name)?;
+    let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
+    // Before anything starts: the level the policy requires of this program.
+    required::check(&home, &ctx, owner, &name.to_string_lossy())?;
     // A bare repository a command plants (no `.git` name) is used only when named.
     let git = git_env::add(&|var| std::env::var(var).ok())?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -111,7 +115,6 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let state = home.root();
     // The agent runs inside the sandbox and must read its own login there; every
     // other agent's stays denied (ADR-054). The hook decides with the whole policy.
-    let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
     let (sandboxed, kept) = own_login::for_session(&policy, &ctx, owner, &grants.writes);
     let mut agent = if args.isolate {
         platform::isolate(&sandboxed, &ctx, grants, &program, state)?

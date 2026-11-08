@@ -114,3 +114,8 @@ pub fn run(cli: Cli) -> Result<Code> {
 pub fn sandboxing_command() -> &'static str {
     run::tier::command(run::bubblewrap())
 }
+
+/// Why `openmoat run` cannot sandbox on this machine; `None` when it can.
+pub fn run_unavailable() -> Option<String> {
+    run::unavailable()
+}

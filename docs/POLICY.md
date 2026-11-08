@@ -58,6 +58,11 @@ staging:                            # optional, since 0.17.0: when a session cou
 
 require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
 
+require:                            # optional: the least protection level of each agent; below it every call is denied (§9.2)
+  protection: hook-and-os-sandbox   #   every agent: hook-only or hook-and-os-sandbox
+  agents:                           #   per agent, by host id, in place of `protection` for it
+    gemini-cli: hook-only
+
 mcp:                                # optional: how `openmoat mcp proxy` treats a new server (§8)
   trust_first_sight: false          # optional, default false: pin its first tool listing unseen
   browser_open: fetch               # optional, default fetch: a browser MCP page open is a `fetch` (§4); `net` keeps it `net`
@@ -854,7 +859,7 @@ A deny or review from one of OpenMoat's own checks that reaches the agent (`unpa
 `unchecked`, `executables`, `kernel-integrity`, `kernel-error`, `mcp-server-changed`,
 `ungoverned`, `project-settings`, `session-taint`, `injected-input`, `mcp-cross-server`,
 `protected-contents`, `session-written-code`, `push-secret`, `push-runs-later`,
-`push-unchecked`) carries the block message as a titled rule does (§2), with OpenMoat's
+`push-unchecked`, `protection-required`) carries the block message as a titled rule does (§2), with OpenMoat's
 own title and `why` (ADR-059, amended); a rule of your policy with one of these ids keeps
 your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat proxy` and
 `policy check-diff` keep their own output.
@@ -869,6 +874,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `settings-drift` | none (audit only) | recorded with the first call of a session decided while the only drift is in Claude Code settings that change no decision (§8); the call's own verdict is unchanged |
 | `mcp-server-changed` | deny | the MCP server this tool belongs to has a definition that differs from its pin, or was added since, or its agent's MCP configuration cannot be parsed (§8); only that server's tool calls are denied, until a person runs `openmoat mcp accept`. Also the audit row (host `mcp-proxy`, tool `mcp__<server>`) of a wrapped server `openmoat mcp proxy` did not start because its command line is not the one an accepted definition gives (ADR-049) |
 | `mcp-proxy`, `mcp-tool-held`, `mcp-unattributed`, `mcp-server-request` | allow, deny | audit rows of `openmoat mcp proxy` (host `mcp-proxy`, with the session and call id of the hook's decision it matched): a call passed to the server; refused because the tool's definition (title, description, input or output schema, annotations) is not the one a person accepted; refused because no hook decision names that exact call (ADR-045); a request the server sent the agent (`sampling/createMessage`, `elicitation/create`, …). A call the policy denies at the proxy carries the policy's rules (§8) |
+| `protection-required` | deny | the agent is below the protection level `require:` asks of it (§9.2): every call, ungoverned tools included, until it meets it; the reason names which policy asks, what is missing and the step that fixes it (ADR-064) |
 | `kernel-error` | deny | `openmoat guard` could not evaluate at all: missing state directory, malformed payload, unreadable policy, a repository policy that cannot be read or parsed (§10); exit 2 |
 | `repo:<id>` | from its list | a rule of the project's repository policy (§10) |
 | `ungoverned` | defer (allow for Cursor) | the host tool is outside policy scope (for example Claude Code `Task`, or `Shell` under Cursor's `preToolUse`, which `beforeShellExecution` already governs); recorded, not evaluated. The host decides it as if no hook had answered; Cursor's hooks have no such answer, so there it is allowed |
@@ -1539,6 +1545,77 @@ Yarn and Bun are not covered, and the host sandboxes of the Standard tier set no
 To install a version released this week inside `openmoat run`, start `openmoat run` with
 your own cut-off in the variable, or set the key to `0`.
 
+### 9.2 Required protection level (`require:`)
+
+`openmoat status` shows how much of the policy is enforced for each agent: `hook + OS
+sandbox`, `hook only`, `not protected`, `not set up`. With `require:` the policy says how
+much is enough. An agent below its level has every call denied, so it cannot keep working
+with less protection than you asked for (ADR-064). Without the section, which is the
+default, nothing is required.
+
+```yaml
+require:
+  protection: hook-and-os-sandbox   # every agent
+  agents:
+    gemini-cli: hook-only           # this agent: OpenMoat writes no OS sandbox for it
+```
+
+| Level | Met when |
+|---|---|
+| `hook-only` | OpenMoat's hook decides the agent's calls |
+| `hook-and-os-sandbox` | the hook decides, and an OS sandbox from OpenMoat holds the commands the agent runs: the agent's own sandbox as OpenMoat set it up (Claude Code, Codex and Cursor; not on native Windows), or `openmoat run` |
+
+An entry in `agents` (a host id, as `openmoat status --format json` names it) takes the
+place of `protection` for that agent; an id OpenMoat does not know is an error, so a typo
+cannot drop an agent's level.
+
+What happens below the level:
+
+- **Every call is denied** with `protection-required`, tools OpenMoat does not govern
+  included. The message names what is missing and the step that fixes it:
+
+  ```text
+  moat: deny [protection-required] — your policy requires hook + OS sandbox for Gemini CLI;
+  this call has hook only: OpenMoat writes no OS sandbox for Gemini CLI; to meet it, start
+  Gemini CLI with `openmoat run`
+  ```
+
+  The step is `openmoat sandbox sync` when OpenMoat's sandbox settings for the agent are
+  missing or differ from the policy, `openmoat run` for an agent OpenMoat writes no
+  sandbox for, and `openmoat edit` (lower that agent's line) where no OS sandbox exists
+  on this system.
+- **`openmoat run` refuses to start** a program it cannot bring to the level: any program
+  when it has no sandbox on this system and `hook-and-os-sandbox` is required, a program
+  that is no agent OpenMoat knows (no hook of OpenMoat's would check its calls; only
+  `protection` applies to it), and an agent whose hook does not run. Calls inside the run
+  meet `hook-and-os-sandbox`.
+- **`openmoat status` and `openmoat doctor`** add a row under the agent:
+  `required: hook + OS sandbox (your policy), met` or `…, not met, so every call is
+  denied: <what is missing>; to meet it, <step>`. An unmet level is a problem (exit 64),
+  the home screen says `below the required …`, and `--format json` has a `required`
+  object per agent (`level`, `by`, `met`, `missing`, `fix`). They show the level in force
+  in the current directory, the repository policy's included.
+
+Where it comes from: your policy, the project's repository policy (§10) and the installed
+packs (§11) can each have a `require:` section. An agent must be at the highest level any
+of them asks for. A repository or a pack can raise the level and never lower it: its
+`hook-only`, for every agent or for one, leaves your `hook-and-os-sandbox` in force,
+trusted or not. Like its deny rules, a repository's level needs no `openmoat trust`.
+
+The guard can only deny the calls that reach it. A hook the agent's settings turn off, a
+plugin the agent did not load, or an agent that runs a call when the hook fails sends no
+call to deny; `status` and `doctor` show such an agent as below the level, and `openmoat
+run` refuses it ([LIMITS.md](LIMITS.md#sandboxes-and-allowed-code)). Taking the section
+out of the policy is a change to a pinned file: every call is denied (`kernel-integrity`)
+until you re-pin.
+
+```bash
+openmoat edit                # add `require:` to your policy
+openmoat status              # each agent's level and whether it meets it
+openmoat sandbox sync        # put OpenMoat's sandbox settings back for Claude Code, Codex, Cursor
+openmoat run -- gemini       # start an agent OpenMoat writes no sandbox for in an OS sandbox
+```
+
 ## 10. Repository policy
 
 A project can commit rules for everyone who works in it: `<project>/.moat/policy.yaml`,
@@ -1556,8 +1633,10 @@ review:
     fs.write: ["${project}/db/migrations/**"]
 ```
 
-- Only `version`, `deny`, `review` (or its old name `ask`) and `allow` are accepted. `defaults`, `executables` and
+- Only `version`, `deny`, `review` (or its old name `ask`), `allow` and `require` are accepted. `defaults`, `executables` and
   `sandbox` stay yours, and any other key is an error. Rules follow §1–§3.
+- `require` raises the protection level an agent must be at in the project (§9.2), never
+  lowers it, and needs no trust.
 - `deny` groups join your deny rules. `review` groups are tried after your deny rules and
   before your allow rules. So they make an action your policy allows need review, but they
   never soften one of your denies, a `deny` your `defaults` give included: a repository
@@ -1628,7 +1707,8 @@ every call in the project is denied.
 ## 11. Signed policy packs
 
 A policy pack is a team's rules that you install for every project (ADR-031). It has a
-repository policy's shape (only `version`, `deny`, `review` and `allow`, §10) and a
+repository policy's shape (only `version`, `deny`, `review`, `allow` and `require`, §10; its
+`require` raises the protection level as a repository's does, §9.2) and a
 detached OpenSSH signature. OpenMoat has no signature code of its own: it runs the
 system `ssh-keygen` (OpenSSH 8.1 or later), found through the environment snapshot
 `openmoat init` records (§8.1), in the namespace `openmoat-pack` (ADR-036). A pack and a

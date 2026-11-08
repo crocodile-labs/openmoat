@@ -85,6 +85,11 @@ pub fn find(home: &Home, root: &Path) -> Result<Option<Found>> {
     }
     let text = context::read_policy(&path)?;
     let policy = RepoPolicy::parse(&text)
+        .map_err(anyhow::Error::from)
+        .and_then(|policy| {
+            crate::protection::required::check_agents(policy.require.as_ref())?;
+            Ok(policy)
+        })
         .with_context(|| format!("invalid repository policy {}", path.display()))?;
     Ok(Some(Found {
         root: root_key(root)?,

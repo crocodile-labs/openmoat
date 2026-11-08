@@ -73,6 +73,16 @@ const CHECKS: &[Check] = &[
         )),
     },
     Check {
+        rule: crate::protection::required::RULE,
+        title: "any call while this agent runs below the protection level the policy requires",
+        why: "without what is missing, fewer of OpenMoat's checks hold, and the policy says that \
+              is not enough",
+        next: Some((
+            Verdict::Deny,
+            "in your terminal, take the step the rule line names after `to meet it`",
+        )),
+    },
+    Check {
         rule: KERNEL_ERROR_RULE,
         title: "a call OpenMoat could not check",
         why: "a call that cannot be checked or recorded is not let through",

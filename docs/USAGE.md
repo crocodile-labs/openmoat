@@ -181,6 +181,13 @@ json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `lev
 `hook-and-os-sandbox`, `hook-only`, `not-protected`, `not-set-up` or `not-found`) and
 exits 0; the text form exits 64 when something needs fixing.
 
+To make a level a minimum, set `require:` in your policy
+([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)): an agent below it
+has every call denied (`protection-required`). `status` and `doctor` then add a row under
+the agent, `required: hook + OS sandbox (your policy), met` or `…, not met, so every call
+is denied: <what is missing>; to meet it, <step>`, and the JSON a `required` object
+(`level`, `by`, `met`, `missing`, `fix`).
+
 ### Did the agent load OpenMoat's plugin?
 
 OpenClaw, pi and OpenCode run OpenMoat through a plugin they load, and each starts
