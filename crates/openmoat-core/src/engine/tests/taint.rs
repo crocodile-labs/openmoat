@@ -200,6 +200,41 @@ fn a_policy_adds_metadata_tools_and_keeps_the_built_in_ones() {
     );
 }
 
+/// A server a configuration defines under Claude in Chrome's name is another
+/// program: its `tabs_context_mcp` taints the session like any tool's result
+/// (ADR-069). A tool the policy lists by its full name still does not.
+#[test]
+fn a_configured_server_named_like_claude_in_chrome_gets_no_metadata_exemption() {
+    let workflow = write("/p/.github/workflows/ci.yml");
+    let defined = format!("{POLICY}taint:\n  defined_servers: [claude-in-chrome, github]\n");
+    let p = policy(&defined);
+    let c = CompiledPolicy::compile(&p, &ctx()).unwrap();
+    let tabs = Action::mcp(TABS);
+    assert!(
+        taint_of(&c, std::slice::from_ref(&tabs))
+            .untrusted
+            .is_some()
+    );
+    let d = c.with_taint(
+        c.decide(&workflow),
+        &workflow,
+        &NoResolver,
+        &taint_of(&c, &[tabs]),
+    );
+    assert_eq!(d.verdict, Verdict::Review, "{d:?}");
+    assert_eq!(d.rules, ["session-taint"]);
+
+    let other = policy(&format!("{POLICY}taint:\n  defined_servers: [github]\n"));
+    let c = CompiledPolicy::compile(&other, &ctx()).unwrap();
+    assert_eq!(taint_of(&c, &[Action::mcp(TABS)]), Taint::default());
+
+    let listed = policy(&format!(
+        "{defined}  metadata_tools: [mcp__claude-in-chrome__tabs_context_mcp]\n"
+    ));
+    let c = CompiledPolicy::compile(&listed, &ctx()).unwrap();
+    assert_eq!(taint_of(&c, &[Action::mcp(TABS)]), Taint::default());
+}
+
 /// The build and test definitions of every ecosystem the default policy runs.
 #[test]
 fn untrusted_content_makes_build_definitions_of_every_ecosystem_need_review() {

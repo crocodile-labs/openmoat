@@ -49,6 +49,7 @@ secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§
 taint:                              # optional: more paths session taint protects (§4.1)
   protected_writes: ["**/deploy/**"]
   metadata_tools: []                # optional: more MCP tools whose results are metadata, not content (§4.1)
+  defined_servers: []               # optional: MCP servers a configuration defines; the built-in metadata tools never belong to one (§4.1)
   provenance: true                  # optional, default true: taint follows written files (§4.1.1)
 
 staging:                            # optional, since 0.17.0: when a session counts as collecting outside the project (§4.5)
@@ -494,6 +495,14 @@ unlisted hosts. The atom never appears in a session that read no secret.
   `read_console_messages`, `read_network_requests`, `computer` (screenshots),
   `gif_creator`, `upload_image`, `form_input`, `file_upload`, `shortcuts_execute`, and every
   tool of every other server, a tool of the same name on another server included.
+  The built-in list is for the Claude in Chrome that Claude Code provides itself, which no
+  MCP configuration file defines. A server an agent's MCP configuration defines under the
+  name `claude-in-chrome` is another program that took the name: once a person accepted
+  it (until then its calls are denied, `mcp-server-changed`), OpenMoat adds its name to
+  `taint.defined_servers` when it decides a call, and every result of it taints the
+  session, its tab lists too; `openmoat mcp accept` says so when it shows such a server
+  (ADR-069). `taint: { defined_servers: [claude-in-chrome] }` in the policy turns the
+  built-in list off by hand; the list can only make more results taint.
   `taint: { metadata_tools: [<name>, …] }` adds another server's tools, each by its full
   name (`mcp__<server>__<tool>`, compared exactly; `openmoat policy lint` rejects a
   wildcard and warns while the list names a tool). List only a tool whose result is the

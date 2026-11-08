@@ -19,7 +19,10 @@ the model, or to have it counted for the wrong session, that a person never revi
   awaiting an answer;
 - the gateway took a hook decision of any agent and any session with the same
   arguments, so with two agents, or two sessions, sending the same call, a result's
-  pieces and fingerprints could be kept for the session that did not read it.
+  pieces and fingerprints could be kept for the session that did not read it;
+- the taint exemption for Claude in Chrome's tab lists (ADR-057 amendment of
+  2026-11-07) was keyed by the tool's name alone, so a configured server named
+  `claude-in-chrome` with a `tabs_context_mcp` tool got it too.
 
 ## Decision
 
@@ -51,6 +54,22 @@ the model, or to have it counted for the wrong session, that a person never revi
    call after that. A proxy started without `--host` takes any agent's decisions, as
    before. A proxy still cannot know which session sent a call, only which decision it
    matched (ADR-045).
+
+4. **The tab-list exemption is for the server the host provides.** Claude in Chrome is
+   not defined in any MCP configuration file: Claude Code provides it itself (the
+   browser extension, `claude --chrome`). Its name is the only thing that reaches the
+   hook, so a server some configuration defines is told apart by being defined: when
+   the lock pins a definition whose tools are named as `claude-in-chrome`'s
+   (`takes_builtin_name`, the hosts' own spellings), the CLI adds that name to
+   `taint.defined_servers` of the policy it decides with, and the core applies the
+   built-in metadata list only while that list does not name it. A definition nobody
+   accepted has its calls denied (`mcp-server-changed`), so it needs no entry; a lock
+   that cannot be read leaves the exemption off. `openmoat mcp accept` says, when it
+   shows such a server, that its tab lists will taint the session. A command, package
+   or pinned tool definition was not used to recognise the real one: the real one has
+   none of them in a file OpenMoat reads, and any of them can be copied. A tool the
+   policy names in `taint.metadata_tools` keeps its exemption: a person listed it by
+   its full name.
 
 ## Consequences
 

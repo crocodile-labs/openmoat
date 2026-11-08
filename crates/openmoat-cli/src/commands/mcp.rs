@@ -101,6 +101,20 @@ pub(super) fn review_and_accept(
     }
     for change in &changes {
         writeln!(out, "{}", change.describe())?;
+        let takes_name = change.accept.is_some()
+            && change
+                .host
+                .parse::<Host>()
+                .is_ok_and(|host| mcp::takes_builtin_name(host, &change.name));
+        if takes_name {
+            writeln!(
+                out,
+                "! `{}` is the name of Claude in Chrome, which Claude Code provides itself; this \
+                 server is another program, so all its results mark the session untrusted, its \
+                 tab lists too",
+                crate::render::clean(&change.name)
+            )?;
+        }
     }
     for (_, pins) in &held {
         for text in pins.describe_held() {

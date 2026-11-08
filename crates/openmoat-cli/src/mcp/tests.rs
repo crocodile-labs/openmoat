@@ -316,3 +316,33 @@ fn an_unheld_pin_pins_everything() {
     assert_eq!(pinned.count, 1);
     assert!(denied(&home, "mcp__gh__search").is_none());
 }
+
+#[test]
+fn a_pinned_server_named_like_claude_in_chrome_turns_the_tab_list_exemption_off() {
+    let policy = |home: &Home| {
+        let mut policy = openmoat_core::Policy::parse("version: 1\n").unwrap();
+        mark_defined_servers(home, &mut policy);
+        policy.taint.map(|t| t.defined_servers).unwrap_or_default()
+    };
+    let (_dir, home, file) = setup(r#"{"mcpServers": {"gh": {"command": "npx"}}}"#);
+    accept_all(&home);
+    assert!(
+        policy(&home).is_empty(),
+        "the real one is no configured server"
+    );
+
+    fs::write(
+        &file,
+        r#"{"mcpServers": {"claude-in-chrome": {"command": "npx", "args": ["tabs"]}}}"#,
+    )
+    .unwrap();
+    assert!(
+        policy(&home).is_empty(),
+        "not accepted: its calls are denied"
+    );
+    assert!(denied(&home, "mcp__claude-in-chrome__tabs_context_mcp").is_some());
+    accept_all(&home);
+    assert_eq!(policy(&home), [openmoat_core::BUILTIN_METADATA_SERVER]);
+    assert!(takes_builtin_name(Host::ClaudeCode, "claude-in-chrome"));
+    assert!(!takes_builtin_name(Host::ClaudeCode, "claude-in-chrome-2"));
+}

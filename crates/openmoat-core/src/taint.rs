@@ -9,6 +9,14 @@ use serde::{Deserialize, Serialize};
 use crate::pattern::GlobPattern;
 use crate::policy::PolicyError;
 
+/// The MCP server whose tab and window tools are the built-in metadata tools:
+/// Claude in Chrome, which Claude Code provides itself (`claude --chrome`, the
+/// browser extension), not a server any MCP configuration file defines. A server a configuration or a
+/// pin defines under this name is another program that took the name, and the
+/// built-in list does not apply to it ([`TaintSettings::defined_servers`],
+/// ADR-069).
+pub const BUILTIN_METADATA_SERVER: &str = "claude-in-chrome";
+
 /// MCP tools whose result is the browser's own bookkeeping, not the content of
 /// a page: Claude in Chrome's tab, window, browser and shortcut lists (tab ids,
 /// titles, URLs). Their results do not taint the session (ADR-057 amendment of
@@ -16,6 +24,7 @@ use crate::policy::PolicyError;
 /// in a tab's title or URL is kept with the tool as its source. Every tool that
 /// returns what a page says (`get_page_text`, `read_page`, `find`, `navigate`,
 /// `javascript_tool`, the console and network logs, screenshots) is not listed.
+/// They apply only while no configured server takes [`BUILTIN_METADATA_SERVER`].
 const METADATA_TOOLS: [&str; 8] = [
     "mcp__claude-in-chrome__list_connected_browsers",
     "mcp__claude-in-chrome__resize_window",
@@ -261,6 +270,15 @@ pub struct TaintSettings {
     /// and their output still feeds injected input (ADR-057).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metadata_tools: Vec<String>,
+    /// MCP servers, by name, that an agent's MCP configuration or OpenMoat's
+    /// pins define. The built-in metadata tools are those of a server the
+    /// host provides itself ([`BUILTIN_METADATA_SERVER`]); one defined here
+    /// under that name is not it, and every tool of it taints the session.
+    /// The CLI adds the names it finds pinned; a policy may list more, which
+    /// can only make more results taint. `metadata_tools` still counts: a
+    /// person who lists a tool there trusts it by its full name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub defined_servers: Vec<String>,
     /// File provenance (ADR-029): a file a session wrote after reading
     /// untrusted content taints the sessions that later read or run it.
     /// Absent means on; `false` turns it off.
@@ -286,10 +304,16 @@ pub(crate) fn protected_writes(settings: Option<&TaintSettings>) -> impl Iterato
     )
 }
 
-/// Whether the MCP tool `name` returns metadata (the built-in list and the
-/// ones `settings` adds), whose result does not taint the session.
+/// Whether the MCP tool `name` returns metadata (the built-in list, unless a
+/// configured server took its server's name, and the ones `settings` adds),
+/// whose result does not taint the session.
 pub(crate) fn is_metadata_tool(settings: Option<&TaintSettings>, name: &str) -> bool {
-    METADATA_TOOLS.contains(&name)
+    let impostor = settings.is_some_and(|s| {
+        s.defined_servers
+            .iter()
+            .any(|server| server == BUILTIN_METADATA_SERVER)
+    });
+    (METADATA_TOOLS.contains(&name) && !impostor)
         || settings.is_some_and(|s| s.metadata_tools.iter().any(|tool| tool == name))
 }
 

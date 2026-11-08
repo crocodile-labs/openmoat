@@ -131,6 +131,7 @@ pub fn is_trusted(home: &Home, user: &Policy, found: &Found) -> Result<bool> {
 pub fn effective_policy(home: &Home, ctx: &EvalContext) -> Result<Policy> {
     let mut user = home.load_policy()?;
     crate::install::self_paths::protect_recorded(home, &mut user)?;
+    crate::mcp::mark_defined_servers(home, &mut user);
     let Some(root) = &ctx.project else {
         return Ok(user);
     };
