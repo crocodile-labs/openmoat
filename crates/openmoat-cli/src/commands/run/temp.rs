@@ -36,9 +36,14 @@ impl RunTemp {
     fn create_in(system: &Path) -> Result<Self> {
         let name = format!("openmoat-run-{}", random_hex(8)?.as_str());
         let dir = system.join(name);
-        let mut builder = std::fs::DirBuilder::new();
+        let builder = std::fs::DirBuilder::new();
+        // Owner-only where modes exist; elsewhere the temp directory's ACL holds.
         #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        let builder = {
+            let mut builder = builder;
+            std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+            builder
+        };
         builder
             .create(&dir)
             .with_context(|| format!("creating the run's temp directory {}", dir.display()))?;

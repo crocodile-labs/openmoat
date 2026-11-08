@@ -148,7 +148,7 @@ fn a_linked_agent_folder_keeps_its_hook_settings_out_of_reach() {
     if stderr(&out).contains("Install bubblewrap") {
         // no namespace: refused before anything starts
         assert!(
-            std::env::var_os("CI").is_none(),
+            !crate::run::netns_required(),
             "CI must run in a namespace: {shown}"
         );
         assert_eq!(out.status.code(), Some(USAGE), "{shown}");
@@ -202,7 +202,7 @@ fn missing_hook_settings_cannot_be_created() {
         let shown = text(&out);
         let port_only = !isolate && stderr(&out).contains("restricted by port only");
         assert!(
-            !(port_only && std::env::var_os("CI").is_some()),
+            !(port_only && crate::run::netns_required()),
             "CI must run `openmoat run` in a network namespace: {shown}"
         );
         if port_only {
