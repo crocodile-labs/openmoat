@@ -3,7 +3,9 @@
 //!
 //! Wrapping replaces `command` and `args` and nothing else:
 //! `{"command": "npx", "args": ["-y", "pkg"]}` becomes
-//! `{"command": "<moat>", "args": ["mcp", "proxy", "--server", "<name>", "--", "npx", "-y", "pkg"]}`.
+//! `{"command": "<moat>", "args": ["mcp", "proxy", "--server", "<name>", "--host", "<agent>", "--", "npx", "-y", "pkg"]}`,
+//! where `<agent>` is the agent whose file it is: the proxy takes only that
+//! agent's hook decisions for its calls.
 //! The original stays in the arguments after `--`, so unwrapping needs no other
 //! record, and `env`, `cwd` and the rest stay as they were. Only user-level files
 //! are changed (`~/.claude.json`, Cursor's `mcp.json`, Codex's `config.toml`,
@@ -18,7 +20,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::McpSyntax;
+use openmoat_hosts::{Host, McpSyntax};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use toml_edit::{Array, DocumentMut, value};
@@ -146,6 +148,28 @@ pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
         kept.push("--sandbox".to_owned());
     }
     kept.extend(rest.iter().cloned());
+    let mut out = entry.clone();
+    out["args"] = Value::from(kept);
+    Some(out)
+}
+
+/// Wrapped `entry` with `--host <host>`, so the proxy takes only `host`'s hook
+/// decisions; `None` when it is not wrapped or names its host already. A
+/// definition wrapped before the proxy took `--host` is given it the next
+/// time it is wrapped.
+pub fn with_host(entry: &Value, host: Host) -> Option<Value> {
+    let args = proxy_args(entry)?;
+    let split = args.iter().position(|a| a == "--")?;
+    let flags = &args[..split];
+    if flags
+        .iter()
+        .any(|a| a == "--host" || a.starts_with("--host="))
+    {
+        return None;
+    }
+    let mut kept = flags.to_vec();
+    kept.extend(["--host".to_owned(), host.id().to_owned()]);
+    kept.extend(args[split..].iter().cloned());
     let mut out = entry.clone();
     out["args"] = Value::from(kept);
     Some(out)
@@ -419,6 +443,34 @@ mod tests {
     }
 
     #[test]
+    fn the_host_is_added_once_before_the_separator() {
+        let [first, second, ..] = Host::ALL;
+        let plain = json!({"command": "npx", "args": ["pkg", "--host", "x"]});
+        assert!(with_host(&plain, first).is_none(), "not wrapped");
+        let off = wrapped(&plain, Path::new("/b/openmoat"), "gh", true).unwrap();
+        let named = with_host(&off, second).unwrap();
+        assert_eq!(
+            named["args"],
+            json!([
+                "mcp",
+                "proxy",
+                "--server",
+                "gh",
+                "--sandbox",
+                "--host",
+                second.id(),
+                "--",
+                "npx",
+                "pkg",
+                "--host",
+                "x"
+            ])
+        );
+        assert!(with_host(&named, first).is_none(), "named once");
+        assert_eq!(unwrapped(&named).unwrap(), unwrapped(&off).unwrap());
+    }
+
+    #[test]
     fn a_local_command_starts_a_process_and_a_url_does_not() {
         assert!(starts_process(&json!({"command": "npx"})));
         assert!(starts_process(
@@ -434,7 +486,7 @@ mod tests {
         let text = "# mine\nmodel = \"x\"\n\n[mcp_servers.docs]\ncommand = \"docs\"\nenv = { A = \"1\" }\n";
         let server = Server {
             id: String::new(),
-            host: openmoat_hosts::Host::Codex,
+            host: Host::Codex,
             file: PathBuf::from("/c/config.toml"),
             pointer: "/mcp_servers/docs".to_owned(),
             name: "docs".to_owned(),

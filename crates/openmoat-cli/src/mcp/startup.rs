@@ -1,8 +1,8 @@
 //! Whether `moat mcp proxy` may start the server it was given (ADR-049).
 //!
 //! The proxy's own command line is what it would run, so that is what is
-//! checked, never a file read again later: the server name, the sandbox flags
-//! and the command after `--` ([`Launch`]). It starts the server only when a
+//! checked, never a file read again later: the server name, the agent it
+//! serves, the sandbox flags and the command after `--` ([`Launch`]). It starts the server only when a
 //! definition the agents read gives exactly that command line, and every such
 //! definition is the one a person accepted: the same pin `moat guard` checks
 //! a server's tool calls against (ADR-026), so `moat mcp accept` is the one
@@ -31,6 +31,8 @@ use crate::integrity;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Launch {
     pub server: String,
+    /// The agent whose hook decisions let its calls through (`--host`).
+    pub host: Option<openmoat_hosts::Host>,
     pub sandbox: bool,
     pub writes: Vec<PathBuf>,
     pub command: Vec<OsString>,
@@ -40,6 +42,7 @@ impl Launch {
     pub fn of(args: &McpProxyArgs) -> Self {
         Self {
             server: args.server.clone(),
+            host: args.host,
             sandbox: args.sandbox,
             writes: args.writes.clone(),
             command: args.command.clone(),

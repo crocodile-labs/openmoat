@@ -243,6 +243,8 @@ fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
             "proxy",
             "--server",
             "gh",
+            "--host",
+            "claude-code",
             "--",
             "npx",
             "-y",

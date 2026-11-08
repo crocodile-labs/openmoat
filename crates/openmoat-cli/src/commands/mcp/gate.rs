@@ -60,6 +60,14 @@ pub struct Gateway {
     cwd: PathBuf,
     /// The session of rows no hook decision names.
     session: String,
+    /// The agent whose configuration starts the server (`--host`): only its
+    /// hook decisions let a call through. `None` for a definition wrapped
+    /// before the proxy took `--host`, which takes any agent's.
+    host: Option<Host>,
+    /// The host and session of the last hook decision a call passed on: a
+    /// host starts a stdio server for one session, so a decision of that
+    /// session is taken before another's with the same arguments.
+    served: Mutex<Option<(String, String)>>,
     /// The host and session of each tool call passed on and not answered
     /// yet, by request id: where its result's pieces go (ADR-058).
     awaiting: Mutex<HashMap<String, Awaiting>>,
@@ -93,7 +101,7 @@ struct Outcome {
 }
 
 impl Gateway {
-    pub fn new(home: Home, server: &str) -> Result<Self> {
+    pub fn new(home: Home, server: &str, host: Option<Host>) -> Result<Self> {
         Ok(Self {
             home,
             server: server.to_owned(),
@@ -103,6 +111,8 @@ impl Gateway {
                 std::process::id(),
                 crate::time::now_ms()
             ),
+            host,
+            served: Mutex::new(None),
             awaiting: Mutex::new(HashMap::new()),
         })
     }
@@ -189,16 +199,40 @@ impl Gateway {
         })
     }
 
-    /// The hook's decision for `call`, taken so it lets no second call through.
+    /// The hook's decision for `call`, taken so it lets no second call
+    /// through: one of the agent the proxy serves (`--host`) that names this
+    /// server's tool, of the session the proxy served last when one of its
+    /// decisions matches. Two sessions that send the same call each take
+    /// their own decision, so each result's pieces and fingerprints go to the
+    /// session that asked for it.
     fn take_ticket(&self, store: &Store, call: &Call<'_>) -> Result<Option<Ticket>> {
         let arguments = openmoat_hosts::mcp_call_arguments(call.arguments);
         let digest = integrity::sha256_hex(arguments.as_bytes());
         let (server, tool) = (self.server.as_str(), call.name);
-        Ok(store.take_mcp_ticket(&digest, |t| {
-            t.host
-                .parse::<Host>()
-                .is_ok_and(|host| names_tool(host, &t.tool, server, tool))
-        })?)
+        let ours = |t: &Ticket| {
+            t.host.parse::<Host>().is_ok_and(|host| {
+                self.host.is_none_or(|own| own == host) && names_tool(host, &t.tool, server, tool)
+            })
+        };
+        let last = self
+            .served
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let mut taken = None;
+        if let Some((host, session)) = &last {
+            taken = store.take_mcp_ticket(&digest, |t| {
+                ours(t) && &t.host == host && &t.session_id == session
+            })?;
+        }
+        if taken.is_none() {
+            taken = store.take_mcp_ticket(&digest, ours)?;
+        }
+        if let Some(ticket) = &taken {
+            *self.served.lock().unwrap_or_else(PoisonError::into_inner) =
+                Some((ticket.host.clone(), ticket.session_id.clone()));
+        }
+        Ok(taken)
     }
 
     /// The policy's decision for `action` in `cwd` (the server's own when

@@ -42,7 +42,7 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
             .load_policy()
             .is_ok_and(|policy| policy.trust_mcp_first_sight());
     let save: Save = Box::new(move |p: &ToolPins| p.save(&path));
-    let gateway = Gateway::new(home, &args.server)?;
+    let gateway = Gateway::new(home, &args.server, args.host)?;
     let relay = Arc::new(Relay::new(
         &args.server,
         pins,
@@ -108,7 +108,8 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
 fn refuse(home: Home, args: &McpProxyArgs, why: &str) -> Result<Code> {
     let message = format!("OpenMoat did not start MCP server `{}`: {why}", args.server);
     note(&message);
-    let recorded = Gateway::new(home, &args.server).and_then(|g| g.refused_start(&message));
+    let recorded =
+        Gateway::new(home, &args.server, args.host).and_then(|g| g.refused_start(&message));
     if let Err(e) = recorded {
         note(&format!(
             "the refusal could not be recorded in the audit log: {e:#}"

@@ -16,7 +16,10 @@ the model, or to have it counted for the wrong session, that a person never revi
 - a JSON-RPC error answer to a tool call skipped the gate: its `message` and `data`
   reach the model as a result does, but left no injected-input fingerprints and no
   cross-server flow pieces, and the call stayed in the gateway's table of calls
-  awaiting an answer.
+  awaiting an answer;
+- the gateway took a hook decision of any agent and any session with the same
+  arguments, so with two agents, or two sessions, sending the same call, a result's
+  pieces and fingerprints could be kept for the session that did not read it.
 
 ## Decision
 
@@ -37,6 +40,17 @@ the model, or to have it counted for the wrong session, that a person never revi
    as OpenMoat's own error, never as the server's text. Claude Code reports a failed
    call of its own tools in `PostToolUseFailure`, which the hook does not read yet:
    that needs a real machine to confirm the payload, and stays a documented gap.
+
+3. **A decision is taken from the agent and the session the proxy serves.**
+   `openmoat mcp wrap` writes `--host <agent>` into the definition it wraps (and adds it
+   to one wrapped before), part of the command line the startup gate checks (ADR-049).
+   The gateway then takes only that agent's decisions. Among them it takes one of the
+   session it last passed a call for when one matches, and another session's only when
+   none does: a host starts a stdio server for a session, but may go on using it after
+   it starts a new one (Claude Code's `/clear`), so a strict binding would refuse every
+   call after that. A proxy started without `--host` takes any agent's decisions, as
+   before. A proxy still cannot know which session sent a call, only which decision it
+   matched (ADR-045).
 
 ## Consequences
 

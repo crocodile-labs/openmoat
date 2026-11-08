@@ -174,6 +174,13 @@ pub(super) fn wrap_servers(
         }
         let entry = wrap::wrapped(&server.entry, binary, &server.name, new_sandbox)
             .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, on)));
+        // The proxy takes only the hook decisions of the agent whose file
+        // starts it; a definition wrapped before `--host` existed gets it now.
+        let host = server.host;
+        let entry = match entry {
+            Some(entry) => Some(wrap::with_host(&entry, host).unwrap_or(entry)),
+            None => wrap::with_host(&server.entry, host),
+        };
         let Some(entry) = entry else {
             continue;
         };

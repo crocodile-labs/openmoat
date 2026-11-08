@@ -797,7 +797,11 @@ Through the gateway:
   the host.
 - **Each call is tied to the session that made it.** The gateway's audit row (host
   `mcp-proxy`) carries the session and call id of the hook's decision, so
-  `openmoat audit export --session <id>` shows both rows, and the session's taint applies:
+  `openmoat audit export --session <id>` shows both rows, and the session's taint applies.
+  The gateway takes only the decisions of the agent whose configuration starts it, and
+  the decision of the session it served before another session's with the same
+  arguments, so each result is kept for the session that asked for it. The session's
+  taint applies:
   after the session read a secret, its MCP calls need review, and the gateway passes one only after
   the person said yes.
 
@@ -988,7 +992,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
-| `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
+| `openmoat mcp proxy --server <name> [--host <agent>] [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. `--host` names the agent whose file starts it: only that agent's hook decisions let its calls through (a server wrapped before this option existed gets it the next time you run `openmoat mcp wrap`). It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
 | `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy check-diff [--base <rev> [--head <rev>]] [--policy <file>] [--format text\|json\|github]` | check a change before it is merged: from `--base` to `--head` (`HEAD`), or a unified diff on stdin; exit 0 nothing found, 2 something the policy denies, 3 something for review ([MERGE_CHECK.md](MERGE_CHECK.md)); `--provenance review\|info\|off` (default `review`) shows what provenance notes say agents wrote in the change, never changing the exit code |
 | `openmoat provenance [--range <rev-range>] [--write-notes] [--verify] [--format text\|json]` | which files and lines of commits an agent session wrote, from this machine's audit log, and whether it had read untrusted content first · keep a note per commit on `refs/notes/openmoat` (person-only) · check those notes against the log (exit 64 on a mismatch) ([PROVENANCE.md](PROVENANCE.md)) |
