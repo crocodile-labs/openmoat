@@ -18,7 +18,7 @@ mod registry;
 mod request;
 mod wire;
 
-pub use block::{RULE_PAGE, rule_page};
+pub use block::{NEVER_SUGGESTED, RULE_PAGE, rule_page};
 pub use contract::{
     Activity, Advisories, Advisory, AlsoDir, AutoStart, Bundle, ConsentFile, Detect, ExtraFile,
     GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookTrust,

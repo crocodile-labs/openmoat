@@ -21,6 +21,20 @@ use openmoat_core::{Decision, Notice, Verdict};
 /// Where each rule's page is: the rule id follows.
 pub const RULE_PAGE: &str = "https://openmoat.dev/r/";
 
+/// Words no block message has: each would point the agent at another way to
+/// the same end. The wording tests of the message and of OpenMoat's own
+/// checks' texts look for them.
+pub const NEVER_SUGGESTED: &[&str] = &[
+    "another way",
+    "instead",
+    "encode",
+    "split",
+    "base64",
+    "variant",
+    "rephrase",
+    "work around",
+];
+
 /// The command that explains the newest deny or review.
 const WHY_LAST: &str = "openmoat why --last";
 
@@ -79,15 +93,17 @@ fn row(label: &str, text: &str) -> String {
     format!("  {label:<6} {text}")
 }
 
-/// The one thing the person can do.
+/// The one thing the person can do: how to approve where the host cannot ask,
+/// else the deciding check's own step, else the verdict's.
 fn next(verdict: Verdict, notice: &Notice) -> String {
-    match (&notice.unasked, verdict) {
-        (Some(why), _) => format!(
+    match (&notice.unasked, &notice.next, verdict) {
+        (Some(why), _, _) => format!(
             "{why}, so approve it in your terminal: run `openmoat`, or `openmoat allow --last`, \
              then retry"
         ),
-        (None, Verdict::Review) => REVIEW_NEXT.to_owned(),
-        (None, _) => DENY_NEXT.to_owned(),
+        (None, Some(next), _) => next.clone(),
+        (None, None, Verdict::Review) => REVIEW_NEXT.to_owned(),
+        (None, None, _) => DENY_NEXT.to_owned(),
     }
 }
 

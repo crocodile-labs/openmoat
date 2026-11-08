@@ -19,7 +19,7 @@ fn ssh_key() -> Decision {
             why: Some("a key or token that leaves this machine cannot be taken back".into()),
             call: Some("Read ~/.ssh/id_ed25519".into()),
             detail: Some("secret material: read ~/.ssh/id_ed25519".into()),
-            unasked: None,
+            ..Notice::default()
         },
     )
 }
@@ -33,10 +33,49 @@ fn push_hook() -> Decision {
             title: "changing something that runs later, outside any sandbox".into(),
             why: None,
             call: Some("Write .git/hooks/pre-push".into()),
-            detail: None,
-            unasked: None,
+            ..Notice::default()
         },
     )
+}
+
+/// One of OpenMoat's own checks, with a step of its own.
+fn drifted() -> Decision {
+    noticed(
+        Verdict::Deny,
+        "kernel-integrity",
+        "~/.moat/policy.yaml was modified",
+        Notice {
+            title: "any call while OpenMoat's own files differ from their pins".into(),
+            next: Some("run `openmoat doctor` in your terminal to see what changed".into()),
+            ..Notice::default()
+        },
+    )
+}
+
+/// A check's own step replaces the verdict's; where the host cannot ask, how
+/// to approve still comes first.
+#[test]
+fn a_checks_own_next_step_replaces_the_verdicts() {
+    let text = reason_line(&drifted());
+    assert!(
+        text.contains("\n  next   run `openmoat doctor` in your terminal to see what changed\n"),
+        "{text}"
+    );
+    let mut held = push_hook();
+    if let Some(notice) = held.notice.as_mut() {
+        notice.next = Some("approve it in this prompt only if you asked for it yourself".into());
+    }
+    assert!(
+        reason_line(&held).contains("\n  next   approve it in this prompt only if you asked"),
+        "{}",
+        reason_line(&held)
+    );
+    let codex = Host::Codex.answer(&HookEvent::PreToolUse, &held);
+    assert!(
+        reason_line(&codex).contains("\n  next   Codex hooks cannot prompt, so approve it"),
+        "{}",
+        reason_line(&codex)
+    );
 }
 
 #[test]
@@ -90,7 +129,7 @@ fn a_review_a_host_cannot_ask_about_says_how_to_approve_it() {
     assert_eq!(lines[4], "  more   openmoat why --last");
 }
 
-/// Without a notice (a rule with no title, a synthetic rule), and for an
+/// Without a notice (a rule with no title, a check with no words), and for an
 /// allow or a defer, the line is exactly what earlier releases sent.
 #[test]
 fn without_a_notice_the_line_is_unchanged() {
@@ -128,22 +167,13 @@ fn only_a_plain_rule_id_gets_a_page_link() {
 #[test]
 fn the_block_is_short_plain_and_never_suggests_a_way_around() {
     let codex = Host::Codex.answer(&HookEvent::PreToolUse, &push_hook());
-    for d in [ssh_key(), push_hook(), codex] {
+    for d in [ssh_key(), push_hook(), codex, drifted()] {
         let text = reason_line(&d);
         assert!(text.lines().count() <= 6, "{text}");
         assert_eq!(text.matches("\n  next ").count(), 1, "{text}");
         assert!(!text.contains('\x1b'), "{text}");
         let lower = text.to_lowercase();
-        for hint in [
-            "another way",
-            "instead",
-            "encode",
-            "split",
-            "base64",
-            "variant",
-            "rephrase",
-            "work around",
-        ] {
+        for hint in crate::NEVER_SUGGESTED {
             assert!(!lower.contains(hint), "`{hint}` in {text}");
         }
     }

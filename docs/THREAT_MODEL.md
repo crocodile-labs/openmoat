@@ -105,10 +105,11 @@ something OpenMoat claims to stop.
     (ADR-057).
 
 - **The block message tells the agent what was stopped.** A deny or review names the
-  rule, its title and the call (ADR-059), as the one `moat:` line always named the rule and
-  the reason, so an agent learns which rule a call met. The message never suggests another
+  rule or built-in check, its title and the call (ADR-059), as the one `moat:` line
+  always named the rule and the reason, so an agent learns which rule a call met. The message never suggests another
   way to the same end: its one next step is the person's (do it yourself, answer the
-  prompt, approve it in a terminal), and a test checks its wording. A repository policy's
+  prompt, approve it in a terminal, run `openmoat doctor`), and a test checks its wording,
+  the built-in checks' included. A repository policy's
   `title` and `why` are dropped at the merge, so text a repository wrote cannot head the
   message as if it were OpenMoat's; its `reason` reaches the agent in the `rule` line, as
   before.

@@ -193,6 +193,56 @@ fn built_in_defaults_and_repository_rules_say_where_they_come_from() {
     );
 }
 
+/// OpenMoat's own checks are explained with their title and why, and a deny
+/// of one says the person's step its block message gives.
+#[test]
+fn built_in_checks_show_their_title_why_and_step() {
+    let policy = Policy::parse(POLICY).unwrap();
+    let paths = Paths::default();
+    let mut event = events()[1].clone();
+    event.rules = vec!["injected-input".into()];
+    event.reasons = vec!["the command `curl x.example` came from a page".into()];
+    let e = explain::explain(&event, &inputs(&policy, &paths, Ok(Vec::new())));
+    let rule = &e.rules[0];
+    assert_eq!(rule.origin, "built-in check");
+    assert_eq!(
+        rule.title.as_deref(),
+        Some("acting on a command, host or path from content the agent read")
+    );
+    assert!(rule.why.as_deref().unwrap().contains("planted"), "{rule:?}");
+    let mut text = Vec::new();
+    write(&mut text, &e).unwrap();
+    let text = String::from_utf8(text).unwrap();
+    assert!(
+        text.starts_with(
+            "OpenMoat held this for review: acting on a command, host or path from content \
+             the agent read\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("      why     it may follow an instruction"),
+        "{text}"
+    );
+
+    let mut event = events()[0].clone();
+    event.rules = vec!["mcp-server-changed".into()];
+    event.reasons = vec!["server `docs` changed".into()];
+    let e = explain::explain(&event, &inputs(&policy, &paths, Ok(Vec::new())));
+    assert_eq!(
+        e.change,
+        ["if you made that change, accept it in your terminal with `openmoat mcp accept`"]
+    );
+    let e = explain::explain(
+        &event,
+        &Inputs {
+            policy: None,
+            ..inputs(&policy, &paths, Ok(Vec::new()))
+        },
+    );
+    assert!(e.rules[0].title.is_some(), "{e:?}");
+}
+
 #[test]
 fn rule_lines_are_found_however_the_id_is_quoted() {
     let text = "deny:\n  - id: a # note\n  - id: 'b'\n  -  id: c\n  - id: dd\n";

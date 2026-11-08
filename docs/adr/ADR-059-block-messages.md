@@ -121,6 +121,34 @@ in the policy, what else (taint, an MCP flow) shaped it and how to change it.
 - A policy made from an earlier default shows the old line for its rules until `openmoat
   policy upgrade` adds the titles; `openmoat policy lint` says so.
 
+## Amendment 2026-11-07: OpenMoat's own checks get the same message
+
+§3's last bullet kept the one line for every synthetic rule, so the
+checks people meet most without a policy rule (`injected-input`, `session-taint`,
+`kernel-integrity`) told them least. They now carry the same block message:
+
+- One table of their words, `crates/openmoat-cli/src/notice/builtin.rs`, next to where the
+  guard looks titles up and naming each check by the constant that produces it: title and
+  `why` for every check that can deny a call or hold it for review and reaches a host's
+  reason field (`unparseable`, `unchecked`, `executables`, `kernel-integrity`,
+  `kernel-error`, `mcp-server-changed`, `ungoverned`, `project-settings`, `session-taint`,
+  `injected-input`, `mcp-cross-server`, `protected-contents`, `session-written-code`,
+  `push-secret`, `push-runs-later`, `push-unchecked`). The policy's defaults
+  (`default.<kind>`), the ids that only allow or record, and the refusals of
+  `openmoat mcp proxy`, `openmoat proxy` and `policy check-diff`, which never reach a
+  host's reason field, have none.
+- The same lookup serves the block message, `openmoat watch` and `openmoat why`: a rule of
+  the person's own policy with that id keeps their words (or none); otherwise the check's.
+  The first rule with words heads the message, as before.
+- A check may give the person's step for its own verdict (`Notice::next`): "run `openmoat
+  doctor` in your terminal to see what changed" for `kernel-integrity`, "approve it in
+  this prompt only if you asked for it yourself" for `injected-input`. Where the host
+  cannot ask, how to approve still comes first. The same wording test covers every check.
+- `kernel-error` carries its message on every path, the deny that answers a panic, the
+  time budget or an unwritable log included; it needs no policy.
+- `openmoat_core::Notice` gains `next`, and `openmoat_hosts` exports `NEVER_SUGGESTED`, the
+  words the wording tests look for.
+
 ## Limits
 
 - The message is what the host shows; a host that truncates its reason field (none of the

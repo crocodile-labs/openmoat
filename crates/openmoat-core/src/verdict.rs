@@ -110,9 +110,10 @@ pub struct Decision {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub context: Vec<String>,
     /// How the agent and its person are told about a `deny` or `review`
-    /// (ADR-059), when the rule that decided it has a title. Presentation
-    /// only: the engine never sets it, no decision reads it, and it is never
-    /// serialised, so JSON output and the audit log stay as they were.
+    /// (ADR-059), when the rule or OpenMoat's own check that decided it has a
+    /// title. Presentation only: the engine never sets it, no decision reads
+    /// it, and it is never serialised, so JSON output and the audit log stay
+    /// as they were.
     #[serde(skip)]
     pub notice: Option<Box<Notice>>,
 }
@@ -132,6 +133,10 @@ pub struct Notice {
     /// The decision's reasons as they may be shown, in place of
     /// [`Decision::reasons`] in the message.
     pub detail: Option<String>,
+    /// The person's one step, where the deciding check has its own for this
+    /// verdict ("run `openmoat doctor` in your terminal to see what
+    /// changed"); `None` for the verdict's own step.
+    pub next: Option<String>,
     /// Set where a `review` reaches a host that cannot put it to the person,
     /// as a `deny`: why it cannot ("Codex hooks cannot prompt").
     pub unasked: Option<String>,

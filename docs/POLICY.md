@@ -828,7 +828,15 @@ The reason line has the shape `moat: <verdict> [rule, rule] — reason; reason`.
 
 ### 5.1 Rule ids that are not in your policy
 
-These appear in responses and in `openmoat show` alongside the ids from `policy.yaml`:
+These appear in responses and in `openmoat show` alongside the ids from `policy.yaml`.
+A deny or review from one of OpenMoat's own checks that reaches the agent (`unparseable`,
+`unchecked`, `executables`, `kernel-integrity`, `kernel-error`, `mcp-server-changed`,
+`ungoverned`, `project-settings`, `session-taint`, `injected-input`, `mcp-cross-server`,
+`protected-contents`, `session-written-code`, `push-secret`, `push-runs-later`,
+`push-unchecked`) carries the block message as a titled rule does (§2), with OpenMoat's
+own title and `why` (ADR-059, amended); a rule of your policy with one of these ids keeps
+your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat proxy` and
+`policy check-diff` keep their own output.
 
 | Rule id | Verdict | When |
 |---|---|---|

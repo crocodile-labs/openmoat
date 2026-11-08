@@ -28,7 +28,7 @@ pub struct View<'a> {
     /// whole lines with the verdict after the call, for a script to read.
     pub width: Option<usize>,
     pub paths: Paths,
-    /// The person's policy, for the rules' titles; `None` when it does not load.
+    /// The person's policy, for their rules' titles; `None` when it does not load.
     pub policy: Option<&'a Policy>,
 }
 
@@ -97,8 +97,8 @@ fn tag(event: &Event) -> String {
 }
 
 /// What a deny or review stopped, in the rule's words: its title when the
-/// person's policy gives it one, else the first reason; for a review, how to
-/// approve it.
+/// person's policy or OpenMoat's own check gives it one ([`notice::words`]),
+/// else the first reason; for a review, how to approve it.
 fn held(event: &Event, policy: Option<&Policy>) -> Option<String> {
     if !matches!(event.verdict, Verdict::Deny | Verdict::Review) {
         return None;
@@ -106,7 +106,7 @@ fn held(event: &Event, policy: Option<&Policy>) -> Option<String> {
     let title = event
         .rules
         .iter()
-        .find_map(|id| policy?.own_group(id)?.title.clone())
+        .find_map(|id| notice::words(policy, id).map(|w| w.title.to_owned()))
         .or_else(|| event.reasons.first().cloned())?;
     Some(match event.verdict {
         Verdict::Review => format!("{title} · approve: openmoat allow --last"),
