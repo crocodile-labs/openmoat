@@ -14,6 +14,8 @@ use openmoat_core::{AtomicAction, DEFAULT_POLICY, EvalContext, Kind, Policy};
 use super::patterns::Spot;
 use super::{Grants, Report, landlock, seatbelt};
 
+mod hosts;
+
 const HOME: &str = "/home/me";
 const PROJECT: &str = "/home/me/proj";
 
@@ -102,8 +104,9 @@ fn braces(pattern: &str) -> Vec<String> {
     vec![pattern.to_owned()]
 }
 
-/// Paths a brace-free glob matches and paths just beside it.
-fn concrete(glob: &str) -> Vec<String> {
+/// Paths a brace-free glob matches and paths just beside it, a relative glob
+/// taken from `project`.
+fn concrete(glob: &str, project: &str) -> Vec<String> {
     let mut out = Vec::new();
     for (deep, any) in [("d1/d2", "f"), ("d1", "file.txt")] {
         let mut path = String::new();
@@ -131,7 +134,7 @@ fn concrete(glob: &str) -> Vec<String> {
             }
         }
         if !path.starts_with('/') {
-            path = format!("{PROJECT}/{path}");
+            path = format!("{project}/{path}");
         }
         let parent = path.rsplit_once('/').map(|(p, _)| p.to_owned());
         out.extend([format!("{path}x"), format!("{path}/inner"), path]);
@@ -141,6 +144,11 @@ fn concrete(glob: &str) -> Vec<String> {
 }
 
 fn samples(ir: &Enforcement) -> Vec<String> {
+    samples_in(ir, PROJECT)
+}
+
+/// [`samples`] for an IR lowered with `project` as the project.
+fn samples_in(ir: &Enforcement, project: &str) -> Vec<String> {
     let rules = [&ir.fs.read, &ir.fs.write]
         .into_iter()
         .flat_map(|a| a.deny.iter().chain(&a.allow));
@@ -158,7 +166,7 @@ fn samples(ir: &Enforcement) -> Vec<String> {
     .to_vec();
     for pattern in rules.flat_map(|r| &r.patterns) {
         for glob in braces(pattern.trim_start_matches('!')) {
-            out.extend(concrete(&glob));
+            out.extend(concrete(&glob, project));
         }
     }
     out.sort();
@@ -169,11 +177,26 @@ fn samples(ir: &Enforcement) -> Vec<String> {
 /// The engine's reading of one allowance pattern: `*` stops at `/`, and
 /// `dir/**` also matches `dir`.
 fn allowance_matches(pattern: &str, path: &str) -> bool {
+    thread_local! {
+        // Each pattern compiled once: the host differentials match every
+        // sample against every entry.
+        static GLOBS: std::cell::RefCell<std::collections::HashMap<String, Option<globset::GlobMatcher>>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
     let glob = |g: &str| {
-        globset::GlobBuilder::new(g)
-            .literal_separator(true)
-            .build()
-            .is_ok_and(|g| g.compile_matcher().is_match(path))
+        GLOBS.with_borrow_mut(|cache| {
+            cache
+                .entry(g.to_owned())
+                .or_insert_with(|| {
+                    globset::GlobBuilder::new(g)
+                        .literal_separator(true)
+                        .build()
+                        .ok()
+                        .map(|g| g.compile_matcher())
+                })
+                .as_ref()
+                .is_some_and(|m| m.is_match(path))
+        })
     };
     glob(pattern) || pattern.strip_suffix("/**").is_some_and(glob)
 }
