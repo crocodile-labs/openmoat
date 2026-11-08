@@ -48,8 +48,11 @@ const ABI_REQUIRED: ABI = ABI::V4;
 /// session keys (Kerberos tickets, filesystem keys), which Landlock does not
 /// cover. `setns()` joins a namespace that exists already (another of the
 /// person's containers, through `/proc/<pid>/ns`), which [`CLONE_NAMESPACES`]
-/// keeps the agent from creating.
-const DENIED: [i64; 10] = [
+/// keeps the agent from creating. `pidfd_getfd()` copies an open file of
+/// another process (a socket, a token file the agent holds open) into the
+/// caller, past every path rule; `pidfd_open()`, which runtimes wait for
+/// their children with, stays allowed.
+const DENIED: [i64; 11] = [
     libc::SYS_io_uring_setup,
     libc::SYS_io_uring_enter,
     libc::SYS_io_uring_register,
@@ -60,6 +63,7 @@ const DENIED: [i64; 10] = [
     libc::SYS_add_key,
     libc::SYS_request_key,
     libc::SYS_setns,
+    libc::SYS_pidfd_getfd,
 ];
 
 /// The flags that make `clone()` and `unshare()` create a namespace (mount,
@@ -86,7 +90,7 @@ const CLONE_NEWTIME: u64 = 0x80;
 /// A call made under another architecture (32-bit `int 0x80`, which has
 /// `socketcall`) kills the process.
 #[cfg(target_arch = "x86_64")]
-const X32_DENIED: &[i64] = &[41, 425, 426, 427, 521, 539, 540, 248, 249, 250, 308];
+const X32_DENIED: &[i64] = &[41, 425, 426, 427, 521, 539, 540, 248, 249, 250, 308, 438];
 #[cfg(not(target_arch = "x86_64"))]
 const X32_DENIED: &[i64] = &[];
 const X32: i64 = 0x4000_0000;

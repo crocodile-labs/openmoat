@@ -328,7 +328,8 @@ bubblewrap.
   `add_key`, `request_key`), refuses new namespaces (`unshare`, and `clone` with a
   namespace flag; `clone3`, whose flags a filter cannot read, answers `ENOSYS`, so the
   C library falls back to `clone`) and joining an existing one (`setns`, so `nsenter`
-  and a container runtime's `exec` fail). Containers, bubblewrap and Chromium's own
+  and a container runtime's `exec` fail), and refuses `pidfd_getfd` (copying an open
+  file of another process; `pidfd_open` stays). Containers, bubblewrap and Chromium's own
   sandbox cannot start inside. Windows refuses.
 - **The network on Linux.** Landlock restricts TCP connections by port only, and a
   seccomp filter cannot read the address `connect()` is given (it gets a pointer), so

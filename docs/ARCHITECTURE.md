@@ -1497,8 +1497,9 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   read or change the agent's memory (its tokens), and debuggers do not work. So do
   `keyctl`, `add_key` and `request_key` (the person's kernel keyrings), `unshare` with
   any namespace flag and `clone` with one of them (a new user namespace would give a
-  command every capability inside it), and `setns` (joining a namespace that exists
-  already). `clone3` passes its flags in memory, which a
+  command every capability inside it), `setns` (joining a namespace that exists
+  already) and `pidfd_getfd` (copying an open file, such as a socket or a token file,
+  out of another process past every path rule; `pidfd_open` stays allowed). `clone3` passes its flags in memory, which a
   filter cannot read: a second filter answers it `ENOSYS`, so glibc falls back to
   `clone`. `sendto`, `sendmsg` and `sendmmsg` with `MSG_FASTOPEN` fail too: TCP Fast Open
   connects an unconnected socket inside the send, without the `connect()` whose LSM

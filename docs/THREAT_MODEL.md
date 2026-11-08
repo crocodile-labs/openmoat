@@ -362,7 +362,8 @@ something OpenMoat claims to stop.
     So are `ptrace` and `process_vm_readv`/`writev`: a command cannot read
     the agent's memory, and debuggers do not work. So are the kernel keyrings
     (`keyctl`, `add_key`, `request_key`) and new namespaces (`unshare`, `clone` with a
-    namespace flag; `clone3` answers `ENOSYS`) and joining an existing one (`setns`),
+    namespace flag; `clone3` answers `ENOSYS`), joining an existing one (`setns`) and
+    copying another process's open file (`pidfd_getfd`, past every path rule),
     so a command cannot read the person's session keys, make a user namespace in which
     to mount over what the sandbox hides, or enter another container's; containers and Chromium's own sandbox do not start inside. Names resolve
     only through the proxy: a tool that ignores `HTTP(S)_PROXY` cannot resolve them.
