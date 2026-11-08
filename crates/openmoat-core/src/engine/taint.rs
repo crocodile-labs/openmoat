@@ -48,8 +48,9 @@ pub struct Taint {
 }
 
 /// Where untrusted content a session read came from: the one list of what
-/// taints a session, which [`CompiledPolicy::exposure`] and the provenance
-/// report (ADR-056) both use.
+/// injected input reads (ADR-057) and, less the metadata tools
+/// (`taint.metadata_tools`), of what taints a session, which
+/// [`CompiledPolicy::exposure`] and the provenance report (ADR-056) both use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UntrustedKind {
@@ -126,7 +127,8 @@ pub(super) fn compile_protected(
 impl CompiledPolicy<'_> {
     /// What running `action` in `cwd` exposed its session to: secret material
     /// from a read the `secrets-paths` group names, untrusted content from a
-    /// fetch, a web search, an unknown tool or an MCP result. The caller passes only calls that ran; the parts
+    /// fetch, a web search, an unknown tool or an MCP result, except a
+    /// metadata tool's (`taint.metadata_tools`). The caller passes only calls that ran; the parts
     /// of an action that cannot be classified expose nothing they can name.
     #[must_use]
     pub fn exposure(&self, action: &Action, cwd: &str, paths: &dyn PathResolver) -> Taint {
@@ -147,7 +149,7 @@ impl CompiledPolicy<'_> {
                         untrusted: None,
                     });
                 }
-                _ if UntrustedKind::of(&atom).is_some() => {
+                _ if self.taints(&atom).is_some() => {
                     taint.untrusted.get_or_insert_with(|| atom.describe());
                 }
                 _ => {}
@@ -173,7 +175,24 @@ impl CompiledPolicy<'_> {
         let (atoms, _) = checked_atoms(action, &ctx, self.opens_as(), paths);
         atoms
             .iter()
-            .find_map(|atom| UntrustedKind::of(atom).map(|kind| (kind, atom.describe())))
+            .find_map(|atom| self.taints(atom).map(|kind| (kind, atom.describe())))
+    }
+
+    /// The kind of untrusted content `atom` brings into its session, which
+    /// then taints it: [`UntrustedKind::of`], except the result of an MCP tool
+    /// that returns metadata, not content (a browser's tab list,
+    /// `taint.metadata_tools`). Injected input still reads that result
+    /// ([`Self::output_source`]): a page sets its own title and URL.
+    fn taints(&self, atom: &AtomicAction) -> Option<UntrustedKind> {
+        let kind = UntrustedKind::of(atom)?;
+        match atom {
+            AtomicAction::McpTool { name }
+                if crate::taint::is_metadata_tool(self.policy.taint.as_ref(), name) =>
+            {
+                None
+            }
+            _ => Some(kind),
+        }
     }
 
     /// `decision` for `action`, tightened by `taint`: after secret material,

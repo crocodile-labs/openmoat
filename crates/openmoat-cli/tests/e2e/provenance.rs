@@ -63,6 +63,37 @@ fn a_script_a_tainted_session_wrote_taints_the_session_that_runs_it() {
     assert!(!reason.contains("session-taint"), "{reason}");
 }
 
+/// A browser's tab list taints no session (POLICY.md §4.1), so what that session
+/// writes carries no provenance; a page's text read the same way still does.
+#[test]
+fn a_file_written_after_only_a_tab_list_carries_no_taint() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let proj = sb.project();
+    for (session, tool, tainted) in [
+        ("a", "tabs_context_mcp", false),
+        ("c", "get_page_text", true),
+    ] {
+        let tool = format!("mcp__claude-in-chrome__{tool}");
+        let (verdict, reason) = decide(
+            &sb,
+            "claude-code",
+            &call(session, &proj, &tool, &json!({"tabId": 1})),
+        );
+        assert_ne!(verdict, "deny", "{tool}: {reason}");
+        let file = format!("run-{session}.sh");
+        write(&sb, &proj, session, &file, BODY);
+
+        let reader = format!("{session}-reader");
+        run(&sb, &proj, &reader, &format!("bash {file}"));
+        let (_, reason) = workflow(&sb, &proj, &reader);
+        assert_eq!(
+            reason.contains("session-taint"),
+            tainted,
+            "{tool}: {reason}"
+        );
+    }
+}
+
 #[test]
 fn a_clean_rewrite_clears_the_provenance() {
     let sb = Sandbox::installed(&[".claude"]);

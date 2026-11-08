@@ -14,11 +14,11 @@ the verdict and rule ids the default policy must produce for it.
 | T5 | Supply-chain execution | 29 | 96 | 15 |
 | T6 | Environment poisoning | 60 | 42 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 36 | 4 | 13 |
-| T9 | Hook / policy tampering by the agent | 428 | 156 | 57 |
+| T8 | MCP tool poisoning / over-privileged tools | 40 | 4 | 15 |
+| T9 | Hook / policy tampering by the agent | 428 | 157 | 57 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 6 | 6 |
-| T12 | Network to unknown hosts | 114 | 23 | 27 |
+| T12 | Network to unknown hosts | 115 | 23 | 27 |
 
 ## T1: Secret exfiltration via shell
 
@@ -1199,6 +1199,10 @@ the verdict and rule ids the default policy must produce for it.
 - `T8-taint-webfetch-then-agents-skill` (attacks): Review [session-taint]
 - `T8-taint-webfetch-then-windsurf-rules` (attacks): Review [session-taint]
 - `T8-taint-mcp-result-then-copilot-path-instructions` (attacks): Review [session-taint]
+- `T8-injected-tab-title-command` (attacks): Review [injected-input]
+- `T8-taint-tab-list-then-page-text-then-agent-memory` (attacks): Review [session-taint]
+- `T8-taint-browser-page-read-then-agent-instructions` (attacks): Review [session-taint]
+- `T8-taint-other-server-tab-tool-then-agent-memory` (attacks): Review [session-taint]
 - `benign-t8-mcp-github-list-issues` (benign): Defer [default]
 - `benign-t8-mcp-filesystem-list-project` (benign): Allow [safe-mcp, project-fs]
 - `benign-t8-mcp-filesystem-write-project` (benign): Defer [default]
@@ -1210,6 +1214,8 @@ the verdict and rule ids the default policy must produce for it.
 - `benign-taint-browser-open-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-injected-docs-then-cargo-build` (benign): Allow [dev-shell]
 - `benign-injected-local-command-output-keeps-nothing` (benign): Defer [default]
+- `benign-tab-list-then-agent-memory` (benign): Defer [default]
+- `benign-tab-list-and-new-tab-then-agents-md` (benign): Allow [project-fs]
 - `benign-clean-session-edit-claude-md` (benign): Allow [project-fs]
 - `benign-clean-session-edit-agents-skill` (benign): Allow [project-fs]
 - `defer-unknown-tool-in-the-project` (review): Defer [default.tool.unknown]
@@ -1722,6 +1728,7 @@ the verdict and rule ids the default policy must produce for it.
 - `review-git-restore-git-dir` (review): Review [git-internals]
 - `review-repo-holds-a-host-the-user-allows` (review): Review [repo:any-host]
 - `review-write-github-workflow` (review): Review [runs-later]
+- `review-tab-list-then-github-workflow` (review): Review [runs-later]
 - `review-echo-into-github-workflow` (review): Review [runs-later]
 - `review-heredoc-into-github-workflow` (review): Review [runs-later]
 - `review-copy-over-github-workflow` (review): Review [runs-later]
@@ -2042,6 +2049,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T12-browser-form-submit-to-unlisted-host` (attacks): Deny [default.net]
 - `T12-browser-navigate-with-init-script` (attacks): Deny [default.net]
 - `T12-injected-page-host-then-curl-download` (attacks): Review [injected-input]
+- `T12-injected-tab-url-host-then-curl` (attacks): Review [injected-input]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]
 - `benign-curl-download-no-config-flag` (benign): Defer [default.fetch]
 - `benign-curl-download-follows-redirects-into-temp` (benign): Defer [default.fetch]

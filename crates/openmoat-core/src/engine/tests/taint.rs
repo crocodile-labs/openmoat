@@ -131,6 +131,75 @@ fn untrusted_content_makes_protected_writes_need_review() {
     }
 }
 
+const TABS: &str = "mcp__claude-in-chrome__tabs_context_mcp";
+
+/// A browser's tab list is its own metadata: it does not taint the session,
+/// while every page-content tool of the same server, and every other server's
+/// tools, still do (ADR-057 amendment of 2026-11-07).
+#[test]
+fn a_tab_list_taints_nothing_and_page_content_still_does() {
+    let memory = write("/p/.claude/projects/p/memory/x.md");
+    for path in [
+        "/p/.github/workflows/ci.yml",
+        "/p/AGENTS.md",
+        "/p/CLAUDE.md",
+    ] {
+        let d = decide_after(&[Action::mcp(TABS)], &write(path));
+        assert!(!d.rules.iter().any(|r| r == TAINT_RULE), "{path}: {d:?}");
+    }
+    let p = policy(POLICY);
+    let c = CompiledPolicy::compile(&p, &ctx()).unwrap();
+    let tabs = [
+        "tabs_context_mcp",
+        "tabs_create_mcp",
+        "tabs_close_mcp",
+        "list_connected_browsers",
+        "select_browser",
+        "switch_browser",
+        "resize_window",
+        "shortcuts_list",
+    ]
+    .map(|tool| Action::mcp(format!("mcp__claude-in-chrome__{tool}")));
+    assert_eq!(taint_of(&c, &tabs), Taint::default());
+    assert_eq!(c.untrusted_read(&tabs[0], "/p", &NoResolver), None);
+    for source in [
+        "mcp__claude-in-chrome__get_page_text",
+        "mcp__claude-in-chrome__read_page",
+        "mcp__claude-in-chrome__javascript_tool",
+        "mcp__claude-in-chrome__computer",
+        "mcp__tabs__tabs_context_mcp",
+        "mcp__github__get_issue",
+    ] {
+        let history = [Action::mcp(TABS), Action::mcp(source)];
+        let d = decide_after(&history, &memory);
+        assert_eq!(d.verdict, Verdict::Review, "{source}");
+        assert_eq!(d.rules, ["session-taint"], "{source}");
+        assert!(d.reasons[0].contains(source), "{d:?}");
+        let (kind, _) = c.untrusted_read(&history[1], "/p", &NoResolver).unwrap();
+        assert_eq!(kind, UntrustedKind::Mcp, "{source}");
+    }
+}
+
+#[test]
+fn a_policy_adds_metadata_tools_and_keeps_the_built_in_ones() {
+    let lister = Action::mcp("mcp__tabs__list_tabs");
+    let workflow = write("/p/.github/workflows/ci.yml");
+    assert_eq!(
+        decide_after(std::slice::from_ref(&lister), &workflow).verdict,
+        Verdict::Review
+    );
+    let p = policy(&format!(
+        "{POLICY}taint:\n  metadata_tools: [mcp__tabs__list_tabs]\n"
+    ));
+    let c = CompiledPolicy::compile(&p, &ctx()).unwrap();
+    assert_eq!(taint_of(&c, &[lister, Action::mcp(TABS)]), Taint::default());
+    assert!(
+        taint_of(&c, &[Action::mcp("mcp__tabs__read_tab")])
+            .untrusted
+            .is_some()
+    );
+}
+
 /// The build and test definitions of every ecosystem the default policy runs.
 #[test]
 fn untrusted_content_makes_build_definitions_of_every_ecosystem_need_review() {

@@ -1,12 +1,34 @@
 //! The policy's `taint:` section (ADR-020, docs/POLICY.md §4.1): what session
-//! taint protects beyond the built-in list, and whether file provenance
-//! (ADR-029) is on. The engine applies the list in `engine/taint.rs`; the CLI
-//! keeps provenance in the audit log.
+//! taint protects beyond the built-in list, which MCP tools return metadata
+//! rather than content, and whether file provenance (ADR-029) is on. The
+//! engine applies the lists in `engine/taint.rs`; the CLI keeps provenance in
+//! the audit log.
 
 use serde::{Deserialize, Serialize};
 
 use crate::pattern::GlobPattern;
 use crate::policy::PolicyError;
+
+/// MCP tools whose result is the browser's own bookkeeping, not the content of
+/// a page: Claude in Chrome's tab, window, browser and shortcut lists (tab ids,
+/// titles, URLs). Their results do not taint the session (ADR-057 amendment of
+/// 2026-11-07), and are still read for injected input: a host, path or command
+/// in a tab's title or URL is kept with the tool as its source. Every tool that
+/// returns what a page says (`get_page_text`, `read_page`, `find`, `navigate`,
+/// `javascript_tool`, the console and network logs, screenshots) is not listed.
+const METADATA_TOOLS: [&str; 8] = [
+    "mcp__claude-in-chrome__list_connected_browsers",
+    "mcp__claude-in-chrome__resize_window",
+    "mcp__claude-in-chrome__select_browser",
+    "mcp__claude-in-chrome__shortcuts_list",
+    "mcp__claude-in-chrome__switch_browser",
+    "mcp__claude-in-chrome__tabs_close_mcp",
+    "mcp__claude-in-chrome__tabs_context_mcp",
+    "mcp__claude-in-chrome__tabs_create_mcp",
+];
+
+/// How every MCP tool's name starts (`mcp__<server>__<tool>`).
+const MCP_PREFIX: &str = "mcp__";
 
 /// Files whose change runs code or steers the agent later, beyond the edit
 /// itself: CI, git hooks, editor tasks, the build and test definitions of every
@@ -233,6 +255,12 @@ pub struct TaintSettings {
     /// exclusions, for the same reason.
     #[serde(default)]
     pub protected_writes: Vec<String>,
+    /// MCP tools, by full name (`mcp__<server>__<tool>`), whose result is the
+    /// server's own metadata rather than content an attacker writes, in
+    /// addition to the built-in list: their results do not taint the session,
+    /// and their output still feeds injected input (ADR-057).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metadata_tools: Vec<String>,
     /// File provenance (ADR-029): a file a session wrote after reading
     /// untrusted content taints the sessions that later read or run it.
     /// Absent means on; `false` turns it off.
@@ -258,9 +286,22 @@ pub(crate) fn protected_writes(settings: Option<&TaintSettings>) -> impl Iterato
     )
 }
 
+/// Whether the MCP tool `name` returns metadata (the built-in list and the
+/// ones `settings` adds), whose result does not taint the session.
+pub(crate) fn is_metadata_tool(settings: Option<&TaintSettings>, name: &str) -> bool {
+    METADATA_TOOLS.contains(&name)
+        || settings.is_some_and(|s| s.metadata_tools.iter().any(|tool| tool == name))
+}
+
 /// Each added path is a glob that compiles and is not an exclusion, which
-/// would take a built-in path out of protection.
+/// would take a built-in path out of protection; each added metadata tool is
+/// one MCP tool's full name.
 pub(crate) fn check(settings: Option<&TaintSettings>) -> Result<(), PolicyError> {
+    check_protected_writes(settings)?;
+    check_metadata_tools(settings)
+}
+
+fn check_protected_writes(settings: Option<&TaintSettings>) -> Result<(), PolicyError> {
     let problem = |problem: String| PolicyError::Rule {
         rule: "taint.protected_writes".to_owned(),
         problem,
@@ -274,6 +315,37 @@ pub(crate) fn check(settings: Option<&TaintSettings>) -> Result<(), PolicyError>
         GlobPattern::compile(p, false).map_err(|e| problem(e.to_string()))?;
     }
     Ok(())
+}
+
+/// Names are compared exactly, so a glob would match no tool: each entry is
+/// one full `mcp__<server>__<tool>` name.
+fn check_metadata_tools(settings: Option<&TaintSettings>) -> Result<(), PolicyError> {
+    let Some(bad) = settings
+        .iter()
+        .flat_map(|s| &s.metadata_tools)
+        .find(|name| !is_tool_name(name))
+    else {
+        return Ok(());
+    };
+    Err(PolicyError::Rule {
+        rule: "taint.metadata_tools".to_owned(),
+        problem: format!(
+            "`{bad}` is not one MCP tool's full name (`mcp__<server>__<tool>`, no wildcards)"
+        ),
+    })
+}
+
+/// Whether `name` is `mcp__<server>__<tool>` with both parts present and no
+/// space or glob character.
+fn is_tool_name(name: &str) -> bool {
+    let plain = !name
+        .chars()
+        .any(|c| c.is_whitespace() || matches!(c, '*' | '?' | '[' | ']' | '{' | '}' | '!'));
+    plain
+        && name
+            .strip_prefix(MCP_PREFIX)
+            .and_then(|rest| rest.split_once("__"))
+            .is_some_and(|(server, tool)| !server.is_empty() && !tool.is_empty())
 }
 
 #[cfg(test)]
@@ -301,6 +373,61 @@ mod tests {
             );
         }
         assert!(Policy::parse("version: 1\ntaint: { bogus: [] }\n").is_err());
+    }
+
+    #[test]
+    fn metadata_tools_are_full_mcp_tool_names() {
+        let yaml = |list: &str| format!("version: 1\ntaint:\n  metadata_tools: [{list}]\n");
+        let ok = Policy::parse(&yaml("mcp__tabs__list_tabs")).unwrap();
+        let settings = ok.taint.as_ref();
+        assert!(super::is_metadata_tool(settings, "mcp__tabs__list_tabs"));
+        assert!(super::is_metadata_tool(
+            settings,
+            "mcp__claude-in-chrome__tabs_context_mcp"
+        ));
+        assert!(!super::is_metadata_tool(settings, "mcp__tabs__read_tab"));
+        assert!(!super::is_metadata_tool(
+            None,
+            "mcp__claude-in-chrome__get_page_text"
+        ));
+        for bad in [
+            "'mcp__tabs__*'",
+            "list_tabs",
+            "'mcp__tabs__'",
+            "'mcp____x'",
+            "''",
+        ] {
+            assert!(
+                matches!(Policy::parse(&yaml(bad)), Err(PolicyError::Rule { rule, .. }) if rule == "taint.metadata_tools"),
+                "{bad} must be rejected"
+            );
+        }
+    }
+
+    /// The built-in list names only tools that list tabs, windows, browsers or
+    /// shortcuts: none of Claude in Chrome's page-content tools.
+    #[test]
+    fn built_in_metadata_tools_leave_page_content_tools_out() {
+        for tool in [
+            "get_page_text",
+            "read_page",
+            "find",
+            "navigate",
+            "javascript_tool",
+            "read_console_messages",
+            "read_network_requests",
+            "computer",
+            "gif_creator",
+            "upload_image",
+            "form_input",
+            "file_upload",
+            "shortcuts_execute",
+            "browser_batch",
+        ] {
+            let name = format!("mcp__claude-in-chrome__{tool}");
+            assert!(!super::is_metadata_tool(None, &name), "{name}");
+        }
+        assert!(super::METADATA_TOOLS.iter().all(|t| super::is_tool_name(t)));
     }
 
     #[test]

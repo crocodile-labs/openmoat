@@ -164,3 +164,36 @@ load, Windsurf's `.windsurfrules` and `.windsurf/rules/`, and GitHub Copilot's p
   made before the content was read: the person approved that exact command.
 - **Losing the fingerprints.** Replacing `proxy.key` forgets the session's fingerprints.
   Deleting it does the same, until the next session start makes a new key.
+
+## Amendment 2026-11-07: a browser's tab list is metadata
+
+A week of one maintainer's audit log held 339 reviews; 193 were `session-taint`, all
+from one session. 182 of those came after Claude in Chrome's `tabs_context_mcp`, which
+returns the open tabs' ids, titles and URLs. As an MCP result it counted as untrusted
+content, so every later write to the agent's memory files, instruction files and CI
+needed review for the rest of the session. 16 more came from provenance (ADR-029): a
+memory file that session wrote tainted the sessions that read it.
+
+The decision above stands. Session taint now leaves out the results of **metadata
+tools**, which return the browser's own bookkeeping rather than what a page says:
+
+- **Built in** (`crates/openmoat-core/src/taint.rs`): Claude in Chrome's
+  `tabs_context_mcp`, `tabs_create_mcp`, `tabs_close_mcp`, `list_connected_browsers`,
+  `select_browser`, `switch_browser`, `resize_window` and `shortcuts_list`.
+- **Added by a policy**: `taint.metadata_tools`, by full tool name, for other servers'
+  metadata tools. It only adds. Names are compared exactly, and `openmoat policy lint` warns
+  while the list names a tool.
+- **Still read for injected input.** A page sets its own title and URL, so a metadata
+  tool's output is still untrusted output here (`output_source`). A host, path or command
+  in a tab's title or URL is kept with the tool as its source, and a later shell command
+  or write using it needs review (`injected-input`).
+- **Unchanged.** Every page-content tool (`get_page_text`, `read_page`, `find`,
+  `navigate`, `javascript_tool`, the console and network logs, screenshots, `form_input`,
+  `file_upload`, `upload_image`, `gif_creator`) and every tool of every other server still
+  taints the session. No call that was allowed becomes a review or a deny.
+
+The cost: a prompt injection written into a page's title, which a tab list shows, no
+longer makes later writes to protected files need review. Only a session whose sole
+untrusted read was a tab list is affected. Its hosts, paths and commands are still
+linked. A title is short and reaches the agent only through that list. Reading the page
+itself taints the session as before.
