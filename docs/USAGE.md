@@ -770,6 +770,13 @@ Through the gateway:
   and its calls are refused (error -32602, rule `mcp-tool-held`), the first time the server
   starts too (ADR-032). When the server says its tools changed, the gateway reads them
   again itself, so a changed tool is held even if the agent keeps its old list.
+- **What you accept is what the model reads.** `openmoat mcp accept` shows each character
+  a terminal does not draw as `?`: control characters, zero-width, bidirectional and other
+  format characters, the soft hyphen, invisible operators, tag characters (U+E0000 to
+  U+E007F, which spell text no terminal shows) and variation selectors. Under a definition
+  that holds any, it says how many, so a description that looks harmless in the terminal
+  cannot hide text for the model. Such a tool is held even under
+  `mcp: { trust_first_sight: true }`.
 - **A call passes only when the hook decided exactly that call.** The gateway matches each
   tool call to the hook's decision for the same tool and arguments, made within the hour,
   and uses each decision once. A call the hook never saw, or one whose arguments changed

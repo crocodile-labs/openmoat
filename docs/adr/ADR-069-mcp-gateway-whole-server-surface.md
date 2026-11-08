@@ -1,0 +1,32 @@
+# ADR-069: The MCP gateway checks everything a server says to the model
+
+Status: accepted · Date: 2026-11-08 · Amends ADR-026, ADR-032, ADR-045, ADR-057 and ADR-058
+
+## Context
+
+ADR-026 and ADR-032 pin each tool's definition and hold a change until a person accepts
+it; ADR-045 has the gateway pass on only what it checked; ADR-057 and ADR-058 keep what a
+tool's result names for the session that called it. A review of the gateway found
+channels those decisions did not reach, each a way for a server to put text in front of
+the model, or to have it counted for the wrong session, that a person never reviewed:
+
+- the review a person reads in `openmoat mcp accept` showed some invisible characters
+  as `?` but not all of them: tag characters (U+E0000 to U+E007F) spell ASCII text no
+  terminal draws, so a description could look harmless and still carry instructions.
+
+## Decision
+
+1. **What a person accepts is what the model reads.** The cleaner every review goes
+   through (`render::clean`) shows as `?` every format character (Unicode General
+   Category Cf: the bidirectional controls, the zero-width characters, the soft hyphen,
+   the invisible operators U+2061 to U+2064, the deprecated format characters U+206A to
+   U+206F, the tag characters), the variation selectors (U+180B to U+180F, U+FE00 to
+   U+FE0F, U+E0100 to U+E01EF), the combining grapheme joiner and the blank Hangul
+   fillers, as well as the control characters it already did. Under a definition that
+   holds any, `openmoat mcp accept` says how many. A tool whose definition holds one is
+   never pinned on first sight under `mcp.trust_first_sight`: a person reviews it.
+
+## Consequences
+
+- An emoji's variation selector or zero-width joiner shows as `?` in reviews and logs;
+  OpenMoat's own output uses none.

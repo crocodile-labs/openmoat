@@ -392,22 +392,58 @@ fn unsafe_to_show(c: char) -> bool {
     c.is_control() || hidden(c)
 }
 
-/// Characters that are not drawn but change how the text around them is shown:
-/// bidirectional marks, embeddings, overrides and isolates (U+061C, U+200E,
-/// U+200F, U+202A to U+202E, U+2066 to U+2069), zero-width characters (U+200B
-/// to U+200D, U+2060, U+FEFF) and the Unicode line and paragraph separators
-/// (U+2028, U+2029).
+/// How many characters of `text` a terminal does not draw as they are read:
+/// those [`clean`] shows as `?`, except line breaks and tabs. A model reads
+/// each of them; a person reading the text in a terminal sees nothing there,
+/// so `openmoat mcp accept` says how many a definition holds.
+pub fn invisible_count(text: &str) -> usize {
+    text.chars()
+        .filter(|&c| unsafe_to_show(c) && !matches!(c, '\n' | '\t'))
+        .count()
+}
+
+/// Characters that are not drawn, or not as what they are, but that a model
+/// reads: every format character (Unicode General Category Cf), among them the
+/// bidirectional marks, embeddings, overrides and isolates, the zero-width
+/// characters, the invisible operators (U+2061 to U+2064), the soft hyphen
+/// (U+00AD) and the tag characters (U+E0000 to U+E007F), which spell ASCII
+/// text no terminal shows; the variation selectors (U+180B to U+180F, U+FE00
+/// to U+FE0F, U+E0100 to U+E01EF), which can carry bytes; the blank Hangul
+/// fillers and the combining grapheme joiner; and the Unicode line and
+/// paragraph separators (U+2028, U+2029).
+///
+/// An emoji's U+FE0F and U+200D show as `?` too: the cost of a check a server's
+/// text cannot get past.
 fn hidden(c: char) -> bool {
     matches!(
         c,
-        '\u{061C}'
+        '\u{00AD}'
+            | '\u{034F}'
+            | '\u{0600}'..='\u{0605}'
+            | '\u{061C}'
+            | '\u{06DD}'
+            | '\u{070F}'
+            | '\u{0890}'..='\u{0891}'
+            | '\u{08E2}'
+            | '\u{115F}'..='\u{1160}'
+            | '\u{17B4}'..='\u{17B5}'
+            | '\u{180B}'..='\u{180F}'
             | '\u{200B}'..='\u{200F}'
-            | '\u{202A}'..='\u{202E}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{2060}'
-            | '\u{2066}'..='\u{2069}'
+            | '\u{2028}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{3164}'
+            | '\u{FE00}'..='\u{FE0F}'
             | '\u{FEFF}'
+            | '\u{FFA0}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{110BD}'
+            | '\u{110CD}'
+            | '\u{13430}'..='\u{1343F}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E007F}'
+            | '\u{E0100}'..='\u{E01EF}'
     )
 }
 
@@ -451,6 +487,18 @@ mod tests {
             "make ?yolped? ?x????"
         );
         assert!(matches!(clean("café ✔ 日本"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn tag_characters_variation_selectors_and_format_characters_become_question_marks() {
+        // "Ignore" spelled in tag characters, then a variation selector, a soft
+        // hyphen, an invisible operator and an inhibit-swapping mark.
+        let tagged =
+            "read files\u{E0049}\u{E0067}\u{E006E}\u{FE0F}\u{E0100}\u{AD}\u{2062}\u{206A}.";
+        assert_eq!(clean(tagged), "read files????????.");
+        assert_eq!(invisible_count(tagged), 8);
+        assert_eq!(invisible_count("two\nlines\tand a tab"), 0);
+        assert_eq!(invisible_count("bell\x07"), 1);
     }
 
     #[test]

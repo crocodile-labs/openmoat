@@ -207,8 +207,14 @@ impl ToolPins {
         let listed: Vec<(String, ToolPin)> = tools.iter().filter_map(ToolPin::of).collect();
         if first {
             // Each name's first entry; another entry of that name that differs
-            // is held below like any change.
-            for (name, pin) in &listed {
+            // is held below like any change. An entry with text a terminal
+            // does not show is never trusted on sight: a person reviews it.
+            let shown: Vec<(String, ToolPin)> = tools
+                .iter()
+                .filter(|tool| !has_invisible(tool))
+                .filter_map(ToolPin::of)
+                .collect();
+            for (name, pin) in &shown {
                 if !self.tools.contains_key(name) {
                     self.tools.insert(name.clone(), pin.clone());
                     listing.changed = true;
@@ -351,9 +357,38 @@ fn describe(server: &str, name: &str, old: Option<&ToolPin>, new: &ToolPin, agai
         Some((labels.0.as_str(), labels.1.as_str())),
     );
     let _ = write!(text, "{diff}");
+    let invisible = crate::render::invisible_count(name) + crate::render::invisible_count(&after);
+    if invisible > 0 {
+        let _ = writeln!(text, "{}", invisible_warning(invisible));
+    }
     // The server wrote every name and text here: an escape sequence in one
     // could redraw the diff the person reads before answering.
     crate::render::clean_lines(&text)
+}
+
+/// The line `openmoat mcp accept` adds under a definition that holds
+/// `count` characters a terminal does not show (tag characters, variation
+/// selectors, zero-width and other format characters): each is a `?` in the
+/// review, and the model reads what they spell.
+pub fn invisible_warning(count: usize) -> String {
+    format!(
+        "! the listed definition contains {count} invisible character(s), each shown as `?` \
+         above: the model reads them, a terminal does not show them; accept it only if you know \
+         why they are there"
+    )
+}
+
+/// Whether any string or key of `value` holds a character a terminal does not
+/// show ([`crate::render::invisible_count`]).
+pub fn has_invisible(value: &Value) -> bool {
+    match value {
+        Value::String(text) => crate::render::invisible_count(text) > 0,
+        Value::Array(items) => items.iter().any(has_invisible),
+        Value::Object(fields) => fields
+            .iter()
+            .any(|(key, value)| crate::render::invisible_count(key) > 0 || has_invisible(value)),
+        Value::Null | Value::Bool(_) | Value::Number(_) => false,
+    }
 }
 
 /// The file of server `name`'s pins: its name with every character but
