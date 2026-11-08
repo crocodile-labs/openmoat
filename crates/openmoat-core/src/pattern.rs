@@ -127,7 +127,10 @@ impl GlobPattern {
 
     /// True when every candidate `other` matches is also matched by `self`.
     /// Negated patterns never cover. Conservative: a glob `other` is covered
-    /// only by the same glob or by `self` = `prefix/**` with `other` under `prefix/`.
+    /// only by the same glob or by `self` = `dir/**` with `other` being `dir`
+    /// or under `dir/` (`**/.vscode/**` covers `**/.vscode/tasks.json`). A `*`
+    /// or `?` in `dir` is fine: the text after `dir/` only narrows what `dir`
+    /// matched. A class, an alternation or an escape there is not compared.
     #[must_use]
     pub fn covers(&self, other: &Self) -> bool {
         if self.negated || other.negated {
@@ -138,8 +141,11 @@ impl GlobPattern {
             return self.is_match(theirs);
         }
         mine == theirs
-            || mine.strip_suffix("**").is_some_and(|prefix| {
-                prefix.ends_with('/') && !has_glob_syntax(prefix) && theirs.starts_with(prefix)
+            || mine.strip_suffix("/**").is_some_and(|dir| {
+                !dir.is_empty()
+                    && !dir.contains(['[', ']', '{', '}', '\\'])
+                    && (theirs == dir
+                        || theirs.strip_prefix(dir).is_some_and(|r| r.starts_with('/')))
             })
     }
 }
@@ -395,6 +401,14 @@ mod tests {
         assert!(!g("/p/*").covers(&g("/p/**")));
         assert!(!g("/p/**").covers(&g("!/p/x")));
         assert!(!g("/p/a/**").covers(&g("/p/**")));
+        // a folder at any depth covers what lies in it, and the folder itself
+        assert!(g("**/.vscode/**").covers(&g("**/.vscode/tasks.json")));
+        assert!(g("**/.vscode/**").covers(&g("**/.vscode")));
+        assert!(g("/p/**/.git/**").covers(&g("/p/**/.git/hooks/*")));
+        assert!(!g("**/.vscode/**").covers(&g("**/.vscode*/x")));
+        assert!(!g("**/.vscode/**").covers(&g("**/.vscodex/tasks.json")));
+        assert!(!g("**/.vscode/tasks.json").covers(&g("**/.vscode/**")));
+        assert!(!g("**/{a,b}/**").covers(&g("**/{a,b}/x")));
     }
 
     #[test]

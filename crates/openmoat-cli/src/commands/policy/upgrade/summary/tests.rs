@@ -89,6 +89,8 @@ fn each_change_is_grouped_by_what_it_does() {
             fewer: vec!["`dev-readonly` now also allows `git config user.name`".to_owned()],
             renamed: true,
             wording: 1,
+            folded: 0,
+            dir_grants: Vec::new(),
             other: Vec::new(),
             unexplained: 0,
         }
@@ -227,6 +229,98 @@ fn the_0_3_0_default_upgraded_to_this_release() {
     assert!(
         summary.fewer.iter().any(|l| l.contains("web.search")) || shown.contains("defaults"),
         "the 0.4.0 `web.search: allow` default is named: {shown}"
+    );
+}
+
+/// The 0.16.0 default's lines that 0.17.0 replaced: `runs-later` and
+/// `project-fs` named `.vscode/tasks.json` alone, where 0.17.0 names all of `.vscode/`.
+const V0_16_RUNS_LATER: (&str, &str) = (
+    "      \"**/.vscode/**\", \"**/.vscode\", \"**/*.code-workspace\", ",
+    "      \"**/.vscode/tasks.json\", ",
+);
+const V0_16_PROJECT_FS: (&str, &str) = (
+    "      \"!${project}/**/.vscode/**\", \"!${project}/**/.vscode\", \"!${project}/**/*.code-workspace\",\n",
+    "      \"!${project}/**/.vscode/tasks.json\",\n",
+);
+
+/// 0.16.0 → 0.17.0 as the maintainer met it: `.vscode/tasks.json` went into
+/// `.vscode/**`, so it still needs review; nothing interrupts less.
+#[test]
+fn a_pattern_folded_into_a_broader_one_is_not_fewer_interruptions() {
+    let after = openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
+    let before =
+        [V0_16_RUNS_LATER, V0_16_PROJECT_FS]
+            .iter()
+            .fold(after.clone(), |text, (now, then)| {
+                assert!(
+                    text.contains(now),
+                    "the 0.17.0 line is in the default: {now}"
+                );
+                text.replacen(now, then, 1)
+            });
+    let summary = summarise(&before, &after, &[], false);
+    assert!(summary.fewer.is_empty(), "{summary:?}");
+    assert_eq!(summary.folded, 2, "{summary:?}");
+    assert!(
+        summary
+            .protections
+            .iter()
+            .any(|l| l.starts_with("`runs-later` now also holds") && l.contains("`**/.vscode/**`")),
+        "{summary:?}"
+    );
+    assert!(
+        summary
+            .protections
+            .iter()
+            .any(|l| l.starts_with("`project-fs` no longer allows")),
+        "{summary:?}"
+    );
+    let mut shown = Vec::new();
+    summary.write(&mut shown).unwrap();
+    let shown = String::from_utf8(shown).unwrap();
+    assert!(!shown.contains("Fewer interruptions"), "{shown}");
+    assert!(
+        shown.contains("  + 2 narrow patterns now matched by a broader one\n"),
+        "{shown}"
+    );
+}
+
+/// A pattern taken out with nothing as broad left still interrupts less, in a
+/// review group and as an exclusion of an allow group alike.
+#[test]
+fn a_removal_nothing_covers_is_still_fewer_interruptions() {
+    let narrowed = BEFORE.replace(
+        "    fs.write: [\"${project}/.git/hooks/**\"]",
+        "    fs.write: [\"${project}/.git/hooks/pre-commit\"]",
+    );
+    let summary = summarise(BEFORE, &narrowed, &[], false);
+    assert_eq!(
+        summary.fewer,
+        ["`runs-later` no longer holds for review `${project}/.git/hooks/**`"],
+        "{summary:?}"
+    );
+    assert_eq!(summary.folded, 0, "{summary:?}");
+
+    // `!` exclusions of `project-fs`: one folded into a broader one, one dropped
+    let wider = AFTER.replace(
+        "[\"${project}/**\", \"!${project}/**/.git/**\"]",
+        "[\"${project}/**\", \"!${project}/**/.git/**\", \"!${project}/**/.vscode/tasks.json\", \"!${project}/.env\"]",
+    );
+    let broader = AFTER.replace(
+        "[\"${project}/**\", \"!${project}/**/.git/**\"]",
+        "[\"${project}/**\", \"!${project}/**/.git/**\", \"!${project}/**/.vscode/**\"]",
+    );
+    let summary = summarise(&wider, &broader, &[], false);
+    assert_eq!(summary.folded, 1, "{summary:?}");
+    assert_eq!(
+        summary.fewer,
+        ["`project-fs` now also allows `${project}/.env`"],
+        "{summary:?}"
+    );
+    assert_eq!(
+        summary.protections,
+        ["`project-fs` no longer allows `${project}/**/.vscode/**`"],
+        "{summary:?}"
     );
 }
 

@@ -5,20 +5,23 @@
 //! - `approvals.json`: session grants, an exact command or exact files for one host
 //!   session, valid for [`GRANT_TTL_MS`] after they are written; a command only in
 //!   the project it was approved in;
-//! - `policy.d/approved.yaml`: permanent allow rules appended by `moat allow --always`,
-//!   `--site` and `--dir`, merged into the user policy at load time so `policy.yaml` is never rewritten.
+//! - `policy.d/approved.yaml`: permanent allow rules appended by `moat allow --always`
+//!   and `--site`, and the directories `--dir` allowed (`dirs.rs`), merged into the
+//!   user policy at load time so `policy.yaml` is never rewritten.
 
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_core::{Action, RuleGroup};
+use openmoat_core::{Action, Policy, RuleGroup};
 use serde::{Deserialize, Serialize};
 
 use crate::home::{Home, write_private};
 use crate::time;
 
+mod dirs;
 mod reviewed;
+pub use dirs::{DirGrant, Places};
 pub use reviewed::{approvable, describe, files};
 
 /// Version 2 grants an [`Action`]; version 1 granted only a `command` string.
@@ -302,12 +305,18 @@ impl Scope<'_> {
     }
 }
 
-/// Allow rules appended by `moat allow --always`, `--site` and `--dir`.
+/// Allow rules appended by `moat allow --always` and `--site`, and the
+/// directories `--dir` allowed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Overlay {
     pub version: u32,
     #[serde(default)]
     pub allow: Vec<RuleGroup>,
+    /// Directories allowed with `--dir`, as chosen; the rule each is comes from
+    /// the policy it is merged into ([`DirGrant::rule`]). A release that does not
+    /// know the field reads the file without them, allowing less.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dirs: Vec<DirGrant>,
 }
 
 impl Default for Overlay {
@@ -315,6 +324,25 @@ impl Default for Overlay {
         Self {
             version: OVERLAY_VERSION,
             allow: Vec::new(),
+            dirs: Vec::new(),
+        }
+    }
+}
+
+/// One entry of the overlay, as `openmoat allow` shows what it added or removed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum Entry {
+    Rule(RuleGroup),
+    Dir(DirGrant),
+}
+
+impl Entry {
+    /// `approved-<n>`, as decisions and `openmoat allow --remove` name it.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Rule(rule) => &rule.id,
+            Self::Dir(grant) => &grant.id,
         }
     }
 }
@@ -346,13 +374,19 @@ impl Overlay {
                 overlay.version
             );
         }
+        if let Some(bad) = overlay.ids().find(|id| !id.starts_with(OVERLAY_PREFIX)) {
+            bail!(
+                "{}: rule `{bad}` must have an id starting with `{OVERLAY_PREFIX}`",
+                path.display()
+            );
+        }
         if let Some(bad) = overlay
-            .allow
+            .dirs
             .iter()
-            .find(|g| !g.id.starts_with(OVERLAY_PREFIX))
+            .find(|g| g.dir.is_empty() || !g.dir.iter().all(|d| dirs::plain_dir(d)))
         {
             bail!(
-                "{}: rule `{}` must have an id starting with `{OVERLAY_PREFIX}`",
+                "{}: `{}` must name a directory, without glob characters",
                 path.display(),
                 bad.id
             );
@@ -361,12 +395,56 @@ impl Overlay {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        let text = format!(
+        write_private(path, self.text()?.as_bytes())
+    }
+
+    /// The file as [`Overlay::save`] writes it.
+    pub fn text(&self) -> Result<String> {
+        Ok(format!(
             "# Permanent allow rules added with `openmoat allow`. Remove one with\n\
              # `openmoat allow --remove <id>`, or edit freely, then run `openmoat doctor --accept`.\n{}",
             openmoat_core::yaml::to_string(self)?
-        );
-        write_private(path, text.as_bytes())
+        ))
+    }
+
+    /// The id of every rule and directory grant.
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        let rules = self.allow.iter().map(|g| g.id.as_str());
+        rules.chain(self.dirs.iter().map(|g| g.id.as_str()))
+    }
+
+    /// The allow rule each directory grant is under `policy` ([`DirGrant::rule`]),
+    /// with `home`'s places; none without grants, and then nothing is looked up.
+    pub fn dir_rules(&self, policy: &Policy, home: &Home) -> Result<Vec<RuleGroup>> {
+        if self.dirs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let places = Places::here(home)?;
+        Ok(self.dirs.iter().map(|g| g.rule(policy, &places)).collect())
+    }
+
+    /// The rules an earlier release's `--dir` wrote ([`dirs::is_old_rule`]),
+    /// which leave out only the protections of their day.
+    pub fn old_dir_rules(&self) -> impl Iterator<Item = &RuleGroup> {
+        self.allow.iter().filter(|g| dirs::is_old_rule(g))
+    }
+
+    /// Turn each of [`Overlay::old_dir_rules`] into the directory grant it stands
+    /// for under `policy` ([`DirGrant::from_rule`]), keeping its id; the grants
+    /// made, in order. Never allows more: what such a rule left out that
+    /// `policy` no longer names stays left out ([`DirGrant::except`]).
+    pub fn migrate_dirs(&mut self, policy: &Policy, places: &Places) -> Vec<DirGrant> {
+        let mut made = Vec::new();
+        self.allow
+            .retain(|rule| match DirGrant::from_rule(rule, policy, places) {
+                Some(grant) => {
+                    made.push(grant);
+                    false
+                }
+                None => true,
+            });
+        self.dirs.extend(made.iter().cloned());
+        made
     }
 
     /// Append an allow rule for one shell command, matched literally: glob
@@ -440,63 +518,61 @@ impl Overlay {
         Ok(self.push("openmoat allow --site", |g| g.net = vec![host]))
     }
 
-    /// Append an `fs.read` and `fs.write` allow for each spelling of a directory
-    /// and everything below it. Writes into a `.git` there are left out, as
-    /// `project-fs` leaves out the project's: git runs what its hooks and config
-    /// name later, outside any sandbox, so such a write is not allowed by this rule.
-    /// So are the files CI, a commit-hook manager or the editor runs later
-    /// ([`RUNS_LATER`](crate::sandbox::RUNS_LATER)), which `runs-later` holds for review.
-    pub fn allow_dir(&mut self, spellings: &[String]) -> &RuleGroup {
-        let patterns: Vec<String> = spellings
-            .iter()
-            .flat_map(|dir| [dir.clone(), format!("{dir}/**")])
-            .collect();
-        let git: Vec<String> = spellings
-            .iter()
-            .flat_map(|dir| {
-                [format!("!{dir}/.git/**"), format!("!{dir}/**/.git/**")]
-                    .into_iter()
-                    .chain(
-                        crate::sandbox::RUNS_LATER
-                            .iter()
-                            .map(move |f| format!("!{dir}/{f}")),
-                    )
-            })
-            .collect();
-        self.push("openmoat allow --dir", |g| {
-            g.fs_read.clone_from(&patterns);
-            g.fs_write = patterns.into_iter().chain(git).collect();
-        })
+    /// Append a grant to read and write each spelling of a directory and
+    /// everything below it ([`DirGrant`]). It stores the directory only: what
+    /// the policy holds for review there (a `.git`, the files CI, a commit hook
+    /// or the editor runs later) stays held, by the policy of the day it is
+    /// loaded with, not the policy of the day it was made.
+    pub fn allow_dir(&mut self, spellings: &[String]) -> &DirGrant {
+        let grant = DirGrant {
+            id: self.next_id(),
+            reason: Some(approved_with("openmoat allow --dir")),
+            dir: spellings.to_vec(),
+            except: Vec::new(),
+        };
+        self.dirs.push(grant);
+        &self.dirs[self.dirs.len() - 1]
     }
 
-    /// Remove the rule with this id, returning it.
-    pub fn remove(&mut self, id: &str) -> Option<RuleGroup> {
-        let index = self.allow.iter().position(|g| g.id == id)?;
-        Some(self.allow.remove(index))
+    /// Remove the rule or directory grant with this id, returning it.
+    pub fn remove(&mut self, id: &str) -> Option<Entry> {
+        if let Some(index) = self.allow.iter().position(|g| g.id == id) {
+            return Some(Entry::Rule(self.allow.remove(index)));
+        }
+        let index = self.dirs.iter().position(|g| g.id == id)?;
+        Some(Entry::Dir(self.dirs.remove(index)))
     }
 
     fn push(&mut self, how: &str, fill: impl FnOnce(&mut RuleGroup)) -> &RuleGroup {
-        // One past the highest existing number: ids stay unique after a person
-        // deletes an earlier rule, and a duplicate id would fail the policy lint.
-        let n = self
-            .allow
-            .iter()
-            .filter_map(|g| g.id.strip_prefix(OVERLAY_PREFIX)?.parse::<u64>().ok())
-            .max()
-            .unwrap_or(0)
-            + 1;
         let mut rule = RuleGroup {
-            id: format!("{OVERLAY_PREFIX}{n}"),
-            reason: Some(format!(
-                "approved with `{how}` on {}",
-                time::timestamp(time::now_ms())
-            )),
+            id: self.next_id(),
+            reason: Some(approved_with(how)),
             ..RuleGroup::default()
         };
         fill(&mut rule);
         self.allow.push(rule);
         &self.allow[self.allow.len() - 1]
     }
+
+    /// One past the highest number of any id: ids stay unique after a person
+    /// deletes an earlier entry, and a duplicate id would fail the policy lint.
+    fn next_id(&self) -> String {
+        let n = self
+            .ids()
+            .filter_map(|id| id.strip_prefix(OVERLAY_PREFIX)?.parse::<u64>().ok())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        format!("{OVERLAY_PREFIX}{n}")
+    }
+}
+
+/// The reason an entry is written with: ``approved with `openmoat allow --dir` on 2026-11-07 10:00``.
+fn approved_with(how: &str) -> String {
+    format!(
+        "approved with `{how}` on {}",
+        time::timestamp(time::now_ms())
+    )
 }
 
 #[cfg(test)]

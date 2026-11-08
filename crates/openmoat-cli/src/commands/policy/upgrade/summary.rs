@@ -1,8 +1,10 @@
 //! What `openmoat policy upgrade` changes, grouped for a person instead of the
 //! raw diff: rules that protect more, changes that interrupt less, the
-//! `ask` → `review` rename, and the count of comment and wording updates.
-//! Worked out from the policy before and after the merge, read as policies, so
-//! a line moved or reworded is never shown as a new rule. A change it cannot
+//! `ask` → `review` rename, the count of comment and wording updates and of
+//! narrow patterns folded into broader ones, and the directory grants brought
+//! up to date (`grants.rs`). Worked out from the policy before and after the
+//! merge, read as policies, so a line moved or reworded is never shown as a new
+//! rule, nor a pattern its rule still covers as a removal. A change it cannot
 //! name is counted under "Other changes", for `d` to show.
 
 use std::collections::BTreeMap;
@@ -28,6 +30,12 @@ pub(super) struct Summary {
     pub renamed: bool,
     /// Changes of comments, blank lines and rule reasons only.
     pub wording: usize,
+    /// Patterns taken out of a group that a broader pattern of the same group
+    /// still matches as a whole, so nothing is decided differently.
+    pub folded: usize,
+    /// Directory grants `openmoat policy upgrade` brings up to date
+    /// ([`crate::approvals::DirGrant`]), one line each.
+    pub dir_grants: Vec<String>,
     /// Other changes, named: a section of the policy that changed.
     pub other: Vec<String>,
     /// Changes of the text that none of the above explains.
@@ -81,7 +89,10 @@ pub(super) fn summarise(
         (Ok(before), Ok(after)) => {
             summary.wording += rules(&before, &after, &mut summary);
             sections(&before, &after, &mut summary);
-            let named = summary.protections.len() + summary.fewer.len() + summary.other.len();
+            let named = summary.protections.len()
+                + summary.fewer.len()
+                + summary.other.len()
+                + summary.folded;
             if named == 0 && summary.wording == wording_only {
                 summary.unexplained = code;
             }
@@ -99,6 +110,7 @@ impl Summary {
             ("New protections", "+", &self.protections),
             ("Fewer interruptions", "−", &self.fewer),
             ("Other changes", "·", &self.other),
+            ("Directory grants", "+", &self.dir_grants),
         ];
         for (heading, mark, lines) in groups {
             if lines.is_empty() {
@@ -116,6 +128,10 @@ impl Summary {
         if self.wording > 0 {
             let updates = crate::report::count(self.wording, "comment and wording update");
             writeln!(out, "  + {updates}")?;
+        }
+        if self.folded > 0 {
+            let narrow = crate::report::count(self.folded, "narrow pattern");
+            writeln!(out, "  + {narrow} now matched by a broader one")?;
         }
         if self.unexplained > 0 {
             writeln!(out, "  Other changes: {} (d to see)", self.unexplained)?;
@@ -203,7 +219,9 @@ fn added_group(list: List, group: &RuleGroup, summary: &mut Summary) {
 
 /// The patterns `group` gained and lost, one line per direction; whether
 /// there were any. A pattern starting with `!` is an exception to the group,
-/// so adding one does the opposite of adding a plain pattern.
+/// so adding one does the opposite of adding a plain pattern. A pattern lost
+/// that one the group keeps or gains still matches as a whole is counted in
+/// [`Summary::folded`], not named: the group decides it as before.
 fn pattern_changes(
     list: List,
     id: &str,
@@ -211,12 +229,16 @@ fn pattern_changes(
     now: &RuleGroup,
     summary: &mut Summary,
 ) -> bool {
+    let folded_before = summary.folded;
     let (mut tighter, mut wider) = (Vec::new(), Vec::new());
     for kind in Kind::ALL {
         let (old, new) = (was.patterns(kind), now.patterns(kind));
         let added = new.iter().filter(|p| !old.contains(p)).map(|p| (p, true));
-        let removed = old.iter().filter(|p| !new.contains(p)).map(|p| (p, false));
-        for (pattern, added) in added.chain(removed) {
+        let removed = old.iter().filter(|p| !new.contains(p));
+        let (folded, removed): (Vec<&String>, Vec<&String>) =
+            removed.partition(|p| still_covered(kind, p, new));
+        summary.folded += folded.len();
+        for (pattern, added) in added.chain(removed.into_iter().map(|p| (p, false))) {
             let shown = pattern.strip_prefix('!');
             // A plain pattern added to a deny or review group protects more;
             // an exception, a removal or an allow group each turn that round.
@@ -245,7 +267,28 @@ fn pattern_changes(
         let line = format!("`{id}` {no_longer} {}", patterns_phrase(&wider));
         summary.fewer.push(line);
     }
-    !(tighter.is_empty() && wider.is_empty())
+    !(tighter.is_empty() && wider.is_empty()) || summary.folded > folded_before
+}
+
+/// Whether `removed`, a pattern a group of `kind` no longer lists, is still
+/// matched as a whole by one of the group's `patterns`: a plain pattern by a
+/// plain one, an exclusion by an exclusion (`**/.vscode/**` for
+/// `**/.vscode/tasks.json`). Then taking it out decides nothing differently.
+/// Conservative: when the core cannot show it ([`openmoat_core::lint::covers`]),
+/// the removal is reported as one.
+fn still_covered(kind: Kind, removed: &str, patterns: &[String]) -> bool {
+    let (negated, body) = split_exclusion(removed);
+    patterns.iter().any(|p| {
+        let (by_negated, by) = split_exclusion(p);
+        by_negated == negated && openmoat_core::lint::covers(kind, by, body)
+    })
+}
+
+/// `!pattern` → `(true, "pattern")`.
+fn split_exclusion(pattern: &str) -> (bool, &str) {
+    pattern
+        .strip_prefix('!')
+        .map_or((false, pattern), |body| (true, body))
 }
 
 fn all_patterns(group: &RuleGroup) -> Vec<&str> {

@@ -219,21 +219,14 @@ impl Home {
 
     /// `policy` with the `moat allow` rules and installed packs merged in.
     fn with_merged(&self, mut policy: Policy) -> Result<Policy> {
-        let overlay = crate::approvals::Overlay::load_in(self)?;
-        if !overlay.allow.is_empty() {
-            // The policy's own patterns were parsed with it: parse only the
-            // overlay's, and check the merge as a whole for duplicate ids.
-            overlay
-                .allow
-                .iter()
-                .try_for_each(openmoat_core::RuleGroup::check_patterns)
-                .and_then(|()| {
-                    policy.allow.extend(overlay.allow);
-                    policy.lint_structure()
-                })
-                .with_context(|| format!("merging {}", self.overlay_path().display()))?;
-        }
+        let mut overlay = crate::approvals::Overlay::load_in(self)?;
+        let merging = || format!("merging {}", self.overlay_path().display());
+        merge_allow(&mut policy, std::mem::take(&mut overlay.allow)).with_context(merging)?;
         crate::packs::merge_installed(self, &mut policy)?;
+        // A directory grant leaves out what this policy, packs included, holds
+        // for review in it (ADR-007, amendment of 2026-11-07).
+        let dirs = overlay.dir_rules(&policy, self).with_context(merging)?;
+        merge_allow(&mut policy, dirs).with_context(merging)?;
         Ok(policy)
     }
 
@@ -265,6 +258,20 @@ impl Home {
         }
         Ok(())
     }
+}
+
+/// Append `rules` from the overlay to `policy`'s allow list. The policy's own
+/// patterns were parsed with it: parse only these, and check the merge as a
+/// whole for duplicate ids.
+fn merge_allow(policy: &mut Policy, rules: Vec<openmoat_core::RuleGroup>) -> Result<()> {
+    if rules.is_empty() {
+        return Ok(());
+    }
+    rules
+        .iter()
+        .try_for_each(openmoat_core::RuleGroup::check_patterns)?;
+    policy.allow.extend(rules);
+    Ok(policy.lint_structure()?)
 }
 
 /// Write a file atomically with owner-only permissions.

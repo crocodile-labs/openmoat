@@ -39,11 +39,24 @@ fn sites_dirs_and_removal() {
         let error = o.allow_site(bad).unwrap_err().to_string();
         assert!(error.contains("in the policy"), "{bad}: {error}");
     }
-    let dir = o.allow_dir(&["/w/a".to_owned(), "/real/a".to_owned()]);
+    let dir = o
+        .allow_dir(&["/w/a".to_owned(), "/real/a".to_owned()])
+        .clone();
     assert_eq!(dir.id, "approved-2");
-    assert_eq!(dir.fs_read, ["/w/a", "/w/a/**", "/real/a", "/real/a/**"]);
+    assert_eq!(dir.dir, ["/w/a", "/real/a"]);
+    assert!(
+        dir.except.is_empty(),
+        "only what the person chose is stored"
+    );
+    let policy = Policy::parse(openmoat_core::DEFAULT_POLICY).unwrap();
+    let places = Places {
+        homes: vec!["/h".to_owned()],
+        moved: Vec::new(),
+    };
+    let rule = dir.rule(&policy, &places);
+    assert_eq!(rule.fs_read, ["/w/a", "/w/a/**", "/real/a", "/real/a/**"]);
     assert_eq!(
-        dir.fs_write[..4],
+        rule.fs_write[..4],
         ["/w/a", "/w/a/**", "/real/a", "/real/a/**"]
     );
     for left_out in [
@@ -56,13 +69,29 @@ fn sites_dirs_and_removal() {
         "!/real/a/**/.idea/**",
     ] {
         assert!(
-            dir.fs_write.iter().any(|p| p == left_out),
+            rule.fs_write.iter().any(|p| p == left_out),
             "{left_out}: `.git` and files run later are left out, as for the project"
         );
     }
-    assert_eq!(o.remove("approved-1").unwrap().net, ["docs.rs"]);
+    let site = o.remove("approved-1");
+    assert!(matches!(site, Some(Entry::Rule(r)) if r.net == ["docs.rs"]));
     assert!(o.remove("approved-1").is_none());
-    assert_eq!(o.allow.len(), 1);
+    assert!(matches!(o.remove("approved-2"), Some(Entry::Dir(g)) if g == dir));
+    assert!(o.allow.is_empty() && o.dirs.is_empty());
+}
+
+#[test]
+fn a_dir_grant_round_trips_and_a_globbed_one_is_refused() {
+    let mut o = Overlay::default();
+    o.allow_dir(&["/w/a".to_owned()]);
+    let path = Path::new("approved.yaml");
+    assert_eq!(Overlay::parse(&o.text().unwrap(), path).unwrap(), o);
+    let globbed = "version: 1\ndirs:\n  - id: approved-1\n    dir: [\"/w/*\"]\n";
+    let error = Overlay::parse(globbed, path).unwrap_err().to_string();
+    assert!(error.contains("without glob characters"), "{error}");
+    let named = "version: 1\ndirs:\n  - id: mine\n    dir: [\"/w/a\"]\n";
+    let error = Overlay::parse(named, path).unwrap_err().to_string();
+    assert!(error.contains("approved-"), "{error}");
 }
 /// 2026-10-03 00:00:00 UTC; tests pass time in, they never read the clock.
 const NOW: i64 = 1_790_985_600_000;
