@@ -41,7 +41,11 @@
 //!   (a call the relay forwarded before it read the notification reaches the
 //!   server, as it would without the relay: the hold starts at the notification);
 //! - each request it sends the host (`sampling/createMessage`,
-//!   `elicitation/create`, …) is recorded.
+//!   `elicitation/create`, …) is recorded, its text kept as untrusted content of
+//!   the session the proxy serves, and a sampling request that asks for the
+//!   session's context (`includeContext` other than `none`) is refused; the
+//!   host's answer is passed on only to a request the server sent and the host
+//!   has not answered yet (ADR-069).
 
 use std::collections::HashSet;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -66,6 +70,8 @@ const REFUSED: i64 = -32001;
 const INVALID_REQUEST: i64 = -32600;
 /// JSON-RPC "parse error".
 const PARSE_ERROR: i64 = -32700;
+/// The most requests to the host the server may leave unanswered at once.
+const MAX_ASKED: usize = 4096;
 
 /// What an MCP message asks the server to do, for the [`Gate`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,9 +103,16 @@ pub trait Gate: Send + Sync {
     /// it is refused then whatever else holds, and still recorded. `Ok(Some)`
     /// is why it is refused; an error refuses it too.
     fn check(&self, call: &Call<'_>, held: Option<&str>) -> Result<Option<String>>;
-    /// Record a request the server sent the host; an error has it answered
-    /// with an error instead of reaching the host.
-    fn server_request(&self, method: &str) -> Result<()>;
+    /// Record a request the server sent the host, with its `params`, whose
+    /// text the host puts before the model or the person (a sampling
+    /// request's messages, an elicitation's message); an error has it
+    /// answered with an error instead of reaching the host.
+    fn server_request(&self, method: &str, params: Option<&Value>) -> Result<()>;
+    /// Record that the relay refused the server's `method` request, and why.
+    fn server_refused(&self, method: &str, why: &str) -> Result<()> {
+        let _ = (method, why);
+        Ok(())
+    }
     /// The server's answer to the host's request `request` ([`id_key`]), its
     /// `result` or its `error` object, before it reaches the host: the gate
     /// keeps what a tool call it passed returned (ADR-058, ADR-057), an error's
@@ -145,6 +158,9 @@ struct State {
     /// The ids ([`id_key`]) of the host's requests the server has not
     /// answered yet.
     pending: HashSet<String>,
+    /// The ids ([`id_key`]) of the server's requests the host has not
+    /// answered yet: a host answer to any other is dropped.
+    asked: HashSet<String>,
     /// The listing the relay asked for after the server said its tools changed.
     relist: Option<server::Relist>,
     /// How many listings the relay has asked for, for their ids.
@@ -185,6 +201,7 @@ impl Relay {
                 initialize: None,
                 broken: None,
                 pending: HashSet::new(),
+                asked: HashSet::new(),
                 relist: None,
                 relists: 0,
             }),
@@ -219,6 +236,7 @@ impl Relay {
                 host::Outcome::Forward(m) => vec![Routed::Server(written(&m))],
                 host::Outcome::Reply(r) => vec![Routed::Host(written(&r))],
                 host::Outcome::Drop => Vec::new(),
+                host::Outcome::Dropped(why) => vec![Routed::Dropped(why)],
             };
         };
         if batch.is_empty() {
@@ -229,12 +247,13 @@ impl Relay {
             );
             return vec![Routed::Host(written(&reply))];
         }
-        let (mut forward, mut replies) = (Vec::new(), Vec::new());
+        let (mut forward, mut replies, mut dropped) = (Vec::new(), Vec::new(), Vec::new());
         for message in batch {
             match self.on_host(message) {
                 host::Outcome::Forward(m) => forward.push(m),
                 host::Outcome::Reply(r) => replies.push(r),
                 host::Outcome::Drop => {}
+                host::Outcome::Dropped(why) => dropped.push(Routed::Dropped(why)),
             }
         }
         let mut out = Vec::new();
@@ -244,6 +263,7 @@ impl Relay {
         if !replies.is_empty() {
             out.push(Routed::Host(written(&Value::Array(replies))));
         }
+        out.extend(dropped);
         out
     }
 

@@ -18,7 +18,7 @@ impl Gate for Results {
         Ok(None)
     }
 
-    fn server_request(&self, _: &str) -> Result<()> {
+    fn server_request(&self, _: &str, _: Option<&Value>) -> Result<()> {
         Ok(())
     }
 

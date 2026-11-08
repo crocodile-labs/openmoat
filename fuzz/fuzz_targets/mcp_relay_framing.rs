@@ -254,7 +254,7 @@ impl Gate for FuzzGate {
         Ok(self.refuse.then(|| "refused".to_owned()))
     }
 
-    fn server_request(&self, _method: &str) -> anyhow::Result<()> {
+    fn server_request(&self, _method: &str, _params: Option<&Value>) -> anyhow::Result<()> {
         Ok(())
     }
 }

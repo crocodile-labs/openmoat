@@ -43,7 +43,9 @@ impl Gateway {
         let gateway = Self { sb, record };
         // `openmoat mcp proxy` starts only a definition a person accepted
         // (ADR-049): one per mode, each starting the proxy as `docs`.
-        for mode in ["answer", "silent", "rug", "inject", "fail", "instruct"] {
+        for mode in [
+            "answer", "silent", "rug", "inject", "fail", "instruct", "sample",
+        ] {
             let line = gateway.proxy_line(mode);
             let args: Vec<&str> = line.iter().map(String::as_str).collect();
             gateway.sb.define_wrapped(&format!("docs-{mode}"), &args);
@@ -428,7 +430,15 @@ fn the_relay_fixtures_hold_through_the_binary() {
             );
         }
         if let Some(expected) = fixture.get("server_receives") {
-            assert_eq!(&Value::Array(received), expected, "{id}");
+            // The host's answers to the server's requests reach the server only
+            // after it asked, and the server here asks nothing.
+            let asked = |m: &&Value| !(m.get("method").is_none() && m.get("id").is_some());
+            let expected: Vec<Value> = match expected {
+                Value::Array(all) if serves => all.iter().filter(asked).cloned().collect(),
+                Value::Array(all) => all.clone(),
+                other => vec![other.clone()],
+            };
+            assert_eq!(received, expected, "{id}");
         }
     }
 }

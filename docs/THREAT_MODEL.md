@@ -137,7 +137,10 @@ something OpenMoat claims to stop.
   the server's `initialize` instructions and server information, and its prompt, resource
   and resource-template listings, are pinned and held the same way (ADR-069); accepted
   instructions are kept as untrusted content only for the sessions that call one of the
-  server's tools (the proxy learns a session only from a call), and a prompt's or
+  server's tools (the proxy learns a session only from a call), and so is the text of
+  the server's requests to the host (a sampling request that asks for the session's
+  context is refused); which session a sampling request is about is the proxy's guess
+  (the one it served last), and a prompt's or
   resource's content, tool results and remote (HTTP) servers are not
   pinned, a `review` is honoured as the agent reports it (an agent that sent a call after the
   person refused it would find the decision unused), and a server can still behave

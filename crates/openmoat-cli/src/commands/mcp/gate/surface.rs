@@ -5,6 +5,11 @@
 //! check (ADR-058), the fingerprints of what it names as injected input
 //! (ADR-057), and a row that marks the session untrusted (ADR-020).
 //!
+//! The server's requests to the host (`sampling/createMessage`,
+//! `elicitation/create`) carry text the host puts before the model or the
+//! person too: each is kept for the session the proxy served last, and one
+//! sent before any for the next session it serves.
+//!
 //! The server answers `initialize` before any session made a call, and a
 //! proxy learns a session only from the hook decision a call matches. So the
 //! text is kept for a session when the proxy first passes a call of it, before
@@ -15,7 +20,7 @@
 use std::collections::HashSet;
 use std::sync::PoisonError;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use openmoat_audit::{NewEvent, Ticket};
 use openmoat_core::{Action, Decision, Verdict};
 use serde_json::Value;
@@ -26,6 +31,9 @@ use super::{AUDIT_HOST, Awaiting, Gateway};
 /// sent it outside a tool result.
 const SERVER_TEXT_RULE: &str = "mcp-server-text";
 
+/// The most requests' texts kept for a session the proxy has not served yet.
+const MAX_QUEUED: usize = 64;
+
 /// What the server sent outside its tool results, and which sessions have it.
 #[derive(Default)]
 pub(super) struct Sent {
@@ -33,6 +41,9 @@ pub(super) struct Sent {
     instructions: Option<String>,
     /// The host and session of each session that has them.
     credited: HashSet<(String, String)>,
+    /// The texts of requests the server sent the host before the proxy served
+    /// any session, with their method: the next session it serves gets them.
+    queued: Vec<(String, String)>,
 }
 
 impl Gateway {
@@ -60,11 +71,69 @@ impl Gateway {
             self.untrusted(whose, cwd, "initialize", &text)
                 .context("keeping the MCP server's instructions for this session")?;
         }
+        let queued = std::mem::take(
+            &mut self
+                .sent
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .queued,
+        );
+        for (method, text) in queued {
+            self.untrusted(whose, cwd, &method, &text)
+                .context("keeping the MCP server's request for this session")?;
+        }
         self.sent
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .credited
             .insert(key);
+        Ok(())
+    }
+
+    /// Keep `text`, which the server sent the host in a `method` request, for
+    /// the session the proxy served last, which the request is about; before
+    /// any, for the next one it serves.
+    pub(super) fn server_text(&self, method: &str, text: &str) -> Result<()> {
+        if text.trim().is_empty() {
+            return Ok(());
+        }
+        let served = self
+            .served
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let Some((host, session)) = served else {
+            let mut sent = self.sent.lock().unwrap_or_else(PoisonError::into_inner);
+            if sent.queued.len() >= MAX_QUEUED {
+                bail!("too many requests from the server before any session used it");
+            }
+            sent.queued.push((method.to_owned(), text.to_owned()));
+            return Ok(());
+        };
+        self.untrusted((&host, &session), None, method, text)
+            .context("keeping the MCP server's request for the session it serves")
+    }
+
+    /// Record the server's `method` request to the host as `decision`, under
+    /// the session the proxy served last when there is one.
+    pub(super) fn record_request(&self, method: &str, decision: &Decision) -> Result<()> {
+        let store = self.store()?.with_secrets(self.known());
+        let served = self
+            .served
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let session = served.map_or_else(|| self.session.clone(), |(_, s)| s);
+        store.record(&NewEvent {
+            host: AUDIT_HOST,
+            session_id: &session,
+            call_id: None,
+            cwd: None,
+            tool: method,
+            action: None,
+            decision,
+            latency_us: 0,
+        })?;
         Ok(())
     }
 

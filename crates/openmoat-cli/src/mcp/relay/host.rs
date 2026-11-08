@@ -29,6 +29,8 @@ pub(super) enum Outcome {
     Reply(Value),
     /// Nowhere: a refused notification, which gets no answer.
     Drop,
+    /// Nowhere, and why, for the proxy's standard error.
+    Dropped(String),
 }
 
 impl Relay {
@@ -44,8 +46,18 @@ impl Relay {
         let id = fields.get("id");
         match (fields.get("method"), answers, id) {
             (Some(Value::String(method)), false, _) => self.request(method, fields, id, &message),
-            // The host's answer to a request the server sent it.
-            (None, true, Some(_)) => Outcome::Forward(message),
+            // The host's answer to a request the server sent it, and to no
+            // other: a server must not get an answer it never asked for.
+            (None, true, Some(id)) => {
+                if self.state().asked.remove(&id_key(id)) {
+                    Outcome::Forward(message)
+                } else {
+                    Outcome::Dropped(format!(
+                        "dropped an answer from the host with id {id}, which answers no \
+                         request the server is waiting for"
+                    ))
+                }
+            }
             (_, _, Some(id)) => Outcome::Reply(error(
                 id,
                 INVALID_REQUEST,

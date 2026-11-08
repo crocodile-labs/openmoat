@@ -783,6 +783,13 @@ Through the gateway:
   server's text: each session that calls one of the server's tools has them kept as
   untrusted content (a host they name is injected input, `injected-input`, and the
   session is marked untrusted, rule `mcp-server-text` in the audit log).
+- **The server's requests to the agent are checked.** A server may ask the agent to run
+  the model for it (`sampling/createMessage`) or to ask you something
+  (`elicitation/create`). A sampling request that asks for the session's context
+  (`includeContext` other than `none`) is refused, since the agent would send the server
+  what other servers returned; the text of every other request is kept as untrusted
+  content of the session the gateway serves, like a tool's result. An answer from the
+  agent reaches the server only for a request the server sent.
 - **What you accept is what the model reads.** `openmoat mcp accept` shows each character
   a terminal does not draw as `?`: control characters, zero-width, bidirectional and other
   format characters, the soft hyphen, invisible operators, tag characters (U+E0000 to

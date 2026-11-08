@@ -100,19 +100,49 @@ impl Relay {
             }
             return true;
         }
+        let params = fields.get("params");
+        if method == "notifications/cancelled" {
+            // The server may cancel a request it sent the host.
+            if let Some(cancelled) = params.and_then(|p| p.get("requestId")) {
+                self.state().asked.remove(&id_key(cancelled));
+            }
+            return true;
+        }
         let Some(id) = fields.get("id") else {
             return true;
         };
-        if UNRECORDED_REQUESTS.contains(&method) {
-            return true;
-        }
-        let Err(e) = self.gate.server_request(method) else {
-            return true;
+        let refuse = |why: String, out: &mut Vec<Routed>| {
+            out.push(Routed::Server(written(&error(id, REFUSED, &why))));
+            out.push(dropped(&format!("the server's `{method}` request: {why}")));
+            false
         };
-        let why = format!("OpenMoat cannot record this request ({e:#}), so it is refused");
-        out.push(Routed::Server(written(&error(id, REFUSED, &why))));
-        out.push(dropped(&format!("the server's `{method}` request: {e:#}")));
-        false
+        if let Some(why) = context_asked(method, params) {
+            // Recorded as refused; a record that fails refuses it all the same.
+            let _ = self.gate.server_refused(method, &why);
+            return refuse(why, out);
+        }
+        if !UNRECORDED_REQUESTS.contains(&method)
+            && let Err(e) = self.gate.server_request(method, params)
+        {
+            return refuse(
+                format!("OpenMoat cannot record this request ({e:#}), so it is refused"),
+                out,
+            );
+        }
+        // The host's answer is passed on only to a request the server sent.
+        let mut state = self.state();
+        if state.asked.len() >= super::MAX_ASKED {
+            drop(state);
+            return refuse(
+                format!(
+                    "more than {} requests to the host are unanswered",
+                    super::MAX_ASKED
+                ),
+                out,
+            );
+        }
+        state.asked.insert(id_key(id));
+        true
     }
 
     /// Whether the response with `id` reaches the host: it answers a request
@@ -244,6 +274,23 @@ impl Relay {
             None => state.relist = None,
         }
     }
+}
+
+/// Why a server's `method` request is refused for the context it asks for:
+/// `sampling/createMessage` with `includeContext` other than `none` has the
+/// host add what other servers, or this one, put in the session, which would
+/// carry it to this server past the cross-server flow check (ADR-058).
+fn context_asked(method: &str, params: Option<&Value>) -> Option<String> {
+    if method != "sampling/createMessage" {
+        return None;
+    }
+    let context = params.and_then(|p| p.get("includeContext"))?;
+    if context.as_str() == Some("none") {
+        return None;
+    }
+    Some(format!(
+        "OpenMoat does not pass on a sampling request that asks for the session's context          (includeContext {context}): it would carry other servers' results to this one"
+    ))
 }
 
 fn dropped(why: &str) -> Routed {

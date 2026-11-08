@@ -398,24 +398,22 @@ impl Gate for Gateway {
         self.keep_instructions(text);
     }
 
-    fn server_request(&self, method: &str) -> Result<()> {
-        let store = self.store()?.with_secrets(self.known());
+    fn server_request(&self, method: &str, params: Option<&Value>) -> Result<()> {
         let decision = Decision::single(
             Verdict::Allow,
             SERVER_REQUEST_RULE,
             format!("MCP server `{}` asked the agent: {method}", self.server),
         );
-        store.record(&NewEvent {
-            host: AUDIT_HOST,
-            session_id: &self.session,
-            call_id: None,
-            cwd: None,
-            tool: method,
-            action: None,
-            decision: &decision,
-            latency_us: 0,
-        })?;
-        Ok(())
+        self.record_request(method, &decision)?;
+        // What the host puts before the model or the person is the server's
+        // text, untrusted as a result is.
+        let text = params.map(crate::mcp::flow::value_text).unwrap_or_default();
+        self.server_text(method, &text)
+    }
+
+    fn server_refused(&self, method: &str, why: &str) -> Result<()> {
+        let decision = Decision::single(Verdict::Deny, SERVER_REQUEST_RULE, why);
+        self.record_request(method, &decision)
     }
 }
 

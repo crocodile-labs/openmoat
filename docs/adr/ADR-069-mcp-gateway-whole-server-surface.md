@@ -15,6 +15,12 @@ the model, or to have it counted for the wrong session, that a person never revi
   without taint, so a server could change what it tells the model at any start and no
   hold, review or audit row followed; the descriptions in `prompts/list`,
   `resources/list` and `resources/templates/list` were unpinned too;
+- the server's requests to the host (`sampling/createMessage`, `elicitation/create`,
+  `roots/list`) were recorded as allowed under the gateway's own session, never the
+  agent's, so their text tainted nothing; a sampling request with `includeContext`
+  had the host add the session's context, other servers' results included, to what it
+  sent this server, which the cross-server flow check never saw; and the host's
+  answers were passed on without checking that they answer a request the server sent;
 - the review a person reads in `openmoat mcp accept` showed some invisible characters
   as `?` but not all of them: tag characters (U+E0000 to U+E007F) spell ASCII text no
   terminal draws, so a description could look harmless and still carry instructions;
@@ -105,6 +111,18 @@ the model, or to have it counted for the wrong session, that a person never revi
    source. A failure to record refuses the call. The proxy learns a session only from
    the hook decision a call matches, so a session that never calls one of the server's
    tools is not marked; what its model read is only text a person accepted.
+
+8. **The server's requests to the host are checked.** A `sampling/createMessage`
+   whose `includeContext` is anything but `none` is answered with error -32001 and
+   recorded as refused (rule `mcp-server-request`): the host would add the session's
+   context to what it sends this server. Every other request is recorded under the
+   session the proxy served last, and its text (a sampling request's messages and
+   system prompt, an elicitation's message) is kept as untrusted content of that
+   session, as instructions are (§7), with `mcp__<server>__<method>` as the source; one
+   sent before the proxy served any session is kept for the next one it serves (at
+   most 64). The relay keeps the ids of the server's requests the host has not
+   answered (at most 4096, as for the host's), forgets one the server cancels, and
+   drops a host answer to any other id.
 
 ## Consequences
 

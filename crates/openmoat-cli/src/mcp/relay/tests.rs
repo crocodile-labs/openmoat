@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use super::*;
 
 mod gaps;
+mod requests;
 mod results;
 mod surface;
 
@@ -52,7 +53,7 @@ impl Gate for Log {
         Ok(None)
     }
 
-    fn server_request(&self, method: &str) -> Result<()> {
+    fn server_request(&self, method: &str, _: Option<&Value>) -> Result<()> {
         self.requests.lock().unwrap().push(method.to_owned());
         Ok(())
     }
@@ -65,7 +66,7 @@ impl Gate for Failing {
         bail!("disk full")
     }
 
-    fn server_request(&self, _: &str) -> Result<()> {
+    fn server_request(&self, _: &str, _: Option<&Value>) -> Result<()> {
         bail!("disk full")
     }
 }
