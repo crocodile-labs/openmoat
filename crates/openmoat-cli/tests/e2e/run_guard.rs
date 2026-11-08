@@ -312,11 +312,12 @@ fn relay_variables_outside_a_run_are_not_followed() {
             vec!["secrets-paths".to_owned()]
         ]
     );
-    // The heartbeat is recorded here too, not skipped as inside a run.
+    // The heartbeat is recorded here too, not skipped as inside a run. Only a
+    // plugin host sends one (Claude Code runs a hook command).
     let mut beat = sb.command();
     beat.env("MOAT_GUARD_SOCKET", &addr)
         .env("MOAT_GUARD_TOKEN", "any")
-        .args(["guard", "--host", "claude-code", "--heartbeat"]);
+        .args(["guard", "--host", "opencode", "--heartbeat"]);
     assert_eq!(output(&mut beat, None).status.code(), Some(OK));
     assert_eq!(server.join().unwrap(), 0, "the listener was never asked");
 }
