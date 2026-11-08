@@ -213,3 +213,37 @@ fn a_relative_path_entry_never_runs_or_pins_a_planted_program() {
         "the hook names a relative path: {hook}"
     );
 }
+
+/// `init` from a shell whose `PATH` finds none of the programs it pins
+/// refuses and writes nothing; over a recorded snapshot it keeps that one.
+#[test]
+fn init_with_an_empty_path_refuses_or_keeps_the_recorded_search_path() {
+    let sb = outside_temp();
+    let empty = |args: &[&str]| output(sb.command().env("PATH", "").args(args), None);
+    let out = empty(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
+    assert!(
+        text(&out).contains("run `openmoat init` from a normal shell"),
+        "{}",
+        text(&out)
+    );
+    assert!(!sb.home.join(".moat").exists(), "nothing was written");
+
+    assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
+    let environment = sb.home.join(".moat/environment.json");
+    let recorded = fs::read_to_string(&environment).unwrap();
+    let out = output(
+        sb.command()
+            .env("PATH", "")
+            .env("MOAT_ASSUME_TTY", "1")
+            .args(["init", "--yes"]),
+        None,
+    );
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(
+        text(&out).contains("kept: this shell's PATH finds none"),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(fs::read_to_string(&environment).unwrap(), recorded);
+}
