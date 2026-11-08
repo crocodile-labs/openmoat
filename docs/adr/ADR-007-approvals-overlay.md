@@ -38,3 +38,31 @@ that makes people turn security tools off (`STRENGTH.md` W6), and hand-editing
   (the person read the command) and is why grants are exact-match only.
 - A terminal prompt of our own and Telegram approvals (`DESIGN.md` §8.4) will write the
   same two files rather than introduce a third store.
+
+## Amendment 2026-11-07: directory grants follow the current policy
+
+`moat allow --dir <D>` wrote an allow rule for `D` and `D/**` whose write exclusions were a
+copy of the `.git` and `runs-later` paths of that day. An overlay allow overrides a
+`review`, so every protection a later release added (all of `.vscode/`, `.idea/`, `.npmrc`,
+`.cargo/config*`, a virtual environment's `bin/`, `.devcontainer`, …) was allowed inside `D`
+without review.
+
+- A directory grant now stores only what the person chose: the directory (as written and
+  with its symlinks resolved) under `dirs:` in `approved.yaml`, with its id and reason.
+- Each time the policy is loaded the grant becomes an allow rule that reads and writes `D`
+  and `D/**` and leaves out of the writes every path a `review` rule of that policy (packs
+  included) holds writes to, as it applies in `D`: `${project}/<p>` as `D/<p>`, `**/<p>` as
+  `D/**/<p>`, and a fixed path (`~/…`, `/usr/local/bin/**`) when it can lie in `D`. So a
+  directory grant never answers a review of the policy, today's or a later one's. Deny rules
+  need no exclusion: no allow overrides a deny (invariant 1). Reads keep no exclusions, as
+  before: the only per-path read review is the whole-home sweep, which a grant cannot name.
+  This is the simplest rule that keeps the old grants' meaning (they copied exactly these
+  `review` paths) and makes it follow the policy; the exclusions keep the shapes the OS
+  sandbox generators already handle for a granted directory.
+- A grant of one exact path (`--always` for a reviewed file) still overrides the review it
+  was approved for: the person read that path.
+- `moat policy upgrade` recognises a rule an earlier `--dir` wrote by its shape (its
+  `--dir` reason, `D` and `D/**` read and written, exclusions only inside `D`, nothing
+  else) and offers to turn it into a grant with the same id, re-pinned with the rest. An
+  old exclusion the policy no longer names is kept in the grant's `except:`, so the change
+  never allows more. `moat doctor` and `moat status` list such a rule until then.

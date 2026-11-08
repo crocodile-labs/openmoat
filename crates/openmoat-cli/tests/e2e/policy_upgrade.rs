@@ -338,3 +338,103 @@ fn init_doctor_and_the_home_screen_offer_an_available_update() {
     assert_eq!(policy(&sb), default_lf());
     assert!(text(&sb.moat(&[])).contains("Nothing needs you."));
 }
+
+/// Exit code of `moat policy check` for writing `path`, from the project.
+fn write_check(sb: &Sandbox, path: &std::path::Path) -> Option<i32> {
+    let proj = sb.project();
+    let (path, proj) = (path.to_string_lossy(), proj.to_string_lossy());
+    let args = [
+        "policy", "check", &path, "--kind", "fs-write", "--cwd", &proj,
+    ];
+    sb.moat(&args).status.code()
+}
+
+/// What `moat allow --dir` wrote before directory grants: the `.git` paths and
+/// `.vscode/tasks.json` of its day copied in, for each spelling of the directory.
+fn old_dir_rule(spellings: &[String]) -> String {
+    let quoted = |paths: Vec<String>| {
+        let list: Vec<String> = paths.iter().map(|p| format!("\"{p}\"")).collect();
+        list.join(", ")
+    };
+    let tree: Vec<String> = spellings
+        .iter()
+        .flat_map(|d| [d.clone(), format!("{d}/**")])
+        .collect();
+    let left_out = spellings.iter().flat_map(|d| {
+        [".git/**", "**/.git/**", "**/.vscode/tasks.json"].map(|p| format!("!{d}/{p}"))
+    });
+    format!(
+        "version: 1\nallow:\n- id: approved-1\n  reason: approved with `moat allow --dir` on \
+         2026-10-15 09:12\n  fs.read: [{}]\n  fs.write: [{}]\n",
+        quoted(tree.clone()),
+        quoted(tree.into_iter().chain(left_out).collect())
+    )
+}
+
+/// A directory allowed by an earlier release kept the protections of its day;
+/// `doctor` says so, and `policy upgrade` turns it into a grant that follows the policy.
+#[test]
+fn an_old_dir_grant_is_brought_up_to_date() {
+    let sb = Sandbox::installed(&[".claude"]);
+    let shared = sb.home.join("work/shared");
+    std::fs::create_dir_all(&shared).unwrap();
+    let written = shared.to_string_lossy().replace('\\', "/");
+    let real = std::fs::canonicalize(&shared).unwrap();
+    let real = real.to_string_lossy().replace('\\', "/");
+    let real = real.strip_prefix("//?/").unwrap_or(&real).to_owned();
+    let mut spellings = vec![written];
+    if real != spellings[0] {
+        spellings.push(real);
+    }
+    let overlay = sb.home.join(".moat/policy.d/approved.yaml");
+    std::fs::write(&overlay, old_dir_rule(&spellings)).unwrap();
+    sb.moat_as_person(&["doctor", "--accept"]);
+    let settings = shared.join(".vscode/settings.json");
+    assert_eq!(
+        write_check(&sb, &settings),
+        Some(OK),
+        "the old rule allows what the policy added since"
+    );
+    assert_eq!(
+        write_check(&sb, &shared.join(".vscode/tasks.json")),
+        Some(REVIEW)
+    );
+    let doctor = crate::common::squash(&text(&sb.moat(&["doctor"])));
+    assert!(
+        doctor.contains("1 directory grant from an earlier release to review"),
+        "{doctor}"
+    );
+
+    let out = sb.moat(&["policy", "upgrade", "--dry-run"]);
+    let shown = text(&out);
+    assert!(
+        shown.contains("Directory grants") && shown.contains("`approved-1`"),
+        "{shown}"
+    );
+    let out = sb.moat_as_person(&["policy", "upgrade", "--yes"]);
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(OK), "{shown}");
+    assert!(
+        shown.contains("1 directory grant brought up to date"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("✔ Policy upgraded"),
+        "the policy itself had nothing: {shown}"
+    );
+
+    let rules = std::fs::read_to_string(&overlay).unwrap();
+    assert!(
+        rules.contains("dirs:") && !rules.contains("tasks.json"),
+        "{rules}"
+    );
+    assert_eq!(write_check(&sb, &settings), Some(REVIEW));
+    assert_eq!(
+        write_check(&sb, &shared.join(".vscode/tasks.json")),
+        Some(REVIEW)
+    );
+    assert_eq!(write_check(&sb, &shared.join("notes.md")), Some(OK));
+    intact(&sb);
+    let doctor = text(&sb.moat(&["doctor"]));
+    assert!(!doctor.contains("directory grant"), "{doctor}");
+}

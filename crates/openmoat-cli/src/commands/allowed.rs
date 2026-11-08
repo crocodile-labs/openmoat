@@ -2,8 +2,8 @@
 //! that takes it back. Read-only, so it needs no terminal: tools that show it
 //! (the `MoatBar` app) run it with `--format json`.
 //!
-//! - permanent rules `moat allow --always`, `--site` and `--dir` wrote to
-//!   `~/.moat/policy.d/approved.yaml`;
+//! - permanent rules `moat allow --always` and `--site` wrote to
+//!   `~/.moat/policy.d/approved.yaml`, and the directories `--dir` allowed there;
 //! - session grants from `moat allow --last` that have not expired;
 //! - repositories whose policy `moat trust` lets allow.
 
@@ -13,7 +13,7 @@ use anyhow::Result;
 use openmoat_core::{Action, Kind, RuleGroup};
 use serde::Serialize;
 
-use crate::approvals::{self, GRANT_TTL_MS, Grants, Overlay};
+use crate::approvals::{self, DirGrant, GRANT_TTL_MS, Grants, Overlay};
 use crate::cli::{AllowedArgs, Format};
 use crate::exit::Code;
 use crate::home::Home;
@@ -25,6 +25,9 @@ use crate::trust::Trust;
 struct Allowed<'a> {
     /// Rules in `approved.yaml`, as the policy spells them.
     rules: &'a [RuleGroup],
+    /// Directories `openmoat allow --dir` allowed, as chosen; each leaves out
+    /// what the policy holds for review in it.
+    directories: &'a [DirGrant],
     session_grants: Vec<SessionGrant<'a>>,
     trusted_repos: Vec<TrustedRepo<'a>>,
 }
@@ -61,6 +64,7 @@ pub fn run(args: &AllowedArgs) -> Result<Code> {
     let now = time::now_ms();
     let allowed = Allowed {
         rules: &overlay.allow,
+        directories: &overlay.dirs,
         session_grants: grants
             .active(now)
             .map(|g| SessionGrant {
@@ -90,16 +94,24 @@ pub fn run(args: &AllowedArgs) -> Result<Code> {
 fn text(allowed: &Allowed<'_>, now: i64) -> Result<Code> {
     let mut out = Deferred::default();
     writeln!(out, "Permanent rules (~/.moat/policy.d/approved.yaml)")?;
-    if allowed.rules.is_empty() {
+    if allowed.rules.is_empty() && allowed.directories.is_empty() {
         writeln!(out, "  none")?;
     }
-    for rule in allowed.rules {
-        writeln!(out, "  {:<14} {}", rule.id, patterns(rule))?;
-        writeln!(
-            out,
-            "  {:<14} remove: openmoat allow --remove {}",
-            "", rule.id
-        )?;
+    let dirs = allowed.directories.iter().map(|g| {
+        let what = format!(
+            "read and write in {} (what the policy holds for review stays held)",
+            g.dir.join(", ")
+        );
+        (&g.id, what)
+    });
+    for (id, what) in allowed
+        .rules
+        .iter()
+        .map(|r| (&r.id, patterns(r)))
+        .chain(dirs)
+    {
+        writeln!(out, "  {id:<14} {what}")?;
+        writeln!(out, "  {:<14} remove: openmoat allow --remove {id}", "")?;
     }
     writeln!(
         out,

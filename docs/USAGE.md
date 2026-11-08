@@ -388,10 +388,10 @@ OpenMoat 0.17.0 · watching Claude Code, Codex · policy 16 deny · 10 allow · 
                          ↳ changing git's config, hooks or refs · approve: openmoat allow --last
 10:42:31  claude-code  ✕ Read   ~/.ssh/id_ed25519                      deny · secrets-paths
                          ↳ reading or changing your keys and credential files
-10:42:40  codex        · Bash   make deploy                            defer · agent asks
+10:42:40  codex        → Bash   make deploy                            defer · agent asks
 ```
 
-- `✓` allowed, `?` held for review, `✕` denied, `·` left to the agent's own prompt (dim).
+- `✓` allowed, `?` held for review, `✕` denied, `→` left to the agent's own prompt (dim).
   Times are UTC, as in `openmoat show`.
 - `--host <id>`, `--only deny` or `--only review`, and `--session <id>` show fewer calls;
   `--recent N` sets how many earlier calls it shows first (10), `--no-follow` stops after them.
@@ -472,9 +472,15 @@ as `openmoat sandbox sync` does:
 
 ```bash
 openmoat allow --site docs.rs          # network access to docs.rs, web fetches included
-openmoat allow --dir ~/work/shared     # read and write in that directory; .env files, keys and writes into a .git in it are not allowed
+openmoat allow --dir ~/work/shared     # read and write in that directory; .env files and keys stay denied, and what the policy holds for review (a .git, CI and editor files) still needs review there
 openmoat allow --remove approved-3     # undo: take a rule openmoat allow added out again
 ```
+
+`--dir` stores the directory only. What the policy holds for review inside it is worked out
+from the policy each time it is loaded, so a protection a later upgrade adds also holds in
+a directory you allowed before. A directory allowed with an earlier OpenMoat keeps only
+the protections of that day until `openmoat policy upgrade` brings it up to date;
+`openmoat doctor` and `openmoat status` list it until then ([POLICY.md §8.2](POLICY.md#82-approvals)).
 
 For anything else, `openmoat edit` opens `~/.moat/policy.yaml` in `$VISUAL` or `$EDITOR`
 (`vi`, or `notepad` on Windows, when neither is set). When you close the editor it

@@ -1,5 +1,6 @@
 //! `moat policy upgrade`: add what this release's default changed to the
-//! person's policy, show what changes (grouped, `summary.rs`; the full diff on
+//! person's policy and bring an earlier release's directory grants up to date
+//! (`grants.rs`), show what changes (grouped, `summary.rs`; the full diff on
 //! `d` or `--diff`) and ask; once applied, sync the agents' sandboxes as `openmoat
 //! sandbox sync` does. `--undo` puts the previous policy back.
 
@@ -18,7 +19,9 @@ use crate::home::{Home, write_private};
 use crate::integrity::{self, HookPins};
 use crate::render::{DIFF_CONTEXT_LINES, Deferred};
 use crate::upgrade::{Base, Plan};
+use grants::Migration;
 
+mod grants;
 mod summary;
 
 pub fn run(args: &UpgradeArgs) -> Result<Code> {
@@ -33,8 +36,9 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
         return undo(&home, args.yes);
     }
     let plan = Plan::for_home(&home)?;
+    let grants = Migration::for_home(&home, &plan.merge.text)?;
     let mut out = Deferred::default();
-    describe(&plan, args, &mut out)?;
+    describe(&plan, grants.as_ref(), args, &mut out)?;
     let binary = crate::install::hook_binary()?;
     let hook_upgrade = crate::install::migrate_hooks::needed(&home, &binary)?;
     if hook_upgrade {
@@ -44,7 +48,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
              asks you to trust the changed one"
         )?;
     }
-    if plan.applicable() == 0 || args.dry_run {
+    if (plan.applicable() == 0 && grants.is_none()) || args.dry_run {
         if hook_upgrade && !args.dry_run {
             person("openmoat policy upgrade")?;
             integrity::refuse_drift(&home, "upgrade existing hooks")?;
@@ -65,7 +69,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     integrity::refuse_drift(&home, "upgrade the policy")?;
     let checkpoint = integrity::Checkpoint::take(&home)?;
     lint(&home, &plan.merge.text)?;
-    if !args.yes && !confirm(&plan, &mut out)? {
+    if !args.yes && !confirm(&plan, grants.as_ref(), &mut out)? {
         writeln!(out, "the policy was not changed")?;
         out.finish()?;
         return Ok(Code::Ok);
@@ -73,7 +77,7 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
     // The re-pin after the writes covers every pinned file: one changed while
     // the question waited would be accepted unseen.
     checkpoint.verify(&home, &[])?;
-    apply(&home, &plan, &mut out)?;
+    apply(&home, &plan, grants.as_ref(), &mut out)?;
     if hook_upgrade {
         trust_steps(&home, &binary, &mut out)?;
     }
@@ -84,27 +88,38 @@ pub fn run(args: &UpgradeArgs) -> Result<Code> {
 
 /// `Apply these changes? [y/N/d]`, where `d` shows the full diff and asks
 /// again; anything but yes, end of input included, is no.
-fn confirm(plan: &Plan, out: &mut Deferred) -> Result<bool> {
+fn confirm(plan: &Plan, grants: Option<&Migration>, out: &mut Deferred) -> Result<bool> {
     loop {
         let question = "\nApply these changes? [y/N/d]   (d = show the full diff) ";
         match crate::commands::edit::answer(out, question)?.as_str() {
             "y" | "yes" => return Ok(true),
-            "d" | "diff" => full_diff(plan, out)?,
+            "d" | "diff" => full_diff(plan, grants, out)?,
             _ => return Ok(false),
         }
     }
 }
 
-/// The policy as it is against the policy upgraded, as `diff -u` shows it.
-fn full_diff(plan: &Plan, out: &mut Deferred) -> Result<()> {
-    let diff = unified_diff(
-        Algorithm::Myers,
-        &plan.current,
-        &plan.merge.text,
-        DIFF_CONTEXT_LINES,
-        Some(("policy.yaml (installed)", "policy.yaml (upgraded)")),
-    );
-    write!(out, "{diff}")?;
+/// The policy as it is against the policy upgraded, as `diff -u` shows it,
+/// then `approved.yaml` against it with the directory grants brought up to date.
+fn full_diff(plan: &Plan, grants: Option<&Migration>, out: &mut Deferred) -> Result<()> {
+    let policy = (&plan.current, &plan.merge.text, "policy.yaml");
+    let overlay = grants.map(|g| (&g.before, &g.after, "approved.yaml"));
+    for (before, after, name) in std::iter::once(policy).chain(overlay) {
+        if before == after {
+            continue;
+        }
+        let diff = unified_diff(
+            Algorithm::Myers,
+            before,
+            after,
+            DIFF_CONTEXT_LINES,
+            Some((
+                &format!("{name} (installed)"),
+                &format!("{name} (upgraded)"),
+            )),
+        );
+        write!(out, "{diff}")?;
+    }
     Ok(())
 }
 
@@ -140,9 +155,51 @@ fn sync(home: &Home, out: &mut Deferred) -> Result<()> {
     Ok(())
 }
 
-/// What the default adds, grouped (`summary.rs`) or, with `--diff`, also as a
-/// diff of the policy, and what it cannot add.
-fn describe(plan: &Plan, args: &UpgradeArgs, out: &mut Deferred) -> Result<()> {
+/// What the default adds and the directory grants it brings up to date,
+/// grouped (`summary.rs`) or, with `--diff`, also as a diff, and what it cannot add.
+fn describe(
+    plan: &Plan,
+    grants: Option<&Migration>,
+    args: &UpgradeArgs,
+    out: &mut Deferred,
+) -> Result<()> {
+    describe_policy(plan, grants, args, out)?;
+    if plan.applicable() == 0
+        && let Some(grants) = grants
+    {
+        writeln!(
+            out,
+            "\nDirectory grants from an earlier OpenMoat leave out only the protections of \
+             their day\n"
+        )?;
+        let summary = summary::Summary {
+            dir_grants: grants.lines(),
+            ..summary::Summary::default()
+        };
+        summary.write(out)?;
+        if args.diff {
+            writeln!(out)?;
+            full_diff(plan, Some(grants), out)?;
+        }
+        if args.dry_run {
+            writeln!(
+                out,
+                "\nNothing was changed: `openmoat policy upgrade` brings them up to date after \
+                 asking (`--diff` shows the full diff)."
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// What the default adds, grouped, with the directory grants under their own
+/// heading, and what it cannot add.
+fn describe_policy(
+    plan: &Plan,
+    grants: Option<&Migration>,
+    args: &UpgradeArgs,
+    out: &mut Deferred,
+) -> Result<()> {
     match plan.base {
         Base::Recorded => {}
         Base::Assumed => writeln!(
@@ -171,10 +228,13 @@ fn describe(plan: &Plan, args: &UpgradeArgs, out: &mut Deferred) -> Result<()> {
         };
         writeln!(out, "{title}\n")?;
         let applied: Vec<_> = plan.merge.applied().collect();
-        summary::summarise(&plan.current, &plan.merge.text, &applied, plan.renamed).write(out)?;
+        let mut summary =
+            summary::summarise(&plan.current, &plan.merge.text, &applied, plan.renamed);
+        summary.dir_grants = grants.map(Migration::lines).unwrap_or_default();
+        summary.write(out)?;
         if args.diff {
             writeln!(out)?;
-            full_diff(plan, out)?;
+            full_diff(plan, grants, out)?;
         }
         if args.dry_run {
             writeln!(
@@ -246,31 +306,49 @@ fn backups(home: &Home) -> (PathBuf, PathBuf) {
     )
 }
 
-fn apply(home: &Home, plan: &Plan, out: &mut Deferred) -> Result<()> {
+/// Write the upgraded policy (keeping the one it replaces for `--undo`) and the
+/// directory grants, then re-pin.
+fn apply(home: &Home, plan: &Plan, grants: Option<&Migration>, out: &mut Deferred) -> Result<()> {
     let (policy_backup, base_backup) = backups(home);
-    write_private(&policy_backup, plan.current.as_bytes())?;
-    copy_or_remove(&home.policy_base_path(), &base_backup)?;
-    write_private(&home.policy_path(), plan.merge.text.as_bytes())?;
-    // A policy not made from the default takes only the rename (ADR-053); recording
-    // the assumed 0.3.0 default as its base would make the next upgrade merge the
-    // default into it as if the person had edited every line.
-    if plan.base != Base::Unrelated {
-        write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
+    let upgrades = plan.applicable() > 0;
+    if upgrades {
+        write_private(&policy_backup, plan.current.as_bytes())?;
+        copy_or_remove(&home.policy_base_path(), &base_backup)?;
+        write_private(&home.policy_path(), plan.merge.text.as_bytes())?;
+        // A policy not made from the default takes only the rename (ADR-053); recording
+        // the assumed 0.3.0 default as its base would make the next upgrade merge the
+        // default into it as if the person had edited every line.
+        if plan.base != Base::Unrelated {
+            write_private(&home.policy_base_path(), plan.merge.base.as_bytes())?;
+        }
+    }
+    if let Some(grants) = grants {
+        grants.save(home)?;
     }
     let binary = crate::install::hook_binary()?;
     crate::install::migrate_hooks::update(home, &binary)?;
     integrity::repin(home, &binary, HookPins::Keep)?;
-    let paths = crate::report::Paths::detect();
     writeln!(out)?;
-    writeln!(
-        out,
-        "✔ Policy upgraded            undo: openmoat policy upgrade --undo"
-    )?;
-    writeln!(
-        out,
-        "  the previous policy is in {}",
-        paths.path(&policy_backup)
-    )?;
+    if upgrades {
+        let paths = crate::report::Paths::detect();
+        writeln!(
+            out,
+            "✔ Policy upgraded            undo: openmoat policy upgrade --undo"
+        )?;
+        writeln!(
+            out,
+            "  the previous policy is in {}",
+            paths.path(&policy_backup)
+        )?;
+    }
+    if let Some(grants) = grants {
+        // Not undone with the policy: the grants only keep out more.
+        let made = crate::report::count(grants.lines().len(), "directory grant");
+        writeln!(
+            out,
+            "✔ {made} brought up to date: what the policy holds for review stays held in them"
+        )?;
+    }
     Ok(())
 }
 

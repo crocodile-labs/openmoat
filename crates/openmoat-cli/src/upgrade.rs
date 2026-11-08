@@ -80,15 +80,29 @@ impl Plan {
 }
 
 /// "N changes from the OpenMoat X default", which `moat`, `moat init` and `moat
-/// doctor` show while the policy can take changes; `None` when it has none or
-/// cannot be read (the commands that load it report that themselves).
+/// doctor` show while the policy can take changes, and "N directory grants from
+/// an earlier release" while an earlier release's `--dir` rule leaves out only the
+/// protections of its day (`approvals::DirGrant`); `None` when there is neither
+/// or the files cannot be read (the commands that load them report that themselves).
 pub fn available(home: &Home) -> Option<String> {
-    let count = Plan::for_home(home).ok()?.applicable();
-    (count > 0).then(|| {
-        let plural = if count == 1 { "" } else { "s" };
-        let version = crate::VERSION;
-        format!("{count} change{plural} from the OpenMoat {version} default")
-    })
+    let changes = Plan::for_home(home).map_or(0, |plan| plan.applicable());
+    let grants = crate::approvals::Overlay::load_in(home)
+        .map_or(0, |overlay| overlay.old_dir_rules().count());
+    let version = crate::VERSION;
+    let parts: Vec<String> = [
+        (changes > 0).then(|| {
+            let changes = crate::report::count(changes, "change");
+            format!("{changes} from the OpenMoat {version} default")
+        }),
+        (grants > 0).then(|| {
+            let grants = crate::report::count(grants, "directory grant");
+            format!("{grants} from an earlier release")
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    (!parts.is_empty()).then(|| parts.join(" and "))
 }
 
 /// `text` with `like`'s line endings: a policy saved with CRLF still lines up

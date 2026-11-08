@@ -404,18 +404,31 @@ fn allow_dir_opens_the_directory_but_deny_rules_still_win() {
     let message = text(&out);
     assert_eq!(out.status.code(), Some(OK), "{message}");
     assert!(
-        message.contains("fs.write:")
-            && message.contains("/**")
+        message.contains("dir:")
+            && message.contains("stay held there")
             && message.contains("deny rules still win")
             && message.contains("Updating the agents' sandbox settings"),
         "{message}"
     );
     assert_eq!(check(&sb, "fs-write", &notes), Some(OK));
-    let hook = shared.join(".git/hooks/pre-commit");
-    assert_ne!(
-        check(&sb, "fs-write", hook.to_str().unwrap()),
-        Some(OK),
-        "a hook planted in the allowed directory is not allowed by it"
+    // what the policy holds for review stays held in the directory, editor files included
+    for held in [
+        ".git/hooks/pre-commit",
+        ".vscode/settings.json",
+        ".idea/workspace.xml",
+    ] {
+        let path = shared.join(held);
+        assert_eq!(
+            check(&sb, "fs-write", path.to_str().unwrap()),
+            Some(REVIEW),
+            "{held} in the allowed directory is not allowed by it"
+        );
+    }
+    let listed = sb.moat(&["allowed"]);
+    assert!(
+        text(&listed).contains("read and write in") && text(&listed).contains("approved-1"),
+        "{}",
+        text(&listed)
     );
     let doctor = sb.moat(&["doctor"]);
     assert!(text(&doctor).contains("all intact"), "{}", text(&doctor));

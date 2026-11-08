@@ -318,8 +318,12 @@ fn fetch_exclusions_net_matches(group: &RuleGroup, out: &mut Vec<Warning>) {
     }
 }
 
-/// Does pattern `by` match everything pattern `target` matches?
-fn covers(kind: Kind, by: &str, target: &str) -> bool {
+/// Does pattern `by` of a `kind` list match everything pattern `target` matches?
+/// `~` and `${project}` stand for the same place on both sides. Conservative:
+/// `false` whenever it cannot be shown from the two patterns' text, and for an
+/// exclusion (`!…`) on either side; compare two exclusions without their `!`.
+#[must_use]
+pub fn covers(kind: Kind, by: &str, target: &str) -> bool {
     if kind == Kind::Shell {
         match (ShellPattern::compile(by), ShellPattern::compile(target)) {
             (Ok(by), Ok(target)) => by.covers(&target),

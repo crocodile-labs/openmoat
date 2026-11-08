@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use openmoat_audit::Event;
 use openmoat_core::{Action, PathResolver as _, RuleGroup, TAINT_RULE, Verdict};
 
-use crate::approvals::{self, GRANT_TTL_MS, Grants, Overlay};
+use crate::approvals::{self, Entry, GRANT_TTL_MS, Grants, Overlay};
 use crate::cli::AllowArgs;
 use crate::context::{absolute, path_string};
 use crate::exit::Code;
@@ -372,7 +372,7 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
     let before = Overlay::load(&path)?;
     let mut overlay = before.clone();
     let (verb, rule) = if let Some(id) = &args.remove {
-        let ids: Vec<String> = overlay.allow.iter().map(|g| g.id.clone()).collect();
+        let ids: Vec<&str> = before.ids().collect();
         let rule = overlay.remove(id).with_context(|| {
             format!(
                 "no rule `{id}` in {}; rules there: {}",
@@ -386,13 +386,14 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
         })?;
         ("removed from", rule)
     } else if let Some(host) = &args.site {
-        ("added to", overlay.allow_site(host)?.clone())
+        ("added to", Entry::Rule(overlay.allow_site(host)?.clone()))
     } else {
         let dir = args
             .dir
             .as_deref()
             .context("give --site, --dir or --remove")?;
-        ("added to", overlay.allow_dir(&dir_spellings(dir)?).clone())
+        let grant = overlay.allow_dir(&dir_spellings(dir)?).clone();
+        ("added to", Entry::Dir(grant))
     };
     overlay.save(&path)?;
     if let Err(error) = home.load_policy() {
@@ -407,11 +408,13 @@ fn change_overlay(home: &Home, args: &AllowArgs, out: &mut Deferred) -> Result<(
         if args.dir.is_some() {
             writeln!(
                 out,
-                "  deny rules still win: secrets and kernel files in it stay denied"
+                "  writes the policy holds for review stay held there (a `.git`, CI and editor \
+                 files, and any a later policy adds); deny rules still win: secrets and kernel \
+                 files in it stay denied"
             )?;
         }
-        writeln!(out, "  undo: openmoat allow --remove {}", rule.id)?;
-        warn_if_shadowed(home, &rule.id, out)?;
+        writeln!(out, "  undo: openmoat allow --remove {}", rule.id())?;
+        warn_if_shadowed(home, rule.id(), out)?;
     }
     Ok(())
 }

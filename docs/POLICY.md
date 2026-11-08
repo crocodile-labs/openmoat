@@ -865,7 +865,7 @@ your words. `default.<kind>` and the ids of `openmoat mcp proxy`, `openmoat prox
 | `diff-policy`, `diff-link`, `diff-submodule`, `diff-unchecked` | review | `openmoat policy check-diff` only: a change to a policy file the check read; a symbolic link the change makes, with where it points; a submodule it changes; a diff too large to search its added lines |
 | `diff-package-near-miss`, `diff-install-script`, `diff-package-source`, `diff-lock-integrity`, `diff-ci-pr-target`, `diff-ci-permissions`, `diff-ci-unpinned`, `diff-ci-injection`, `diff-ci-secret-out`, `diff-pipe-to-shell`, `diff-decode-exec`, `diff-python-startup`, `diff-docker-remote-add`, `diff-encoded-blob`, `diff-private-key`, `diff-env-secret`, `diff-new-host` | each its own; `check_diff.levels` sets them | `openmoat policy check-diff` only: the content checks of an added line ([MERGE_CHECK.md](MERGE_CHECK.md#content-checks), ADR-055) |
 | `approved-session` | allow | a `review` for a shell command that a person granted with `openmoat allow` for this host session (§8.2) |
-| `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` |
+| `approved-<n>` | allow | a permanent rule in `~/.moat/policy.d/approved.yaml` written by `openmoat allow --always` or `--site`, or a directory grant from `--dir` (§8.2) |
 | `proxy-address`, `proxy-sni`, `proxy-request`, `proxy-upstream`, `proxy-secret`, `proxy-secret-route`, `proxy-tls`, `proxy-port`, `proxy-session`, `proxy-capacity`, `proxy-audit` | deny | `openmoat proxy` refused a connection: a loopback, link-local, metadata, or unnamed private destination, a TLS server name that does not match the CONNECT host or is encrypted (ECH), a request it does not serve, a destination it could not reach, a brokered secret sent to a host other than its own, a request to a secret's host that its `allow` rules do not name (§2.1, ADR-043), a terminated tunnel whose TLS handshake failed or whose upstream certificate did not verify (§2.1), an allowed host on a port no rule names, a request without a valid session credential, or over its session's share of the connections (§9, ADR-044), (counted, without a host) connections over its capacity, or a connection it could not record (§2.1, §5.2) |
 | `proxy-credential`, `session-start` | allow (audit only) | the row Claude Code's `SessionStart` hook records when it issues the session its credential for `openmoat proxy`, which the proxy folds the session's taint with (§9, ADR-044); or a session start that issued none (the reason says why) |
 
@@ -1328,15 +1328,37 @@ openmoat allow --dir ~/work/shared     # fs.read and fs.write of the directory a
 openmoat allow --remove approved-3     # take a permanent rule out again
 ```
 
-`--site` and `--dir` append a rule to the same overlay, check that the merged policy still
-lints, re-pin, and print the rule as written plus the `--remove` command that undoes it.
-`--site` takes a plain host name or address only (no wildcard, scheme or port; write those
-with `openmoat edit`). `--dir` must name an existing directory; it is stored as written and,
-when that differs, with its symlinks resolved, since the hook checks a path both ways. The
-home directory, its ancestors and filesystem roots are refused, as are names with glob
-characters. Deny rules still win, so `.env` files and keys inside an allowed directory stay
-denied and `kernel-self` paths stay protected. `--remove` takes any `approved-N` id,
-including one `--always` wrote.
+`--site` and `--dir` add to the same overlay, check that the merged policy still lints,
+re-pin, and print what was written plus the `--remove` command that undoes it. `--site`
+appends a rule and takes a plain host name or address only (no wildcard, scheme or port;
+write those with `openmoat edit`). `--dir` must name an existing directory; it is stored as
+written and, when that differs, with its symlinks resolved, since the hook checks a path
+both ways. The home directory, its ancestors and filesystem roots are refused, as are names
+with glob characters. `--remove` takes any `approved-N` id, including one `--always` wrote.
+
+A directory grant is stored as the person chose it, under `dirs:` in the overlay
+(`- id: approved-4`, a `reason`, `dir: [<as written>, <symlinks resolved>]`). Each time the
+policy is loaded it becomes an allow rule that reads and writes the directory and everything
+below it, except the writes a `review` rule of the policy, as it is then, holds there: the
+rule's project paths read as paths in the directory (`${project}/.git/**` becomes
+`<dir>/.git/**`), its paths at any depth too (`**/.vscode/**` becomes `<dir>/**/.vscode/**`),
+and its fixed paths (`~/.config/git/**`) where they can lie in the directory, through a
+moved agent directory included (ADR-007, amendment of 2026-11-07). So a write the policy
+holds for review, a `.git`, CI files, the editors' configuration, a virtual environment's
+`bin/`, still needs review inside a granted directory, and so does every path a later policy
+or a policy pack adds. Deny rules still win, so `.env` files and keys inside an allowed
+directory stay denied and `kernel-self` paths stay protected. A grant of one exact path
+(`openmoat allow --last --always`) still answers the review it was approved for.
+
+Before directory grants, `--dir` wrote a plain allow rule with the `.git` and `runs-later`
+paths of that day copied in as exclusions, so a protection added later was allowed in the
+directory. `openmoat policy upgrade` recognises such a rule (its `--dir` reason, the
+directory and everything below it read and written, exclusions only inside it, nothing else)
+and offers to turn it into a grant with the same id; it is listed under "Directory grants",
+applied with the answer to the rest and re-pinned with it. An exclusion of the old rule that
+the policy no longer names is kept in the grant's `except:` list, so the change only adds
+protection. Until then `openmoat doctor`, `openmoat status` and the home screen list it as a
+directory grant to bring up to date. `--undo` puts back the policy, not the old rule.
 
 `openmoat edit` opens `~/.moat/policy.yaml` in `$VISUAL`, `$EDITOR` or `vi` (`notepad` on
 Windows) on a copy inside `~/.moat`. When the editor exits, an unchanged copy changes
