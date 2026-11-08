@@ -62,7 +62,7 @@ itself, not the sandbox (the CI runner's kernel has `dev.tty.legacy_tiocsti` at 
 | Layer | Status |
 |---|---|
 | `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |
-| `openmoat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |
+| `openmoat run`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |
 | `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |
 | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |
 | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |

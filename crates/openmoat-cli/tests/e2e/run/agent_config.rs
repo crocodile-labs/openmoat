@@ -90,10 +90,7 @@ fn existing_agent_configuration_is_read_only_in_the_network_namespace() {
     }
     let shown = text(&out);
     let port_only = stderr(&out).contains("restricted by port only");
-    assert!(
-        !(port_only && std::env::var_os("CI").is_some()),
-        "CI must run `openmoat run` in a network namespace: {shown}"
-    );
+    super::check_netns(port_only, &shown);
     if port_only {
         eprintln!("skipped: bubblewrap cannot make a network namespace here");
         return;

@@ -20,6 +20,43 @@ mod agent_config;
 /// The running agent keeps its login; other agents' stay denied (ADR-054).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod agent_logins;
+/// Linux without bubblewrap: the port-only path a stock system takes.
+#[cfg(target_os = "linux")]
+mod stock_linux;
+
+/// Set by CI's `stock linux` job, whose runner has no bubblewrap and keeps
+/// unprivileged user namespaces restricted, as a stock Ubuntu does: there
+/// `openmoat run` must take the port-only path (Landlock and seccomp alone).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) const STOCK_LINUX: &str = "MOAT_TEST_STOCK_LINUX";
+
+/// Whether this is CI's `stock linux` job ([`STOCK_LINUX`]).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn stock_linux() -> bool {
+    std::env::var_os(STOCK_LINUX).is_some()
+}
+
+/// Whether `openmoat run` must get a network namespace here: on CI, whose
+/// Linux jobs install bubblewrap, except the `stock linux` job.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn netns_required() -> bool {
+    std::env::var_os("CI").is_some() && !stock_linux()
+}
+
+/// Fail when the run's network namespace is missing where it is required,
+/// or present on the `stock linux` job, which must test the path without
+/// one; `port_only` is whether `openmoat run` said it had none.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn check_netns(port_only: bool, shown: &str) {
+    assert!(
+        !(port_only && netns_required()),
+        "CI must run `openmoat run` in a network namespace: {shown}"
+    );
+    assert!(
+        port_only || !stock_linux(),
+        "the stock Linux job must run `openmoat run` without a network namespace: {shown}"
+    );
+}
 
 /// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
 /// outside the home so that writing the home is not a temp-directory write.
@@ -206,7 +243,7 @@ pub mod confined {
         let shown = stderr(out);
         let unavailable = shown.contains("needs bubblewrap") || shown.contains("bubblewrap cannot");
         assert!(
-            !(unavailable && std::env::var_os("CI").is_some()),
+            !(unavailable && netns_required()),
             "CI must run the Isolated tier: {}",
             text(out)
         );

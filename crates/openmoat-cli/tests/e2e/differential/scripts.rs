@@ -247,7 +247,7 @@ fn evidence_table_is_current() {
     doc.push_str(
         "\n## Layers\n\n| Layer | Status |\n|---|---|\n\
          | `openmoat run`, macOS (Seatbelt) | verified by the `macos-15` and `macos-15-intel` CI jobs |\n\
-         | `openmoat run`, Linux (Landlock + seccomp) | verified by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
+         | `openmoat run`, Linux (Landlock + seccomp) | verified by the `stock linux` CI job (no bubblewrap, unprivileged user namespaces restricted, as on a stock Ubuntu) and, with a network namespace, by the `ubuntu-latest` CI job (Linux 6.7 or later) |\n\
          | `openmoat run --isolate`, Linux (bubblewrap) | verified by the `ubuntu-latest` CI job (bubblewrap installed) |\n\
          | `openmoat run --isolate`, macOS | not run: refused until the Isolated tier has a virtual machine there (#175) |\n\
          | Claude Code sandbox and Codex profile, macOS | verified by the `standard tier (macos-15)` CI job |\n\
