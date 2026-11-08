@@ -26,9 +26,10 @@
 //! - a response must answer a request the host sent and the server has not
 //!   answered; any other is dropped, so a server cannot slip the host a listing
 //!   or a result nobody asked for;
-//! - a result goes to the [`Gate`] before the host sees it, which keeps the
-//!   pieces of a tool call's result for the cross-server flow check (ADR-058);
-//!   one it cannot keep reaches the host as an error;
+//! - a result, or an error answer, goes to the [`Gate`] before the host sees
+//!   it, which keeps the pieces of a tool call's answer for the cross-server
+//!   flow check (ADR-058) and what it names as injected input (ADR-057); one
+//!   it cannot keep reaches the host as OpenMoat's error;
 //! - a response that lists tools (`result.tools`) leaves out the tools the pins
 //!   hold;
 //! - `notifications/tools/list_changed` has the relay read the tools again
@@ -94,10 +95,12 @@ pub trait Gate: Send + Sync {
     /// Record a request the server sent the host; an error has it answered
     /// with an error instead of reaching the host.
     fn server_request(&self, method: &str) -> Result<()>;
-    /// The server's `result` for the host's request `request` ([`id_key`]),
-    /// before it reaches the host: the gate keeps what a tool call it passed
-    /// returned (ADR-058). An error has the host answered with an error
-    /// instead, so a result is never seen by the model unrecorded.
+    /// The server's answer to the host's request `request` ([`id_key`]), its
+    /// `result` or its `error` object, before it reaches the host: the gate
+    /// keeps what a tool call it passed returned (ADR-058, ADR-057), an error's
+    /// `message` and `data` as much as a result. An error has the host answered
+    /// with OpenMoat's error instead, so an answer is never seen by the model
+    /// unrecorded.
     fn result(&self, request: &str, result: &Value) -> Result<()> {
         let _ = (request, result);
         Ok(())

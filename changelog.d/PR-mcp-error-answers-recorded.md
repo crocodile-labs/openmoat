@@ -1,0 +1,2 @@
+### Security
+- The MCP gateway now reads a wrapped server's error answer to a tool call as it reads a result: a host, path or command in the error's `message` or `data` is injected input for the session (`injected-input`), and a piece of it carried to another server's sending tool needs review (`mcp-cross-server`); an error the gateway cannot record reaches the agent as OpenMoat's error instead ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

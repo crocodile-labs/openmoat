@@ -55,8 +55,11 @@ impl Relay {
                 if !self.response_of(&id, fields, out) {
                     return None;
                 }
-                if let Some(result) = fields.get("result")
-                    && let Err(e) = self.gate.result(&id_key(&id), result)
+                // An error answer reaches the model too: its `message` and
+                // `data` are the server's text as much as a result is.
+                let answer = fields.get("result").or_else(|| fields.get("error"));
+                if let Some(answer) = answer
+                    && let Err(e) = self.gate.result(&id_key(&id), answer)
                 {
                     // The model must not read a result whose pieces the
                     // cross-server flow check does not have (ADR-058).

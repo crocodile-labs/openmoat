@@ -17,7 +17,8 @@
 //! it names, any other as a host): a host also reads resources for the person,
 //! with no hook. `prompts/get` and the server's own requests are recorded.
 //!
-//! The result of each `tools/call` passed on a hook decision has its pieces
+//! The answer to each `tools/call` passed on a hook decision, a result or an
+//! error (whose `message` and `data` the model reads too), has its pieces
 //! kept under that decision's session (`mcp/flow.rs`, ADR-058), so the hook
 //! can tell when a later call carries them to another server, and the
 //! fingerprints of what it names kept as injected input (ADR-057), so a later
@@ -332,10 +333,11 @@ impl Gate for Gateway {
         Ok(refused)
     }
 
-    /// Keep the pieces of a passed tool call's result (ADR-058) and the
-    /// fingerprints of what it names (ADR-057) under the session the hook's
-    /// decision named; a response to anything else is not a tool result of a
-    /// session and is let through as it is.
+    /// Keep the pieces of a passed tool call's answer, its result or its error
+    /// object (ADR-058), and the fingerprints of what it names (ADR-057) under
+    /// the session the hook's decision named; the call no longer awaits an
+    /// answer either way. A response to anything else is not a tool result of
+    /// a session and is let through as it is.
     fn result(&self, request: &str, result: &Value) -> Result<()> {
         let awaiting = self
             .awaiting

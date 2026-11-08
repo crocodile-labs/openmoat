@@ -12,7 +12,11 @@ the model, or to have it counted for the wrong session, that a person never revi
 
 - the review a person reads in `openmoat mcp accept` showed some invisible characters
   as `?` but not all of them: tag characters (U+E0000 to U+E007F) spell ASCII text no
-  terminal draws, so a description could look harmless and still carry instructions.
+  terminal draws, so a description could look harmless and still carry instructions;
+- a JSON-RPC error answer to a tool call skipped the gate: its `message` and `data`
+  reach the model as a result does, but left no injected-input fingerprints and no
+  cross-server flow pieces, and the call stayed in the gateway's table of calls
+  awaiting an answer.
 
 ## Decision
 
@@ -25,6 +29,14 @@ the model, or to have it counted for the wrong session, that a person never revi
    fillers, as well as the control characters it already did. Under a definition that
    holds any, `openmoat mcp accept` says how many. A tool whose definition holds one is
    never pinned on first sight under `mcp.trust_first_sight`: a person reviews it.
+
+2. **An error answer is an answer.** The relay hands the gate a tool call's `error`
+   object as it hands it a `result`; the gate keeps its pieces (ADR-058) and the
+   fingerprints of what it names (ADR-057) under the session of the hook's decision,
+   and forgets the call either way. An error the gate cannot record reaches the host
+   as OpenMoat's own error, never as the server's text. Claude Code reports a failed
+   call of its own tools in `PostToolUseFailure`, which the hook does not read yet:
+   that needs a real machine to confirm the payload, and stays a documented gap.
 
 ## Consequences
 

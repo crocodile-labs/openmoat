@@ -86,7 +86,10 @@ something OpenMoat claims to stop.
   request.**
   - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
     report what a call returned; the MCP gateway keeps what a wrapped server's tool
-    returned for every agent (ADR-063, proposed). On every other host a planted host,
+    returned for every agent (ADR-063, proposed), its result or its error answer (the
+    error's `message` and `data` reach the model too). Claude Code reports a tool call
+    that failed in `PostToolUseFailure`, which OpenMoat's hook does not handle yet: a
+    failed host tool's (or an unwrapped MCP tool's) error text is not read. On every other host a planted host,
     path or command from a call that is not a wrapped MCP tool is not linked to the later
     call that uses it, and only session taint applies.
   - Linked beyond exact matches are only spellings of the same request (ADR-063 §4): a
