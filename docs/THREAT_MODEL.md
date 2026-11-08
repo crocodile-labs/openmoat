@@ -1199,12 +1199,9 @@ something OpenMoat claims to stop.
   workspace runs beside the user's hooks, is warned about the same way.
 
   [codex-hooks-doc]: https://learn.chatgpt.com/docs/hooks
-- **Codex does not send a command's `workdir`.** Codex's shell tools take a `workdir`
-  argument and run the command there, but the `PreToolUse` payload carries only the
-  command, so a relative path in it is checked against the session's directory, not
-  the one Codex runs it in. Absolute paths and `**/` patterns (`.env` anywhere) are
-  unaffected, and Codex's own sandbox (the `openmoat` profile) still applies to the
-  command where it runs. Until Codex sends `workdir`, OpenMoat cannot see it.
+<!-- generated:hosts-workdir -->
+- **Codex chooses where a call runs.** Codex sends a call's own working directory as `cwd` (a shell call's `workdir`, which the model picks) and starts every hook in the session's directory. When the `cwd` lies outside the session's project, `openmoat guard` decides the call from the session's directory, as the command run after a `cd` to the `cwd`, with every relative path taken from it: a write from `~/Library/LaunchAgents` is checked as that path, and a model-chosen directory never decides which directory is the project. A session started outside any project (the home directory) keeps a `cwd` inside a git work tree as its project.
+<!-- /generated -->
 - **PowerShell is not parsed.** Claude Code `PowerShell` is always `unparseable`, which
   the default policy defers to Claude Code's own prompt (and a `review` catch-all holds it for review). A
   PowerShell line given to a POSIX shell tool is lexed as POSIX and usually falls through
