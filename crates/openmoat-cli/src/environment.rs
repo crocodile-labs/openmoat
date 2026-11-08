@@ -87,9 +87,12 @@ impl Snapshot {
         } else {
             Vec::new()
         };
+        // Pinned only from absolute entries: a pin of `./git` would let any
+        // `git` planted in the directory a command runs in pass as the pinned one.
+        let absolute = absolute_only(path.iter().cloned());
         let mut programs = BTreeMap::new();
         for name in PINNED_PROGRAMS {
-            if let Some(found) = find_in(&path, &pathext, name) {
+            if let Some(found) = find_in(&absolute, &pathext, name) {
                 programs.insert((*name).to_owned(), found);
             }
         }
@@ -184,18 +187,42 @@ impl Snapshot {
     /// `node_modules/.bin`) names a directory of whatever repository the
     /// command runs in, where an agent can put a program of that name.
     pub fn program(&self, program: &str) -> Option<PathBuf> {
-        let absolute: Vec<PathBuf> = self
-            .path
-            .iter()
-            .filter(|dir| dir.is_absolute())
-            .cloned()
-            .collect();
         self.programs
             .get(program)
             .filter(|p| p.is_absolute())
             .cloned()
-            .or_else(|| find_in(&absolute, &self.pathext, program))
+            .or_else(|| {
+                find_in(
+                    &absolute_only(self.path.iter().cloned()),
+                    &self.pathext,
+                    program,
+                )
+            })
     }
+}
+
+/// The absolute directories of `dirs`, in order. A relative entry (`.`,
+/// `bin`, `node_modules/.bin`) names a directory of whatever directory the
+/// process runs in, where an agent can put a program of any name.
+fn absolute_only(dirs: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    dirs.into_iter().filter(|dir| dir.is_absolute()).collect()
+}
+
+/// This process's `PATH`, relative entries left out ([`absolute_only`]).
+pub fn absolute_search_path() -> Vec<PathBuf> {
+    std::env::var_os("PATH")
+        .map(|p| absolute_only(std::env::split_paths(&p)))
+        .unwrap_or_default()
+}
+
+/// The `program` this process's `PATH` names, found only in its absolute
+/// directories: what every program OpenMoat runs, probes (`--version`),
+/// trusts or records outside the snapshot is looked up by. Run from a
+/// repository with `.` on `PATH`, a planted `claude` or `git` there is never
+/// the one found. The snapshot's own lookups are [`Snapshot::program`] and,
+/// for deciding what a command would run, [`Snapshot`]'s `resolve`.
+pub fn find_on_path(program: &str) -> Option<PathBuf> {
+    find_in(&absolute_search_path(), &[], program)
 }
 
 /// `PATHEXT` (`.COM;.EXE;…`) as lowercase extensions; the default list when empty.
@@ -313,6 +340,25 @@ mod tests {
         let pinned_relative = snap(vec![system], Some(relative.join("git"))).program("git");
         assert_eq!(pinned_relative, Some(real), "a relative pin is no pin");
         assert_eq!(snap(vec![relative], None).program("git"), None);
+    }
+
+    /// A relative entry that reaches a directory holding a planted program
+    /// finds it with [`find_in`], and never once [`absolute_only`] filtered the
+    /// entries, as [`find_on_path`] and the snapshot's pins do.
+    #[cfg(unix)]
+    #[test]
+    fn a_relative_entry_reaching_a_planted_program_is_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let planted = executable(dir.path(), "claude");
+        let cwd = std::env::current_dir().unwrap();
+        let up = "../".repeat(cwd.components().count().saturating_sub(1));
+        let relative = PathBuf::from(format!("{up}{}", dir.path().display()).replace("//", "/"));
+        assert!(relative.is_relative());
+        let dirs = vec![relative];
+        assert!(find_in(&dirs, &[], "claude").is_some_and(|p| p.ends_with("claude")));
+        assert_eq!(find_in(&absolute_only(dirs.clone()), &[], "claude"), None);
+        let with_system = absolute_only(dirs.into_iter().chain([dir.path().to_path_buf()]));
+        assert_eq!(find_in(&with_system, &[], "claude"), Some(planted));
     }
 
     #[cfg(windows)]

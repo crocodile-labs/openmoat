@@ -51,7 +51,7 @@ use super::proxy::{self, Exit};
 use super::sandbox::write_report;
 use crate::cli::{IsolatedArgs, Netns, RunArgs};
 use crate::context::{self, path_string};
-use crate::environment::find_in;
+use crate::environment::find_on_path;
 use crate::exit::Code;
 use crate::guard_relay::{self, Service, random_hex};
 use crate::home::Home;
@@ -255,16 +255,15 @@ fn env_secrets(policy: &Policy) -> Vec<String> {
         .collect()
 }
 
-/// The executable `name` starts, symlinks resolved.
+/// The executable `name` starts, symlinks resolved. A bare name is looked up
+/// in `PATH`'s absolute entries only ([`find_on_path`]): `openmoat run` starts
+/// the agent, and a relative entry would let the repository it opens pick it.
 fn resolve(name: &OsStr) -> Result<PathBuf> {
     let path = Path::new(name);
     let found = if path.components().count() > 1 {
         Some(path.to_path_buf())
     } else {
-        let dirs: Vec<PathBuf> = std::env::var_os("PATH")
-            .map(|p| std::env::split_paths(&p).collect())
-            .unwrap_or_default();
-        find_in(&dirs, &[], &name.to_string_lossy())
+        find_on_path(&name.to_string_lossy())
     };
     let found = found.with_context(|| format!("{} is not on PATH", path.display()))?;
     std::fs::canonicalize(&found).with_context(|| format!("resolving {}", found.display()))

@@ -13,7 +13,6 @@
 //! ([`super::bundled`]; the VS Code extension puts no `claude` on `PATH`), and
 //! at least one of them is found.
 
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -90,10 +89,7 @@ fn on_path(found: &mut Vec<Option<Version>>) {
         }
         return;
     }
-    let path: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    if let Some(claude) = crate::environment::find_in(&path, &[], "claude") {
+    if let Some(claude) = crate::environment::find_on_path("claude") {
         found.push(run_version(Command::new(claude)).and_then(|text| parse(&text)));
     }
 }

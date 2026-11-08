@@ -61,10 +61,7 @@ impl Repo {
 
 /// The `git` on this test's search path, by its absolute path.
 pub fn git_program() -> PathBuf {
-    let path: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("PATH").unwrap())
-        .filter(|dir| dir.is_absolute())
-        .collect();
-    crate::environment::find_in(&path, &[], "git").expect("git on PATH")
+    crate::environment::find_on_path("git").expect("git on PATH")
 }
 
 /// An environment snapshot that pins [`git_program`], as `openmoat init` records it.

@@ -97,10 +97,7 @@ fn a_file_place_appends_one_line_per_anchor() {
 
 /// git from the search path, `None` (and the test stops early) without one.
 fn git() -> Option<PathBuf> {
-    let path: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    crate::environment::find_in(&path, &[], "git")
+    crate::environment::find_on_path("git")
 }
 
 #[test]

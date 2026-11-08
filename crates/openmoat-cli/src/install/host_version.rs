@@ -232,10 +232,7 @@ fn ask(program: &str) -> Option<Version> {
     if let Some(value) = std::env::var_os(format!("MOAT_{}_VERSION", program.to_uppercase())) {
         return parse_any(&value.to_string_lossy());
     }
-    let path: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    let found = crate::environment::find_in(&path, &[], program)?;
+    let found = crate::environment::find_on_path(program)?;
     let dir = CACHE_DIR.get();
     let file = dir.and_then(|_| identify(&found));
     if let (Some(dir), Some(seen)) = (dir, &file)

@@ -134,3 +134,82 @@ fn doctor_and_status_name_a_missing_or_different_hook_binary() {
         text(&out)
     );
 }
+
+/// Programs a repository could plant for OpenMoat to find through a relative
+/// `PATH` entry: each host's program (asked `--version` by `init`, `status`
+/// and `doctor`) and programs OpenMoat runs or pins.
+const PLANTED: &[&str] = &[
+    "claude",
+    "cn",
+    "codex",
+    "copilot",
+    "gemini",
+    "goose",
+    "hermes",
+    "openclaw",
+    "opencode",
+    "pi",
+    "git",
+    "ssh-keygen",
+    "sh",
+    "bash",
+    "openmoat",
+    "moat",
+];
+
+/// A repository with `.` first on `PATH` cannot make OpenMoat run, pin or
+/// record a program of its own: every lookup outside the snapshot's
+/// command resolution skips relative entries. OpenMoat Bar runs `status`
+/// and `doctor` every minute, wherever its shell was started.
+#[test]
+fn a_relative_path_entry_never_runs_or_pins_a_planted_program() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let sb = outside_temp();
+    let repo = sb.home.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let marker = sb.home.join("ran.txt");
+    for name in PLANTED {
+        let script = repo.join(name);
+        fs::write(
+            &script,
+            format!("#!/bin/sh\necho {name} >> '{}'\n", marker.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(".:{}", std::env::var("PATH").unwrap_or_default());
+    let run = |args: &[&str]| {
+        let mut cmd = sb.command();
+        cmd.current_dir(&repo)
+            .env("PATH", &path)
+            .env_remove("MOAT_CLAUDE_CODE_VERSION")
+            .env_remove("MOAT_OPENCODE_VERSION")
+            .args(args);
+        output(&mut cmd, None)
+    };
+    let out = run(&["init", "--yes"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    run(&["status"]);
+    run(&["doctor"]);
+    assert!(
+        !marker.exists(),
+        "a planted program ran: {}",
+        fs::read_to_string(&marker).unwrap_or_default()
+    );
+    let snapshot: Value =
+        serde_json::from_str(&fs::read_to_string(sb.home.join(".moat/environment.json")).unwrap())
+            .unwrap();
+    for (name, pinned) in snapshot["programs"].as_object().unwrap() {
+        let pinned = pinned.as_str().unwrap();
+        assert!(Path::new(pinned).is_absolute(), "{name} pinned as {pinned}");
+        assert!(
+            !pinned.starts_with(&*repo.to_string_lossy()),
+            "{name}: {pinned}"
+        );
+    }
+    let hook = hook_command(&sb);
+    assert!(
+        !hook.starts_with('.'),
+        "the hook names a relative path: {hook}"
+    );
+}

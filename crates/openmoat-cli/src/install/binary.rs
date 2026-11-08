@@ -130,14 +130,15 @@ fn stable_link(exe: &Path) -> Option<PathBuf> {
 }
 
 /// `argv[0]` as a path: absolute or relative to the working directory when it
-/// names a directory, otherwise looked up in `PATH` like the shell did.
+/// names a directory, otherwise looked up in `PATH`'s absolute entries. Found
+/// through a relative entry (`.`) it would be a relative path, and a hook
+/// naming one runs whatever is there in the directory the agent works in.
 fn invoked_path(arg0: &std::ffi::OsStr) -> Option<PathBuf> {
     let arg0 = Path::new(arg0);
     if arg0.components().count() > 1 {
         return std::path::absolute(arg0).ok();
     }
-    let dirs: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("PATH")?).collect();
-    crate::environment::find_in(&dirs, &[], arg0.to_str()?)
+    crate::environment::find_on_path(arg0.to_str()?)
 }
 
 #[cfg(test)]

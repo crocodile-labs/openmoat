@@ -194,10 +194,7 @@ pub fn all(home: &Home, binary: &Path) -> Vec<HostLoaded> {
 /// When `program` on the search path last changed: the newer of the entry
 /// there (a link a package manager made) and the file it names.
 fn program_ms(program: &str) -> Option<i64> {
-    let dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    let found = crate::environment::find_in(&dirs, &[], program)?;
+    let found = crate::environment::find_on_path(program)?;
     let link = fs::symlink_metadata(&found)
         .ok()
         .and_then(|m| modified_ms(&m));

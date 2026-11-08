@@ -284,14 +284,7 @@ fn seconds(text: Option<&str>) -> Result<i64> {
 /// The first `git` on `PATH` in an absolute directory: a relative entry
 /// would name a directory of the repository being read.
 fn git_program() -> Result<PathBuf> {
-    let dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| {
-            std::env::split_paths(&p)
-                .filter(|d| d.is_absolute())
-                .collect()
-        })
-        .unwrap_or_default();
-    crate::environment::find_in(&dirs, &[], "git").context("no git found on PATH")
+    crate::environment::find_on_path("git").context("no git found on PATH")
 }
 
 fn failed(Unchecked(why): Unchecked) -> anyhow::Error {
