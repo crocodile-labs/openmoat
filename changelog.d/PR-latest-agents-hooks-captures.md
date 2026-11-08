@@ -1,0 +1,2 @@
+### Added
+- The weekly check of each agent's latest release now proves Claude Code's `SessionStart` hook and its `PostToolUse` hook (a call to a host an earlier call's output named is held as `injected-input`), and copies every payload a real agent sends `openmoat guard` into its artefact, scrubbed, for the adapters' captured fixtures; only that job's build (`--features capture-payloads`) copies anything, no release does ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

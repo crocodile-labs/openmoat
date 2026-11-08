@@ -18,6 +18,14 @@ read JSON, and the agent records they come from (agents.json beside this file).
     check.py denied <host> <before.json> <after.json> [<marker file>...]
                                              a new audit row: <host> denied a read under ~/.ssh by
                                              secrets-paths; no marker file's text is in the logs given
+    check.py session-start <host> <before.json> <after.json>
+                                             a new audit row: <host>'s SessionStart hook ran
+    check.py injected <host> <before.json> <after.json> <text>
+                                             a new audit row naming <text> held by injected-input
+    check.py scrub <host> <version> <captured dir> <root> <home> <project> <out dir>
+                                             each payload `openmoat guard` copied for <host> written
+                                             as `captured-<version>-<n>.json`, with the throwaway
+                                             paths made the fixtures' made-up ones
     check.py openclaw-valid <config> <report.json>
     check.py openclaw-inspect <report.json>  OpenClaw's own validator and plugin inspector agree
     check.py opencode-settled <report.json>  OpenCode 2's plugin inventory is applied (exit 0/1, silent)
@@ -317,6 +325,73 @@ def load_json(path, what):
         fail(f"{what}: {path} is not JSON: {error}")
 
 
+def new_rows(host, before, after):
+    seen = {json.dumps(r, sort_keys=True) for r in rows(before)}
+    return [r for r in rows(after)
+            if r.get("host") == host and json.dumps(r, sort_keys=True) not in seen]
+
+
+def cmd_session_start(host, before, after):
+    """Claude Code ran OpenMoat's SessionStart hook: it records the session's
+    start (`session-start`), or the proxy credential it issued."""
+    new = new_rows(host, before, after)
+    hits = [r for r in new
+            if {"session-start", "proxy-credential"} & set(r.get("rules") or [])]
+    if not hits:
+        fail(f"no new {host} SessionStart row in the audit log: the agent never ran "
+             f"OpenMoat's SessionStart hook. New rows: {json.dumps(new)[:1500]}")
+    print(f"ok    the real agent ran OpenMoat's SessionStart hook: {hits[0].get('rules')}")
+    return 0
+
+
+def cmd_injected(host, before, after, text):
+    """A call using what an earlier call's output named was held as injected
+    input: OpenMoat's PostToolUse hook kept that output (ADR-057)."""
+    new = new_rows(host, before, after)
+    hits = [r for r in new if "injected-input" in (r.get("rules") or [])
+            and r.get("verdict") in ("review", "deny") and text in json.dumps(r)]
+    if not hits:
+        fail(f"no new {host} row naming {text} held by injected-input: the agent never ran "
+             f"OpenMoat's PostToolUse hook, or it kept nothing. New rows: {json.dumps(new)[:1500]}")
+    print(f"ok    the real agent ran OpenMoat's PostToolUse hook: {text} "
+          f"{hits[0].get('verdict')} [injected-input]")
+    return 0
+
+
+def unlocalise(value, places):
+    """`value` with each throwaway path of `places` (longest first) made the
+    fixtures' made-up one."""
+    if isinstance(value, dict):
+        return {k: unlocalise(v, places) for k, v in value.items()}
+    if isinstance(value, list):
+        return [unlocalise(v, places) for v in value]
+    if isinstance(value, str):
+        for real, fake in places:
+            value = value.replace(real, fake)
+    return value
+
+
+def cmd_scrub(host, version, captured, root, home, project, out):
+    """The payloads `openmoat guard` copied for `host` (`OPENMOAT_CAPTURE_DIR`,
+    a capture build only), ready for host/<module>/fixtures/."""
+    # A capture never fails the job: an odd version string names no file.
+    if not VERSION.fullmatch(version):
+        version = "unknown"
+    places = sorted([(project, "/p"), (home, "/Users/me"), (root, "/tmp/scratch")],
+                    key=lambda p: -len(p[0]))
+    files = sorted(Path(captured).glob(f"{host}-*.json")) if Path(captured).is_dir() else []
+    Path(out).mkdir(parents=True, exist_ok=True)
+    for n, path in enumerate(files, start=1):
+        doc = unlocalise(json.loads(path.read_text(encoding="utf-8")), places)
+        target = Path(out) / f"captured-{version}-{n}.json"
+        target.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+        print(f"ok    {path.name} -> {target.name}")
+    if not files:
+        print(f"warn  no payload captured for {host} (a build without capture-payloads, or "
+              f"an agent that clears the hook's environment)")
+    return 0
+
+
 def cmd_openclaw_valid(config, report):
     """`openclaw config validate --json` calls the file valid."""
     doc = load_json(report, "openclaw config validate")
@@ -401,6 +476,8 @@ COMMANDS = {
     "records": (cmd_records, 0), "matrix": (cmd_matrix, 0), "get": (cmd_get, 2),
     "version": (cmd_version, 2), "configs": (cmd_configs, 1), "json": (cmd_json, 1),
     "payload": (cmd_payload, 4), "reply": (cmd_reply, 4), "protected": (cmd_protected, 3),
+    "session-start": (cmd_session_start, 3), "injected": (cmd_injected, 4),
+    "scrub": (cmd_scrub, 7),
 }
 
 
