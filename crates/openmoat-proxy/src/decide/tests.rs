@@ -330,6 +330,64 @@ allow:
     );
 }
 
+/// A name pattern with a port whose host part is all hex letters (`f*:5432`)
+/// is a name on that port, not an address: as IPv6 text it would match a
+/// unique local address ending in `:5432` (`fd00::1:5432`). Its port is split
+/// off first, and only a host part starting with a digit or containing `:`
+/// names an address.
+#[test]
+fn a_hex_letter_name_with_a_port_does_not_name_an_address() {
+    let yaml = r#"
+version: 1
+allow:
+  - { id: names, net: ["f*:5432", "fac*:5432", "db.internal:5432", "*:5432"] }
+  - { id: lan, net: ["10.0.0.*:5432", "fd00::*:5432", "fd12:*", "1*:5432"] }
+"#;
+    let named_policy = address_policy(&Policy::parse(yaml).unwrap());
+    assert_eq!(named_policy.allow[0].patterns(Kind::Net), [""; 0]);
+    assert_eq!(
+        named_policy.allow[1].patterns(Kind::Net),
+        ["10.0.0.*:5432", "fd00::*:5432", "fd12:*", "1*:5432"]
+    );
+    // Even kept, a pattern with a port never matches an IPv6 address's text.
+    let all = Policy {
+        allow: vec![openmoat_core::RuleGroup {
+            id: "kept".to_owned(),
+            net: vec!["f*:5432".to_owned(), "6*:5432".to_owned()],
+            ..Default::default()
+        }],
+        defaults: Defaults::All(Verdict::Review),
+        ..Policy::parse("version: 1\n").unwrap()
+    };
+    let addresses = CompiledPolicy::compile(&named_policy, &ctx()).unwrap();
+    let kept = CompiledPolicy::compile(&all, &ctx()).unwrap();
+    for ip in ["fd00::1:5432", "fd00::5432", "64:ff9b:1::808:5432"] {
+        let ip: IpAddr = ip.parse().unwrap();
+        assert_eq!(
+            forbidden(ip).map(|f| matches!(f, Forbidden::Private(_))),
+            Some(true),
+            "{ip}"
+        );
+        assert!(!named(&kept, ip), "{ip}");
+        for port in [5432, 443] {
+            let addr = SocketAddr::new(ip, port);
+            assert!(!named_on(&kept, addr), "{addr}");
+        }
+    }
+    for (addr, open) in [
+        ("[fd00::1]:5432", false),
+        ("[fd00::2]:443", false),
+        // `fd00::*:5432` is an IPv6 glob: it names these on 443 and 80.
+        ("[fd00::7:5432]:443", true),
+        ("10.0.0.7:5432", true),
+        ("10.0.0.7:443", false),
+        ("[fd12::9]:443", true),
+    ] {
+        let addr: SocketAddr = addr.parse().unwrap();
+        assert_eq!(named_on(&addresses, addr), open, "{addr}");
+    }
+}
+
 #[test]
 fn deny_rules_hold_for_every_resolved_address() {
     // There is no CIDR syntax; a range is a glob on the address text.

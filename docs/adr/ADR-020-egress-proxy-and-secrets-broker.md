@@ -73,3 +73,15 @@ are deliberate:
   example a script that posts its own configuration, without protecting the value.
 
 A placeholder or value in a request to any other host is still refused and recorded.
+
+## Note (2026-11-08): which allow patterns name a private address
+
+This note explains the accepted decision above; it does not change it.
+
+A private or unique local address is reached only when an allow rule names the
+address. A pattern names one when it starts with a digit (`10.0.0.*`) or is IPv6 text
+(`fd12::*`, `fe80:*`). A `host:port` pattern is judged by its host part: `fac*:5432` is
+a name on port 5432, even though the text of the unique local address `fd00::1:5432`
+matches it as a glob. The policy engine already never matched a pattern with a port
+against IPv6 text; the proxy's address policy now drops such a pattern too, so neither
+layer depends on the other for this.

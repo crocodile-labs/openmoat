@@ -947,7 +947,9 @@ first. Differences from the hook:
   matching that text still wins. An IPv4 pattern with a port (`10.0.0.5:5432`) opens the
   address on that port only, and an exclusion (`!10.0.0.9`) holds on every port. Patterns
   starting with `*`, `?`, `[` or `{`, and name patterns such as `*.corp.example`, never
-  open a private address.
+  open a private address. A pattern with a port is judged by the part before the port:
+  `fac*:5432` is a name on port 5432 and opens no unique local address such as
+  `fd00::1:5432`, although that address's text matches it.
 - A deny rule naming an address (`net: ["203.0.113.7"]`, `2001:db8::*`) holds for every
   name that resolves to it, public addresses included: one such address refuses the name.
 - Names are resolved as fully qualified (`example.com.`), so the resolver never tries a
