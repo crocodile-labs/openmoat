@@ -54,7 +54,7 @@ pub struct HeldEntry {
 /// The pins of one listing (prompts, resources or resource templates), by
 /// each entry's key.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Catalog {
+pub struct Catalogue {
     /// Whether a listing of this kind was ever read: an earlier pin file has
     /// none, and its first listing is pinned as it is when a person accepted
     /// the server's tools.
@@ -66,7 +66,7 @@ pub struct Catalog {
     pub held: BTreeMap<String, HeldEntry>,
 }
 
-impl Catalog {
+impl Catalogue {
     fn is_unseen(&self) -> bool {
         !self.seen && self.accepted.is_empty() && self.held.is_empty()
     }
@@ -197,12 +197,12 @@ pub struct Surface {
     /// a person accepted: each part never read is pinned as it is first read.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub adopt: bool,
-    #[serde(default, skip_serializing_if = "Catalog::is_unseen")]
-    pub prompts: Catalog,
-    #[serde(default, skip_serializing_if = "Catalog::is_unseen")]
-    pub resources: Catalog,
-    #[serde(default, skip_serializing_if = "Catalog::is_unseen")]
-    pub templates: Catalog,
+    #[serde(default, skip_serializing_if = "Catalogue::is_unseen")]
+    pub prompts: Catalogue,
+    #[serde(default, skip_serializing_if = "Catalogue::is_unseen")]
+    pub resources: Catalogue,
+    #[serde(default, skip_serializing_if = "Catalogue::is_unseen")]
+    pub templates: Catalogue,
 }
 
 /// What one `initialize` answer did to the pins.
@@ -247,7 +247,7 @@ pub fn is_version_like(version: &str) -> bool {
 }
 
 impl Surface {
-    pub fn catalog(&mut self, kind: Kind) -> &mut Catalog {
+    pub fn catalogue(&mut self, kind: Kind) -> &mut Catalogue {
         match kind {
             Kind::Prompts => &mut self.prompts,
             Kind::Resources => &mut self.resources,
@@ -255,7 +255,7 @@ impl Surface {
         }
     }
 
-    fn catalog_of(&self, kind: Kind) -> &Catalog {
+    fn catalogue_of(&self, kind: Kind) -> &Catalogue {
         match kind {
             Kind::Prompts => &self.prompts,
             Kind::Resources => &self.resources,
@@ -305,7 +305,8 @@ impl Surface {
 
     /// Check one listing of `kind`; `trust` as for [`Self::introduce`].
     pub fn list(&mut self, kind: Kind, entries: &[Value], trust: bool, now_ms: i64) -> Listed {
-        self.catalog(kind).list(entries, kind.key(), trust, now_ms)
+        self.catalogue(kind)
+            .list(entries, kind.key(), trust, now_ms)
     }
 
     /// Mark the listings the server's `capabilities` (of its `initialize`
@@ -335,7 +336,7 @@ impl Surface {
     pub fn unseen(&self, kind: Option<Kind>) -> bool {
         match kind {
             None => !self.server_seen && self.server.is_none(),
-            Some(kind) => self.catalog_of(kind).is_unseen(),
+            Some(kind) => self.catalogue_of(kind).is_unseen(),
         }
     }
 
@@ -344,7 +345,7 @@ impl Surface {
         usize::from(self.server_held.is_some())
             + Kind::ALL
                 .iter()
-                .map(|k| self.catalog_of(*k).held.len())
+                .map(|k| self.catalogue_of(*k).held.len())
                 .sum::<usize>()
     }
 
@@ -353,7 +354,7 @@ impl Surface {
             self.server = Some(held.pin);
         }
         for kind in Kind::ALL {
-            self.catalog(kind).accept_held();
+            self.catalogue(kind).accept_held();
         }
     }
 
@@ -365,10 +366,10 @@ impl Surface {
             out.push(describe(&what, self.server.as_ref(), &held.pin));
         }
         for kind in Kind::ALL {
-            let catalog = self.catalog_of(kind);
-            for (name, held) in &catalog.held {
+            let catalogue = self.catalogue_of(kind);
+            for (name, held) in &catalogue.held {
                 let what = format!("{} `{name}` of MCP server `{server}`", kind.noun());
-                out.push(describe(&what, catalog.accepted.get(name), &held.pin));
+                out.push(describe(&what, catalogue.accepted.get(name), &held.pin));
             }
         }
         out

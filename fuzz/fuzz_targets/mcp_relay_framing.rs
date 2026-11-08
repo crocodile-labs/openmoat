@@ -165,7 +165,16 @@ mod mcp {
                     listed
                 }
 
-                pub fn unlisted_seen(&mut self, _capabilities: &Value) {}
+                // As the real pins: a list the server does not offer counts as seen.
+                pub fn unlisted_seen(&mut self, capabilities: &Value) {
+                    if capabilities.get("prompts").is_none() {
+                        self.listed.insert(Kind::Prompts);
+                    }
+                    if capabilities.get("resources").is_none() {
+                        self.listed.insert(Kind::Resources);
+                        self.listed.insert(Kind::Templates);
+                    }
+                }
 
                 pub fn prompt_held(&self, name: &str) -> bool {
                     self.held.contains(&(Kind::Prompts, name.to_owned()))
