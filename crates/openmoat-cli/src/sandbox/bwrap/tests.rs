@@ -108,7 +108,13 @@ fn denied_paths_in_the_project_and_the_grants_are_masked() {
         !out.mounts
             .contains(&Mount::ReadOnly(p("proj/.claude/worktrees")))
     );
-    assert_eq!(out.placeholders, vec![p("proj/.envrc"), p("proj/.moat")]);
+    let made: Vec<&str> = out.placeholders.iter().map(|x| x.path.as_str()).collect();
+    let (envrc, moat) = (p("proj/.envrc"), p("proj/.moat"));
+    assert_eq!(made[..2], [envrc.as_str(), moat.as_str()]);
+    // and the hook settings the project lacks
+    let local = p("proj/.claude/settings.local.json");
+    assert!(made.contains(&local.as_str()), "{made:?}");
+    assert!(!made.contains(&p("proj/.claude/settings.json").as_str()));
     // Trees first, outermost first; the home itself is never mounted.
     let first_mask = out
         .mounts
@@ -293,7 +299,19 @@ fn the_network_namespace_keeps_the_projects_agent_configuration_read_only() {
     }
     let project = real.display().to_string();
     let ir = session_ir(&project);
-    let masks = project_masks(&ir, &[project.clone(), "/other/spelling".into()]).unwrap();
+    let all = project_masks(&ir, &[project.clone(), "/other/spelling".into()]).unwrap();
+    // the missing hook settings planned for the session are another test's
+    let made: Vec<String> = all.placeholders.iter().map(|x| x.path.clone()).collect();
+    let masks: Vec<Mount> = all
+        .mounts
+        .into_iter()
+        .filter(|m| {
+            let at = path_of(m);
+            !made
+                .iter()
+                .any(|x| x == at || x.replacen(&project, "/other/spelling", 1) == at)
+        })
+        .collect();
     let expected = [
         Mount::ReadWrite(p(".github")),
         Mount::ReadWrite(p(".pi")),
@@ -336,7 +354,8 @@ fn the_network_namespace_keeps_the_projects_agent_configuration_read_only() {
             "{writable}"
         );
     }
-    assert_eq!(project_masks(&ir, &[]).unwrap(), Vec::new());
+    let none = project_masks(&ir, &[]).unwrap();
+    assert!(none.mounts.is_empty() && none.placeholders.is_empty());
 }
 
 /// Under `--isolate` the folders above an agent's configuration directly in
@@ -498,3 +517,6 @@ allow:
         ]
     );
 }
+
+/// The agents' hook settings a project lacks when the session starts.
+mod hook_settings;

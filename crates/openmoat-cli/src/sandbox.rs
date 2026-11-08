@@ -216,14 +216,24 @@ pub fn netns_masks(
 
 /// The binds `moat run`'s network namespace on Linux adds over the agent
 /// configuration and hook settings in the project of `ctx`, and the folders
-/// that hold them ([`bwrap::project_masks`]).
+/// that hold them, with the missing hook settings it creates
+/// ([`bwrap::project_masks`]).
 #[cfg(target_os = "linux")]
 pub fn netns_project_masks(
     policy: &Policy,
     ctx: &EvalContext,
-) -> anyhow::Result<Vec<bwrap::Mount>> {
+) -> anyhow::Result<bwrap::ProjectMasks> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
     bwrap::project_masks(&ir, &project_spellings(ctx))
+}
+
+/// The agents' hook settings missing in the project of `ctx`, which `moat
+/// run` on Linux without a network namespace cannot cover
+/// ([`bwrap::missing_hook_settings`]).
+#[cfg(target_os = "linux")]
+pub fn missing_hook_settings(policy: &Policy, ctx: &EvalContext) -> anyhow::Result<Vec<String>> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    Ok(bwrap::missing_hook_settings(&ir, &project_spellings(ctx)))
 }
 
 /// The paths `kernel-self` keeps from commands (OpenMoat's state, an agent's

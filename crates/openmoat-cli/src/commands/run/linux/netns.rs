@@ -24,7 +24,7 @@ use super::isolate::{Session, relay_to_proxy, system_bwrap};
 use super::{Confined, Rules};
 use crate::context::path_string;
 use crate::sandbox::Report;
-use crate::sandbox::bwrap::{self, Mount};
+use crate::sandbox::bwrap::{self, Mount, Placeholder};
 use crate::sandbox::landlock::TCP_PORT_ALLOWANCE;
 
 /// The namespaces: a user namespace, needed to create the network one
@@ -96,7 +96,9 @@ fn refused(bwrap: &Path) -> Option<String> {
 pub fn port_only_notice(port: u16, why: &str, masks: &[Mount]) -> String {
     let mut notice = format!(
         "moat run: the network is restricted by port only: {why}, so a command in the sandbox \
-         can reach any host on port {port} and go around the proxy's checks and audit. With \
+         can reach any host on port {port} and go around the proxy's checks and audit, and can \
+         create an agent's hook settings the project lacks, which `openmoat run` names when the \
+         agent exits. With \
          bubblewrap (`apt install bubblewrap`) `openmoat run` gives the agent a network of its own \
          whose only exit is the proxy; `openmoat run --isolate` needs it too and also hides the \
          rest of the machine"
@@ -118,6 +120,24 @@ pub fn port_only_notice(port: u16, why: &str, masks: &[Mount]) -> String {
     notice
 }
 
+/// One line for each of `watched`, the hook settings missing when the agent
+/// started, that `exists` finds now: a command may have written it to turn
+/// the next session's hook off.
+pub fn created_during_run(watched: &[String], exists: impl Fn(&str) -> bool) -> Vec<String> {
+    watched
+        .iter()
+        .filter(|path| exists(path))
+        .map(|path| {
+            format!(
+                "moat run: {path} did not exist when the agent started and does now; an agent \
+                 reads it as its hook settings in its next session, where it can turn OpenMoat's \
+                 hook off. Look at it before you start an agent here, and remove it if you did \
+                 not write it"
+            )
+        })
+        .collect()
+}
+
 /// What `moat doctor` warns where there is no namespace, if there is none.
 pub fn doctor_warning() -> Option<String> {
     match network() {
@@ -131,19 +151,25 @@ pub fn doctor_warning() -> Option<String> {
 }
 
 /// `program` under `bwrap` in its own network namespace, `moat isolated`
-/// applying `rules` inside, in `cwd`, with the proxy on `port` relayed in and
-/// `masks` over the denied paths inside the grants.
+/// applying `rules` inside, in `cwd`, with the proxy on `port` relayed in,
+/// `masks` over the denied paths inside the grants and `placeholders` created
+/// in the project for the session.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one call site, which hands over what `confine` generated"
+)]
 pub fn namespaced(
     bwrap: &Path,
     rules: &Rules,
     masks: &[Mount],
+    placeholders: &[Placeholder],
     mut report: Report,
     program: &Path,
     cwd: &str,
     port: u16,
 ) -> Result<Confined> {
     report.allowances.retain(|a| a.rule != TCP_PORT_ALLOWANCE);
-    let session = Session::create(&[])?;
+    let session = Session::create(placeholders)?;
     relay_to_proxy(&session.socket, port)?;
     let moat = std::env::current_exe()
         .and_then(std::fs::canonicalize)
@@ -167,6 +193,7 @@ pub fn namespaced(
         restrict: None,
         _session: Some(session),
         warning: None,
+        watch: Vec::new(),
     })
 }
 
@@ -236,6 +263,28 @@ mod tests {
         assert!(
             notice.contains("stay open to commands")
                 && notice.ends_with(": /home/me/.claude/settings.json"),
+            "{notice}"
+        );
+    }
+
+    #[test]
+    fn hook_settings_created_during_a_port_only_run_are_named() {
+        let watched = [
+            "/p/.gemini/settings.json".to_owned(),
+            "/p/.claude/settings.local.json".to_owned(),
+        ];
+        let lines = created_during_run(&watched, |p| p == watched[0]);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].starts_with("moat run: /p/.gemini/settings.json did not exist"));
+        assert!(
+            lines[0].contains("turn OpenMoat's hook off"),
+            "{}",
+            lines[0]
+        );
+        assert!(created_during_run(&watched, |_| false).is_empty());
+        let notice = port_only_notice(41_000, "no bwrap", &[]);
+        assert!(
+            notice.contains("hook settings the project lacks"),
             "{notice}"
         );
     }

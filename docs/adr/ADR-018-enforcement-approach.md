@@ -127,3 +127,24 @@ user: other tools' state, sockets' folders and Kerberos ticket caches
   its own sandbox and adds the cache `KRB5CCNAME` names. In the network namespace on Linux, a deny whose glob is
   in the last name only is applied to the entries that exist when the session starts in a
   granted folder (hidden or bound read-only), as a literal path is.
+
+## Amendment 2026-11-08: hook settings that do not exist yet, on Linux
+
+A mount needs a path to cover, so on Linux `openmoat run` protected an agent's hook
+settings in the project only where they existed when the agent started. A command could
+create `.gemini/settings.json` or `.claude/settings.local.json` with `disableAllHooks`,
+and the next session ran without OpenMoat's hook; Seatbelt on macOS denies them by
+pattern, existing or not.
+
+- In the network namespace and under `--isolate`, each hook settings file `kernel-self`
+  names below a folder (`**/<dir>/<file>`) that is missing directly in the project is
+  created for the session, with the folders above it: `{}` for a JSON file, which every
+  agent reads as settings that change nothing, an empty folder for `.copilot/hooks`. The
+  file is bound read-only and the folders onto themselves, as for an existing one. Each is
+  removed when the agent exits while it is still as made. They show in `git status`
+  during the session.
+- Without a namespace (port-only), nothing can cover them. `openmoat run` notes the gap
+  when it starts and, when the agent exits, names each that was missing at the start and
+  exists now. Refusing to start there was weighed and not chosen: the port-only mode
+  already warns on every start, and a refusal would stop every run on such machines for a
+  file most projects never get.

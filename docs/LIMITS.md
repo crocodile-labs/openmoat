@@ -67,7 +67,11 @@ Each agent's gaps and the reasons are in
 - **On Linux, plain `openmoat run` does not protect files inside the project:**
   commands the agent starts can read and write `.env`, create `.envrc`, and write `.moat`
   and `.git/hooks`. `openmoat run` says so when it starts and `openmoat doctor` warns about
-  it; `openmoat run --isolate` (bubblewrap) closes it.
+  it; `openmoat run --isolate` (bubblewrap) closes it. An agent's hook settings in the
+  project (`.gemini/settings.json`, `.claude/settings.local.json`, …) are protected where
+  the agent gets a network namespace, missing ones by a read-only `{}` placeholder for the
+  session; without a namespace a command can create one that turns the next session's
+  hook off, and `openmoat run` only names it when the agent exits.
 - **The shared temp directory stays readable under `openmoat run`.** The run writes only
   its own temp directory (`TMPDIR`), but `/tmp` and `/var/folders` stay read roots, so a
   command can read what other programs left there, except the Kerberos ticket caches

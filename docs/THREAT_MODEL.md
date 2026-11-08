@@ -355,8 +355,10 @@ something OpenMoat claims to stop.
 
     back on either (on macOS not created or removed either); a nested one, such as a
     package's `.github` in `node_modules`, can. On Linux, an agent's hook settings
-    existing directly in the project (`.claude/settings.json` and the like) are
-    read-only in the network namespace too. CI files and commit-hook managers' files
+    directly in the project (`.claude/settings.json` and the like) are read-only in the
+    network namespace and under `--isolate` too; a missing one is created for the session
+    as a read-only `{}`, so a command cannot create one that turns the next session's hook
+    off. Without a namespace a command can, and `openmoat run` names it when the agent exits. CI files and commit-hook managers' files
     stay writable on both (installs write them); the hook holds the agent's tools'
     writes to one for review. On Linux an agent configuration file missing when the run starts
     (`.mcp.json`, `.claude/hooks/`) can still be created by a command.

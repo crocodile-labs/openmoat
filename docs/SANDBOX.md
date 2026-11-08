@@ -391,8 +391,23 @@ bubblewrap.
   settings there (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`,
   `.gemini/settings.json`, `.github/copilot/settings.json`, `.copilot/hooks/`), and
   each folder holding them is bound onto itself so it cannot be renamed; `--isolate`
-  pins those folders too. One created later or in a subdirectory, and all of them
-  without a namespace, stay writable, since Landlock grants the project whole.
+  pins those folders too. A hook settings file that does not exist yet
+  (`.claude/settings.local.json`, `.gemini/settings.json`,
+  `.github/copilot/settings.local.json`, `.codex/hooks.json`, `.cursor/hooks.json`, …)
+  would let a command turn the next session's hook off, so in the namespace and under
+  `--isolate` `openmoat run` creates it for the session (`{}` for a JSON file, which
+  every agent reads as settings that change nothing; a folder for `.copilot/hooks/`),
+  with the folders above it, binds the file read-only and the folders onto themselves,
+  and removes them when the agent exits while they are still as made. `git status`
+  shows them during the session; leave them out of commits. An agent configuration
+  file created later, one in a subdirectory, a hook settings file below a link, and
+  all of them without a namespace stay writable, since Landlock grants the project
+  whole; without a namespace `openmoat run` names, when the agent exits, each hook
+  settings file that was missing at the start and exists now:
+
+  ```text
+  moat run: .gemini/settings.json did not exist when the agent started and does now; ...
+  ```
 - **OpenMoat's state directory.** For the same reason, `openmoat run` on Linux refuses to
   start when a tree it grants (the project, a read root, a `--write` path, the temp
   directory) holds the state directory (`MOAT_HOME`, default `~/.moat`) or lies inside

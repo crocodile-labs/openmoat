@@ -162,3 +162,73 @@ fn a_linked_agent_folder_keeps_its_hook_settings_out_of_reach() {
         "{shown}"
     );
 }
+
+/// On Linux, an agent's hook settings that the project lacks when the agent
+/// starts cannot be created by a command: in the network namespace and under
+/// `--isolate` each is a read-only `{}` for the session, removed afterwards.
+/// Created, `.gemini/settings.json` or `.claude/settings.local.json` with
+/// `disableAllHooks` would run the next session without OpenMoat's hook.
+#[cfg(target_os = "linux")]
+#[test]
+fn missing_hook_settings_cannot_be_created() {
+    use super::confined::isolated;
+    use crate::common::{output, stderr};
+
+    const SCRIPT: &str = "mkdir -p .gemini && echo '{\"hooks\":{}}' > .gemini/settings.json; echo \"gemini=$?\"
+         mkdir -p .github/copilot && echo '{}' > .github/copilot/settings.local.json; echo \"copilot=$?\"
+         mkdir -p .claude && echo '{\"disableAllHooks\":true}' > .claude/settings.local.json; echo \"claude=$?\"
+         mkdir -p .codex && echo '{}' > .codex/hooks.json; echo \"codex=$?\"
+         cat .gemini/settings.json; echo
+         mv .gemini gemini-old; echo \"move=$?\"";
+    let created = [
+        ".gemini/settings.json",
+        ".github/copilot/settings.local.json",
+        ".claude/settings.local.json",
+        ".codex/hooks.json",
+    ];
+    for isolate in [false, true] {
+        let (sb, project) = installed_with_secret();
+        let tmp = sb.home.with_file_name("tmp");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let mut command = sb.command();
+        command.current_dir(&project).env("TMPDIR", &tmp).arg("run");
+        if isolate {
+            command.arg("--isolate");
+        }
+        let out = output(command.args(["--", "/bin/sh", "-c", SCRIPT]), None);
+        if !ran(&out) || (isolate && !isolated(&out)) {
+            continue;
+        }
+        let shown = text(&out);
+        let port_only = !isolate && stderr(&out).contains("restricted by port only");
+        assert!(
+            !(port_only && std::env::var_os("CI").is_some()),
+            "CI must run `openmoat run` in a network namespace: {shown}"
+        );
+        if port_only {
+            // Nothing covers them; the run names each when the agent exits.
+            assert!(
+                stderr(&out).contains(".gemini/settings.json did not exist"),
+                "{shown}"
+            );
+            continue;
+        }
+        for denied in ["gemini", "copilot", "claude", "codex", "move"] {
+            assert!(
+                !stdout(&out).contains(&format!("{denied}=0\n")),
+                "{denied} (isolate {isolate}): {shown}"
+            );
+        }
+        // the agent reads the placeholder as settings that change nothing
+        assert!(stdout(&out).contains("{}\n"), "{shown}");
+        for file in created {
+            assert!(
+                !project.join(file).exists(),
+                "{file} removed after the run (isolate {isolate}): {shown}"
+            );
+        }
+        for folder in [".gemini", ".github", ".claude", ".codex"] {
+            assert!(!project.join(folder).exists(), "{folder}: {shown}");
+        }
+    }
+}
