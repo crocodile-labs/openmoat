@@ -3,22 +3,35 @@
 Generated from `tests/conformance/*.yaml` by the conformance suite; do not edit.
 Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
 Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and
-the verdict and rule ids the default policy must produce for it.
+the verdict and rule ids the default policy must produce for it. The OWASP column names
+the risks of the OWASP Top 10 for Agentic Applications (2026) each class is a case of.
 
-| Threat | Class | Attacks | Reviews | Benign |
+| Threat | Class | OWASP agentic | Attacks | Reviews | Benign |
+|---|---|---|---|---|---|
+| T1 | Secret exfiltration via shell | ASI02, ASI03 | 159 | 73 | 10 |
+| T2 | Secret exfiltration via file tools | ASI02, ASI03 | 53 | 3 | 3 |
+| T3 | Secret exfiltration via environment | ASI03 | 123 | 5 | 20 |
+| T4 | Destructive git / filesystem operations | ASI02 | 65 | 59 | 6 |
+| T5 | Supply-chain execution | ASI04, ASI05 | 29 | 96 | 15 |
+| T6 | Environment poisoning | ASI05 | 60 | 42 | 7 |
+| T7 | Obfuscation and nested execution | ASI05 | 158 | 131 | 3 |
+| T8 | MCP tool poisoning / over-privileged tools | ASI02, ASI04, ASI06 | 36 | 4 | 13 |
+| T9 | Hook / policy tampering by the agent | ASI03 | 428 | 156 | 57 |
+| T10 | Hook supply chain (trojaned hook binary) | ASI04 | 13 | 0 | 3 |
+| T11 | Time-of-check / time-of-use, symlinks | ASI02 | 31 | 6 | 6 |
+| T12 | Network to unknown hosts | ASI02 | 114 | 23 | 27 |
+
+## By OWASP agentic risk
+
+A fixture counts under every risk its class maps to.
+
+| Risk | Name | Classes | Attacks | Reviews |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 159 | 74 | 10 |
-| T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
-| T3 | Secret exfiltration via environment | 123 | 5 | 20 |
-| T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
-| T5 | Supply-chain execution | 34 | 96 | 17 |
-| T6 | Environment poisoning | 60 | 42 | 7 |
-| T7 | Obfuscation and nested execution | 161 | 131 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 36 | 4 | 13 |
-| T9 | Hook / policy tampering by the agent | 428 | 156 | 57 |
-| T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
-| T11 | Time-of-check / time-of-use, symlinks | 31 | 6 | 6 |
-| T12 | Network to unknown hosts | 114 | 23 | 27 |
+| ASI02 | Tool Misuse and Exploitation | T1, T2, T4, T8, T11, T12 | 458 | 168 |
+| ASI03 | Identity and Privilege Abuse | T1, T2, T3, T9 | 763 | 237 |
+| ASI04 | Agentic Supply Chain Vulnerabilities | T5, T8, T10 | 78 | 100 |
+| ASI05 | Unexpected Code Execution | T5, T6, T7 | 247 | 269 |
+| ASI06 | Memory and Context Poisoning | T8 | 36 | 4 |
 
 ## T1: Secret exfiltration via shell
 
@@ -194,8 +207,7 @@ the verdict and rule ids the default policy must produce for it.
 - `review-curl-github-token-to-github` (review): Defer [default]
 - `review-curl-commit-sha` (review): Defer [default]
 - `review-curl-uuid-and-base64` (review): Defer [default]
-- `review-glob-component-that-does-not-compile` (review): Review [unparseable]
-- `review-glob-past-the-expansion-limit` (review): Review [unparseable]
+- `review-glob-component-that-does-not-compile` (review): Defer [unparseable]
 - `review-tilde-previous-directory` (review): Defer [unparseable]
 - `review-home-session-relative-read` (review): Defer [default]
 - `review-cd-unknown-target-then-relative-read` (review): Defer [default, unparseable]
@@ -623,11 +635,6 @@ the verdict and rule ids the default policy must produce for it.
 - `T5-curl-pipe-node-dash` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-perl-reads-stdin` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-ruby-reads-stdin` (attacks): Deny [pipe-to-shell]
-- `T5-sh-c-curl-substitution` (attacks): Deny [pipe-to-shell]
-- `T5-bash-c-wget-substitution` (attacks): Deny [pipe-to-shell]
-- `T5-eval-curl-substitution` (attacks): Deny [pipe-to-shell]
-- `T5-wrapped-sh-c-curl-substitution` (attacks): Deny [pipe-to-shell]
-- `T5-curl-pipe-versioned-python-then-more` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-sh-s` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-source-stdin` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-dot-stdin` (attacks): Deny [pipe-to-shell]
@@ -648,8 +655,6 @@ the verdict and rule ids the default policy must produce for it.
 - `T5-curl-get-pipe-sh` (attacks): Deny [pipe-to-shell]
 - `T5-curl-get-pipe-bash-with-args` (attacks): Deny [pipe-to-shell]
 - `T5-injected-page-curl-pipe-sh` (attacks): Deny [pipe-to-shell]
-- `benign-echo-date-substitution` (benign): Allow [dev-readonly, dev-shell]
-- `benign-sh-c-local-substitution` (benign): Defer [default]
 - `benign-t5-npm-ci` (benign): Defer [default]
 - `benign-t5-pnpm-install-frozen` (benign): Defer [default]
 - `benign-t5-npm-install-popular` (benign): Defer [default]
@@ -1034,9 +1039,6 @@ the verdict and rule ids the default policy must produce for it.
 - `T7-catchsegv-read-key` (attacks): Deny [secrets-paths]
 - `T7-systemd-inhibit-read-key` (attacks): Deny [secrets-paths]
 - `T7-launcher-unknown-option-hides-no-shell` (attacks): Deny [secrets-paths]
-- `T7-unlisted-wrapper-shell-string-read-key` (attacks): Deny [secrets-paths]
-- `T7-unlisted-wrapper-shell-string-settings-write` (attacks): Deny [kernel-self]
-- `T7-unlisted-wrapper-login-shell-string` (attacks): Deny [secrets-paths]
 - `benign-here-string-to-cat` (benign): Allow [dev-shell]
 - `benign-here-string-to-grep` (benign): Allow [dev-shell]
 - `benign-unterminated-heredoc-ends-with-the-input` (benign): Allow [dev-shell]

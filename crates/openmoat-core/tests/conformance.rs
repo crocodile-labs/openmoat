@@ -404,6 +404,75 @@ const THREATS: [(&str, &str); 12] = [
     ("T12", "Network to unknown hosts"),
 ];
 
+/// The OWASP Top 10 for Agentic Applications (2026) risks the threat classes
+/// fall under, with the five OpenMoat claims coverage of (ASI02-ASI06). The
+/// others (goal hijack, inter-agent messages, cascading failures, trust
+/// exploitation, rogue agents) are about what an agent is told or does over
+/// time, which a check of each tool call does not see.
+const ASI: [(&str, &str); 5] = [
+    ("ASI02", "Tool Misuse and Exploitation"),
+    ("ASI03", "Identity and Privilege Abuse"),
+    ("ASI04", "Agentic Supply Chain Vulnerabilities"),
+    ("ASI05", "Unexpected Code Execution"),
+    ("ASI06", "Memory and Context Poisoning"),
+];
+
+/// Which [`ASI`] risks each threat class of [`THREATS`] is a case of: an
+/// agent's own tools turned on the machine (ASI02), its inherited rights and
+/// credentials used beyond the task (ASI03), code or servers it pulls in
+/// (ASI04), code it was never meant to run (ASI05), and content that changes
+/// what later turns do (ASI06: poisoned MCP results and tools).
+const ASI_OF: [(&str, &[&str]); 12] = [
+    ("T1", &["ASI02", "ASI03"]),
+    ("T2", &["ASI02", "ASI03"]),
+    ("T3", &["ASI03"]),
+    ("T4", &["ASI02"]),
+    ("T5", &["ASI04", "ASI05"]),
+    ("T6", &["ASI05"]),
+    ("T7", &["ASI05"]),
+    ("T8", &["ASI02", "ASI04", "ASI06"]),
+    ("T9", &["ASI03"]),
+    ("T10", &["ASI04"]),
+    ("T11", &["ASI02"]),
+    ("T12", &["ASI02"]),
+];
+
+/// The [`ASI`] risks of threat class `t`.
+fn asi_of(t: &str) -> &'static [&'static str] {
+    ASI_OF
+        .iter()
+        .find(|(id, _)| *id == t)
+        .map_or(&[], |(_, risks)| risks)
+}
+
+/// Each threat class maps to at least one known OWASP agentic risk, and each
+/// of those risks to at least one class, so the column cannot fall behind
+/// [`THREATS`] or claim a risk nothing tests.
+#[test]
+fn every_threat_class_maps_to_an_owasp_agentic_risk() {
+    for (t, name) in THREATS {
+        let risks = asi_of(t);
+        assert!(!risks.is_empty(), "{t} ({name}) has no OWASP agentic risk");
+        for risk in risks {
+            assert!(
+                ASI.iter().any(|(id, _)| id == risk),
+                "{t}: unknown `{risk}`"
+            );
+        }
+    }
+    assert_eq!(
+        ASI_OF.len(),
+        THREATS.len(),
+        "ASI_OF lists a class twice or an unknown one"
+    );
+    for (risk, name) in ASI {
+        assert!(
+            ASI_OF.iter().any(|(_, risks)| risks.contains(&risk)),
+            "{risk} ({name}) has no threat class"
+        );
+    }
+}
+
 /// Every attack and review fixture names a known threat, every threat has at least
 /// one attack fixture, and `docs/COVERAGE.md` is the table generated from them.
 /// Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
@@ -445,19 +514,42 @@ fn threat_coverage_is_complete_and_documented() {
          Generated from `tests/conformance/*.yaml` by the conformance suite; do not edit.\n\
          Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.\n\
          Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and\n\
-         the verdict and rule ids the default policy must produce for it. Which layer holds\n\
-         each security promise on a given machine (policy decision, host hook, OS sandbox,\n\
-         network boundary) is the proof report of `openmoat bench --report`\n\
+         the verdict and rule ids the default policy must produce for it. The OWASP column names\n\
+         the risks of the OWASP Top 10 for Agentic Applications (2026) each class is a case of.\n\
+         Which layer holds each security promise on a given machine (policy decision, host hook,\n\
+         OS sandbox, network boundary) is the proof report of `openmoat bench --report`\n\
          ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)).\n\n\
-         | Threat | Class | Attacks | Reviews | Benign |\n|---|---|---|---|---|\n",
+         | Threat | Class | OWASP agentic | Attacks | Reviews | Benign |\n\
+         |---|---|---|---|---|---|\n",
     );
     for (t, name) in THREATS {
         let _ = writeln!(
             doc,
-            "| {t} | {name} | {} | {} | {} |",
+            "| {t} | {name} | {} | {} | {} | {} |",
+            asi_of(t).join(", "),
             count(t, "attacks.yaml"),
             count(t, "review.yaml"),
             count(t, "benign.yaml")
+        );
+    }
+    doc.push_str(
+        "\n## By OWASP agentic risk\n\n\
+         A fixture counts under every risk its class maps to.\n\n\
+         | Risk | Name | Classes | Attacks | Reviews |\n|---|---|---|---|---|\n",
+    );
+    for (risk, name) in ASI {
+        let classes: Vec<&str> = THREATS
+            .iter()
+            .map(|(t, _)| *t)
+            .filter(|t| asi_of(t).contains(&risk))
+            .collect();
+        let total = |file: &str| classes.iter().map(|t| count(t, file)).sum::<usize>();
+        let _ = writeln!(
+            doc,
+            "| {risk} | {name} | {} | {} | {} |",
+            classes.join(", "),
+            total("attacks.yaml"),
+            total("review.yaml")
         );
     }
     for (t, name) in THREATS {
