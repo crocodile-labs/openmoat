@@ -30,6 +30,33 @@ fn a_deny_hidden_past_a_classifier_limit_needs_review() {
     }
 }
 
+/// The same for the glob budget all globs of one call share (`MAX_MATCHES`):
+/// a glob that names more than can be listed may name a secret past the
+/// bound, so the call needs review instead of the catch-all's `defer`.
+#[test]
+fn a_deny_hidden_past_the_glob_expansion_limit_needs_review() {
+    use crate::expand::MAX_MATCHES;
+    use crate::realpath::MapPathResolver;
+    let p = Policy::parse(crate::DEFAULT_POLICY).unwrap();
+    let compiled = CompiledPolicy::compile(&p, &ctx()).unwrap();
+    let mut files: Vec<String> = (0..=MAX_MATCHES).map(|n| format!("/p/a{n}")).collect();
+    // listed last, so only past the bound
+    files.push("/p/z/.env".to_owned());
+    let fs = MapPathResolver {
+        files,
+        ..MapPathResolver::default()
+    };
+    for line in ["cat */.env", "cat *", "true; cat */.env"] {
+        let d = compiled.decide_with(&shell(line), &NoResolver, &fs);
+        assert!(
+            matches!(d.verdict, Verdict::Review | Verdict::Deny),
+            "{line}: {:?} {:?}",
+            d.verdict,
+            d.rules
+        );
+    }
+}
+
 #[test]
 fn unparseable_is_never_allowed() {
     let p = policy("version: 1\ndefaults: allow\n");

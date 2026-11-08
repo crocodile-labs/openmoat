@@ -7,7 +7,7 @@ the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Reviews | Benign |
 |---|---|---|---|---|
-| T1 | Secret exfiltration via shell | 159 | 73 | 10 |
+| T1 | Secret exfiltration via shell | 159 | 74 | 10 |
 | T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
@@ -194,7 +194,8 @@ the verdict and rule ids the default policy must produce for it.
 - `review-curl-github-token-to-github` (review): Defer [default]
 - `review-curl-commit-sha` (review): Defer [default]
 - `review-curl-uuid-and-base64` (review): Defer [default]
-- `review-glob-component-that-does-not-compile` (review): Defer [unparseable]
+- `review-glob-component-that-does-not-compile` (review): Review [unparseable]
+- `review-glob-past-the-expansion-limit` (review): Review [unparseable]
 - `review-tilde-previous-directory` (review): Defer [unparseable]
 - `review-home-session-relative-read` (review): Defer [default]
 - `review-cd-unknown-target-then-relative-read` (review): Defer [default, unparseable]

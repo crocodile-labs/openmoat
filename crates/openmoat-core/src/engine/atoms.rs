@@ -233,12 +233,22 @@ pub(super) fn checked_atoms(
             atoms.extend(named.into_iter().filter_map(|path| glob.with_path(path)));
         }
     }
-    let unexpanded = expansion.overflow().map(|reason| Unparsed {
-        reason,
-        needs_review: false,
-    });
+    // A glob not expanded in full may name a file no atom checks, as a line
+    // cut at the atom or length limit does: the call needs review, so padding
+    // a glob past the bound cannot turn a deny into the catch-all's `defer`.
+    let unparsed = match (unparsed, expansion.overflow()) {
+        (Some(why), Some(_)) => Some(Unparsed {
+            reason: why.reason,
+            needs_review: true,
+        }),
+        (None, Some(reason)) => Some(Unparsed {
+            reason,
+            needs_review: true,
+        }),
+        (why, None) => why,
+    };
     let atoms = with_environ_reads(with_resolved_paths(atoms, paths));
-    (atoms, unparsed.or(unexpanded))
+    (atoms, unparsed)
 }
 
 /// The read atoms of the paths an MCP call's values only look like
