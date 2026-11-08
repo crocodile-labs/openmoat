@@ -155,6 +155,27 @@ fn report(sb: &Sandbox, format: &str) -> std::process::Output {
     )
 }
 
+/// One line for a failed run: the exit code, the first line of stderr and the
+/// rows that are not PASS or NOT TESTED HERE, since a CI annotation shows only
+/// a message's first line.
+fn why_failed(out: &std::process::Output) -> String {
+    let err = stderr(out);
+    let first = err.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let rows: Vec<String> = serde_json::from_slice::<Value>(&out.stdout)
+        .ok()
+        .and_then(|r| r["rows"].as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r["status"] != "pass" && r["status"] != "not-tested-here")
+        .map(|r| format!("{}/{}: {}", r["promise"], r["layer"], r["reason"]))
+        .collect();
+    format!(
+        "exit {:?}; stderr: {first}; failed rows: {}",
+        out.status.code(),
+        rows.join(" | ")
+    )
+}
+
 /// The rows of `report` for `promise` at `layer`.
 fn rows<'a>(report: &'a Value, promise: &str, layer: &str) -> Vec<&'a Value> {
     report["rows"]
@@ -171,7 +192,12 @@ fn moatbench_report_answers_every_promise_per_layer() {
     let out = report(&sb, "json");
     let report = json(&out);
     println!("{report:#}");
-    assert_eq!(out.status.code(), Some(OK), "{}\n{report:#}", stderr(&out));
+    assert_eq!(
+        out.status.code(),
+        Some(OK),
+        "{}\n{report:#}",
+        why_failed(&out)
+    );
     assert_eq!(report["format"], "openmoat-bench-report-v1");
     assert_eq!(report["openmoat"], env!("CARGO_PKG_VERSION"));
     assert_ne!(report["os"].as_str().unwrap(), "");
@@ -245,7 +271,8 @@ fn moatbench_report_answers_every_promise_per_layer() {
 fn moatbench_report_in_markdown_and_text() {
     let sb = Sandbox::bare(&[]);
     let out = report(&sb, "markdown");
-    assert_eq!(out.status.code(), Some(OK), "{}", stderr(&out));
+    let json_run = report(&sb, "json");
+    assert_eq!(out.status.code(), Some(OK), "{}", why_failed(&json_run));
     let markdown = stdout(&out);
     assert!(
         markdown.starts_with("# MoatBench proof report\n"),

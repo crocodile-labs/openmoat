@@ -81,7 +81,8 @@ fn a_policy_from_the_previous_default_is_offered_build_credentials() {
 
 #[test]
 fn a_policy_from_the_previous_default_is_offered_the_proxy_ca_lines() {
-    let new = openmoat_core::DEFAULT_POLICY;
+    // A Windows checkout may hold the file with CRLF line ends.
+    let new = &openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
     let added = "      # a new proxy CA decides which HTTPS the proxy reads and signs for (ADR-043)\n      \
                  - \"{moat,openmoat} proxy ca *\"\n      - \"*/{moat,openmoat} proxy ca *\"\n";
     assert!(new.contains(added));

@@ -102,18 +102,22 @@ impl Scratch {
     pub fn new(parent: Option<&Path>) -> Result<Self> {
         let parent = match parent {
             Some(dir) => {
-                let dir = std::fs::canonicalize(dir)
+                // Compared resolved, used as given: on Windows `canonicalize`
+                // answers a `\\?\` path, which the paths in the hook payloads
+                // and the policy never are.
+                let resolved = std::fs::canonicalize(dir)
                     .with_context(|| format!("--scratch-dir {}", dir.display()))?;
                 let home = crate::home::user_home()
                     .ok()
                     .and_then(|h| std::fs::canonicalize(h).ok());
                 ensure!(
-                    home.is_none_or(|h| !h.starts_with(&dir)),
+                    home.is_none_or(|h| !h.starts_with(&resolved)),
                     "--scratch-dir {} is your home directory or one of its ancestors; name a \
                      directory of its own",
                     dir.display()
                 );
-                dir
+                std::path::absolute(dir)
+                    .with_context(|| format!("--scratch-dir {}", dir.display()))?
             }
             None => std::env::temp_dir(),
         };
