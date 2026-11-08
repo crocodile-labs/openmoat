@@ -1,2 +1,0 @@
-### Security
-- `openmoat run` on Linux compares each deny rule's path where it resolves, as it does the `--write` paths it grants: with `~/.claude` a link, `--write ~/.claude` now keeps `settings.json` in the linked folder read-only in the network namespace and under `--isolate`, Landlock's list of denies it cannot enforce names it, and without a namespace the run refuses as for an unlinked folder ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
