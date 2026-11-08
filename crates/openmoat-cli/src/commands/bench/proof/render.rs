@@ -11,18 +11,17 @@ use super::Report;
 /// What a person reads first: hook-level detection and OS-level enforcement
 /// are separate rows, and a row that did not run is not a pass.
 const LEGEND: &str = "Each row is one layer of one promise. policy decision: what OpenMoat's \
-                      engine decides; host hook: the host's own payload and its reading of the \
-                      reply; OS sandbox: the attack run under `openmoat run`; network boundary: \
-                      the proxy's decision. NOT TESTED HERE is not a pass.";
+                      engine decides; host model (golden payloads): OpenMoat's own model of \
+                      each host's payload and of its reading of the reply, no host program \
+                      run; real host: the host program itself, not run by this report; OS \
+                      sandbox: the attack run under `openmoat run`; network boundary: the \
+                      proxy's decision. NOT TESTED HERE is not a pass.";
 
 fn header(report: &Report) -> Vec<(&'static str, String)> {
     let hosts = report
         .hosts
         .iter()
-        .map(|h| match &h.version {
-            Some(v) => format!("{} ({v})", h.id),
-            None => format!("{} (version unknown)", h.id),
-        })
+        .map(|h| format!("{} ({}, not run)", h.id, h.evidence))
         .collect::<Vec<_>>()
         .join(", ");
     vec![
@@ -61,18 +60,18 @@ pub fn text(report: &Report) -> Result<()> {
         }
         let _ = writeln!(
             out,
-            "  {:<17} {:<16} {}",
+            "  {:<28} {:<16} {}",
             row.layer.label(),
             row.status.word(),
             row.check
         );
         if let Some(why) = row.status.reason() {
-            let _ = writeln!(out, "  {:<17} {:<16} why: {why}", "", "");
+            let _ = writeln!(out, "  {:<28} {:<16} why: {why}", "", "");
         }
         if !row.reproduce.is_empty() {
             let _ = writeln!(
                 out,
-                "  {:<17} {:<16} reproduce: {}",
+                "  {:<28} {:<16} reproduce: {}",
                 "",
                 "",
                 row.reproduce.join(", ")

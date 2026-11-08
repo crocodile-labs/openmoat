@@ -202,7 +202,12 @@ fn moatbench_report_answers_every_promise_per_layer() {
     assert_eq!(report["openmoat"], env!("CARGO_PKG_VERSION"));
     assert_ne!(report["os"].as_str().unwrap(), "");
     assert_eq!(report["hosts"][0]["id"], "claude-code");
-    assert_eq!(report["hosts"][0]["version"], "claude 2.1.295");
+    // The hook rows are OpenMoat's model of the host, not a run of the
+    // program named like it: no host version is reported beside them.
+    assert_eq!(
+        report["hosts"][0],
+        serde_json::json!({"id": "claude-code", "evidence": "model"})
+    );
     assert_eq!(report["summary"]["fail"], 0, "{report:#}");
     for promise in [
         "read-ssh-key",
@@ -211,7 +216,7 @@ fn moatbench_report_answers_every_promise_per_layer() {
         "exfil-allowed-host",
         "turn-off-openmoat",
     ] {
-        for layer in ["policy", "hook"] {
+        for layer in ["policy", "host-model"] {
             let found = rows(&report, promise, layer);
             assert_eq!(found.len(), 1, "{promise} {layer}");
             assert_eq!(found[0]["status"], "pass", "{promise} {layer}: {report:#}");
@@ -221,12 +226,14 @@ fn moatbench_report_answers_every_promise_per_layer() {
     let network = rows(&report, "exfil-allowed-host", "network");
     assert_eq!(network[0]["status"], "pass", "{report:#}");
     // OpenMoat's side of a failed hook is exercised; the host's needs the host.
-    let failed = rows(&report, "hook-fails-closed", "hook");
-    assert_eq!(failed.len(), 2);
+    let failed = rows(&report, "hook-fails-closed", "host-model");
+    assert_eq!(failed.len(), 1);
     assert_eq!(failed[0]["status"], "pass", "{report:#}");
-    assert_eq!(failed[1]["status"], "not-tested-here");
+    let real = rows(&report, "hook-fails-closed", "real-host");
+    assert_eq!(real.len(), 1);
+    assert_eq!(real[0]["status"], "not-tested-here");
     assert!(
-        failed[1]["reason"]
+        real[0]["reason"]
             .as_str()
             .unwrap()
             .contains("needs the real host"),
@@ -287,6 +294,12 @@ fn moatbench_report_in_markdown_and_text() {
         "{markdown}"
     );
     assert!(markdown.contains("**NOT TESTED HERE**"), "{markdown}");
+    assert!(
+        markdown.contains("| host model (golden payloads) |")
+            && markdown.contains("- **hosts**: claude-code (model, not run)")
+            && !markdown.contains("| host hook |"),
+        "{markdown}"
+    );
     let text = stdout(&report(&sb, "text"));
     assert!(text.starts_with("MoatBench proof report\n"), "{text}");
     assert!(

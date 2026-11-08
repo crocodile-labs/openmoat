@@ -71,3 +71,19 @@ Neither is something a person runs on their own machine to see what holds there.
   suite covers it in CI and `docs/EVIDENCE.md` records it.
 - Promises and their scenarios are one table in `commands/bench/proof/promises.rs`; a
   unit test checks every id names a bundled scenario.
+
+## Amendment 2026-11-08: the hook layer is OpenMoat's model of the host
+
+The "host hook" rows come from OpenMoat's own golden payloads and its own reading of
+each host's reply (`openmoat_hosts::bench`); no host program runs. Printed beside the
+version of a program named like the host on the search path, a PASS there read as
+"this host, at this version, was tested", which it was not: a mistake the model shares
+with OpenMoat's parser passes on every machine.
+
+- The layer is now **host model (golden payloads)** (`host-model` in JSON). The
+  host's own handling of a failed hook, which the report never runs, is its own layer,
+  **real host** (`real-host`), always NOT TESTED HERE.
+- The report names no host version (point 5): each host is listed as
+  `{"id": …, "evidence": "model"}`, "claude-code (model, not run)" in text. A version
+  appears only with evidence from a run of the real agent, which the report does not
+  gather; the weekly `latest agents` workflow is where real agents run.
