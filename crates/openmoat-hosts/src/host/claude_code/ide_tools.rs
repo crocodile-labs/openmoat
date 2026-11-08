@@ -65,6 +65,7 @@ fn diagnostics(tool: &str, input: &Value, cwd: Option<&str>) -> Option<Result<Ac
         hosts: Vec::new(),
         opens: Vec::new(),
         commands: Vec::new(),
+        value_reads: Vec::new(),
         unchecked: None,
     };
     let map = match input {

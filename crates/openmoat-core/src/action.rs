@@ -135,6 +135,14 @@ pub enum Action {
         /// the host cannot tell an MCP tool from one of its own.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         commands: Vec<String>,
+        /// Paths the call may read that only a value's look names: a string
+        /// under an argument key the adapter does not know (`{"input":
+        /// "~/.ssh/id_rsa"}`) that starts at a root, a drive or `~`. Checked
+        /// as reads against the policy's `deny` rules only, so a path no deny
+        /// rule names changes nothing (no new `review` or `defer`), and never
+        /// as writes (a bare `~` or `/` would hit destructive rules).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        value_reads: Vec<String>,
         /// The limit that stopped the adapter searching the arguments (nesting
         /// depth, number of paths and URLs). What was not searched may name a
         /// file or host, so the engine decides the call at least `review`.
@@ -170,6 +178,7 @@ impl Action {
             hosts: Vec::new(),
             opens: Vec::new(),
             commands: Vec::new(),
+            value_reads: Vec::new(),
             unchecked: None,
         }
     }

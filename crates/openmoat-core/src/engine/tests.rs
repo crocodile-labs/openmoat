@@ -134,6 +134,7 @@ fn an_unparseable_part_never_softens_a_deny() {
         hosts: vec!["https://".into(), "example.org".into()],
         opens: Vec::new(),
         commands: Vec::new(),
+        value_reads: Vec::new(),
         unchecked: None,
     };
     let verdict = |action: &Action| {
@@ -153,6 +154,53 @@ fn an_unparseable_part_never_softens_a_deny() {
     ] {
         assert_eq!(&verdict(&shell(command)), expected, "{command}");
     }
+}
+
+/// A path only a value under an unknown MCP key looks like is checked against
+/// deny rules and nothing else: a deny wins (through a symlink too), while a
+/// review, defer or allow rule naming it leaves the verdict as before, and it
+/// is never a write (a bare `~` would hit a rule on destroying the home).
+#[test]
+fn value_reads_are_checked_against_deny_rules_only() {
+    let p = policy(
+        "version: 1\ndefaults: defer\n\
+         deny:\n  - id: keys\n    fs.read: ['~/.ssh/**']\n  - id: home-wipe\n    fs.write: ['~']\n\
+         review:\n  - id: notes\n    fs.read: ['~/notes/**']\n\
+         allow:\n  - id: tool\n    mcp: ['mcp__s__run']\n",
+    );
+    let compiled = CompiledPolicy::compile(&p, &ctx()).unwrap();
+    let mcp = |values: &[&str]| {
+        let mut action = Action::mcp("mcp__s__run");
+        if let Action::McpTool { value_reads, .. } = &mut action {
+            value_reads.extend(values.iter().map(|v| (*v).to_owned()));
+        }
+        action
+    };
+    let verdict = |action: &Action| {
+        let d = compiled.decide(action);
+        (d.verdict, d.rules)
+    };
+    let allowed = (Verdict::Allow, vec!["tool".to_owned()]);
+    assert_eq!(verdict(&mcp(&[])), allowed);
+    assert_eq!(
+        verdict(&mcp(&["~/notes/plan.md", "/h/other", "~", "/"])),
+        allowed
+    );
+    assert_eq!(
+        verdict(&mcp(&["~/notes/plan.md", "/h/.ssh/id_rsa"])),
+        (Verdict::Deny, vec!["keys".to_owned()])
+    );
+    let links = crate::MapPathResolver {
+        links: [("/h/link".to_owned(), "/h/.ssh".to_owned())].into(),
+        files: Vec::new(),
+    };
+    let d = compiled.decide_with(&mcp(&["/h/link/id_rsa"]), &NoResolver, &links);
+    assert_eq!(
+        (d.verdict, d.rules),
+        (Verdict::Deny, vec!["keys".to_owned()])
+    );
+    let shown_in_part = Action::unchecked(mcp(&["~/.ssh/id_rsa"]), "why");
+    assert_eq!(compiled.decide(&shown_in_part).verdict, Verdict::Deny);
 }
 
 /// An approval cannot make an unparseable command run: `sh -ee.a` has an option

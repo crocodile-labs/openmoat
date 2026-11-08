@@ -30,8 +30,16 @@ export type Action =
   | { type: "fetch"; url: string }
   | { type: "web_search"; query: string }
   /** `opens`: the one URL a call that only opens or reads a page names (a browser's
-   * `navigate`), decided like a fetch; a call that sends more names it in `hosts`. */
-  | ({ type: "mcp_tool"; name: string; opens?: string[]; unchecked?: string } & Touches)
+   * `navigate`), decided like a fetch; a call that sends more names it in `hosts`.
+   * `value_reads`: paths only the look of a value under an argument key you do not
+   * understand names (`{"input": "~/.ssh/id_rsa"}`), checked against deny rules only. */
+  | ({
+      type: "mcp_tool";
+      name: string;
+      opens?: string[];
+      value_reads?: string[];
+      unchecked?: string;
+    } & Touches)
   | ({ type: "unknown_tool"; host: string; tool: string } & Touches)
   | { type: "unchecked"; action: Action; reason: string };
 

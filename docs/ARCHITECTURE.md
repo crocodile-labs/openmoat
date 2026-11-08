@@ -214,6 +214,9 @@ week and the phase most of them were in.
   opens one web page (`wire/mcp/browser.rs`) names it in `opens`, which is a `fetch` atom
   of each host of a plain web page, `net` otherwise or under `mcp.browser_open: net`, plus
   the hosts of the URLs inside it (ADR-047).
+  A string under any other key that is a path by its look is named in `value_reads`: its
+  `fs.read` atoms (through `..` and symlinks) are checked against `deny` rules alone
+  (`engine/atoms.rs` `value_read_atoms`), so they add a deny and nothing else.
   When deeper nesting stops the search, the adapter names the limit in `unchecked`, and
   the engine adds an `unparseable` atom to the decision.
 - **Fetch** (Claude Code `WebFetch`). A `fetch` atom for the URL's host (ADR-017).

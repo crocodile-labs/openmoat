@@ -731,6 +731,15 @@
   threat: T8
   action: { mcp_tool: { name: shell, commands: ["cat ~/.ssh/id_rsa"] } }
   expect: { verdict: deny, rules: [secrets-paths] }
+# A path under an argument key OpenMoat does not know is still checked against deny rules
+- id: T8-mcp-unknown-key-names-a-secret
+  threat: T8
+  action: { mcp_tool: { name: mcp__github__get_pull_request, value_reads: ["~/.ssh/id_rsa"] } }
+  expect: { verdict: deny, rules: [secrets-paths] }
+- id: T8-mcp-unknown-key-names-cloud-credentials
+  threat: T8
+  action: { mcp_tool: { name: mcp__custom__run, value_reads: ["/Users/me/.aws/credentials"] } }
+  expect: { verdict: deny, rules: [secrets-paths] }
 # A call the payload shows only in part needs review, and a deny in what it shows still wins
 - id: T7-partial-call-reads-a-secret
   threat: T7

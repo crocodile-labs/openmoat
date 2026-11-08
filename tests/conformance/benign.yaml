@@ -289,6 +289,10 @@
 - id: benign-mcp-filesystem-reads-project-file
   action: { mcp_tool: { name: mcp__filesystem__read_file, reads: ["/p/README.md"] } }
   expect: { verdict: allow, rules: [safe-mcp, project-fs] }
+- id: benign-mcp-unknown-key-names-a-plain-path
+  why: a value under an unknown key is checked against deny rules only, so a path no deny rule names leaves the name's verdict
+  action: { mcp_tool: { name: mcp__github__get_pull_request, value_reads: ["/p/src/main.rs", "/etc/hosts", "~"] } }
+  expect: { verdict: allow, rules: [safe-mcp] }
 
 - id: benign-git-commit-dotted-message
   action: { shell: "git commit -m fix.bug" }

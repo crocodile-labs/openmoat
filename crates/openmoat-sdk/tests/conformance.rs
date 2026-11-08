@@ -133,6 +133,9 @@ enum McpFixture {
         commands: Vec<String>,
         #[serde(default)]
         opens: Vec<String>,
+        /// Paths only a value under an unknown key looks like: deny rules only.
+        #[serde(default)]
+        value_reads: Vec<String>,
         unchecked: Option<String>,
     },
 }
@@ -178,6 +181,7 @@ impl FixtureAction {
                     hosts,
                     commands,
                     opens,
+                    value_reads,
                     unchecked,
                 } => {
                     let call = McpCall::new(name)
@@ -185,7 +189,8 @@ impl FixtureAction {
                         .writes(writes)
                         .hosts(hosts)
                         .commands(commands)
-                        .opens(opens);
+                        .opens(opens)
+                        .value_reads(value_reads);
                     Action::mcp(match unchecked {
                         Some(limit) => call.unchecked(limit),
                         None => call,
@@ -237,6 +242,7 @@ impl FixtureAction {
                     hosts,
                     commands,
                     opens,
+                    value_reads,
                     unchecked,
                 } => core::Action::McpTool {
                     name,
@@ -245,6 +251,7 @@ impl FixtureAction {
                     hosts,
                     commands,
                     opens,
+                    value_reads,
                     unchecked,
                 },
             }),

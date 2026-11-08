@@ -2,8 +2,10 @@
 //!
 //! Servers are not standardised, so this is key-based: arguments named like a
 //! path become `fs.read` (or `fs.write` for write-shaped tools), arguments named
-//! like a URL become `net`, down to `MAX_DEPTH` levels. Unknown shapes add nothing
-//! and the call is judged by its name alone. A call that only opens one web
+//! like a URL become `net`, down to `MAX_DEPTH` levels. A string under any
+//! other key that is a path by its look ([`super::unknown::looks_like`]) goes
+//! to `value_reads`, which the engine checks against deny rules alone; nothing
+//! else of an unknown shape is added. A call that only opens one web
 //! page (a browser's `navigate`, [`browser`]) names that page in `opens`
 //! instead, which the engine decides as a fetch (ADR-047). Adding resources can only make a
 //! verdict stricter, so arguments that cannot be read are an error (the guard
@@ -74,6 +76,7 @@ pub(crate) fn action(name: &str, input: &Value) -> Result<Action, HostError> {
         hosts: found.hosts,
         opens: Vec::new(),
         commands: found.commands,
+        value_reads: found.value_reads,
         unchecked: found.unchecked,
     })
 }
@@ -120,6 +123,7 @@ pub(crate) fn read_resource(tool: &str, input: &Value) -> Result<Action, HostErr
         hosts,
         opens: Vec::new(),
         commands: Vec::new(),
+        value_reads: Vec::new(),
         unchecked: None,
     })
 }
@@ -136,16 +140,30 @@ pub(super) struct Resources {
     pub(super) writes: Vec<String>,
     pub(super) hosts: Vec<String>,
     pub(super) commands: Vec<String>,
+    /// Paths only a value's look names, under keys no list above knows
+    /// (`{"input": "~/.ssh/id_rsa"}`): the engine checks them against deny
+    /// rules alone. Empty with `everything`, which reads them as `reads`.
+    pub(super) value_reads: Vec<String>,
     /// Set when nesting stopped the search.
     pub(super) unchecked: Option<String>,
 }
 
 impl Resources {
     pub(super) fn count(&self) -> usize {
-        self.reads.len() + self.writes.len() + self.hosts.len() + self.commands.len()
+        self.reads.len()
+            + self.writes.len()
+            + self.hosts.len()
+            + self.commands.len()
+            + self.value_reads.len()
     }
 
     pub(super) fn walk(&mut self, value: &Value, depth: usize) {
+        self.walk_under(value, depth, false);
+    }
+
+    /// [`Self::walk`] of a value under a key that `claimed` says already took
+    /// its strings (a path, URL or command key).
+    fn walk_under(&mut self, value: &Value, depth: usize, claimed: bool) {
         if self.count() > MAX_RESOURCES {
             return;
         }
@@ -161,26 +179,30 @@ impl Resources {
         match value {
             Value::Object(map) => {
                 for (key, value) in map {
-                    self.key(&snake(key), value);
-                    self.walk(value, depth + 1);
+                    let claimed = self.key(&snake(key), value);
+                    self.walk_under(value, depth + 1, claimed);
                 }
             }
             Value::Array(items) => {
                 for item in items {
-                    self.walk(item, depth + 1);
+                    self.walk_under(item, depth + 1, claimed);
                 }
             }
             Value::String(text) if self.everything => self.value(text),
+            Value::String(text) if !claimed => self.unknown_value(text),
             _ => {}
         }
     }
 
-    fn key(&mut self, key: &str, value: &Value) {
+    /// Take what `value` names by its `key`; whether the key took its strings.
+    fn key(&mut self, key: &str, value: &Value) -> bool {
         let ends = |suffixes: &[&str]| suffixes.iter().any(|s| key.ends_with(&format!("_{s}")));
         if self.everything && super::unknown::names_a_command(key) {
             self.commands.extend(super::unknown::command_lines(value));
+            true
         } else if names_url(key) {
             self.hosts.extend(strings(value));
+            true
         } else if PATH_KEYS.contains(&key)
             || ends(&["path", "paths", "dir", "directory", "file", "filename"])
         {
@@ -191,6 +213,18 @@ impl Resources {
                 &mut self.reads
             };
             sink.extend(strings(value));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// A string under a key no list knows: a path by its look is kept in
+    /// `value_reads`, a read the deny rules alone decide. A URL is not: a
+    /// key-less host would add `net` reviews to calls that only mention one.
+    fn unknown_value(&mut self, text: &str) {
+        if let Some(super::unknown::Looks::Path(path)) = super::unknown::looks_like(text) {
+            self.value_reads.push(path);
         }
     }
 
@@ -397,6 +431,47 @@ mod tests {
             &json!({"owner": "x", "repo": "y", "number": 42}),
         );
         assert_eq!(a, Action::mcp("mcp__github__get_pull_request"));
+    }
+
+    fn value_reads(a: &Action) -> &[String] {
+        match a {
+            Action::McpTool { value_reads, .. } => value_reads,
+            other => panic!("not an mcp action: {other:?}"),
+        }
+    }
+
+    /// A string under a key no list knows is kept in `value_reads` when it is
+    /// a path by its look, at any depth and in lists; a relative word, a URL
+    /// and the strings a path or URL key already took are not.
+    #[test]
+    fn paths_under_unknown_keys_are_value_reads() {
+        let a = ok("mcp__custom__run", &json!({"input": "~/.ssh/id_rsa"}));
+        assert_eq!(value_reads(&a), ["~/.ssh/id_rsa"]);
+        assert_eq!(parts(a), (vec![], vec![], vec![]), "not a keyed read");
+        let a = ok(
+            "mcp__custom__write_notes",
+            &json!({"opts": {"args": ["-v", "/etc/shadow", "file:///h/.aws/credentials"]}}),
+        );
+        assert_eq!(
+            value_reads(&a),
+            ["/etc/shadow", "/h/.aws/credentials"],
+            "never writes, even for a write-shaped tool"
+        );
+        assert_eq!(parts(a).1, Vec::<String>::new());
+        let a = ok(
+            "mcp__custom__run",
+            &json!({"input": "src/main.rs", "note": "see https://x.test", "q": "a\n/etc/passwd"}),
+        );
+        assert_eq!(a, Action::mcp("mcp__custom__run"), "nothing by its look");
+        let a = ok(
+            "mcp__custom__run",
+            &json!({"path": "/p/a", "url": "file:///h/x", "files": [{"path": "/p/b", "x": "/p/c"}]}),
+        );
+        assert_eq!(
+            value_reads(&a),
+            ["/p/c"],
+            "keyed strings are not taken twice"
+        );
     }
 
     #[test]

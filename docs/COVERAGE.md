@@ -3,10 +3,7 @@
 Generated from `tests/conformance/*.yaml` by the conformance suite; do not edit.
 Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.
 Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and
-the verdict and rule ids the default policy must produce for it. Which layer holds
-each security promise on a given machine (policy decision, host hook, OS sandbox,
-network boundary) is the proof report of `openmoat bench --report`
-([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)).
+the verdict and rule ids the default policy must produce for it.
 
 | Threat | Class | Attacks | Reviews | Benign |
 |---|---|---|---|---|
@@ -17,11 +14,11 @@ network boundary) is the proof report of `openmoat bench --report`
 | T5 | Supply-chain execution | 29 | 96 | 15 |
 | T6 | Environment poisoning | 60 | 42 | 7 |
 | T7 | Obfuscation and nested execution | 158 | 131 | 3 |
-| T8 | MCP tool poisoning / over-privileged tools | 40 | 4 | 15 |
-| T9 | Hook / policy tampering by the agent | 448 | 157 | 59 |
+| T8 | MCP tool poisoning / over-privileged tools | 38 | 4 | 13 |
+| T9 | Hook / policy tampering by the agent | 428 | 156 | 57 |
 | T10 | Hook supply chain (trojaned hook binary) | 13 | 0 | 3 |
 | T11 | Time-of-check / time-of-use, symlinks | 31 | 6 | 6 |
-| T12 | Network to unknown hosts | 115 | 23 | 27 |
+| T12 | Network to unknown hosts | 114 | 23 | 27 |
 
 ## T1: Secret exfiltration via shell
 
@@ -1174,6 +1171,8 @@ network boundary) is the proof report of `openmoat bench --report`
 - `T8-unknown-tool-pipes-to-shell` (attacks): Deny [pipe-to-shell]
 - `T8-unknown-tool-contacts-a-host` (attacks): Deny [default.net]
 - `T8-mcp-shaped-tool-runs-a-secret-read` (attacks): Deny [secrets-paths]
+- `T8-mcp-unknown-key-names-a-secret` (attacks): Deny [secrets-paths]
+- `T8-mcp-unknown-key-names-cloud-credentials` (attacks): Deny [secrets-paths]
 - `T8-mcp-filesystem-reads-aws-credentials` (attacks): Deny [secrets-paths]
 - `T8-mcp-resource-file-uri-reads-ssh-key` (attacks): Deny [secrets-paths]
 - `T8-ide-diagnostics-of-aws-credentials` (attacks): Deny [secrets-paths]
@@ -1202,10 +1201,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `T8-taint-webfetch-then-agents-skill` (attacks): Review [session-taint]
 - `T8-taint-webfetch-then-windsurf-rules` (attacks): Review [session-taint]
 - `T8-taint-mcp-result-then-copilot-path-instructions` (attacks): Review [session-taint]
-- `T8-injected-tab-title-command` (attacks): Review [injected-input]
-- `T8-taint-tab-list-then-page-text-then-agent-memory` (attacks): Review [session-taint]
-- `T8-taint-browser-page-read-then-agent-instructions` (attacks): Review [session-taint]
-- `T8-taint-other-server-tab-tool-then-agent-memory` (attacks): Review [session-taint]
 - `benign-t8-mcp-github-list-issues` (benign): Defer [default]
 - `benign-t8-mcp-filesystem-list-project` (benign): Allow [safe-mcp, project-fs]
 - `benign-t8-mcp-filesystem-write-project` (benign): Defer [default]
@@ -1217,8 +1212,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `benign-taint-browser-open-then-cargo-test` (benign): Allow [dev-shell]
 - `benign-injected-docs-then-cargo-build` (benign): Allow [dev-shell]
 - `benign-injected-local-command-output-keeps-nothing` (benign): Defer [default]
-- `benign-tab-list-then-agent-memory` (benign): Defer [default]
-- `benign-tab-list-and-new-tab-then-agents-md` (benign): Allow [project-fs]
 - `benign-clean-session-edit-claude-md` (benign): Allow [project-fs]
 - `benign-clean-session-edit-agents-skill` (benign): Allow [project-fs]
 - `defer-unknown-tool-in-the-project` (review): Defer [default.tool.unknown]
@@ -1420,26 +1413,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `T9-openmoat-proxy-install` (attacks): Deny [kernel-self]
 - `T9-openmoat-proxy-uninstall-by-path` (attacks): Deny [kernel-self]
 - `T9-nohup-moat-proxy-uninstall` (attacks): Deny [kernel-self]
-- `T9-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-openmoat-proxy-ca-init-by-path` (attacks): Deny [kernel-self]
-- `T9-moat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-script-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-script-command-string-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-unbuffer-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-tmux-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-expect-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-script-openmoat-proxy-install` (attacks): Deny [kernel-self]
-- `T9-expect-openmoat-proxy-uninstall` (attacks): Deny [kernel-self]
-- `T9-osascript-openmoat-proxy-ca-init` (attacks): Deny [kernel-self]
-- `T9-agent-runs-openmoat-serve` (attacks): Deny [kernel-self]
-- `T9-agent-runs-moat-serve-on-a-port` (attacks): Deny [kernel-self]
-- `T9-agent-runs-openmoat-serve-by-path` (attacks): Deny [kernel-self]
-- `T9-agent-runs-openmoat-serve-in-background` (attacks): Deny [kernel-self]
-- `T9-agent-runs-openmoat-serve-through-sh-c` (attacks): Deny [kernel-self]
-- `T9-script-openmoat-serve` (attacks): Deny [kernel-self]
-- `T9-script-quoted-openmoat-serve` (attacks): Deny [kernel-self]
-- `T9-expect-spawn-openmoat-serve` (attacks): Deny [kernel-self]
-- `T9-python-pty-spawn-openmoat-serve` (attacks): Deny [kernel-self]
 - `T9-zsh-interactive-moat-doctor-accept` (attacks): Deny [kernel-self]
 - `T9-absolute-script-moat-doctor-accept` (attacks): Deny [kernel-self]
 - `T9-absolute-script-linux-command-form` (attacks): Deny [kernel-self]
@@ -1710,7 +1683,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `benign-taint-webfetch-then-source-edit` (benign): Allow [project-fs]
 - `benign-repo-net-review-leaves-other-commands` (benign): Allow [dev-shell]
 - `benign-python-test-file-named-after-moat` (benign): Allow [dev-shell, project-fs]
-- `benign-openmoat-proxy-ca-help` (benign): Allow [openmoat-readonly]
 - `benign-t9-pkill-script-name` (benign): Defer [default]
 - `benign-t9-pkill-script-then-command-naming-moat` (benign): Defer [default]
 - `benign-t9-pkill-server-script` (benign): Defer [default]
@@ -1724,7 +1696,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `benign-openmoat-version-short` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-subcommand-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-init-help` (benign): Allow [openmoat-readonly]
-- `benign-openmoat-serve-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-policy-upgrade-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-guard-help` (benign): Allow [openmoat-readonly]
 - `benign-openmoat-mcp-proxy-help` (benign): Allow [openmoat-readonly]
@@ -1753,7 +1724,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `review-git-restore-git-dir` (review): Review [git-internals]
 - `review-repo-holds-a-host-the-user-allows` (review): Review [repo:any-host]
 - `review-write-github-workflow` (review): Review [runs-later]
-- `review-tab-list-then-github-workflow` (review): Review [runs-later]
 - `review-echo-into-github-workflow` (review): Review [runs-later]
 - `review-heredoc-into-github-workflow` (review): Review [runs-later]
 - `review-copy-over-github-workflow` (review): Review [runs-later]
@@ -2074,7 +2044,6 @@ network boundary) is the proof report of `openmoat bench --report`
 - `T12-browser-form-submit-to-unlisted-host` (attacks): Deny [default.net]
 - `T12-browser-navigate-with-init-script` (attacks): Deny [default.net]
 - `T12-injected-page-host-then-curl-download` (attacks): Review [injected-input]
-- `T12-injected-tab-url-host-then-curl` (attacks): Review [injected-input]
 - `benign-taint-project-read-then-github-api` (benign): Allow [registries]
 - `benign-curl-download-no-config-flag` (benign): Defer [default.fetch]
 - `benign-curl-download-follows-redirects-into-temp` (benign): Defer [default.fetch]

@@ -241,6 +241,25 @@ pub(super) fn checked_atoms(
     (atoms, unparsed.or(unexpanded))
 }
 
+/// The read atoms of the paths an MCP call's values only look like
+/// ([`Action::McpTool`]'s `value_reads`), normalised, followed through `..`
+/// and symlinks like any other read. The engine checks them against `deny`
+/// rules alone; they are never writes.
+pub(super) fn value_read_atoms(
+    action: &Action,
+    ctx: &EvalContext,
+    paths: &dyn PathResolver,
+) -> Vec<AtomicAction> {
+    let Action::McpTool { value_reads, .. } = action.shown() else {
+        return Vec::new();
+    };
+    let atoms = value_reads
+        .iter()
+        .flat_map(|p| file_atoms(p, ctx, read))
+        .collect();
+    with_environ_reads(with_resolved_paths(atoms, paths))
+}
+
 /// Add `@proc-environ <path>` for every read of a process's environment
 /// (`/proc/self/environ`, `/proc/1/task/1/environ`): the same variables as
 /// `printenv`, secrets included, which `env-dump` denies. A shell atom, not a

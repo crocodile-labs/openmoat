@@ -61,6 +61,7 @@ pub(crate) fn mcp(name: &str, input: &Value) -> Result<Action, HostError> {
         hosts: found.hosts,
         opens: Vec::new(),
         commands: found.commands,
+        value_reads: Vec::new(),
         unchecked: None,
     })
 }

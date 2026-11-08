@@ -161,6 +161,9 @@ enum McpFixture {
         opens: Vec<String>,
         #[serde(default)]
         commands: Vec<String>,
+        /// Paths only a value under an unknown key looks like: deny rules only.
+        #[serde(default)]
+        value_reads: Vec<String>,
         unchecked: Option<String>,
     },
 }
@@ -204,6 +207,7 @@ impl FixtureAction {
                     hosts,
                     opens,
                     commands,
+                    value_reads,
                     unchecked,
                 } => Action::McpTool {
                     name,
@@ -212,6 +216,7 @@ impl FixtureAction {
                     hosts,
                     opens,
                     commands,
+                    value_reads,
                     unchecked,
                 },
             }),
