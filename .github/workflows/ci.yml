@@ -159,6 +159,48 @@ jobs:
   # The jobs below skip on a documentation-only pull request; skipped, a
   # required one reports success under its name. `!cancelled()` lets them run
   # when the changes job failed.
+
+  # `openmoat run` as a stock Ubuntu runs it: no bubblewrap, and AppArmor's
+  # restriction on unprivileged user namespaces left on (the image's
+  # default), so Landlock and seccomp alone, without a network namespace or
+  # masks inside the grants. Every other Linux leg installs bubblewrap and
+  # lifts the restriction, so without this job the out-of-the-box path never
+  # ran end to end. With MOAT_TEST_STOCK_LINUX set the run tests require that
+  # path (tests/e2e/run/stock_linux.rs): the port-only notice and `doctor`'s
+  # warning, `--netns=require` exiting 64, `--isolate` and a `--write` outside
+  # the project refused; and the hostile scripts must meet the Landlock column
+  # of docs/EVIDENCE.md, gap rows included.
+  stock-linux:
+    name: stock linux (Landlock + seccomp, no bubblewrap)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MOAT_TEST_STOCK_LINUX: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: rust toolchain
+        # The channel, components and targets come from rust-toolchain.toml.
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: no bubblewrap, unprivileged user namespaces restricted
+        run: |
+          if command -v bwrap > /dev/null; then
+            sudo apt-get remove -y -q bubblewrap
+          fi
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          if command -v bwrap; then
+            echo "::error::bubblewrap is still installed"
+            exit 1
+          fi
+      - name: the run tests and hostile scripts on the stock path
+        run: |
+          cargo test --locked -p openmoat --test e2e -- --nocapture \
+            run:: hostile_scripts_meet_the_os_layer
+
   core-is-pure:
     name: openmoat-core builds for wasm32 (no I/O)
     needs: changes
