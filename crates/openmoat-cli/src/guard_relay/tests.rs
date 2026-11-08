@@ -230,6 +230,11 @@ fn the_environment_names_both_or_neither() {
 /// A home with an empty audit log, and a stand-in for `moat` that prints the
 /// variables the service sets, echoes its payload and exits with `code`.
 fn service(code: i32) -> (tempfile::TempDir, Home, Service) {
+    service_for(code, Some(Host::ClaudeCode))
+}
+
+/// [`service`] of a run whose program is `agent`'s (`None`: no agent OpenMoat knows).
+fn service_for(code: i32, agent: Option<Host>) -> (tempfile::TempDir, Home, Service) {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     std::fs::create_dir_all(home.root()).unwrap();
@@ -241,7 +246,13 @@ fn service(code: i32) -> (tempfile::TempDir, Home, Service) {
     );
     std::fs::write(&moat, script).unwrap();
     std::fs::set_permissions(&moat, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let service = Service::new(home.clone(), RUN, token().as_bytes(), PathBuf::from(&moat));
+    let service = Service::new(
+        home.clone(),
+        RUN,
+        token().as_bytes(),
+        PathBuf::from(&moat),
+        agent,
+    );
     (dir, home, service)
 }
 
@@ -309,3 +320,5 @@ fn random_hex_is_hex_of_the_length_asked_and_differs() {
     assert!(a.bytes().all(|c| c.is_ascii_hexdigit()));
     assert_ne!(*a, *b);
 }
+
+mod scope;

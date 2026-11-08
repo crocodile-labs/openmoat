@@ -141,7 +141,12 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
-    let (guard, guard_token) = guard_service(&home, &run_session)?;
+    // Only the calls of the agent this run starts, in its own sessions (ADR-069).
+    let agent_host = match owner {
+        Owner::Agent(host) => Some(host),
+        Owner::Unknown => None,
+    };
+    let (guard, guard_token) = guard_service(&home, &run_session, agent_host)?;
     let exit = Exit::open(&home, policy, ctx, Some(credential))?
         .with_guard(guard)
         .with_tls(terminating.map(|t| t.tls))
@@ -209,13 +214,18 @@ fn session_credential() -> Result<Credential> {
 }
 
 /// The service that decides the agent's hook calls on the proxy's port
-/// (ADR-028), and its token of 64 hex characters (256 bits).
-fn guard_service(home: &Home, run_session: &str) -> Result<(Service, Zeroizing<String>)> {
+/// (ADR-028), for the calls of `agent` (ADR-069), and its token of 64 hex
+/// characters (256 bits).
+fn guard_service(
+    home: &Home,
+    run_session: &str,
+    agent: Option<openmoat_hosts::Host>,
+) -> Result<(Service, Zeroizing<String>)> {
     let token = random_hex(32).context("making the hook token")?;
     let moat = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .context("locating the moat binary")?;
-    let service = Service::new(home.clone(), run_session, token.as_bytes(), moat);
+    let service = Service::new(home.clone(), run_session, token.as_bytes(), moat, agent);
     Ok((service, token))
 }
 

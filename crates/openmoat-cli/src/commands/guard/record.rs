@@ -25,6 +25,8 @@ pub(super) struct Recorded<'a> {
     pub(super) known: KnownSecrets,
     pub(super) cache: Option<taint::CacheWrite>,
     pub(super) provenance: taint::provenance::Seen,
+    /// `openmoat run` relayed the call from inside its sandbox (`--relayed`).
+    pub(super) relayed: bool,
 }
 
 /// Record the decision, after the session cache on the same handle. The cache
@@ -40,6 +42,7 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         known,
         cache,
         provenance,
+        relayed,
     } = recorded;
     hangs::enter(Phase::Record);
     let home = Home::locate()?;
@@ -80,7 +83,7 @@ pub(super) fn record(host: Host, recorded: Recorded<'_>) -> Result<()> {
         // a call that matches such a decision (ADR-045). Like the row, a decision
         // that cannot be written fails the call.
         if let Some(r) = request {
-            mcp_ticket(&store, id, host, r, decision)?;
+            mcp_ticket(&store, id, host, r, decision, relayed)?;
         }
         // Under `moat run`, the run's proxy applies this session's taint too
         // (ADR-027); a link that cannot be written fails the call like the row.
@@ -156,14 +159,23 @@ fn record_then(
 
 /// The decision on MCP call `request`, recorded as `event`, for the proxy to
 /// match; nothing for another call, or one the host is told is denied (an
-/// `review` where no person sees it included).
+/// `review` where no person sees it included), and nothing for a call
+/// `openmoat run` relayed (`relayed`, ADR-069): the run's sandbox holds the
+/// agent's MCP servers, and no `openmoat mcp proxy` in there can read the
+/// audit log to take a ticket (ADR-049), so one would only serve a proxy
+/// outside the run, for a call no hook outside decided. Every process in the
+/// sandbox holds the relay's token, so such tickets could be minted at will.
 fn mcp_ticket(
     store: &Store,
     event: EventId,
     host: Host,
     request: &HookRequest,
     decision: &Decision,
+    relayed: bool,
 ) -> Result<()> {
+    if relayed {
+        return Ok(());
+    }
     let (Some(Action::McpTool { name, .. }), Some(arguments)) =
         (&request.action, &request.mcp_arguments)
     else {
@@ -233,6 +245,38 @@ mod tests {
             last.reasons
         );
         assert!(store.verify_chain().unwrap().broken.is_none());
+    }
+
+    /// What sandboxed code holding the relay's token could ask for: an MCP
+    /// call decided `allow`. Outside a run it leaves the ticket the gateway
+    /// takes; relayed, it leaves none, so no gateway passes such a call on.
+    #[test]
+    fn a_relayed_mcp_call_leaves_no_ticket() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "transcript_path": "/t.jsonl",
+            "cwd": "/p",
+            "tool_name": "mcp__notes__save",
+            "tool_input": {"text": "hello"},
+            "tool_use_id": "toolu_1",
+        })
+        .to_string();
+        // The host whose hook sends this payload, found by its program.
+        let (host, _) = Host::by_program("claude").unwrap();
+        let request = host.parse_request(&payload).unwrap();
+        let digest =
+            crate::integrity::sha256_hex(request.mcp_arguments.as_deref().unwrap().as_bytes());
+        let decision = allowed();
+        for relayed in [true, false] {
+            let store = Store::open_in_memory().unwrap();
+            let id = store
+                .record(&event(request.action.as_ref().unwrap(), &decision))
+                .unwrap();
+            mcp_ticket(&store, id, host, &request, &decision, relayed).unwrap();
+            let ticket = store.take_mcp_ticket(&digest, |_| true).unwrap();
+            assert_eq!(ticket.is_some(), !relayed, "relayed: {relayed}");
+        }
     }
 
     #[test]

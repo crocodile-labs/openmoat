@@ -5,17 +5,27 @@
 //! policy, taint and audit row are exactly those of a hook outside `moat run`,
 //! and [`RUN_SESSION_ENV`] makes it write the run's link row. A call with
 //! another token is recorded and gets no answer.
+//!
+//! Every process in the run's sandbox holds the token, not only the agent's
+//! hooks, so the token alone does not say whose call it is (ADR-069). The
+//! service decides only calls of the run's own agent ([`Scope`]): the host
+//! `openmoat run` started, or for a program OpenMoat does not know, the host
+//! of the first call, and the sessions that are the run's: one the audit log
+//! has never seen, or one the agent resumes with its own session start. A
+//! call for another host or another session is refused with a row in the
+//! run's session ([`RULE_HOST`], [`RULE_SESSION`]) and a deny.
 
 use std::io::Write as _;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_audit::{NewEvent, Store};
+use openmoat_audit::{EventId, NewEvent, Store};
 use openmoat_core::{Decision, Verdict};
-use openmoat_hosts::Host;
+use openmoat_hosts::{HookEvent, Host};
 use openmoat_proxy::{LocalService, constant_time_eq};
 use zeroize::Zeroizing;
 
@@ -24,10 +34,33 @@ use super::{SOCKET_ENV, Stream, TOKEN_ENV};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::install::GUARD_BUDGET_S;
-use crate::taint::run::{LINK_HOST, RUN_SESSION_ENV};
+use crate::taint::run::{LINK_HOST, RUN_SESSION_ENV, run_session};
 
 /// The rule of the row a call with a wrong token leaves.
 pub const RULE_TOKEN: &str = "run-guard-token";
+/// The rule of the row a call for another agent than the run's leaves.
+pub const RULE_HOST: &str = "run-guard-host";
+/// The rule of the row a call in a session that is not the run's leaves.
+pub const RULE_SESSION: &str = "run-guard-session";
+/// The most agent sessions one run decides calls for: a start, `/clear`s,
+/// resumes and subagents with sessions of their own fit well within it.
+pub const MAX_SESSIONS: usize = 64;
+
+/// Whose calls the run decides.
+#[derive(Debug, Default)]
+struct Scope {
+    /// The run's agent; `None` until the first call when the program is no
+    /// agent OpenMoat knows.
+    host: Option<Host>,
+    /// The agent sessions taken so far.
+    sessions: Vec<String>,
+}
+
+/// A call outside the run's [`Scope`]: its row's rule and reason.
+struct Refused {
+    rule: &'static str,
+    reason: String,
+}
 
 /// One run's decision service.
 pub struct Service {
@@ -35,17 +68,23 @@ pub struct Service {
     run: String,
     token: Zeroizing<Vec<u8>>,
     moat: PathBuf,
+    scope: Mutex<Scope>,
 }
 
 impl Service {
     /// The service of run session `run`, which wants `token`. Calls are
-    /// decided by `moat`, the binary this process runs.
-    pub fn new(home: Home, run: &str, token: &[u8], moat: PathBuf) -> Self {
+    /// decided by `moat`, the binary this process runs, for `agent`, the host
+    /// of the program the run started (`None`: no agent OpenMoat knows).
+    pub fn new(home: Home, run: &str, token: &[u8], moat: PathBuf, agent: Option<Host>) -> Self {
         Self {
             home,
             run: run.to_owned(),
             token: Zeroizing::new(token.to_vec()),
             moat,
+            scope: Mutex::new(Scope {
+                host: agent,
+                sessions: Vec::new(),
+            }),
         }
     }
 
@@ -59,8 +98,73 @@ impl Service {
             bail!("a hook call with a wrong token");
         }
         let host: Host = request.host.parse()?;
+        if let Err(refused) = self.admit(host, &request)? {
+            self.record_out_of_scope(&refused)?;
+            return Reply {
+                nonce: request.nonce.clone(),
+                code: Code::Deny as u8,
+                stdout: Vec::new(),
+                stderr: format!("moat: {}\n", refused.reason).into_bytes(),
+            }
+            .write_to(&mut stream);
+        }
         let reply = self.decide(host, &request)?;
         reply.write_to(&mut stream)
+    }
+
+    /// Whether `request`, a call `host`'s hook sent, is the run's to decide;
+    /// a payload the guard cannot parse is, and it denies it.
+    fn admit(&self, host: Host, request: &Request) -> Result<Result<(), Refused>> {
+        let sender = host.sender(&request.payload, request.continue_cli);
+        let mut scope = self.scope.lock().unwrap_or_else(PoisonError::into_inner);
+        match scope.host {
+            None => scope.host = Some(host),
+            Some(agent) if agent == host || agent == sender => {}
+            Some(agent) => {
+                return Ok(Err(Refused {
+                    rule: RULE_HOST,
+                    reason: format!(
+                        "a hook call for {} came from inside this `openmoat run` of {}, so it was \
+                         not decided: the run decides only its own agent's calls",
+                        host.id(),
+                        agent.id()
+                    ),
+                }));
+            }
+        }
+        let Ok(parsed) = sender.parse_request(&request.payload) else {
+            return Ok(Ok(()));
+        };
+        let session = parsed.session_id;
+        if scope.sessions.contains(&session) {
+            return Ok(Ok(()));
+        }
+        let refuse = |why: &str| {
+            Ok(Err(Refused {
+                rule: RULE_SESSION,
+                reason: format!(
+                    "a hook call from inside this `openmoat run` named a session that is not the \
+                     run's ({why}), so it was not decided"
+                ),
+            }))
+        };
+        if run_session(Some(&session)).is_some() {
+            return refuse("an `openmoat run` session");
+        }
+        if scope.sessions.len() >= MAX_SESSIONS {
+            return refuse(&format!("the run already has {MAX_SESSIONS} sessions"));
+        }
+        let store = Store::open_existing(&self.home.audit_path())?;
+        let first = store.session_page(&session, EventId(0), 1)?;
+        let resumed = matches!(parsed.event, HookEvent::SessionStart { .. });
+        match first.first() {
+            None => {}
+            // The agent's own session start brings a session it ran before into the run.
+            Some(row) if resumed && row.host == sender.id() => {}
+            Some(_) => return refuse("one the audit log already holds from outside the run"),
+        }
+        scope.sessions.push(session);
+        Ok(Ok(()))
     }
 
     /// `moat guard --host <host>` outside the sandbox, on the request's payload.
@@ -125,14 +229,23 @@ impl Service {
         let host = claimed
             .parse::<Host>()
             .map_or("an unknown host", |h| h.id());
-        let decision = Decision::single(
-            Verdict::Deny,
+        self.record_row(
             RULE_TOKEN,
             format!(
                 "a hook call for {host} came with a wrong token for this `openmoat run`, so it was \
                  not decided"
             ),
-        );
+        )
+    }
+
+    /// A row in the run's session for a call outside its [`Scope`].
+    fn record_out_of_scope(&self, refused: &Refused) -> Result<()> {
+        self.record_row(refused.rule, refused.reason.clone())
+    }
+
+    /// A deny row in the run's session: host [`LINK_HOST`], tool `guard`.
+    fn record_row(&self, rule: &str, reason: String) -> Result<()> {
+        let decision = Decision::single(Verdict::Deny, rule, reason);
         let store = Store::open_existing(&self.home.audit_path())?;
         store.record(&NewEvent {
             host: LINK_HOST,

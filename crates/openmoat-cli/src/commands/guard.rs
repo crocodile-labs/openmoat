@@ -256,6 +256,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         known: out.known,
         cache: out.cache,
         provenance: out.provenance,
+        relayed: by_run,
     };
     if let Err(error) = record(host, recorded) {
         decision = kernel_error(&error.context("audit log unavailable"));

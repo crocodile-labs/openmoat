@@ -581,14 +581,28 @@ something OpenMoat claims to stop.
     disk, compared in constant time. A wrong one is recorded (`run-guard-token`) and
     gets no decision. As with the proxy credential, every process in the sandbox holds
     it and a same-user process that can read the agent's environment could take it.
-    That is enough because what the token buys is small: a real decision on a payload
-    the asker chose, recorded as such. Any process outside `openmoat run` gets the same by
-    running `openmoat guard` itself; an agent's own shell tool cannot, since `kernel-self`
-    denies `guard` and `mcp proxy` (only a host runs them, as its hook, from its plugin or
-    as an MCP server's command, where no hook sees it), so an agent cannot forge rows, MCP
-    tickets or a session's proxy credential that way. It cannot choose the verdict of a row, change the
-    lock or the policy, read a secret source, or make taint looser: link rows only add
-    sessions to the run, and taint only tightens.
+    So the token does not tell the agent's hooks from any other code the sandbox runs:
+    `kernel-self` denies the agent's shell the `openmoat guard` command line, but a
+    script, a test runner or a package's install step can open the port and send a
+    payload of its choosing. What that buys is bounded (ADR-069):
+    - *Only the run's agent.* The service decides calls only for the host `openmoat run`
+      started (for a program OpenMoat does not know, the host of the first call), and
+      refuses any other with a deny and a `run-guard-host` row in the run's session.
+    - *Only the run's sessions.* A session joins the run when the audit log has never
+      seen it, or when the agent's own session start resumes one of its sessions.
+      A session that ran outside the run, another agent's session, or any `run-…`
+      session is refused (`run-guard-session`), and a run takes at most 64 sessions.
+      So code in the sandbox cannot add rows to a session outside the run.
+    - *No MCP tickets.* A relayed call leaves no ticket for `openmoat mcp proxy`. Inside
+      the run no gateway can read the audit log to take one (ADR-049), so a ticket
+      would only let a gateway outside the run pass a call no hook outside decided.
+    - *No proxy credential.* A relayed session start issues none: the run's own applies.
+
+    Within those bounds, code in the sandbox can still add rows to the run's own
+    sessions with payloads it chose, each decided by the policy as if the agent had made
+    the call. It cannot choose the verdict of a row, change the lock or the policy, read
+    a secret source, or make taint looser: link rows only add sessions to the run, and
+    taint only tightens.
   - *Nothing in the payload beyond what `openmoat guard` already trusts.* The payload,
     host, Continue flag and working directory are the hook's input, parsed and decided
     as outside `openmoat run`; each field has a size limit checked before it is read.

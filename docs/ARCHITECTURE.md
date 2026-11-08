@@ -1458,7 +1458,10 @@ openmoat run ─► openmoat proxy (thread, 127.0.0.1:<ephemeral>, session mode)
   The sandbox profiles are unchanged: no Unix socket and no second port. The guard
   relays only when its own lock is refused the way the run's sandbox refuses it
   (`guard_relay/inside.rs`, ADR-069); with the variables set anywhere else it decides
-  itself and records a `run-guard-outside` row.
+  itself and records a `run-guard-outside` row. The service decides only the run's
+  own agent's calls, in the run's own sessions (a new one, or one its agent's session
+  start resumes; at most 64), and refuses any other with a deny and a `run-guard-host`
+  or `run-guard-session` row. A relayed call leaves no MCP ticket (ADR-069).
 - **Seatbelt (macOS).** `(deny default)`, then:
   - process basics (exec, fork, signals and process info in the same sandbox,
     pseudo-terminals, POSIX shm, the two directory-service lookups
