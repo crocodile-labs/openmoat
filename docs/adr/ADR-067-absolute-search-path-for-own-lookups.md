@@ -1,4 +1,4 @@
-# ADR-065: OpenMoat finds the programs it runs in absolute PATH entries only
+# ADR-067: OpenMoat finds the programs it runs in absolute PATH entries only
 
 Status: accepted · Date: 2026-11-08 · Builds on ADR-008
 
