@@ -51,17 +51,24 @@ pub(super) fn classify(
             options::classify(argv, program, ctx, sink, depth)?;
         }
         for run in &more {
-            classify_wrapped(run, ctx, sink, depth)?;
+            classify_wrapped(run, &[], ctx, sink, depth)?;
         }
         let Some(inner) = inner else {
             return Ok(());
         };
         if program == "xargs" {
             for run in xargs::runs(cmd, argv, inner)? {
-                classify_wrapped(&run, ctx, sink, depth)?;
+                classify_wrapped(&run, &[], ctx, sink, depth)?;
             }
         }
-        classify_wrapped(inner, ctx, sink, depth)
+        // `inner` is the tail of the command's words: their substitutions
+        // still feed a shell the wrapper runs (`env sh -c "$(curl URL)"`)
+        let outer: Vec<Vec<String>> = cmd
+            .substitutions_of_last(inner.len())
+            .into_iter()
+            .map(<[String]>::to_vec)
+            .collect();
+        classify_wrapped(inner, &outer, ctx, sink, depth)
     };
     Some(classify())
 }

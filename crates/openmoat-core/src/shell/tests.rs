@@ -8,6 +8,7 @@ mod path_options;
 mod quotes;
 mod redirects;
 mod stdin;
+mod substituted;
 mod text;
 mod utilities;
 mod venv;

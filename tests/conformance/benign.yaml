@@ -987,6 +987,16 @@
 - id: benign-date-format
   action: { shell: "date -u +%Y-%m-%dT%H:%M:%SZ" }
   expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-echo-date-substitution
+  threat: T5
+  why: the output of `date` is printed, not run; only a shell's or `eval`'s program text counts as downloaded code
+  action: { shell: "echo \"$(date)\"" }
+  expect: { verdict: allow, rules: [dev-readonly, dev-shell] }
+- id: benign-sh-c-local-substitution
+  threat: T5
+  why: what a substitution feeds a shell is only `pipe-to-shell` when it downloads or decodes it (`date | sh` names no rule)
+  action: { shell: "sh -c \"echo $(date)\"" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-fd
   action: { shell: "fd '\\.rs$'" }
   expect: { verdict: allow, rules: [dev-readonly] }

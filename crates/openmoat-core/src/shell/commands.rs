@@ -55,6 +55,11 @@ struct SimpleCommand {
     piped: Vec<Piped>,
     /// The words of the command this one pipes into, when there is one.
     consumer: Option<Vec<String>>,
+    /// For a command a wrapper runs (`env sh -c "$(curl URL)"`): the command
+    /// substitutions of each of `words` as the wrapping command's shell
+    /// expands them, classified there already. Only used to find text a
+    /// shell runs as its program (`pipelines::push_substituted_code`).
+    outer_substitutions: Vec<Vec<String>>,
 }
 
 impl SimpleCommand {
@@ -69,6 +74,21 @@ impl SimpleCommand {
     fn stdin_texts(&self) -> impl Iterator<Item = &str> {
         let expanded = self.stdin.iter().map(|w| w.text.as_str());
         expanded.chain(self.literal_stdin.iter().map(String::as_str))
+    }
+
+    /// The command substitutions the shell expands in each of the last `n`
+    /// words: the word's own, or those of the word a wrapper was handed.
+    fn substitutions_of_last(&self, n: usize) -> Vec<&[String]> {
+        let start = self.words.len().saturating_sub(n);
+        (start..self.words.len())
+            .map(|i| match &self.words[i].substitutions {
+                own if !own.is_empty() => own.as_slice(),
+                _ => self
+                    .outer_substitutions
+                    .get(i)
+                    .map_or(&[][..], Vec::as_slice),
+            })
+            .collect()
     }
 }
 
@@ -356,10 +376,22 @@ fn classify_as_written(
     }
 
     if program == "eval" && argv.len() > 1 {
+        // `eval "$(curl URL)"` parses what curl prints as shell code
+        let substituted = cmd.substitutions_of_last(argv.len() - 1);
+        pipelines::push_substituted_code(substituted, "sh", sink)?;
         return classify_into(&argv[1..].join(" "), ctx, sink, depth + 1);
     }
     if SHELLS.contains(&program) {
         let run = invocation::parse(program, &argv)?;
+        // `sh -c "$(curl URL)"` runs what curl prints: the command string is
+        // the word (or, for fish's `--init-command=…`, the part of it) the
+        // shell was handed
+        let substituted = cmd.substitutions_of_last(argv.len());
+        let code_words = substituted.into_iter().zip(&argv).filter(|(_, arg)| {
+            let held = arg.as_bytes().as_ptr_range();
+            run.code.iter().any(|code| held.contains(&code.as_ptr()))
+        });
+        pipelines::push_substituted_code(code_words.map(|(subs, _)| subs), program, sink)?;
         // `bash <<< 'cmd'`, `bash <<EOF` and `cat <<EOF | bash` run their stdin
         // as the program.
         let piped = cmd.piped.iter().filter_map(Piped::text);
@@ -411,8 +443,14 @@ fn classify_as_written(
 }
 
 /// Classify a wrapper's inner argv (`sudo rm …` → `rm …`) as its own command.
+///
+/// `outer` holds, aligned with `inner` when the wrapper was handed them, the
+/// command substitutions of each word ([`SimpleCommand::outer_substitutions`]),
+/// so `env sh -c "$(curl URL)"` still runs what curl prints; empty when the
+/// words were made up (`xargs` input, `find -exec`).
 pub(super) fn classify_wrapped(
     inner: &[String],
+    outer: &[Vec<String>],
     ctx: &ShellContext<'_>,
     sink: &mut Sink,
     depth: u8,
@@ -431,6 +469,7 @@ pub(super) fn classify_wrapped(
                 ..Word::default()
             })
             .collect(),
+        outer_substitutions: outer.to_vec(),
         ..SimpleCommand::default()
     };
     classify_simple(&cmd, ctx, sink, depth + 1)
