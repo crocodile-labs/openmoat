@@ -3,12 +3,12 @@
 
 use std::ffi::OsString;
 use std::io::{Read, Write as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use openmoat_hosts::Host;
 
 use crate::install::{GUARD_BUDGET_S, dir_variable};
@@ -88,25 +88,55 @@ pub struct Scratch {
     root: PathBuf,
     pub home: PathBuf,
     pub project: PathBuf,
+    /// The temp directory of commands run under the OS sandbox: beside the
+    /// home, never above it, since the sandbox grants it.
+    pub tmp: PathBuf,
 }
 
 impl Scratch {
-    /// A new directory under the system temporary directory, with the agents'
-    /// configuration directories and a git project in its home. `create_dir`
-    /// fails on an existing path, so nothing already there is reused.
-    pub fn new() -> Result<Self> {
+    /// A new directory under `parent` (the system temporary directory when
+    /// `None`), with the agents' configuration directories and a git project
+    /// in its home. `create_dir` fails on an existing path, so nothing already
+    /// there is reused. A `parent` that is the person's home or one of its
+    /// ancestors is refused: the throwaway home is never theirs.
+    pub fn new(parent: Option<&Path>) -> Result<Self> {
+        let parent = match parent {
+            Some(dir) => {
+                // Compared resolved, used as given: on Windows `canonicalize`
+                // answers a `\\?\` path, which the paths in the hook payloads
+                // and the policy never are.
+                let resolved = std::fs::canonicalize(dir)
+                    .with_context(|| format!("--scratch-dir {}", dir.display()))?;
+                let home = crate::home::user_home()
+                    .ok()
+                    .and_then(|h| std::fs::canonicalize(h).ok());
+                ensure!(
+                    home.is_none_or(|h| !h.starts_with(&resolved)),
+                    "--scratch-dir {} is your home directory or one of its ancestors; name a \
+                     directory of its own",
+                    dir.display()
+                );
+                std::path::absolute(dir)
+                    .with_context(|| format!("--scratch-dir {}", dir.display()))?
+            }
+            None => std::env::temp_dir(),
+        };
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos());
-        let root = std::env::temp_dir().join(format!("moat-bench-{}-{nanos}", std::process::id()));
+        let root = parent.join(format!("moat-bench-{}-{nanos}", std::process::id()));
         std::fs::create_dir(&root).with_context(|| format!("creating {}", root.display()))?;
         let home = root.join("home");
         let project = home.join("proj");
+        let tmp = root.join("tmp");
         let scratch = Self {
             root,
             home,
             project,
+            tmp,
         };
+        std::fs::create_dir(&scratch.tmp)
+            .with_context(|| format!("creating {}", scratch.tmp.display()))?;
         let mut dirs = vec!["proj/.git"];
         for host in Host::ALL {
             dirs.push(dir_variable(host)?.1);

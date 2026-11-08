@@ -482,6 +482,9 @@ deny:
       # a service installed or removed runs or stops the proxy for every later session
       - "{moat,openmoat} proxy {install,uninstall}*"
       - "*/{moat,openmoat} proxy {install,uninstall}*"
+      # a new proxy CA decides which HTTPS the proxy reads and signs for (ADR-043)
+      - "{moat,openmoat} proxy ca *"
+      - "*/{moat,openmoat} proxy ca *"
       # a brokered secret's host is where its value goes
       - "{moat,openmoat} secret*"
       - "*/{moat,openmoat} secret*"
@@ -494,6 +497,10 @@ deny:
       # a changed or new MCP server, or a wrapped one, is a person's to accept (ADR-026)
       - "{moat,openmoat} mcp {accept,wrap,unwrap}*"
       - "*/{moat,openmoat} mcp {accept,wrap,unwrap}*"
+      # the read-only browser view: its link opens the audit log to whoever holds it,
+      # and it listens until stopped (ADR-066)
+      - "{moat,openmoat} serve*"
+      - "*/{moat,openmoat} serve*"
       # taken out again: the read-only forms `openmoat-readonly` allows. `policy lint`
       # and `policy check` read a file or a command and the policy, which stays
       # readable; `--help`/`-h` right after a one- or two-word command prints the
@@ -503,26 +510,26 @@ deny:
       - "!{moat,openmoat,*/moat,*/openmoat} policy {lint,check}"
       - "!{moat,openmoat,*/moat,*/openmoat} [!-]* {--help,-h}"
       - "!{moat,openmoat,*/moat,*/openmoat} {policy,mcp,proxy,sandbox,audit} [!-]* {--help,-h}"
-      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept` require
+      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept`/`proxy ca init`/`proxy install` require
       # (`*moat` inside a quoted command line covers `openmoat` too)
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */{moat,openmoat} sandbox sync*"
       - "script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       - "unbuffer * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "unbuffer * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "*/script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "*/script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
-      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve a
       # review) under the same wrappers; patterns are prefixes, so these deny any command
       # of either name run in them
@@ -531,6 +538,9 @@ deny:
       - "{expect,*/expect} * '*spawn {moat,*/moat,openmoat,*/openmoat}{;,\n,'}*"
       - "{python*,*/python*} * '*pty*spawn*(*\"{moat,*/moat,openmoat,*/openmoat}\"{],)}*'"
       - "{osascript,*/osascript} * '*\"{moat,*/moat,openmoat,*/openmoat}\"*'"
+      # `openmoat serve` inside a quoted command line of the same wrappers (ADR-066)
+      - "{script,*/script,tmux,*/tmux,screen,*/screen,expect,*/expect,osascript,*/osascript} * '*moat serve*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*serve*'"
       # the hook and the MCP gateway themselves, which only a host runs (as its hook, from
       # its plugin, or as an MCP server's command) where no hook sees it. Run by an
       # agent, `guard` records decisions and MCP tickets for payloads the agent wrote and

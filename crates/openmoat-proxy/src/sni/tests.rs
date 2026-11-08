@@ -189,9 +189,24 @@ fn an_encrypted_server_name_is_reported_with_the_cleartext_one() {
     }
     let raw = records(&handshake(&hello_body(&[ech])), 16384);
     assert_eq!(server_name(&raw), Ok(Hello::Encrypted(None)));
+    // The codepoints ECH drafts 08 to 12 used mark it too.
+    for kind in 0xfe08..=0xfe0c {
+        let exts = [sni.clone(), (kind, vec![0, 0, 1, 0, 1, 7])];
+        let raw = records(&handshake(&hello_body(&exts)), 16384);
+        assert_eq!(
+            server_name(&raw),
+            Ok(Hello::Encrypted(Some("front.example".to_owned()))),
+            "{kind:#06x}"
+        );
+    }
     // Neighbouring extension types are not taken for it.
     let raw = records(
-        &handshake(&hello_body(&[sni, (0xfe0c, vec![]), (0xffcd, vec![])])),
+        &handshake(&hello_body(&[
+            sni,
+            (0xfe07, vec![]),
+            (0xfe0e, vec![]),
+            (0xffcd, vec![]),
+        ])),
         16384,
     );
     assert_eq!(

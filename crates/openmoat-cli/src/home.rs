@@ -227,6 +227,8 @@ impl Home {
         // for review in it (ADR-007, amendment of 2026-11-07).
         let dirs = overlay.dir_rules(&policy, self).with_context(merging)?;
         merge_allow(&mut policy, dirs).with_context(merging)?;
+        // The core cannot tell an agent id from a typo; the CLI knows the hosts.
+        crate::protection::required::check_policy(&policy)?;
         Ok(policy)
     }
 

@@ -1,11 +1,13 @@
 //! Each agent's protection level, as `moat status`, `moat doctor` and the home
 //! screen report it. It is derived only from checks moat already makes: the
 //! hook's state and, for the hosts OpenMoat configures a sandbox for, whether
-//! that sandbox is in place and matches the policy.
+//! that sandbox is in place and matches the policy. The level a policy
+//! requires of an agent, and the guard's deny below it, are in [`required`].
 
 use std::path::Path;
 
 use anyhow::Result;
+use openmoat_core::Policy;
 use openmoat_hosts::Host;
 use serde::Serialize;
 
@@ -13,6 +15,10 @@ use crate::home::Home;
 use crate::install::{HookState, HostConfig, Recorded};
 use crate::integrity::{Drift, Lock};
 use crate::sandbox::{Plan, install as host_sandbox};
+
+pub mod required;
+
+pub use required::Required;
 
 /// How much of the policy is enforced for one agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -62,9 +68,19 @@ pub struct Protection {
     /// ([`HostSpec::limit`](openmoat_hosts::HostSpec::limit)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<&'static str>,
+    /// The level the policy for the current directory requires of this
+    /// agent, and whether it meets it (ADR-064); `None` when nothing is
+    /// required or the agent is not on this machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<Required>,
 }
 
 impl Protection {
+    /// Whether the agent meets the level the policy requires of it, or none is.
+    pub fn meets_required(&self) -> bool {
+        self.required.as_ref().is_none_or(|r| r.met)
+    }
+
     /// `<level>[: <reason>]`, or `None` for an agent not set up or not found,
     /// which the hook lines already report.
     pub fn summary(&self) -> Option<String> {
@@ -78,58 +94,101 @@ impl Protection {
     }
 }
 
+/// What every agent's level is worked out from, read once per report.
+struct Inputs {
+    plan: Option<Plan>,
+    lock: Option<Lock>,
+    recorded: Recorded,
+    /// The policy for the current directory, repository policy included,
+    /// whose `require:` the report shows.
+    policy: Option<Policy>,
+}
+
+impl Inputs {
+    fn load(home: &Home) -> Self {
+        Self {
+            plan: home
+                .load_policy()
+                .ok()
+                .and_then(|p| Plan::new(home, &p).ok()),
+            lock: Lock::load(&home.lock_path()).ok(),
+            recorded: Recorded::load(home).unwrap_or_default(),
+            policy: policy_here(home),
+        }
+    }
+}
+
+/// Every requirement in force in the current directory
+/// ([`required::policy_in`]), or the user policy's alone when the repository
+/// policy cannot be read (`doctor` reports it; every call there is denied).
+fn policy_here(home: &Home) -> Option<Policy> {
+    let merged = crate::context::eval_context(home, None, None)
+        .and_then(|ctx| required::policy_in(home, &ctx));
+    merged.or_else(|_| home.load_policy()).ok()
+}
+
 /// Every supported agent's protection, in [`Host::ALL`] order.
 pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
-    let plan = home
-        .load_policy()
-        .ok()
-        .and_then(|p| Plan::new(home, &p).ok());
-    let lock = Lock::load(&home.lock_path()).ok();
-    let recorded = Recorded::load(home).unwrap_or_default();
+    let inputs = Inputs::load(home);
     Host::ALL
         .into_iter()
-        .map(|host| {
-            let config = HostConfig::for_host(home, host)?;
-            // A version that does not load OpenMoat's hook (OpenCode before 1.3.4).
-            let unsupported = config
-                .host_present()
-                .then(|| crate::install::host_version::unsupported(host))
-                .flatten();
-            let (level, reason) = match unsupported {
-                Some(why) => (Level::NotProtected, Some(why)),
-                None => level(
-                    &config.state(binary),
-                    config.host_present(),
-                    recorded.skipped(host),
-                    || {
-                        crate::project_settings::switched_off(
-                            host,
-                            config.dir(),
-                            &config.settings_path,
-                        )
-                        .map(|off| format!("hook turned off by {off}"))
-                        .or_else(|| {
-                            crate::project_settings::replaced_here(host, &config.settings_path)
-                        })
-                        .or_else(|| {
-                            crate::heartbeat::check(home, &config).and_then(|loaded| {
-                                crate::heartbeat::not_loaded(host.display_name(), &loaded)
-                            })
-                        })
-                    },
-                    || sandbox(home, host, plan.as_ref(), lock.as_ref()),
-                ),
-            };
-            Ok(Protection {
-                host: host.id(),
-                name: host.display_name(),
-                level,
-                reason,
-                gaps: host.spec().gaps,
-                limit: host.spec().limit,
-            })
-        })
+        .map(|host| protection(home, binary, &inputs, host))
         .collect()
+}
+
+/// One agent's protection, as [`report`] has it.
+pub fn of_host(home: &Home, binary: &Path, host: Host) -> Result<Protection> {
+    protection(home, binary, &Inputs::load(home), host)
+}
+
+fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result<Protection> {
+    let config = HostConfig::for_host(home, host)?;
+    // A version that does not load OpenMoat's hook (OpenCode before 1.3.4).
+    let unsupported = config
+        .host_present()
+        .then(|| crate::install::host_version::unsupported(host))
+        .flatten();
+    let (level, reason) = match unsupported {
+        Some(why) => (Level::NotProtected, Some(why)),
+        None => level(
+            &config.state(binary),
+            config.host_present(),
+            inputs.recorded.skipped(host),
+            || {
+                crate::project_settings::switched_off(host, config.dir(), &config.settings_path)
+                    .map(|off| format!("hook turned off by {off}"))
+                    .or_else(|| crate::project_settings::replaced_here(host, &config.settings_path))
+                    .or_else(|| {
+                        crate::heartbeat::check(home, &config).and_then(|loaded| {
+                            crate::heartbeat::not_loaded(host.display_name(), &loaded)
+                        })
+                    })
+            },
+            || sandbox(home, host, inputs.plan.as_ref(), inputs.lock.as_ref()),
+        ),
+    };
+    let required = inputs
+        .policy
+        .as_ref()
+        .filter(|_| level != Level::NotFound)
+        .and_then(|p| p.required_for(Some(host.id())))
+        .map(|requirement| Required::of(host, level, &requirement));
+    Ok(Protection {
+        host: host.id(),
+        name: host.display_name(),
+        level,
+        reason,
+        gaps: host.spec().gaps,
+        limit: host.spec().limit,
+        required,
+    })
+}
+
+/// Whether OpenMoat puts an OS sandbox from the host's own settings around
+/// `host`'s commands on this system, from its spec alone: it writes one for
+/// the host, and the host can run it here.
+pub(crate) fn writes_sandbox(host: Host) -> bool {
+    host_sandbox::format(host).is_some() && host_sandbox::unavailable(host).is_none()
 }
 
 /// The level from the hook's state, the agent's presence, whether `moat init`
@@ -178,7 +237,7 @@ fn level(
 /// One such setting, Claude Code's `permissions.blockReadsOutsideWorkingDirectories`,
 /// is part of the answer, so the drifted files' bytes are in the key too.
 pub fn os_sandboxed_by_lock(home: &Home, host: Host, drifted: &[Drift]) -> bool {
-    if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
+    if !writes_sandbox(host) {
         return false;
     }
     let Ok(lock) = std::fs::read(home.lock_path()) else {
@@ -224,9 +283,10 @@ struct SandboxedByLock {
 /// has one (its spec), it applies on this OS, and its settings are in place
 /// and match the policy and the lock, as `status` reports `hook + OS sandbox`.
 /// The guard reads it through [`os_sandboxed_by_lock`], only for a call that
-/// runs code its session wrote (`session_code.rs`).
+/// runs code its session wrote (`session_code.rs`) and, while the policy
+/// requires a level, for every call ([`required::in_force`]).
 pub fn os_sandboxed(home: &Home, host: Host) -> bool {
-    if host_sandbox::format(host).is_none() || host_sandbox::unavailable(host).is_some() {
+    if !writes_sandbox(host) {
         return false;
     }
     let plan = home
@@ -453,6 +513,7 @@ mod tests {
             reason: reason.map(str::to_owned),
             gaps: "",
             limit: None,
+            required: None,
         };
         assert_eq!(
             protection(Level::HookOnly, Some("why"))

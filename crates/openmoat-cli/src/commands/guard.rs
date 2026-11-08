@@ -32,6 +32,7 @@ mod drift;
 mod placed;
 mod post_tool_use;
 mod record;
+mod required;
 mod session_start;
 mod unseen;
 
@@ -42,7 +43,7 @@ const SESSION_GRANT_RULE: &str = "approved-session";
 /// How far into [`GUARD_BUDGET_S`] the session's taint may be folded, leaving
 /// time to record: a session too long to fold in time is denied with a
 /// recorded reason, its progress kept, rather than by the budget's deny.
-const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
+pub(super) const TAINT_BUDGET: Duration = Duration::from_secs(GUARD_BUDGET_S * 2 / 3);
 
 /// The least time a call that got here late on a loaded machine still gets to
 /// read on a few events from its session's cache row.
@@ -394,7 +395,14 @@ fn evaluate(
         }
     }
     let Some(action) = &request.action else {
-        return Ok((Some(request), ungoverned(host)));
+        let call = required::Call {
+            home: &home,
+            host,
+            drifted: &out.drifted,
+            within_run,
+        };
+        let decision = required::ungoverned(&call, &request, ungoverned(host));
+        return Ok((Some(request), decision));
     };
     let cwd = request
         .cwd
@@ -406,6 +414,17 @@ fn evaluate(
     let ctx = context::eval_context(&home, Some(&cwd), None)?;
     let policy = crate::repo::effective_policy(&home, &ctx)?;
     out.known = secrets::known(&policy.secrets, &ctx.home)?;
+    // An agent below the level the policy requires gets no decision but this
+    // deny, on every call (ADR-064); nothing to read when none is required.
+    let call = required::Call {
+        home: &home,
+        host,
+        drifted: &out.drifted,
+        within_run,
+    };
+    if let Some(decision) = required::unmet(&call, &policy) {
+        return Ok((Some(request), decision));
+    }
     let snapshot = Snapshot::load_in(&home)?;
     hangs::enter(Phase::Compile);
     let compiled = CompiledPolicy::compile(&policy, &ctx)?;

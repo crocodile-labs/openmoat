@@ -73,3 +73,29 @@ are deliberate:
   example a script that posts its own configuration, without protecting the value.
 
 A placeholder or value in a request to any other host is still refused and recorded.
+
+## Note (2026-11-08): which allow patterns name a private address
+
+This note explains the accepted decision above; it does not change it.
+
+A private or unique local address is reached only when an allow rule names the
+address. A pattern names one when it starts with a digit (`10.0.0.*`) or is IPv6 text
+(`fd12::*`, `fe80:*`). A `host:port` pattern is judged by its host part: `fac*:5432` is
+a name on port 5432, even though the text of the unique local address `fd00::1:5432`
+matches it as a glob. The policy engine already never matched a pattern with a port
+against IPv6 text; the proxy's address policy now drops such a pattern too, so neither
+layer depends on the other for this.
+
+## Note (2026-11-08): reserved and site-local space, and ECH drafts
+
+This note explains the accepted decision above; it does not change it.
+
+- `240.0.0.0/4` (reserved) and `fec0::/10` (site-local, deprecated by RFC 3879) are
+  refused like private space: no public server has such an address, but some networks
+  still route them inside (a cloud may use `240.0.0.0/4` for pod ranges). They are
+  `Private` rather than never reachable, so an allow rule naming the address opens it,
+  as for `10.0.0.0/8`. Before, `fec0::/10` was allowed on purpose as possibly public
+  space; refusing fails closed, and an allow naming the address is the way to reach it.
+- A `ClientHello` carrying an `encrypted_client_hello` extension under the codepoints
+  of ECH drafts 08 to 12 (`0xfe08` to `0xfe0c`) is refused like one with `0xfe0d`: a
+  server speaking a draft acts on the encrypted inner name all the same.

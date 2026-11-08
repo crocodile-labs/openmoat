@@ -67,6 +67,7 @@ mod proxy_session;
 mod push;
 mod replay_report;
 mod repo_policy;
+mod required_level;
 mod run;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod run_guard;
@@ -75,6 +76,7 @@ mod sandbox;
 mod sandbox_exec;
 mod sandbox_sync;
 mod secret;
+mod serve;
 mod session_code;
 mod staging;
 mod taint;

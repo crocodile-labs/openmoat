@@ -315,10 +315,7 @@ pub fn detected() -> Result<Vec<(Host, PathBuf)>> {
             found.push((host, dir));
             continue;
         }
-        let path: Vec<PathBuf> = std::env::var_os("PATH")
-            .map(|p| std::env::split_paths(&p).collect())
-            .unwrap_or_default();
-        if let Some(binary) = crate::environment::find_in(&path, &[], detect.binary) {
+        if let Some(binary) = crate::environment::find_on_path(detect.binary) {
             found.push((host, binary));
         }
     }

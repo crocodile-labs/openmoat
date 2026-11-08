@@ -69,7 +69,10 @@ pub fn confine(
 /// Never a silent fallback to the Lightweight tier; the owner asked for the
 /// Isolated boundary, so refusing is fail-closed.
 pub fn isolate(_: &Policy, _: &EvalContext, _: Grants, _: &Path, _: &Path) -> Result<Confined> {
-    bail!("{}", stub_message(&search_path(), CONTAINER))
+    bail!(
+        "{}",
+        stub_message(&crate::environment::absolute_search_path(), CONTAINER)
+    )
 }
 
 pub fn inside(_: &IsolatedArgs) -> Result<Code> {
@@ -163,13 +166,6 @@ fn refusal(reason: &str) -> String {
         "`openmoat run` {reason}. The agent was not started. The agent hooks still apply the \
          policy to each tool call: start the agent without `openmoat run`"
     )
-}
-
-/// The dirs `PATH` lists today, as [`find_in`] takes them.
-fn search_path() -> Vec<PathBuf> {
-    std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default()
 }
 
 /// What `moat run --isolate` tells the user on macOS today, with `#175` in

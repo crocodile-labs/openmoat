@@ -27,6 +27,7 @@ fn agents() -> Vec<Protection> {
                 reason,
                 gaps: "the agent's own web search is not checked",
                 limit: None,
+                required: None,
             }
         })
         .collect()

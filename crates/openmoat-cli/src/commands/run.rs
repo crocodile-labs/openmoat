@@ -23,6 +23,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod release_age;
+mod required;
 pub mod tier;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
@@ -50,7 +51,7 @@ use super::proxy::{self, Exit};
 use super::sandbox::write_report;
 use crate::cli::{IsolatedArgs, Netns, RunArgs};
 use crate::context::{self, path_string};
-use crate::environment::find_in;
+use crate::environment::find_on_path;
 use crate::exit::Code;
 use crate::guard_relay::{self, Service, random_hex};
 use crate::home::Home;
@@ -83,6 +84,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let (name, rest) = args.command.split_first().context("no agent to run")?;
     // The sandbox checks the file it starts, not a link to it.
     let program = resolve(name)?;
+    let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
+    // Before anything starts: the level the policy requires of this program.
+    required::check(&home, &ctx, owner, &name.to_string_lossy())?;
     // A bare repository a command plants (no `.git` name) is used only when named.
     let git = git_env::add(&|var| std::env::var(var).ok())?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -111,7 +115,6 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let state = home.root();
     // The agent runs inside the sandbox and must read its own login there; every
     // other agent's stays denied (ADR-054). The hook decides with the whole policy.
-    let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
     let (sandboxed, kept) = own_login::for_session(&policy, &ctx, owner, &grants.writes);
     let mut agent = if args.isolate {
         platform::isolate(&sandboxed, &ctx, grants, &program, state)?
@@ -252,16 +255,15 @@ fn env_secrets(policy: &Policy) -> Vec<String> {
         .collect()
 }
 
-/// The executable `name` starts, symlinks resolved.
+/// The executable `name` starts, symlinks resolved. A bare name is looked up
+/// in `PATH`'s absolute entries only ([`find_on_path`]): `openmoat run` starts
+/// the agent, and a relative entry would let the repository it opens pick it.
 fn resolve(name: &OsStr) -> Result<PathBuf> {
     let path = Path::new(name);
     let found = if path.components().count() > 1 {
         Some(path.to_path_buf())
     } else {
-        let dirs: Vec<PathBuf> = std::env::var_os("PATH")
-            .map(|p| std::env::split_paths(&p).collect())
-            .unwrap_or_default();
-        find_in(&dirs, &[], &name.to_string_lossy())
+        find_on_path(&name.to_string_lossy())
     };
     let found = found.with_context(|| format!("{} is not on PATH", path.display()))?;
     std::fs::canonicalize(&found).with_context(|| format!("resolving {}", found.display()))

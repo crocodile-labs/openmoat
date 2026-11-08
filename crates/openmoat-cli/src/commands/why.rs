@@ -37,9 +37,25 @@ use explain::{Explanation, File, Files, Inputs, Part};
 const MS_PER_DAY: i64 = 86_400_000;
 
 pub fn run(args: &WhyArgs) -> Result<Code> {
+    let explained = explanation(args.event.as_deref())?;
+    match args.format {
+        Format::Json => render::json(&explained)?,
+        Format::Text => write(&mut io::stdout().lock(), &explained)?,
+    }
+    Ok(Code::Ok)
+}
+
+/// What `--format json` prints for `which`, which `openmoat serve` sends too.
+pub(super) fn json(which: Option<&str>) -> Result<serde_json::Value> {
+    Ok(serde_json::to_value(explanation(which)?)?)
+}
+
+/// The explanation of the event `which` names ([`pick`]), from the audit log
+/// and the policy files, read only.
+fn explanation(which: Option<&str>) -> Result<Explanation> {
     let home = Home::locate()?;
     let store = home.open_audit()?;
-    let event = pick(&store, args.event.as_deref(), crate::time::now_ms())?;
+    let event = pick(&store, which, crate::time::now_ms())?;
     let paths = Paths::detect();
     let newest_review = store
         .latest_held()?
@@ -75,12 +91,7 @@ pub fn run(args: &WhyArgs) -> Result<Code> {
         newest_review,
         paths: &paths,
     };
-    let explained = explain::explain(&event, &inputs);
-    match args.format {
-        Format::Json => render::json(&explained)?,
-        Format::Text => write(&mut io::stdout().lock(), &explained)?,
-    }
-    Ok(Code::Ok)
+    Ok(explain::explain(&event, &inputs))
 }
 
 /// The event `which` names: an id, a time today (UTC), or the newest deny or

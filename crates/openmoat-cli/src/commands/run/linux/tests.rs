@@ -74,14 +74,15 @@ fn the_filter_refuses_terminal_input_and_allows_other_terminal_calls() {
 }
 
 /// Asks for the session keyring's id, makes new user, network and no
-/// namespaces, calls `clone3()` without arguments and `setns()` on no file
-/// (`EBADF` when it is not refused), then starts a thread and
+/// namespaces, calls `clone3()` without arguments, and `setns()` and
+/// `pidfd_getfd()` on no file (`EBADF` when they are not refused), then
+/// starts a thread and
 /// forks a child that exits 7. Prints each call's errno (0 when it worked);
 /// the syscall numbers come in as arguments, as they differ by architecture.
 const NAMESPACE_PROBE: &str = r#"
 import ctypes, os, sys, threading
 libc = ctypes.CDLL(None, use_errno=True)
-keyctl, unshare, clone3, setns = (int(a) for a in sys.argv[1:5])
+keyctl, unshare, clone3, setns, pidfd_getfd = (int(a) for a in sys.argv[1:6])
 def call(name, nr, *args):
     ctypes.set_errno(0)
     r = libc.syscall(nr, *[ctypes.c_long(a) for a in args])
@@ -92,6 +93,7 @@ call("newnet", unshare, 0x40000000)
 call("none", unshare, 0)
 call("clone3", clone3, 0, 0)
 call("setns", setns, -1, 0)
+call("pidfd_getfd", pidfd_getfd, -1, 0, 0)
 t = threading.Thread(target=lambda: None)
 t.start()
 t.join()
@@ -103,7 +105,8 @@ print("fork=%d" % os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
 "#;
 
 /// The real filters, on a thread of its own: the kernel keyrings, new
-/// namespaces and joining one are refused with `EPERM`, `clone3()` answers
+/// namespaces, joining one and copying another process's file are refused
+/// with `EPERM`, `clone3()` answers
 /// `ENOSYS`, and the
 /// C library's threads and `fork()`, which fall back to `clone()`, still work,
 /// as does starting the probe itself.
@@ -115,6 +118,7 @@ fn the_filters_refuse_keyrings_and_new_namespaces_and_threads_still_start() {
         libc::SYS_unshare,
         libc::SYS_clone3,
         libc::SYS_setns,
+        libc::SYS_pidfd_getfd,
     ]
     .map(|nr| nr.to_string());
     let out = std::thread::spawn(move || {
@@ -141,6 +145,7 @@ fn the_filters_refuse_keyrings_and_new_namespaces_and_threads_still_start() {
         "none=0".to_owned(),
         format!("clone3={}", libc::ENOSYS),
         format!("setns={}", libc::EPERM),
+        format!("pidfd_getfd={}", libc::EPERM),
         "thread=ok".to_owned(),
         "fork=7".to_owned(),
     ];

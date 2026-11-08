@@ -20,6 +20,7 @@ mod report;
 mod run;
 mod sandbox;
 mod secret;
+mod serve;
 mod service;
 mod show;
 mod status;
@@ -64,6 +65,7 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Trust(args) => trust::run(&args),
         Command::Replay(args) => replay::run(&args),
         Command::Report(args) => report::run(&args),
+        Command::Serve(args) => serve::run(&args),
         Command::Provenance(args) => provenance::run(&args),
         Command::Proxy(args) => match args.command {
             None => proxy::run(&args),
@@ -113,4 +115,9 @@ pub fn run(cli: Cli) -> Result<Code> {
 /// where plain `moat run` leaves paths inside the project open ([`run::tier`]).
 pub fn sandboxing_command() -> &'static str {
     run::tier::command(run::bubblewrap())
+}
+
+/// Why `openmoat run` cannot sandbox on this machine; `None` when it can.
+pub fn run_unavailable() -> Option<String> {
+    run::unavailable()
 }

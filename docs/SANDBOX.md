@@ -124,7 +124,12 @@ cat: /Users/you/.claude/.credentials.json: Operation not permitted
   (`codex.linux-agent-dirs`). Codex keeps `.codex` read-only itself. The rest
   (`.env.local`, a `.envrc` or `.claude` in a subdirectory, `bin/moat`) can still be
   created by sandboxed commands on Linux;
-  `openmoat sandbox show` lists it (`codex.linux-write-globs`). Codex on Linux also runs its
+  `openmoat sandbox show` lists it (`codex.linux-write-globs`). Codex compares those globs
+  with file names case-sensitively, so in a directory that folds case (`chattr +F`) a
+  `.ENV` that exists would not be hidden: the Linux profile writes every letter case of
+  each glob of up to five letters (`**/.env`, `**/.env.*`, `**/.envrc`, `**/.moat/**`)
+  and lists the
+  longer ones (`codex.linux-case-variants`). Codex on Linux also runs its
   own executable inside the sandbox, so on Linux the profile lets commands read the
   executable `codex` on `PATH` starts (through npm's launcher, the platform binary),
   listed as `codex.own-binary`. Run `openmoat sandbox sync` after installing, moving or
@@ -328,7 +333,8 @@ bubblewrap.
   `add_key`, `request_key`), refuses new namespaces (`unshare`, and `clone` with a
   namespace flag; `clone3`, whose flags a filter cannot read, answers `ENOSYS`, so the
   C library falls back to `clone`) and joining an existing one (`setns`, so `nsenter`
-  and a container runtime's `exec` fail). Containers, bubblewrap and Chromium's own
+  and a container runtime's `exec` fail), and refuses `pidfd_getfd` (copying an open
+  file of another process; `pidfd_open` stays). Containers, bubblewrap and Chromium's own
   sandbox cannot start inside. Windows refuses.
 - **The network on Linux.** Landlock restricts TCP connections by port only, and a
   seccomp filter cannot read the address `connect()` is given (it gets a pointer), so

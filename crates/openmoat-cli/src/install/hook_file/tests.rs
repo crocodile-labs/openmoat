@@ -169,10 +169,14 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
     let doc = root(&cfg);
     assert_eq!(doc["version"], 1);
     let entry = &doc["hooks"]["beforeShellExecution"][0];
-    assert_eq!(
-        entry["command"],
+    // Single quotes on POSIX, where Cursor's shell would expand `$` or a
+    // backtick inside double quotes.
+    let expected = if cfg!(windows) {
         "\"/Applications/My Tools/moat\" guard --host cursor"
-    );
+    } else {
+        "'/Applications/My Tools/moat' guard --host cursor"
+    };
+    assert_eq!(entry["command"], expected);
     assert_eq!(entry["failClosed"], true);
     assert_eq!(entry["timeout"], 600);
     assert!(entry.get("args").is_none());

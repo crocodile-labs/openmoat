@@ -226,6 +226,47 @@ fn linux_denies_each_glob_name_directly_in_the_workspace_roots() {
     );
 }
 
+/// In a directory that folds case, `.ENV` is the project's `.env`: on Linux
+/// each short deny glob is written in every letter case, as a glob (never a
+/// name bubblewrap would create), and a longer one is reported.
+#[test]
+fn linux_denies_every_letter_case_of_short_globs_and_reports_the_rest() {
+    let mut out = generated(DEFAULT_POLICY);
+    deny_names(&mut out);
+    let ws = [":workspace_roots"];
+    for spelling in [
+        "**/.ENV",
+        "**/.Env",
+        "**/.eNv",
+        "**/.ENV.*",
+        "**/.ENVRC",
+        "**/.EnvRc",
+    ] {
+        assert_eq!(mode(&out, &ws, spelling), Some("deny"), "{spelling}");
+    }
+    let variants = out.profile["filesystem"][":workspace_roots"]
+        .as_table()
+        .unwrap()
+        .iter()
+        .filter(|(key, _)| key.eq_ignore_ascii_case("**/.envrc"))
+        .count();
+    assert_eq!(variants, 32);
+    for name in [".ENV", ".Env", ".ENVRC"] {
+        assert_eq!(mode(&out, &ws, name), None, "{name}: no empty file mounted");
+    }
+    let loss = out
+        .report
+        .losses
+        .iter()
+        .find(|l| l.rule == "codex.linux-case-variants");
+    assert!(
+        loss.is_some_and(
+            |l| l.message.contains("`**/bin/moat`") && !l.message.contains("`**/.env`")
+        ),
+        "{loss:?}"
+    );
+}
+
 #[test]
 fn network_lists_domains_and_keeps_addresses_unlisted() {
     let out = generated(DEFAULT_POLICY);

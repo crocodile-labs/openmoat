@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 
-use crate::common::{OK, Sandbox, USAGE, json, stderr, stdout};
+use crate::common::{OK, Sandbox, USAGE, json, output, stderr, stdout};
 
 /// Run `moat bench` with `args` in an isolated home; exits 0 whatever the scores.
 fn bench(sb: &Sandbox, args: &[&str]) -> (Value, String) {
@@ -139,4 +139,185 @@ fn moatbench_hook_needs_a_host() {
     let sb = Sandbox::bare(&[]);
     let out = sb.moat(&["bench", "--hook", "true"]);
     assert_eq!(out.status.code(), Some(USAGE), "{}", stderr(&out));
+}
+
+/// `moat bench --report` on one host, with the throwaway home below the
+/// target directory: on Linux the OS rows need it outside `/tmp`.
+fn report(sb: &Sandbox, format: &str) -> std::process::Output {
+    let scratch = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let dir = scratch.path().to_string_lossy().into_owned();
+    output(
+        sb.command()
+            .env("MOAT_CLAUDE_VERSION", "2.1.295")
+            .args(["bench", "--report", "--host", "claude-code"])
+            .args(["--scratch-dir", &dir, "--format", format]),
+        None,
+    )
+}
+
+/// One line for a failed run: the exit code, the first line of stderr and the
+/// rows that are not PASS or NOT TESTED HERE, since a CI annotation shows only
+/// a message's first line.
+fn why_failed(out: &std::process::Output) -> String {
+    let err = stderr(out);
+    let first = err.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let rows: Vec<String> = serde_json::from_slice::<Value>(&out.stdout)
+        .ok()
+        .and_then(|r| r["rows"].as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r["status"] != "pass" && r["status"] != "not-tested-here")
+        .map(|r| format!("{}/{}: {}", r["promise"], r["layer"], r["reason"]))
+        .collect();
+    format!(
+        "exit {:?}; stderr: {first}; failed rows: {}",
+        out.status.code(),
+        rows.join(" | ")
+    )
+}
+
+/// The rows of `report` for `promise` at `layer`.
+fn rows<'a>(report: &'a Value, promise: &str, layer: &str) -> Vec<&'a Value> {
+    report["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["promise"] == promise && r["layer"] == layer)
+        .collect()
+}
+
+#[test]
+fn moatbench_report_answers_every_promise_per_layer() {
+    let sb = Sandbox::bare(&[]);
+    let out = report(&sb, "json");
+    let report = json(&out);
+    println!("{report:#}");
+    assert_eq!(
+        out.status.code(),
+        Some(OK),
+        "{}\n{report:#}",
+        why_failed(&out)
+    );
+    assert_eq!(report["format"], "openmoat-bench-report-v1");
+    assert_eq!(report["openmoat"], env!("CARGO_PKG_VERSION"));
+    assert_ne!(report["os"].as_str().unwrap(), "");
+    assert_eq!(report["hosts"][0]["id"], "claude-code");
+    assert_eq!(report["hosts"][0]["version"], "claude 2.1.295");
+    assert_eq!(report["summary"]["fail"], 0, "{report:#}");
+    for promise in [
+        "read-ssh-key",
+        "build-script-reads-agent-login",
+        "mcp-steers-write",
+        "exfil-allowed-host",
+        "turn-off-openmoat",
+    ] {
+        for layer in ["policy", "hook"] {
+            let found = rows(&report, promise, layer);
+            assert_eq!(found.len(), 1, "{promise} {layer}");
+            assert_eq!(found[0]["status"], "pass", "{promise} {layer}: {report:#}");
+            assert_ne!(found[0]["reproduce"], serde_json::json!([]));
+        }
+    }
+    let network = rows(&report, "exfil-allowed-host", "network");
+    assert_eq!(network[0]["status"], "pass", "{report:#}");
+    // OpenMoat's side of a failed hook is exercised; the host's needs the host.
+    let failed = rows(&report, "hook-fails-closed", "hook");
+    assert_eq!(failed.len(), 2);
+    assert_eq!(failed[0]["status"], "pass", "{report:#}");
+    assert_eq!(failed[1]["status"], "not-tested-here");
+    assert!(
+        failed[1]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("needs the real host"),
+        "{report:#}"
+    );
+    // The OS rows ran the attack, or say why not; never a pass without a run.
+    // CI's macOS jobs run Seatbelt, so there they must pass. On Linux a row
+    // may be NOT TESTED HERE with its reason (the runner's namespaces and
+    // Landlock vary), never a pass without a run.
+    let must_run = std::env::var_os("CI").is_some() && cfg!(target_os = "macos");
+    for promise in [
+        "read-ssh-key",
+        "build-script-reads-agent-login",
+        "turn-off-openmoat",
+    ] {
+        let os = rows(&report, promise, "os-sandbox");
+        assert_eq!(os.len(), 1, "{promise}");
+        let status = os[0]["status"].as_str().unwrap();
+        // The reason first: a CI annotation shows only the first line.
+        let reason = os[0]["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .replace('\n', " ");
+        if must_run {
+            assert_eq!(status, "pass", "{promise}: {reason}\n{report:#}");
+        } else if status != "pass" {
+            assert_eq!(status, "not-tested-here", "{promise}: {reason}\n{report:#}");
+            assert_ne!(os[0]["reason"].as_str().unwrap(), "");
+            eprintln!("{promise}: OS sandbox not tested here: {}", os[0]["reason"]);
+        }
+        if cfg!(windows) {
+            assert_eq!(status, "not-tested-here");
+        }
+    }
+    assert!(
+        !sb.home.join(".moat").exists(),
+        "the throwaway home is not the caller's"
+    );
+}
+
+#[test]
+fn moatbench_report_in_markdown_and_text() {
+    let sb = Sandbox::bare(&[]);
+    let out = report(&sb, "markdown");
+    let json_run = report(&sb, "json");
+    assert_eq!(out.status.code(), Some(OK), "{}", why_failed(&json_run));
+    let markdown = stdout(&out);
+    assert!(
+        markdown.starts_with("# MoatBench proof report\n"),
+        "{markdown}"
+    );
+    assert!(
+        markdown.contains("| Promise | Layer | Check | Status | Why | Reproduce |"),
+        "{markdown}"
+    );
+    assert!(
+        markdown.contains("`readme-injection-posts-ssh-key`"),
+        "{markdown}"
+    );
+    assert!(markdown.contains("**NOT TESTED HERE**"), "{markdown}");
+    let text = stdout(&report(&sb, "text"));
+    assert!(text.starts_with("MoatBench proof report\n"), "{text}");
+    assert!(
+        text.contains("can an agent read ~/.ssh/id_rsa? [read-ssh-key]"),
+        "{text}"
+    );
+    assert!(text.contains("NOT TESTED HERE is not a pass."), "{text}");
+}
+
+#[test]
+fn moatbench_report_refuses_what_it_cannot_do() {
+    let sb = Sandbox::bare(&[]);
+    // Markdown is the proof report's; --hook tests another hook, not OpenMoat.
+    let out = sb.moat(&["bench", "--format", "markdown"]);
+    assert_eq!(out.status.code(), Some(USAGE), "{}", stderr(&out));
+    let out = sb.moat(&["bench", "--report", "--hook", "true", "--host", "codex"]);
+    assert_eq!(out.status.code(), Some(USAGE), "{}", stderr(&out));
+    // The throwaway home is never the caller's home or above it.
+    let home = sb.home.to_string_lossy().into_owned();
+    let out = sb.moat(&[
+        "bench",
+        "--report",
+        "--host",
+        "codex",
+        "--scratch-dir",
+        &home,
+    ]);
+    assert_eq!(out.status.code(), Some(USAGE), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("is your home directory"),
+        "{}",
+        stderr(&out)
+    );
 }

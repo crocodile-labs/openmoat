@@ -224,8 +224,9 @@ fn ordinary_addresses_are_not_forbidden() {
         "198.17.255.255",
         "198.20.0.0",
         "2606:4700::1111",
-        "fec0::1",
+        "223.255.255.255",
         "fe00::1",
+        "fe7f:ffff::1",
         "::ffff:8.8.8.8",
     ] {
         assert_eq!(forbidden(ip.parse().unwrap()), None, "{ip}");
@@ -271,6 +272,30 @@ fn private_ranges_are_forbidden_in_every_spelling() {
             private("an IETF protocol address (192.0.0.0/24)"),
         ),
         ("64:ff9b:1::a00:5", private(ten)),
+        // reserved for future use; broadcast is not a server at all
+        ("240.0.0.0", private("a reserved address (240.0.0.0/4)")),
+        (
+            "254.255.255.255",
+            private("a reserved address (240.0.0.0/4)"),
+        ),
+        (
+            "::ffff:240.0.0.1",
+            private("a reserved address (240.0.0.0/4)"),
+        ),
+        (
+            "64:ff9b::f000:1",
+            private("a reserved address (240.0.0.0/4)"),
+        ),
+        ("255.255.255.255", Some(Forbidden::NotUnicast)),
+        // deprecated site-local: local network, never a public server
+        (
+            "fec0::1",
+            private("a deprecated site-local address (fec0::/10)"),
+        ),
+        (
+            "feff:ffff::1",
+            private("a deprecated site-local address (fec0::/10)"),
+        ),
         // a local-use NAT64 address in a layout other than /96, public inside
         (
             "64:ff9b:1:5db8:d7:e00:808:808",
@@ -292,7 +317,7 @@ deny:
   - { id: no-lab, net: ["10.9.*"] }
 allow:
   - { id: wide, net: ["*", "*.example", "?0.0.0.1"] }
-  - { id: lan, net: ["10.0.0.5", "192.168.1.*", "10.9.0.1", "fd12::*"] }
+  - { id: lan, net: ["10.0.0.5", "192.168.1.*", "10.9.0.1", "fd12::*", "240.0.0.7", "fec0::7"] }
   - { id: docs, fetch: ["172.16.0.9"] }
 review:
   - { id: lab, net: ["100.64.0.1"] }
@@ -306,6 +331,10 @@ review:
         ("192.168.1.77", true),
         ("172.16.0.9", true),
         ("fd12::1", true),
+        ("240.0.0.7", true),
+        ("fec0::7", true),
+        ("240.0.0.8", false),
+        ("fec0::8", false),
         ("10.0.0.6", false),
         ("192.168.2.1", false),
         ("20.0.0.1", false),
@@ -328,6 +357,64 @@ allow:
         named_policy.allow[0].patterns(Kind::Net),
         ["10.0.0.5", "fd12::*"]
     );
+}
+
+/// A name pattern with a port whose host part is all hex letters (`f*:5432`)
+/// is a name on that port, not an address: as IPv6 text it would match a
+/// unique local address ending in `:5432` (`fd00::1:5432`). Its port is split
+/// off first, and only a host part starting with a digit or containing `:`
+/// names an address.
+#[test]
+fn a_hex_letter_name_with_a_port_does_not_name_an_address() {
+    let yaml = r#"
+version: 1
+allow:
+  - { id: names, net: ["f*:5432", "fac*:5432", "db.internal:5432", "*:5432"] }
+  - { id: lan, net: ["10.0.0.*:5432", "fd00::*:5432", "fd12:*", "1*:5432"] }
+"#;
+    let named_policy = address_policy(&Policy::parse(yaml).unwrap());
+    assert_eq!(named_policy.allow[0].patterns(Kind::Net), [""; 0]);
+    assert_eq!(
+        named_policy.allow[1].patterns(Kind::Net),
+        ["10.0.0.*:5432", "fd00::*:5432", "fd12:*", "1*:5432"]
+    );
+    // Even kept, a pattern with a port never matches an IPv6 address's text.
+    let all = Policy {
+        allow: vec![openmoat_core::RuleGroup {
+            id: "kept".to_owned(),
+            net: vec!["f*:5432".to_owned(), "6*:5432".to_owned()],
+            ..Default::default()
+        }],
+        defaults: Defaults::All(Verdict::Review),
+        ..Policy::parse("version: 1\n").unwrap()
+    };
+    let addresses = CompiledPolicy::compile(&named_policy, &ctx()).unwrap();
+    let kept = CompiledPolicy::compile(&all, &ctx()).unwrap();
+    for ip in ["fd00::1:5432", "fd00::5432", "64:ff9b:1::808:5432"] {
+        let ip: IpAddr = ip.parse().unwrap();
+        assert_eq!(
+            forbidden(ip).map(|f| matches!(f, Forbidden::Private(_))),
+            Some(true),
+            "{ip}"
+        );
+        assert!(!named(&kept, ip), "{ip}");
+        for port in [5432, 443] {
+            let addr = SocketAddr::new(ip, port);
+            assert!(!named_on(&kept, addr), "{addr}");
+        }
+    }
+    for (addr, open) in [
+        ("[fd00::1]:5432", false),
+        ("[fd00::2]:443", false),
+        // `fd00::*:5432` is an IPv6 glob: it names these on 443 and 80.
+        ("[fd00::7:5432]:443", true),
+        ("10.0.0.7:5432", true),
+        ("10.0.0.7:443", false),
+        ("[fd12::9]:443", true),
+    ] {
+        let addr: SocketAddr = addr.parse().unwrap();
+        assert_eq!(named_on(&addresses, addr), open, "{addr}");
+    }
 }
 
 #[test]

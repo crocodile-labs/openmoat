@@ -16,11 +16,7 @@ use crate::render;
 use crate::time;
 
 pub fn run(args: &ReportArgs) -> Result<Code> {
-    let since = time::parse_since(&args.since, time::now_ms())?;
-    let store = Home::locate()?.open_audit()?;
-    let host = args.host.map(Host::id);
-    let summary = store.summary(since, host)?;
-    let staging = staging(&store, since, host, summary.active_hours)?;
+    let (summary, staging) = build(args)?;
     match args.format {
         Format::Json => render::json(&Report {
             summary: &summary,
@@ -47,6 +43,25 @@ pub fn run(args: &ReportArgs) -> Result<Code> {
         }
     }
     Ok(Code::Ok)
+}
+
+/// The window's summary and staging counts, from the audit log read-only.
+fn build(args: &ReportArgs) -> Result<(Summary, StagingCounts)> {
+    let since = time::parse_since(&args.since, time::now_ms())?;
+    let store = Home::locate()?.open_audit()?;
+    let host = args.host.map(Host::id);
+    let summary = store.summary(since, host)?;
+    let staging = staging(&store, since, host, summary.active_hours)?;
+    Ok((summary, staging))
+}
+
+/// The report `--format json` prints, which `openmoat serve` sends too.
+pub(super) fn json(args: &ReportArgs) -> Result<serde_json::Value> {
+    let (summary, staging) = build(args)?;
+    Ok(serde_json::to_value(Report {
+        summary: &summary,
+        staging: &staging,
+    })?)
 }
 
 /// The summary, with the staging counts beside it.

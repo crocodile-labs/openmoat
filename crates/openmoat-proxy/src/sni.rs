@@ -22,6 +22,11 @@ const NAME_TYPE_HOST: u8 = 0;
 /// `encrypted_client_hello` (RFC 9849): the real server name travels in an
 /// encrypted inner `ClientHello`, the cleartext one may name a fronting host.
 const EXT_ECH: u16 = 0xfe0d;
+/// `encrypted_client_hello` as drafts 08 to 12 of draft-ietf-tls-esni numbered
+/// it (from draft 08 the codepoint is `0xfe00` plus the draft number; drafts
+/// 13 on use [`EXT_ECH`]). A client built on a draft still sends one, and the
+/// server it reaches may act on the encrypted inner name all the same.
+const EXT_ECH_DRAFTS: core::ops::RangeInclusive<u16> = 0xfe08..=0xfe0c;
 /// `encrypted_server_name`, the ECH drafts' predecessor (draft-ietf-tls-esni-02).
 const EXT_ESNI: u16 = 0xffce;
 
@@ -123,7 +128,7 @@ fn client_hello_sni(body: &[u8]) -> Result<(Option<String>, bool), HelloError> {
             }
             name = Some(server_name_list(data)?);
         }
-        encrypted |= kind == EXT_ECH || kind == EXT_ESNI;
+        encrypted |= kind == EXT_ECH || kind == EXT_ESNI || EXT_ECH_DRAFTS.contains(&kind);
     }
     Ok((name.flatten(), encrypted))
 }

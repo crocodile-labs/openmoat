@@ -4,9 +4,13 @@
 //! call that acts on one of them needs review (`taint::injected`).
 //!
 //! Nothing is decided and no audit row is written: the call already ran, and
-//! its `PreToolUse` row is its record. The lock is checked first, as for any
+//! its `PreToolUse` row is its record. The hook then reads on through the
+//! session's earlier calls for its taint (`taint::catch_up`), so a long
+//! session's next `PreToolUse` does not spend its time budget catching up. The lock is checked first, as for any
 //! call, and what cannot be kept fails the hook (exit 2, which the host shows
 //! the agent); the call is not undone.
+
+use std::time::Instant;
 
 use anyhow::{Context as _, Result};
 use openmoat_core::{CompiledPolicy, Decision, Verdict};
@@ -39,6 +43,7 @@ pub(super) fn answer(host: Host, payload: &str, event: &HookEvent) -> Code {
 /// host is answered with: an `allow` it never sees (the response is empty),
 /// or the lock check's deny.
 fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
+    let started = Instant::now();
     let home = Home::locate()?;
     let verified = integrity::check(&home)?;
     if let Some(deny) = verified.checked.deny {
@@ -72,5 +77,17 @@ fn kept(host: Host, request: HookRequest, output: &str) -> Result<Decision> {
         text: output,
     };
     taint::injected::record(&home, &store, &compiled, &output)?;
+    // The call ran: read on through the session's history now, so the next
+    // call's own fold is short (the cache row is keyed like that call's).
+    hangs::enter(Phase::Taint);
+    let deadline = started + super::TAINT_BUDGET;
+    taint::catch_up(
+        &store,
+        host,
+        &request.session_id,
+        &compiled,
+        &ctx.cwd,
+        deadline,
+    );
     Ok(Decision::new(Verdict::Allow))
 }

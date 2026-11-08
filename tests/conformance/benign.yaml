@@ -1736,6 +1736,11 @@
 - id: benign-openmoat-proxy-status
   action: { shell: "openmoat proxy status" }
   expect: { verdict: defer, rules: [default] }
+# the CA's usage prints and makes nothing
+- id: benign-openmoat-proxy-ca-help
+  threat: T9
+  action: { shell: "openmoat proxy ca --help" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
 # reading whether plugins loaded stays the person's and the agent's to do
 - id: benign-openmoat-status-plugins
   action: { shell: "openmoat status --format json" }
@@ -2396,6 +2401,10 @@
 - id: benign-openmoat-init-help
   threat: T9
   action: { shell: "target/debug/openmoat init -h" }
+  expect: { verdict: allow, rules: [openmoat-readonly] }
+- id: benign-openmoat-serve-help
+  threat: T9
+  action: { shell: "openmoat serve --help" }
   expect: { verdict: allow, rules: [openmoat-readonly] }
 - id: benign-openmoat-policy-upgrade-help
   threat: T9

@@ -45,7 +45,7 @@ const NAT64_LOCAL: [u16; 3] = [0x64, 0xff9b, 1];
 /// RFC 2765 IPv4-translated prefix: `::ffff:0:a.b.c.d` reaches `a.b.c.d`.
 const SIIT: [u16; 6] = [0, 0, 0, 0, 0xffff, 0];
 /// Ranges on the local network (or the carrier's), each with its description.
-const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
+const PRIVATE_V4: [(Ipv4Addr, u8, &str); 7] = [
     (
         Ipv4Addr::new(10, 0, 0, 0),
         8,
@@ -75,6 +75,14 @@ const PRIVATE_V4: [(Ipv4Addr, u8, &str); 6] = [
         Ipv4Addr::new(192, 0, 0, 0),
         24,
         "an IETF protocol address (192.0.0.0/24)",
+    ),
+    // Reserved for future use (RFC 1112 §4, RFC 6890): no public server has
+    // one, while some clouds hand it out inside a private network (GKE uses
+    // it for pod ranges). `255.255.255.255` is broadcast, refused before this.
+    (
+        Ipv4Addr::new(240, 0, 0, 0),
+        4,
+        "a reserved address (240.0.0.0/4)",
     ),
 ];
 
@@ -188,7 +196,8 @@ pub enum Forbidden {
     ThisMachine,
     /// Unspecified, broadcast, multicast or `0.0.0.0/8`: never a server.
     NotUnicast,
-    /// Private, CGNAT, benchmarking or unique-local (`fc00::/7`): reachable
+    /// Private, CGNAT, benchmarking, reserved (`240.0.0.0/4`), unique-local
+    /// (`fc00::/7`) or deprecated site-local (`fec0::/10`): reachable
     /// only when an allow rule names the address ([`named`]). Carries the
     /// description naming the range.
     Private(&'static str),
@@ -250,6 +259,12 @@ fn forbidden_v6(ip: Ipv6Addr) -> Option<Forbidden> {
         )))
     } else if seg[0] & 0xfe00 == 0xfc00 {
         Some(Forbidden::Private("a unique local address (fc00::/7)"))
+    } else if seg[0] & 0xffc0 == 0xfec0 {
+        // Deprecated (RFC 3879) but still routed inside networks that kept it:
+        // local network all the same, and never a public server.
+        Some(Forbidden::Private(
+            "a deprecated site-local address (fec0::/10)",
+        ))
     } else {
         None
     }
@@ -281,8 +296,10 @@ fn tunnelled_v4(ip: Ipv6Addr) -> impl Iterator<Item = Ipv4Addr> {
 
 /// The part of `policy` that decides a resolved address: its deny rules, and
 /// the allow rules' `net` and `fetch` patterns that name an address: a pattern
-/// starting with a digit or containing `:`, not starting with a glob
-/// metacharacter, and made only of what an address's text and a glob use.
+/// starting with a digit or, without a port, containing `:` (a `host:port`
+/// pattern is judged by its host part, so `f*:5432` is a name), not starting
+/// with a glob metacharacter, and made only of what an address's text and a
+/// glob use.
 /// Anything else is left undecided (`review`), which neither opens a
 /// [`Forbidden::Private`] address ([`named`]) nor refuses one ([`denied`]), so
 /// a wildcard such as `*` or `*.example`, or a name such as
@@ -322,13 +339,21 @@ pub fn address_policy(policy: &Policy) -> Policy {
     }
 }
 
-/// Whether a host pattern names an address (see [`address_policy`]).
+/// Whether a host pattern names an address (see [`address_policy`]). A
+/// `host:port` pattern ([`port_pattern`](openmoat_core::port_pattern)) is
+/// judged by its host part, so a name made of hex letters with a port
+/// (`f*:5432`, `fac*:5432`) is a name, not an IPv6 glob reaching a unique
+/// local address: only a host part starting with a digit (`10.0.0.*:5432`)
+/// names an address with a port. Without a port, a `:` makes it IPv6 text
+/// (`fd12::*`, `fe80:*`).
 fn names_address(pattern: &str) -> bool {
-    !pattern.starts_with(['*', '?', '[', '{'])
-        && (pattern.starts_with(|c: char| c.is_ascii_digit()) || pattern.contains(':'))
-        && pattern
+    let body = pattern.strip_prefix('!').unwrap_or(pattern);
+    let host = openmoat_core::port_pattern(body).map_or(body, |(host, _)| host);
+    !body.starts_with(['*', '?', '[', '{'])
+        && (host.starts_with(|c: char| c.is_ascii_digit()) || host.contains(':'))
+        && body
             .chars()
-            .all(|c| c.is_ascii_hexdigit() || ".:*?[]{},!-".contains(c))
+            .all(|c| c.is_ascii_hexdigit() || ".:*?[]{},-".contains(c))
 }
 
 /// Whether `addresses` (compiled from [`address_policy`]) allows `ip`, matched

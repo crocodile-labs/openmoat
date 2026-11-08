@@ -2,6 +2,22 @@
 //! runs. `moat doctor --bundle` names it; `moat run` and `moat doctor` compare it
 //! with the oldest macOS whose `sandbox-exec` reads the Seatbelt profile.
 
+// `this_os` is this OS's module: `system()`, the system and its version in
+// one line for `describe` (not `platform`, which names the function below).
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+mod unsupported;
+
+#[cfg(target_os = "linux")]
+use linux as this_os;
+#[cfg(target_os = "macos")]
+use macos as this_os;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+use unsupported as this_os;
+
 /// Where macOS keeps its version.
 const SYSTEM_VERSION: &str = "/System/Library/CoreServices/SystemVersion.plist";
 
@@ -59,6 +75,28 @@ pub fn platform() -> openmoat_hosts::Platform {
     } else {
         Platform::Linux
     }
+}
+
+/// This system and its version in one line, for `openmoat bench --report`:
+/// `macOS 14.5 (aarch64)`, `Ubuntu 24.04.1 LTS, Linux 6.8.0-1017-azure
+/// (x86_64)`; read from files, so no program runs. Parts that cannot be read
+/// are said to be unknown.
+pub fn describe() -> String {
+    format!("{} ({})", this_os::system(), std::env::consts::ARCH)
+}
+
+/// `PRETTY_NAME` of an `os-release` file, unquoted. Kept here, not in
+/// `linux.rs`, so its tests run on every system.
+#[cfg_attr(
+    all(not(target_os = "linux"), not(test)),
+    expect(dead_code, reason = "only Linux reads an os-release file")
+)]
+pub fn pretty_name(os_release: &str) -> Option<String> {
+    let line = os_release
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("PRETTY_NAME="))?;
+    let name = line.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+    Some(name.to_owned()).filter(|n| !n.is_empty())
 }
 
 /// Whether a Linux kernel release string is the Windows Subsystem for

@@ -9,6 +9,7 @@ mod audit;
 mod mcp;
 mod policy;
 mod provenance;
+mod serve;
 
 mod timeline;
 
@@ -19,6 +20,7 @@ pub use policy::{
     PolicyCommand, RemoveArgs, TrustKeyArgs, UpgradeArgs,
 };
 pub use provenance::{DiffProvenanceArgs, ProvenanceArgs, ProvenanceLevel};
+pub use serve::ServeArgs;
 
 pub use timeline::{Only, WatchArgs, WhyArgs};
 
@@ -89,6 +91,11 @@ pub enum Command {
     Replay(ReplayArgs),
     /// Summarise decisions over a window: verdicts, hosts, top rules, reviews per hour.
     Report(ReportArgs),
+    /// Show what `status`, `show`, `report` and `why` show in a browser on this machine:
+    /// listens on 127.0.0.1 only, prints a link with a token made for this run, and
+    /// answers only requests that carry it. Read-only; Ctrl-C stops it. Refused unless
+    /// run by a person at an interactive terminal.
+    Serve(ServeArgs),
     /// Show which files and lines of commits agent sessions wrote, as this machine's audit
     /// log recorded them, and whether each session had read untrusted content first;
     /// `--write-notes` keeps it in git notes, `--verify` checks those notes.
@@ -499,9 +506,30 @@ pub struct BenchArgs {
     #[arg(long)]
     pub verbose: bool,
 
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = Format::Text)]
-    pub format: Format,
+    /// Print the proof report instead of the scorecard: each security promise per
+    /// layer (policy decision, host hook, OS sandbox, network boundary) as PASS,
+    /// FAIL or NOT TESTED HERE with the reason. Runs attacks under `openmoat run` in
+    /// the throwaway home. Exits 1 when an exercised layer fails.
+    #[arg(long, conflicts_with = "hook")]
+    pub report: bool,
+
+    /// The directory to make the throwaway home in (default: the system temp
+    /// directory). On Linux the OS sandbox rows need one outside /tmp, which the
+    /// sandbox lets commands read.
+    #[arg(long, value_name = "DIR")]
+    pub scratch_dir: Option<PathBuf>,
+
+    /// Output format; markdown only with --report.
+    #[arg(long, value_enum, default_value_t = BenchFormat::Text)]
+    pub format: BenchFormat,
+}
+
+/// `openmoat bench --format`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum BenchFormat {
+    Text,
+    Json,
+    Markdown,
 }
 
 #[derive(Debug, Args)]

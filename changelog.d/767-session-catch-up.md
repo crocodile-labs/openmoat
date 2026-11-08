@@ -1,0 +1,2 @@
+### Fixed
+- In a long Claude Code session whose history OpenMoat's cache had not caught up on (after an upgrade, a policy change, or in a new directory), calls were denied with `kernel-error` until a few calls had read through the backlog. The `PostToolUse` hook now reads on through the session after each call ran, so the next call is decided within its own time; a call that still runs out of time says plainly that it was stopped, not judged, and that running it again reads on ([#767](https://github.com/crocodile-labs/openmoat/pull/767)).

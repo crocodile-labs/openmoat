@@ -22,8 +22,8 @@ platform and false positives from daily use turned into fixtures, then enforceme
 (`openmoat run` with Seatbelt and Landlock + seccomp, the egress proxy, session taint,
 the MCP proxy with description pinning) shown by the executing fixtures in
 [EVIDENCE.md](EVIDENCE.md), where exfiltration fails at the OS level. What 1.0 still
-needs, as ADR-013 sets it: a stable policy schema with `openmoat policy migrate` (#136),
-`openmoat serve` (#320), and MoatBench meeting a 1.0 gate. [MOATBENCH.md](MOATBENCH.md)
+needs, as ADR-013 sets it: a stable policy schema with `openmoat policy migrate` (#136)
+and MoatBench meeting a 1.0 gate; the third, `openmoat serve` (#320), is built (ADR-066). [MOATBENCH.md](MOATBENCH.md)
 defines the gate CI applies today (every bundled scenario decided as expected, with no
 false positive, on every platform); the threshold 1.0 asks beyond that is not yet set.
 What exists:
@@ -139,7 +139,6 @@ Planned for 1.0 or after, not yet scheduled:
 - HTTPS injection of brokered secrets in the standalone `openmoat proxy`, and keep-alive
   inside a terminated tunnel; `openmoat run` has both injection and the method and path
   rules (ADR-043, #247).
-- `openmoat serve` (#320).
 - A conservative PowerShell tokenizer; until then PowerShell is `unparseable` and defers.
 - A scrubbed environment for agent commands (THREAT_MODEL T3).
 

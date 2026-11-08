@@ -35,6 +35,20 @@ Each agent's gaps and the reasons are in
   so a classifier mistake is a bypass. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
+- **A required protection level is checked where the hook runs.** With `require:`
+  ([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)) the guard denies every
+  call of an agent below the level, but it only sees what it can tell from inside one
+  call without starting a process: that its hook runs, that the lock still pins the hook
+  entries as `openmoat init` wrote them, whether the call came through `openmoat run`,
+  and whether OpenMoat's sandbox settings for the agent are in place (the answer kept per
+  lock). It cannot see a hook that does not run (turned off in the agent's settings, a
+  plugin the agent did not load, an agent that runs a call when the hook fails): no call
+  reaches it to deny. `openmoat status` and `openmoat doctor` show those agents as below
+  the level, and `openmoat run` refuses them, but an agent started on its own keeps
+  running. `hook-and-os-sandbox` means OpenMoat's sandbox settings are in force, not that
+  every call is confined (Claude Code's file tools, `WebFetch` and MCP servers run
+  outside its sandbox). The kept sandbox answer lives in `~/.moat`, so a program that runs
+  as you outside any sandbox can change it, as it can change the policy.
 - **Under `openmoat run`, the agent's own login is readable to the commands it runs.**
   Every OS sandbox denies the agents' login and key files (`agent-credentials`) to the
   commands an agent runs; Claude Code's, Codex's and Cursor's sandboxes confine only those
@@ -177,3 +191,9 @@ Each agent's gaps and the reasons are in
   nothing, a commit with no record is not shown to be a person's, and only the machine
   that wrote a note can verify it; in CI it is a claim
   ([PROVENANCE.md](PROVENANCE.md#limits)).
+- **`openmoat serve`'s link reads the audit log while it runs.** Whoever holds the link
+  can read every recorded call until the server stops; it stays in the browser's history,
+  where it no longer works once the server has stopped. The server is plain HTTP on
+  loopback, so a program running as you could read the log file directly anyway; it adds
+  nothing for that program, and nothing for another user, a web page or another machine
+  without the token ([ADR-066](adr/ADR-066-openmoat-serve.md)).

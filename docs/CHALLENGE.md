@@ -44,6 +44,13 @@ openmoat policy check 'cat ~/.ssh/openmoat-canary'            # deny, secrets-pa
 openmoat policy check '~/.ssh/openmoat-canary' --kind fs-read # deny
 ```
 
+To see which layer holds each of these on your machine before you start (the policy
+decision, the agent's hook, the OS sandbox or the proxy), and which is not tested there:
+
+```bash
+openmoat bench --report --host claude-code     # MOATBENCH.md, "Proof report"
+```
+
 ## What counts
 
 Any one of these, with the default policy, without you approving a `review`:

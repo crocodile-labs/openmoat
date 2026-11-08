@@ -1,4 +1,4 @@
-//! Private, CGNAT and unique-local addresses, and addresses a deny rule
+//! Private, CGNAT, reserved, unique-local and site-local addresses, and addresses a deny rule
 //! names, behind allowed names. An opt-in
 //! cannot be shown end to end without connecting to a private address, so
 //! `decide::tests` covers it on the decision function.
@@ -14,6 +14,9 @@ fn an_allowed_name_on_the_local_network_is_refused() {
         ("mixed-lan.test", "192.168.0.0/16"),
         // a wildcard allow does not name an address
         ("x.wild.test", "fc00::/7"),
+        // reserved and deprecated site-local space is local network too
+        ("reserved.test", "240.0.0.0/4"),
+        ("site-local.test", "fec0::/10"),
     ] {
         let reply = h.exchange(&format!("GET http://{host}/ HTTP/1.1\r\n\r\n"));
         assert!(reply.starts_with("HTTP/1.1 403"), "{host}: {reply}");
@@ -23,7 +26,7 @@ fn an_allowed_name_on_the_local_network_is_refused() {
     }
     assert!(h.nothing_forwarded());
     let rows = h.rows();
-    assert_eq!(rows.len(), 6);
+    assert_eq!(rows.len(), 10);
     assert!(
         rows.iter()
             .all(|r| r.verdict == Verdict::Deny && r.rules == ["proxy-address"])

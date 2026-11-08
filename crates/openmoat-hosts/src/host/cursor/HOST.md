@@ -14,7 +14,10 @@ and [`doc.rs`](doc.rs); if they disagree, the code wins.
 | `beforeTabFileRead` | 600 s |
 
 Each entry sets `failClosed`. Output is `{"permission", "user_message", "agent_message"}`;
-exit 2 also denies.
+exit 2 also denies. An entry's `command` is one shell string Cursor's shell expands, so on
+macOS and Linux the binary path is written in single quotes (`'/opt/My Tools/openmoat'
+guard --host cursor`): a `$`, backtick or `\` in it is never run as shell. Windows keeps
+double quotes, which a Windows path cannot hold.
 
 ## Tools OpenMoat sees
 

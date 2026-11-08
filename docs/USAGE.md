@@ -181,6 +181,13 @@ json` prints the same per agent (`host`, `name`, `level`, `reason`, `gaps`; `lev
 `hook-and-os-sandbox`, `hook-only`, `not-protected`, `not-set-up` or `not-found`) and
 exits 0; the text form exits 64 when something needs fixing.
 
+To make a level a minimum, set `require:` in your policy
+([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)): an agent below it
+has every call denied (`protection-required`). `status` and `doctor` then add a row under
+the agent, `required: hook + OS sandbox (your policy), met` or `…, not met, so every call
+is denied: <what is missing>; to meet it, <step>`, and the JSON a `required` object
+(`level`, `by`, `met`, `missing`, `fix`).
+
 ### Did the agent load OpenMoat's plugin?
 
 OpenClaw, pi and OpenCode run OpenMoat through a plugin they load, and each starts
@@ -443,6 +450,37 @@ More: https://openmoat.dev/r/secrets-paths
   deny of a built-in check the step its block message gives.
 - `--format json` prints the same as one document (`rules`, `decided_now`, `context`,
   `change`, `page`).
+
+### In a browser
+
+`openmoat serve` shows the same in a browser tab on this machine: `openmoat status` with the
+latest decisions, `openmoat show` (each event linked to its explanation and its session),
+`openmoat report` and `openmoat why`. It changes nothing; reload the page for new calls.
+
+```
+$ openmoat serve
+openmoat serve: read-only, on this machine only. Open
+  http://127.0.0.1:52817/?token=3f9c…e1
+The link works until this stops (Ctrl-C). Anyone holding it can read what `openmoat status`, `show`, `report` and `why` show; do not share it.
+```
+
+- It listens on 127.0.0.1 only; `--listen 127.0.0.1:8080` or `--listen '[::1]:8080'` picks
+  the port, and any other address is refused.
+- The token in the link is made for this run, printed once and kept only in memory; every
+  request needs it. A request that names the server by another name than `127.0.0.1`,
+  `localhost` or `[::1]` (the trick a web page uses to reach local servers), or that comes
+  from another site, is refused even with it.
+- The same views as JSON, exactly as the commands' `--format json` prints them, for a script:
+
+  ```bash
+  curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/show?recent=50
+  curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8080/api/report?since=24h&host=codex"
+  ```
+
+  The paths are `/api/status`, `/api/show` (`id`, `session`, `since`, `recent`),
+  `/api/report` (`since`, `host`) and `/api/why` (`event`).
+- Run it yourself, in a terminal: like `openmoat allow`, it refuses when an agent started
+  it, and the default policy denies it to agents ([ADR-066](adr/ADR-066-openmoat-serve.md)).
 
 Credentials are redacted before anything is stored. The log is a SQLite file in
 `~/.moat`; nothing leaves your machine.
@@ -888,6 +926,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat show [id] [--session …] [--since …] [--recent N]` | see events |
 | `openmoat watch [--host …] [--only deny\|review] [--session …] [--recent N] [--no-follow]` | follow the agents' calls live, one line each; reads the audit log only ([Watch the agents live](#watch-the-agents-live)) |
 | `openmoat why [--last \| <id> \| HH:MM[:SS]] [--format json]` | explain one deny or review: its rules and where they are, how the policy decides the call now, the context, and how to change it ([Why was this blocked?](#why-was-this-blocked)) |
+| `openmoat serve [--listen 127.0.0.1:<port>]` | see `status`, `show`, `report` and `why` in a browser on this machine: 127.0.0.1 only, a link with a token made for this run, read-only; person-only ([In a browser](#in-a-browser)) |
 | `openmoat replay --since today` · `openmoat report --since 7d` | per-session timeline · summary, with the sends after collecting outside the project per session and per active hour (recorded only, [POLICY.md §4.5](POLICY.md#45-staging-data-sent-after-collection-recorded)) |
 | `openmoat audit export [--since …] [--host …] [--session …]` | write events to stdout as JSON Lines with their chain hashes, for `audit verify` and `audit report` |
 | `openmoat audit verify <file> [--anchor <hash>] [--require-anchor]` | check an export without the database; print its head hash; without `--anchor` the result says "not anchored", and `--require-anchor` fails it |
@@ -916,13 +955,15 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
 | `openmoat sandbox show` · `openmoat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |
 | `openmoat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-openmoat-bench)) |
+| `openmoat bench --report [--host …] [--scratch-dir DIR] [--format json\|markdown]` | the proof report: each security promise per layer (policy decision, host hook, OS sandbox, network boundary) as PASS, FAIL or NOT TESTED HERE with the reason; the OS rows run the attacks under `openmoat run` in the throwaway home; exits 1 when an exercised layer fails ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)) |
 | `openmoat run [--isolate] [--write PATH]… [--netns auto\|require] [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; on Linux it does not protect `.env`, `.git` or `.moat` inside the project); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp; `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
 | `openmoat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own; it serves only requests with a session credential (Claude Code's sessions get one from their `SessionStart` hook) unless `sandbox.proxy_serve_without_credential` is set; an allowed host is reached on ports 443 and 80 unless a `net` or `fetch` rule names `host:port`, and a plain-HTTP secret goes to port 80 unless it sets `port` ([POLICY.md](POLICY.md#52-openmoat-proxy)) |
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
 | `openmoat guard --host <id>` | the hook entry point; agents call it, you do not. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
 Exit codes: 0 allow or success, 1 the program `openmoat run` or `openmoat mcp proxy` started
-exited non-zero, or `openmoat mcp proxy` refused to start the server, 2 deny,
+exited non-zero, or `openmoat mcp proxy` refused to start the server, or a layer `openmoat bench
+--report` exercised failed, 2 deny,
 3 unresolved review (`policy check`) or a change for review (`policy check-diff`), 64 usage or
 configuration error. `openmoat guard` never
 exits 64: it denies with exit 2 instead, so a broken hook blocks rather than fails open

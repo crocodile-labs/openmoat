@@ -69,8 +69,9 @@ pub use patch::writes as patch_writes;
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
 pub use policy::{
-    BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, RuleGroup,
-    SUPPORTED_VERSION, SandboxSettings, TITLE_MAX_CHARS, WHY_MAX_CHARS,
+    BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, Require, RequiredBy,
+    RequiredLevel, Requirement, RuleGroup, SUPPORTED_VERSION, SandboxSettings, TITLE_MAX_CHARS,
+    WHY_MAX_CHARS,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};

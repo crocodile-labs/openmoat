@@ -38,6 +38,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let home = Home::locate()?;
     let binary = crate::install::hook_binary()?;
     refuse_writable_binary(&home, &binary)?;
+    let snapshot = search_path(&home)?;
     let mut out = Deferred::default();
     // Each file written, the backups and the lock: shown with `--verbose`.
     let mut detail = if verbose {
@@ -55,6 +56,14 @@ pub fn run(args: &InitArgs) -> Result<Code> {
         "{}\n",
         Style::detect().bold(&format!("OpenMoat {} · {title}", crate::VERSION))
     )?;
+    if snapshot.is_none() {
+        writeln!(
+            out,
+            "! environment      {} kept: this shell's PATH finds none of the programs \
+             OpenMoat pins; run `openmoat init` from a normal shell to record a new one\n",
+            home.environment_path().display()
+        )?;
+    }
     // Whether a lock existed before this run; `repin` below always leaves one.
     let lock_existed = !dry_run && refuse_repin(&home, &mut out)?;
     // No person over an existing lock: what the lock trusts stays (`unattended.rs`).
@@ -71,7 +80,7 @@ pub fn run(args: &InitArgs) -> Result<Code> {
     let hosts = choose_hosts(&home, args, &binary, &mut out)?;
 
     let mut steps = summary::Steps {
-        update: state(&home, dry_run, unattended, &mut detail)?,
+        update: state(&home, dry_run, unattended, snapshot.as_ref(), &mut detail)?,
         ..summary::Steps::default()
     };
     if !dry_run {
@@ -276,12 +285,14 @@ fn refuse_writable_binary(home: &Home, binary: &std::path::Path) -> Result<()> {
 }
 
 /// OpenMoat's own state: the directory, the default policy (kept when there is
-/// one), the audit log and the search-path snapshot (kept when `unattended`);
-/// the update a kept policy can take from this release's default.
+/// one), the audit log and the search-path snapshot `snapshot` (the recorded
+/// one kept when `unattended` or when [`search_path`] found nothing); the
+/// update a kept policy can take from this release's default.
 fn state(
     home: &Home,
     dry_run: bool,
     unattended: bool,
+    snapshot: Option<&Snapshot>,
     out: &mut Deferred,
 ) -> Result<Option<String>> {
     let prefix = if dry_run { "would" } else { "✔" };
@@ -335,8 +346,7 @@ fn state(
             "· environment      {} kept: no person at a terminal to record a new search path",
             home.environment_path().display()
         )?;
-    } else {
-        let snapshot = Snapshot::capture();
+    } else if let Some(snapshot) = snapshot {
         snapshot.save(&home.environment_path())?;
         writeln!(
             out,
@@ -345,8 +355,35 @@ fn state(
             snapshot.path.len(),
             snapshot.programs.len()
         )?;
+    } else {
+        writeln!(
+            out,
+            "· environment      {} kept",
+            home.environment_path().display()
+        )?;
     }
     Ok(update)
+}
+
+/// This shell's search path, as `init` records it; `None` when it finds none
+/// of [`PINNED_PROGRAMS`](crate::environment::PINNED_PROGRAMS) (an empty or
+/// broken `PATH`, a service's bare environment) and a snapshot is recorded
+/// already, which is then kept. Without one it is refused: a snapshot that
+/// pins nothing would check no program the guard resolves, and `init` would
+/// say it succeeded.
+fn search_path(home: &Home) -> Result<Option<Snapshot>> {
+    let snapshot = Snapshot::capture();
+    if !snapshot.programs.is_empty() {
+        return Ok(Some(snapshot));
+    }
+    if home.environment_path().is_file() {
+        return Ok(None);
+    }
+    bail!(
+        "this shell's PATH finds none of the programs OpenMoat pins (sh, git, curl, …), so \
+         there is no search path to record and nothing was changed; run `openmoat init` from a \
+         normal shell"
+    )
 }
 
 /// The backups `init` made of `hosts`' files, and how to undo; how many.

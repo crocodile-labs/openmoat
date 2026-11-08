@@ -192,6 +192,19 @@ fn advisory_line(name: &str, version: Version, affecting: &[&Advisory]) -> Optio
     ))
 }
 
+/// `host`'s program on the search path and the version it reports
+/// (`claude 2.1.290`), for `openmoat bench --report`; `None` when its spec
+/// names no program, none is found or its version cannot be read.
+pub fn reported(host: Host) -> Option<String> {
+    let spec = host.spec();
+    let gate = spec.install.as_ref().and_then(|i| i.versions.as_ref());
+    [gate.map(|g| g.program), Some(spec.advisories.program)]
+        .into_iter()
+        .flatten()
+        .filter(|program| !program.is_empty())
+        .find_map(|program| version(program).map(|v| format!("{program} {}", dotted(v))))
+}
+
 fn dotted((major, minor, patch): Version) -> String {
     format!("{major}.{minor}.{patch}")
 }
@@ -219,10 +232,7 @@ fn ask(program: &str) -> Option<Version> {
     if let Some(value) = std::env::var_os(format!("MOAT_{}_VERSION", program.to_uppercase())) {
         return parse_any(&value.to_string_lossy());
     }
-    let path: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    let found = crate::environment::find_in(&path, &[], program)?;
+    let found = crate::environment::find_on_path(program)?;
     let dir = CACHE_DIR.get();
     let file = dir.and_then(|_| identify(&found));
     if let (Some(dir), Some(seen)) = (dir, &file)

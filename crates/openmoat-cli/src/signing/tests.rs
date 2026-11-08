@@ -7,10 +7,7 @@ use super::*;
 /// `ssh-keygen` from this process's search path; `None` where OpenSSH is
 /// missing, and those tests stop early (CI runners have it).
 fn program() -> Option<PathBuf> {
-    let path: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).collect())
-        .unwrap_or_default();
-    let found = crate::environment::find_in(&path, &[], PROGRAM);
+    let found = crate::environment::find_on_path(PROGRAM);
     if found.is_none() {
         eprintln!("ssh-keygen not found; skipping");
     }

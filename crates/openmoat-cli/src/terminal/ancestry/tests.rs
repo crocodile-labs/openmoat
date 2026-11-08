@@ -53,6 +53,21 @@ fn agent_hosts_are_known_by_program_or_script() {
             "node /usr/local/lib/node_modules/@github/copilot/index.js",
             "@github",
         ),
+        // the interpreter's own options before the script
+        ("node --no-warnings /x/@github/copilot/index.js", "@github"),
+        (
+            "/usr/bin/node --max-old-space-size=4096 --require /x/hook.js /usr/local/lib/node_modules/@github/copilot/index.js",
+            "@github",
+        ),
+        (
+            "bun --smol /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+            "claude-code",
+        ),
+        (
+            "node --enable-source-maps /usr/local/bin/codex exec",
+            "codex",
+        ),
+        ("python3.12 -X utf8 /usr/local/bin/hermes chat", "hermes"),
         ("gemini", "gemini"),
         (
             "node /usr/local/lib/node_modules/@google/gemini-cli/dist/index.js",
@@ -94,6 +109,11 @@ fn a_persons_shell_and_tools_are_not_agents() {
         "vim claude.md",
         "/usr/bin/pip install x",
         "sshd: me@pts/0",
+        "node --inspect ./server.js --port 3000",
+        "python3 -m http.server 8000",
+        "/usr/bin/node /Users/me/app/node_modules/.bin/vite build",
+        "python3 scripts/ci/adr062-poc.py --bin /Users/me/src/openmoat/target/debug/openmoat",
+        "node scripts/check.js /usr/local/bin/moat",
     ] {
         assert_eq!(agent_name(&argv(line)), None, "{line}");
     }

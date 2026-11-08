@@ -72,8 +72,10 @@ use crate::verdict::Verdict;
 
 mod hook_only;
 mod old_names;
+mod require;
 mod text;
 
+pub use require::{Require, RequiredBy, RequiredLevel, Requirement};
 pub use text::{TITLE_MAX_CHARS, WHY_MAX_CHARS};
 
 pub use old_names::OldNames;
@@ -366,6 +368,18 @@ pub struct Policy {
     /// (ADR-055). Absent in older policies: each check's own level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_diff: Option<crate::diffscan::Settings>,
+    /// The least protection level each agent must be at for `openmoat guard`
+    /// to decide its calls; below it, every call is denied
+    /// (`protection-required`, ADR-064). Absent in older policies and the
+    /// default: nothing is required.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub require: Option<Require>,
+    /// The `require:` sections of the repository policy and the packs merged
+    /// in ([`Policy::add_requirement`]), read with [`Self::require`] by
+    /// [`Policy::required_for`], which takes the strictest: they raise a
+    /// level, never lower one. Never read from or written to a file.
+    #[serde(skip)]
+    pub require_added: Vec<(RequiredBy, Require)>,
     /// Review rules merged in from a repository policy ([`crate::RepoPolicy`],
     /// ADR-022) or a policy pack (ADR-031). Tried after `deny` and before
     /// `allow`, so a repository can make an action the user allows need review.
@@ -555,6 +569,10 @@ impl Policy {
         taint::check(self.taint.as_ref())?;
         staging::check(self.staging.as_ref())?;
         crate::diffscan::check(self.check_diff.as_ref())?;
+        require::check(self.require.as_ref())?;
+        for (_, added) in &self.require_added {
+            require::check(Some(added))?;
+        }
         secret::check(&self.secrets)
     }
 

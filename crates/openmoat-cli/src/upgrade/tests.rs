@@ -80,6 +80,32 @@ fn a_policy_from_the_previous_default_is_offered_build_credentials() {
 }
 
 #[test]
+fn a_policy_from_the_previous_default_is_offered_the_proxy_ca_lines() {
+    // A Windows checkout may hold the file with CRLF line ends.
+    let new = &openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
+    let added = "      # a new proxy CA decides which HTTPS the proxy reads and signs for (ADR-043)\n      \
+                 - \"{moat,openmoat} proxy ca *\"\n      - \"*/{moat,openmoat} proxy ca *\"\n";
+    assert!(new.contains(added));
+    let old = new
+        .replace(added, "")
+        .replace(",proxy*ca,proxy*install,proxy*uninstall}*'", "}*'");
+    let yours = old.replace(
+        "\"~/.zsh_history\"",
+        "\"~/.zsh_history\"\n      - \"~/mine\"",
+    );
+    let merged = merge(&old, &yours, new);
+    assert_eq!(merged.conflicts().count(), 0);
+    assert_eq!(
+        merged.text,
+        new.replace(
+            "\"~/.zsh_history\"",
+            "\"~/.zsh_history\"\n      - \"~/mine\"",
+        )
+    );
+    assert!(openmoat_core::Policy::parse(&merged.text).is_ok());
+}
+
+#[test]
 fn crlf_policies_line_up_with_the_lf_default() {
     let yours = BASE.replace('\n', "\r\n");
     let base = line_endings_of(&yours, BASE);

@@ -47,6 +47,7 @@ mod tests {
             reason: None,
             gaps: "",
             limit: None,
+            required: None,
         }
     }
 
