@@ -589,7 +589,7 @@ something OpenMoat claims to stop.
     So the token does not tell the agent's hooks from any other code the sandbox runs:
     `kernel-self` denies the agent's shell the `openmoat guard` command line, but a
     script, a test runner or a package's install step can open the port and send a
-    payload of its choosing. What that buys is bounded (ADR-069):
+    payload of its choosing. What that buys is bounded (ADR-070):
     - *Only the run's agent.* The service decides calls only for the host `openmoat run`
       started (for a program OpenMoat does not know, the host of the first call), and
       refuses any other with a deny and a `run-guard-host` row in the run's session.
@@ -619,7 +619,7 @@ something OpenMoat claims to stop.
     own, which then answers that guard. That gains nothing: the command could skip the
     guard altogether, a forged answer leaves no audit row, and the hooks the host
     starts keep the host's environment.
-  - *The sandbox, for the relay itself (ADR-069).* The two variables alone do not make a
+  - *The sandbox, for the relay itself (ADR-070).* The two variables alone do not make a
     guard relay. A host that builds its hooks' environment from a file or setting
     OpenMoat does not guard could hand them to a hook outside any run, and a listener
     that repeats the nonce would answer every call. So the guard relays only when it
@@ -746,7 +746,7 @@ something OpenMoat claims to stop.
   row at once and then one per 10 seconds with the count, written when the next
   connection arrives after that time, so the count of a burst's end can be missing
   until then.
-- **Refusals before a credential is verified are counted, not listed (ADR-069).** Any
+- **Refusals before a credential is verified are counted, not listed (ADR-070).** Any
   local process can send the proxy requests with no or a wrong credential (`407`,
   `proxy-session`) or a head it cannot read (`400`, `proxy-request`), and the hook relay
   of `openmoat run` calls with a wrong token (`run-guard-token`). A row for each would

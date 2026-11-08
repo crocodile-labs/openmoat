@@ -141,7 +141,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
-    // Only the calls of the agent this run starts, in its own sessions (ADR-069).
+    // Only the calls of the agent this run starts, in its own sessions (ADR-070).
     let agent_host = match owner {
         Owner::Agent(host) => Some(host),
         Owner::Unknown => None,
@@ -214,7 +214,7 @@ fn session_credential() -> Result<Credential> {
 }
 
 /// The service that decides the agent's hook calls on the proxy's port
-/// (ADR-028), for the calls of `agent` (ADR-069), and its token of 64 hex
+/// (ADR-028), for the calls of `agent` (ADR-070), and its token of 64 hex
 /// characters (256 bits).
 fn guard_service(
     home: &Home,

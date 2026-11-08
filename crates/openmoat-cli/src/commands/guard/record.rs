@@ -160,7 +160,7 @@ fn record_then(
 /// The decision on MCP call `request`, recorded as `event`, for the proxy to
 /// match; nothing for another call, or one the host is told is denied (an
 /// `review` where no person sees it included), and nothing for a call
-/// `openmoat run` relayed (`relayed`, ADR-069): the run's sandbox holds the
+/// `openmoat run` relayed (`relayed`, ADR-070): the run's sandbox holds the
 /// agent's MCP servers, and no `openmoat mcp proxy` in there can read the
 /// audit log to take a ticket (ADR-049), so one would only serve a proxy
 /// outside the run, for a call no hook outside decided. Every process in the

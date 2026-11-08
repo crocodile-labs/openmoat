@@ -284,7 +284,7 @@ fn echoing_listener() -> (String, std::thread::JoinHandle<usize>, TcpListener) {
 /// (a host that took them from a setting OpenMoat does not guard), pointing at a
 /// listener that would allow everything: the guard never asks it. It decides
 /// itself, denies the read of an SSH key, and records a `run-guard-outside` row
-/// (ADR-069).
+/// (ADR-070).
 #[test]
 fn relay_variables_outside_a_run_are_not_followed() {
     let sb = Sandbox::installed(&[".claude"]);

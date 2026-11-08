@@ -7,7 +7,7 @@
 //! another token is recorded and gets no answer.
 //!
 //! Every process in the run's sandbox holds the token, not only the agent's
-//! hooks, so the token alone does not say whose call it is (ADR-069). The
+//! hooks, so the token alone does not say whose call it is (ADR-070). The
 //! service decides only calls of the run's own agent ([`Scope`]): the host
 //! `openmoat run` started, or for a program OpenMoat does not know, the host
 //! of the first call, and the sessions that are the run's: one the audit log

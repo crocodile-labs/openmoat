@@ -1,4 +1,4 @@
-# ADR-069: the guard relay is bound to the run's sandbox, host and sessions
+# ADR-070: the guard relay is bound to the run's sandbox, host and sessions
 
 Status: accepted · Date: 2026-11-08 · Amends ADR-028, ADR-045
 

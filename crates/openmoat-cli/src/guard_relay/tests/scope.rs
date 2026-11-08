@@ -1,4 +1,4 @@
-//! Whose calls the service decides (ADR-069): the run's agent, in the run's
+//! Whose calls the service decides (ADR-070): the run's agent, in the run's
 //! own sessions. Every process in the sandbox holds the token, so a script
 //! could otherwise send calls under any host and any session.
 
