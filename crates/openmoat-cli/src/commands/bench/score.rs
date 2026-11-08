@@ -16,6 +16,12 @@ const BENIGN: &str = "benign";
 /// review the policy intends (installs, push), and reviews are counted per workflow.
 const WORKFLOWS: &str = "workflows";
 
+/// What the `sandboxed` column counts, under the table: it is declared by the
+/// scenarios, not measured.
+const SANDBOXED_NOTE: &str = "* sandboxed: expected (not run): allowed by the hook where the \
+                              scenario declares OpenMoat's OS sandbox holds every step that \
+                              went through; `openmoat bench --report` runs the sandbox";
+
 /// One step of a run.
 pub struct StepResult {
     pub got: Answer,
@@ -25,15 +31,28 @@ pub struct StepResult {
     pub ok: bool,
     /// The step carries a gap marker.
     pub gap: bool,
+    /// Whether OpenMoat's OS sandbox is expected to hold what the hook let
+    /// through at this step.
+    pub sandbox: Sandbox,
+}
+
+/// What a step expects of OpenMoat's OS sandbox. Declared by the scenario,
+/// not run here: `openmoat bench --report` runs the sandbox.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sandbox {
+    /// The step has no `sandboxed:` expectation, the host has no OS sandbox
+    /// from OpenMoat here, or the step missed the expectation.
+    NotExpected,
+    /// The step met the expectation it has where OpenMoat's OS sandbox holds
+    /// the host's commands (`sandboxed:`), on a host where that sandbox is in
+    /// place: what the hook lets through, the sandbox is expected to hold.
+    Expected,
 }
 
 /// One scenario on one host.
 pub struct Run {
     pub steps: Vec<StepResult>,
     pub outcome: Outcome,
-    /// A step met the expectation it has where OpenMoat's OS sandbox holds the
-    /// host's commands (`sandboxed:`): what the hook allows, the sandbox holds.
-    pub held: bool,
     /// Where the kernel's verdict missed the scenario, known gaps included.
     pub policy: Vec<String>,
     /// Where the host's reading of the reply differs from the kernel's verdict.
@@ -54,8 +73,10 @@ struct Row {
     blocked: usize,
     reviewed: usize,
     allowed: usize,
-    /// Allowed or passed through by the hook where OpenMoat's OS sandbox holds
-    /// the step, as the scenario expects there (`sandboxed:`).
+    /// Allowed or passed through by the hook where OpenMoat's OS sandbox is
+    /// expected to hold every step that went through, as the scenario declares
+    /// (`sandboxed:`). An expectation, not a run: `openmoat bench --report`
+    /// runs the sandbox.
     sandboxed: usize,
     passthrough: usize,
     error: usize,
@@ -154,7 +175,7 @@ impl Scorecard {
             .map(|s| s.got)
             .max()
             .unwrap_or(Answer::Allow);
-        let held = run.held;
+        let held = sandbox_expected(&run.steps);
         self.categories
             .entry(category.to_owned())
             .or_default()
@@ -205,6 +226,18 @@ impl Scorecard {
     }
 }
 
+/// Whether OpenMoat's OS sandbox is expected to hold the whole run: at least
+/// one step went through (allowed or passed through) and every step that
+/// did is one the sandbox holds ([`Sandbox::Expected`]). A single
+/// marked step among others that went through unheld does not count.
+fn sandbox_expected(steps: &[StepResult]) -> bool {
+    let mut through = steps
+        .iter()
+        .filter(|s| matches!(s.got, Answer::Allow | Answer::Passthrough))
+        .peekable();
+    through.peek().is_some() && through.all(|s| s.sandbox == Sandbox::Expected)
+}
+
 impl fmt::Display for Scorecard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let line = |f: &mut fmt::Formatter<'_>, name: &str, r: &Row| {
@@ -222,7 +255,7 @@ impl fmt::Display for Scorecard {
             "blocked",
             "reviewed",
             "allowed",
-            "sandboxed",
+            "sandboxed*",
             "passthrough",
             "error"
         )?;
@@ -232,6 +265,7 @@ impl fmt::Display for Scorecard {
             total.add(row);
         }
         line(f, "total", &total)?;
+        writeln!(f, "{SANDBOXED_NOTE}")?;
         writeln!(f, "workflows: {}", Tally::total(self.workflows.values()))?;
         for (id, tally) in &self.workflows {
             writeln!(f, "  {id:<24} {tally}")?;
@@ -247,5 +281,60 @@ impl fmt::Display for Scorecard {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn step(got: Answer, held: bool) -> StepResult {
+        StepResult {
+            got,
+            expects_review: false,
+            ok: true,
+            gap: false,
+            sandbox: if held {
+                Sandbox::Expected
+            } else {
+                Sandbox::NotExpected
+            },
+        }
+    }
+
+    fn row(steps: Vec<StepResult>) -> Row {
+        let mut card = Scorecard::default();
+        let run = Run {
+            steps,
+            outcome: Outcome::Pass,
+            policy: Vec::new(),
+            hook: Vec::new(),
+        };
+        card.add("persistence", "s", "a-host", run);
+        card.categories.remove("persistence").unwrap_or_default()
+    }
+
+    /// One step the sandbox is expected to hold does not make a run held
+    /// while another step went through without that expectation.
+    #[test]
+    fn a_run_counts_as_sandboxed_only_when_every_step_that_went_through_is_held() {
+        let mixed = row(vec![step(Answer::Allow, true), step(Answer::Allow, false)]);
+        assert_eq!((mixed.sandboxed, mixed.allowed), (0, 1));
+        let all = row(vec![
+            step(Answer::Allow, true),
+            step(Answer::Passthrough, true),
+        ]);
+        assert_eq!((all.sandboxed, all.passthrough), (1, 0));
+        // A blocked step does not need the sandbox; the run is blocked anyway.
+        let blocked = row(vec![step(Answer::Deny, false), step(Answer::Allow, true)]);
+        assert_eq!((blocked.blocked, blocked.sandboxed), (1, 0));
+        assert!(!sandbox_expected(&[]));
+    }
+
+    #[test]
+    fn the_column_says_it_is_expected_not_run() {
+        let text = Scorecard::default().to_string();
+        assert!(text.contains("sandboxed*"), "{text}");
+        assert!(text.contains("* sandboxed: expected (not run)"), "{text}");
     }
 }

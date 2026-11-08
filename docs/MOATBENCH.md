@@ -101,11 +101,12 @@ scenario added, and `openmoat bench` prints today's):
 
 ```text
 MoatBench mini: openmoat (claude-code, codex, cursor, openclaw, copilot-cli, pi, gemini-cli, opencode, hermes)
-category          runs  blocked  reviewed  allowed  sandboxed  passthrough  error
+category          runs  blocked  reviewed  allowed  sandboxed*  passthrough  error
 benign               …        0         0        …          …            …      …
 exfiltration         …        …         …        …          …            …      …
 …
 total                …        …         …        …          …            …      …
+* sandboxed: expected (not run): allowed by the hook where the scenario declares OpenMoat's OS sandbox holds every step that went through; `openmoat bench --report` runs the sandbox
 workflows: … steps, … reviews (expected …), 0 unexpected, 0 expected failures
   docker-image             … steps, … reviews (expected …), 0 unexpected, 0 expected failures
 …
@@ -116,8 +117,11 @@ mismatches: 0
 
 `blocked`, `reviewed`, `allowed`, `sandboxed`, `passthrough` and `error` count runs
 (scenario × host) by their strictest answer; `sandboxed` is an allow or passthrough on a
-host whose OS sandbox from OpenMoat holds the step, as the step's `sandboxed:`
-expectation says (below). A run in `benign` that is not allowed (or passed through)
+host where OpenMoat's OS sandbox is in place and every step that went through carries a
+`sandboxed:` expectation it met (below). It is what the scenarios declare, not a run of
+the sandbox: one marked step among others that went through unmarked counts as
+`allowed`. The proof report's OS rows (`openmoat bench --report`) are what run attacks
+under the sandbox. A run in `benign` that is not allowed (or passed through)
 is a false positive; a step whose answer misses its `expect` is a mismatch. Against
 another hook a mismatch reads `wipe-home (claude-code): step 0: expected deny, got
 allow`, followed by:
