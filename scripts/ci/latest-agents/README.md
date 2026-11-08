@@ -18,7 +18,7 @@ the agent's output.
 
 | Agent | Install | Real load | Not proven |
 |---|---|---|---|
-| Claude Code (`claude-code`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `claude -p` against `tests/differential/fake_api.py`: one `Bash` call | interactive prompts; the `ConfigChange` and `SessionStart` hooks |
+| Claude Code (`claude-code`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `claude -p` against `tests/differential/fake_api.py`: three `Bash` calls in one session. The denied read; a read of an unknown page whose output names another host; then a call to that host, held for review as `injected-input`, which proves the `PostToolUse` hook kept that output. The log also holds the session's start, which proves the `SessionStart` hook ran | interactive prompts; the `ConfigChange` hook |
 | Codex (`codex`) | npm, scripts off | `codex exec` with a custom Responses-API provider at `fake_openai.py`: one shell call | Codex's persisted hook trust (`/hooks`): the run uses `--dangerously-bypass-hook-trust`, as Codex's own hook tests do |
 | OpenCode 1 (`opencode-1`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `opencode debug info` lists `plugins/openmoat.js`; `opencode run` with an OpenAI-compatible provider in `opencode.json` at `fake_openai.py`: one `bash` call | interactive sessions |
 | OpenCode 2 (`opencode-2`) | npm, scripts off; the platform package's native binary | one `opencode serve`, `GET /api/plugin` polled until the location's plugins have activated: OpenMoat's plugin `active`, a state OpenCode 2 sets only once the plugin's `setup` ran | a tool call: OpenCode 2's provider settings are not driven yet, so the denied call is not proven in the real agent |
@@ -39,6 +39,21 @@ its configuration files parsing (JSON; JavaScript with `node --check`; OpenClaw'
 `config validate`; Hermes Agent's own `hooks list`); and the two payloads. An agent
 whose `payload` sets `allow_is_silent` (Codex, which rejects a bare
 `permissionDecision: allow`) passes the allow payload with exit 0 and no output.
+
+## Captured payloads
+
+The workflow builds `openmoat` with the `capture-payloads` feature, which no release
+has. While the real agent runs, `OPENMOAT_CAPTURE_DIR` points at the artefact's
+`captured/` folder, and `openmoat guard` copies every payload it is sent there, exactly
+as it arrived. `check.py scrub` then writes them to `captured/scrubbed/` as
+`captured-<version>-<n>.json`, with the throwaway home, project and temporary folder
+replaced by the fixtures' made-up `/Users/me`, `/p` and `/tmp/scratch`. To replace a
+fixture built from source with a capture, read the scrubbed file, copy it into
+`crates/openmoat-hosts/src/host/<module>/fixtures/`, and name its version in that
+folder's README. `crates/openmoat-hosts/tests/captured.rs` parses every `captured-*`
+file with its agent's adapter and refuses one that still holds a runner path. An agent
+that clears its hook's environment leaves `captured/` empty, and the run says so
+without failing.
 
 ## When it fails
 

@@ -155,7 +155,14 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
             config.host_present(),
             inputs.recorded.skipped(host),
             || {
-                crate::project_settings::switched_off(host, config.dir(), &config.settings_path)
+                crate::project_settings::system::switched_off(host, &config.settings_path)
+                    .or_else(|| {
+                        crate::project_settings::switched_off(
+                            host,
+                            config.dir(),
+                            &config.settings_path,
+                        )
+                    })
                     .map(|off| format!("hook turned off by {off}"))
                     .or_else(|| crate::project_settings::replaced_here(host, &config.settings_path))
                     .or_else(|| {

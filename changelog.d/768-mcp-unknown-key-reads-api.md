@@ -1,0 +1,2 @@
+### Changed
+- **Breaking** `openmoat-core`: `Action::McpTool` has a new field `value_reads` (`Vec<String>`, paths only a value under an unknown argument key looks like, checked against `deny` rules only; set it to `Vec::new()` where you build the variant yourself, or start from `Action::mcp`). `openmoat-sdk`'s `McpCall` gains the same field, the `value_reads` builder and the optional `value_reads` key in its JSON form ([#768](https://github.com/crocodile-labs/openmoat/pull/768)).

@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use openmoat_hosts::{Host, HostSpec};
+use openmoat_hosts::{Host, HostSpec, SessionDir};
 
 const END: &str = "<!-- /generated -->";
 const UPDATE: &str = "OPENMOAT_TEST_UPDATE_DOCS";
@@ -86,6 +86,32 @@ fn gaps_list() -> Vec<String> {
             format!(
                 "- **{}.** Known gaps: {}. When the hook fails: {}.",
                 spec.display_name, spec.gaps, spec.on_hook_failure
+            )
+        })
+        .collect()
+}
+
+/// `docs/THREAT_MODEL.md` §5: how a call is decided for each agent whose
+/// payload names the directory the tool runs in, which the model chooses
+/// ([`SessionDir::HookProcess`]), so the text follows the spec and cannot go
+/// back to saying the directory is not sent.
+fn workdir_list() -> Vec<String> {
+    hosts()
+        .iter()
+        .map(|host| host.spec())
+        .filter(|spec| spec.session_dir == SessionDir::HookProcess)
+        .map(|spec| {
+            let name = spec.display_name;
+            format!(
+                "- **{name} chooses where a call runs.** {name} sends a call's own working \
+                 directory as `cwd` (a shell call's `workdir`, which the model picks) and starts \
+                 every hook in the session's directory. When the `cwd` lies outside the \
+                 session's project, `openmoat guard` decides the call from the session's \
+                 directory, as the command run after a `cd` to the `cwd`, with every relative \
+                 path taken from it: a write from `~/Library/LaunchAgents` is checked as that \
+                 path, and a model-chosen directory never decides which directory is the \
+                 project. A session started outside any project (the home directory) keeps a \
+                 `cwd` inside a git work tree as its project."
             )
         })
         .collect()
@@ -179,8 +205,14 @@ fn install_lists_each_agents_directory_and_hook_entries() {
 }
 
 #[test]
-fn threat_model_lists_each_agents_gaps_and_hook_failure() {
-    check("docs/THREAT_MODEL.md", &[("hosts-gaps", gaps_list())]);
+fn threat_model_lists_each_agents_gaps_hook_failure_and_working_directory() {
+    check(
+        "docs/THREAT_MODEL.md",
+        &[
+            ("hosts-gaps", gaps_list()),
+            ("hosts-workdir", workdir_list()),
+        ],
+    );
 }
 
 #[test]

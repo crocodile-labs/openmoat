@@ -289,6 +289,10 @@
 - id: benign-mcp-filesystem-reads-project-file
   action: { mcp_tool: { name: mcp__filesystem__read_file, reads: ["/p/README.md"] } }
   expect: { verdict: allow, rules: [safe-mcp, project-fs] }
+- id: benign-mcp-unknown-key-names-a-plain-path
+  why: a value under an unknown key is checked against deny rules only, so a path no deny rule names leaves the name's verdict
+  action: { mcp_tool: { name: mcp__github__get_pull_request, value_reads: ["/p/src/main.rs", "/etc/hosts", "~"] } }
+  expect: { verdict: allow, rules: [safe-mcp] }
 
 - id: benign-git-commit-dotted-message
   action: { shell: "git commit -m fix.bug" }
@@ -983,6 +987,16 @@
 - id: benign-date-format
   action: { shell: "date -u +%Y-%m-%dT%H:%M:%SZ" }
   expect: { verdict: allow, rules: [dev-readonly] }
+- id: benign-echo-date-substitution
+  threat: T5
+  why: the output of `date` is printed, not run; only a shell's or `eval`'s program text counts as downloaded code
+  action: { shell: "echo \"$(date)\"" }
+  expect: { verdict: allow, rules: [dev-readonly, dev-shell] }
+- id: benign-sh-c-local-substitution
+  threat: T5
+  why: what a substitution feeds a shell is only `pipe-to-shell` when it downloads or decodes it (`date | sh` names no rule)
+  action: { shell: "sh -c \"echo $(date)\"" }
+  expect: { verdict: defer, rules: [default] }
 - id: benign-fd
   action: { shell: "fd '\\.rs$'" }
   expect: { verdict: allow, rules: [dev-readonly] }
@@ -1751,6 +1765,22 @@
 - id: benign-flock-command-string-build
   action: { shell: "flock /tmp/build.lock -c 'cargo build'" }
   expect: { verdict: defer, rules: [default] }
+- id: benign-unlisted-wrapper-shell-string-tests
+  why: the command string poetry's shell runs is a test run, decided as it is on its own
+  action: { shell: "poetry run sh -c 'pytest -q'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-unlisted-wrapper-option-c
+  why: a `-c` of a program that is no shell is that program's option, not a command string
+  action: { shell: "mywrap -c 3 make" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-container-shell-string
+  why: the command string runs inside the container, not on this machine (LIMITS.md)
+  action: { shell: "docker run --rm node:22 sh -c 'cat /etc/os-release'" }
+  expect: { verdict: defer, rules: [default] }
+- id: benign-echo-shell-words
+  why: echo prints its arguments; the words are not a command it runs
+  action: { shell: "echo sh -c 'rm -rf ~'" }
+  expect: { verdict: allow, rules: [dev-shell] }
 - id: benign-strace-project-binary
   action: { shell: "strace -f -o trace.txt ./target/debug/app" }
   expect: { verdict: defer, rules: [default] }

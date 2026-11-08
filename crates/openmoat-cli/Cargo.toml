@@ -22,6 +22,12 @@ path = "src/main.rs"
 name = "moat"
 path = "src/bin/moat.rs"
 
+[features]
+# The weekly latest-agents job's build only: `openmoat guard` copies each hook
+# payload into `OPENMOAT_CAPTURE_DIR` (commands/guard/capture.rs), for the
+# adapters' captured fixtures. Never on by default, so no release reads it.
+capture-payloads = []
+
 [dependencies]
 openmoat-core.workspace = true
 openmoat-hosts.workspace = true

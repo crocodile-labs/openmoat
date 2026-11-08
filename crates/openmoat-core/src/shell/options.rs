@@ -53,7 +53,7 @@ pub(super) fn classify(
                 .position(|a| a == ";" || a == "+")
                 .unwrap_or(rest.len());
             if end > 0 {
-                classify_wrapped(&rest[..end], ctx, sink, depth)?;
+                classify_wrapped(&rest[..end], &[], ctx, sink, depth)?;
             }
             i += end + 1;
             continue;

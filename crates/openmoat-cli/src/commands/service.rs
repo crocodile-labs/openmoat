@@ -23,6 +23,8 @@
 // without turning off `-D warnings`.
 #[cfg(any(target_os = "macos", test))]
 pub mod plist;
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+pub mod read_back;
 #[cfg(any(target_os = "linux", test))]
 pub mod unit;
 
@@ -130,6 +132,13 @@ pub trait Manager {
     /// Where the service file lives on disk.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn file_path(&self) -> Result<PathBuf>;
+    /// The file [`Self::install`] writes for `binary` and `moat_home`.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn render(&self, binary: &std::path::Path, moat_home: &std::path::Path) -> Result<String>;
+    /// The variables a service file of this platform's format sets
+    /// ([`read_back::findings`]).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn environment(&self) -> fn(&str) -> Option<Vec<String>>;
     /// What state the service is in now.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn state(&self) -> Result<State>;
@@ -143,6 +152,40 @@ pub trait Manager {
 /// can read them without `sudo` on macOS.
 pub fn manager(home: &Home) -> Result<Box<dyn Manager>> {
     platform::manager(home)
+}
+
+/// Why the installed service file is not the one `moat proxy install` writes
+/// for `binary` and `moat_home` ([`read_back`](mod@read_back)); empty when it is, or when
+/// nothing is installed. A file that cannot be read is a finding too.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn read_back(
+    manager: &dyn Manager,
+    binary: &std::path::Path,
+    moat_home: &std::path::Path,
+) -> Vec<String> {
+    let Ok(path) = manager.file_path() else {
+        return Vec::new();
+    };
+    let text = match std::fs::read(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(e) => return vec![format!("cannot be read: {e}")],
+    };
+    let expected = match manager.render(binary, moat_home) {
+        Ok(expected) => expected,
+        Err(e) => return vec![format!("cannot be compared: {e:#}")],
+    };
+    let installed = read_back::Installed {
+        text: &text,
+        mode: mode(&path),
+    };
+    read_back::findings(&expected, &installed, manager.environment())
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn mode(path: &std::path::Path) -> Option<u32> {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::metadata(path).ok().map(|m| m.permissions().mode())
 }
 
 /// Human-readable name for the launchd agent / systemd user unit, so the

@@ -323,6 +323,22 @@ user. Token values the policy brokers are read from the user's
 environment at run time by the proxy itself; they never touch the service
 file.
 
+The service manager starts the proxy exactly as that file says, so `openmoat doctor`
+and `openmoat status` read it back and compare it with what `openmoat proxy install`
+writes for the current binary and state directory. Each difference is a problem, and
+`doctor` exits 64:
+
+- an environment variable other than `MOAT_HOME` (`DYLD_INSERT_LIBRARIES`,
+  `LD_PRELOAD`, `HTTPS_PROXY`), or a systemd `EnvironmentFile=` or `PassEnvironment=`;
+- any other change (another binary, an `ExecStartPre=`, extra arguments), or a file in
+  a form it cannot read (a binary plist);
+- a mode that lets others read or write it (anything but owner-only).
+
+```bash
+openmoat doctor   # ✗ service file     ~/.config/systemd/user/moat-proxy.service sets environment the proxy is started with beyond `MOAT_HOME`: LD_PRELOAD; `openmoat proxy install` writes it again
+openmoat proxy install   # writes it again, the old file kept as a backup
+```
+
 ### Upgrade note
 
 The service names the pinned `openmoat` by its stable path (ADR-016), so an
@@ -352,6 +368,24 @@ outside them cannot turn off a hook set in them. For teams:
 
 OpenMoat does not write or pin managed settings; whoever deploys them keeps them in step
 with `openmoat init` after an upgrade that changes the hook entries.
+
+`openmoat status` and `openmoat doctor` read the system-wide settings of three agents,
+without changing them, and call the agent not protected when they keep its hook from
+running. They name the file and the key:
+
+| Agent | Files read | What turns OpenMoat's hook off |
+|---|---|---|
+| Claude Code | `managed-settings.json` and the `*.json` drop-ins of `managed-settings.d/` beside it (`/Library/Application Support/ClaudeCode/` on macOS, `/etc/claude-code/` on Linux and WSL, `C:\Program Files\ClaudeCode\` on Windows) | `disableAllHooks: true`; `allowManagedHooksOnly: true` with no OpenMoat entry among their `hooks` |
+| Gemini CLI | system `settings.json` and `system-defaults.json` (`/Library/Application Support/GeminiCli/`, `/etc/gemini-cli/`, `C:\ProgramData\gemini-cli\`; `GEMINI_CLI_SYSTEM_SETTINGS_PATH` and `GEMINI_CLI_SYSTEM_DEFAULTS_PATH` move them) | `hooksConfig.enabled` not `true`; `hooksConfig.disabled` naming OpenMoat's hook |
+| Codex | `requirements.toml` (`/etc/codex/` on macOS, Linux and WSL, `C:\ProgramData\OpenAI\Codex\` on Windows) | `[features] hooks = false` (or `codex_hooks`); `allow_managed_hooks_only = true` with no OpenMoat entry in its `[hooks]` |
+
+```bash
+openmoat status    # Claude Code   not protected: hook turned off by /etc/claude-code/managed-settings.json: `disableAllHooks` turns off every hook, OpenMoat's included
+```
+
+A file that is missing, that this user cannot read (the agent, running as the same
+user, cannot read it either) or that does not parse says nothing. Codex settings an MDM
+profile delivers on macOS are not read.
 
 ## Non-default config directories
 

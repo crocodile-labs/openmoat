@@ -1,0 +1,2 @@
+### Added
+- `docs/COVERAGE.md` maps each threat class to the OWASP Top 10 for Agentic Applications risks it is a case of (ASI02 to ASI06) and counts the fixtures per risk, and MoatBench's obfuscation set has four more scenarios: `$IFS` in place of a space, a here-string handed to a shell, `xargs sh -c` running a download, and `eval` of a string built from variables ([#768](https://github.com/crocodile-labs/openmoat/pull/768)).

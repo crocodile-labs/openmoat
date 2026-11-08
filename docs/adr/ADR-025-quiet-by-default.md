@@ -123,3 +123,21 @@ The protection does not depend on those reviews:
 - Of the reads outside the git root, only the agent's own temporary folder is allowed
   (`agent-temp`, `/tmp/claude-*`). Sibling repositories still defer; a person allows
   one with `moat allow --dir`.
+
+## Amendment 2026-11-07: paths under MCP argument keys OpenMoat does not know
+
+An MCP call's arguments were checked by key only (`path`, `file_path`, `url`, …), so
+`mcp__custom__run {"input": "~/.ssh/id_rsa"}` was decided by the tool's name alone. Reading
+every string of every MCP call as a full read, as for a tool no adapter maps, would add a
+`review` or `defer` to calls that only mention a file in a text field, which this ADR rules
+out.
+
+- A string under any other key that is a path by its look (it starts at `/`, `\`, a drive,
+  `~` or `file:`, on one line) is named in the action's `value_reads`. The engine checks the
+  reads it makes (normalised, through `..` and symlinks) against `deny` rules only, next to
+  the deny-or-review check of another spelling of OpenMoat's binary. A deny wins as anywhere
+  else; a value no deny rule names changes nothing, so no call gets a new prompt.
+- They are reads only. A bare `~` or `/` in some text field is common, and as a write it
+  would hit the rules on destroying the home folder or the disk.
+- URLs under unknown keys are not added: a host named in text would turn on the `net`
+  default for calls that only mention one.

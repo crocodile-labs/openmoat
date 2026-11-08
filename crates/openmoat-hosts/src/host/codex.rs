@@ -126,6 +126,25 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // `hooks/src/events/pre_tool_use.rs`) and starts every hook in the
     // session's directory.
     session_dir: crate::contract::SessionDir::HookProcess,
+    // `requirements.toml` (<https://learn.chatgpt.com/docs/hooks>, "Managed
+    // hooks"): `[features] hooks = false` there forces every hook off, and
+    // `allow_managed_hooks_only` skips the person's, project and plugin
+    // hooks, running only the managed `[hooks]`.
+    system_settings: Some(crate::contract::SystemSettingsSpec {
+        files: &[
+            crate::contract::SystemFile::at(
+                "/etc/codex/requirements.toml",
+                &[crate::contract::Platform::MacOs, crate::contract::Platform::Linux, crate::contract::Platform::Wsl],
+            ),
+            crate::contract::SystemFile::at(
+                "C:/ProgramData/OpenAI/Codex/requirements.toml",
+                &[crate::contract::Platform::Windows],
+            ),
+        ],
+        drop_ins: None,
+        managed_only: Some("allow_managed_hooks_only"),
+        hooks_key: "hooks",
+    }),
     ..HostSpec::BASE
 };
 

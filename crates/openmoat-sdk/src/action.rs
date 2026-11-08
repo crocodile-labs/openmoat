@@ -106,6 +106,13 @@ pub struct McpCall {
     /// the URL names it in `hosts` instead.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub opens: Vec<String>,
+    /// Paths the call may read that only a value's look names: a string under
+    /// an argument key you do not understand that starts at a root, a drive or
+    /// `~` (`{"input": "~/.ssh/id_rsa"}`). Checked as reads against the
+    /// policy's `deny` rules only, so a value no deny rule names changes
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub value_reads: Vec<String>,
     /// Why the arguments were not searched in full (a depth or size limit);
     /// the call is then at least `review`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -202,6 +209,7 @@ impl Action {
                 hosts: call.hosts,
                 commands: call.commands,
                 opens: call.opens,
+                value_reads: call.value_reads,
                 unchecked: call.unchecked,
             },
             Self::UnknownTool(call) => CoreAction::UnknownTool {
@@ -228,6 +236,7 @@ impl McpCall {
             hosts: Vec::new(),
             commands: Vec::new(),
             opens: Vec::new(),
+            value_reads: Vec::new(),
             unchecked: None,
         }
     }
@@ -264,6 +273,14 @@ impl McpCall {
     #[must_use]
     pub fn opens<S: Into<String>>(mut self, urls: impl IntoIterator<Item = S>) -> Self {
         self.opens.extend(urls.into_iter().map(Into::into));
+        self
+    }
+
+    /// Add paths only the look of a value under an unknown argument key names
+    /// (the `value_reads` field: checked against `deny` rules only).
+    #[must_use]
+    pub fn value_reads<S: Into<String>>(mut self, paths: impl IntoIterator<Item = S>) -> Self {
+        self.value_reads.extend(paths.into_iter().map(Into::into));
         self
     }
 

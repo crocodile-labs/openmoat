@@ -69,5 +69,8 @@ Tool arguments (OpenCode 2.2.0): `shell` `command`, `workdir`, `timeout`, `backg
 (`core/src/file-access.ts`, `resolvePath`), unlike OpenCode 1. `v2-read-malformed.json`
 names OpenCode 1's `filePath`, which OpenCode 2's `read` does not take.
 
-Replace these with captured payloads once OpenMoat's plugin has run under a real
-OpenCode 1 and 2 (`cat` the stdin of `openmoat guard` from a scratch `XDG_CONFIG_HOME`).
+Captured payloads go beside these as `captured-<version>-<n>.json`. The weekly
+latest-agents job copies what OpenCode 1's real `opencode run` sends `openmoat guard`
+into its artefact's `captured/scrubbed/` folder (`scripts/ci/latest-agents/README.md`,
+"Captured payloads"); `tests/captured.rs` parses each one committed here. OpenCode 2's
+headless run is not driven yet, so it has no capture.

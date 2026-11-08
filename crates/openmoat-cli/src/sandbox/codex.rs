@@ -218,6 +218,17 @@ impl Filesystem {
             report.allowances.push(allowance.clone());
         }
         fs.allows(&ir.fs.write, Mode::Write, &readable, report);
+        for (access, kind) in [(&ir.fs.read, Kind::FsRead), (&ir.fs.write, Kind::FsWrite)] {
+            if access.default == Effect::Allow {
+                report.loss(
+                    kind,
+                    "default",
+                    "the profile grants only the paths the policy lists: sandboxed commands \
+                     reach nothing else"
+                        .into(),
+                );
+            }
+        }
         grant(&mut fs.paths, ":tmpdir".into(), Mode::Write);
         report.allowance(
             Kind::FsWrite,
@@ -241,19 +252,10 @@ impl Filesystem {
                 );
             }
         }
-        for rule in &ir.fs.write.deny {
-            let (positive, _) = split(&rule.patterns);
-            for pattern in positive {
-                let read_only = write_only_target(pattern).is_some_and(|path| readable(&path));
-                fs.deny(
-                    pattern,
-                    if read_only { Mode::Read } else { Mode::Deny },
-                    true,
-                );
-            }
-        }
+        let whole = fs.write_denies(ir, &readable);
         fs.drop_directory_nodes(report);
         fs.drop_masked();
+        fs.report_whole(&whole, report);
         if fs.denies_anywhere && !fs.outside_home.is_empty() {
             report.allowance(
                 Kind::FsRead,
@@ -274,6 +276,75 @@ impl Filesystem {
                 .into(),
         );
         Ok(fs)
+    }
+
+    /// Deny rules for writes: a literal path the IR reads is made read-only;
+    /// a glob has no read-only form, so it is denied whole, reads included.
+    /// Returns those globs that no read deny names, with their rule, for
+    /// [`Self::report_whole`].
+    fn write_denies(
+        &mut self,
+        ir: &Enforcement,
+        readable: &dyn Fn(&str) -> bool,
+    ) -> Vec<(String, String)> {
+        let mut found = Vec::new();
+        let read_denied: Vec<&str> = ir
+            .fs
+            .read
+            .deny
+            .iter()
+            .flat_map(|r| split(&r.patterns).0)
+            .collect();
+        for rule in &ir.fs.write.deny {
+            let (positive, _) = split(&rule.patterns);
+            for pattern in positive {
+                let target = write_only_target(pattern);
+                let read_only = target.as_deref().is_some_and(readable);
+                if target.is_none() && !read_denied.contains(&pattern) {
+                    found.push((rule.id.clone(), pattern.to_owned()));
+                }
+                self.deny(
+                    pattern,
+                    if read_only { Mode::Read } else { Mode::Deny },
+                    true,
+                );
+            }
+        }
+        found
+    }
+
+    /// One loss per rule for the write-deny globs of `whole` the profile still
+    /// denies once directory nodes are left out: commands cannot read there.
+    fn report_whole(&self, whole: &[(String, String)], report: &mut Report) {
+        let denied = |list: &[(String, Mode)], key: &str| {
+            list.iter().any(|(k, m)| k == key && *m == Mode::Deny)
+        };
+        let mut by_rule: Vec<(&str, Vec<&str>)> = Vec::new();
+        for (rule, pattern) in whole {
+            let kept = match spot(pattern) {
+                Spot::Anywhere(rest) => denied(&self.workspace, &format!("**/{rest}")),
+                Spot::Project(rest) => denied(&self.workspace, literal_tree(rest).unwrap_or(rest)),
+                Spot::Absolute(path) => denied(&self.paths, literal_tree(path).unwrap_or(path)),
+            };
+            if !kept {
+                continue;
+            }
+            match by_rule.iter_mut().find(|(r, _)| r == rule) {
+                Some((_, patterns)) => patterns.push(pattern),
+                None => by_rule.push((rule, vec![pattern])),
+            }
+        }
+        for (rule, patterns) in by_rule {
+            report.loss(
+                Kind::FsRead,
+                rule,
+                format!(
+                    "a profile glob can only deny, so sandboxed commands cannot read these \
+                     either: {}",
+                    patterns.join(", ")
+                ),
+            );
+        }
     }
 
     fn grant_root(&mut self, path: &str, mode: Mode) {

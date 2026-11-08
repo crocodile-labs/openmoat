@@ -24,7 +24,7 @@ mod injection;
 mod staging;
 mod taint;
 
-use atoms::checked_atoms;
+use atoms::{checked_atoms, value_read_atoms};
 pub use contents::HOLDS_PROTECTED_RULE;
 pub use staging::{STAGING_ATOM, Staging};
 pub use taint::{Secret, TAINT_RULE, Taint, UntrustedKind};
@@ -392,6 +392,12 @@ impl CompiledPolicy<'_> {
             .into_iter()
             .filter_map(|atom| self.matched_rules(&atom))
             .filter(|hit| matches!(hit.verdict, Verdict::Deny | Verdict::Review));
+        // A path only an MCP argument's value looks like, under a key the
+        // adapter does not know, adds the deny its read would get and nothing
+        // else: no new review or defer for a value that is not a path.
+        let value_reads = value_read_atoms(action, &self.ctx, paths)
+            .into_iter()
+            .filter_map(|atom| Self::hit(&self.deny, Verdict::Deny, &atom));
         // A part that could not be parsed, or arguments the adapter did not
         // search, may name anything: never allow (defer or review, ADR-025), and let
         // a deny on the rest still win. A line not read in full, or one past a
@@ -434,6 +440,7 @@ impl CompiledPolicy<'_> {
             .filter_map(|atom| self.evaluate_atomic(atom))
             .chain(folders)
             .chain(aliased)
+            .chain(value_reads)
             .chain(pins)
             .chain(unparsed)
             .chain(unchecked)

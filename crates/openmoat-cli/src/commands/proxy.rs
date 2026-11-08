@@ -43,8 +43,11 @@ use crate::taint::issued::IssuedTaint;
 use crate::taint::run::RunTaint;
 
 use super::service;
+
+mod service_lines;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::service::State;
+pub use service_lines::service_lines;
 
 mod ca;
 
@@ -232,23 +235,6 @@ pub fn restart_if_installed(home: &Home) -> Result<Option<String>> {
     }
 }
 
-/// `moat doctor` and `moat status` lines for the user service: not installed
-/// is silent (opt-in), installed is a line, drift / crashloop is a problem.
-/// Returns `(ok, text)` so the caller renders the icon. Silent on platforms
-/// without a service story (Windows): `moat proxy install` refuses there, so
-/// there is nothing to report under `moat doctor`.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub fn service_line(home: &Home) -> Option<(bool, String)> {
-    let manager = service::manager(home).ok()?;
-    let state = manager.state().ok()?;
-    let path = manager.file_path().ok()?;
-    match state {
-        State::NotInstalled => None,
-        State::Running => Some((true, format!("service          {}", state.describe(&path)))),
-        _ => Some((false, format!("service          {}", state.describe(&path)))),
-    }
-}
-
 /// Windows: no user service to report on (#272), so `moat proxy status`
 /// refuses with the way to keep the proxy up instead of a made-up state.
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -265,12 +251,6 @@ pub fn status(_args: &ProxyStatusArgs) -> Result<Code> {
 pub fn restart_if_installed(home: &Home) -> Result<Option<String>> {
     service::manager(home)?;
     Ok(None)
-}
-
-/// Windows: `moat doctor` and `moat status` have no service line.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub fn service_line(_home: &Home) -> Option<(bool, String)> {
-    None
 }
 
 /// The `moat doctor` and `moat status` line for the proxy the host sandboxes

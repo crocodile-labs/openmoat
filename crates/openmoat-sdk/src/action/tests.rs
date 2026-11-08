@@ -66,6 +66,7 @@ fn every_variant_maps_to_the_engine_action_it_names() {
         .hosts(["x"])
         .commands(["ls"])
         .opens(["https://docs.example/page"])
+        .value_reads(["~/.ssh/id_rsa"])
         .unchecked("depth");
     assert_eq!(
         Action::mcp(call).to_core(),
@@ -76,6 +77,7 @@ fn every_variant_maps_to_the_engine_action_it_names() {
             hosts: vec!["x".into()],
             commands: vec!["ls".into()],
             opens: vec!["https://docs.example/page".into()],
+            value_reads: vec!["~/.ssh/id_rsa".into()],
             unchecked: Some("depth".into()),
         }
     );

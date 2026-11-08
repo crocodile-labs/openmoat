@@ -1,4 +1,4 @@
-//! The scenarios of ADR-039 and the benign and MCP categories decided
+//! The scenarios of ADR-039 and the benign, MCP and obfuscation categories decided
 //! in-process: the default policy, the session's taint from its earlier
 //! steps, the files each session wrote and the session-code check, as
 //! `openmoat guard` applies them, without hook payloads
@@ -141,11 +141,13 @@ fn run(scenario: &Scenario, sandboxed: bool) -> Vec<String> {
 }
 
 #[test]
-fn session_code_benign_and_mcp_scenarios_hold_in_process() {
+fn session_code_benign_mcp_and_obfuscation_scenarios_hold_in_process() {
     let mut problems = Vec::new();
     let mut ran = 0;
     for (category, scenario) in scenarios().unwrap() {
-        if !["benign", "mcp"].contains(&category) && !SESSION_CODE.contains(&scenario.id.as_str()) {
+        if !["benign", "mcp", "obfuscation"].contains(&category)
+            && !SESSION_CODE.contains(&scenario.id.as_str())
+        {
             continue;
         }
         for sandboxed in [false, true] {

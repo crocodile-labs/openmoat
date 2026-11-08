@@ -8,9 +8,14 @@
 //! `--checkpoint-action=exec=`, `-F`/`--info-script`/`--new-volume-script` and
 //! remote-tape `--rsh-command`/`--rmt-command`, `su`/`runuser -c 'cmd'` and
 //! `flock FILE -c 'cmd'`.
-//! Each one is classified as a command line of its own.
+//! Each one is classified as a command line of its own. A program none of
+//! these tables names that is handed a shell with a command string
+//! (`mywrap sh -c 'cmd'`, `poetry run bash -lc 'cmd'`) runs that string too, so
+//! it is classified as well ([`unlisted`]); this only adds atoms.
 
-use super::git;
+use super::tables::{CONTAINER_RUNNERS, NO_FILE_OPERANDS, SHELLS};
+use super::tokens::basename;
+use super::{git, invocation};
 
 /// `watch` options that take a value.
 const WATCH_VALUES: &[&str] = &["-n", "--interval", "-q", "--equexit"];
@@ -61,8 +66,9 @@ const SU_COMMAND_OPTIONS: &[(&str, &str, &str)] = &[
     ("", "--session-command", "--se"),
 ];
 
-/// Every command line `argv` hands to a shell, as written.
-pub(super) fn commands(argv: &[String], program: &str) -> Vec<String> {
+/// Every command line `argv` hands to a shell, as written. `data` are the
+/// argv indices the classifier reads as text, not as words the program runs.
+pub(super) fn commands(argv: &[String], program: &str, data: &[usize]) -> Vec<String> {
     match program {
         "watch" => watch(argv).into_iter().collect(),
         "git" => git_commands(&git::parse(argv).subcommand),
@@ -71,8 +77,35 @@ pub(super) fn commands(argv: &[String], program: &str) -> Vec<String> {
         "su" | "runuser" => all_values(argv, SU_COMMAND_OPTIONS),
         "flock" => option_values(argv, "-c", "--command", "--c"),
         p if SSH_PROGRAMS.contains(&p) => ssh(argv),
-        _ => Vec::new(),
+        _ => unlisted(argv, program, data),
     }
+}
+
+/// The command strings of every shell word among the arguments of a program
+/// no table names: `mywrap sh -c 'cmd'` runs `cmd`. A shell, a wrapper the
+/// classifier unwraps, a program that only prints its arguments and a
+/// container runner (whose command runs in the container, docs/LIMITS.md) are
+/// left alone; a shell option that cannot be read yields nothing here, so the
+/// scan never makes a command unparseable.
+fn unlisted(argv: &[String], program: &str, data: &[usize]) -> Vec<String> {
+    let handled = SHELLS.contains(&program)
+        || NO_FILE_OPERANDS.contains(&program)
+        || CONTAINER_RUNNERS.contains(&program)
+        || super::commands::wrapped_command(argv, program).is_some();
+    if handled {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    for (i, word) in argv.iter().enumerate().skip(1) {
+        let shell = basename(word);
+        if data.contains(&i) || !SHELLS.contains(&shell) {
+            continue;
+        }
+        if let Ok(run) = invocation::parse(shell, &argv[i..]) {
+            found.extend(run.code.into_iter().map(str::to_owned));
+        }
+    }
+    found
 }
 
 fn all_values(argv: &[String], options: &[(&str, &str, &str)]) -> Vec<String> {
@@ -225,7 +258,7 @@ mod tests {
 
     fn run(line: &str) -> Vec<String> {
         let argv: Vec<String> = line.split(' ').map(str::to_owned).collect();
-        commands(&argv, &argv[0])
+        commands(&argv, &argv[0], &[])
     }
 
     #[test]
@@ -321,5 +354,30 @@ mod tests {
         ] {
             assert_eq!(run(line), found, "{line}");
         }
+    }
+
+    /// A program no table names runs the command string of a shell among its
+    /// arguments; a container runner's runs in the container.
+    #[test]
+    fn finds_the_command_an_unlisted_program_hands_a_shell() {
+        for (line, found) in [
+            ("mywrap sh -c cmd", &["cmd"][..]),
+            ("mywrap --flag /bin/bash -lc cmd", &["cmd"]),
+            ("poetry run zsh -ec cmd", &["cmd"]),
+            ("mywrap -c 3 make", &[]),
+            ("mywrap cargo build", &[]),
+            ("mywrap sh script.sh", &[]),
+            ("mywrap sh --bogus -c cmd", &[]),
+            ("echo sh -c cmd", &[]),
+            ("docker run img sh -c cmd", &[]),
+            ("kubectl exec pod -- sh -c cmd", &[]),
+        ] {
+            assert_eq!(run(line), found, "{line}");
+        }
+        let argv: Vec<String> = ["grep", "sh", "-c", "x"].map(str::to_owned).into();
+        assert!(
+            commands(&argv, "grep", &[1]).is_empty(),
+            "a data word is text"
+        );
     }
 }

@@ -323,6 +323,67 @@ fn doctor_reports_the_service_state_once_installed() {
     );
 }
 
+/// `moat doctor` reads the installed service file back: the file `proxy
+/// install` wrote is fine, and one changed to start the proxy with another
+/// variable, or opened to others, is a problem naming the fix.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn doctor_names_a_service_file_changed_after_install() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let sb = Sandbox::installed(&[]);
+    let out = sb
+        .command()
+        .args(["proxy", "install"])
+        .env("MOAT_ASSUME_TTY", "1")
+        .env("MOAT_SERVICE_SKIP_EXEC", "1")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(OK));
+    let doctor = || {
+        let out = sb
+            .command()
+            .args(["doctor", "--format", "json"])
+            .env("MOAT_SERVICE_SKIP_EXEC", "1")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let text = doctor();
+    assert!(!text.contains("service file"), "{text}");
+
+    let path = service_file(&sb);
+    let original = std::fs::read_to_string(&path).unwrap();
+    let tampered = if cfg!(target_os = "macos") {
+        original.replace(
+            "    <key>MOAT_HOME</key>\n",
+            "    <key>DYLD_INSERT_LIBRARIES</key>\n    <string>/x.dylib</string>\n    <key>MOAT_HOME</key>\n",
+        )
+    } else {
+        original.replace(
+            "Restart=on-failure\n",
+            "Restart=on-failure\nEnvironment=LD_PRELOAD=/x.so\n",
+        )
+    };
+    assert_ne!(tampered, original);
+    std::fs::write(&path, &tampered).unwrap();
+    let text = doctor();
+    let variable = if cfg!(target_os = "macos") {
+        "DYLD_INSERT_LIBRARIES"
+    } else {
+        "LD_PRELOAD"
+    };
+    assert!(
+        text.contains("service file") && text.contains(variable),
+        "{text}"
+    );
+    assert!(text.contains("openmoat proxy install"), "{text}");
+
+    std::fs::write(&path, &original).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let text = doctor();
+    assert!(text.contains("not 600"), "{text}");
+}
+
 /// `moat uninstall` also stops the proxy service: leaving it listening with
 /// a stale binary reference once the hooks are gone would be a nasty gotcha.
 #[cfg(any(target_os = "macos", target_os = "linux"))]

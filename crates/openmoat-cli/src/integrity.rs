@@ -438,6 +438,11 @@ impl Lock {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
+        debug_assert!(
+            self.pinned_twice().is_none(),
+            "{:?} is pinned whole and by its Codex profile",
+            self.pinned_twice()
+        );
         let text = serde_json::to_string_pretty(self)? + "\n";
         write_private(path, text.as_bytes())
     }
@@ -445,6 +450,18 @@ impl Lock {
     /// Compare pinned digests with the files on disk. Empty means intact.
     pub fn verify(&self) -> Vec<Drift> {
         self.verify_keeping(&[], &[]).0
+    }
+
+    /// A file pinned both whole ([`Self::entries`]) and by the part OpenMoat
+    /// owns ([`Self::codex_profiles`]). Never one: Codex rewrites the rest of
+    /// its `config.toml` itself, so a whole pin of it would deny every call
+    /// after Codex's next edit, and a re-pin path that adds one has lost track
+    /// of which form a file is pinned in.
+    pub fn pinned_twice(&self) -> Option<&str> {
+        self.codex_profiles
+            .keys()
+            .find(|path| self.entries.contains_key(*path))
+            .map(String::as_str)
     }
 
     /// Whether the lock pins the moat profile in the Codex config at `path`.

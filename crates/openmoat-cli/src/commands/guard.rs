@@ -27,6 +27,7 @@ use crate::integrity::{self, Drift};
 use crate::realpath::FsPathResolver;
 use crate::{notice, push, render, secrets, session_code, taint, time};
 
+mod capture;
 mod config_change;
 mod drift;
 mod placed;
@@ -589,6 +590,7 @@ fn read_stdin(host: Host) -> Result<String> {
     if payload.trim().is_empty() {
         bail!("empty hook payload on stdin");
     }
+    capture::keep(host, &payload);
     Ok(payload)
 }
 

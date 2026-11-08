@@ -387,6 +387,7 @@ fn claude_code_mcp_resources_worktrees_and_skills() {
             hosts: vec![],
             opens: vec![],
             commands: vec![],
+            value_reads: vec![],
             unchecked: None,
         })
     );
@@ -399,6 +400,7 @@ fn claude_code_mcp_resources_worktrees_and_skills() {
             hosts: vec!["https://api.github.com/repos/x/y/readme".into()],
             opens: vec![],
             commands: vec![],
+            value_reads: vec![],
             unchecked: None,
         })
     );

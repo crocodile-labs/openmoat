@@ -149,6 +149,30 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
     bundled: BUNDLED,
+    // Managed settings (<https://code.claude.com/docs/en/settings>, "Settings
+    // files"): an administrator's `managed-settings.json` and the drop-ins in
+    // `managed-settings.d/` beside it outrank every other file;
+    // `disableAllHooks` there turns every hook off, and
+    // `allowManagedHooksOnly` runs only the hooks they list.
+    system_settings: Some(crate::contract::SystemSettingsSpec {
+        files: &[
+            crate::contract::SystemFile::at(
+                "/Library/Application Support/ClaudeCode/managed-settings.json",
+                &[crate::contract::Platform::MacOs],
+            ),
+            crate::contract::SystemFile::at(
+                "/etc/claude-code/managed-settings.json",
+                &[crate::contract::Platform::Linux, crate::contract::Platform::Wsl],
+            ),
+            crate::contract::SystemFile::at(
+                "C:/Program Files/ClaudeCode/managed-settings.json",
+                &[crate::contract::Platform::Windows],
+            ),
+        ],
+        drop_ins: Some("managed-settings.d"),
+        managed_only: Some("allowManagedHooksOnly"),
+        hooks_key: "hooks",
+    }),
     ..HostSpec::BASE
 };
 

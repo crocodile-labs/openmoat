@@ -83,7 +83,15 @@
   threat: T1
   action: { shell: "cat notes[*" }
   files: ["/p/notes[1]"]
-  expect: { verdict: defer, rules: [unparseable] }
+  expect: { verdict: review, rules: [unparseable] }
+# A glob that names more than can be listed (here `**` past its depth bound)
+# may name a secret no atom checks: the call needs review, never the
+# catch-all's `defer` or an allow from the files that were listed.
+- id: review-glob-past-the-expansion-limit
+  threat: T1
+  action: { shell: "cat **/x" }
+  files: ["/p/d/d/d/d/d/d/d/d/d/x"]
+  expect: { verdict: review, rules: [unparseable] }
 - id: review-unbalanced-paren
   threat: T7
   action: { shell: "cd /tmp ) ; cat notes.txt" }

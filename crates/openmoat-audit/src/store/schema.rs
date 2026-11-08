@@ -349,26 +349,34 @@ pub(super) fn version(conn: &Connection) -> Result<i64, StoreError> {
     Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
 }
 
-/// Bring the database to [`SCHEMA_VERSION`]. Several `moat guard` processes may
-/// open an old database at once, so the version is re-read under the write lock
-/// and each step runs at most once.
-pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
-    let found = version(conn)?;
+/// Nothing to migrate for a database at `found`, at least [`SCHEMA_VERSION`]:
+/// fine at that version, refused past it (a newer build's schema).
+pub(super) fn too_new(found: i64) -> Result<(), StoreError> {
     if found > SCHEMA_VERSION {
         return Err(StoreError::SchemaTooNew {
             found,
             supported: SCHEMA_VERSION,
         });
     }
-    if found == SCHEMA_VERSION {
-        return Ok(());
+    Ok(())
+}
+
+/// Bring the database to [`SCHEMA_VERSION`]. Several `moat guard` processes may
+/// open an old database at once, so the version is re-read under the write lock
+/// and each step runs at most once.
+pub(super) fn migrate(conn: &Connection) -> Result<(), StoreError> {
+    let found = version(conn)?;
+    if found >= SCHEMA_VERSION {
+        return too_new(found);
     }
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let found = version(&tx)?;
     if found >= SCHEMA_VERSION {
-        // Another process migrated first; recheck without the lock.
+        // Another process migrated first, perhaps a newer build that went past
+        // this one's version: what it wrote is read under the lock, so there is
+        // nothing to recheck and no second pass.
         drop(tx);
-        return migrate(conn);
+        return too_new(found);
     }
     if found < 1 {
         tx.execute_batch(V1)?;

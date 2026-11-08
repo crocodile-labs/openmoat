@@ -13,8 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use openmoat_core::{
-    Action, CompiledPolicy, DEFAULT_POLICY, Decision, EvalContext, MapPathResolver, MapResolver,
-    Policy, Taint, Verdict,
+    Action, CompiledPolicy, DEFAULT_POLICY, Decision, MapPathResolver, MapResolver, Policy, Verdict,
 };
 use openmoat_hosts::{HookEvent, Host};
 use serde::Deserialize;
@@ -22,8 +21,10 @@ use serde::de::IgnoredAny;
 use serde_json::{Value, json};
 
 mod attacks;
+mod mcp;
 mod payloads;
 mod routes;
+mod setup;
 mod unknown;
 
 use payloads::{
@@ -32,16 +33,17 @@ use payloads::{
 };
 use routes::{cline_route, opencode2_route};
 
-/// The part of a conformance fixture this suite reads. A fixture with its own
-/// context, session, repository policy, links or resolver is not a plain
-/// intent, so a row naming one fails ([`fixture`]).
+/// The part of a conformance fixture this suite reads. A fixture's session
+/// and context are applied alike for every route ([`setup::Setup`]); one with
+/// its own repository policy, links or resolver is not a plain intent, so a
+/// row naming one fails ([`fixture`]).
 #[derive(Deserialize)]
 struct Fixture {
     id: String,
     action: FixtureAction,
     expect: Expect,
-    context: Option<IgnoredAny>,
-    session: Option<IgnoredAny>,
+    context: Option<Value>,
+    session: Option<Vec<Value>>,
     repo: Option<IgnoredAny>,
     links: Option<IgnoredAny>,
     resolve: Option<IgnoredAny>,
@@ -407,7 +409,7 @@ fn repo_root() -> PathBuf {
 }
 
 /// The conformance fixture `id`, which must be a plain intent.
-fn fixture(id: &str) -> (Intent, Expect) {
+fn fixture(id: &str) -> (Intent, Expect, setup::Setup) {
     let dir = repo_root().join("tests/conformance");
     for name in ["attacks.yaml", "review.yaml", "benign.yaml"] {
         let text = fs::read_to_string(dir.join(name)).expect("conformance file");
@@ -415,11 +417,12 @@ fn fixture(id: &str) -> (Intent, Expect) {
         let Some(f) = fixtures.into_iter().find(|f| f.id == id) else {
             continue;
         };
-        let extras = [&f.context, &f.session, &f.repo, &f.links, &f.resolve];
+        let extras = [&f.repo, &f.links, &f.resolve];
         assert!(
             extras.iter().all(|e| e.is_none()),
-            "{id}: not a plain intent (context, session, repo, links or resolve)"
+            "{id}: not a plain intent (repo, links or resolve)"
         );
+        let setup = setup::Setup::read(id, f.session, f.context);
         let a = f.action;
         let intent = match (a.shell, a.fs_read, a.fs_write, a.fetch) {
             (Some(c), None, None, None) => Intent::Shell(c),
@@ -428,7 +431,7 @@ fn fixture(id: &str) -> (Intent, Expect) {
             (None, None, None, Some(u)) => Intent::Fetch(u),
             _ => panic!("{id}: the action is not one shell, fs_read, fs_write or fetch"),
         };
-        return (intent, f.expect);
+        return (intent, f.expect, setup);
     }
     panic!("no conformance fixture `{id}`");
 }
@@ -436,32 +439,34 @@ fn fixture(id: &str) -> (Intent, Expect) {
 /// What the host receives for `payload`, decided as `moat guard` decides it
 /// with no session history, grant or lock drift.
 fn decide(host: Host, payload: &str) -> Result<(Action, Decision), String> {
+    decide_in(host, payload, &setup::Setup::default())
+}
+
+/// [`decide`] after `setup`'s session, in its context.
+fn decide_in(
+    host: Host,
+    payload: &str,
+    setup: &setup::Setup,
+) -> Result<(Action, Decision), String> {
     let request = host.parse_request(payload).map_err(|e| e.to_string())?;
     let action = request
         .action
         .clone()
         .ok_or("the adapter left the call ungoverned")?;
-    let ctx = EvalContext {
-        home: HOME.into(),
-        project: Some(CWD.into()),
-        real_home: None,
-        real_project: None,
-        moved_dirs: Vec::new(),
-        cwd: request.cwd.clone().unwrap_or_else(|| CWD.into()),
-        case_insensitive_paths: false,
-    };
+    let ctx = setup.context(request.cwd.clone().unwrap_or_else(|| CWD.into()));
     let policy = Policy::parse(DEFAULT_POLICY).expect("default policy must lint");
     let compiled = CompiledPolicy::compile(&policy, &ctx).expect("default policy must compile");
     let links = MapPathResolver::default();
     let decision = compiled.decide_with(&action, &MapResolver::default(), &links);
-    let decision = compiled.with_taint(decision, &action, &links, &Taint::default());
+    let taint = setup.taint(&compiled, &links);
+    let decision = compiled.with_taint(decision, &action, &links, &taint);
     let decision = host.decided(&request.event, decision);
     Ok((action, host.answer(&request.event, &decision)))
 }
 
 /// Every route of the row's intent gets the fixture's verdict and rules.
 fn check(id: &str) {
-    let (intent, expect) = fixture(id);
+    let (intent, expect, setup) = fixture(id);
     let mut checked = Vec::new();
     let mut mismatches = Vec::new();
     for route in ROUTES {
@@ -469,7 +474,7 @@ fn check(id: &str) {
             continue;
         };
         let want = received(route, expect.verdict);
-        match decide(route.host(), &payload.to_string()) {
+        match decide_in(route.host(), &payload.to_string(), &setup) {
             Err(error) => mismatches.push(format!("{route:?}: {error}")),
             Ok((action, _)) if action != want_action => {
                 mismatches.push(format!(
@@ -570,4 +575,11 @@ rows! {
     // Fetches: a registry is allowed, an unknown host is left to the host.
     allowed_fetch => "benign-webfetch-registry",
     unknown_host_fetch_defers => "review-webfetch-unknown-host",
+    // After a secret read or untrusted content (session taint), and with the
+    // state directory moved (context).
+    fetch_after_reading_dotenv => "T2-taint-read-dotenv-then-webfetch-allowed-host",
+    ci_workflow_after_a_fetch => "T9-taint-webfetch-then-ci-workflow",
+    agent_skill_after_a_fetch => "T8-taint-webfetch-then-agents-skill",
+    read_moved_audit_log => "T9-read-moved-audit-db",
+    edit_moved_policy => "T9-edit-moved-moat-policy",
 }
