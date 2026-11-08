@@ -198,3 +198,30 @@ fn a_hook_pinned_elsewhere_names_every_hosts_variable() {
         assert!(moved.contains(variable), "{moved}");
     }
 }
+
+/// A Codex `config.toml` is pinned by the part OpenMoat owns, never whole as
+/// well: a whole pin would deny every call after Codex's next edit of it.
+#[test]
+fn a_file_is_never_pinned_whole_and_by_its_codex_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    let policy = write(dir.path(), "policy.yaml", "version: 1\n");
+    let config = write(dir.path(), "config.toml", "model = \"x\"\n");
+    let mut lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&policy)).unwrap();
+    lock.codex_profiles.insert(key(&config), "00".to_owned());
+    assert_eq!(lock.pinned_twice(), None);
+    lock.save(&dir.path().join("policy.lock")).unwrap();
+
+    lock.entries.insert(key(&config), "00".to_owned());
+    assert_eq!(lock.pinned_twice(), Some(key(&config).as_str()));
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "pinned whole and by its Codex profile")]
+fn saving_a_lock_that_pins_a_file_twice_is_a_bug() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = write(dir.path(), "config.toml", "model = \"x\"\n");
+    let mut lock = Lock::pin(Path::new("/x/moat"), std::slice::from_ref(&config)).unwrap();
+    lock.codex_profiles.insert(key(&config), "00".to_owned());
+    let _ = lock.save(&dir.path().join("policy.lock"));
+}

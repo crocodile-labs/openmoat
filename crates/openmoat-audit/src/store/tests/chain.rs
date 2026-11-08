@@ -352,3 +352,28 @@ fn a_newer_schema_is_refused_read_only() {
         "{refused}"
     );
 }
+
+/// A migration that finds, under the write lock, that another process got
+/// there first decides from the version it read there in one pass: done at
+/// this build's version, refused past it, never a second migration.
+#[test]
+fn a_database_migrated_by_another_process_is_decided_once() {
+    assert!(schema::too_new(schema::SCHEMA_VERSION).is_ok());
+    let refused = schema::too_new(schema::SCHEMA_VERSION + 1).err().unwrap();
+    assert!(
+        matches!(refused, StoreError::SchemaTooNew { found, supported }
+            if found == schema::SCHEMA_VERSION + 1 && supported == schema::SCHEMA_VERSION),
+        "{refused}"
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("audit.db");
+    drop(Store::open(&path).unwrap());
+    let conn = Connection::open(&path).unwrap();
+    schema::migrate(&conn).unwrap();
+    conn.pragma_update(None, "user_version", schema::SCHEMA_VERSION + 1)
+        .unwrap();
+    assert!(matches!(
+        schema::migrate(&conn),
+        Err(StoreError::SchemaTooNew { .. })
+    ));
+}
