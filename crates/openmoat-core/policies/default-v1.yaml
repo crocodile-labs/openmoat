@@ -482,6 +482,9 @@ deny:
       # a service installed or removed runs or stops the proxy for every later session
       - "{moat,openmoat} proxy {install,uninstall}*"
       - "*/{moat,openmoat} proxy {install,uninstall}*"
+      # a new proxy CA decides which HTTPS the proxy reads and signs for (ADR-043)
+      - "{moat,openmoat} proxy ca *"
+      - "*/{moat,openmoat} proxy ca *"
       # a brokered secret's host is where its value goes
       - "{moat,openmoat} secret*"
       - "*/{moat,openmoat} secret*"
@@ -503,26 +506,26 @@ deny:
       - "!{moat,openmoat,*/moat,*/openmoat} policy {lint,check}"
       - "!{moat,openmoat,*/moat,*/openmoat} [!-]* {--help,-h}"
       - "!{moat,openmoat,*/moat,*/openmoat} {policy,mcp,proxy,sandbox,audit} [!-]* {--help,-h}"
-      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept` require
+      # pseudo-terminal wrappers that fake the terminal `allow`/`edit`/`secret`/`trust`/`uninstall`/`sandbox sync`/`doctor --accept`/`mcp accept`/`proxy ca init`/`proxy install` require
       # (`*moat` inside a quoted command line covers `openmoat` too)
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */{moat,openmoat} sandbox sync*"
       - "script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       - "unbuffer * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "unbuffer * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "*/script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "*/script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
-      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
       - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
-      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync}*'"
+      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,secret,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve a
       # review) under the same wrappers; patterns are prefixes, so these deny any command
       # of either name run in them
