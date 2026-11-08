@@ -193,6 +193,7 @@ fn launch_with(
         sessions,
         local: None,
         tls: None,
+        requests: Box::leak(Box::default()),
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();

@@ -2,8 +2,9 @@
 //!
 //! Order: finish the agent's TLS handshake with the host's leaf → read one
 //! request head (`request::origin`) → refuse a brokered secret bound
-//! elsewhere (the leak check) → refuse a request the host's secrets' `allow`
-//! rules do not name → (session mode) the session's taint → connect and
+//! elsewhere (the leak check) → refuse a request the host's request rules
+//! deny (ADR-062, `requests.rs`) → refuse a request the host's secrets'
+//! `allow` rules do not name → (session mode) the session's taint → connect and
 //! verify the upstream → record → put the value in → forward the body,
 //! watched like a plain-HTTP body → relay the answer, stopped where it holds
 //! a value (`response.rs`) → close.
@@ -30,6 +31,7 @@ use crate::body::BodyEnd;
 use crate::broker::{Broker, Channel, Watch};
 use crate::decide::RULE_REQUEST;
 use crate::request::origin::{self, Inner};
+use crate::requests::Requests;
 use crate::server::{Limits, response as answer};
 use crate::tls::{RULE_TLS, Tls};
 
@@ -75,6 +77,8 @@ pub(crate) struct Tunnel<'a> {
     pub(crate) host: &'a str,
     pub(crate) port: u16,
     pub(crate) broker: &'a Broker,
+    /// The hosts' request rules (ADR-062), checked before the secrets' rules.
+    pub(crate) requests: &'a Requests,
     pub(crate) tls: &'a Tls,
     pub(crate) limits: &'a Limits,
     /// The host's allow decision, which each request's row repeats.
@@ -176,6 +180,11 @@ impl Tunnel<'_> {
         if let Some(leak) = watch.next(&buf) {
             return Err(Stop::Refuse(403, leak.decision(self.host)));
         }
+        // Deny is absolute: a host's request rules before any secret's `allow`.
+        let ruled = self
+            .requests
+            .check(self.host, &inner.head)
+            .map_err(|refused| Stop::Refuse(403, refused))?;
         let routed = self
             .broker
             .admit(self.host, Channel::Terminated, &inner.head)
@@ -189,6 +198,7 @@ impl Tunnel<'_> {
             "{} request read inside a TLS tunnel the proxy terminated",
             inner.method
         ));
+        row.reasons.extend(ruled);
         row.reasons.extend(routed);
         if !(self.record)(Some(&inner.method), &row) {
             upstream.sock.close();

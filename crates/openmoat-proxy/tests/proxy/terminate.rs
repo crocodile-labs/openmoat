@@ -13,7 +13,7 @@ use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
 };
 
-use openmoat_proxy::{Roots, Tls, new_ca};
+use openmoat_proxy::{RULE_REQUEST_RULE, Requests, Roots, Tls, new_ca};
 use zeroize::Zeroizing;
 
 use super::*;
@@ -95,6 +95,11 @@ fn terminating(terminate: bool) -> Terminating {
 /// [`terminating`]; with `without_credential`, it also serves requests that
 /// carry no credential, as a host sandbox's may be.
 fn terminating_with(terminate: bool, without_credential: bool) -> Terminating {
+    terminating_for(terminate, without_credential, Requests::default())
+}
+
+/// [`terminating_with`], with `requests` as the hosts' request rules (ADR-062).
+fn terminating_for(terminate: bool, without_credential: bool, requests: Requests) -> Terminating {
     let (upstream_ca, config) = upstream_tls();
     let (addr, received) = https_upstream(config);
     let tls_line = if terminate {
@@ -136,7 +141,7 @@ fn terminating_with(terminate: bool, without_credential: bool) -> Terminating {
     let h = launch_tls(
         Broker::new(secrets).unwrap(),
         (addr, received),
-        tls,
+        (tls, Box::leak(Box::new(requests))),
         sessions,
     );
     Terminating {
@@ -153,7 +158,7 @@ fn terminating_with(terminate: bool, without_credential: bool) -> Terminating {
 fn launch_tls(
     broker: Broker,
     (upstream, received): (SocketAddr, Receiver<Vec<u8>>),
-    tls: &'static Tls,
+    (tls, requests): (&'static Tls, &'static Requests),
     sessions: &'static Sessions<'static>,
 ) -> Harness {
     let rows: &'static MemoryRecorder = Box::leak(Box::default());
@@ -182,6 +187,7 @@ fn launch_tls(
         sessions: Some(sessions),
         local: None,
         tls: Some(tls),
+        requests,
     };
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -368,4 +374,60 @@ fn a_request_without_a_session_is_never_terminated() {
     let mut s = t.h.connect();
     write!(s, "CONNECT owner.test:{} HTTP/1.1\r\n\r\n", t.h.port()).unwrap();
     assert!(read_all(&mut s).starts_with("HTTP/1.1 407"));
+}
+
+/// A host with request rules and no `tls: terminate` secret (ADR-062 step 0)
+/// is terminated too: a denied request is answered by the proxy and recorded,
+/// and never reaches the upstream; any other passes as it was sent.
+#[test]
+fn a_host_with_request_rules_is_terminated_and_its_denied_requests_stay_local() {
+    let requests = Requests::default()
+        .deny("owner.test", &["POST /gists", "POST /gists/**"])
+        .unwrap();
+    let t = terminating_for(false, false, requests);
+    let send = |line: &str| {
+        https(
+            &t.h,
+            &t.auth,
+            &t.agent_trusts,
+            "owner.test",
+            &request(line, t.h.port()),
+        )
+    };
+    for line in [
+        "POST /gists",
+        "POST /gists/",
+        "post /Gists?x=1",
+        "POST /gists/a/comments",
+    ] {
+        let reply = send(line);
+        assert!(reply.starts_with("HTTP/1.1 403 "), "{line}: {reply}");
+        assert!(reply.contains(RULE_REQUEST_RULE), "{reply}");
+    }
+    assert!(t.h.nothing_forwarded());
+    let reply = send("GET /gists");
+    assert!(reply.starts_with("HTTP/1.1 200 OK\r\n"), "{reply}");
+    let head = String::from_utf8(t.h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    assert!(head.starts_with("GET /gists HTTP/1.1\r\n"), "{head}");
+    // No secret says `tls: terminate`: the placeholder is not replaced.
+    assert!(
+        head.contains(PLACEHOLDER) && !head.contains(VALUE),
+        "{head}"
+    );
+    let rows = t.h.rows();
+    let refused = rows.iter().filter(|r| r.rules == [RULE_REQUEST_RULE]);
+    assert_eq!(refused.count(), 4, "{rows:?}");
+    assert!(
+        rows.iter().any(|r| r
+            .reasons
+            .iter()
+            .any(|w| w.contains("for its request rules"))),
+        "{rows:?}"
+    );
+    let passed: Vec<_> = rows
+        .iter()
+        .filter(|r| r.terminated && r.verdict == Verdict::Allow)
+        .collect();
+    assert_eq!(passed.len(), 1, "{rows:?}");
+    assert_eq!(passed[0].tool.as_deref(), Some("GET"));
 }

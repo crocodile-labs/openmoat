@@ -192,3 +192,59 @@ fn run_refuses_a_terminated_secret_without_a_ca() {
     );
     assert!(!shown.contains("ran\n"), "the agent never started: {shown}");
 }
+
+/// The temporary setting of ADR-062 step 0.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const POC: (&str, &str) = ("OPENMOAT_ADR062_POC", "1");
+
+/// `openmoat run` under the ADR-062 proof-of-concept setting.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn run_poc(sb: &Sandbox) -> std::process::Output {
+    let tmp = sb.home.with_file_name("tmp");
+    fs::create_dir_all(&tmp).unwrap();
+    let mut cmd = sb.command();
+    cmd.current_dir(sb.project())
+        .env("TMPDIR", &tmp)
+        .env(POC.0, POC.1)
+        .args(["run", "--", "/bin/sh", "-c", "echo ran"]);
+    output(&mut cmd, None)
+}
+
+/// The ADR-062 setting terminates `api.github.com` with no secret for it: a
+/// run fails closed until a person makes a CA that covers the host, and then
+/// starts and says the setting is on.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn the_request_rule_setting_needs_a_ca_for_its_host() {
+    // A home `openmoat run` can start from on every OS: on Linux, not under `/tmp`.
+    let (sb, _) = crate::run::installed_with_secret();
+    let out = run_poc(&sb);
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(USAGE), "{shown}");
+    assert!(
+        shown.contains("TLS to api.github.com is terminated")
+            && shown.contains("OPENMOAT_ADR062_POC=1")
+            && shown.contains("no pinned proxy CA yet"),
+        "{shown}"
+    );
+    assert!(!shown.contains("ran\n"), "the agent never started: {shown}");
+
+    let mut cmd = sb.command();
+    cmd.args(["proxy", "ca", "init"])
+        .env("MOAT_ASSUME_TTY", "1")
+        .env(POC.0, POC.1);
+    let out = output(&mut cmd, Some("y\n"));
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let pem = fs::read_to_string(ca_files(&sb).0).unwrap();
+    assert!(pem.contains("only for: api.github.com"), "{pem}");
+
+    let out = run_poc(&sb);
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(OK), "{shown}");
+    assert!(shown.contains("ran\n"), "{shown}");
+    assert!(
+        shown.contains("POST /gists and POST /gists/** refused there")
+            && shown.contains("proof of concept"),
+        "{shown}"
+    );
+}

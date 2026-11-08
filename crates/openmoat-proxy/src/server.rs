@@ -37,6 +37,7 @@ use crate::broker::{Broker, Channel, Watch};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
+use crate::requests::Requests;
 use crate::session::{AuthError, RULE_SESSION, Sessions};
 use crate::slots::{PENDING, Share, Shares, WITHOUT_CREDENTIAL};
 use crate::tls::Tls;
@@ -78,6 +79,11 @@ pub struct Proxy<'a> {
     /// the value and recorded. `None`: every tunnel is relayed as it is, as
     /// in `moat proxy`, whose clients cannot be made to trust the CA.
     pub tls: Option<&'a Tls>,
+    /// Method and path rules of hosts with no secret (ADR-062 step 0):
+    /// with [`Proxy::tls`] set, a CONNECT to one of their hosts is terminated
+    /// too, and a plain-HTTP request to one is checked. [`Requests::default`]
+    /// for none.
+    pub requests: &'a Requests,
 }
 
 impl std::fmt::Debug for Proxy<'_> {
@@ -85,6 +91,7 @@ impl std::fmt::Debug for Proxy<'_> {
         f.debug_struct("Proxy")
             .field("limits", &self.limits)
             .field("broker", &self.broker)
+            .field("requests", &self.requests)
             .field("loopback_ok", &self.loopback_ok)
             .field("allow_ech", &self.allow_ech)
             .field("sessions", &self.sessions)
@@ -228,10 +235,15 @@ impl Proxy<'_> {
             refuse(client, 403, &summary(&refusal));
             return;
         }
-        // A secret's `allow` rules, before anything goes upstream (ADR-043).
+        // The host's request rules (ADR-062), then a secret's `allow` rules
+        // (ADR-043), before anything goes upstream.
         let routed = match &request.target {
             Target::Http { head, host, port } => {
-                match self.broker.admit(host, Channel::Plain(*port), head) {
+                let checked = self.requests.check(host, head).and_then(|ruled| {
+                    let admitted = self.broker.admit(host, Channel::Plain(*port), head)?;
+                    Ok(ruled.into_iter().chain(admitted).collect())
+                });
+                match checked {
                     Ok(reasons) => reasons,
                     Err(refusal) => {
                         self.record(turn, Some(&request), &refusal);

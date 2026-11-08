@@ -196,3 +196,84 @@ and the standalone half (5 and 6) starts only if it holds.
    for them; `requests_untrusted`.
 6. *(only if step 0 held)* `feat(cli)`: `SessionStart` writes the per-session trust files and variables; e2e.
 7. `policy`: the `exfil-endpoints` pack, `status` note, MoatBench scenario, THREAT_MODEL.
+
+## Step 0 results
+
+Status: built; measurements pending the first run of the CI job.
+
+### What is built
+
+- **The setting.** `OPENMOAT_ADR062_POC=1` in the environment of `openmoat run`, read
+  only by the CLI (`openmoat-cli/src/proxy_ca/request_poc.rs`). It is temporary, not
+  documented as a feature and not policy schema; step 2's `requests:` section replaces it.
+  It holds one fixed entry: host `api.github.com`, `deny: POST /gists, POST /gists/**`
+  (the second line covers a trailing slash and what is posted under a gist: comments,
+  forks). The host joins the terminated hosts, so `openmoat proxy ca init` run with the
+  same setting makes a CA whose name constraints cover it, and `openmoat run` with the
+  setting and no such CA stops before the agent starts, saying so. It only narrows: the
+  host must still be allowed by the policy.
+- **The rule at the proxy** (`openmoat-proxy/src/requests.rs`, `Requests`). The existing
+  ADR-043 path: `server/terminate.rs` terminates a CONNECT to a host with request rules as
+  it does for a `tls: terminate` secret (an authenticated session only), and
+  `exchange.rs` checks the request head after the leak check and before any secret's
+  `allow` rules (deny is absolute), so a refused request opens no upstream connection.
+  A plain-HTTP request to the host is checked too. The matcher is `route.rs`'s
+  (`SecretRoute`, `RequestPath`), with the method and path compared in any letter case
+  (a deny list errs wide) and `route.rs`'s refusals: a path the server could read as
+  another (`..` in any spelling, `%2f`, `;`, `//`), a method-override header or `_method`
+  parameter. The client gets `403` with body `moat proxy: … (proxy-request-rule)`; the
+  audit row names the method and the rule, never the path.
+- **Rule id.** `proxy-request`, which §1 proposes, already names a malformed request
+  (`RULE_REQUEST`); the proof of concept uses `proxy-request-rule`. Step 3 keeps it or
+  picks another; it must not reuse `proxy-request`.
+- **Tests.** `requests/tests.rs` (spellings, variants, refusals, other hosts),
+  `exchange/tests/requests.rs` (a deny over a secret's `allow`: no connection upstream,
+  the value kept), `tests/proxy/terminate.rs` (a listening proxy terminates a host with
+  rules and no secret, refuses four spellings of `POST /gists` with four rows, passes
+  `GET /gists` with the placeholder unreplaced), `proxy_ca/request_poc.rs` (the setting),
+  e2e `proxy_ca::the_request_rule_setting_needs_a_ca_for_its_host`.
+- **The measurement.** `scripts/ci/adr062-poc.py`, run by the workflow `adr-062 poc`,
+  job `adr-062 step 0 (<os>)`, on `ubuntu-latest` and `macos-15` (macOS 13 or later is
+  `openmoat run`'s floor; macOS 12 cannot run it). Each client sends an allowed
+  `GET /rate_limit` and the denied `POST /gists` with a dummy body and no credentials;
+  curl also sends `/gists/`, `/GISTS`, `/gists?per_page=1`, `/gists/0/comments` and a
+  lower-case `post`. A `POST` answered by anyone but OpenMoat fails the job, as does a
+  refusal without its audit row or a `POST` recorded as passed. No token is sent.
+
+### Results (to fill from the job summary)
+
+Clients, per OS:
+
+| client | OS | (a) allowed GET | terminated | (b) denied POST | audit rows |
+|---|---|---|---|---|---|
+| curl | Linux | | | | |
+| curl | macOS | | | | |
+| gh | Linux, macOS | | | | |
+| git ls-remote (github.com, no rule) | Linux | | | | |
+| git ls-remote (github.com, no rule) | macOS | | | | |
+| node fetch (NODE_USE_ENV_PROXY=1) | Linux | | | | |
+| node fetch (NODE_USE_ENV_PROXY=1) | macOS | | | | |
+| node fetch (default) | Linux | | | | |
+| node fetch (default) | macOS | | | | |
+| python requests | Linux | | | | |
+| python requests | macOS | | | | |
+
+Latency of `curl GET https://api.github.com/rate_limit`, 30 requests per path, ms:
+
+| OS | direct median / p95 | tunnel median / p95 | terminated median / p95 | added median / p95 | within 15 ms p95 |
+|---|---|---|---|---|---|
+| Linux | | | | | |
+| macOS | | | | | |
+
+Not measured by the job:
+
+- `gh`: `gh api` asks for a token even for `/rate_limit`, and the job sends none; the
+  job reports it as skipped with that reason. Measuring it needs a token scoped to
+  nothing, which is a decision for step 1.
+- The agents' own clients (Claude Code's and Codex's HTTP clients): they need a model
+  key and do not reach `api.github.com` themselves; their GitHub calls go through `gh`,
+  `git` and `curl`, measured above. Node's `fetch` stands in for Claude Code's tools.
+
+Exit criteria (from "Pull requests", step 0): no client sends a request the rule denies;
+every failure is a refusal, none a silent pass; the added p95 within the 15 ms `guard
+latency` budget.

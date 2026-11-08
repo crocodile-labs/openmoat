@@ -13,7 +13,9 @@
 //!   decrypted except, with [`Tls`] set, a tunnel to the host of a secret that
 //!   says `tls: terminate` (ADR-043): its one request is checked against the
 //!   leak check and the secret's `allow` rules, given the value, sent over the
-//!   proxy's own verified TLS, and its answer searched for every value.
+//!   proxy's own verified TLS, and its answer searched for every value. A
+//!   host with [`Requests`] rules (ADR-062 step 0, a proof of concept) is
+//!   terminated the same way, and a request its `deny` rules name is refused.
 //! - A request that carries a brokered secret's placeholder or value to a host
 //!   other than the secret's own is refused ([`Broker`]).
 //! - Every decision is recorded through a [`Recorder`]; a failed record is a
@@ -40,6 +42,7 @@ mod decide;
 mod exchange;
 mod local;
 mod request;
+mod requests;
 mod server;
 mod session;
 mod slots;
@@ -60,6 +63,7 @@ pub use local::LocalService;
 pub use request::{
     MAX_HEADERS, ProxyCredential, Request, RequestError, Target, parse as parse_request,
 };
+pub use requests::{RULE_REQUEST_RULE, RequestRuleError, Requests};
 pub use server::{Limits, Proxy, RULE_CAPACITY};
 pub use session::{
     AuthError, Credential, CredentialError, MIN_TOKEN_LEN, RULE_SESSION, Sessions, TaintLookup,
