@@ -259,6 +259,12 @@ pub const EDITORS: &[&str] = &["vi", "vim", "nvim", "nano", "emacs", "code"];
 /// `tr` takes character sets. A `/` in them is text.
 pub const NO_FILE_OPERANDS: &[&str] = &["echo", "printf", "tr"];
 
+/// Programs that run the command line they are given inside a container or a
+/// pod, not on this machine: a `sh -c STR` among their arguments is not
+/// classified as a local command (docs/LIMITS.md); `container-host` holds
+/// handing the host over to the container.
+pub const CONTAINER_RUNNERS: &[&str] = &["docker", "podman", "nerdctl", "kubectl", "oc"];
+
 /// Programs whose path operands name the file system holding them, which they
 /// query without opening anything under it: `df -h ~` reports free space and
 /// reads no file of the home folder. (`du` walks the tree and is a reader.)

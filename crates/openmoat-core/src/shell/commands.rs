@@ -347,7 +347,7 @@ fn classify_as_written(
     for dir in extract::destinations(&argv, program) {
         sink.write(ctx, &dir)?;
     }
-    for code in embedded::commands(&argv, program) {
+    for code in embedded::commands(&argv, program, &text_operands.data) {
         classify_into(&code, ctx, sink, depth + 1)?;
     }
 

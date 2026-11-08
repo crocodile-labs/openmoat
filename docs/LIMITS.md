@@ -165,6 +165,13 @@ Each agent's gaps and the reasons are in
   options a `docker`, `podman` or `nerdctl` command line shows; another spelling, or the
   same options in a compose file or a script, is not caught by it
   ([POLICY.md §6](POLICY.md#6-the-default-policy-in-one-table)).
+- **A command a container runs is not checked as a command on this machine.** A
+  `sh -c 'cmd'` handed to a program OpenMoat does not know (`mywrap sh -c 'cmd'`,
+  `poetry run bash -lc 'cmd'`) is checked as `cmd`, but not one handed to `docker`,
+  `podman`, `nerdctl`, `kubectl` or `oc`: it runs inside the container or pod, where
+  `~/.ssh` is not yours. What the container is given of this machine (`--privileged`,
+  `-v /:/host`, the Docker socket) is checked by `container-host`; a folder mounted
+  some other way is not.
 - **The MCP flow check sees wrapped servers and exact text only.** Results of a server
   not run through `openmoat mcp wrap` (remote HTTP, plugin or managed servers) are not
   recorded, and text the agent rewrites, encodes, splits or shortens below eight words

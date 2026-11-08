@@ -19,7 +19,7 @@
 //! | `python -c`, `node -e`, `perl -e`, … payloads | URL/path scan of the payload; `FsWrite` of every file name it shows when it writes (`commands/payload/writes.rs`); `@opaque-code <interpreter>` when it opens, connects or runs through names it builds (`commands/payload/opaque.rs`) |
 //! | script operands, `./x` programs, modules inline code imports (`executes.rs`) | no atom: the side list `CompiledPolicy::executed` reads (ADR-039) |
 //! | `find -exec/-execdir/-ok/-okdir` commands, `--output=FILE`, `gofmt -w` operands (`options.rs`) | nested classification, `FsWrite` |
-//! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e`, `flock -c` (`embedded.rs`) | nested classification |
+//! | `watch`, `git rebase --exec`, `git submodule foreach`, `git bisect run`, `ssh -o ProxyCommand=`, `rsync -e`, `flock -c`, a shell's `-c` string among the arguments of a program no table names (`embedded.rs`) | nested classification |
 //! | `file:` URLs (`curl file:///etc/passwd`) | `FsRead` |
 //! | files `curl -F`/`-T`/`-d @` and `wget --post-file` send (`upload.rs`) | `FsRead` |
 //! | `perl -i`/`ruby -i` operands, `patch` targets and `-o` (`in_place.rs`) | `FsWrite` |
