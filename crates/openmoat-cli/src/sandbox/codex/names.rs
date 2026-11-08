@@ -13,6 +13,10 @@ use crate::sandbox::patterns::{Spot, has_glob, literal_tree, push_unique, split,
 /// (`codex-rs/protocol/src/permissions.rs`), so they need no mount of ours.
 const CODEX_PROTECTED: &[&str] = &[".git", ".agents", ".codex", ".aws"];
 
+/// The most spellings one deny glob is written in by [`case_variants`]: every
+/// letter case of a name of up to five letters (`.envrc`).
+const MAX_CASE_VARIANTS: usize = 32;
+
 /// The single names a write deny covers anywhere, as a node (`**/.claude`) or
 /// a tree (`**/.moat/**`).
 pub(super) fn denied_dirs(ir: &Enforcement) -> Vec<String> {
@@ -86,6 +90,7 @@ pub fn deny_names(generated: &mut Generated) {
             ),
         );
     }
+    case_variants(workspace, &globs, &mut generated.report);
     if !globs.is_empty() {
         generated.report.allowance(
             Kind::FsWrite,
@@ -98,4 +103,84 @@ pub fn deny_names(generated: &mut Generated) {
              the agent's own writes",
         );
     }
+}
+
+/// Also deny each `**/` glob of the workspace roots in every other ASCII
+/// letter case. Codex on Linux hides the files a glob matches, compared
+/// case-sensitively, when a command starts; in a directory that folds case
+/// (ext4 or f2fs with `chattr +F`) a file spelled `.ENV` is the project's
+/// `.env`, yet `**/.env` does not match it. Which directories fold case is
+/// not known when the profile is written (the workspace roots are Codex's), so
+/// the spellings are written on every Linux profile: on a disk that keeps case
+/// they deny only files of those other names. Written as globs, never as names
+/// in the roots, which bubblewrap would create as empty files. A glob with
+/// more spellings than [`MAX_CASE_VARIANTS`] is reported instead.
+fn case_variants(
+    workspace: &mut toml_edit::Table,
+    globs: &[String],
+    report: &mut crate::sandbox::Report,
+) {
+    let mut past_cap = Vec::new();
+    for glob in globs {
+        match spellings(glob) {
+            Some(spellings) => {
+                for spelling in spellings {
+                    if !workspace.contains_key(&spelling) {
+                        workspace.insert(&spelling, value(Mode::Deny.as_str()));
+                    }
+                }
+            }
+            None => past_cap.push(glob.clone()),
+        }
+    }
+    if !past_cap.is_empty() {
+        report.loss(
+            Kind::FsWrite,
+            "codex.linux-case-variants",
+            format!(
+                "Codex on Linux compares deny globs with file names in their letter case, so in \
+                 a directory that folds case (`chattr +F`) a file that exists in another case is \
+                 not hidden by {}; the profile writes every case of shorter names only, and the \
+                 hook still decides the agent's own reads and writes",
+                past_cap
+                    .iter()
+                    .map(|g| format!("`{g}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+    }
+}
+
+/// Every ASCII letter case of `glob` other than its own, or `None` when there
+/// are more than [`MAX_CASE_VARIANTS`] or it holds a character class or a
+/// brace, whose letters are not plain name letters.
+fn spellings(glob: &str) -> Option<Vec<String>> {
+    if glob.contains(['[', '{', '\\']) {
+        return None;
+    }
+    let letters: Vec<usize> = glob
+        .char_indices()
+        .filter(|(_, c)| c.is_ascii_alphabetic())
+        .map(|(i, _)| i)
+        .collect();
+    let count = 1_usize.checked_shl(u32::try_from(letters.len()).ok()?)?;
+    if count > MAX_CASE_VARIANTS {
+        return None;
+    }
+    let lower = glob.to_ascii_lowercase();
+    let mut out = Vec::new();
+    for mask in 0..count {
+        let mut spelling = lower.clone().into_bytes();
+        for (bit, &at) in letters.iter().enumerate() {
+            if mask & (1 << bit) != 0 {
+                spelling[at] = spelling[at].to_ascii_uppercase();
+            }
+        }
+        let spelling = String::from_utf8(spelling).ok()?;
+        if spelling != glob {
+            out.push(spelling);
+        }
+    }
+    Some(out)
 }
