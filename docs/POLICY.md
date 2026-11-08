@@ -196,7 +196,8 @@ sandbox can broker it too, below).
   are refused. Two secrets cannot set the same header for the same host.
 - **`plain_http`** is off unless set. A plain-HTTP request carries the value in clear text,
   readable by anyone on the network path, so OpenMoat injects into one only for a secret
-  that says `plain_http: true`.
+  that says `plain_http: true`. The answer to such a request is searched for the value,
+  and the connection closes before it would reach the agent (`proxy-secret`).
 - **`port`** (1 to 65535, an integer) is the one port of the plain-HTTP requests that get
   the value; without it, 80. It needs `plain_http: true`, and a policy that sets it
   without, or sets 0, does not load.

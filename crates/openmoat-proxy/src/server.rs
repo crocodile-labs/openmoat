@@ -35,7 +35,7 @@ pub(crate) use self::wire::response;
 use self::wire::{read_head, read_hello, refuse, respond, summary};
 use crate::audit::{Connection, Recorder};
 use crate::body::{self, BodyEnd, Framing};
-use crate::broker::{Broker, Channel, Watch};
+use crate::broker::{Broker, Channel, Echo, RULE_SECRET, Watch, value_came_back};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
@@ -329,6 +329,7 @@ impl Proxy<'_> {
                 Forward::All
             }
         };
+        let mut echo = None;
         let (first_bytes, inspect) = match &request.target {
             Target::Connect { host, .. } => {
                 match self.check_tunnel(client, host, rest.to_vec(), &decision, &request, turn) {
@@ -348,6 +349,16 @@ impl Proxy<'_> {
                 // Only the owner host's head carries a value; it is zeroed
                 // with `first_bytes` once written.
                 let injected = self.broker.inject(host, Channel::Plain(*port), head);
+                // An answer to a request a value went into is searched for
+                // it, as a terminated tunnel's is (`broker/echo.rs`).
+                let request = &request;
+                echo = injected.as_ref().map(|_| {
+                    Echo::new(self.broker, move |id: &str| {
+                        let why = value_came_back(host, id);
+                        let refused = Decision::single(Verdict::Deny, RULE_SECRET, why);
+                        self.record(turn, Some(request), &refused);
+                    })
+                });
                 let head = injected.as_deref().map_or(head.as_slice(), Vec::as_slice);
                 let body_bytes = &rest[..body_in_rest];
                 (Zeroizing::new([head, body_bytes].concat()), Some(inspect))
@@ -359,11 +370,12 @@ impl Proxy<'_> {
                 every: self.limits.taint_recheck,
                 still_allowed: &still_allowed,
             });
+            let answer = echo.as_mut().map(|e| e as &mut dyn tunnel::Answer);
             tunnel::relay(
                 client,
                 &upstream,
                 self.limits.idle_timeout,
-                inspect,
+                (inspect, answer),
                 recheck,
             );
         }

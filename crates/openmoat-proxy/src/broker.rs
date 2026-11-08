@@ -330,7 +330,7 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 mod echo;
 mod route;
 
-pub(crate) use self::echo::Holdback;
+pub(crate) use self::echo::{Echo, Holdback, value_came_back};
 pub use self::route::RULE_SECRET_ROUTE;
 
 #[cfg(test)]

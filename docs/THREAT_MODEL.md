@@ -655,7 +655,13 @@ something OpenMoat claims to stop.
     connecting command's arguments to another host (`placeholder-egress`), but not one
     in a file, a here-document, an environment variable or an encoded form;
   - an agent that asks the user to paste the secret into the conversation;
-  - the owner host itself misusing or reflecting the token;
+  - the owner host itself misusing the token. Its plain-HTTP answer to a request the
+    value went into is searched for the value, as a terminated tunnel's answer is: the
+    connection closes before the value reaches the agent, and a `proxy-secret` row says
+    so. That search reads the raw stream: a value the host sends compressed, encoded or
+    split by a chunked body's framing is not recognised there (the terminated path reads
+    the framing and forces `identity`), and later requests on the same connection carry
+    no value, so their answers are not searched;
   - traffic that does not go through `openmoat proxy`: the agent's own requests and
     in-process tools; every host sandbox command unless the policy sets
     `sandbox.proxy_port`; and even then, under Codex, every command whose Codex was
