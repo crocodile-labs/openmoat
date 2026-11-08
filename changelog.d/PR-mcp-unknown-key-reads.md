@@ -1,2 +1,0 @@
-### Security
-- An MCP call's arguments under keys OpenMoat does not know are now checked for file paths: a string that starts at `/`, `\`, a drive, `~` or `file:` (`mcp__custom__run {"input": "~/.ssh/id_rsa"}`) is checked as a file read against the policy's `deny` rules, so `secrets-paths` denies it as it denies the same path under `path`. Only deny rules apply to such a value, and never as a write, so a path no deny rule names, a relative word or a bare `~` in some text field changes nothing and adds no prompt ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

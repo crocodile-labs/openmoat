@@ -1,2 +1,0 @@
-### Security
-- A glob that names more than can be listed (more than 256 paths, 1024 directories or 8 levels of `**`) or that cannot be matched the way the shell does now makes the call need review, as a line past the atom or length limit already did; before, the default policy deferred it, so a secret past the bound could reach the agent's own prompt ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

@@ -1,2 +1,0 @@
-### Security
-- A command string handed to a shell by a program OpenMoat does not know (`mywrap sh -c 'cat ~/.ssh/id_rsa'`, `poetry run bash -lc '…'`) is now checked as the command it is, so a deny in it is no longer deferred; the commands containers run (`docker`, `podman`, `nerdctl`, `kubectl`, `oc`) are left to `container-host` (LIMITS.md) ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

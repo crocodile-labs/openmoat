@@ -1,0 +1,2 @@
+### Added
+- The cross-host consistency suite now also decides calls made after a secret read or untrusted content (session taint) and with the state directory moved, and sends one MCP tool call per agent the way that agent sends it, so an agent whose payload drops a fetch, a path or an MCP tool's arguments fails the suite instead of getting a different verdict ([#768](https://github.com/crocodile-labs/openmoat/pull/768)).

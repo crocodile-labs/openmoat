@@ -1,0 +1,2 @@
+### Security
+- `openmoat doctor` and `openmoat status` read the proxy's launchd or systemd service file back: an environment variable other than `MOAT_HOME` (`DYLD_INSERT_LIBRARIES`, `LD_PRELOAD`, an `EnvironmentFile=`), any other change from what `openmoat proxy install` writes, or a mode open to others is a problem, with `openmoat proxy install` named to write it again ([#768](https://github.com/crocodile-labs/openmoat/pull/768)).

@@ -1,0 +1,2 @@
+### Security
+- `openmoat status` and `openmoat doctor` read Claude Code's managed settings (with `managed-settings.d/`), Gemini CLI's system settings and defaults and Codex's `requirements.toml`, read-only, and call the agent not protected when one turns hooks off (`disableAllHooks`, `hooksConfig`, `[features] hooks = false`) or runs only its own hooks without OpenMoat's (`allowManagedHooksOnly`, `allow_managed_hooks_only`), naming the file and key; a missing or unreadable file says nothing (ADR-068) ([#768](https://github.com/crocodile-labs/openmoat/pull/768)).
