@@ -281,10 +281,7 @@ mod tests {
             "{}",
             lines[0]
         );
-        assert_eq!(
-            created_during_run(&watched, |_| false),
-            [] as [String; 0]
-        );
+        assert_eq!(created_during_run(&watched, |_| false), [] as [String; 0]);
         let notice = port_only_notice(41_000, "no bwrap", &[]);
         assert!(
             notice.contains("hook settings the project lacks"),
