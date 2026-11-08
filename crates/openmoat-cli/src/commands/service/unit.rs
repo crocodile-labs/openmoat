@@ -80,6 +80,62 @@ fn escape(text: &str) -> String {
     out
 }
 
+/// The variables a unit sets for the service, for [`super::read_back()`]: the
+/// names each `Environment=` line assigns, each `PassEnvironment=` name, and
+/// each `EnvironmentFile=` as itself (what it loads is unknown); `None` for a
+/// file with no `[Service]` section.
+pub fn environment(text: &str) -> Option<Vec<String>> {
+    let mut names = Vec::new();
+    let mut service = false;
+    for line in text.lines().map(str::trim) {
+        if line.starts_with('[') {
+            service = line == "[Service]";
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if !service {
+            continue;
+        }
+        match key.trim() {
+            "Environment" => names.extend(assignments(value)),
+            "PassEnvironment" => names.extend(value.split_whitespace().map(str::to_owned)),
+            "EnvironmentFile" => names.push(format!("EnvironmentFile={}", value.trim())),
+            _ => {}
+        }
+    }
+    text.lines()
+        .any(|l| l.trim() == "[Service]")
+        .then_some(names)
+}
+
+/// The names one `Environment=` value assigns: words split on spaces outside
+/// double quotes, as systemd splits them, each up to its `=`.
+fn assignments(value: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut quoted = false;
+    for ch in value.chars() {
+        match ch {
+            '"' => quoted = !quoted,
+            c if c.is_whitespace() && !quoted => {
+                words.push(std::mem::take(&mut word));
+            }
+            c => word.push(c),
+        }
+    }
+    words.push(word);
+    words
+        .into_iter()
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            w.split_once('=')
+                .map_or(w.clone(), |(name, _)| name.to_owned())
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -123,5 +179,39 @@ mod tests {
             text.contains("Environment=MOAT_HOME=/home/weird\\t\\\\path"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn environment_names_what_each_service_line_sets() {
+        let text = render(&Spec {
+            binary: &PathBuf::from("/bin/moat"),
+            moat_home: &PathBuf::from("/home/u/.moat"),
+        });
+        assert_eq!(environment(&text), Some(vec!["MOAT_HOME".to_owned()]));
+        let tampered = text.replace(
+            "Restart=on-failure\n",
+            "Restart=on-failure\nEnvironment=\"LD_PRELOAD=/x.so\" HTTPS_PROXY=h\n\
+             PassEnvironment=SSH_AUTH_SOCK\nEnvironmentFile=-/home/u/env\n",
+        );
+        assert_eq!(
+            environment(&tampered),
+            Some(
+                [
+                    "MOAT_HOME",
+                    "LD_PRELOAD",
+                    "HTTPS_PROXY",
+                    "SSH_AUTH_SOCK",
+                    "EnvironmentFile=-/home/u/env"
+                ]
+                .map(str::to_owned)
+                .to_vec()
+            )
+        );
+        // `[Install]` keys are not the service's environment.
+        assert_eq!(
+            environment("[Service]\nExecStart=/bin/moat proxy\n[Install]\nEnvironment=X=1\n"),
+            Some(Vec::new())
+        );
+        assert_eq!(environment("Environment=X=1\n"), None);
     }
 }

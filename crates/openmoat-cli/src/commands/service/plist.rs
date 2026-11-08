@@ -121,6 +121,42 @@ fn xml_escape(text: &str) -> String {
     out
 }
 
+/// The names of the variables a plist's `EnvironmentVariables` dictionaries
+/// set, for [`super::read_back()`]; `None` for a file not in the XML form
+/// [`render`] writes (a binary plist `plutil` converted, a broken dictionary).
+pub fn environment(text: &str) -> Option<Vec<String>> {
+    if !text.starts_with("<?xml") {
+        return None;
+    }
+    let mut names = Vec::new();
+    let mut lines = text.lines().map(str::trim);
+    while let Some(line) = lines.next() {
+        if line != "<key>EnvironmentVariables</key>" {
+            continue;
+        }
+        match lines.next()? {
+            "<dict/>" => continue,
+            "<dict>" => {}
+            _ => return None,
+        }
+        loop {
+            let line = lines.next()?;
+            if line == "</dict>" {
+                break;
+            }
+            if let Some(name) = line
+                .strip_prefix("<key>")
+                .and_then(|l| l.strip_suffix("</key>"))
+            {
+                names.push(name.to_owned());
+            } else if !(line.starts_with("<string>") && line.ends_with("</string>")) {
+                return None;
+            }
+        }
+    }
+    Some(names)
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -179,5 +215,35 @@ mod tests {
         });
         assert!(text.contains("/Users/a&amp;b/&lt;moat&gt;"));
         assert!(!text.contains("/Users/a&b/<moat>"));
+    }
+
+    #[test]
+    fn environment_names_each_variable_the_plist_sets() {
+        let (bin, home, out_log, err_log) = spec();
+        let text = render(&Spec {
+            binary: &bin,
+            moat_home: &home,
+            stdout_log: &out_log,
+            stderr_log: &err_log,
+        });
+        assert_eq!(environment(&text), Some(vec!["MOAT_HOME".to_owned()]));
+        let tampered = text.replace(
+            "    <key>MOAT_HOME</key>\n",
+            "    <key>DYLD_INSERT_LIBRARIES</key>\n    <string>/x.dylib</string>\n    \
+             <key>MOAT_HOME</key>\n",
+        );
+        assert_eq!(
+            environment(&tampered),
+            Some(vec![
+                "DYLD_INSERT_LIBRARIES".to_owned(),
+                "MOAT_HOME".to_owned()
+            ])
+        );
+        assert_eq!(environment("bplist00"), None);
+        let broken = text.replace(
+            "  <dict>\n    <key>MOAT_HOME",
+            "  <array>\n    <key>MOAT_HOME",
+        );
+        assert_eq!(environment(&broken), None);
     }
 }

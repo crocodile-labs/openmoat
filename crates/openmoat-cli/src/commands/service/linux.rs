@@ -57,10 +57,18 @@ impl Manager for SystemdManager {
         Ok(self.unit_path())
     }
 
+    fn render(&self, binary: &Path, moat_home: &Path) -> Result<String> {
+        Ok(unit::render(&unit::Spec { binary, moat_home }))
+    }
+
+    fn environment(&self) -> fn(&str) -> Option<Vec<String>> {
+        unit::environment
+    }
+
     fn install(&self, binary: &Path, moat_home: &Path) -> Result<PathBuf> {
         let dir = self.unit_dir();
         fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-        let text = unit::render(&unit::Spec { binary, moat_home });
+        let text = self.render(binary, moat_home)?;
         let path = self.unit_path();
         if path.exists() {
             let backup = backup_path(&path, SANDBOX_BACKUP);

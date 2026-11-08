@@ -323,6 +323,22 @@ user. Token values the policy brokers are read from the user's
 environment at run time by the proxy itself; they never touch the service
 file.
 
+The service manager starts the proxy exactly as that file says, so `openmoat doctor`
+and `openmoat status` read it back and compare it with what `openmoat proxy install`
+writes for the current binary and state directory. Each difference is a problem, and
+`doctor` exits 64:
+
+- an environment variable other than `MOAT_HOME` (`DYLD_INSERT_LIBRARIES`,
+  `LD_PRELOAD`, `HTTPS_PROXY`), or a systemd `EnvironmentFile=` or `PassEnvironment=`;
+- any other change (another binary, an `ExecStartPre=`, extra arguments), or a file in
+  a form it cannot read (a binary plist);
+- a mode that lets others read or write it (anything but owner-only).
+
+```bash
+openmoat doctor   # ✗ service file     ~/.config/systemd/user/moat-proxy.service sets environment the proxy is started with beyond `MOAT_HOME`: LD_PRELOAD; `openmoat proxy install` writes it again
+openmoat proxy install   # writes it again, the old file kept as a backup
+```
+
 ### Upgrade note
 
 The service names the pinned `openmoat` by its stable path (ADR-016), so an

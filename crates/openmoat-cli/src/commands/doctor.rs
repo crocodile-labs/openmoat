@@ -45,9 +45,10 @@ enum Area {
 
 /// The `moat doctor` line for the proxy user service (`moat proxy install`,
 /// #272). A missing service is silent (opt-in); a drift-blocked or
-/// crash-looping service is a problem; a running one is a check.
+/// crash-looping service is a problem, as is a service file that is not the
+/// one `moat proxy install` wrote; a running one is a check.
 fn service(report: &mut Report, home: &Home) {
-    if let Some((ok, text)) = super::proxy::service_line(home) {
+    for (ok, text) in super::proxy::service_lines(home) {
         report.line(Area::Service, ok, text);
     }
 }

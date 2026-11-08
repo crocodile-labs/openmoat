@@ -78,19 +78,26 @@ impl Manager for LaunchdManager {
         Ok(self.plist_path())
     }
 
+    fn render(&self, binary: &Path, moat_home: &Path) -> Result<String> {
+        let logs = log_dir()?;
+        Ok(plist::render(&plist::Spec {
+            binary,
+            moat_home,
+            stdout_log: &logs.join("proxy.out.log"),
+            stderr_log: &logs.join("proxy.err.log"),
+        }))
+    }
+
+    fn environment(&self) -> fn(&str) -> Option<Vec<String>> {
+        plist::environment
+    }
+
     fn install(&self, binary: &Path, moat_home: &Path) -> Result<PathBuf> {
         let dir = self.plist_dir();
         fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
         let logs = log_dir()?;
         fs::create_dir_all(&logs).with_context(|| format!("creating {}", logs.display()))?;
-        let stdout_log = logs.join("proxy.out.log");
-        let stderr_log = logs.join("proxy.err.log");
-        let text = plist::render(&plist::Spec {
-            binary,
-            moat_home,
-            stdout_log: &stdout_log,
-            stderr_log: &stderr_log,
-        });
+        let text = self.render(binary, moat_home)?;
         let path = self.plist_path();
         // Back up an existing plist once per `install`, so a hand-edited
         // file is never lost silently.

@@ -150,14 +150,14 @@ pub(super) fn sandboxes(shown: &mut Shown, home: &Home, plan: &Plan, binary: &Pa
             proxy_row(shown, ok, label, text);
         }
     }
-    if let Some((ok, text)) = crate::commands::proxy::service_line(home) {
-        // `service          <state>`, as `doctor` prints it.
-        let state = text
-            .strip_prefix("service")
-            .unwrap_or(&text)
-            .trim()
-            .to_owned();
-        proxy_row(shown, ok, "Service", state);
+    for (ok, text) in crate::commands::proxy::service_lines(home) {
+        // `service          <state>` and `service file     <finding>`, as
+        // `doctor` prints them.
+        let (label, rest) = match text.strip_prefix("service file") {
+            Some(rest) => ("Service file", rest),
+            None => ("Service", text.strip_prefix("service").unwrap_or(&text)),
+        };
+        proxy_row(shown, ok, label, rest.trim().to_owned());
         healthy &= ok;
     }
     healthy
