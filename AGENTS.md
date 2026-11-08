@@ -47,7 +47,7 @@ The module-by-module map is in [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.m
 2. **Strictest wins** across every atomic action one tool call produces.
 3. **Unparseable is never allow.** Anything the lexer or classifier cannot understand gets rule `unparseable`: `review` when the policy's catch-all (`"*"`) is `review` or `deny`, `defer` when it is `allow` or `defer` (ADR-025), never `allow`.
 4. **Fail closed.** Every error path in `openmoat guard` yields a `deny` response and exit 2 (ADR-004).
-5. **Exit codes:** 0 allow, defer or ok, 1 the program `openmoat run` or `openmoat mcp proxy` started failed (or `mcp proxy` refused to start it), 2 deny, 3 unresolved review (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
+5. **Exit codes:** 0 allow, defer or ok, 1 the program `openmoat run` or `openmoat mcp proxy` started failed (or `mcp proxy` refused to start it), or a layer `openmoat bench --report` exercised failed (ADR-065), 2 deny, 3 unresolved review (`policy check`), 64 usage/config. Nothing else may use 2 or 3.
 6. **No secrets in the audit log.** Everything persisted passes `openmoat_audit::redact`.
 7. **Pure core.** `openmoat-core` depends only on `serde`, `serde-saphyr`, `globset`, `thiserror`. Anything that needs the filesystem (program resolution, hashing) is injected from the CLI through a trait (`ProgramResolver`, `PathResolver`).
 8. **Idempotent install.** `openmoat init` never overwrites a policy, never duplicates a hook, always backs up before editing a host file.

@@ -9,7 +9,8 @@ pub enum Code {
     /// Success, or verdict `allow`.
     Ok = 0,
     /// The program `moat run` started exited with another status or was
-    /// killed. Never a verdict.
+    /// killed, or a layer `openmoat bench --report` exercised failed
+    /// (ADR-065). Never a verdict.
     Failed = 1,
     /// Verdict `deny`. Claude Code and Codex treat exit 2 as a blocking hook result.
     Deny = 2,

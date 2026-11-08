@@ -440,7 +440,10 @@ fn threat_coverage_is_complete_and_documented() {
          Generated from `tests/conformance/*.yaml` by the conformance suite; do not edit.\n\
          Regenerate with `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`.\n\
          Threat classes are defined in `docs/THREAT_MODEL.md` §3. A fixture is one tool call and\n\
-         the verdict and rule ids the default policy must produce for it.\n\n\
+         the verdict and rule ids the default policy must produce for it. Which layer holds\n\
+         each security promise on a given machine (policy decision, host hook, OS sandbox,\n\
+         network boundary) is the proof report of `openmoat bench --report`\n\
+         ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)).\n\n\
          | Threat | Class | Attacks | Reviews | Benign |\n|---|---|---|---|---|\n",
     );
     for (t, name) in THREATS {

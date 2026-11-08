@@ -34,6 +34,10 @@ pub struct Run {
     /// A step met the expectation it has where OpenMoat's OS sandbox holds the
     /// host's commands (`sandboxed:`): what the hook allows, the sandbox holds.
     pub held: bool,
+    /// Where the kernel's verdict missed the scenario, known gaps included.
+    pub policy: Vec<String>,
+    /// Where the host's reading of the reply differs from the kernel's verdict.
+    pub hook: Vec<String>,
 }
 
 pub enum Outcome {

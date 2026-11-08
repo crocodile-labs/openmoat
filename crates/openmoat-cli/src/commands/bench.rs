@@ -9,6 +9,7 @@
 
 mod hook;
 mod hosts;
+mod proof;
 mod scenario;
 mod score;
 #[cfg(test)]
@@ -23,7 +24,7 @@ use openmoat_core::Verdict;
 use openmoat_hosts::Host;
 use serde::Serialize;
 
-use crate::cli::{BenchArgs, Format};
+use crate::cli::{BenchArgs, BenchFormat};
 use crate::exit::Code;
 use crate::home::Home;
 use crate::render;
@@ -73,8 +74,16 @@ struct HostFailure {
 }
 
 pub fn run(args: &BenchArgs) -> Result<Code> {
-    let scenarios = scenarios()?;
-    let scratch = Scratch::new()?;
+    ensure!(
+        args.format != BenchFormat::Markdown || args.report,
+        "--format markdown needs --report"
+    );
+    let mut scenarios = scenarios()?;
+    if args.report {
+        // The proof report needs only the scenarios its promises name.
+        scenarios.retain(|(_, s)| proof::scenario_ids().any(|id| id == s.id));
+    }
+    let scratch = Scratch::new(args.scratch_dir.as_deref())?;
     let hosts: Vec<Host> = args.host.map_or_else(|| Host::ALL.to_vec(), |h| vec![h]);
     let target = match &args.hook {
         Some(line) => Target::Hook(line.clone()),
@@ -85,15 +94,25 @@ pub fn run(args: &BenchArgs) -> Result<Code> {
     }
     let markers = matches!(target, Target::OpenMoat { .. });
     let mut card = Scorecard::default();
+    let mut checked = Vec::new();
     for (category, scenario) in &scenarios {
         if let Some(issue) = scenario.gap.as_ref().filter(|_| markers) {
             card.note_gap(&scenario.id, issue);
         }
         for &host in &hosts {
             if let Some(result) = run_scenario(&target, &scratch, scenario, host, args.verbose)? {
+                checked.push(proof::Checked {
+                    scenario: scenario.id.clone(),
+                    host,
+                    policy: result.policy.clone(),
+                    hook: result.hook.clone(),
+                });
                 card.add(category, &scenario.id, host.id(), result);
             }
         }
+    }
+    if args.report {
+        return proof::report(&target, &scratch, &hosts, &checked, args.format);
     }
     if markers {
         card.check_gaps();
@@ -115,8 +134,8 @@ pub fn run(args: &BenchArgs) -> Result<Code> {
         hook_failure,
     };
     match args.format {
-        Format::Json => render::json(&report)?,
-        Format::Text => print_text(&report)?,
+        BenchFormat::Json => render::json(&report)?,
+        BenchFormat::Text | BenchFormat::Markdown => print_text(&report)?,
     }
     Ok(Code::Ok)
 }
@@ -272,10 +291,15 @@ fn compare(
     calls: &[Call],
     verdicts: &[(Answer, Option<Vec<String>>)],
     causes: &[Option<String>],
-    mut problems: Vec<String>,
+    hook: Vec<String>,
     markers: bool,
 ) -> Run {
+    // The host's reading of the reply came first (`recorded`); the kernel's
+    // verdict against the scenario follows. The proof report keeps them apart.
+    let mut problems = Vec::new();
     let mut known = Vec::new();
+    // Gap markers on steps that pass: the bench's own bookkeeping, not the policy's.
+    let mut stale = Vec::new();
     let mut steps = Vec::new();
     let mut held = false;
     // `openmoat init --yes` in the throwaway home put the host's OS sandbox in
@@ -302,7 +326,7 @@ fn compare(
                 "step {i} {issue}: expected {}, got {got_word} {rules:?}",
                 want.word(),
             )),
-            (Some(issue), true) => problems.push(format!(
+            (Some(issue), true) => stale.push(format!(
                 "step {i}: marked as gap {issue} but passes; remove the marker"
             )),
             (None, false) => problems.push(format!(
@@ -328,6 +352,9 @@ fn compare(
         });
         held |= sandboxed && step.sandboxed.is_some() && ok;
     }
+    // A known gap is a policy that does not hold, whatever its marker says.
+    let policy: Vec<String> = problems.iter().chain(&known).cloned().collect();
+    let problems: Vec<String> = hook.iter().cloned().chain(problems).chain(stale).collect();
     let outcome = match (
         scenario.gap.as_ref().filter(|_| markers),
         problems.is_empty(),
@@ -341,6 +368,8 @@ fn compare(
         steps,
         outcome,
         held,
+        policy,
+        hook,
     }
 }
 

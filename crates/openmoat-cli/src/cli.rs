@@ -499,9 +499,30 @@ pub struct BenchArgs {
     #[arg(long)]
     pub verbose: bool,
 
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = Format::Text)]
-    pub format: Format,
+    /// Print the proof report instead of the scorecard: each security promise per
+    /// layer (policy decision, host hook, OS sandbox, network boundary) as PASS,
+    /// FAIL or NOT TESTED HERE with the reason. Runs attacks under `openmoat run` in
+    /// the throwaway home. Exits 1 when an exercised layer fails.
+    #[arg(long, conflicts_with = "hook")]
+    pub report: bool,
+
+    /// The directory to make the throwaway home in (default: the system temp
+    /// directory). On Linux the OS sandbox rows need one outside /tmp, which the
+    /// sandbox lets commands read.
+    #[arg(long, value_name = "DIR")]
+    pub scratch_dir: Option<PathBuf>,
+
+    /// Output format; markdown only with --report.
+    #[arg(long, value_enum, default_value_t = BenchFormat::Text)]
+    pub format: BenchFormat,
+}
+
+/// `openmoat bench --format`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum BenchFormat {
+    Text,
+    Json,
+    Markdown,
 }
 
 #[derive(Debug, Args)]
