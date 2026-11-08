@@ -14,6 +14,8 @@ use openmoat_core::{AtomicAction, DEFAULT_POLICY, EvalContext, Kind, Policy};
 use super::patterns::Spot;
 use super::{Grants, Report, landlock, seatbelt};
 
+// It reads `bwrap`'s masks, a module built on Unix only (`sandbox.rs`).
+#[cfg(unix)]
 mod hosts;
 
 const HOME: &str = "/home/me";

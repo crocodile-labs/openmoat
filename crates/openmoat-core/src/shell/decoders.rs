@@ -91,6 +91,11 @@ pub(super) fn pipe_chains(tokens: &[Token]) -> Vec<Vec<Vec<&str>>> {
                 }
             }
             Token::Operator(op) if op.is_redirect() => skip_target = true,
+            // A group's parentheses neither start nor end a chain, as in
+            // `pipelines::push`: `(curl URL) | sh` pipes what `curl` prints,
+            // and a `)` that closes nothing (`curl URL) | sh ; true`, which
+            // the shell refuses) cannot hide the stage before it.
+            Token::Operator(op) if op.is_grouping() => {}
             Token::Operator(_) => chains.push(vec![Vec::new()]),
             Token::HereDoc { .. } => {}
         }

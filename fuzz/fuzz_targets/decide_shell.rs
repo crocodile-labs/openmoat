@@ -45,6 +45,13 @@ fuzz_target!(|data: &[u8]| {
     if decision.rules.iter().any(|rule| rule == "unparseable") {
         return;
     }
+    // A line ending in an unescaped `\` continues into what follows, so
+    // ` ; true` after it is an argument (`ls \ ; true` lists the file ` `),
+    // not one more command.
+    let trailing = command.bytes().rev().take_while(|b| *b == b'\\').count();
+    if trailing % 2 == 1 {
+        return;
+    }
     let padded = compiled().decide(&Action::Shell {
         command: format!("{command} ; true"),
     });
