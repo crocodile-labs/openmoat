@@ -11,7 +11,7 @@ the verdict and rule ids the default policy must produce for it.
 | T2 | Secret exfiltration via file tools | 53 | 3 | 3 |
 | T3 | Secret exfiltration via environment | 123 | 5 | 20 |
 | T4 | Destructive git / filesystem operations | 65 | 59 | 6 |
-| T5 | Supply-chain execution | 29 | 96 | 15 |
+| T5 | Supply-chain execution | 30 | 96 | 15 |
 | T6 | Environment poisoning | 60 | 42 | 7 |
 | T7 | Obfuscation and nested execution | 161 | 131 | 3 |
 | T8 | MCP tool poisoning / over-privileged tools | 36 | 4 | 13 |
@@ -623,6 +623,7 @@ the verdict and rule ids the default policy must produce for it.
 - `T5-curl-pipe-node-dash` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-perl-reads-stdin` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-ruby-reads-stdin` (attacks): Deny [pipe-to-shell]
+- `T5-curl-pipe-versioned-python-then-more` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-sh-s` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-source-stdin` (attacks): Deny [pipe-to-shell]
 - `T5-curl-pipe-dot-stdin` (attacks): Deny [pipe-to-shell]

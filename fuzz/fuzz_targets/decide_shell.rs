@@ -38,4 +38,20 @@ fuzz_target!(|data: &[u8]| {
         !decision.rules.is_empty(),
         "a decision without a rule: {decision:?}"
     );
+    // For a decided line, one more harmless command never makes it less
+    // strict: padding a line until a classifier limit stops it must not lower
+    // its verdict (strictness: deny > review > defer > allow). A line that
+    // was not decided (`unparseable`, an empty line) may become one.
+    if decision.rules.iter().any(|rule| rule == "unparseable") {
+        return;
+    }
+    let padded = compiled().decide(&Action::Shell {
+        command: format!("{command} ; true"),
+    });
+    assert!(
+        padded.verdict >= decision.verdict,
+        "appending `; true` lowered {:?} to {:?}",
+        decision.verdict,
+        padded.verdict
+    );
 });

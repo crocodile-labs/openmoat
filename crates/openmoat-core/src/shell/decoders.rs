@@ -18,6 +18,15 @@ const STDIN_INTERPRETERS: &[&str] = &[
     "python", "python2", "python3", "node", "perl", "ruby", "php", "deno", "bun", "pwsh",
 ];
 
+/// Whether `program` is a language runtime that runs a program read from
+/// stdin when given no script: one of [`STDIN_INTERPRETERS`] or any
+/// `python…` (`python2.7`, `python3.12`, `pythonw`), as the default policy's
+/// `python*` names them, so a version suffix does not drop the canonical
+/// pipeline atom once another command follows the pipeline.
+fn is_stdin_interpreter(program: &str) -> bool {
+    STDIN_INTERPRETERS.contains(&program) || program.starts_with("python")
+}
+
 /// Programs that only ever decode or decompress.
 const ALWAYS_DECODE: &[&str] = &[
     "uudecode", "gunzip", "zcat", "gzcat", "bunzip2", "bzcat", "unxz", "xzcat", "unzstd",
@@ -127,9 +136,7 @@ pub(super) fn stdin_interpreter<'a>(stage: &[&'a str]) -> Option<&'a str> {
         let owned: Vec<String> = stage.iter().map(|w| (*w).to_owned()).collect();
         let rest = super::commands::wrapped_command(&owned, program)?;
         let inner = basename(stage[stage.len() - rest.len()]);
-        let interpreter = SHELLS.contains(&inner)
-            || STDIN_INTERPRETERS.contains(&inner)
-            || inner.starts_with("python3.");
+        let interpreter = SHELLS.contains(&inner) || is_stdin_interpreter(inner);
         return interpreter.then_some(inner);
     }
     if SHELLS.contains(&program) {
@@ -138,7 +145,7 @@ pub(super) fn stdin_interpreter<'a>(stage: &[&'a str]) -> Option<&'a str> {
         let run = invocation::parse(program, stage).ok()?;
         return run.reads_stdin.then_some(program);
     }
-    if !STDIN_INTERPRETERS.contains(&program) && !program.starts_with("python3.") {
+    if !is_stdin_interpreter(program) {
         return None;
     }
     let inline: &[&str] = INLINE_INTERPRETERS
@@ -193,6 +200,7 @@ mod tests {
             &["python3", "-"],
             &["python3", "-I"],
             &["python3.12"],
+            &["python2.7"],
             &["node"],
             &["node", "-"],
             &["perl"],
