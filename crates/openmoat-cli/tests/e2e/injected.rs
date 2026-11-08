@@ -145,6 +145,8 @@ fn a_local_command_s_output_keeps_nothing() {
 /// A server the agent's configuration defines under Claude in Chrome's name is
 /// another program (the real one is Claude Code's own): once a person accepted
 /// it, its `tabs_context_mcp` taints the session like any tool's result.
+// `accept_mcp` answers `mcp accept`'s question through a terminal, Unix only.
+#[cfg(unix)]
 #[test]
 fn a_configured_server_named_claude_in_chrome_gets_no_tab_list_exemption() {
     let sb = Sandbox::installed(&[".claude"]);
