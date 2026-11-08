@@ -301,7 +301,6 @@ fn compare(
     // Gap markers on steps that pass: the bench's own bookkeeping, not the policy's.
     let mut stale = Vec::new();
     let mut steps = Vec::new();
-    let mut held = false;
     // `openmoat init --yes` in the throwaway home put the host's OS sandbox in
     // place wherever OpenMoat has one on this OS; another hook has none.
     let sandboxed = markers
@@ -349,8 +348,12 @@ fn compare(
             expects_review: expect == Verdict::Review,
             ok,
             gap: gap.is_some(),
+            sandbox: if sandboxed && step.sandboxed.is_some() && ok {
+                score::Sandbox::Expected
+            } else {
+                score::Sandbox::NotExpected
+            },
         });
-        held |= sandboxed && step.sandboxed.is_some() && ok;
     }
     // A known gap is a policy that does not hold, whatever its marker says.
     let policy: Vec<String> = problems.iter().chain(&known).cloned().collect();
@@ -367,7 +370,6 @@ fn compare(
     Run {
         steps,
         outcome,
-        held,
         policy,
         hook,
     }

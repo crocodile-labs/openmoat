@@ -17,7 +17,8 @@
 //! it names, any other as a host): a host also reads resources for the person,
 //! with no hook. `prompts/get` and the server's own requests are recorded.
 //!
-//! The result of each `tools/call` passed on a hook decision has its pieces
+//! The answer to each `tools/call` passed on a hook decision, a result or an
+//! error (whose `message` and `data` the model reads too), has its pieces
 //! kept under that decision's session (`mcp/flow.rs`, ADR-058), so the hook
 //! can tell when a later call carries them to another server, and the
 //! fingerprints of what it names kept as injected input (ADR-057), so a later
@@ -59,6 +60,17 @@ pub struct Gateway {
     cwd: PathBuf,
     /// The session of rows no hook decision names.
     session: String,
+    /// The agent whose configuration starts the server (`--host`): only its
+    /// hook decisions let a call through. `None` for a definition wrapped
+    /// before the proxy took `--host`, which takes any agent's.
+    host: Option<Host>,
+    /// The host and session of the last hook decision a call passed on: a
+    /// host starts a stdio server for one session, so a decision of that
+    /// session is taken before another's with the same arguments.
+    served: Mutex<Option<(String, String)>>,
+    /// What the server sent outside its tool results, and the sessions that
+    /// have it (`surface.rs`, ADR-069).
+    sent: Mutex<surface::Sent>,
     /// The host and session of each tool call passed on and not answered
     /// yet, by request id: where its result's pieces go (ADR-058).
     awaiting: Mutex<HashMap<String, Awaiting>>,
@@ -92,7 +104,7 @@ struct Outcome {
 }
 
 impl Gateway {
-    pub fn new(home: Home, server: &str) -> Result<Self> {
+    pub fn new(home: Home, server: &str, host: Option<Host>) -> Result<Self> {
         Ok(Self {
             home,
             server: server.to_owned(),
@@ -102,6 +114,9 @@ impl Gateway {
                 std::process::id(),
                 crate::time::now_ms()
             ),
+            host,
+            served: Mutex::new(None),
+            sent: Mutex::default(),
             awaiting: Mutex::new(HashMap::new()),
         })
     }
@@ -188,16 +203,40 @@ impl Gateway {
         })
     }
 
-    /// The hook's decision for `call`, taken so it lets no second call through.
+    /// The hook's decision for `call`, taken so it lets no second call
+    /// through: one of the agent the proxy serves (`--host`) that names this
+    /// server's tool, of the session the proxy served last when one of its
+    /// decisions matches. Two sessions that send the same call each take
+    /// their own decision, so each result's pieces and fingerprints go to the
+    /// session that asked for it.
     fn take_ticket(&self, store: &Store, call: &Call<'_>) -> Result<Option<Ticket>> {
         let arguments = openmoat_hosts::mcp_call_arguments(call.arguments);
         let digest = integrity::sha256_hex(arguments.as_bytes());
         let (server, tool) = (self.server.as_str(), call.name);
-        Ok(store.take_mcp_ticket(&digest, |t| {
-            t.host
-                .parse::<Host>()
-                .is_ok_and(|host| names_tool(host, &t.tool, server, tool))
-        })?)
+        let ours = |t: &Ticket| {
+            t.host.parse::<Host>().is_ok_and(|host| {
+                self.host.is_none_or(|own| own == host) && names_tool(host, &t.tool, server, tool)
+            })
+        };
+        let last = self
+            .served
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let mut taken = None;
+        if let Some((host, session)) = &last {
+            taken = store.take_mcp_ticket(&digest, |t| {
+                ours(t) && &t.host == host && &t.session_id == session
+            })?;
+        }
+        if taken.is_none() {
+            taken = store.take_mcp_ticket(&digest, ours)?;
+        }
+        if let Some(ticket) = &taken {
+            *self.served.lock().unwrap_or_else(PoisonError::into_inner) =
+                Some((ticket.host.clone(), ticket.session_id.clone()));
+        }
+        Ok(taken)
     }
 
     /// The policy's decision for `action` in `cwd` (the server's own when
@@ -316,6 +355,11 @@ impl Gate for Gateway {
             Verdict::Deny => Some(refusal(&outcome.decision)),
             _ => None,
         };
+        if let (Some(ticket), None) = (&outcome.ticket, &refused) {
+            // The session's model read the server's instructions before this
+            // call: they are its untrusted content before the result is.
+            self.credit(ticket, outcome.cwd.as_deref())?;
+        }
         let awaits = match (&outcome.ticket, call.request, &refused) {
             (Some(ticket), Some(request), None) => Some((
                 request,
@@ -332,10 +376,11 @@ impl Gate for Gateway {
         Ok(refused)
     }
 
-    /// Keep the pieces of a passed tool call's result (ADR-058) and the
-    /// fingerprints of what it names (ADR-057) under the session the hook's
-    /// decision named; a response to anything else is not a tool result of a
-    /// session and is let through as it is.
+    /// Keep the pieces of a passed tool call's answer, its result or its error
+    /// object (ADR-058), and the fingerprints of what it names (ADR-057) under
+    /// the session the hook's decision named; the call no longer awaits an
+    /// answer either way. A response to anything else is not a tool result of
+    /// a session and is let through as it is.
     fn result(&self, request: &str, result: &Value) -> Result<()> {
         let awaiting = self
             .awaiting
@@ -346,37 +391,46 @@ impl Gate for Gateway {
             return Ok(());
         };
         let store = self.store()?.with_secrets(self.known());
-        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(result));
-        if !pieces.is_empty() {
-            store
-                .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
-                .context("recording what the tool's result held")?;
-        }
-        self.injected(&store, &awaiting, result)
+        self.keep(&store, &awaiting, result)
     }
 
-    fn server_request(&self, method: &str) -> Result<()> {
-        let store = self.store()?.with_secrets(self.known());
+    fn instructions(&self, text: &str) {
+        self.keep_instructions(text);
+    }
+
+    fn server_request(&self, method: &str, params: Option<&Value>) -> Result<()> {
         let decision = Decision::single(
             Verdict::Allow,
             SERVER_REQUEST_RULE,
             format!("MCP server `{}` asked the agent: {method}", self.server),
         );
-        store.record(&NewEvent {
-            host: AUDIT_HOST,
-            session_id: &self.session,
-            call_id: None,
-            cwd: None,
-            tool: method,
-            action: None,
-            decision: &decision,
-            latency_us: 0,
-        })?;
-        Ok(())
+        self.record_request(method, &decision)?;
+        // What the host puts before the model or the person is the server's
+        // text, untrusted as a result is.
+        let text = params.map(crate::mcp::flow::value_text).unwrap_or_default();
+        self.server_text(method, &text)
+    }
+
+    fn server_refused(&self, method: &str, why: &str) -> Result<()> {
+        let decision = Decision::single(Verdict::Deny, SERVER_REQUEST_RULE, why);
+        self.record_request(method, &decision)
     }
 }
 
 impl Gateway {
+    /// Keep what `value`, untrusted content the server sent for `awaiting`'s
+    /// session, holds: its pieces for the cross-server flow check (ADR-058)
+    /// and the fingerprints of what it names (ADR-057).
+    fn keep(&self, store: &Store, awaiting: &Awaiting, value: &Value) -> Result<()> {
+        let pieces = crate::mcp::flow::hashed(crate::mcp::flow::value_pieces(value));
+        if !pieces.is_empty() {
+            store
+                .add_mcp_flow(&awaiting.host, &awaiting.session, &self.server, &pieces)
+                .context("recording what the tool's result held")?;
+        }
+        self.injected(store, awaiting, value)
+    }
+
     /// Keep the injected-input fingerprints of a passed call's result, as the
     /// hook keeps those of a host's `PostToolUse` (`taint::injected`), with
     /// the policy of the directory the hook decided the call in. Under a
@@ -424,6 +478,8 @@ fn refusal(decision: &Decision) -> String {
     let reasons = decision.reasons.join("; ");
     format!("OpenMoat refused this call [{rules}]: {reasons}")
 }
+
+mod surface;
 
 #[cfg(test)]
 mod tests;

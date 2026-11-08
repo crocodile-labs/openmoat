@@ -30,6 +30,10 @@ impl SettingsReader for Reader {
         switched_off(file.root, file.base, file.hook_file, file.user_home)
     }
 
+    fn project_switched_off(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        project_off(file.root, file.base, file.hook_file, file.user_home)
+    }
+
     fn hook_dir_effect(&self) -> &'static str {
         "is an extension pi loads with the agent's rights"
     }
@@ -75,15 +79,7 @@ fn findings(
     home: Option<&Path>,
 ) -> Vec<String> {
     let entries = entries(root);
-    let mut found: Vec<String> = entries
-        .iter()
-        .filter(|e| match (e.strip_prefix('!'), e.strip_prefix('-')) {
-            (Some(glob), _) => glob_names(glob, base, extension, home),
-            (_, Some(exact)) => exact_names(exact, base, extension, home),
-            _ => false,
-        })
-        .map(|e| off(e))
-        .collect();
+    let mut found = project_off(root, base, extension, home);
     if entries
         .iter()
         .any(|e| !e.starts_with(['!', '+', '-']) && !e.starts_with("builtin:"))
@@ -97,6 +93,27 @@ fn findings(
         );
     }
     found
+}
+
+/// The entries of a trusted project's `.pi/settings.json` `root` (base
+/// `base`) that exclude OpenMoat's extension at `extension`. A project's
+/// entries are resolved before the person's, so one that names the extension
+/// turns it off whatever a `+` entry says.
+fn project_off(
+    root: &Map<String, Value>,
+    base: &Path,
+    extension: &Path,
+    home: Option<&Path>,
+) -> Vec<String> {
+    entries(root)
+        .iter()
+        .filter(|e| match (e.strip_prefix('!'), e.strip_prefix('-')) {
+            (Some(glob), _) => glob_names(glob, base, extension, home),
+            (_, Some(exact)) => exact_names(exact, base, extension, home),
+            _ => false,
+        })
+        .map(|e| off(e))
+        .collect()
 }
 
 fn off(entry: &str) -> String {

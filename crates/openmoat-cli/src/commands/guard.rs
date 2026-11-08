@@ -96,7 +96,9 @@ fn fault_point(_: &str) {}
 /// `openmoat run` the sandbox holds no state directory: the report is skipped,
 /// and the run's decisions for the host show the plugin loaded instead.
 fn heartbeat(host: Host) -> Code {
-    if guard_relay::configured(&|var| std::env::var(var).ok()).is_some() {
+    let home = Home::locate().ok();
+    let env = |var: &str| std::env::var(var).ok();
+    if let guard_relay::Relay::Inside(_) = guard_relay::relay(&env, home.as_ref()) {
         return Code::Ok;
     }
     match Home::locate().and_then(|home| crate::heartbeat::report(&home, host, time::now_ms())) {
@@ -193,10 +195,15 @@ fn answer_once(host: Host, answer: &Answer<'_>, decision: &Decision) -> Option<C
 /// for the deny [`run`] answers with if this panics.
 fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) -> Code {
     let started = Instant::now();
-    // Inside `moat run` the sandbox holds no OpenMoat home: the run decides (ADR-028).
-    if let Some(endpoint) = guard_relay::configured(&|var| std::env::var(var).ok()) {
-        return relayed(installed_for, endpoint, started);
-    }
+    // Inside `moat run` the sandbox holds no OpenMoat home: the run decides
+    // (ADR-028). Only there: a guard that can open its lock, or that no sandbox
+    // of `openmoat run` holds, decides itself whatever its environment says.
+    let env = |var: &str| std::env::var(var).ok();
+    let stray_relay = match guard_relay::relay(&env, Home::locate().ok().as_ref()) {
+        guard_relay::Relay::Inside(endpoint) => return relayed(installed_for, endpoint, started),
+        guard_relay::Relay::Outside => true,
+        guard_relay::Relay::Unset => false,
+    };
 
     // The event is read separately so a payload that cannot be parsed is still
     // refused in the format its hook expects.
@@ -249,6 +256,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         known: out.known,
         cache: out.cache,
         provenance: out.provenance,
+        relayed: by_run,
     };
     if let Err(error) = record(host, recorded) {
         decision = kernel_error(&error.context("audit log unavailable"));
@@ -256,6 +264,10 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
         && let Err(error) = pending.write()
     {
         decision = kernel_error(&error.context("writing the session's environment file"));
+    }
+    if stray_relay {
+        // A note beside the call's row; the call stays as decided.
+        record::relay_outside(host, request.as_ref());
     }
 
     hangs::enter(Phase::Answer);
@@ -434,6 +446,9 @@ fn evaluate(
         binary: &verified.lock.binary,
     };
     let decision = compiled.decide_with(action, &programs, &FsPathResolver);
+    // A write that leaves a project settings file turning its host's hook off;
+    // only tightens, and before the grant, which cannot lift a deny.
+    let decision = crate::project_settings::written::checked(&home, &request, &ctx, decision);
     hangs::enter(Phase::Taint);
     let store = home.open_audit()?;
     // A part of the call that came from untrusted output the session read

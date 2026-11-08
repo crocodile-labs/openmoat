@@ -29,6 +29,8 @@ pub(super) enum Outcome {
     Reply(Value),
     /// Nowhere: a refused notification, which gets no answer.
     Drop,
+    /// Nowhere, and why, for the proxy's standard error.
+    Dropped(String),
 }
 
 impl Relay {
@@ -44,8 +46,18 @@ impl Relay {
         let id = fields.get("id");
         match (fields.get("method"), answers, id) {
             (Some(Value::String(method)), false, _) => self.request(method, fields, id, &message),
-            // The host's answer to a request the server sent it.
-            (None, true, Some(_)) => Outcome::Forward(message),
+            // The host's answer to a request the server sent it, and to no
+            // other: a server must not get an answer it never asked for.
+            (None, true, Some(id)) => {
+                if self.state().asked.remove(&id_key(id)) {
+                    Outcome::Forward(message)
+                } else {
+                    Outcome::Dropped(format!(
+                        "dropped an answer from the host with id {id}, which answers no \
+                         request the server is waiting for"
+                    ))
+                }
+            }
             (_, _, Some(id)) => Outcome::Reply(error(
                 id,
                 INVALID_REQUEST,
@@ -91,11 +103,12 @@ impl Relay {
             "prompts/get" => {
                 let name = params.and_then(|p| p.get("name")).and_then(Value::as_str);
                 let arguments = params.and_then(|p| p.get("arguments"));
+                let held = self.prompt_refusal(name.unwrap_or(""));
                 self.gated(
                     Method::Prompt,
                     name.unwrap_or(""),
                     (arguments, request),
-                    None,
+                    held,
                 )
             }
             "notifications/cancelled" => {
@@ -109,7 +122,12 @@ impl Relay {
         };
         match (refused, id) {
             (None, Some(id)) => {
-                self.state().pending.insert(id_key(id));
+                let mut state = self.state();
+                if method == "initialize" {
+                    // Its answer carries the instructions the pins check.
+                    state.initialize = Some(id_key(id));
+                }
+                state.pending.insert(id_key(id));
                 Outcome::Forward(message.clone())
             }
             (None, None) => Outcome::Forward(message.clone()),

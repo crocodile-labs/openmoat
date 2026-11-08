@@ -7,7 +7,9 @@ use serde_json::{Value, json};
 use super::*;
 
 mod gaps;
+mod requests;
 mod results;
+mod surface;
 
 /// One call the gate saw: its method, name, arguments, and why the pins held it.
 #[derive(Debug, Clone, PartialEq)]
@@ -51,7 +53,7 @@ impl Gate for Log {
         Ok(None)
     }
 
-    fn server_request(&self, method: &str) -> Result<()> {
+    fn server_request(&self, method: &str, _: Option<&Value>) -> Result<()> {
         self.requests.lock().unwrap().push(method.to_owned());
         Ok(())
     }
@@ -64,7 +66,7 @@ impl Gate for Failing {
         bail!("disk full")
     }
 
-    fn server_request(&self, _: &str) -> Result<()> {
+    fn server_request(&self, _: &str, _: Option<&Value>) -> Result<()> {
         bail!("disk full")
     }
 }
@@ -172,12 +174,30 @@ fn refused(routed: &[Routed]) -> (Value, i64, String) {
 fn first_session(listing: &[(&str, &str)]) -> ToolPins {
     let log = Log::default();
     let (relay, saved) = relay(None, &log);
+    // The server introduces itself and lists one prompt, as the relay
+    // fixtures' server does; all of it is held with the tools.
+    let ask = json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {}});
+    relay.host_line(&ask.to_string());
+    let answer = json!({"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": "2025-06-18",
+        "capabilities": {"tools": {"listChanged": true}},
+        "serverInfo": {"name": "docs", "version": "1"}}});
+    relay.server_line(&answer.to_string());
+    relay.host_line(&json!({"jsonrpc": "2.0", "id": "p", "method": "prompts/list"}).to_string());
+    let prompts = json!({"jsonrpc": "2.0", "id": "p", "result": {"prompts": [
+        {"name": "review", "description": "Review a pull request."}]}});
+    relay.server_line(&prompts.to_string());
     assert!(
         listed(&relay, 1, listing).is_empty(),
         "first sight hides every tool"
     );
     let mut pins = saved.lock().unwrap().pop().expect("first sight is saved");
     assert_eq!(pins.held.len(), listing.len());
+    assert_eq!(
+        pins.held_count(),
+        listing.len() + 2,
+        "{:?}",
+        pins.describe_held()
+    );
     pins.accept_held();
     pins
 }

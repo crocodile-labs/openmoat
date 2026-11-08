@@ -338,3 +338,39 @@ fn a_terminated_secret_goes_into_tunnel_requests_only() {
             .is_none()
     );
 }
+
+/// A plain-HTTP answer passes the same search as a terminated one: a value
+/// that comes back, whole or split between reads, closes the connection
+/// before it is sent and is reported once; any other answer is sent whole.
+#[test]
+fn a_plain_answer_is_stopped_before_a_value_it_echoes() {
+    use crate::tunnel::Answer as _;
+    let b = broker_with(VALUE, true).unwrap();
+    let answer = format!("HTTP/1.1 200 OK\r\n\r\nyou sent {VALUE} to us");
+    for cut in 0..answer.len() {
+        let mut leaked = Vec::new();
+        let mut echo = super::Echo::new(&b, |id: &str| leaked.push(id.to_owned()));
+        let mut sent = Vec::new();
+        let mut stopped = false;
+        for part in [&answer.as_bytes()[..cut], &answer.as_bytes()[cut..]] {
+            let Some(out) = echo.pass(part) else {
+                stopped = true;
+                break;
+            };
+            sent.extend_from_slice(&out);
+        }
+        if !stopped {
+            sent.extend_from_slice(&echo.end());
+        }
+        drop(echo);
+        assert!(stopped, "cut {cut}");
+        assert_eq!(leaked, ["gh"], "cut {cut}");
+        let sent = String::from_utf8_lossy(&sent);
+        assert!(!sent.contains(VALUE), "cut {cut}: {sent}");
+    }
+    let benign = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    let mut echo = super::Echo::new(&b, |_: &str| panic!("nothing leaked"));
+    let mut sent = echo.pass(benign.as_bytes()).unwrap().to_vec();
+    sent.extend_from_slice(&echo.end());
+    assert_eq!(sent, benign.as_bytes());
+}

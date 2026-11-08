@@ -122,9 +122,11 @@ fn a_tunnel_needs_its_sessions_credential() {
     let forwarded = h.received.recv_timeout(WAIT).unwrap();
     assert_eq!(forwarded, client_hello("allowed.test"));
     let rows = h.rows();
-    assert_eq!(rows.len(), 3);
-    assert!(rows[..2].iter().all(|r| r.rules == ["proxy-session"]));
-    assert_eq!(rows[2].rules, ["test-hosts"]);
+    // The second 407, within 10 s of the first, is counted in a later row
+    // rather than written as one of its own.
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].rules, ["proxy-session"]);
+    assert_eq!(rows[1].rules, ["test-hosts"]);
 }
 
 #[test]

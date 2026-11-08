@@ -52,6 +52,14 @@ pub trait SettingsReader: Sync + fmt::Debug {
     /// What the person's own file sets that turns OpenMoat's hook off.
     fn switched_off(&self, file: &SettingsFile<'_>) -> Vec<String>;
 
+    /// What a project's file sets that turns OpenMoat's hook off: the part of
+    /// [`Self::findings`] the guard denies a write for, where the rest of
+    /// them only warn. The same as [`Self::switched_off`] unless the host
+    /// reads a project's entries apart from the person's (pi).
+    fn project_switched_off(&self, file: &SettingsFile<'_>) -> Vec<String> {
+        self.switched_off(file)
+    }
+
     /// What a file in the project's hook directory
     /// ([`crate::ProjectSettingsSpec::hook_dir`]) does, for its warning.
     fn hook_dir_effect(&self) -> &'static str {

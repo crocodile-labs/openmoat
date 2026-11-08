@@ -217,3 +217,74 @@ fn a_secret_split_between_the_head_read_and_the_body_is_caught() {
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[1].rules, ["proxy-secret"]);
 }
+
+/// An upstream that answers each request with the request itself as the
+/// body, as a debugging endpoint or an error page quoting a header does.
+fn echo_upstream() -> (SocketAddr, Receiver<Vec<u8>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            stream
+                .set_read_timeout(Some(Duration::from_millis(500)))
+                .unwrap();
+            let mut buf = vec![0; 65536];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            buf.truncate(n);
+            let _ = tx.send(buf.clone());
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                buf.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            // In two writes, so the value may be split between reads.
+            let (a, b) = buf.split_at(buf.len() / 2);
+            let _ = stream.write_all(a);
+            thread::sleep(Duration::from_millis(20));
+            let _ = stream.write_all(b);
+        }
+    });
+    (addr, rx)
+}
+
+/// Attack: the owner host of a `plain_http` secret echoes the request. The
+/// value the proxy put in comes back in the answer, which is stopped before
+/// the value reaches the client, and a `proxy-secret` row is written, as for
+/// a terminated tunnel's answer.
+#[test]
+fn a_plain_http_answer_that_echoes_the_value_is_stopped() {
+    let h = brokered_to(echo_upstream(), true);
+    let port = h.port();
+    let reply = h.exchange(&format!(
+        "GET http://owner.test:{port}/ HTTP/1.1\r\nX-Api-Key: {PLACEHOLDER}\r\n\r\n"
+    ));
+    let head = String::from_utf8(h.received.recv_timeout(WAIT).unwrap()).unwrap();
+    assert!(head.contains(VALUE), "the owner got the value: {head}");
+    assert!(!reply.contains(VALUE), "{reply}");
+    let rows = h.rows();
+    assert!(
+        rows.iter().any(|r| r.rules == ["proxy-secret"]
+            && r.reasons
+                .iter()
+                .any(|why| why.contains("holds the value of secret `svc`"))),
+        "{rows:?}"
+    );
+    for row in &rows {
+        assert!(!format!("{row:?}").contains(VALUE), "{row:?}");
+    }
+}
+
+/// An answer that does not hold the value reaches the client whole, the
+/// bytes held back to search included.
+#[test]
+fn a_plain_http_answer_without_the_value_reaches_the_client_whole() {
+    let h = brokered_to(upstream(), true);
+    let port = h.port();
+    let reply = h.exchange(&format!(
+        "GET http://owner.test:{port}/ HTTP/1.1\r\nX-Api-Key: {PLACEHOLDER}\r\n\r\n"
+    ));
+    assert!(reply.as_bytes().ends_with(UPSTREAM_REPLY), "{reply}");
+    assert!(h.rows().iter().all(|r| r.rules == ["test-hosts"]));
+}

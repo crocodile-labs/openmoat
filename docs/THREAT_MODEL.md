@@ -58,7 +58,7 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 | T5 | Supply-chain execution (`curl … \| sh`, unknown installs, typo-squats, made-up package names, fresh malicious versions) | `pipe-to-shell` denies downloads and decoded streams piped into a shell or interpreter, and `eval`; an install of a name one typo or a common trick away from a popular package needs review (`package-near-miss`, ADR-030), other installs are left to the agent's own prompt (ADR-025), and the OS sandbox confines install scripts; a container run that is handed the host (`--privileged`, a host namespace, `--cap-add`, `--device`, the host's root or the Docker socket mounted in) needs review (`container-host`); package-manager and build configuration that runs code or swaps the registry (`.npmrc`, `.yarnrc.yml`, `.cargo/config.toml`, `bunfig.toml`, pip's and uv's user configuration) needs review (`runs-later`, `persistence`) | Network only to allowed hosts (the registries); inside `openmoat run`, npm and uv install no version published in the last 7 days (`sandbox.package_min_release_age_days`) |
 | T6 | Environment poisoning (`PATH`, `LD_PRELOAD`, planted binaries) | `env-poison` denies setting dangerous variables; executable pins deny a program that resolves somewhere else than recorded (ADR-008); `git --git-dir=…` and git config that runs a program (`git -c`, `git config`) need review (`git-internals`), setting `GIT_CONFIG_*` is denied (`env-poison`), and under `openmoat run`, Claude Code and Codex git opens a bare repository only when named (`safe.bareRepository=explicit`); writing a shell's startup files (bash, zsh, fish, csh, ksh, their login files and drop-in folders) is denied (`shell-rc`), and writing into a folder on `PATH` (`~/.local/bin`, `~/bin`, `~/.cargo/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, a shim named after `git`) or what every Python start runs (a site directory's `.pth`, `sitecustomize.py`, `usercustomize.py`), a virtual environment's interpreter (`.venv/bin/`, `venv/bin/`) or a dev container's configuration (`.devcontainer/`, `.devcontainer.json`, whose `initializeCommand` runs on this machine) needs review (`persistence`, `runs-later`) | Writes outside the project (shell startup files) never reach the disk, as for T4; in-project `.git/hooks` and `.envrc` refused except the gaps in [EVIDENCE.md](EVIDENCE.md); *planned:* a scrubbed environment, as for T3 |
 | T7 | Obfuscation and nested execution (`bash -c`, `eval`, `$( … )`, here-documents, decoders) | Recursive classification to depth 4; decoder pipelines are canonicalised; anything unclear is `unparseable`, never `allow` (it defers under the default policy and needs review under a `review` catch-all, ADR-025), while the parts around it are still decided, so a deny among them stands; a line not read in full or past a classifier limit needs review, so padding cannot turn a deny into a defer | The sandbox bounds what any spelling can reach |
-| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms, a `file:` URL a read of its path, and a URL that names no network address (`javascript:`, `data:`, `chrome:`) needs review; a browser call that only opens a page is a `fetch` (ADR-047), and the page it opens is untrusted content, so later writes to files that run later need review (`session-taint`); unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `openmoat mcp accept` (ADR-026) | Opt-in, per stdio server: `openmoat mcp proxy`, the gateway (ADR-045), pins each tool's title, description, input and output schemas, annotations (`readOnlyHint`, `destructiveHint`) and every other field it lists, hides a changed or new tool (every tool of a server it has not seen, ADR-032) until `openmoat mcp accept`, and reads the tools again itself when the server says they changed; it passes on only messages it read, written again by itself, and only responses to requests the host sent; a `tools/call` reaches the server only when the policy does not deny it as the server receives it (its arguments' paths and URLs) and a hook decision for exactly that call lets it through, once, which ties the call to its session; `resources/read` is decided on its URI; with `--sandbox` the server runs under `openmoat run`; the gateway keeps hashed pieces of each result (addresses, email addresses, long tokens, runs of eight words), and a later call that carries one into another server's tool that writes or sends needs review (`mcp-cross-server`, ADR-058), unless the tool's pinned annotations say it only reads or `mcp.flow_trusted` lists either server |
+| T8 | MCP tool poisoning, over-privileged MCP tools | `mcp` rules on tool names; path and URL arguments become `fs.*` and `net` atoms, a `file:` URL a read of its path, and a URL that names no network address (`javascript:`, `data:`, `chrome:`) needs review; a browser call that only opens a page is a `fetch` (ADR-047), and the page it opens is untrusted content, so later writes to files that run later need review (`session-taint`); unreadable arguments deny; arguments nested deeper than 8 levels are `unparseable` (deferred under the default policy); the lock pins each server definition the agents read (user and project files), and a changed or new server's tool calls are denied (`mcp-server-changed`) until a person runs `openmoat mcp accept` (ADR-026) | Opt-in, per stdio server: `openmoat mcp proxy`, the gateway (ADR-045), pins each tool's title, description, input and output schemas, annotations (`readOnlyHint`, `destructiveHint`) and every other field it lists, and the server's `initialize` instructions and server information and its prompt and resource listings (ADR-069), hides a changed or new tool (every tool of a server it has not seen, ADR-032) until `openmoat mcp accept`, and reads the tools again itself when the server says they changed; it passes on only messages it read, written again by itself, and only responses to requests the host sent; a `tools/call` reaches the server only when the policy does not deny it as the server receives it (its arguments' paths and URLs) and a hook decision for exactly that call lets it through, once, which ties the call to its session; `resources/read` is decided on its URI; with `--sandbox` the server runs under `openmoat run`; the gateway keeps hashed pieces of each result (addresses, email addresses, long tokens, runs of eight words), and a later call that carries one into another server's tool that writes or sends needs review (`mcp-cross-server`, ADR-058), unless the tool's pinned annotations say it only reads or `mcp.flow_trusted` lists either server |
 | T9 | Hook and policy tampering by the agent | `kernel-self` denies writes to state, host directories (also where `MOAT_HOME` or the agents' directory variables in [INSTALL.md](INSTALL.md#non-default-config-directories) moved them, as recorded in `hosts.json`; goose's plugin directory under `GOOSE_PATH_ROOT` is pinned by the lock but not named in the default policy), hook files (Gemini CLI's user and project `settings.json` and its `trustedFolders.json` too, Hermes Agent's `config.yaml` and `shell-hooks-allowlist.json`, Cline's `hooks` directories and plugins, goose's `config.yaml`, plugin settings and `.agents/plugins` directories), and agent runs of `openmoat allow\\|doctor\\|edit\\|init\\|policy\\|secret\\|trust\\|uninstall`, `openmoat sandbox sync`, `openmoat proxy install\\|uninstall`, `openmoat proxy ca init`, `openmoat mcp accept\\|wrap\\|unwrap`, `openmoat audit anchor`, `openmoat provenance --write-notes` and `openmoat serve`, whose link reads the audit log while it listens (ADR-066; it also refuses to start when an agent is among its parent processes, and answers only requests that carry the run's token and name it as `127.0.0.1`, `localhost` or `[::1]`) (the read-only `--help`, `--version`, `policy lint`, `policy check` and `demo` are allowed, `openmoat-readonly`), and reads of the audit log, the lock, `hosts.json`, the approvals, the trust records and the MCP pins (the policy stays readable); a policy pack is installed only when its OpenSSH signature verifies against a key a person trusted, and is pinned (ADR-031); the lock denies everything after drift, except drift of only Claude Code's own display toggles and permission lists, or of Gemini CLI's model, theme, sign-in method and display keys, which is recorded and reported while the hook keeps deciding every call (§5); Claude Code `ConfigChange` blocks a drifted settings file, and a project settings file that turns hooks off or runs a program (§5); a repository policy adds only deny and review rules unless a person trusted that exact file in that checkout, a repository review rule never weakens what the user policy alone decides for an action (a host the `net: deny` default refuses stays denied; found by the `repo_policy_merge` fuzz target), and one that does not parse or sets `defaults`, `executables` or `sandbox` denies every call in the project (ADR-022); a database shell (`sqlite3`, `duckdb`) opening the audit log is a write, so `kernel-self` denies it; an agent's writes to the provenance notes ref (`git notes … openmoat`, `git update-ref … notes/openmoat`, `update-ref --stdin`) need review (`provenance-notes`), and `openmoat provenance --verify` checks a note's cited events, head and claims against the log, so a forged or edited note does not verify (ADR-056); `managed-settings` denies writes to the agents' system-wide settings (Claude Code's managed settings folder, Gemini CLI's system settings, Codex's `/etc/codex`), which outrank the user's and can turn every hook off, as the hook sees them (`hook_only`; the sandboxes grant no write there) | Under Claude Code's and Codex's sandboxes, commands cannot change `~/.moat`, the agents' settings and hook files in the home, or those in the project root (`.claude/settings*.json`, `.cursor/hooks.json`, `.cursor/sandbox.json`, `.codex/hooks.json`, `.moat`). On Linux the same files in a project subdirectory stay writable (`claude-code.linux-write-globs`, `codex.linux-write-globs` in `openmoat sandbox show`), and Cursor's sandbox cannot deny inside the workspace (§5); the state read denies hold in Seatbelt (`openmoat run` on macOS) and the host sandboxes that take them; Landlock cannot deny inside a grant, so on Linux `openmoat run` refuses to start where a grant holds the state directory (§5) |
 | T10 | Hook supply chain (a trojaned hook binary) | Hooks are exec-form with an absolute, stable path (ADR-016); `kernel-self` denies writes to any `bin/openmoat` or `bin/moat` and to the recorded binary, its other name beside it (`moat` runs the `openmoat` next to it), its directory and its link target by literal path, which the host sandboxes and Claude Code's deny rules name too; `openmoat init` refuses a binary inside a project, a temp directory or a directory the sandboxes may write; `doctor` names a missing or different hook binary | Releases carry build provenance attestations |
 | T11 | Time of check vs. time of use, symlinks | Literal and resolved paths are both checked (ADR-009) | Sandbox path rules apply at use |
@@ -86,7 +86,10 @@ something OpenMoat claims to stop.
   request.**
   - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
     report what a call returned; the MCP gateway keeps what a wrapped server's tool
-    returned for every agent (ADR-063, proposed). On every other host a planted host,
+    returned for every agent (ADR-063, proposed), its result or its error answer (the
+    error's `message` and `data` reach the model too). Claude Code reports a tool call
+    that failed in `PostToolUseFailure`, which OpenMoat's hook does not handle yet: a
+    failed host tool's (or an unwrapped MCP tool's) error text is not read. On every other host a planted host,
     path or command from a call that is not a wrapped MCP tool is not linked to the later
     call that uses it, and only session taint applies.
   - Linked beyond exact matches are only spellings of the same request (ADR-063 §4): a
@@ -131,7 +134,14 @@ something OpenMoat claims to stop.
   it whenever the agent's own hook let it, or the agent ran no hook. With it, every
   tool waits for a person's `openmoat mcp accept`, the first listing of a new server too
   (ADR-032), and a call passes only on the hook's decision for that exact call (ADR-045);
-  but prompts, resources, tool results and remote (HTTP) servers are not
+  the server's `initialize` instructions and server information, and its prompt, resource
+  and resource-template listings, are pinned and held the same way (ADR-069); accepted
+  instructions are kept as untrusted content only for the sessions that call one of the
+  server's tools (the proxy learns a session only from a call), and so is the text of
+  the server's requests to the host (a sampling request that asks for the session's
+  context is refused); which session a sampling request is about is the proxy's guess
+  (the one it served last), and a prompt's or
+  resource's content, tool results and remote (HTTP) servers are not
   pinned, a `review` is honoured as the agent reports it (an agent that sent a call after the
   person refused it would find the decision unused), and a server can still behave
   differently from what its accepted description says. `mcp: { trust_first_sight: true }` in the policy brings back pinning a new
@@ -197,7 +207,9 @@ something OpenMoat claims to stop.
   are not checked; nor are `npx`, `uvx`, `pnpm dlx` and `bunx`, which download and run
   a package. The release age `openmoat run` asks for (`sandbox.package_min_release_age_days`)
   reaches only npm (`npm_config_before`) and uv (`UV_EXCLUDE_NEWER`), not pip, pnpm,
-  Yarn or Bun, nothing outside `openmoat run`, and not uv in a project with a `uv.lock`;
+  Yarn or Bun, nothing outside `openmoat run`, and not uv in a project with a `uv.lock`
+  (`openmoat run` says so when it starts); a project's own `.npmrc` or `pyproject.toml`
+  can make the cut-off stricter, not switch it off;
   it delays a malicious version rather than detecting it, and a program that resets
   the variables escapes it.
 
@@ -343,8 +355,10 @@ something OpenMoat claims to stop.
 
     back on either (on macOS not created or removed either); a nested one, such as a
     package's `.github` in `node_modules`, can. On Linux, an agent's hook settings
-    existing directly in the project (`.claude/settings.json` and the like) are
-    read-only in the network namespace too. CI files and commit-hook managers' files
+    directly in the project (`.claude/settings.json` and the like) are read-only in the
+    network namespace and under `--isolate` too; a missing one is created for the session
+    as a read-only `{}`, so a command cannot create one that turns the next session's hook
+    off. Without a namespace a command can, and `openmoat run` names it when the agent exits. CI files and commit-hook managers' files
     stay writable on both (installs write them); the hook holds the agent's tools'
     writes to one for review. On Linux an agent configuration file missing when the run starts
     (`.mcp.json`, `.claude/hooks/`) can still be created by a command.
@@ -549,7 +563,12 @@ something OpenMoat claims to stop.
   (ADR-044): the session id, an expiry 24 hours after issue and an HMAC-SHA-256 under
   `~/.moat/proxy.key`, which `kernel-self` keeps every agent and sandboxed command from
   reading. A credential names one session, cannot be edited into another or stretched,
-  and is refused once it expires; replacing the key revokes them all. A sandboxed
+  and is refused once it expires; replacing the key revokes them all. A key others may
+  read (any group or other bit) or replace (a folder others may write) is refused, not
+  used, by `openmoat proxy`, the guard and `openmoat run`, and `doctor` names it: a backup
+  restored with other modes, or a state directory on a shared disk, may already have
+  handed it to another user. A key loaded before its mode changed stays in use by a
+  running proxy until the key file itself changes. A sandboxed
   command cannot issue one itself by running the hook: it can read neither the key nor
   the audit log the issue must be recorded in first. What it does not stop: Claude Code keeps the credential in the session's environment file
   (`CLAUDE_ENV_FILE`, under `~/.claude/session-env/`) and runs that file's lines before
@@ -571,14 +590,28 @@ something OpenMoat claims to stop.
     disk, compared in constant time. A wrong one is recorded (`run-guard-token`) and
     gets no decision. As with the proxy credential, every process in the sandbox holds
     it and a same-user process that can read the agent's environment could take it.
-    That is enough because what the token buys is small: a real decision on a payload
-    the asker chose, recorded as such. Any process outside `openmoat run` gets the same by
-    running `openmoat guard` itself; an agent's own shell tool cannot, since `kernel-self`
-    denies `guard` and `mcp proxy` (only a host runs them, as its hook, from its plugin or
-    as an MCP server's command, where no hook sees it), so an agent cannot forge rows, MCP
-    tickets or a session's proxy credential that way. It cannot choose the verdict of a row, change the
-    lock or the policy, read a secret source, or make taint looser: link rows only add
-    sessions to the run, and taint only tightens.
+    So the token does not tell the agent's hooks from any other code the sandbox runs:
+    `kernel-self` denies the agent's shell the `openmoat guard` command line, but a
+    script, a test runner or a package's install step can open the port and send a
+    payload of its choosing. What that buys is bounded (ADR-070):
+    - *Only the run's agent.* The service decides calls only for the host `openmoat run`
+      started (for a program OpenMoat does not know, the host of the first call), and
+      refuses any other with a deny and a `run-guard-host` row in the run's session.
+    - *Only the run's sessions.* A session joins the run when the audit log has never
+      seen it, or when the agent's own session start resumes one of its sessions.
+      A session that ran outside the run, another agent's session, or any `run-…`
+      session is refused (`run-guard-session`), and a run takes at most 64 sessions.
+      So code in the sandbox cannot add rows to a session outside the run.
+    - *No MCP tickets.* A relayed call leaves no ticket for `openmoat mcp proxy`. Inside
+      the run no gateway can read the audit log to take one (ADR-049), so a ticket
+      would only let a gateway outside the run pass a call no hook outside decided.
+    - *No proxy credential.* A relayed session start issues none: the run's own applies.
+
+    Within those bounds, code in the sandbox can still add rows to the run's own
+    sessions with payloads it chose, each decided by the policy as if the agent had made
+    the call. It cannot choose the verdict of a row, change the lock or the policy, read
+    a secret source, or make taint looser: link rows only add sessions to the run, and
+    taint only tightens.
   - *Nothing in the payload beyond what `openmoat guard` already trusts.* The payload,
     host, Continue flag and working directory are the hook's input, parsed and decided
     as outside `openmoat run`; each field has a size limit checked before it is read.
@@ -590,6 +623,20 @@ something OpenMoat claims to stop.
     own, which then answers that guard. That gains nothing: the command could skip the
     guard altogether, a forged answer leaves no audit row, and the hooks the host
     starts keep the host's environment.
+  - *The sandbox, for the relay itself (ADR-070).* The two variables alone do not make a
+    guard relay. A host that builds its hooks' environment from a file or setting
+    OpenMoat does not guard could hand them to a hook outside any run, and a listener
+    that repeats the nonce would answer every call. So the guard relays only when it
+    cannot open its own lock and the refusal is the run's sandbox's: `EPERM` from
+    Seatbelt on macOS, or, on Linux, a lock it cannot open while a seccomp filter holds
+    the process (`Seccomp: 2`, which `openmoat run` always applies and no process can
+    drop). Anywhere else it decides the call itself and records a `run-guard-outside`
+    row beside it. Not covered: the same hook environment can also set `MOAT_HOME`, which
+    picks the state directory, its policy and its lock; on Linux, inside another
+    seccomp sandbox (a container's default profile) such an environment can still
+    point `MOAT_HOME` at a directory it cannot open and get the relay. The agent's own
+    shell cannot set either (`env-poison` denies `MOAT_*`), and the known hosts'
+    settings files are under `kernel-self`.
   - Everything that goes wrong denies in the sandboxed guard, and the sandbox stays
     closed to `~/.moat` (tested in `tests/e2e/run_guard.rs`).
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**
@@ -612,7 +659,13 @@ something OpenMoat claims to stop.
     connecting command's arguments to another host (`placeholder-egress`), but not one
     in a file, a here-document, an environment variable or an encoded form;
   - an agent that asks the user to paste the secret into the conversation;
-  - the owner host itself misusing or reflecting the token;
+  - the owner host itself misusing the token. Its plain-HTTP answer to a request the
+    value went into is searched for the value, as a terminated tunnel's answer is: the
+    connection closes before the value reaches the agent, and a `proxy-secret` row says
+    so. That search reads the raw stream: a value the host sends compressed, encoded or
+    split by a chunked body's framing is not recognised there (the terminated path reads
+    the framing and forces `identity`), and later requests on the same connection carry
+    no value, so their answers are not searched;
   - traffic that does not go through `openmoat proxy`: the agent's own requests and
     in-process tools; every host sandbox command unless the policy sets
     `sandbox.proxy_port`; and even then, under Codex, every command whose Codex was
@@ -639,7 +692,9 @@ something OpenMoat claims to stop.
     agent's run of it, also under the pseudo-terminal wrappers); the key is owner-only in
     `~/.moat/proxy-ca/`, which `kernel-self` denies reading and no sandbox OpenMoat writes
     grants (Seatbelt, Landlock and bubblewrap in `openmoat run`; Claude Code's
-    `denyRead`; Codex and Cursor grant named paths only). Both files are pinned in the
+    `denyRead`; Codex and Cursor grant named paths only). `openmoat run` refuses to start
+    with a key others may read or a folder others may write, and `doctor` names it.
+    Both files are pinned in the
     lock; a changed one is drift. The CA's name constraints limit it to the terminated
     hosts, so even a leaked key cannot sign for any other name, and nothing outside a run
     trusts it.
@@ -695,6 +750,18 @@ something OpenMoat claims to stop.
   row at once and then one per 10 seconds with the count, written when the next
   connection arrives after that time, so the count of a burst's end can be missing
   until then.
+- **Refusals before a credential is verified are counted, not listed (ADR-070).** Any
+  local process can send the proxy requests with no or a wrong credential (`407`,
+  `proxy-session`) or a head it cannot read (`400`, `proxy-request`), and the hook relay
+  of `openmoat run` calls with a wrong token (`run-guard-token`). A row for each would
+  let that process grow the audit log without limit, and a log that can no longer be
+  written makes the proxy and the guard refuse everything. So the first of each kind
+  is recorded as it was, and the ones in the 10 seconds after it are counted in the
+  next row of the kind, which keeps the last one's reason. The rows of a flood are
+  bounded by time, not by the number of requests. Every request is still refused;
+  only the requests a later row counts have no row with their destination of their
+  own. The count of the last interval before the proxy or the run stops can be
+  missing.
 - **A miswired command can skip the guard.** Codex 0.160.1–0.166.0 ignores `args`
   in command hooks. OpenMoat writes the guard arguments in `command` and supplies
   `commandWindows`; `init`, `policy upgrade` and `sandbox sync` repair legacy entries.
@@ -906,7 +973,11 @@ something OpenMoat claims to stop.
   the lock pins the extension, so an edit of it stops every call. Under `openmoat run`
   the sandbox denies those writes to pi itself too, so pi cannot save its settings or
   a trust decision there. A project's
-  `.pi/settings.json`, `.pi/extensions/` and `.pi/mcp.json` need review (`runs-later`).
+  `.pi/settings.json`, `.pi/extensions/` and `.pi/mcp.json` need review (`runs-later`);
+  a write of `.pi/settings.json` whose content excludes OpenMoat's extension is denied
+  (`project-settings`), as are a Codex `.codex/config.toml` with `[features] hooks =
+  false` and an OpenCode `opencode.json` that removes OpenMoat's plugin, when the
+  content the write leaves is known ([LIMITS.md](LIMITS.md)).
   An extension that fails to load is a diagnostic and the session starts without it.
   The extension reports loading (`openmoat guard --heartbeat --host pi`, ADR-042):
   `openmoat status` and `openmoat doctor` say "plugin not loaded yet", a note, until it

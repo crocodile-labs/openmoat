@@ -287,6 +287,7 @@ fn parse_payload(host: Host, p: Payload, event: &str) -> Result<HookRequest, Hos
         action,
         content: None,
         edits: Vec::new(),
+        patch: None,
         mcp_arguments,
         sandboxed,
         event: event_kind(event),

@@ -46,11 +46,7 @@ fn run_as(sb: &Sandbox, project: &Path, program: &Path) -> Output {
 /// there it refuses `--write` paths outside the project. CI has one.
 fn namespaced(out: &Output) -> bool {
     let refused = stderr(out).contains("Install bubblewrap");
-    assert!(
-        !(refused && std::env::var_os("CI").is_some()),
-        "CI must run `openmoat run` in a network namespace: {}",
-        text(out)
-    );
+    super::check_netns(refused, &text(out));
     if refused {
         eprintln!("skipped: bubblewrap cannot make a network namespace here");
     }

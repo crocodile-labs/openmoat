@@ -2,6 +2,7 @@
 //! Over Unix socket pairs, so no port is bound.
 
 use std::io::Cursor;
+use std::io::Read as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -9,6 +10,7 @@ use std::time::Instant;
 
 use openmoat_audit::Store;
 use openmoat_hosts::Host;
+use openmoat_proxy::coalesce::INTERVAL;
 
 use super::client::{connect_retrying, exchange};
 use super::service::RULE_TOKEN;
@@ -230,6 +232,11 @@ fn the_environment_names_both_or_neither() {
 /// A home with an empty audit log, and a stand-in for `moat` that prints the
 /// variables the service sets, echoes its payload and exits with `code`.
 fn service(code: i32) -> (tempfile::TempDir, Home, Service) {
+    service_for(code, Some(Host::ClaudeCode))
+}
+
+/// [`service`] of a run whose program is `agent`'s (`None`: no agent OpenMoat knows).
+fn service_for(code: i32, agent: Option<Host>) -> (tempfile::TempDir, Home, Service) {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::at(dir.path().join("state"));
     std::fs::create_dir_all(home.root()).unwrap();
@@ -241,13 +248,26 @@ fn service(code: i32) -> (tempfile::TempDir, Home, Service) {
     );
     std::fs::write(&moat, script).unwrap();
     std::fs::set_permissions(&moat, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let service = Service::new(home.clone(), RUN, token().as_bytes(), PathBuf::from(&moat));
+    let service = Service::new(
+        home.clone(),
+        RUN,
+        token().as_bytes(),
+        PathBuf::from(&moat),
+        agent,
+    );
     (dir, home, service)
 }
 
 /// What the service answers to `sent`: the reply, or the error of a caller
 /// that got none.
 fn ask(service: &Service, sent: &Request) -> Result<Reply> {
+    // One at a time: macOS has no `pipe2`, so a stand-in started by one test
+    // can inherit another's standard input before close-on-exec is set, and
+    // both `cat`s then wait for an end of input that never comes.
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let (ours, theirs) = UnixStream::pair().unwrap();
     let server = std::thread::scope(|scope| {
         let handle = scope.spawn(|| service.answer(theirs));
@@ -292,14 +312,58 @@ fn a_wrong_token_gets_no_answer_and_is_recorded() {
         let error = ask(&service, &request(wrong, "{}")).unwrap_err();
         assert!(format!("{error:#}").contains("answer"), "{error:#}");
     }
+    // The first has its row at once; the two after it, within the interval,
+    // are counted, and recorded together when the run's service ends.
     let rows = home.open_audit().unwrap().session(RUN).unwrap();
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 1);
+    assert!(
+        rows[0].reasons[0].contains("claude-code"),
+        "{:?}",
+        rows[0].reasons
+    );
+    drop(service);
+    let rows = home.open_audit().unwrap().session(RUN).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows[1].reasons[0].starts_with("2 hook calls came with a wrong token"));
     for row in rows {
         assert_eq!(row.rules, [RULE_TOKEN]);
         assert_eq!(row.verdict, openmoat_core::Verdict::Deny);
-        assert!(row.reasons[0].contains("claude-code"), "{:?}", row.reasons);
         assert!(!row.reasons[0].contains(token()));
     }
+}
+
+/// Wrong tokens from any local process cannot grow the log by one row each:
+/// a flood is a row or two, and the run's own calls are still decided.
+#[test]
+fn a_flood_of_wrong_tokens_is_a_few_rows_and_the_run_still_decides() {
+    let (_dir, home, service) = service(0);
+    let started = Instant::now();
+    for _ in 0..200 {
+        assert!(ask(&service, &request("x", "{}")).is_err());
+    }
+    let reply = ask(&service, &request(token(), "{\"payload\":1}")).unwrap();
+    assert_eq!(reply.code, 0);
+    // One row at once, then at most one per interval while the flood lasts.
+    let intervals = started.elapsed().as_secs() / INTERVAL.as_secs();
+    let rows = home.open_audit().unwrap().session(RUN).unwrap();
+    assert!(rows.len() as u64 <= 1 + intervals, "{} rows", rows.len());
+    drop(service);
+    let rows = home.open_audit().unwrap().session(RUN).unwrap();
+    assert!(rows.len() as u64 <= 2 + intervals, "{} rows", rows.len());
+    // Every refused call is in a row's count.
+    let counted: u64 = rows
+        .iter()
+        .skip(1)
+        .map(|r| {
+            r.reasons[0]
+                .split(' ')
+                .next()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap()
+        })
+        .sum();
+    assert_eq!(1 + counted, 200);
 }
 
 #[test]
@@ -309,3 +373,5 @@ fn random_hex_is_hex_of_the_length_asked_and_differs() {
     assert!(a.bytes().all(|c| c.is_ascii_hexdigit()));
     assert_ne!(*a, *b);
 }
+
+mod scope;

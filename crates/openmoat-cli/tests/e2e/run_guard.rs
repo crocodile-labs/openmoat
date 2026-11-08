@@ -235,69 +235,117 @@ fn a_state_directory_inside_the_project_is_refused() {
     assert!(!stdout(&out).contains("ran"), "{shown}");
 }
 
-/// A server at the address that does not answer as this run's service: a
-/// reply for another request, an exit code the guard never gives, or an
-/// HTTP answer. Each is a deny, and none is recorded as a decision.
-#[test]
-fn a_forged_reply_is_a_deny() {
-    let sb = Sandbox::installed(&[".claude"]);
-    let project = sb.project();
-    let forged: [&[u8]; 3] = [
-        // Magic, then a nonce no request sent, exit 0 and an allow.
-        b"MOAT-GUARD-REPLY/1\n\x00\x00\x00\x20ffffffffffffffffffffffffffffffff\
-          \x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
-        b"",
-    ];
-    for reply in forged {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap().to_string();
-        let server = std::thread::spawn(move || {
-            if let Ok((mut client, _)) = listener.accept() {
-                let mut request = vec![0u8; 64];
-                let _ = client.read(&mut request);
-                let _ = client.write_all(reply);
+/// A listener that answers every hook call as `openmoat run` would, with an
+/// allow for whatever request it got: it reads the request's nonce and repeats it.
+fn echoing_listener() -> (String, std::thread::JoinHandle<usize>, TcpListener) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let accept = listener.try_clone().unwrap();
+    accept.set_nonblocking(true).unwrap();
+    let server = std::thread::spawn(move || {
+        let mut answered = 0;
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        while std::time::Instant::now() < until {
+            match accept.accept() {
+                Ok((mut client, _)) => {
+                    let _ = client.set_nonblocking(false);
+                    let mut request = vec![0u8; 4096];
+                    let read = client.read(&mut request).unwrap_or(0);
+                    // Magic, then the token's and the nonce's fields.
+                    let field = |at: usize| -> Option<(usize, &[u8])> {
+                        let len = u32::from_be_bytes(request.get(at..at + 4)?.try_into().ok()?);
+                        let end = at + 4 + len as usize;
+                        Some((end, request.get(at + 4..end)?))
+                    };
+                    let start = "MOAT-GUARD/1\n".len();
+                    if let Some((after_token, _)) = field(start).filter(|_| read > start)
+                        && let Some((_, nonce)) = field(after_token)
+                    {
+                        let mut reply = b"MOAT-GUARD-REPLY/1\n".to_vec();
+                        for part in [nonce, &[0u8][..], b"", b""] {
+                            reply.extend_from_slice(
+                                &u32::try_from(part.len()).unwrap().to_be_bytes(),
+                            );
+                            reply.extend_from_slice(part);
+                        }
+                        let _ = client.write_all(&reply);
+                    }
+                    answered += 1;
+                }
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
             }
-        });
-        let mut cmd = sb.command();
-        cmd.env("MOAT_GUARD_SOCKET", &addr)
-            .env("MOAT_GUARD_TOKEN", "any")
-            .args(["guard", "--host", "claude-code"]);
-        let payload = crate::common::bash_payload("forged", &project, "ls");
-        let out = output(&mut cmd, Some(&payload));
-        server.join().unwrap();
-        assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
-        assert!(text(&out).contains("did not decide"), "{}", text(&out));
-    }
-    assert_eq!(rows(&sb, "forged"), Vec::<Value>::new());
+        }
+        answered
+    });
+    (addr, server, listener)
 }
 
-/// Half the settings, an address off this machine or one nothing listens on:
-/// the guard denies without deciding, and never falls back to its own home.
+/// The relay variables in the environment of a hook outside any `openmoat run`
+/// (a host that took them from a setting OpenMoat does not guard), pointing at a
+/// listener that would allow everything: the guard never asks it. It decides
+/// itself, denies the read of an SSH key, and records a `run-guard-outside` row
+/// (ADR-070).
 #[test]
-fn a_guard_with_broken_relay_settings_denies() {
+fn relay_variables_outside_a_run_are_not_followed() {
     let sb = Sandbox::installed(&[".claude"]);
     let project = sb.project();
-    let cases: [&[(&str, &str)]; 4] = [
-        &[("MOAT_GUARD_SOCKET", "127.0.0.1:9")],
-        &[("MOAT_GUARD_TOKEN", "t")],
-        &[
-            ("MOAT_GUARD_SOCKET", "192.0.2.1:9"),
-            ("MOAT_GUARD_TOKEN", "t"),
-        ],
-        &[
-            ("MOAT_GUARD_SOCKET", "127.0.0.1:1"),
-            ("MOAT_GUARD_TOKEN", "t"),
-        ],
+    let (addr, server, _listener) = echoing_listener();
+    let key = json!({"file_path": sb.home.join(".ssh/id_rsa").to_string_lossy()});
+    let payload = call("stray", &project, "Read", &key);
+    let mut cmd = sb.command();
+    cmd.env("MOAT_GUARD_SOCKET", &addr)
+        .env("MOAT_GUARD_TOKEN", "any")
+        .args(["guard", "--host", "claude-code"]);
+    let out = output(&mut cmd, Some(&payload));
+    assert_eq!(out.status.code(), Some(DENY), "{}", text(&out));
+    assert!(text(&out).contains("secrets-paths"), "{}", text(&out));
+    assert!(!text(&out).contains("did not decide"), "{}", text(&out));
+    let decided = rows(&sb, "stray");
+    // The call's row and the `run-guard-outside` row are written by the same
+    // call, so their order is not fixed.
+    let mut found: Vec<Vec<String>> = decided.iter().map(rules).collect();
+    found.sort();
+    assert_eq!(
+        found,
+        [
+            vec!["run-guard-outside".to_owned()],
+            vec!["secrets-paths".to_owned()]
+        ]
+    );
+    // The heartbeat is recorded here too, not skipped as inside a run. Only a
+    // plugin host sends one (Claude Code runs a hook command).
+    let mut beat = sb.command();
+    beat.env("MOAT_GUARD_SOCKET", &addr)
+        .env("MOAT_GUARD_TOKEN", "any")
+        .args(["guard", "--host", "opencode", "--heartbeat"]);
+    assert_eq!(output(&mut beat, None).status.code(), Some(OK));
+    assert_eq!(server.join().unwrap(), 0, "the listener was never asked");
+}
+
+/// Half the settings, or an address nothing in the sandbox may reach, inside
+/// the run: the guard denies without deciding, and never falls back to a home
+/// it cannot read.
+#[test]
+fn a_guard_with_broken_relay_settings_denies() {
+    let (sb, project) = installed_with_secret();
+    moat_in(&project);
+    let cases = [
+        "env -u MOAT_GUARD_TOKEN",
+        "MOAT_GUARD_SOCKET=192.0.2.1:9",
+        "MOAT_GUARD_SOCKET=127.0.0.1:1",
     ];
     for env in cases {
-        let mut cmd = sb.command();
-        cmd.envs(env.iter().copied())
-            .args(["guard", "--host", "claude-code"]);
         let payload = crate::common::bash_payload("broken", &project, "ls");
-        let out = output(&mut cmd, Some(&payload));
-        assert_eq!(out.status.code(), Some(DENY), "{env:?}: {}", text(&out));
-        assert!(text(&out).contains("did not decide"), "{}", text(&out));
+        let out = run_sh_with(&sb, &project, &hook_script(env), &[("PAYLOAD", &payload)]);
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        assert!(
+            stdout(&out).contains(&format!("hook={DENY}")),
+            "{env}: {shown}"
+        );
+        assert!(shown.contains("did not decide"), "{env}: {shown}");
     }
     assert_eq!(rows(&sb, "broken"), Vec::<Value>::new());
 }

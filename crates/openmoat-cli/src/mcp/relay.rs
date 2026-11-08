@@ -26,17 +26,26 @@
 //! - a response must answer a request the host sent and the server has not
 //!   answered; any other is dropped, so a server cannot slip the host a listing
 //!   or a result nobody asked for;
-//! - a result goes to the [`Gate`] before the host sees it, which keeps the
-//!   pieces of a tool call's result for the cross-server flow check (ADR-058);
-//!   one it cannot keep reaches the host as an error;
+//! - a result, or an error answer, goes to the [`Gate`] before the host sees
+//!   it, which keeps the pieces of a tool call's answer for the cross-server
+//!   flow check (ADR-058) and what it names as injected input (ADR-057); one
+//!   it cannot keep reaches the host as OpenMoat's error;
 //! - a response that lists tools (`result.tools`) leaves out the tools the pins
-//!   hold;
+//!   hold, and one that lists prompts, resources or resource templates the
+//!   entries they hold; the answer to `initialize` reaches the host without
+//!   `instructions`, and with the accepted `serverInfo`, while the pins hold
+//!   them (ADR-069); a `prompts/get` of a held prompt is refused as a held
+//!   tool's call is;
 //! - `notifications/tools/list_changed` has the relay read the tools again
 //!   itself, so a changed tool is held even when the host never lists again
 //!   (a call the relay forwarded before it read the notification reaches the
 //!   server, as it would without the relay: the hold starts at the notification);
 //! - each request it sends the host (`sampling/createMessage`,
-//!   `elicitation/create`, …) is recorded.
+//!   `elicitation/create`, …) is recorded, its text kept as untrusted content of
+//!   the session the proxy serves, and a sampling request that asks for the
+//!   session's context (`includeContext` other than `none`) is refused; the
+//!   host's answer is passed on only to a request the server sent and the host
+//!   has not answered yet (ADR-069).
 
 use std::collections::HashSet;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -49,6 +58,7 @@ use super::tools::ToolPins;
 mod frame;
 mod host;
 mod server;
+mod surface;
 
 pub use frame::{pump_host, pump_server, refuse_all};
 
@@ -60,6 +70,8 @@ const REFUSED: i64 = -32001;
 const INVALID_REQUEST: i64 = -32600;
 /// JSON-RPC "parse error".
 const PARSE_ERROR: i64 = -32700;
+/// The most requests to the host the server may leave unanswered at once.
+const MAX_ASKED: usize = 4096;
 
 /// What an MCP message asks the server to do, for the [`Gate`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,16 +103,31 @@ pub trait Gate: Send + Sync {
     /// it is refused then whatever else holds, and still recorded. `Ok(Some)`
     /// is why it is refused; an error refuses it too.
     fn check(&self, call: &Call<'_>, held: Option<&str>) -> Result<Option<String>>;
-    /// Record a request the server sent the host; an error has it answered
-    /// with an error instead of reaching the host.
-    fn server_request(&self, method: &str) -> Result<()>;
-    /// The server's `result` for the host's request `request` ([`id_key`]),
-    /// before it reaches the host: the gate keeps what a tool call it passed
-    /// returned (ADR-058). An error has the host answered with an error
-    /// instead, so a result is never seen by the model unrecorded.
+    /// Record a request the server sent the host, with its `params`, whose
+    /// text the host puts before the model or the person (a sampling
+    /// request's messages, an elicitation's message); an error has it
+    /// answered with an error instead of reaching the host.
+    fn server_request(&self, method: &str, params: Option<&Value>) -> Result<()>;
+    /// Record that the relay refused the server's `method` request, and why.
+    fn server_refused(&self, method: &str, why: &str) -> Result<()> {
+        let _ = (method, why);
+        Ok(())
+    }
+    /// The server's answer to the host's request `request` ([`id_key`]), its
+    /// `result` or its `error` object, before it reaches the host: the gate
+    /// keeps what a tool call it passed returned (ADR-058, ADR-057), an error's
+    /// `message` and `data` as much as a result. An error has the host answered
+    /// with OpenMoat's error instead, so an answer is never seen by the model
+    /// unrecorded.
     fn result(&self, request: &str, result: &Value) -> Result<()> {
         let _ = (request, result);
         Ok(())
+    }
+    /// The `instructions` of the server's `initialize` answer, which the
+    /// host is passed (they match the pins): the gate keeps them as untrusted
+    /// content for each session it serves (ADR-069).
+    fn instructions(&self, text: &str) {
+        let _ = text;
     }
 }
 
@@ -120,11 +147,20 @@ struct State {
     /// No pins existed when the session started, the policy trusts first
     /// sight, and no listing came yet: the first listing is pinned as it is.
     first: bool,
+    /// No pins existed when the session started and the policy trusts first
+    /// sight: each part of the server's surface is pinned as first read.
+    trust_unseen: bool,
+    /// The id ([`id_key`]) of the host's `initialize` request the server has
+    /// not answered yet.
+    initialize: Option<String>,
     /// Why the pins could not be saved; every call is refused then.
     broken: Option<String>,
     /// The ids ([`id_key`]) of the host's requests the server has not
     /// answered yet.
     pending: HashSet<String>,
+    /// The ids ([`id_key`]) of the server's requests the host has not
+    /// answered yet: a host answer to any other is dropped.
+    asked: HashSet<String>,
     /// The listing the relay asked for after the server said its tools changed.
     relist: Option<server::Relist>,
     /// How many listings the relay has asked for, for their ids.
@@ -161,8 +197,11 @@ impl Relay {
             state: Mutex::new(State {
                 pins: pins.unwrap_or_else(|| ToolPins::new(server)),
                 first,
+                trust_unseen: first,
+                initialize: None,
                 broken: None,
                 pending: HashSet::new(),
+                asked: HashSet::new(),
                 relist: None,
                 relists: 0,
             }),
@@ -197,6 +236,7 @@ impl Relay {
                 host::Outcome::Forward(m) => vec![Routed::Server(written(&m))],
                 host::Outcome::Reply(r) => vec![Routed::Host(written(&r))],
                 host::Outcome::Drop => Vec::new(),
+                host::Outcome::Dropped(why) => vec![Routed::Dropped(why)],
             };
         };
         if batch.is_empty() {
@@ -207,12 +247,13 @@ impl Relay {
             );
             return vec![Routed::Host(written(&reply))];
         }
-        let (mut forward, mut replies) = (Vec::new(), Vec::new());
+        let (mut forward, mut replies, mut dropped) = (Vec::new(), Vec::new(), Vec::new());
         for message in batch {
             match self.on_host(message) {
                 host::Outcome::Forward(m) => forward.push(m),
                 host::Outcome::Reply(r) => replies.push(r),
                 host::Outcome::Drop => {}
+                host::Outcome::Dropped(why) => dropped.push(Routed::Dropped(why)),
             }
         }
         let mut out = Vec::new();
@@ -222,6 +263,7 @@ impl Relay {
         if !replies.is_empty() {
             out.push(Routed::Host(written(&Value::Array(replies))));
         }
+        out.extend(dropped);
         out
     }
 

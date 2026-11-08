@@ -31,7 +31,9 @@ pub mod git_env;
 #[cfg(test)]
 mod hook_only;
 pub mod install;
+pub mod kerberos;
 pub mod landlock;
+mod links;
 pub mod own_login;
 mod patterns;
 pub(crate) use patterns::RUNS_LATER;
@@ -121,7 +123,9 @@ fn with_read_roots(policy: &Policy) -> anyhow::Result<(Policy, bool)> {
 pub struct Grants {
     /// The loopback port of OpenMoat's egress proxy, the only network destination.
     pub proxy_port: Option<u16>,
-    /// The temp directory, resolved, which commands may read and write.
+    /// The temp directory, resolved, which commands may read and write: the
+    /// run's own (`commands/run/temp.rs`), or, when `None`, this process's
+    /// (`--isolate`, which covers it with an empty `tmpfs`).
     pub tmpdir: Option<String>,
     /// The program `moat run` starts, resolved: it must be readable to start.
     pub program: Option<String>,
@@ -142,25 +146,23 @@ pub struct Grants {
     pub trust: Option<String>,
 }
 
-/// The IR of a `moat run` session in `ctx`, and `grants` plus this process's
-/// temp directory.
+/// The IR of a `moat run` session in `ctx`, and `grants` with this process's
+/// temp directory where they name none of the run's own.
 fn lower_for_session(
     policy: &Policy,
     ctx: &EvalContext,
     grants: Grants,
 ) -> anyhow::Result<(Enforcement, Grants)> {
     let (policy, _) = with_read_roots(policy)?;
+    let tmpdir = grants.tmpdir.clone().or_else(session_tmpdir);
     Ok((
         openmoat_core::ir::lower(&policy, ctx)?,
-        Grants {
-            tmpdir: session_tmpdir(),
-            ..grants
-        },
+        Grants { tmpdir, ..grants },
     ))
 }
 
-/// This process's temp directory, resolved: what a `moat run` session grants
-/// (and `--isolate` covers with an empty `tmpfs`).
+/// This process's temp directory, resolved: what `moat run --isolate` covers
+/// with an empty `tmpfs`, and what holds the run's own.
 pub fn session_tmpdir() -> Option<String> {
     std::fs::canonicalize(std::env::temp_dir())
         .ok()
@@ -209,19 +211,29 @@ pub fn netns_masks(
     rules: &landlock::Rules,
 ) -> anyhow::Result<Vec<bwrap::Mount>> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
-    Ok(bwrap::grant_masks(&ir, rules, &project_spellings(ctx)))
+    bwrap::grant_masks(&ir, rules, &project_spellings(ctx))
 }
 
 /// The binds `moat run`'s network namespace on Linux adds over the agent
 /// configuration and hook settings in the project of `ctx`, and the folders
-/// that hold them ([`bwrap::project_masks`]).
+/// that hold them, with the missing hook settings it creates
+/// ([`bwrap::project_masks`]).
 #[cfg(target_os = "linux")]
 pub fn netns_project_masks(
     policy: &Policy,
     ctx: &EvalContext,
-) -> anyhow::Result<Vec<bwrap::Mount>> {
+) -> anyhow::Result<bwrap::ProjectMasks> {
     let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
     bwrap::project_masks(&ir, &project_spellings(ctx))
+}
+
+/// The agents' hook settings missing in the project of `ctx`, which `moat
+/// run` on Linux without a network namespace cannot cover
+/// ([`bwrap::missing_hook_settings`]).
+#[cfg(target_os = "linux")]
+pub fn missing_hook_settings(policy: &Policy, ctx: &EvalContext) -> anyhow::Result<Vec<String>> {
+    let (ir, _) = lower_for_session(policy, ctx, Grants::default())?;
+    Ok(bwrap::missing_hook_settings(&ir, &project_spellings(ctx)))
 }
 
 /// The paths `kernel-self` keeps from commands (OpenMoat's state, an agent's
@@ -268,6 +280,15 @@ pub fn kernel_self_in_writes(
             }
             // `dir/**` denies the whole tree, so a write path inside it is held too.
             let tree = pattern.strip_suffix("/**") == Some(base);
+            // The writes are resolved: compare where the rule's path resolves
+            // (`~/.claude/settings.json` with `~/.claude` a link). Linux only,
+            // where this refusal applies; elsewhere a made-up path in a test
+            // would resolve by the machine (macOS links `/home`).
+            #[cfg(target_os = "linux")]
+            let base = links::real_path(base);
+            #[cfg(not(target_os = "linux"))]
+            let base = base.to_owned();
+            let base = base.as_str();
             let holder = writes
                 .iter()
                 .find(|w| exposure::within(base, w, ci) || (tree && exposure::within(w, base, ci)));

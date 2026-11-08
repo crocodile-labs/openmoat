@@ -65,7 +65,7 @@ pub use injection::{
     TokenKind as InjectedTokenKind,
 };
 pub use kind::{Kind, UnknownKind};
-pub use patch::writes as patch_writes;
+pub use patch::{Replayed as PatchReplayed, replay as patch_replay, writes as patch_writes};
 pub use paths::resolve as resolve_path;
 pub use pattern::literal_shell_pattern;
 pub use policy::{
@@ -84,7 +84,7 @@ pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
 pub use staging::{DEFAULT_OUTSIDE_FOLDERS, DEFAULT_OUTSIDE_READS, StagingSettings};
-pub use taint::TaintSettings;
+pub use taint::{BUILTIN_METADATA_SERVER, TaintSettings};
 pub use verdict::{Decision, Notice, OLD_REVIEW, UnknownVerdict, Verdict};
 
 /// The shipped default policy, as YAML: what `moat init` installs and what the

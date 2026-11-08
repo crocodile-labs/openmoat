@@ -91,6 +91,7 @@ fn a_tunnel_whose_client_cannot_be_answered_is_recorded_and_gets_no_bytes() {
         addresses: &addresses,
         ports: &ports,
         shares: Shares::new(8),
+        noise: Noise::default(),
     };
     proxy.handle(&proxy_end, &served, None);
     assert_eq!(*rules.0.lock().unwrap(), [[RULE_SNI]]);
@@ -147,6 +148,7 @@ fn with_echo(request: &[u8]) -> (String, Vec<Vec<String>>) {
         addresses: &addresses,
         ports: &ports,
         shares: Shares::new(8),
+        noise: Noise::default(),
     };
     proxy.handle(&proxy_end, &served, None);
     drop(proxy_end);

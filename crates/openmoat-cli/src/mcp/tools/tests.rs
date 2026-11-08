@@ -256,3 +256,39 @@ fn the_review_text_has_no_control_characters_but_line_breaks() {
     );
     assert!(shown.contains("title: T?]52;c;ZXZpbA==?"), "{shown}");
 }
+
+#[test]
+fn invisible_characters_are_shown_and_counted_in_the_review() {
+    // "Ig" in tag characters after a harmless description: a terminal shows
+    // "Search the docs." and nothing more; the model reads the tags.
+    let mut pins = ToolPins::new("docs");
+    pins.list(
+        &[tool("search", "Search the docs.\u{E0049}\u{E0067}")],
+        false,
+        1,
+    );
+    let shown = pins.describe_held().join("\n");
+    assert!(shown.contains("+Search the docs.??"), "{shown}");
+    assert!(
+        shown.contains("contains 2 invisible character(s)"),
+        "{shown}"
+    );
+    assert!(!shown.contains('\u{E0049}'), "{shown}");
+
+    let mut plain = ToolPins::new("docs");
+    plain.list(&[tool("search", "Search the docs.")], false, 1);
+    assert!(!plain.describe_held().join("\n").contains("invisible"));
+}
+
+#[test]
+fn a_trusted_first_sight_does_not_pin_a_tool_with_invisible_characters() {
+    let mut pins = ToolPins::new("docs");
+    let listed = [
+        tool("search", "Search the docs."),
+        tool("read", "Read a page.\u{FE0F}\u{2062}"),
+    ];
+    let first = pins.list(&listed, true, 1);
+    let hidden: Vec<&str> = first.hidden.iter().map(String::as_str).collect();
+    assert_eq!(hidden, ["read"]);
+    assert!(pins.tools.contains_key("search") && pins.is_held("read"));
+}

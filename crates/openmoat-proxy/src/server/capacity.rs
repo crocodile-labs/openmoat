@@ -5,21 +5,20 @@
 //! refusal whether or not it is recorded; recording every one would let a
 //! flood fill the log, so the first refusal of a kind is recorded at once and
 //! the ones after it are counted and recorded as one row per [`INTERVAL`],
-//! when the next connection is accepted or refused after it.
+//! when the next connection is accepted or refused after it
+//! ([`crate::coalesce`]).
 
-use std::sync::{Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use openmoat_core::{Decision, Verdict};
 
 use crate::audit::{Connection, Recorder};
+pub(super) use crate::coalesce::INTERVAL;
+use crate::coalesce::{Coalesce, counted};
 
 /// Rule id for a connection refused at accept because the proxy, or the
 /// connections not yet authenticated, hold all the slots they may.
 pub const RULE_CAPACITY: &str = "proxy-capacity";
-
-/// The shortest time between two rows of one kind.
-pub(super) const INTERVAL: Duration = Duration::from_secs(10);
 
 /// Why a connection was refused at accept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +30,8 @@ pub(super) enum Full {
 }
 
 impl Full {
+    const ALL: [Self; 2] = [Self::Slots, Self::Pending];
+
     /// What the 503 says.
     pub(super) fn reply(self) -> &'static str {
         match self {
@@ -40,30 +41,17 @@ impl Full {
     }
 }
 
-/// Per kind: when a row was last written, and the refusals not in a row yet.
-#[derive(Debug, Default)]
-struct Kind {
-    last: Option<Instant>,
-    unrecorded: u64,
-}
-
 /// The refusals at accept of one [`Proxy::serve`](crate::Proxy::serve).
 #[derive(Debug, Default)]
 pub(super) struct Refusals {
-    kinds: Mutex<[Kind; 2]>,
+    counts: Coalesce<2>,
 }
 
 impl Refusals {
     /// Count one refusal, and record the count once [`INTERVAL`] has passed
     /// since the last row of its kind.
     pub(super) fn refused(&self, full: Full, recorder: &dyn Recorder, now: Instant) {
-        let due = {
-            let mut kinds = self.kinds.lock().unwrap_or_else(PoisonError::into_inner);
-            let kind = &mut kinds[full as usize];
-            kind.unrecorded += 1;
-            take_due(kind, now)
-        };
-        if let Some(count) = due {
+        if let Some(count) = self.counts.refused(full as usize, now) {
             write(full, count, recorder);
         }
     }
@@ -72,45 +60,22 @@ impl Refusals {
     /// passed: called as connections are accepted, so a burst that ends is
     /// still recorded.
     pub(super) fn flush(&self, recorder: &dyn Recorder, now: Instant) {
-        let due: Vec<(Full, u64)> = {
-            let mut kinds = self.kinds.lock().unwrap_or_else(PoisonError::into_inner);
-            [Full::Slots, Full::Pending]
-                .into_iter()
-                .filter_map(|full| {
-                    let kind = &mut kinds[full as usize];
-                    (kind.unrecorded > 0)
-                        .then(|| take_due(kind, now))
-                        .flatten()
-                        .map(|n| (full, n))
-                })
-                .collect()
-        };
-        for (full, count) in due {
-            write(full, count, recorder);
+        for (kind, count) in self.counts.due(now) {
+            if let Some(full) = Full::ALL.get(kind) {
+                write(*full, count, recorder);
+            }
         }
     }
 }
 
-/// The count to record now, if [`INTERVAL`] has passed since the last row.
-fn take_due(kind: &mut Kind, now: Instant) -> Option<u64> {
-    let due = kind
-        .last
-        .is_none_or(|last| now.saturating_duration_since(last) >= INTERVAL);
-    if !due {
-        return None;
-    }
-    kind.last = Some(now);
-    Some(std::mem::take(&mut kind.unrecorded))
-}
-
 fn write(full: Full, count: u64, recorder: &dyn Recorder) {
-    let plural = if count == 1 { "" } else { "s" };
     let decision = Decision::single(
         Verdict::Deny,
         RULE_CAPACITY,
         format!(
-            "{count} connection{plural} refused before a request was read: {}; later ones \
-             within {} s are counted in the next row",
+            "{} refused before a request was read: {}; later ones within {} s are counted in \
+             the next row",
+            counted(count, "connection", "connections"),
             full.reply(),
             INTERVAL.as_secs()
         ),

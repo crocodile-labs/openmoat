@@ -18,7 +18,7 @@ use zeroize::Zeroizing;
 
 use super::{BUFFER, Pace, Stop, closed};
 use crate::body::{BodyEnd, Framing};
-use crate::broker::{Broker, Holdback, RULE_SECRET};
+use crate::broker::{Broker, Holdback, RULE_SECRET, value_came_back as echoed};
 use crate::decide::RULE_UPSTREAM;
 
 /// Largest answer head the proxy reads, and most headers in it.
@@ -89,13 +89,6 @@ pub(super) fn relay<U: Read, C: Write>(
         RULE_UPSTREAM,
         format!("{host} sent more than {MAX_INTERIM} interim answers"),
     ))
-}
-
-fn echoed(host: &str, id: &str) -> String {
-    format!(
-        "the answer from {host} holds the value of secret `{id}`; it was stopped before the value \
-         reached the client"
-    )
 }
 
 /// Read one head into `buf`. `Err(None)`: the upstream went away first.

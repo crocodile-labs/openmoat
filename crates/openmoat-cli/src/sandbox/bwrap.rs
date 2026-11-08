@@ -22,11 +22,18 @@ use openmoat_core::ir::{Access, Checker, Effect, Enforcement};
 use openmoat_core::{AtomicAction, Kind};
 
 use super::landlock::{self, INSIDE_GRANTS_ALLOWANCE, Rules, TCP_PORT_ALLOWANCE};
+use super::links;
 use super::patterns::{
     AGENT_CONFIG, folders_above, has_glob, is_below, literal_tree, push_unique,
     runs_later_exclusion, split,
 };
 use super::{Grants, Report};
+
+/// Deny rules with a glob in the last name, in a granted folder.
+mod globs;
+/// Agents' hook settings in the project that do not exist yet.
+mod hook_settings;
+pub use hook_settings::Placeholder;
 
 /// A name below a directory that only a rule for the whole subtree (`dir/**`)
 /// matches: no policy names it.
@@ -56,9 +63,9 @@ pub struct Generated {
     pub rules: Rules,
     /// The agent's view.
     pub mounts: Vec<Mount>,
-    /// Files created in the project for the session, so that a denied name
-    /// cannot be created; removed afterwards while still empty.
-    pub placeholders: Vec<String>,
+    /// Files and folders created in the project for the session, so that a
+    /// denied name cannot be created; removed afterwards while still as made.
+    pub placeholders: Vec<Placeholder>,
     /// Losses and allowances of this backend.
     pub report: Report,
 }
@@ -86,8 +93,9 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
     if !unenforced.is_empty() {
         let patterns = unenforced;
         let message = "hidden, or read-only for writes, where they exist when the agent starts, \
-                       and `.env`, `.envrc` and `.moat` directly in the project even when \
-                       missing; a match created later stays open, and the hook still decides it";
+                       and `.env`, `.envrc`, `.moat` and the agents' hook settings directly in \
+                       the project even when missing; a match created later stays open, and \
+                       the hook still decides it";
         report.allowance(Kind::FsRead, "bwrap.created-later", patterns, message);
     }
     let mut trees = Vec::new();
@@ -120,11 +128,21 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
         let path = format!("{real}/{name}");
         let missing = std::fs::symlink_metadata(&path).is_err();
         if missing && (masks.denied(Kind::FsRead, &path) || masks.denied_below(&path)) {
-            placeholders.push(path.clone());
+            placeholders.push(Placeholder::empty_file(path.clone()));
             masks.mounts.push(Mount::Hide { path, dir: false });
         }
     }
+    if let Some(real) = real {
+        let missing = hook_settings::plan(ir, real, &hook_settings::on_disk, &|p| {
+            masks.denied_below(p)
+        });
+        placeholders.extend(missing.placeholders);
+        masks.mounts.extend(missing.mounts);
+    }
     masks.mounts.extend(literal_masks(ir, &trees, real));
+    masks
+        .mounts
+        .extend(globs::name_glob_masks(ir, &trees, real)?);
     let mut mounts = trees;
     mounts.extend(respelled(&masks.mounts, project));
     Ok(Generated {
@@ -141,8 +159,10 @@ pub fn generate(ir: &Enforcement, grants: &Grants, project: &[String]) -> Result
 /// made read-only as under `--isolate`. Landlock alone cannot deny inside those
 /// grants, so `--write ~/.claude` would leave `~/.claude/settings.json`, and a
 /// read root `~/.cargo` its `credentials.toml`, open to every command. The
-/// project (`project`, its resolved spelling first) is left to the hook.
-pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<Mount> {
+/// project (`project`, its resolved spelling first) is left to the hook. A
+/// deny with a glob in its last name only (`/tmp/krb5cc_*`) masks the entries
+/// that match when the session starts ([`globs`]).
+pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Result<Vec<Mount>> {
     let trees = |paths: &[String], mount: fn(String) -> Mount| {
         paths
             .iter()
@@ -156,7 +176,10 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<M
         held.push(tree);
     }
     held.sort_by_key(|m| depth(path_of(m)));
-    literal_masks(ir, &held, project.first().map(String::as_str))
+    let real = project.first().map(String::as_str);
+    let mut masks = literal_masks(ir, &held, real);
+    masks.extend(globs::name_glob_masks(ir, &held, real)?);
+    Ok(masks)
 }
 
 /// The masks `moat run`'s network namespace adds in the project (`project`,
@@ -169,11 +192,13 @@ pub fn grant_masks(ir: &Enforcement, rules: &Rules, project: &[String]) -> Vec<M
 /// - the folders above both (`.github`, `.pi`, `.claude`), each bound onto
 ///   itself, so it cannot be renamed away with the file inside and back.
 ///
-/// One created later, or one in a subdirectory, stays writable; Landlock
-/// grants the project whole.
-pub fn project_masks(ir: &Enforcement, project: &[String]) -> Result<Vec<Mount>> {
+/// A hook settings file that is missing is created for the session and bound
+/// read-only, with the folders above it ([`hook_settings`]). Agent
+/// configuration created later, or one in a subdirectory, stays writable;
+/// Landlock grants the project whole.
+pub fn project_masks(ir: &Enforcement, project: &[String]) -> Result<ProjectMasks> {
     let Some(real) = project.first() else {
-        return Ok(Vec::new());
+        return Ok(ProjectMasks::default());
     };
     let checker = ir.checker()?;
     let mut masks = Masks {
@@ -204,9 +229,41 @@ pub fn project_masks(ir: &Enforcement, project: &[String]) -> Result<Vec<Mount>>
             }
         }
     }
+    let missing = hook_settings::plan(ir, real, &hook_settings::on_disk, &|p| {
+        masks.denied_below(p)
+    });
     let mut mounts = masks.mounts;
+    mounts.extend(missing.mounts);
     mounts.sort_by_key(|m| depth(path_of(m)));
-    Ok(respelled(&mounts, project))
+    Ok(ProjectMasks {
+        mounts: respelled(&mounts, project),
+        placeholders: missing.placeholders,
+    })
+}
+
+/// What `moat run`'s network namespace adds in the project
+/// ([`project_masks`]).
+#[derive(Debug, Default)]
+pub struct ProjectMasks {
+    /// The mounts, outermost first, under each spelling of the project.
+    pub mounts: Vec<Mount>,
+    /// The hook settings and folders created for the session.
+    pub placeholders: Vec<Placeholder>,
+}
+
+/// The agents' hook settings missing in the project (`project`, its resolved
+/// spelling first) when the session starts: without a network namespace
+/// nothing covers them, so `moat run` names each that exists when the agent
+/// exits.
+pub fn missing_hook_settings(ir: &Enforcement, project: &[String]) -> Vec<String> {
+    let Some(real) = project.first() else {
+        return Vec::new();
+    };
+    hook_settings::protected(ir)
+        .into_iter()
+        .map(|rest| format!("{real}/{rest}"))
+        .filter(|path| hook_settings::on_disk(path) == hook_settings::Found::Missing)
+        .collect()
 }
 
 /// The paths `**/` write denies of `ir` name below a folder, without a glob
@@ -245,7 +302,10 @@ fn push_mount(mounts: &mut Vec<Mount>, mount: Mount) {
 }
 
 /// The masks for the absolute paths deny rules name without a glob that exist
-/// inside `trees` (outermost first), outside the project `real`.
+/// inside `trees` (outermost first), outside the project `real`. The trees are
+/// resolved paths, so each deny is compared where it resolves
+/// ([`links::real_path`]): with `~/.claude` a link and `--write ~/.claude`
+/// granting its target, `~/.claude/settings.json` is masked there.
 fn literal_masks(ir: &Enforcement, trees: &[Mount], real: Option<&str>) -> Vec<Mount> {
     let mut masks = Vec::new();
     for (path, kind, subtree) in denied_literals(ir) {
@@ -346,16 +406,17 @@ fn denied_names(ir: &Enforcement) -> Vec<String> {
     names
 }
 
-/// Absolute paths deny rules name without a glob, outermost first: the
-/// access they deny (a read deny first) and whether the rule covers the
-/// subtree (`dir/**`).
+/// Absolute paths deny rules name without a glob, outermost first, each
+/// where it resolves ([`links::real_path`]): the access they deny (a read
+/// deny first) and whether the rule covers the subtree (`dir/**`).
 fn denied_literals(ir: &Enforcement) -> Vec<(String, Kind, bool)> {
     let mut found: Vec<(String, Kind, bool)> = Vec::new();
     for (access, kind) in [(&ir.fs.read, Kind::FsRead), (&ir.fs.write, Kind::FsWrite)] {
         for pattern in denials(access).filter(|p| p.starts_with('/')) {
-            let Some(path) = literal_tree(pattern) else {
+            let Some(path) = literal_tree(pattern).map(links::real_path) else {
                 continue;
             };
+            let path = path.as_str();
             if !found
                 .iter()
                 .any(|(p, k, _)| p == path && *k == Kind::FsRead)

@@ -24,6 +24,7 @@ mod linux;
 mod macos;
 mod release_age;
 mod required;
+mod temp;
 pub mod tier;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
@@ -59,8 +60,10 @@ use crate::proxy_ca::{Trust, request_poc};
 use crate::sandbox::Grants;
 use crate::sandbox::Report;
 use crate::sandbox::git_env;
+use crate::sandbox::kerberos;
 use crate::sandbox::own_login::{self, Owner};
 use crate::taint::run::RUN_SESSION_ENV;
+use temp::RunTemp;
 
 /// What a proxy-aware program reads to find its proxy.
 const PROXY_VARS: [&str; 6] = [
@@ -94,18 +97,28 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let port = listener.local_addr()?.port();
     let mut policy = home.load_policy()?;
     crate::install::self_paths::protect_recorded(&home, &mut policy)?;
+    // Kerberos tickets: the default caches and the session's own, wherever
+    // `KRB5CCNAME` puts it, denied in this sandbox too.
+    let ccname = std::env::var("KRB5CCNAME").ok();
+    kerberos::for_run(&mut policy, ccname.as_deref());
+    // A temp directory of the run's own instead of the shared one; under
+    // `--isolate` the shared one is an empty `tmpfs` already.
+    let run_temp = (!args.isolate).then(RunTemp::create).transpose()?;
     // TLS termination (ADR-043), checked before anything starts: a CA that is
     // missing, not pinned or not covering a host stops the run here. The
     // agent's clients trust it through files in the run's temp directory.
     let terminating = crate::proxy_ca::load(&home, &policy)?;
     let trust = terminating
         .as_ref()
-        .map(|t| Trust::write(&t.cert_pem))
+        .map(|t| match &run_temp {
+            Some(temp) => Trust::write_in(&t.cert_pem, Path::new(&temp.path())),
+            None => Trust::write(&t.cert_pem),
+        })
         .transpose()?;
     let ca_notice = terminating.as_ref().and_then(|t| t.notice.clone());
     let grants = Grants {
         proxy_port: Some(port),
-        tmpdir: None,
+        tmpdir: run_temp.as_ref().map(RunTemp::path),
         program: Some(path_string(&program)),
         writes: args.writes.iter().map(|w| resolved(w)).collect(),
         // The person's other terminals stay out of reach of the agent's commands.
@@ -124,9 +137,8 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     own_login::report(agent.report_mut(), &kept, &ctx);
     refuse_port_only(args.netns, agent.warning())?;
     agent.command().args(rest);
-    agent
-        .command()
-        .envs(package_release_age(&policy, ctx.project.as_deref()));
+    let release_age = package_release_age(&policy, ctx.project.as_deref());
+    agent.command().envs(release_age.vars);
     // The proxy reads a brokered secret from this process's environment; the
     // agent gets only the placeholder, never the variable that holds the value.
     for name in env_secrets(&policy) {
@@ -141,7 +153,12 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let run_session = credential.session().to_owned();
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
-    let (guard, guard_token) = guard_service(&home, &run_session)?;
+    // Only the calls of the agent this run starts, in its own sessions (ADR-070).
+    let agent_host = match owner {
+        Owner::Agent(host) => Some(host),
+        Owner::Unknown => None,
+    };
+    let (guard, guard_token) = guard_service(&home, &run_session, agent_host)?;
     let exit = Exit::open(&home, policy, ctx, Some(credential))?
         .with_guard(guard)
         .with_tls(terminating.map(|t| t.tls))
@@ -149,6 +166,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     notice(&program, port, exit.session(), &agent, args)?;
     let notices = ca_notice
         .into_iter()
+        .chain(release_age.notices)
         .chain(request_poc::notice())
         .chain(trust.iter().filter_map(Trust::notice));
     for line in notices {
@@ -172,6 +190,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .env_remove("NO_PROXY")
         .env_remove("no_proxy");
     agent.command().envs(git);
+    if let Some(temp) = &run_temp {
+        agent.command().env(temp::TMPDIR, temp.path());
+    }
     // Set last, over any the person had: what the agent's clients trust.
     for (var, path) in trust.iter().flat_map(Trust::env) {
         agent.command().env(var, path);
@@ -209,13 +230,18 @@ fn session_credential() -> Result<Credential> {
 }
 
 /// The service that decides the agent's hook calls on the proxy's port
-/// (ADR-028), and its token of 64 hex characters (256 bits).
-fn guard_service(home: &Home, run_session: &str) -> Result<(Service, Zeroizing<String>)> {
+/// (ADR-028), for the calls of `agent` (ADR-070), and its token of 64 hex
+/// characters (256 bits).
+fn guard_service(
+    home: &Home,
+    run_session: &str,
+    agent: Option<openmoat_hosts::Host>,
+) -> Result<(Service, Zeroizing<String>)> {
     let token = random_hex(32).context("making the hook token")?;
     let moat = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .context("locating the moat binary")?;
-    let service = Service::new(home.clone(), run_session, token.as_bytes(), moat);
+    let service = Service::new(home.clone(), run_session, token.as_bytes(), moat, agent);
     Ok((service, token))
 }
 
@@ -225,19 +251,23 @@ const MAX_PACKAGE_CONFIG_BYTES: u64 = 1 << 20;
 
 /// npm and uv skip versions published within the policy's release age
 /// (ADR-030), unless the person set their own cut-off.
-fn package_release_age(policy: &Policy, project: Option<&str>) -> Vec<(&'static str, String)> {
+fn package_release_age(policy: &Policy, project: Option<&str>) -> release_age::ReleaseAge {
     let in_project = |file: &str| project.map(|p| Path::new(p).join(file));
+    let small = |path: &Path| {
+        let small = std::fs::metadata(path).is_ok_and(|m| m.len() < MAX_PACKAGE_CONFIG_BYTES);
+        small.then(|| std::fs::read_to_string(path).ok()).flatten()
+    };
+    let var = |name: &str| std::env::var(name).ok();
     release_age::env(
         policy.package_min_release_age_days(),
         crate::time::now_ms(),
         &release_age::Found {
-            inherited: &|name| std::env::var_os(name).is_some(),
+            inherited: &|name| std::env::var_os(name).map(|v| v.to_string_lossy().into_owned()),
             project_has: &|file| in_project(file).is_some_and(|p| p.exists()),
-            project_file: &|file| {
-                let path = in_project(file)?;
-                let small =
-                    std::fs::metadata(&path).is_ok_and(|m| m.len() < MAX_PACKAGE_CONFIG_BYTES);
-                small.then(|| std::fs::read_to_string(&path).ok()).flatten()
+            project_file: &|file| small(&in_project(file)?),
+            user_file: &|tool| {
+                let home = crate::home::user_home().ok();
+                small(&release_age::user_config_path(tool, &var, home)?)
             },
         },
     )

@@ -19,7 +19,6 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::Policy;
 use openmoat_proxy::{CA_VALID_DAYS, CaFiles, Roots, Tls};
-use zeroize::Zeroizing;
 
 pub use self::trust::Trust;
 use crate::home::Home;
@@ -118,10 +117,8 @@ pub fn load(home: &Home, policy: &Policy) -> Result<Option<Loaded>> {
     }
     let cert = std::fs::read_to_string(cert_path(home))
         .with_context(|| format!("reading {}", cert_path(home).display()))?;
-    let key = Zeroizing::new(
-        std::fs::read_to_string(key_path(home))
-            .with_context(|| format!("reading {}", key_path(home).display()))?,
-    );
+    // Refused when others may read or replace it (`key_file::read`).
+    let key = crate::key_file::read(&key_path(home))?;
     let tls = Tls::new(&cert, &key, &Roots::System, &hosts)
         .with_context(|| format!("the proxy CA cannot be used; {again}"))?;
     let now = crate::time::now_ms();

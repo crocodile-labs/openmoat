@@ -67,6 +67,21 @@ fn the_certificate_file_says_what_it_is_and_still_parses() {
     assert_eq!(valid_until("no header"), None);
 }
 
+/// A CA key others may read could sign certificates for them: the run stops.
+#[cfg(unix)]
+#[test]
+fn a_ca_key_others_may_read_stops_the_run() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let (_dir, home) = home_with_ca(&["a.test"], true);
+    let policy = policy(&["a.test"]);
+    assert!(load(&home, &policy).unwrap().is_some());
+    std::fs::set_permissions(key_path(&home), std::fs::Permissions::from_mode(0o640)).unwrap();
+    let Err(error) = load(&home, &policy) else {
+        panic!("a key of mode 640 was used");
+    };
+    assert!(format!("{error:#}").contains("mode 640"), "{error:#}");
+}
+
 #[test]
 fn a_run_without_terminated_secrets_needs_no_ca() {
     let dir = tempfile::tempdir().unwrap();

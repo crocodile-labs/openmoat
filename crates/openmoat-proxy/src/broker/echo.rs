@@ -68,3 +68,48 @@ impl<'a> Holdback<'a> {
         self.pending
     }
 }
+
+/// The reason of the row an answer stopped before a value leaves.
+pub(crate) fn value_came_back(host: &str, id: &str) -> String {
+    format!(
+        "the answer from {host} holds the value of secret `{id}`; it was stopped before the value \
+         reached the client"
+    )
+}
+
+/// A plain-HTTP answer to a request a value went into (ADR-020), searched as
+/// a terminated tunnel's is: the bytes the upstream sends pass a
+/// [`Holdback`], and the connection closes before a value. `leaked` is told
+/// the secret's id once, to record the refusal. The raw stream is searched,
+/// framing and all: a value the server splits across chunks of a chunked body
+/// is not recognised here (the terminated path reads the framing).
+pub(crate) struct Echo<'a, F: FnMut(&str) + Send> {
+    hold: Option<Holdback<'a>>,
+    leaked: F,
+}
+
+impl<'a, F: FnMut(&str) + Send> Echo<'a, F> {
+    pub(crate) fn new(broker: &'a Broker, leaked: F) -> Self {
+        Self {
+            hold: Some(Holdback::new(broker)),
+            leaked,
+        }
+    }
+}
+
+impl<F: FnMut(&str) + Send> crate::tunnel::Answer for Echo<'_, F> {
+    fn pass(&mut self, chunk: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+        match self.hold.as_mut()?.push(chunk) {
+            Ok(release) => Some(release),
+            Err(id) => {
+                self.hold = None;
+                (self.leaked)(id);
+                None
+            }
+        }
+    }
+
+    fn end(&mut self) -> Zeroizing<Vec<u8>> {
+        self.hold.take().map(Holdback::finish).unwrap_or_default()
+    }
+}

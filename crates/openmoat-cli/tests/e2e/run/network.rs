@@ -17,11 +17,7 @@ const ENETUNREACH: &str = "101";
 /// there the namespace must be used.
 fn namespaced(out: &Output) -> bool {
     let port_only = stderr(out).contains("restricted by port only");
-    assert!(
-        !(port_only && std::env::var_os("CI").is_some()),
-        "CI must run `openmoat run` in a network namespace: {}",
-        text(out)
-    );
+    super::check_netns(port_only, &text(out));
     if port_only {
         eprintln!("skipped: bubblewrap cannot make a network namespace here");
     }

@@ -20,8 +20,10 @@ fn oversized_and_malformed_heads_get_400() {
         h.exchange("\x16\x03\x01\x00\x05hello")
             .starts_with("HTTP/1.1 400")
     );
+    // A head that cannot be read comes before any credential: the first has
+    // its row, the two within 10 s after it are counted in a later one.
     let rows = h.rows();
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 1);
     assert!(
         rows.iter()
             .all(|r| r.rules == ["proxy-request"] && r.dest.is_none())

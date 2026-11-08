@@ -108,7 +108,13 @@ fn denied_paths_in_the_project_and_the_grants_are_masked() {
         !out.mounts
             .contains(&Mount::ReadOnly(p("proj/.claude/worktrees")))
     );
-    assert_eq!(out.placeholders, vec![p("proj/.envrc"), p("proj/.moat")]);
+    let made: Vec<&str> = out.placeholders.iter().map(|x| x.path.as_str()).collect();
+    let (envrc, moat) = (p("proj/.envrc"), p("proj/.moat"));
+    assert_eq!(made[..2], [envrc.as_str(), moat.as_str()]);
+    // and the hook settings the project lacks
+    let local = p("proj/.claude/settings.local.json");
+    assert!(made.contains(&local.as_str()), "{made:?}");
+    assert!(!made.contains(&p("proj/.claude/settings.json").as_str()));
     // Trees first, outermost first; the home itself is never mounted.
     let first_mask = out
         .mounts
@@ -230,7 +236,7 @@ allow:
         write: vec![p("proj"), p(".agent")],
         connect_port: Some(18080),
     };
-    let masks = grant_masks(&ir, &rules, &[p("proj")]);
+    let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
     assert_eq!(
         masks,
         [
@@ -293,7 +299,19 @@ fn the_network_namespace_keeps_the_projects_agent_configuration_read_only() {
     }
     let project = real.display().to_string();
     let ir = session_ir(&project);
-    let masks = project_masks(&ir, &[project.clone(), "/other/spelling".into()]).unwrap();
+    let all = project_masks(&ir, &[project.clone(), "/other/spelling".into()]).unwrap();
+    // the missing hook settings planned for the session are another test's
+    let made: Vec<String> = all.placeholders.iter().map(|x| x.path.clone()).collect();
+    let masks: Vec<Mount> = all
+        .mounts
+        .into_iter()
+        .filter(|m| {
+            let at = path_of(m);
+            !made
+                .iter()
+                .any(|x| x == at || x.replacen(&project, "/other/spelling", 1) == at)
+        })
+        .collect();
     let expected = [
         Mount::ReadWrite(p(".github")),
         Mount::ReadWrite(p(".pi")),
@@ -336,7 +354,8 @@ fn the_network_namespace_keeps_the_projects_agent_configuration_read_only() {
             "{writable}"
         );
     }
-    assert_eq!(project_masks(&ir, &[]).unwrap(), Vec::new());
+    let none = project_masks(&ir, &[]).unwrap();
+    assert!(none.mounts.is_empty() && none.placeholders.is_empty());
 }
 
 /// Under `--isolate` the folders above an agent's configuration directly in
@@ -383,3 +402,124 @@ fn isolate_pins_the_folders_holding_agent_configuration() {
         );
     }
 }
+
+/// With `~/.claude` a link, `--write ~/.claude` grants the directory it points
+/// to (`openmoat run` resolves its grants), and the deny of
+/// `~/.claude/settings.json` is masked there: compared as text, it lay below
+/// no grant and stayed writable to every command. Linux, where bubblewrap
+/// runs: on macOS the temp directory itself resolves elsewhere
+/// (`/var` → `/private/var`), which no grant written here does.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_linked_agent_folder_keeps_its_hook_settings_read_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", home.display());
+    for d in ["proj", "real-claude"] {
+        std::fs::create_dir_all(p(d)).unwrap();
+    }
+    std::fs::write(p("real-claude/settings.json"), "{}").unwrap();
+    std::os::unix::fs::symlink(p("real-claude"), p(".claude")).unwrap();
+    let ctx = EvalContext {
+        home: home.to_string_lossy().into_owned(),
+        project: Some(p("proj")),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: p("proj"),
+        case_insensitive_paths: false,
+    };
+    let policy = Policy::parse(DEFAULT_POLICY).expect("default policy");
+    let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
+    let rules = Rules {
+        read: Vec::new(),
+        write: vec![p("proj"), p("real-claude")],
+        connect_port: Some(18080),
+    };
+    let masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
+    assert!(
+        masks.contains(&Mount::ReadOnly(p("real-claude/settings.json"))),
+        "{masks:?}"
+    );
+    // the link's own spelling is no mount of its own: bubblewrap follows it
+    assert!(
+        !masks.iter().any(|m| path_of(m).starts_with(&p(".claude/"))),
+        "{masks:?}"
+    );
+    // and Landlock reports the deny as one it cannot enforce in that grant
+    let grants = Grants {
+        writes: vec![p("real-claude")],
+        ..Grants::default()
+    };
+    let report = landlock::generate(&ir, &grants).expect("generates").report;
+    let inside: Vec<String> = report
+        .allowances
+        .iter()
+        .filter(|a| a.rule == INSIDE_GRANTS_ALLOWANCE && a.kind == Kind::FsWrite)
+        .flat_map(|a| a.patterns.clone())
+        .collect();
+    assert!(inside.contains(&p(".claude/settings.json")), "{inside:?}");
+}
+
+/// The network namespace hides the Kerberos ticket caches in a read root
+/// (`/tmp/krb5cc_*`): Landlock grants `/tmp` whole. Other files there stay
+/// readable, and a policy's default never masks an entry, only a deny rule.
+#[test]
+fn ticket_caches_in_a_read_root_are_hidden_and_nothing_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", root.display());
+    for d in ["proj", "tmp/krb5cc_1000_dir"] {
+        std::fs::create_dir_all(p(d)).unwrap();
+    }
+    for f in ["tmp/krb5cc_1000", "tmp/build.log", "tmp/my-krb5cc_1000"] {
+        std::fs::write(p(f), "x").unwrap();
+    }
+    let ctx = EvalContext {
+        home: "/nowhere/home".into(),
+        project: Some(p("proj")),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: p("proj"),
+        case_insensitive_paths: false,
+    };
+    let tmp = p("tmp");
+    let policy = Policy::parse(&format!(
+        r#"
+version: 1
+defaults: {{ "*": deny }}
+deny:
+  - id: secrets-paths
+    fs.read: ["{tmp}/krb5cc_*", "{tmp}/krb5cc_*/**"]
+allow:
+  - id: work
+    fs.write: ["${{project}}/**"]
+"#
+    ))
+    .expect("test policy");
+    let ir = openmoat_core::ir::lower(&policy, &ctx).expect("lowers");
+    let rules = Rules {
+        read: vec![tmp.clone()],
+        write: vec![p("proj")],
+        connect_port: Some(18080),
+    };
+    let mut masks = grant_masks(&ir, &rules, &[p("proj")]).unwrap();
+    masks.sort_by(|a, b| path_of(a).cmp(path_of(b)));
+    assert_eq!(
+        masks,
+        [
+            Mount::Hide {
+                path: p("tmp/krb5cc_1000"),
+                dir: false,
+            },
+            Mount::Hide {
+                path: p("tmp/krb5cc_1000_dir"),
+                dir: true,
+            },
+        ]
+    );
+}
+
+/// The agents' hook settings a project lacks when the session starts.
+mod hook_settings;

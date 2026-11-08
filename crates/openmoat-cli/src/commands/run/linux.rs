@@ -26,8 +26,8 @@ use seccompiler::{
 use crate::sandbox::landlock::Rules;
 use crate::sandbox::seccomp::SOCKET_ARGS;
 use crate::sandbox::{
-    Grants, Report, exposure, kernel_self_in_writes, landlock_rules, netns_masks,
-    netns_project_masks, session_tmpdir,
+    Grants, Report, exposure, kernel_self_in_writes, landlock_rules, missing_hook_settings,
+    netns_masks, netns_project_masks, session_tmpdir,
 };
 
 /// `moat run --isolate`: bubblewrap around the same rules.
@@ -143,6 +143,10 @@ pub struct Confined {
     /// Where the sandbox is weaker than `moat run` promises: printed before
     /// the agent starts.
     warning: Option<String>,
+    /// Hook settings missing in the project when the agent starts, which
+    /// nothing covers without a network namespace: each that exists when the
+    /// agent exits is named.
+    watch: Vec<String>,
 }
 
 pub fn confine(
@@ -169,13 +173,16 @@ pub fn confine(
     match netns::network() {
         netns::Network::Namespace(bwrap) => {
             // The agent configuration and hook settings in the project,
-            // read-only where they exist, and the folders holding them pinned.
+            // read-only where they exist (missing hook settings created for
+            // the session), and the folders holding them pinned.
+            let project = netns_project_masks(policy, ctx)?;
             let mut masks = masks;
-            masks.extend(netns_project_masks(policy, ctx)?);
+            masks.extend(project.mounts);
             netns::namespaced(
                 &bwrap,
                 &generated.rules,
                 &masks,
+                &project.placeholders,
                 agent.report,
                 program,
                 &ctx.cwd,
@@ -190,6 +197,7 @@ pub fn confine(
                 bail!("{refusal}");
             }
             agent.warning = Some(netns::port_only_notice(port, &why, &masks));
+            agent.watch = missing_hook_settings(policy, ctx)?;
             Ok(agent)
         }
     }
@@ -286,6 +294,7 @@ fn restricted(rules: &Rules, report: Report, command: Command) -> Result<Confine
         restrict: Some((ruleset, filters)),
         _session: None,
         warning: None,
+        watch: Vec::new(),
     })
 }
 
@@ -421,12 +430,13 @@ impl Confined {
             mut command,
             restrict,
             _session,
+            watch,
             ..
         } = self;
         let Some((ruleset, filters)) = restrict else {
             return command.status().context("starting bubblewrap");
         };
-        std::thread::spawn(move || {
+        let status = std::thread::spawn(move || {
             ruleset
                 .restrict_self()
                 .context("applying the Landlock rules")?;
@@ -437,7 +447,11 @@ impl Confined {
         })
         .join()
         .ok()
-        .context("the thread that starts the agent panicked")?
+        .context("the thread that starts the agent panicked")?;
+        for line in netns::created_during_run(&watch, |path| Path::new(path).exists()) {
+            eprintln!("{line}");
+        }
+        status
     }
 }
 

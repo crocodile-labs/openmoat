@@ -84,6 +84,33 @@ fn statuses_serialise_with_their_reason() {
     );
 }
 
+/// The hook rows come from OpenMoat's own model of each host, and say so: the
+/// layer is named for the model, the host program has a layer of its own that
+/// the report never runs, and no host program's version stands beside them.
+#[test]
+fn the_hook_rows_are_labelled_as_the_model_and_name_no_host_version() {
+    let layer = |l: Layer| (serde_json::to_value(l).unwrap(), l.label());
+    assert_eq!(
+        layer(Layer::HostModel),
+        (
+            serde_json::json!("host-model"),
+            "host model (golden payloads)"
+        )
+    );
+    assert_eq!(
+        layer(Layer::RealHost),
+        (serde_json::json!("real-host"), "real host")
+    );
+    let host = super::HostRow {
+        id: Host::ClaudeCode.id(),
+        evidence: super::MODEL_ONLY,
+    };
+    assert_eq!(
+        serde_json::to_value(&host).unwrap(),
+        serde_json::json!({"id": "claude-code", "evidence": "model"})
+    );
+}
+
 #[test]
 fn every_promise_names_bundled_scenarios_and_a_layer() {
     let bundled: BTreeSet<String> = scenarios()
@@ -142,7 +169,7 @@ fn policy_and_hook_rows_are_judged_apart() {
     let by = |layer| rows.iter().find(|r| r.layer == layer).unwrap();
     assert_eq!(by(Layer::Policy).status, Status::Pass);
     assert!(
-        matches!(&by(Layer::Hook).status, Status::Fail(why) if why.contains("host reads allow"))
+        matches!(&by(Layer::HostModel).status, Status::Fail(why) if why.contains("host reads allow"))
     );
     let rows = scenario_rows(promise, &[checked(id, &["expected deny, got allow"], &[])]);
     assert!(matches!(rows[0].status, Status::Fail(_)));

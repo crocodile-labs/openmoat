@@ -88,7 +88,7 @@ pub(super) fn review_and_accept(
         .collect();
     let mut held: Vec<(std::path::PathBuf, ToolPins)> = tools::all(home)?
         .into_iter()
-        .filter(|(_, p)| !p.held.is_empty() && wanted(&p.server))
+        .filter(|(_, p)| p.held_count() > 0 && wanted(&p.server))
         .collect();
     if changes.is_empty() && held.is_empty() {
         return Ok(false);
@@ -101,6 +101,20 @@ pub(super) fn review_and_accept(
     }
     for change in &changes {
         writeln!(out, "{}", change.describe())?;
+        let takes_name = change.accept.is_some()
+            && change
+                .host
+                .parse::<Host>()
+                .is_ok_and(|host| mcp::takes_builtin_name(host, &change.name));
+        if takes_name {
+            writeln!(
+                out,
+                "! `{}` is the name of Claude in Chrome, which Claude Code provides itself; this \
+                 server is another program, so all its results mark the session untrusted, its \
+                 tab lists too",
+                crate::render::clean(&change.name)
+            )?;
+        }
     }
     for (_, pins) in &held {
         for text in pins.describe_held() {
@@ -117,13 +131,13 @@ pub(super) fn review_and_accept(
     mcp::accept(home, &changes)?;
     let mut count = 0;
     for (path, pins) in &mut held {
-        count += pins.held.len();
+        count += pins.held_count();
         pins.accept_held();
         pins.save(path)?;
     }
     writeln!(
         out,
-        "✔ accepted {} server definition(s) and {count} tool(s)",
+        "✔ accepted {} server definition(s) and {count} held tool(s), instructions, prompts or resources",
         changes.len()
     )?;
     Ok(true)
@@ -174,6 +188,13 @@ pub(super) fn wrap_servers(
         }
         let entry = wrap::wrapped(&server.entry, binary, &server.name, new_sandbox)
             .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, on)));
+        // The proxy takes only the hook decisions of the agent whose file
+        // starts it; a definition wrapped before `--host` existed gets it now.
+        let host = server.host;
+        let entry = match entry {
+            Some(entry) => Some(wrap::with_host(&entry, host).unwrap_or(entry)),
+            None => wrap::with_host(&server.entry, host),
+        };
         let Some(entry) = entry else {
             continue;
         };

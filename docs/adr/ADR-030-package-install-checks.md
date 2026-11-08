@@ -77,3 +77,24 @@ itself never downloads it.
   a person who needs one sets their own `npm_config_before` or the key to `0`.
 - `openmoat-core` gains a data directory and no dependency (the list is
   `include_str!`, parsed once with `std::sync::LazyLock`).
+
+## Amendment 2026-11-08: the repository's files no longer switch the release age off
+
+The cut-off was skipped when the project's own `.npmrc` had a `before=` line, when the
+substring `exclude-newer` appeared anywhere in its `pyproject.toml` or `uv.toml` (a
+comment counted), or when it had a `uv.lock`, without a word. The project is the
+repository's, not the person's: a cloned repository with `before=2099-01-01` turned the
+check off for every install the agent ran.
+
+- A cut-off is the person's when it is in `openmoat run`'s own environment or in the
+  tool's user-level configuration: npm's `userconfig` (`~/.npmrc`, or the file
+  `npm_config_userconfig` names) and uv's `uv.toml` (`$XDG_CONFIG_HOME/uv/uv.toml`, else
+  `~/.config/uv/uv.toml`). It is kept, as before.
+- A cut-off in the project's `.npmrc`, `pyproject.toml` (`[tool.uv] exclude-newer`) or
+  `uv.toml` is read as the key itself (TOML parsed, not a substring search) and kept only
+  when it is a date before the policy's: then it is stricter, and the variable would
+  override it with a later one. A later date, a duration or a value that is not a date gets
+  the policy's cut-off; both tools read the variable over the project's files.
+- A project with a `uv.lock` still gets no `UV_EXCLUDE_NEWER`, for the reason above, but
+  `openmoat run` now says so on every start and names the two ways to keep a cut-off
+  (`exclude-newer` under `[tool.uv]`, or the variable set before `openmoat run`).

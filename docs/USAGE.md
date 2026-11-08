@@ -770,6 +770,33 @@ Through the gateway:
   and its calls are refused (error -32602, rule `mcp-tool-held`), the first time the server
   starts too (ADR-032). When the server says its tools changed, the gateway reads them
   again itself, so a changed tool is held even if the agent keeps its old list.
+- **The server's instructions, prompts and resources are pinned with its tools.** A host
+  puts the `instructions` of a server's `initialize` answer in the model's prompt, and
+  shows it the descriptions of its prompts and resources. The gateway passes on only the
+  ones you accepted ([ADR-069](adr/ADR-069-mcp-gateway-whole-server-surface.md)): new or
+  changed instructions are taken out of the answer (and the server information is the one
+  you accepted), a new or changed prompt, resource or resource template is left out of its
+  listing, and a `prompts/get` of a held prompt is refused (rule `mcp-tool-held`), until
+  `openmoat mcp accept` shows you what changed. A new version number alone is not a
+  change. A server you accepted before this release has what it says now pinned as it is
+  the first time it starts, without asking again. Accepted instructions are still the
+  server's text: each session that calls one of the server's tools has them kept as
+  untrusted content (a host they name is injected input, `injected-input`, and the
+  session is marked untrusted, rule `mcp-server-text` in the audit log).
+- **The server's requests to the agent are checked.** A server may ask the agent to run
+  the model for it (`sampling/createMessage`) or to ask you something
+  (`elicitation/create`). A sampling request that asks for the session's context
+  (`includeContext` other than `none`) is refused, since the agent would send the server
+  what other servers returned; the text of every other request is kept as untrusted
+  content of the session the gateway serves, like a tool's result. An answer from the
+  agent reaches the server only for a request the server sent.
+- **What you accept is what the model reads.** `openmoat mcp accept` shows each character
+  a terminal does not draw as `?`: control characters, zero-width, bidirectional and other
+  format characters, the soft hyphen, invisible operators, tag characters (U+E0000 to
+  U+E007F, which spell text no terminal shows) and variation selectors. Under a definition
+  that holds any, it says how many, so a description that looks harmless in the terminal
+  cannot hide text for the model. Such a tool is held even under
+  `mcp: { trust_first_sight: true }`.
 - **A call passes only when the hook decided exactly that call.** The gateway matches each
   tool call to the hook's decision for the same tool and arguments, made within the hour,
   and uses each decision once. A call the hook never saw, or one whose arguments changed
@@ -790,7 +817,11 @@ Through the gateway:
   the host.
 - **Each call is tied to the session that made it.** The gateway's audit row (host
   `mcp-proxy`) carries the session and call id of the hook's decision, so
-  `openmoat audit export --session <id>` shows both rows, and the session's taint applies:
+  `openmoat audit export --session <id>` shows both rows, and the session's taint applies.
+  The gateway takes only the decisions of the agent whose configuration starts it, and
+  the decision of the session it served before another session's with the same
+  arguments, so each result is kept for the session that asked for it. The session's
+  taint applies:
   after the session read a secret, its MCP calls need review, and the gateway passes one only after
   the person said yes.
 
@@ -981,7 +1012,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat trust [<repo>] [--revoke]` | let a repository's `.moat/policy.yaml` allow, until the file changes; it shows the file, its digest and every rule it adds, and asks `Trust this file? [y/N]` first |
 | `openmoat mcp accept [<server>]` | review a changed or new MCP server definition, or tools `openmoat mcp proxy` holds, and accept them; until then that server's tool calls are refused |
 | `openmoat mcp wrap [<server>…] [--sandbox \| --no-sandbox] [--dry-run]` · `openmoat mcp unwrap [<server>…]` | run stdio MCP servers through `openmoat mcp proxy`, which starts one only from a definition a person accepted, in `openmoat run`'s sandbox by default where it can sandbox (`--no-sandbox` opts out; a rewrap keeps the choice unless a flag is given), pins each tool's title, description, input and output schemas and annotations and hides one that changed or that nobody accepted yet, every tool of a server it has not seen included · point them back; `openmoat init --mcp-proxy` wraps every one, `openmoat uninstall` unwraps them ([ADR-026](adr/ADR-026-mcp-server-and-tool-pinning.md), [ADR-032](adr/ADR-032-mcp-proxy-holds-first-sight.md)) |
-| `openmoat mcp proxy --server <name> [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
+| `openmoat mcp proxy --server <name> [--host <agent>] [--sandbox] [--write PATH]… -- <command>` | the wrapper `openmoat mcp wrap` writes into the agent's configuration; the agent starts it, you do not. `--host` names the agent whose file starts it: only that agent's hook decisions let its calls through (a server wrapped before this option existed gets it the next time you run `openmoat mcp wrap`). It starts the server only when this command line is the one an accepted definition gives; otherwise it answers every request with an error naming `openmoat mcp accept <name>` and exits 1 ([ADR-049](adr/ADR-049-mcp-startup-gate.md)) |
 | `openmoat policy lint` · `openmoat policy check "<action>" [--kind shell\|fs-read\|fs-write\|net\|fetch\|mcp]` · `openmoat policy compile` | validate a policy · test an action against it · print what the OS layers enforce |
 | `openmoat policy check-diff [--base <rev> [--head <rev>]] [--policy <file>] [--format text\|json\|github]` | check a change before it is merged: from `--base` to `--head` (`HEAD`), or a unified diff on stdin; exit 0 nothing found, 2 something the policy denies, 3 something for review ([MERGE_CHECK.md](MERGE_CHECK.md)); `--provenance review\|info\|off` (default `review`) shows what provenance notes say agents wrote in the change, never changing the exit code |
 | `openmoat provenance [--range <rev-range>] [--write-notes] [--verify] [--format text\|json]` | which files and lines of commits an agent session wrote, from this machine's audit log, and whether it had read untrusted content first · keep a note per commit on `refs/notes/openmoat` (person-only) · check those notes against the log (exit 64 on a mismatch) ([PROVENANCE.md](PROVENANCE.md)) |
@@ -990,7 +1021,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat policy install <pack.yaml> [--sig <file>] [--name <name>]` · `openmoat policy remove <name>` | install a signed policy pack after its signature verifies; its rules apply as `pack:<name>:<id>` · take it out again |
 | `openmoat sandbox show` · `openmoat sandbox sync` | see the host sandbox settings the policy compiles to · write and re-pin them for the agents whose hook is installed |
 | `openmoat bench [--host …] [--hook <command>] [--verbose] [--format json]` | send the bundled MoatBench scenarios to OpenMoat in a throwaway home, or to any hook command with `--hook` and `--host`, and print the scorecard; the scenarios' commands never run ([MOATBENCH.md](MOATBENCH.md#reproduce-it-openmoat-bench)) |
-| `openmoat bench --report [--host …] [--scratch-dir DIR] [--format json\|markdown]` | the proof report: each security promise per layer (policy decision, host hook, OS sandbox, network boundary) as PASS, FAIL or NOT TESTED HERE with the reason; the OS rows run the attacks under `openmoat run` in the throwaway home; exits 1 when an exercised layer fails ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)) |
+| `openmoat bench --report [--host …] [--scratch-dir DIR] [--format json\|markdown]` | the proof report: each security promise per layer (policy decision, host model from OpenMoat's golden payloads, real host, OS sandbox, network boundary) as PASS, FAIL or NOT TESTED HERE with the reason; the OS rows run the attacks under `openmoat run` in the throwaway home; exits 1 when an exercised layer fails ([MOATBENCH.md](MOATBENCH.md#proof-report-openmoat-bench---report)) |
 | `openmoat run [--isolate] [--write PATH]… [--netns auto\|require] [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; on Linux it does not protect `.env`, `.git` or `.moat` inside the project); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp; `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
 | `openmoat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own; it serves only requests with a session credential (Claude Code's sessions get one from their `SessionStart` hook) unless `sandbox.proxy_serve_without_credential` is set; an allowed host is reached on ports 443 and 80 unless a `net` or `fetch` rule names `host:port`, and a plain-HTTP secret goes to port 80 unless it sets `port` ([POLICY.md](POLICY.md#52-openmoat-proxy)) |
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |

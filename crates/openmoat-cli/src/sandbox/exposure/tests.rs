@@ -312,3 +312,35 @@ fn nested_rules_and_denied_trees_hold_write_paths_outside_the_project() {
         "{projects:?}"
     );
 }
+
+/// With `~/.claude` a link, `--write ~/.claude` is resolved to the folder it
+/// points to; the run still refuses without a namespace, since the rule's
+/// `~/.claude/settings.json` is compared where it resolves (Linux, where the
+/// refusal applies).
+#[cfg(target_os = "linux")]
+#[test]
+fn a_linked_agent_folder_in_a_write_path_is_refused_without_a_namespace() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = std::fs::canonicalize(dir.path()).unwrap();
+    let p = |rel: &str| format!("{}/{rel}", home.display());
+    std::fs::create_dir_all(p("proj")).unwrap();
+    std::fs::create_dir_all(p("real-claude")).unwrap();
+    std::os::unix::fs::symlink(p("real-claude"), p(".claude")).unwrap();
+    let ctx = EvalContext {
+        home: home.to_string_lossy().into_owned(),
+        project: Some(p("proj")),
+        real_home: None,
+        real_project: None,
+        moved_dirs: Vec::new(),
+        cwd: p("proj"),
+        case_insensitive_paths: false,
+    };
+    let policy = Policy::parse(DEFAULT_POLICY).unwrap();
+    let held = crate::sandbox::kernel_self_in_writes(&policy, &ctx, &[p("real-claude")]).unwrap();
+    let paths: Vec<&str> = held.iter().map(|(_, p)| p.as_str()).collect();
+    assert!(
+        paths.contains(&p(".claude/settings.json").as_str()),
+        "{held:?}"
+    );
+    assert!(held.iter().all(|(w, _)| *w == p("real-claude")), "{held:?}");
+}

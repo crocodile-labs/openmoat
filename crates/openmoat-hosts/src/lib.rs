@@ -364,6 +364,11 @@ pub struct HookRequest {
     /// file as it is to learn the content the call leaves (ADR-048). Empty
     /// for every other tool.
     pub edits: Vec<Replacement>,
+    /// The `apply_patch` envelope the call applies, when the tool sends one
+    /// (Codex `apply_patch`, OpenCode `apply_patch` and `patch`): the guard
+    /// replays it on the files as they are to learn the content it leaves
+    /// ([`openmoat_core::patch_replay`]). `None` for every other tool.
+    pub patch: Option<String>,
     /// For an MCP tool call, its arguments as [`mcp_call_arguments`] reads
     /// them: `openmoat mcp proxy` passes a call on to the server only when it
     /// matches one the hook decided (ADR-045). `None` for any other call.

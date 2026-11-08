@@ -11,8 +11,14 @@ use serde::Serialize;
 pub enum Layer {
     /// The engine's decision on the call, read back from the audit log.
     Policy,
-    /// The host's payload shape and its reading of the hook's reply.
-    Hook,
+    /// OpenMoat's model of a host: the payload shape and the reading of the
+    /// hook's reply OpenMoat ships for it (`openmoat_hosts::bench`, golden
+    /// payloads). No host program runs; a mistake the model shares with
+    /// OpenMoat's parser passes here.
+    HostModel,
+    /// The host program itself; the report never runs one, so its rows are
+    /// NOT TESTED HERE.
+    RealHost,
     /// The OS sandbox `openmoat run` generates from the policy, running the attack.
     OsSandbox,
     /// The egress proxy's decision on a request.
@@ -24,7 +30,8 @@ impl Layer {
     pub fn label(self) -> &'static str {
         match self {
             Self::Policy => "policy decision",
-            Self::Hook => "host hook",
+            Self::HostModel => "host model (golden payloads)",
+            Self::RealHost => "real host",
             Self::OsSandbox => "OS sandbox",
             Self::Network => "network boundary",
         }

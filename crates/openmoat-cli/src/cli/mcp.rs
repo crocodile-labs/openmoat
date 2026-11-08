@@ -39,6 +39,11 @@ pub struct McpProxyArgs {
     #[arg(long)]
     pub server: String,
 
+    /// The agent whose configuration starts the server: only that agent's hook
+    /// decisions let its calls through. `openmoat mcp wrap` writes it.
+    #[arg(long, value_parser = super::parse_host())]
+    pub host: Option<openmoat_hosts::Host>,
+
     /// Start the server under `openmoat run`: in a sandbox made from the policy, with
     /// network only through OpenMoat's proxy (macOS, Linux). Not inside `openmoat run`:
     /// sandboxes do not nest.

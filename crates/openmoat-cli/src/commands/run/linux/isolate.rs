@@ -28,6 +28,7 @@ use super::{Confined, Rules, refuse_exposed, restricted};
 use crate::cli::IsolatedArgs;
 use crate::context::path_string;
 use crate::exit::Code;
+use crate::sandbox::bwrap::Placeholder;
 use crate::sandbox::{Grants, Report, bwrap, bwrap_mounts};
 
 /// Where bubblewrap is taken from. Not `PATH`: `bwrap` starts unconfined and
@@ -109,6 +110,7 @@ pub fn isolate(
         restrict: None,
         _session: Some(session),
         warning: None,
+        watch: Vec::new(),
     })
 }
 
@@ -225,15 +227,16 @@ fn splice(tcp: &TcpStream, unix: &UnixStream) {
 
 /// A private directory for the session (mode `0700`) with the proxy's socket
 /// and the placeholders hidden paths are covered with (mode `000`), and the
-/// placeholders created in the project. All are removed when it drops.
+/// placeholders created in the project. All are removed when it drops, the
+/// project's only while still as made.
 pub struct Session {
     dir: PathBuf,
     pub(super) socket: PathBuf,
-    placeholders: Vec<PathBuf>,
+    placeholders: Vec<Placeholder>,
 }
 
 impl Session {
-    pub(super) fn create(placeholders: &[String]) -> Result<Self> {
+    pub(super) fn create(placeholders: &[Placeholder]) -> Result<Self> {
         let dir = std::env::temp_dir().join(format!("moat-run-{}", std::process::id()));
         DirBuilder::new()
             .mode(0o700)
@@ -248,9 +251,19 @@ impl Session {
             .set_permissions(Permissions::from_mode(0o000))?;
         std::fs::create_dir(session.dir.join("dir"))?;
         std::fs::set_permissions(session.dir.join("dir"), Permissions::from_mode(0o000))?;
-        for path in placeholders {
-            File::create_new(path).with_context(|| format!("creating a placeholder at {path}"))?;
-            session.placeholders.push(PathBuf::from(path));
+        // Outermost first; each is recorded once made, so a failure part way
+        // removes what was made.
+        for placeholder in placeholders {
+            let path = &placeholder.path;
+            let made = if placeholder.dir {
+                std::fs::create_dir(path)
+            } else {
+                File::create_new(path).and_then(|mut file| {
+                    io::Write::write_all(&mut file, placeholder.contents.as_bytes())
+                })
+            };
+            made.with_context(|| format!("creating a placeholder at {path}"))?;
+            session.placeholders.push(placeholder.clone());
         }
         Ok(session)
     }
@@ -267,16 +280,33 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        for path in &self.placeholders {
-            // Only while it is still the empty file this session created.
-            if std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file() && m.len() == 0) {
-                let _ = std::fs::remove_file(path);
-            }
+        // Innermost first, each only while it is still as this session made it.
+        for placeholder in self.placeholders.iter().rev() {
+            remove_placeholder(placeholder);
         }
         let _ = std::fs::remove_file(&self.socket);
         let _ = std::fs::remove_file(self.dir.join("file"));
         let _ = std::fs::remove_dir(self.dir.join("dir"));
         let _ = std::fs::remove_dir(&self.dir);
+    }
+}
+
+/// Remove `placeholder` if it is still as made: a folder while empty, a file
+/// while it holds what was written; anything changed or replaced stays.
+fn remove_placeholder(placeholder: &Placeholder) {
+    let path = Path::new(&placeholder.path);
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return;
+    };
+    if placeholder.dir {
+        if meta.is_dir() {
+            // fails, and keeps it, unless it is empty
+            let _ = std::fs::remove_dir(path);
+        }
+    } else if meta.is_file()
+        && std::fs::read(path).is_ok_and(|held| held == placeholder.contents.as_bytes())
+    {
+        let _ = std::fs::remove_file(path);
     }
 }
 

@@ -236,7 +236,8 @@ fn grant_masks_deny_inside_grants_what_the_checker_denies() {
             trust: None,
         };
         let generated = landlock::generate(&ir, &grants).expect("generates");
-        let masks = bwrap::grant_masks(&ir, &generated.rules, std::slice::from_ref(&project));
+        let masks =
+            bwrap::grant_masks(&ir, &generated.rules, std::slice::from_ref(&project)).unwrap();
         let checker = ir.checker().expect("compiles");
         let effect = |kind, path: &str| masked_effect(&generated.rules, &masks, kind, path);
         let wrong = unreported(&checker, &generated.report, &paths, true, effect);

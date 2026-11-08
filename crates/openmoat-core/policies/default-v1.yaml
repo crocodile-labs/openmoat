@@ -119,6 +119,21 @@ deny:
       - "~/.m2/settings-security.xml"
       - "~/.gradle/gradle.properties"
     fs.write: *build-credentials
+  # Kerberos ticket caches where MIT Kerberos and Heimdal keep them by default, a
+  # file or a directory collection: with one anyone can act as you on the network
+  # services it covers. `hook_only` (ADR-034) for the host sandboxes, which cannot
+  # deny a glob inside the temp folder they grant (Codex's Linux sandbox lists
+  # every folder below a deny glob, Cursor's would lose `/tmp`); `openmoat run`
+  # applies it in its own sandbox and adds the cache `KRB5CCNAME` names
+  - id: kerberos-tickets
+    reason: a Kerberos ticket cache
+    title: reading or changing your Kerberos tickets
+    why: with a ticket anyone can act as you on the services it covers
+    hook_only: true
+    fs.read: &kerberos-tickets
+      - "/tmp/krb5cc_*"
+      - "/tmp/krb5cc_*/**"
+    fs.write: *kerberos-tickets
   # Where each supported agent keeps its login, provider keys and OAuth tokens.
   # The hook denies the agent's own tools reading or writing them (a shell
   # command naming them, file and MCP tools), and every OS sandbox denies them
@@ -1136,6 +1151,10 @@ review:
       # `yarnPath`, `.cargo/config.toml` `rustc-wrapper`/`runner`, `bunfig.toml`
       # `preload`), in the project or the home
       "**/.npmrc", "**/.yarnrc", "**/.yarnrc.yml", "**/.cargo/config.toml", "**/.cargo/config", "**/bunfig.toml",
+      # a project's Codex, pi and OpenCode settings (here and below) need review;
+      # a write whose content turns that host's hook off (`[features] hooks =
+      # false`, a pi `extensions` entry or an OpenCode plugin entry that removes
+      # OpenMoat's) is denied before the file changes (`project-settings`)
       "**/.claude/hooks/**", "**/.mcp.json", "**/.cursor/mcp.json", "**/.codex/config.toml",
       "~/.claude.json", "~/.claude/plugins/**", "~/.cursor/mcp.json", "~/.cursor/cli-config.json",
       # OpenClaw plugins, which its Gateway loads and runs with the agent's rights

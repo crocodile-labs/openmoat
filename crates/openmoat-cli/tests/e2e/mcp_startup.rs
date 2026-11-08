@@ -203,6 +203,8 @@ fn wrap_sandboxes_by_default_and_a_rewrap_keeps_the_choice() {
             "proxy",
             "--server",
             "gh",
+            "--host",
+            "claude-code",
             "--sandbox",
             "--",
             "npx",

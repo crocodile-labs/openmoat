@@ -61,6 +61,12 @@ impl Trust {
     pub fn write(cert_pem: &str) -> Result<Self> {
         let temp =
             std::fs::canonicalize(std::env::temp_dir()).context("resolving the temp directory")?;
+        Self::write_in(cert_pem, &temp)
+    }
+
+    /// [`Trust::write`] in the temp directory `temp`: the run's own, which
+    /// its commands may read (`commands/run/temp.rs`).
+    pub fn write_in(cert_pem: &str, temp: &std::path::Path) -> Result<Self> {
         let dir = temp.join(format!("moat-run-{}-ca", std::process::id()));
         let ca = dir.join("ca.pem");
         write_private(&ca, cert_pem.as_bytes())?;

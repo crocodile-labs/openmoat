@@ -20,6 +20,46 @@ mod agent_config;
 /// The running agent keeps its login; other agents' stay denied (ADR-054).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod agent_logins;
+/// `--isolate` never runs a `bwrap` found through `PATH`.
+#[cfg(target_os = "linux")]
+mod isolate_path;
+/// Linux without bubblewrap: the port-only path a stock system takes.
+#[cfg(target_os = "linux")]
+mod stock_linux;
+
+/// Set by CI's `stock linux` job, whose runner has no bubblewrap and keeps
+/// unprivileged user namespaces restricted, as a stock Ubuntu does: there
+/// `openmoat run` must take the port-only path (Landlock and seccomp alone).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) const STOCK_LINUX: &str = "MOAT_TEST_STOCK_LINUX";
+
+/// Whether this is CI's `stock linux` job ([`STOCK_LINUX`]).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn stock_linux() -> bool {
+    std::env::var_os(STOCK_LINUX).is_some()
+}
+
+/// Whether `openmoat run` must get a network namespace here: on CI, whose
+/// Linux jobs install bubblewrap, except the `stock linux` job.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn netns_required() -> bool {
+    std::env::var_os("CI").is_some() && !stock_linux()
+}
+
+/// Fail when the run's network namespace is missing where it is required,
+/// or present on the `stock linux` job, which must test the path without
+/// one; `port_only` is whether `openmoat run` said it had none.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn check_netns(port_only: bool, shown: &str) {
+    assert!(
+        !(port_only && netns_required()),
+        "CI must run `openmoat run` in a network namespace: {shown}"
+    );
+    assert!(
+        port_only || !stock_linux(),
+        "the stock Linux job must run `openmoat run` without a network namespace: {shown}"
+    );
+}
 
 /// `moat run -- /bin/sh -c <script>` in the project, with the temp directory
 /// outside the home so that writing the home is not a temp-directory write.
@@ -104,35 +144,6 @@ fn isolate_is_refused_on_macos() {
     assert!(!text(&out).contains("ran\n"), "{}", text(&out));
 }
 
-/// bubblewrap starts unconfined, so it comes from the system's directories,
-/// never from `PATH`: a `bwrap` the project ships on a relative entry does
-/// not run. Without a system one the agent does not start at all.
-#[cfg(target_os = "linux")]
-#[test]
-fn isolate_never_runs_a_bwrap_from_path() {
-    use std::os::unix::fs::PermissionsExt as _;
-
-    let (sb, project) = installed_with_secret();
-    let marker = project.join("project-bwrap-ran");
-    let fake = project.join("bin/bwrap");
-    std::fs::create_dir_all(project.join("bin")).unwrap();
-    std::fs::write(&fake, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
-    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let out = output(
-        sb.command()
-            .current_dir(&project)
-            .env("PATH", "bin:/usr/bin:/bin")
-            .args(["run", "--isolate", "--", "/bin/sh", "-c", "echo ran"]),
-        None,
-    );
-    assert!(!marker.exists(), "the project's bwrap ran: {}", text(&out));
-    let system = ["/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap"];
-    if !system.iter().any(|p| Path::new(p).exists()) {
-        assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
-        assert!(stderr(&out).contains("needs bubblewrap"), "{}", text(&out));
-    }
-}
-
 /// Plain `moat run` on Linux says, before the agent starts, what Landlock
 /// leaves open inside the project and that `--isolate` closes it; macOS's
 /// Seatbelt denies those paths, so it says nothing of the kind.
@@ -206,7 +217,7 @@ pub mod confined {
         let shown = stderr(out);
         let unavailable = shown.contains("needs bubblewrap") || shown.contains("bubblewrap cannot");
         assert!(
-            !(unavailable && std::env::var_os("CI").is_some()),
+            !(unavailable && netns_required()),
             "CI must run the Isolated tier: {}",
             text(out)
         );
@@ -487,6 +498,88 @@ print("io_uring=" + str(ctypes.get_errno()))
         }
         let own = run_sh_with(&sb, &project, script, &[("UV_EXCLUDE_NEWER", "2026-01-01")]);
         assert!(stdout(&own).contains("uv=2026-01-01\n"), "{}", text(&own));
+    }
+
+    /// The agent gets a temp directory of the run's own as `TMPDIR`, removed
+    /// afterwards; the shared one is no longer writable, and a Kerberos ticket
+    /// cache where Kerberos keeps it by default (`/tmp/krb5cc_<uid>`) cannot
+    /// be read by a command.
+    #[test]
+    fn the_run_has_its_own_temp_directory_and_ticket_caches_stay_closed() {
+        let (sb, project) = installed_with_secret();
+        // As `openmoat run` resolves it (`/private/var/…` on macOS).
+        let shared = sb.home.with_file_name("tmp");
+        std::fs::create_dir_all(&shared).unwrap();
+        let shared = std::fs::canonicalize(&shared).unwrap();
+        // A fake cache under a name of this test's own, never a real one.
+        let id = Command::new("id").arg("-u").output().unwrap();
+        let uid = String::from_utf8_lossy(&id.stdout).trim().to_owned();
+        let cache = format!("/tmp/krb5cc_{uid}_openmoat_e2e_{}", std::process::id());
+        let planted = std::fs::File::create_new(&cache)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, b"FAKE-TICKET"))
+            .is_ok();
+        let script = format!(
+            "case \"$TMPDIR\" in \"{shared}\"/openmoat-run-*) echo private=0;; esac
+             echo x > \"$TMPDIR/f\" && cat \"$TMPDIR/f\" >/dev/null; echo own=$?
+             echo \"$TMPDIR\" > \"{shared}/where\"; echo shared=$?
+             cat \"{cache}\"; echo krb=$?",
+            shared = shared.display()
+        );
+        let out = run_sh(&sb, &project, &script);
+        if planted {
+            let _ = std::fs::remove_file(&cache);
+        }
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        for expected in ["private=0\n", "own=0\n"] {
+            assert!(stdout(&out).contains(expected), "{expected}: {shown}");
+        }
+        assert!(!stdout(&out).contains("shared=0\n"), "{shown}");
+        assert!(!shared.join("where").exists(), "{shown}");
+        let leftovers = std::fs::read_dir(&shared)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("openmoat-run-"))
+            .count();
+        assert_eq!(leftovers, 0, "removed when the run ends: {shown}");
+        // Without a network namespace Landlock cannot deny inside the read root.
+        let port_only = stderr(&out).contains("restricted by port only");
+        if planted && !port_only {
+            assert!(!stdout(&out).contains("krb=0\n"), "{shown}");
+            assert!(!shown.contains("FAKE-TICKET"), "{shown}");
+        }
+    }
+
+    /// The repository's own files cannot switch the cut-off off: a far
+    /// `before=` in its `.npmrc` still gets npm's, and a `uv.lock`, which keeps
+    /// uv as it is, is named on standard error.
+    #[test]
+    fn the_projects_files_do_not_switch_the_release_age_off() {
+        let (sb, project) = installed_with_secret();
+        std::fs::write(project.join(".npmrc"), "before=2099-01-01\n").unwrap();
+        std::fs::write(project.join("uv.lock"), "version = 1\n").unwrap();
+        let script =
+            "echo \"npm=${npm_config_before-unset}\"; echo \"uv=${UV_EXCLUDE_NEWER-unset}\"";
+        let out = run_sh(&sb, &project, script);
+        if !ran(&out) {
+            return;
+        }
+        let shown = text(&out);
+        let npm = stdout(&out)
+            .lines()
+            .find_map(|l| l.strip_prefix("npm="))
+            .map(str::to_owned);
+        assert!(
+            npm.is_some_and(|v| v.ends_with("T00:00:00Z") && !v.starts_with("2099")),
+            "{shown}"
+        );
+        assert!(stdout(&out).contains("uv=unset\n"), "{shown}");
+        assert!(
+            shown.contains("uv gets no release-age cut-off") && shown.contains("uv.lock"),
+            "{shown}"
+        );
     }
 
     #[test]

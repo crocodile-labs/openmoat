@@ -234,6 +234,7 @@ fn parse(host: Host, payload: &str) -> Result<HookRequest, HostError> {
         action: mapped.action,
         content,
         edits,
+        patch: None,
         mcp_arguments,
         sandboxed: false,
         event: HookEvent::PreToolUse,

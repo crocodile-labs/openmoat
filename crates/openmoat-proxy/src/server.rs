@@ -15,6 +15,7 @@ mod capacity;
 mod limits;
 mod recheck;
 mod terminate;
+mod unauthenticated;
 mod wire;
 
 use std::io::{self, ErrorKind, Write as _};
@@ -29,11 +30,12 @@ use zeroize::Zeroizing;
 pub use self::capacity::RULE_CAPACITY;
 use self::capacity::{Full, Refusals};
 pub use self::limits::Limits;
+use self::unauthenticated::{Noise, Unauthenticated};
 pub(crate) use self::wire::response;
 use self::wire::{read_head, read_hello, refuse, respond, summary};
 use crate::audit::{Connection, Recorder};
 use crate::body::{self, BodyEnd, Framing};
-use crate::broker::{Broker, Channel, Watch};
+use crate::broker::{Broker, Channel, Echo, RULE_SECRET, Watch, value_came_back};
 use crate::decide::{self, RULE_REQUEST, RULE_SNI};
 use crate::local::{self, LocalService};
 use crate::request::{Request, Target};
@@ -107,6 +109,8 @@ struct Served<'s> {
     /// [`decide::port_policy`] of the policy, compiled.
     ports: &'s CompiledPolicy<'s>,
     shares: Shares,
+    /// Refusals before a credential was verified, recorded at a bounded rate.
+    noise: Noise,
 }
 
 /// One connection's session (`None` without session mode) and start time,
@@ -132,6 +136,7 @@ impl Proxy<'_> {
             addresses: &addresses,
             ports: &ports,
             shares: Shares::new(self.limits.max_connections),
+            noise: Noise::default(),
         };
         let served = &served;
         let active = AtomicUsize::new(0);
@@ -144,6 +149,7 @@ impl Proxy<'_> {
                     Err(e) => return Err(e),
                 };
                 refusals.flush(self.recorder, Instant::now());
+                served.noise.flush(self.recorder, Instant::now());
                 let _ = client.set_write_timeout(Some(self.limits.handshake_timeout));
                 let full = |kind: Full| {
                     respond(&client, 503, kind.reply());
@@ -200,7 +206,10 @@ impl Proxy<'_> {
                     session: None,
                     started,
                 };
-                self.record(turn, None, &decision);
+                // Before any credential: counted, not one row each.
+                if let Some(row) = served.noise.row(Unauthenticated::Head, &decision, started) {
+                    self.record(turn, None, &row);
+                }
                 refuse(client, 400, &decision.reasons[0]);
                 return;
             }
@@ -320,6 +329,7 @@ impl Proxy<'_> {
                 Forward::All
             }
         };
+        let mut echo = None;
         let (first_bytes, inspect) = match &request.target {
             Target::Connect { host, .. } => {
                 match self.check_tunnel(client, host, rest.to_vec(), &decision, &request, turn) {
@@ -339,6 +349,16 @@ impl Proxy<'_> {
                 // Only the owner host's head carries a value; it is zeroed
                 // with `first_bytes` once written.
                 let injected = self.broker.inject(host, Channel::Plain(*port), head);
+                // An answer to a request a value went into is searched for
+                // it, as a terminated tunnel's is (`broker/echo.rs`).
+                let request = &request;
+                echo = injected.as_ref().map(|_| {
+                    Echo::new(self.broker, move |id: &str| {
+                        let why = value_came_back(host, id);
+                        let refused = Decision::single(Verdict::Deny, RULE_SECRET, why);
+                        self.record(turn, Some(request), &refused);
+                    })
+                });
                 let head = injected.as_deref().map_or(head.as_slice(), Vec::as_slice);
                 let body_bytes = &rest[..body_in_rest];
                 (Zeroizing::new([head, body_bytes].concat()), Some(inspect))
@@ -350,11 +370,12 @@ impl Proxy<'_> {
                 every: self.limits.taint_recheck,
                 still_allowed: &still_allowed,
             });
+            let answer = echo.as_mut().map(|e| e as &mut dyn tunnel::Answer);
             tunnel::relay(
                 client,
                 &upstream,
                 self.limits.idle_timeout,
-                inspect,
+                (inspect, answer),
                 recheck,
             );
         }
@@ -390,7 +411,13 @@ impl Proxy<'_> {
             }
             Err(why) => {
                 let decision = Decision::single(Verdict::Deny, RULE_SESSION, why.to_string());
-                self.record(unnamed, Some(request), &decision);
+                // Before any credential: counted, not one row each.
+                if let Some(row) = served
+                    .noise
+                    .row(Unauthenticated::Credential, &decision, started)
+                {
+                    self.record(unnamed, Some(request), &row);
+                }
                 refuse(client, 407, &summary(&decision));
                 return None;
             }

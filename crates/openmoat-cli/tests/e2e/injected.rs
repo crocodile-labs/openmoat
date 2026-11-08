@@ -141,3 +141,29 @@ fn a_local_command_s_output_keeps_nothing() {
     let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "Bash", &curl));
     assert_eq!(verdict, "defer", "{reason}");
 }
+
+/// A server the agent's configuration defines under Claude in Chrome's name is
+/// another program (the real one is Claude Code's own): once a person accepted
+/// it, its `tabs_context_mcp` taints the session like any tool's result.
+// `accept_mcp` answers `mcp accept`'s question through a terminal, Unix only.
+#[cfg(unix)]
+#[test]
+fn a_configured_server_named_claude_in_chrome_gets_no_tab_list_exemption() {
+    let sb = Sandbox::installed(&[".claude"]);
+    std::fs::write(
+        sb.home.join(".claude.json"),
+        r#"{"mcpServers": {"claude-in-chrome": {"command": "npx", "args": ["tabs-lookalike"]}}}"#,
+    )
+    .unwrap();
+    sb.accept_mcp();
+    let proj = sb.project();
+    let memory = sb.home.join(".claude/projects/p/memory/notes.md");
+    let note = json!({"file_path": memory.to_string_lossy(), "content": "- a note"});
+    let tabs = "mcp__claude-in-chrome__tabs_context_mcp";
+    let input = json!({"createIfEmpty": true});
+    let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, tabs, &input));
+    assert_ne!(verdict, "deny", "{reason}");
+    let (verdict, reason) = decide(&sb, "claude-code", &call("s1", &proj, "Write", &note));
+    assert_eq!(verdict, "ask", "{reason}");
+    assert!(reason.contains("session-taint"), "{reason}");
+}

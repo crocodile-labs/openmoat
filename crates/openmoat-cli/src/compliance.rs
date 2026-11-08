@@ -165,6 +165,7 @@ pub const GROUPS: &[Group] = &[
         covers: Covers::Rules(&[
             "secrets-paths",
             "build-credentials",
+            "kerberos-tickets",
             "agent-credentials",
             "env-secrets",
             "env-dump",

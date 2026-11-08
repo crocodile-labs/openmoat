@@ -110,10 +110,12 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let lightweight = super::run::tier::doctor_warning(super::run::bubblewrap());
     let alias = warnings::alias_hooks(&home, &binary);
     let expiring = warnings::grant_expiry(&home, crate::time::now_ms());
+    let keys = warnings::key_modes(&home);
     for warning in [tiocsti, hangs, state, macos, network, lightweight, expiring]
         .into_iter()
         .flatten()
         .chain(alias)
+        .chain(keys)
     {
         report.warn(&warning);
     }

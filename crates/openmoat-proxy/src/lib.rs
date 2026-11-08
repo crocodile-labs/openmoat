@@ -38,6 +38,7 @@
 mod audit;
 mod body;
 mod broker;
+pub mod coalesce;
 mod decide;
 mod exchange;
 mod local;

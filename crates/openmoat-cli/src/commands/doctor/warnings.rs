@@ -144,9 +144,39 @@ pub(super) fn hangs(home: &Home, now_ms: i64) -> Option<String> {
     ))
 }
 
+/// The private keys of the state directory that others may read or replace:
+/// `openmoat proxy`, `openmoat run` and the guard refuse to use them
+/// (`key_file`), and this row says which and how to fix it.
+pub(super) fn key_modes(home: &Home) -> Vec<String> {
+    [
+        crate::proxy_session::key_path(home),
+        crate::proxy_ca::key_path(home),
+    ]
+    .iter()
+    .filter_map(|path| crate::key_file::problem(path))
+    .map(|problem| format!("private key      {problem}"))
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_key_others_may_read_is_a_row() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        assert!(key_modes(&home).is_empty(), "no key yet");
+        crate::proxy_session::Key::load_or_create(&home).unwrap();
+        assert_eq!(key_modes(&home), Vec::<String>::new());
+        let key = crate::proxy_session::key_path(&home);
+        std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let rows = key_modes(&home);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert!(rows[0].contains("mode 644"), "{rows:?}");
+    }
 
     #[test]
     fn tiocsti_warns_only_for_codex_on_a_kernel_that_allows_it() {

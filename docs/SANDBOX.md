@@ -361,7 +361,9 @@ bubblewrap.
   glob inside a read root or a `--write` path is covered for the session as under
   `--isolate` (hidden, or bound read-only for a write deny): `~/.cargo/credentials.toml`
   stays unreadable and, with `--write ~/.claude`, `~/.claude/settings.json` unwritable.
-  Without a namespace these stay open, and `openmoat run` names them on every start;
+  `openmoat run` grants a `--write` path where it resolves, so each deny is compared
+  where it resolves too: with `~/.claude` a link to another folder, the mask is put on
+  `settings.json` in that folder. Without a namespace these stay open, and `openmoat run` names them on every start;
   a `--write` path that holds what `kernel-self` protects (OpenMoat's state, an
   agent's hook settings, existing or not) or lies inside a tree it protects whole
   (`~/.codex/sessions`) refuses to start instead (exit 64), naming the paths. So does
@@ -389,8 +391,23 @@ bubblewrap.
   settings there (`.claude/settings.json`, `.cursor/hooks.json`, `.codex/hooks.json`,
   `.gemini/settings.json`, `.github/copilot/settings.json`, `.copilot/hooks/`), and
   each folder holding them is bound onto itself so it cannot be renamed; `--isolate`
-  pins those folders too. One created later or in a subdirectory, and all of them
-  without a namespace, stay writable, since Landlock grants the project whole.
+  pins those folders too. A hook settings file that does not exist yet
+  (`.claude/settings.local.json`, `.gemini/settings.json`,
+  `.github/copilot/settings.local.json`, `.codex/hooks.json`, `.cursor/hooks.json`, …)
+  would let a command turn the next session's hook off, so in the namespace and under
+  `--isolate` `openmoat run` creates it for the session (`{}` for a JSON file, which
+  every agent reads as settings that change nothing; a folder for `.copilot/hooks/`),
+  with the folders above it, binds the file read-only and the folders onto themselves,
+  and removes them when the agent exits while they are still as made. `git status`
+  shows them during the session; leave them out of commits. An agent configuration
+  file created later, one in a subdirectory, a hook settings file below a link, and
+  all of them without a namespace stay writable, since Landlock grants the project
+  whole; without a namespace `openmoat run` names, when the agent exits, each hook
+  settings file that was missing at the start and exists now:
+
+  ```text
+  moat run: .gemini/settings.json did not exist when the agent started and does now; ...
+  ```
 - **OpenMoat's state directory.** For the same reason, `openmoat run` on Linux refuses to
   start when a tree it grants (the project, a read root, a `--write` path, the temp
   directory) holds the state directory (`MOAT_HOME`, default `~/.moat`) or lies inside
@@ -413,7 +430,27 @@ bubblewrap.
   outside `openmoat run`.
 - The agent and every command it starts may read the project, `sandbox.read_roots`,
   the temp directory and the agent's own executable; never the keychain. They may
-  write the project, the temp directory and each `--write` path (the agent's state).
+  write the project, the run's own temp directory and each `--write` path (the agent's
+  state). That temp directory is new for each run: `openmoat-run-<random>` (mode `0700`)
+  inside the system's, given to the agent as `TMPDIR` and removed with everything in it
+  when the run ends. The shared temp directory (`/tmp` on Linux, `/var/folders/…/T` on
+  macOS) holds other programs' state and other sessions' files, so it is no longer
+  writable; it stays readable where `sandbox.read_roots` lists it. A tool that honours
+  `TMPDIR` (compilers, `npm`, `pip`, `cargo`, `go`, `mktemp`) works as before; a
+  command that writes a fixed `/tmp/<name>` fails with "permission denied", as it did on
+  macOS already:
+
+  ```bash
+  openmoat run -- sh -c 'echo x > "$TMPDIR/f" && echo ok'   # ok
+  openmoat run -- sh -c 'echo x > /tmp/f'                    # Permission denied
+  ```
+
+  Kerberos ticket caches stay closed: `kerberos-tickets` denies `/tmp/krb5cc_*`, where MIT
+  Kerberos and Heimdal keep them by default (`hook_only` for the host sandboxes), and
+  `openmoat run` applies it in its sandbox and adds the cache `KRB5CCNAME` names
+  (`FILE:` or `DIR:`) for the run. On Linux the network namespace
+  hides each cache that exists in a read root when the agent starts; without one,
+  Landlock cannot deny inside the read root `/tmp`, and they stay readable there.
   Deny rules still win (`~/.claude/settings.json` stays unwritable; on Linux only where
   the agent gets a network namespace, above).
 - **Agent logins.** The agent reads its own login inside the sandbox, so `openmoat run`

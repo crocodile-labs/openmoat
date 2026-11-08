@@ -193,7 +193,7 @@ fn mcp_changes(home: &Home, binary: &Path) -> Result<Vec<String>> {
             .map(|(p, why)| format!("{} cannot be read: {why}", p.display())),
     );
     for (_, pins) in crate::mcp::tools::all(home)? {
-        if !pins.held.is_empty() {
+        if pins.held_count() > 0 {
             lines.push(format!(
                 "MCP server `{}` lists {}",
                 pins.server,

@@ -95,3 +95,14 @@ still `agent-credentials`.
   (about 6.4 ms) and the decision time of a mixed set of commands were unchanged within
   noise in a release build.
 - OS layers are unchanged: they already deny or allow the files themselves.
+
+## Amendment 2026-11-08: the shared temp folder itself is left out
+
+A new deny rule, `kerberos-tickets`, names the Kerberos ticket caches in the temp folder
+(`/tmp/krb5cc_*`), whose literal folder is `/tmp`. Under this rule every read of `/tmp`
+itself (`cd /tmp && …`, `ls /tmp`) would need review, though the folder holds every
+program's temp files and a person's prompt there would teach nothing. The shared temp
+folder in each spelling (`/tmp`, `/private/tmp`) is therefore left out, as the home folder
+is; a folder below it is checked as anywhere else, and the caches themselves stay denied.
+A recursive read of `/tmp` reaches them in hook-only use; under `openmoat run` the
+sandbox denies them.

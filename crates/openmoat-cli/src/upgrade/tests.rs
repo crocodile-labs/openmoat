@@ -105,6 +105,37 @@ fn a_policy_from_the_previous_default_is_offered_the_proxy_ca_lines() {
     assert!(openmoat_core::Policy::parse(&merged.text).is_ok());
 }
 
+/// The note on hook-off project settings (`project-settings`) lands in a
+/// policy from the previous default, next to the person's own change.
+#[test]
+fn a_policy_from_the_previous_default_is_offered_the_project_settings_note() {
+    let new = &openmoat_core::DEFAULT_POLICY.replace("\r\n", "\n");
+    let added = "      # a project's Codex, pi and OpenCode settings (here and below) need review;\n      \
+                 # a write whose content turns that host's hook off (`[features] hooks =\n      \
+                 # false`, a pi `extensions` entry or an OpenCode plugin entry that removes\n      \
+                 # OpenMoat's) is denied before the file changes (`project-settings`)\n";
+    assert!(new.contains(added));
+    let old = new.replace(added, "");
+    let mine = |text: &str| {
+        text.replace(
+            "\"~/.zsh_history\"",
+            "\"~/.zsh_history\"\n      - \"~/mine\"",
+        )
+    };
+    let merged = merge(&old, &mine(&old), new);
+    assert_eq!(merged.conflicts().count(), 0);
+    assert_eq!(merged.applied().count(), 1);
+    assert_eq!(merged.text, mine(new));
+    let policy = openmoat_core::Policy::parse(&merged.text).unwrap();
+    let runs_later = policy.review.iter().find(|g| g.id == "runs-later").unwrap();
+    assert!(
+        runs_later
+            .fs_write
+            .iter()
+            .any(|p| p == "**/.codex/config.toml")
+    );
+}
+
 #[test]
 fn crlf_policies_line_up_with_the_lf_default() {
     let yours = BASE.replace('\n', "\r\n");

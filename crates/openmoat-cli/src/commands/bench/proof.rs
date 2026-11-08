@@ -52,12 +52,18 @@ struct Row {
     reproduce: Vec<String>,
 }
 
+/// A host the report covers, and what its rows rest on: OpenMoat's model of
+/// it (`model`), never a run of the host program, so no host version is
+/// named. A host program's version on the search path says nothing about
+/// what the rows tested.
 #[derive(Serialize)]
-struct HostVersion {
+struct HostRow {
     id: &'static str,
-    /// The host's program on the search path and its version, if found.
-    version: Option<String>,
+    evidence: &'static str,
 }
+
+/// [`HostRow::evidence`] for a host whose rows come from its golden payloads.
+const MODEL_ONLY: &str = "model";
 
 #[derive(Default, Serialize)]
 struct Summary {
@@ -74,7 +80,7 @@ struct Report {
     os: String,
     /// The OS sandbox `openmoat run` applies here; `None` where it refuses.
     os_sandbox: Option<&'static str>,
-    hosts: Vec<HostVersion>,
+    hosts: Vec<HostRow>,
     rows: Vec<Row>,
     summary: Summary,
 }
@@ -134,7 +140,7 @@ pub fn report(
             let check = fails_closed::GUARD_CHECK.to_owned();
             rows.push(row(
                 promise,
-                Layer::Hook,
+                Layer::HostModel,
                 check,
                 guard.clone(),
                 fails_closed::PROBE,
@@ -144,14 +150,13 @@ pub fn report(
             rows.push(Row {
                 promise: promise.id,
                 question: promise.question,
-                layer: Layer::Hook,
+                layer: Layer::RealHost,
                 check,
                 status,
                 reproduce: Vec::new(),
             });
         }
     }
-    crate::install::host_version::prefetch(hosts.iter().copied());
     let mut summary = Summary::default();
     for r in &rows {
         *match r.status {
@@ -168,9 +173,9 @@ pub fn report(
         os_sandbox: os::backend(),
         hosts: hosts
             .iter()
-            .map(|&h| HostVersion {
+            .map(|&h| HostRow {
                 id: h.id(),
-                version: crate::install::host_version::reported(h),
+                evidence: MODEL_ONLY,
             })
             .collect(),
         rows,
@@ -214,7 +219,7 @@ fn scenario_rows(promise: &promises::Promise, checked: &[Checked]) -> Vec<Row> {
     let none = "none of its scenarios runs on the hosts chosen";
     [
         (Layer::Policy, evidence(|c| &c.policy)),
-        (Layer::Hook, evidence(|c| &c.hook)),
+        (Layer::HostModel, evidence(|c| &c.hook)),
     ]
     .into_iter()
     .map(|(layer, evidence)| Row {

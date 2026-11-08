@@ -7,7 +7,8 @@
 //! The client's bytes can pass an inspection first. It can let a chunk
 //! through, let only its start through and nothing from the client after it
 //! (the end of a plain-HTTP request's body), or close the connection before
-//! the chunk is forwarded.
+//! the chunk is forwarded. The upstream's bytes can pass an [`Answer`] that
+//! holds some back and closes the connection before a brokered value.
 //!
 //! A [`Recheck`] asks, at most once per its interval and between reads,
 //! whether the connection may stay open (a session whose taint grew); a
@@ -37,6 +38,17 @@ pub(crate) enum Forward {
 /// What a chunk from the client passes before it is forwarded.
 pub(crate) type Inspect<'a> = &'a mut dyn FnMut(&[u8]) -> Forward;
 
+/// What the upstream's bytes pass before they reach the client, where the
+/// answer must be searched (a plain-HTTP request a secret's value went into):
+/// it may hold some back until it knows they start no value.
+pub(crate) trait Answer: Send {
+    /// The bytes to send on now, after `chunk` came; `None` closes the
+    /// connection without sending anything more.
+    fn pass(&mut self, chunk: &[u8]) -> Option<zeroize::Zeroizing<Vec<u8>>>;
+    /// The upstream finished: what is still held back, already searched.
+    fn end(&mut self) -> zeroize::Zeroizing<Vec<u8>>;
+}
+
 /// Whether an open connection may stay open, asked every `every`.
 #[derive(Clone, Copy)]
 pub(crate) struct Recheck<'a> {
@@ -48,11 +60,12 @@ pub(crate) struct Recheck<'a> {
 
 /// Relay between `client` and `upstream` until both sides finish, the
 /// connection is idle for `idle`, or `recheck` says it may not stay open.
+/// The client's bytes pass `inspect`, the upstream's `answer`.
 pub(crate) fn relay(
     client: &TcpStream,
     upstream: &TcpStream,
     idle: Duration,
-    inspect: Option<Inspect<'_>>,
+    (inspect, answer): (Option<Inspect<'_>>, Option<&mut dyn Answer>),
     recheck: Option<Recheck<'_>>,
 ) {
     let wait = recheck.map_or(idle, |r| r.every.min(idle));
@@ -69,16 +82,18 @@ pub(crate) fn relay(
         // A thread that cannot be created (the process is at its limit) closes
         // this connection instead of panicking through the server.
         let back = thread::Builder::new().spawn_scoped(scope, || {
-            copy(upstream, client, &activity, &checks, idle, None);
+            copy(upstream, client, &activity, &checks, idle, None, answer);
         });
         if back.is_err() {
             close(client, upstream);
             return;
         }
-        copy(client, upstream, &activity, &checks, idle, inspect);
+        copy(client, upstream, &activity, &checks, idle, inspect, None);
     });
 }
 
+/// Copy `from` to `to`: the client's bytes through `inspect`, the
+/// upstream's through `answer`.
 fn copy(
     from: &TcpStream,
     to: &TcpStream,
@@ -86,6 +101,7 @@ fn copy(
     checks: &Checks<'_>,
     idle: Duration,
     mut inspect: Option<Inspect<'_>>,
+    mut answer: Option<&mut dyn Answer>,
 ) {
     let mut buf = [0u8; BUFFER];
     // Set once `Forward::Part` has been answered: nothing more is forwarded.
@@ -97,9 +113,24 @@ fn copy(
         }
         match read {
             Ok(0) => {
+                // What the answer held back was searched with all before it.
+                if let Some(answer) = answer.as_mut()
+                    && (&*to).write_all(&answer.end()).is_err()
+                {
+                    break;
+                }
                 // Half-close: the other direction may still be answering.
                 let _ = to.shutdown(Shutdown::Write);
                 return;
+            }
+            Ok(n) if answer.is_some() => {
+                let Some(out) = answer.as_mut().and_then(|a| a.pass(&buf[..n])) else {
+                    break;
+                };
+                if (&*to).write_all(&out).is_err() {
+                    break;
+                }
+                activity.touch();
             }
             // Dropped bytes do not count as activity. Intended: once the
             // request ends, only the upstream's answer keeps the connection
