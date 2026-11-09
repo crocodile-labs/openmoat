@@ -1,2 +1,0 @@
-### Security
-- A download substituted into the text a shell runs (`sh -c "$(curl …)"`, `bash -c "$(wget -qO- …)"`, also behind a wrapper such as `env timeout 60 bash -c "$(curl …)"`) is now denied by `pipe-to-shell` like `curl … | sh`: the classifier reports it as the same canonical pipeline. `eval "$(curl …)"` gets that pipeline too. `echo "$(date)"` and a single-quoted `sh -c '$(…)'` are unchanged ([#768](https://github.com/crocodile-labs/openmoat/pull/768)).

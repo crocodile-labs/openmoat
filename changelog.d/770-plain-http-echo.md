@@ -1,2 +1,0 @@
-### Security
-- `openmoat proxy` searches the plain-HTTP answer to a request a `plain_http: true` secret's value went into for that value, as it already searched a terminated tunnel's answer: the connection closes before the value reaches the agent, and a `proxy-secret` row records it. Before, an owner host that echoed the request (a debugging endpoint, an error page quoting a header) handed the agent the value over plain HTTP ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

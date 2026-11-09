@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-core`: `TaintSettings` has a new public field `defined_servers` (`Vec<String>`, the MCP servers a configuration defines; the built-in metadata tools do not apply while it names `BUILTIN_METADATA_SERVER`; set it to `Vec::new()` where you build the settings yourself, or start from `TaintSettings::default()`), and `BUILTIN_METADATA_SERVER` is exported ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

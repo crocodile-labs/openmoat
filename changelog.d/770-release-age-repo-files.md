@@ -1,2 +1,0 @@
-### Security
-- `openmoat run` no longer lets a repository switch the package release age off: a `before=` in the project's `.npmrc` or `exclude-newer` in its `pyproject.toml` or `uv.toml` is kept only when it is a stricter (earlier) date, the TOML key is parsed instead of searched for as text, the person's own `~/.npmrc` and `~/.config/uv/uv.toml` are honoured, and a project with a `uv.lock`, which still gets no `UV_EXCLUDE_NEWER`, is named on every start ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

@@ -1,2 +1,0 @@
-### Security
-- `openmoat mcp accept` now shows tag characters, variation selectors, the soft hyphen, invisible operators and every other format character as `?`, and says how many invisible characters a tool definition holds, so a description that looks harmless in the terminal cannot hide text the model reads; such a tool is never pinned on first sight, even under `mcp: { trust_first_sight: true }` ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).

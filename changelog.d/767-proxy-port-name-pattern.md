@@ -1,2 +1,0 @@
-### Security
-- `openmoat proxy` no longer counts a name pattern with a port whose host part is all hex letters (`fac*:5432`) as an address pattern: only a host part that starts with a digit, or IPv6 text without a port, opens a private or unique local address, so such an allow cannot name `fd00::1:5432`. The policy engine already kept a pattern with a port from matching IPv6 text; a test now pins both layers ([#767](https://github.com/crocodile-labs/openmoat/pull/767)).
