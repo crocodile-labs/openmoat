@@ -82,6 +82,14 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 These hold for the current code. Each is a design consequence or a tracked gap, not
 something OpenMoat claims to stop.
 
+- **The guard's check of its own binary catches a file changed in place, not a binary
+  built to skip it (ADR-071).** Each re-pin records the binary's SHA-256 and release;
+  the guard denies every call when the file it runs from has other bytes under the
+  same release, and only reports an upgrade to another release. A binary changed to
+  skip the check, or an older genuine release put in its place, does not check. The
+  digest is cached beside the lock by size, modification time and inode; whoever can
+  write the state directory can rewrite the lock as well.
+
 - **Injected input is linked only where the host reports output, and only for the same
   request.**
   - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI
@@ -609,7 +617,12 @@ something OpenMoat claims to stop.
 
     Within those bounds, code in the sandbox can still add rows to the run's own
     sessions with payloads it chose, each decided by the policy as if the agent had made
-    the call. It cannot choose the verdict of a row, change the lock or the policy, read
+    the call. The token cannot be bound more tightly on any OS (ADR-071 §4): every host
+    starts its hooks and its tool commands the same way, so a descriptor reaches both,
+    a script that runs `openmoat guard` itself is the same program with the same parent
+    as a hook, and a per-run secret in the hook command would be readable by every
+    process of the user in the sandbox. The run's link row for each agent session says
+    that its rows show what was asked from inside the run, not that the agent asked it. It cannot choose the verdict of a row, change the lock or the policy, read
     a secret source, or make taint looser: link rows only add sessions to the run, and
     taint only tightens.
   - *Nothing in the payload beyond what `openmoat guard` already trusts.* The payload,
@@ -631,12 +644,18 @@ something OpenMoat claims to stop.
     Seatbelt on macOS, or, on Linux, a lock it cannot open while a seccomp filter holds
     the process (`Seccomp: 2`, which `openmoat run` always applies and no process can
     drop). Anywhere else it decides the call itself and records a `run-guard-outside`
-    row beside it. Not covered: the same hook environment can also set `MOAT_HOME`, which
-    picks the state directory, its policy and its lock; on Linux, inside another
-    seccomp sandbox (a container's default profile) such an environment can still
-    point `MOAT_HOME` at a directory it cannot open and get the relay. The agent's own
-    shell cannot set either (`env-poison` denies `MOAT_*`), and the known hosts'
-    settings files are under `kernel-self`.
+    row beside it.
+  - *The state directory, from the hook's command line (ADR-071).* `openmoat init`
+    writes `--home <state directory>` into every hook it installs, and the lock pins
+    the hook file. The guard decides with that directory whatever `MOAT_HOME` says,
+    and denies a call whose `MOAT_HOME` names another one, so a hook environment
+    cannot point it at another policy and lock, nor (on Linux, inside another seccomp
+    sandbox such as a container's default profile) at a directory it cannot open to
+    get the relay. Not covered: a hook written by a release before ADR-071, which has
+    no `--home` and still reads `MOAT_HOME`; `openmoat status` and `openmoat doctor`
+    report it as out of date until `openmoat init` rewrites it. The agent's own shell
+    cannot set `MOAT_*` (`env-poison`), and the known hosts' settings files are under
+    `kernel-self`.
   - Everything that goes wrong denies in the sandboxed guard, and the sandbox stays
     closed to `~/.moat` (tested in `tests/e2e/run_guard.rs`).
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**

@@ -182,7 +182,7 @@ fn every_verdict_is_rendered_as_goose_reads_it() {
 #[test]
 fn the_entry_runs_the_guard_for_every_tool_and_blocks_when_it_fails() {
     let spec = HookSpec::new("PreToolUse", "", 60, false);
-    let entry = Goose.entry(&spec, "goose", "/opt/it's/openmoat", false);
+    let entry = Goose.entry(&spec, "goose", &crate::GuardCommand::new("/opt/it's/openmoat"), false);
     assert_eq!(
         entry,
         json!({ "hooks": [{
@@ -198,9 +198,9 @@ fn the_entry_runs_the_guard_for_every_tool_and_blocks_when_it_fails() {
         Goose.binary(&entry, "goose").as_deref(),
         Some("/opt/it's/openmoat")
     );
-    let matched = Goose.entry(&HookSpec::new("PreToolUse", "^shell$", 60, false), "goose", "/b", false);
+    let matched = Goose.entry(&HookSpec::new("PreToolUse", "^shell$", 60, false), "goose", &crate::GuardCommand::new("/b"), false);
     assert_eq!(matched["matcher"], "^shell$");
-    let windows = command_for(r"C:\Program Files\openmoat.exe", "goose");
+    let windows = command_for(&crate::GuardCommand::new(r"C:\Program Files\openmoat.exe"), "goose");
     assert_eq!(
         binary_of(&windows, "goose").as_deref(),
         Some(r"C:\Program Files\openmoat.exe")
@@ -213,10 +213,10 @@ fn install_then_remove_gives_back_the_file() {
     let original = json!({});
     let mut root = original.clone();
     layout
-        .upsert(&mut root, "hooks.json", "goose", super::HOOKS, "/b/openmoat", || false)
+        .upsert(&mut root, "hooks.json", "goose", super::HOOKS, &crate::GuardCommand::new("/b/openmoat"), || false)
         .unwrap();
     assert_eq!(
-        layout.state(&root, "goose", super::HOOKS, "/b/openmoat", || false),
+        layout.state(&root, "goose", super::HOOKS, &crate::GuardCommand::new("/b/openmoat"), || false),
         crate::wire::hook_file::HookFileState::Installed
     );
     // An entry that lost `on_failure` is stale, and `init` writes it back.
@@ -225,7 +225,7 @@ fn install_then_remove_gives_back_the_file() {
         .unwrap()
         .remove("on_failure");
     assert!(matches!(
-        layout.state(&root, "goose", super::HOOKS, "/b/openmoat", || false),
+        layout.state(&root, "goose", super::HOOKS, &crate::GuardCommand::new("/b/openmoat"), || false),
         crate::wire::hook_file::HookFileState::Stale { .. }
     ));
     assert!(layout.remove(&mut root, "goose"));

@@ -300,7 +300,12 @@ fn review_is_a_deny_where_cursor_does_not_prompt() {
 fn an_entry_without_fail_closed_fails_open() {
     use crate::wire::hook_file::HookFile;
     let layout: &dyn HookFile = &hook_file::Cursor;
-    let mut entry = hook_file::Cursor.entry(&HOOKS[0], "cursor", "/x/openmoat", false);
+    let mut entry = hook_file::Cursor.entry(
+        &HOOKS[0],
+        "cursor",
+        &crate::GuardCommand::new("/x/openmoat"),
+        false,
+    );
     let root = |entry: &serde_json::Value| {
         serde_json::json!({ "version": 1, "hooks": { HOOKS[0].event: [entry] } })
     };
@@ -310,4 +315,39 @@ fn an_entry_without_fail_closed_fails_open() {
         layout.fails_open(&root(&entry), "cursor", &HOOKS[..1]),
         Some("failClosed")
     );
+}
+
+/// An entry that names no state directory, or another one, is stale: `init`
+/// rewrites it in place, `uninstall` still finds it, and only the entry for
+/// this state directory is installed (ADR-071).
+#[test]
+fn an_entry_without_this_state_directory_is_stale_and_still_ours() {
+    use crate::wire::hook_file::HookFile;
+    let layout: &dyn HookFile = &hook_file::Cursor;
+    let bare = crate::GuardCommand::new("/x/openmoat");
+    let homed = bare.clone().with_home("/h/.moat");
+    let mut root = serde_json::json!({});
+    layout
+        .upsert(&mut root, "hooks.json", "cursor", &HOOKS[..1], &bare, || false)
+        .unwrap();
+    assert!(matches!(
+        layout.state(&root, "cursor", &HOOKS[..1], &homed, || false),
+        crate::HookFileState::Stale { .. }
+    ));
+    let outcome = layout
+        .upsert(&mut root, "hooks.json", "cursor", &HOOKS[..1], &homed, || false)
+        .unwrap();
+    assert_eq!(outcome, crate::HookOutcome::Updated);
+    assert_eq!(
+        layout.state(&root, "cursor", &HOOKS[..1], &homed, || false),
+        crate::HookFileState::Installed
+    );
+    let entries = root["hooks"][HOOKS[0].event].as_array().unwrap();
+    assert_eq!(entries.len(), 1, "{root}");
+    let elsewhere = bare.with_home("/other/.moat");
+    assert!(matches!(
+        layout.state(&root, "cursor", &HOOKS[..1], &elsewhere, || false),
+        crate::HookFileState::Stale { .. }
+    ));
+    assert!(layout.remove(&mut root, "cursor"));
 }

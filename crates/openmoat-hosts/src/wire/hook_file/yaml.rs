@@ -19,7 +19,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 use super::{HookFile, HookFileError, HookOutcome};
-use crate::HookSpec;
+use crate::{GuardCommand, HookSpec};
 
 /// Why a YAML hook file was not edited.
 #[derive(Debug, Error)]
@@ -84,7 +84,7 @@ pub fn upsert(
     file: &str,
     id: &str,
     hooks: &[HookSpec],
-    binary: &str,
+    guard: &GuardCommand,
 ) -> Result<(HookOutcome, String), YamlHookError> {
     let root = parse(text).map_err(|reason| YamlHookError::Unreadable {
         file: file.to_owned(),
@@ -92,18 +92,18 @@ pub fn upsert(
     })?;
     let mut expected = root.clone();
     fill_empty(&mut expected, hooks);
-    let outcome = layout.upsert(&mut expected, file, id, hooks, binary, || false)?;
+    let outcome = layout.upsert(&mut expected, file, id, hooks, guard, || false)?;
     if outcome == HookOutcome::Unchanged {
         return Ok((outcome, text.to_owned()));
     }
     let layout_error = |why: String| YamlHookError::Layout {
         file: file.to_owned(),
         why,
-        entry: entries_text(layout, id, hooks, binary),
+        entry: entries_text(layout, id, hooks, guard),
     };
     let mut doc = Lines::of(text);
     for spec in hooks {
-        let entry = layout.entry(spec, id, binary, false);
+        let entry = layout.entry(spec, id, guard, false);
         doc.upsert(spec.event, &entry, layout, id)
             .map_err(layout_error)?;
     }
@@ -174,13 +174,18 @@ fn check(edited: &str, expected: &Value) -> Result<(), String> {
 }
 
 /// The entries for `hooks`, as the YAML a person adds under `hooks:`.
-fn entries_text(layout: &dyn HookFile, id: &str, hooks: &[HookSpec], binary: &str) -> String {
+fn entries_text(
+    layout: &dyn HookFile,
+    id: &str,
+    hooks: &[HookSpec],
+    guard: &GuardCommand,
+) -> String {
     let mut out = String::new();
     for spec in hooks {
         out.push_str("  ");
         out.push_str(spec.event);
         out.push_str(":\n");
-        for line in item_lines(&layout.entry(spec, id, binary, false), 4).unwrap_or_default() {
+        for line in item_lines(&layout.entry(spec, id, guard, false), 4).unwrap_or_default() {
             out.push_str(&line);
             out.push('\n');
         }

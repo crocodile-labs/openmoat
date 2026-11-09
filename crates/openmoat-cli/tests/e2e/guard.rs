@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::common::{Sandbox, fixture, hook_output as decision, stderr, stdout};
 
+mod state_dir;
 mod tools;
 
 /// The parsed `~/.claude/settings.json`.
@@ -32,7 +33,7 @@ fn init_creates_state_and_installs_claude_code_hook() {
     assert_eq!(hooks.as_array().unwrap().len(), 1);
     assert_eq!(
         hooks[0]["hooks"][0]["args"],
-        serde_json::json!(["guard", "--host", "claude-code"])
+        serde_json::json!(["guard", "--host", "claude-code", "--home", sb.home_word()])
     );
     assert_eq!(hooks[0]["hooks"][0]["onFailure"], "block");
     assert!(

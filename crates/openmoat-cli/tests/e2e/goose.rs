@@ -57,7 +57,7 @@ fn init_writes_one_entry_that_blocks_when_the_hook_fails() {
         action["command"]
             .as_str()
             .unwrap()
-            .ends_with(" guard --host goose"),
+            .ends_with(&sb.hook_args("goose")),
         "{hook}"
     );
 }

@@ -314,7 +314,7 @@ fn every_fixture_but_the_malformed_one_parses() {
 fn the_plugin_names_the_host_and_waits_as_long_as_the_spec_says() {
     let source = include_str!("integration/openmoat.js");
     assert!(source.starts_with("// OpenMoat for OpenCode."));
-    assert!(source.contains(r#"["guard", "--host", "opencode"]"#));
+    assert!(source.contains(r#"["guard", "--host", "opencode", "--home", MOAT_HOME]"#));
     assert!(source.contains(&format!(
         "const GUARD_TIMEOUT_MS = {}_000;",
         super::HOOK_TIMEOUT_S

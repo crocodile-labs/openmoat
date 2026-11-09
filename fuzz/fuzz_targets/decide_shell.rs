@@ -52,6 +52,11 @@ fuzz_target!(|data: &[u8]| {
     if trailing % 2 == 1 {
         return;
     }
+    // In a here-document with no closing line, ` ; true` is more of its body
+    // (a path it names becomes another path), not one more command.
+    if command.contains("<<") {
+        return;
+    }
     let padded = compiled().decide(&Action::Shell {
         command: format!("{command} ; true"),
     });

@@ -3,7 +3,8 @@
 
 use serde_json::{Value, json};
 
-use crate::{HookFile, HookSpec};
+use crate::wire::guard_command::split_guard;
+use crate::{GuardCommand, HookFile, HookSpec};
 
 #[derive(Debug)]
 pub(super) struct Codex;
@@ -13,11 +14,12 @@ impl HookFile for Codex {
         true
     }
 
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, _block: bool) -> Value {
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
+        let binary = guard.binary.replace('\'', r"'\''");
         json!({"matcher": spec.matcher, "hooks": [{
             "type": "command",
-            "command": format!("'{}' guard --host {id}", binary.replace('\'', r"'\''")),
-            "commandWindows": windows_command(binary, id),
+            "command": format!("'{binary}'{}", guard.shell_args(id)),
+            "commandWindows": windows_command(guard, id),
             "timeout": spec.timeout,
             "statusMessage": "OpenMoat",
         }]})
@@ -34,19 +36,20 @@ impl HookFile for Codex {
         if crate::wire::hook_file::nested::Nested.is_ours(entry, id) {
             return Some(command.to_owned());
         }
-        let quoted = command.strip_suffix(&format!(" guard --host {id}"))?;
+        let (quoted, _) = split_guard(command, id)?;
         let inner = quoted.strip_prefix('\'')?.strip_suffix('\'')?;
         Some(inner.replace(r"'\''", "'"))
     }
 }
 
-fn windows_command(binary: &str, id: &str) -> String {
+fn windows_command(guard: &GuardCommand, id: &str) -> String {
     // Codex defaults to cmd.exe /C. An encoded PowerShell command keeps cmd's
     // percent expansion and metacharacters out of the path, and also works
     // with a PowerShell command shell. Propagate guard's blocking exit code.
     let script = format!(
-        "& '{}' guard --host {id}; if ($null -eq $LASTEXITCODE) {{ exit 2 }}; exit $LASTEXITCODE",
-        binary.replace('\'', "''")
+        "& '{}'{}; if ($null -eq $LASTEXITCODE) {{ exit 2 }}; exit $LASTEXITCODE",
+        guard.binary.replace('\'', "''"),
+        guard.shell_args(id)
     );
     let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
     format!(

@@ -558,6 +558,11 @@ pub struct GuardArgs {
     /// (run by the plugin as it loads; `openmoat status` reports it).
     #[arg(long)]
     pub heartbeat: bool,
+    /// The state directory to decide with, as `openmoat init` writes it into
+    /// the hook (ADR-071). It wins over `MOAT_HOME`, and a `MOAT_HOME` that
+    /// names another directory makes the guard deny.
+    #[arg(long, value_name = "DIR")]
+    pub home: Option<String>,
 }
 
 #[derive(Debug, Args)]

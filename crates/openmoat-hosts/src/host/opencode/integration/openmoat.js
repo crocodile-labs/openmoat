@@ -105,6 +105,10 @@ import { spawn } from "node:child_process";
 
 /** @type {string} */
 const MOAT = __MOAT_BINARY__;
+// The state directory the guard decides with, from its command line and never
+// from the environment the host gives this plugin (ADR-071).
+/** @type {string} */
+const MOAT_HOME = __MOAT_HOME__;
 // Above `openmoat guard`'s own 30 s budget.
 const GUARD_TIMEOUT_MS = 45_000;
 const MAX_OUTPUT = 1 << 20;
@@ -200,7 +204,7 @@ function guard(payload, cwd) {
       finish({ code: null, stdout: "", stderr: why });
     };
     try {
-      child = spawn(MOAT, ["guard", "--host", "opencode"], {
+      child = spawn(MOAT, ["guard", "--host", "opencode", "--home", MOAT_HOME], {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
@@ -235,7 +239,7 @@ function guard(payload, cwd) {
 // saying the plugin has not reported.
 function heartbeat() {
   try {
-    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "opencode"], {
+    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "opencode", "--home", MOAT_HOME], {
       stdio: "ignore",
       windowsHide: true,
     });

@@ -437,10 +437,10 @@ fn a_review_hermes_would_approve_unseen_is_a_deny() {
 
 #[test]
 fn the_hook_command_is_quoted_for_hermes_and_read_back() {
-    let posix = command_for("/opt/it's/openmoat", "hermes", false);
+    let posix = command_for(&crate::GuardCommand::new("/opt/it's/openmoat"), "hermes", false);
     assert_eq!(posix, r"'/opt/it'\''s/openmoat' guard --host hermes");
     assert_eq!(binary_of(&posix, "hermes").as_deref(), Some("/opt/it's/openmoat"));
-    let windows = command_for(r"C:\Program Files\openmoat\openmoat.exe", "hermes", true);
+    let windows = command_for(&crate::GuardCommand::new(r"C:\Program Files\openmoat\openmoat.exe"), "hermes", true);
     assert_eq!(windows, r#""C:\Program Files\openmoat\openmoat.exe" guard --host hermes"#);
     assert_eq!(
         binary_of(&windows, "hermes").as_deref(),
@@ -448,7 +448,7 @@ fn the_hook_command_is_quoted_for_hermes_and_read_back() {
     );
     assert_eq!(binary_of("'/x/openmoat' guard --host codex", "hermes"), None);
     let spec = &Host::Hermes.spec().install.as_ref().unwrap().hooks[0];
-    let entry = Hermes.entry(spec, "hermes", "/x/openmoat", false);
+    let entry = Hermes.entry(spec, "hermes", &crate::GuardCommand::new("/x/openmoat"), false);
     assert_eq!(entry["fail_closed"], json!(true));
     assert_eq!(entry["timeout"], json!(60));
     assert!(entry.get("matcher").is_none());
@@ -464,7 +464,7 @@ fn an_entry_without_fail_closed_true_fails_open() {
     let hooks = Host::Hermes.spec().install.as_ref().unwrap().hooks;
     let layout: &dyn HookFile = &Hermes;
     let with = |entry: Value| json!({ "hooks": { "pre_tool_call": [entry] } });
-    let ours = Hermes.entry(&hooks[0], "hermes", "/x/openmoat", false);
+    let ours = Hermes.entry(&hooks[0], "hermes", &crate::GuardCommand::new("/x/openmoat"), false);
     assert_eq!(layout.fails_open(&with(ours.clone()), "hermes", hooks), None);
     for value in [None, Some(json!(false)), Some(json!("true"))] {
         let mut entry = ours.clone();
@@ -493,7 +493,7 @@ fn the_entry_goes_into_config_yaml_and_comes_out_again() {
                     approvals:\n  mode: manual\n";
     let hooks = Host::Hermes.spec().install.as_ref().unwrap().hooks;
     let (_, edited) =
-        yaml::upsert(&Hermes, original, "config.yaml", "hermes", hooks, "/x/openmoat").unwrap();
+        yaml::upsert(&Hermes, original, "config.yaml", "hermes", hooks, &crate::GuardCommand::new("/x/openmoat")).unwrap();
     assert!(edited.contains("# the main model"), "{edited}");
     let parsed = yaml::parse(&edited).unwrap();
     let ours = &parsed["hooks"]["pre_tool_call"][0];

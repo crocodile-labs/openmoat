@@ -20,7 +20,10 @@ fn the_pi_extension_blocks_on_everything_but_allow_no_answer_and_an_approved_rev
     assert_eq!(payload["cwd"], report["dir"]);
     assert_eq!(payload["hasUI"], true);
     assert!(payload["platform"].is_string(), "{payload}");
-    assert_eq!(report["argv"], serde_json::json!(["--host", "pi"]));
+    assert_eq!(
+        report["argv"],
+        serde_json::json!(["--host", "pi", "--home", "/h/.moat"])
+    );
 
     let result = |mode| entry(&report, "results", "mode", mode);
     let outcome = |mode| result(mode)["outcome"].as_str().unwrap().to_owned();

@@ -63,11 +63,12 @@ fn entry<'a>(report: &'a Value, list: &str, key: &str, name: &str) -> &'a Value 
         .unwrap_or_else(|| panic!("no {list} entry {name}: {report}"))
 }
 
-/// The heartbeats the plugin sent: `guard --heartbeat --host <id>`, once.
+/// The heartbeats the plugin sent: `guard --heartbeat --host <id> --home
+/// <state directory>`, once.
 fn assert_one_heartbeat(report: &Value, id: &str) {
     assert_eq!(
         report["heartbeats"],
-        serde_json::json!([["--heartbeat", "--host", id]]),
+        serde_json::json!([["--heartbeat", "--host", id, "--home", "/h/.moat"]]),
         "{report}"
     );
 }

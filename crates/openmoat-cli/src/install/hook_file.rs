@@ -109,7 +109,7 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
 pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Option<String>> {
     match config.layout {
         HookLayout::Owned(file) | HookLayout::Script(file) => {
-            return owned::render(file, binary, current);
+            return owned::render(config, file, binary, current);
         }
         HookLayout::Yaml(layout) => return yaml::render(config, layout, binary, current),
         HookLayout::Entries(_) | HookLayout::Plugin(_) => {}
@@ -144,7 +144,7 @@ fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Ou
             &config.settings_path.display().to_string(),
             config.host.id(),
             config.hooks,
-            &binary.to_string_lossy(),
+            &config.guard(binary),
             config.blocks_on_failure,
         )
         .map_err(anyhow::Error::new)
@@ -195,8 +195,8 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
         HookLayout::Entries(layout) => layout,
     };
     let id = config.host.id();
-    let binary = binary.to_string_lossy();
-    let state = match layout.state(&root, id, config.hooks, &binary, config.blocks_on_failure) {
+    let guard = config.guard(binary);
+    let state = match layout.state(&root, id, config.hooks, &guard, config.blocks_on_failure) {
         HookFileState::Missing => HookState::Missing,
         HookFileState::Installed => HookState::Installed,
         HookFileState::Stale { command } => HookState::Stale { command },

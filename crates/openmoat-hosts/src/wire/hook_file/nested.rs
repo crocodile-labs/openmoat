@@ -1,23 +1,24 @@
 //! Claude Code's exec-form layout (`settings.json`):
 //! `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{type, command,
 //! args, timeout}]}]}}`. Our entries are recognised by their `args`
-//! (`guard --host <id>`).
+//! (`guard --host <id>`, then `--home <state directory>`).
 
 use serde_json::{Value, json};
 
 use super::HookFile;
 use crate::HookSpec;
+use crate::wire::guard_command::{GuardCommand, is_guard_list};
 
 /// Claude Code's `settings.json` entries; also recognises legacy Codex entries.
 #[derive(Debug)]
 pub(crate) struct Nested;
 
 impl HookFile for Nested {
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, block: bool) -> Value {
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, block: bool) -> Value {
         let mut hook = json!({
             "type": "command",
-            "command": binary,
-            "args": ["guard", "--host", id],
+            "command": guard.binary,
+            "args": guard.arg_list(id),
             "timeout": spec.timeout,
         });
         if block {
@@ -38,7 +39,7 @@ impl HookFile for Nested {
                 hooks.iter().any(|h| {
                     h.get("args").and_then(Value::as_array).is_some_and(|args| {
                         let args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
-                        args == ["guard", "--host", id]
+                        is_guard_list(&args, id)
                     })
                 })
             })

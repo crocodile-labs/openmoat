@@ -26,6 +26,7 @@ fn config(dir: &Path) -> HostConfig {
         hooks: SPECS,
         layout: HookLayout::Owned(extension()),
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }
 
@@ -36,7 +37,9 @@ fn install(config: &HostConfig, binary: &Path) -> Outcome {
 
 #[test]
 fn the_extension_names_the_binary_once_and_waits_as_the_spec_says() {
-    let text = text(extension(), Path::new(r#"/opt/my "tools"/openmoat"#)).unwrap();
+    let cfg = config(Path::new("/x"));
+    let text = text(&cfg, extension(), Path::new(r#"/opt/my "tools"/openmoat"#)).unwrap();
+    assert!(text.contains(r#"const MOAT_HOME = "/h/.moat";"#));
     assert!(text.contains(r#"const MOAT = "/opt/my \"tools\"/openmoat";"#));
     assert!(!text.contains(BINARY_LINE));
     assert!(extension().is_ours(&text));
@@ -51,7 +54,7 @@ fn the_extension_names_the_binary_once_and_waits_as_the_spec_says() {
     assert!(
         extension()
             .source
-            .contains(r#"spawn(MOAT, ["guard", "--host", "pi"]"#)
+            .contains(r#"spawn(MOAT, ["guard", "--host", "pi", "--home", MOAT_HOME]"#)
     );
 }
 
@@ -72,7 +75,7 @@ fn init_writes_the_extension_once_and_rewrites_it_for_another_binary() {
     assert_eq!(hook_file::state(&cfg, binary), HookState::Installed);
     assert_eq!(
         fs::read_to_string(&cfg.settings_path).unwrap(),
-        text(extension(), binary).unwrap()
+        text(&cfg, extension(), binary).unwrap()
     );
 
     let other = Path::new("/opt/openmoat/bin/openmoat");
@@ -93,7 +96,7 @@ fn an_edited_extension_is_stale_and_a_file_of_the_persons_is_backed_up() {
     let cfg = config(dir.path());
     let binary = Path::new("/usr/local/bin/openmoat");
     install(&cfg, binary);
-    let edited = text(extension(), binary)
+    let edited = text(&cfg, extension(), binary)
         .unwrap()
         .replace("return await answer(", "return undefined; await answer(");
     fs::write(&cfg.settings_path, &edited).unwrap();
@@ -102,11 +105,17 @@ fn an_edited_extension_is_stale_and_a_file_of_the_persons_is_backed_up() {
         HookState::Stale { .. }
     ));
     assert_eq!(
-        render(extension(), binary, &edited).unwrap(),
-        Some(text(extension(), binary).unwrap())
+        render(&cfg, extension(), binary, &edited).unwrap(),
+        Some(text(&cfg, extension(), binary).unwrap())
     );
     assert_eq!(
-        render(extension(), binary, &text(extension(), binary).unwrap()).unwrap(),
+        render(
+            &cfg,
+            extension(),
+            binary,
+            &text(&cfg, extension(), binary).unwrap()
+        )
+        .unwrap(),
         None
     );
 

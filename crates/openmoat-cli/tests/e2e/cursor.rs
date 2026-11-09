@@ -41,7 +41,7 @@ fn init_installs_fail_closed_hooks_for_every_cursor_event() {
             entries[0]["command"]
                 .as_str()
                 .unwrap()
-                .ends_with("guard --host cursor"),
+                .ends_with(&sb.hook_args("cursor")),
             "{event}"
         );
     }

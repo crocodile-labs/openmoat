@@ -6,7 +6,8 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::hook_file::{HookFile, guard_args};
+use crate::wire::guard_command::{GuardCommand, split_guard};
+use crate::wire::hook_file::HookFile;
 
 /// GitHub Copilot CLI's hook file entries.
 #[derive(Debug)]
@@ -15,8 +16,8 @@ pub(crate) struct Copilot;
 impl HookFile for Copilot {
     /// No `matcher`, which the CLI would reject when empty, so it runs for
     /// every tool.
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, _block: bool) -> Value {
-        let args = guard_args(id);
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
+        let (binary, args) = (&guard.binary, guard.shell_args(id));
         json!({
             "type": "command",
             "bash": format!("'{}'{args}", binary.replace('\'', r"'\''")),
@@ -26,12 +27,12 @@ impl HookFile for Copilot {
     }
 
     fn is_ours(&self, entry: &Value, id: &str) -> bool {
-        bash(entry).is_some_and(|c| c.trim_end().ends_with(&guard_args(id)))
+        bash(entry).is_some_and(|c| split_guard(c, id).is_some())
     }
 
     /// The binary `entry` runs, unquoted from its `bash` command.
     fn binary(&self, entry: &Value, id: &str) -> Option<String> {
-        let quoted = bash(entry)?.trim_end().strip_suffix(&guard_args(id))?.trim();
+        let (quoted, _) = split_guard(bash(entry)?, id)?;
         Some(
             match quoted.strip_prefix('\'').and_then(|q| q.strip_suffix('\'')) {
                 Some(inner) => inner.replace(r"'\''", "'"),

@@ -52,7 +52,10 @@ pub fn link(store: &Store, run: &str, host: Host, session: &str) -> Result<()> {
         Verdict::Allow,
         LINK_RULE,
         format!(
-            "{} session {session} runs under this `openmoat run`; its taint applies to the proxy",
+            "{} session {session} runs under this `openmoat run`; its taint applies to the proxy. \
+             Its rows come through the run's relay, which any program in the run's sandbox can \
+             use: they show what was asked from inside the run, not that the agent asked it \
+             (ADR-071)",
             host.id()
         ),
     );

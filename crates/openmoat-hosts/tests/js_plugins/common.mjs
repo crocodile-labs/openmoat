@@ -12,6 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+/** The state directory every harness writes into the plugin (`--home`). */
+export const HARNESS_HOME = "/h/.moat";
+
 const FAKE_GUARD = `
 const fs = require("node:fs");
 const path = require("node:path");
@@ -72,11 +75,16 @@ export function scratch(prefix) {
  */
 export function plugin(source, dir, moat, name) {
   const original = readFileSync(source, "utf8");
-  for (const line of ["const MOAT = __MOAT_BINARY__;", "const GUARD_TIMEOUT_MS = 45_000;"]) {
+  for (const line of [
+    "const MOAT = __MOAT_BINARY__;",
+    "const MOAT_HOME = __MOAT_HOME__;",
+    "const GUARD_TIMEOUT_MS = 45_000;",
+  ]) {
     if (!original.includes(line)) throw new Error(`the plugin has no \`${line}\`; update the harness`);
   }
   const text = original
     .replace("const MOAT = __MOAT_BINARY__;", `const MOAT = ${JSON.stringify(moat)};`)
+    .replace("const MOAT_HOME = __MOAT_HOME__;", `const MOAT_HOME = ${JSON.stringify(HARNESS_HOME)};`)
     .replace("const GUARD_TIMEOUT_MS = 45_000;", `const GUARD_TIMEOUT_MS = ${HARNESS_GUARD_TIMEOUT_MS};`);
   const file = join(dir, name);
   writeFileSync(file, text);

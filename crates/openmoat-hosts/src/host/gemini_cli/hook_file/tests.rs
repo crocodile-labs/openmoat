@@ -3,7 +3,7 @@ use super::{binary_of, command_for};
 #[test]
 fn the_binary_is_quoted_for_the_shell_and_read_back() {
     let id = "gemini-cli";
-    let posix = command_for("/Users/me/My Tools/it's/openmoat", id, false);
+    let posix = command_for(&crate::GuardCommand::new("/Users/me/My Tools/it's/openmoat"), id, false);
     assert_eq!(
         posix,
         r"'/Users/me/My Tools/it'\''s/openmoat' guard --host gemini-cli"
@@ -12,7 +12,7 @@ fn the_binary_is_quoted_for_the_shell_and_read_back() {
         binary_of(&posix, id).as_deref(),
         Some("/Users/me/My Tools/it's/openmoat")
     );
-    let windows = command_for(r"C:\Program Files\it's\openmoat.exe", id, true);
+    let windows = command_for(&crate::GuardCommand::new(r"C:\Program Files\it's\openmoat.exe"), id, true);
     assert_eq!(
         windows,
         r"& 'C:\Program Files\it''s\openmoat.exe' guard --host gemini-cli; if (-not $?) { exit 2 }"
@@ -25,7 +25,7 @@ fn the_binary_is_quoted_for_the_shell_and_read_back() {
         binary_of("/usr/bin/openmoat guard --host gemini-cli", id).as_deref(),
         Some("/usr/bin/openmoat")
     );
-    let doubled = command_for("/opt/a''b/openmoat", id, false);
+    let doubled = command_for(&crate::GuardCommand::new("/opt/a''b/openmoat"), id, false);
     assert_eq!(
         binary_of(&doubled, id).as_deref(),
         Some("/opt/a''b/openmoat")

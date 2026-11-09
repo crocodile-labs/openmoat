@@ -51,7 +51,7 @@ fn init_writes_one_hook_entry_for_every_tool() {
             entry[shell]
                 .as_str()
                 .unwrap()
-                .ends_with(" guard --host copilot-cli"),
+                .ends_with(&sb.hook_args("copilot-cli")),
             "{entry}"
         );
     }

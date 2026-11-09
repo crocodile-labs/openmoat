@@ -581,7 +581,21 @@ moat: deny [kernel-integrity] — /Users/you/.moat/policy.yaml was modified;
 ```
 
 `openmoat doctor` lists what drifted. If it was not you, you caught what this tool exists
-for. The policy language, the full default policy and recipes are in
+for.
+
+The lock pins what the state files hold, not who may change them, so `openmoat doctor`
+also checks the mode and owner of each one (the state directory, the lock, the policy,
+the approvals, the trust and host records, the audit log, the keys). A file other users
+may write, or one another user owns, is a problem with its fix; one they may only read
+is a warning; `--verbose` lists every file's mode and owner:
+
+```
+openmoat doctor            # ✗ policy           ~/.moat/policy.yaml has mode 666: other users may change it under the lock; `chmod go-rwx ~/.moat/policy.yaml`, then check what it holds
+openmoat doctor --verbose  #   lock             ~/.moat/policy.lock mode 600, owner you
+```
+
+On Windows files have access control lists, not Unix modes, and doctor says the check
+does not run there. The policy language, the full default policy and recipes are in
 [POLICY.md](POLICY.md).
 
 ### Keep a token from the agent
@@ -1025,7 +1039,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat run [--isolate] [--write PATH]… [--netns auto\|require] [--verbose] -- <agent> [args]` | run an agent in a sandbox generated from the policy (macOS, Linux; on Linux it does not protect `.env`, `.git` or `.moat` inside the project); `--isolate` (Linux, bubblewrap) shows it only the project, the read roots and temp; `--netns=require` refuses to start on Linux where the agent cannot get a network namespace of its own, instead of restricting its network by port only ([SANDBOX.md](SANDBOX.md)) |
 | `openmoat proxy [--listen 127.0.0.1:<port>]` | run the egress proxy on its own; it serves only requests with a session credential (Claude Code's sessions get one from their `SessionStart` hook) unless `sandbox.proxy_serve_without_credential` is set; an allowed host is reached on ports 443 and 80 unless a `net` or `fetch` rule names `host:port`, and a plain-HTTP secret goes to port 80 unless it sets `port` ([POLICY.md](POLICY.md#52-openmoat-proxy)) |
 | `openmoat proxy install` · `uninstall` · `status [--format json]` | run `openmoat proxy` as a user service (macOS launchd user agent, Linux systemd user unit) so it stays up; `status` reports not installed / stopped / running / drift-blocked / crashlooping. `install` and `uninstall` are person-only: run them in a terminal of your own. Not supported on Windows yet (#272) |
-| `openmoat guard --host <id>` | the hook entry point; agents call it, you do not. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
+| `openmoat guard --host <id> --home <dir>` | the hook entry point; agents call it, you do not. `--home` is the state directory `openmoat init` wrote into the hook; a `MOAT_HOME` that names another one makes it deny. OpenMoat's plugins also run it with `--heartbeat` as they load ([above](#did-the-agent-load-openmoats-plugin)) |
 
 Exit codes: 0 allow or success, 1 the program `openmoat run` or `openmoat mcp proxy` started
 exited non-zero, or `openmoat mcp proxy` refused to start the server, or a layer `openmoat bench

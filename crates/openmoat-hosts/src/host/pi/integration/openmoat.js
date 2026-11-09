@@ -59,6 +59,10 @@ import { spawn } from "node:child_process";
 
 /** @type {string} */
 const MOAT = __MOAT_BINARY__;
+// The state directory the guard decides with, from its command line and never
+// from the environment the host gives this plugin (ADR-071).
+/** @type {string} */
+const MOAT_HOME = __MOAT_HOME__;
 // Above `openmoat guard`'s own 30 s budget; the wait for a person's answer to
 // an ask comes after it and has no limit.
 const GUARD_TIMEOUT_MS = 45_000;
@@ -157,7 +161,7 @@ function guard(payload, cwd, signal) {
     };
     const onAbort = () => stop("the tool call was cancelled");
     try {
-      child = spawn(MOAT, ["guard", "--host", "pi"], {
+      child = spawn(MOAT, ["guard", "--host", "pi", "--home", MOAT_HOME], {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
@@ -193,7 +197,7 @@ function guard(payload, cwd, signal) {
 // saying the extension has not reported.
 function heartbeat() {
   try {
-    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "pi"], {
+    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "pi", "--home", MOAT_HOME], {
       stdio: "ignore",
       windowsHide: true,
     });

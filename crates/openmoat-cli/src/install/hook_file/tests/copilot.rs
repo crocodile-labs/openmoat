@@ -18,6 +18,7 @@ fn config(dir: &Path) -> HostConfig {
         hooks: install.hooks,
         layout: install.hook_file,
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }
 
@@ -43,8 +44,8 @@ fn writes_a_hook_file_of_its_own_with_a_command_per_shell() {
             "version": 1,
             "hooks": {"preToolUse": [{
                 "type": "command",
-                "bash": r"'/Users/o'\''neil/bin/openmoat' guard --host copilot-cli",
-                "powershell": "& '/Users/o''neil/bin/openmoat' guard --host copilot-cli",
+                "bash": r"'/Users/o'\''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
+                "powershell": "& '/Users/o''neil/bin/openmoat' guard --host copilot-cli --home /h/.moat",
                 "timeoutSec": 600,
             }]},
         })

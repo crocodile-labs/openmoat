@@ -82,6 +82,10 @@ import { join, resolve } from "node:path";
 
 /** @type {string} */
 const MOAT = __MOAT_BINARY__;
+// The state directory the guard decides with, from its command line and never
+// from the environment the host gives this plugin (ADR-071).
+/** @type {string} */
+const MOAT_HOME = __MOAT_HOME__;
 // Above `moat guard`'s own 30 s budget, below the hook timeout `moat init` sets.
 const GUARD_TIMEOUT_MS = 45_000;
 const MAX_OUTPUT = 1 << 20;
@@ -249,7 +253,7 @@ function guard(payload, cwd, signal) {
     };
     const onAbort = () => stop("the tool call was cancelled");
     try {
-      child = spawn(MOAT, ["guard", "--host", "openclaw"], {
+      child = spawn(MOAT, ["guard", "--host", "openclaw", "--home", MOAT_HOME], {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
@@ -283,7 +287,7 @@ function guard(payload, cwd, signal) {
 // saying the plugin has not reported.
 function heartbeat() {
   try {
-    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "openclaw"], {
+    const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "openclaw", "--home", MOAT_HOME], {
       stdio: "ignore",
       windowsHide: true,
     });

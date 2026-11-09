@@ -52,6 +52,18 @@ const MIN_TAINT_TIME: Duration = Duration::from_secs(1);
 
 pub fn run(args: &GuardArgs) -> Code {
     let host = args.host;
+    // The hook's command line names the state directory; the environment the
+    // host gave the hook does not get to (ADR-071).
+    if let Some(word) = &args.home
+        && let Err(error) = crate::home::pin(word, std::env::var_os(crate::home::ENV).as_deref())
+    {
+        let error = error.context("the hook's state directory");
+        if args.heartbeat {
+            eprintln!("moat: {error:#}");
+            return Code::Deny;
+        }
+        return respond(host, &HookEvent::default(), &kernel_error(&error));
+    }
     if args.heartbeat {
         return heartbeat(host);
     }

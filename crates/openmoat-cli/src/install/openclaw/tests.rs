@@ -27,6 +27,7 @@ fn config(dir: &Path) -> HostConfig {
         hooks: SPECS,
         layout: HookLayout::Plugin(plugin()),
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }
 
@@ -44,7 +45,12 @@ fn the_plugin_source_names_the_binary_once_and_waits_less_than_openclaw() {
     const _: () = assert!(crate::install::GUARD_BUDGET_S < 45);
     let installed = Host::OpenClaw.spec().install.as_ref().unwrap().hooks;
     assert!(installed.iter().all(|spec| 45 < spec.timeout));
-    let text = owned::text(plugin(), Path::new(r#"/opt/my "tools"/moat"#)).unwrap();
+    let text = owned::text(
+        &config(Path::new("/x")),
+        plugin(),
+        Path::new(r#"/opt/my "tools"/moat"#),
+    )
+    .unwrap();
     assert!(text.contains(r#"const MOAT = "/opt/my \"tools\"/moat";"#));
     assert!(!text.contains(BINARY_LINE));
     // The plugin gives up on `moat guard` before OpenClaw gives up on the plugin.

@@ -7,7 +7,7 @@ use std::path::Path;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
 use openmoat_hosts::{
-    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HookLayout, Host, HostError, reason_line,
+    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, reason_line,
 };
 use serde_json::json;
 
@@ -171,7 +171,8 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
 
 /// A host that runs OpenMoat through a plugin it loads says how the plugin
 /// reports that it loaded, and the plugin runs `guard --heartbeat --host
-/// <id>` (ADR-042); a host that runs a hook command has nothing to report.
+/// <id> --home <state directory>` (ADR-042, ADR-071); a host that runs a hook
+/// command has nothing to report.
 #[test]
 fn every_plugin_reports_that_it_loaded() {
     for host in Host::ALL {
@@ -185,7 +186,7 @@ fn every_plugin_reports_that_it_loaded() {
             continue;
         };
         let call = format!(
-            r#"["guard", "{HEARTBEAT_FLAG}", "--host", "{}"]"#,
+            r#"["guard", "{HEARTBEAT_FLAG}", "--host", "{}", "{HOME_FLAG}", MOAT_HOME]"#,
             host.id()
         );
         assert!(file.source.contains(&call), "{host:?} plugin has no {call}");

@@ -117,7 +117,7 @@ fn codex_windows_command_forwards_stdin_and_preserves_guard_exit_codes() {
     let entry = spec.hook_file.entries().unwrap().entry(
         &spec.hooks[0],
         "codex",
-        &missing.to_string_lossy(),
+        &openmoat_hosts::GuardCommand::new(missing.to_string_lossy()),
         false,
     );
     let out = run(
@@ -245,7 +245,7 @@ fn legacy_codex_hook_is_reported_and_migrated_by_each_upgrade_path() {
             hook["command"]
                 .as_str()
                 .unwrap()
-                .ends_with(" guard --host codex")
+                .ends_with(&sb.hook_args("codex"))
         );
         assert_eq!(hook["statusMessage"], "OpenMoat");
         assert!(path.with_extension("json.moat-backup").exists());

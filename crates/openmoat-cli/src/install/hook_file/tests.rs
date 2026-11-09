@@ -32,6 +32,7 @@ fn config(dir: &Path) -> HostConfig {
         hooks: SPECS,
         layout: layout_of("claude-code"),
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }
 
@@ -134,6 +135,7 @@ fn codex_and_cursor_never_get_on_failure() {
         hooks: &SPECS[..1],
         layout: layout_of("codex"),
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     install(&codex, Path::new("/x/moat"), false).unwrap();
     assert_eq!(on_failure(&codex, "PreToolUse"), Value::Null);
@@ -161,6 +163,7 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
         hooks: SHELL,
         layout: layout_of("cursor"),
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     let binary = Path::new("/Applications/My Tools/moat");
     assert_eq!(install(&cfg, binary, false).unwrap(), Outcome::Installed);
@@ -172,9 +175,9 @@ fn cursor_format_sets_version_fail_closed_and_a_quoted_command() {
     // Single quotes on POSIX, where Cursor's shell would expand `$` or a
     // backtick inside double quotes.
     let expected = if cfg!(windows) {
-        "\"/Applications/My Tools/moat\" guard --host cursor"
+        "\"/Applications/My Tools/moat\" guard --host cursor --home /h/.moat"
     } else {
-        "'/Applications/My Tools/moat' guard --host cursor"
+        "'/Applications/My Tools/moat' guard --host cursor --home /h/.moat"
     };
     assert_eq!(entry["command"], expected);
     assert_eq!(entry["failClosed"], true);
@@ -333,6 +336,7 @@ fn remove_undoes_install_and_keeps_foreign_entries() {
         hooks: &SPECS[..1],
         layout: layout_of("cursor"),
         blocks_on_failure: || true,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     install(&cursor, Path::new("/x/moat"), false).unwrap();
     let mut doc = root(&cursor);

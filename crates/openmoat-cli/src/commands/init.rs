@@ -170,12 +170,12 @@ fn install(
     let events: Vec<&str> = config.hooks.iter().map(|spec| spec.event).collect();
     writeln!(
         files.detail,
-        "{prefix} {:<16} {} ({verb}: {} → {} guard --host {})",
+        "{prefix} {:<16} {} ({verb}: {} → {}{})",
         host.display_name(),
         config.settings_path.display(),
         events.join(", "),
         binary.display(),
-        host.id()
+        config.guard(binary).shell_args(host.id())
     )?;
     if let Some(backup) = replaced.filter(|_| outcome != Outcome::Unchanged) {
         let verb = if dry_run { "would move" } else { "moved" };

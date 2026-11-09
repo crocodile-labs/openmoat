@@ -17,6 +17,7 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
+use crate::wire::guard_command::{GuardCommand, split_guard};
 use crate::wire::hook_file::HookFile;
 
 /// Gemini CLI's `settings.json` entries.
@@ -32,13 +33,13 @@ const NAME: &str = "openmoat";
 const POWERSHELL_TAIL: &str = "; if (-not $?) { exit 2 }";
 
 impl HookFile for Gemini {
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, _block: bool) -> Value {
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
         json!({
             "matcher": spec.matcher,
             "hooks": [{
                 "name": NAME,
                 "type": "command",
-                "command": command_for(binary, id, cfg!(windows)),
+                "command": command_for(guard, id, cfg!(windows)),
                 "timeout": spec.timeout * 1000,
             }],
         })
@@ -64,22 +65,22 @@ impl HookFile for Gemini {
 }
 
 /// `binary guard --host <id>` for bash, or for PowerShell.
-fn command_for(binary: &str, id: &str, powershell: bool) -> String {
+fn command_for(guard: &GuardCommand, id: &str, powershell: bool) -> String {
+    let args = guard.shell_args(id);
     if powershell {
-        let binary = binary.replace('\'', "''");
-        format!("& '{binary}' guard --host {id}{POWERSHELL_TAIL}")
+        let binary = guard.binary.replace('\'', "''");
+        format!("& '{binary}'{args}{POWERSHELL_TAIL}")
     } else {
-        format!("'{}' guard --host {id}", binary.replace('\'', r"'\''"))
+        format!("'{}'{args}", guard.binary.replace('\'', r"'\''"))
     }
 }
 
 /// The binary a command written by [`command_for`] runs, or `None` when the
 /// command is not OpenMoat's guard for `id`.
 fn binary_of(command: &str, id: &str) -> Option<String> {
-    let suffix = format!(" guard --host {id}");
     let command = command.trim();
     let command = command.strip_suffix(POWERSHELL_TAIL).unwrap_or(command);
-    let quoted = command.strip_suffix(&suffix)?.trim();
+    let (quoted, _) = split_guard(command, id)?;
     let (quoted, powershell) = match quoted.strip_prefix("& ") {
         Some(rest) => (rest.trim(), true),
         None => (quoted, false),

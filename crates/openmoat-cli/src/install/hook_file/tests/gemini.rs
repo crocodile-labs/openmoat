@@ -21,6 +21,7 @@ fn the_entry_is_installed_once_and_removed_alone() {
         hooks: spec.hooks,
         layout: spec.hook_file,
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     };
     let theirs = json!({
         "ui": {"theme": "GitHub"},

@@ -24,6 +24,7 @@ mod json;
 mod mcp;
 mod rows;
 mod sandboxes;
+mod state_files;
 mod warnings;
 
 /// What a check is about, so accepting changes clears exactly the problems a
@@ -79,9 +80,10 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     let lock = load_lock(&mut report, &home);
     let drift = lock
         .as_ref()
-        .map(|lock| verify_lock(&mut report, lock, &binary))
+        .map(|lock| verify_lock(&mut report, &home, lock, &binary))
         .unwrap_or_default();
     environment(&mut report, &home);
+    state_files::rows(&mut report, &home);
     let hook_files = hooks::hooks(&mut report, &home, &binary)?;
     if let Some(lock) = &lock {
         hook_pins(&mut report, lock, &home, &hook_files);
@@ -255,7 +257,12 @@ fn load_lock(report: &mut Report, home: &Home) -> Option<Lock> {
 
 /// The lock lines: what drifted, and whether the lock pins this binary;
 /// returns the drift.
-fn verify_lock(report: &mut Report, lock: &Lock, binary: &Path) -> Vec<integrity::Drift> {
+fn verify_lock(
+    report: &mut Report,
+    home: &Home,
+    lock: &Lock,
+    binary: &Path,
+) -> Vec<integrity::Drift> {
     let drift = lock.verify();
     if drift.is_empty() {
         report.line(
@@ -269,6 +276,14 @@ fn verify_lock(report: &mut Report, lock: &Lock, binary: &Path) -> Vec<integrity
     }
     for d in &drift {
         report.line(Area::Lock, false, format!("lock             {d}"));
+    }
+    // Only the guard runs from the lock's binary; a person's `doctor` there
+    // checks it the same way (ADR-071).
+    let own = integrity::binary::check(home, lock);
+    match (own.deny_reason(), own.note()) {
+        (Some(reason), _) => report.line(Area::Binary, false, format!("binary           {reason}")),
+        (None, Some(note)) => report.warn(&format!("binary           {note}")),
+        (None, None) => {}
     }
     if let Some(warning) = warnings::alias_lock(&lock.binary, binary) {
         report.warn(&warning);

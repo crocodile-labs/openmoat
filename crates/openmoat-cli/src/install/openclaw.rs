@@ -86,14 +86,14 @@ pub fn plugin_path(config: &HostConfig) -> PathBuf {
 
 /// Whether the plugin file holds `plugin` as `init` writes it for `binary`.
 pub fn plugin_current(config: &HostConfig, plugin: &OwnedFile, binary: &Path) -> bool {
-    let wanted = owned::text(plugin, binary).ok();
+    let wanted = owned::text(config, plugin, binary).ok();
     fs::read_to_string(plugin_path(config)).ok() == wanted
 }
 
 pub fn write_plugin(config: &HostConfig, plugin: &OwnedFile, binary: &Path) -> Result<()> {
     write_private(
         &plugin_path(config),
-        owned::text(plugin, binary)?.as_bytes(),
+        owned::text(config, plugin, binary)?.as_bytes(),
     )
 }
 

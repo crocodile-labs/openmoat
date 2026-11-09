@@ -21,7 +21,7 @@ fn hooks() -> Value {
     let mut entry = super::super::hook_file::Codex.entry(
         &crate::HookSpec::new("PreToolUse", "Bash", 600, false),
         "codex",
-        "openmoat",
+        &crate::GuardCommand::new("openmoat"),
         false,
     );
     // Keep the guard suffix for ownership detection, with separate values

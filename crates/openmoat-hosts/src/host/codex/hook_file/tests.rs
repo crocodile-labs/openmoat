@@ -20,12 +20,16 @@ fn schema_has_only_codex_command_fields_and_round_trips_quoted_paths() {
         let entry = Codex.entry(
             &HookSpec::new("PreToolUse", "Bash", 600, false),
             "codex",
-            path,
+            &crate::GuardCommand::new(path).with_home("/Users/A B/.moat"),
             false,
         );
         let command: Handler = serde_json::from_value(entry["hooks"][0].clone()).unwrap();
         assert_eq!(command.r#type, "command");
-        assert!(command.command.ends_with(" guard --host codex"));
+        assert!(
+            command
+                .command
+                .ends_with(" guard --host codex --home /Users/A+20B/.moat")
+        );
         assert!(
             command
                 .command_windows
@@ -64,7 +68,7 @@ fn legacy_entries_are_recognised_but_stale() {
     let mut root = json!({"hooks":{"PreToolUse":[legacy, unrelated.clone()]}});
     let layout: &dyn HookFile = &Codex;
     assert!(matches!(
-        layout.state(&root, "codex", &[spec], "/bin/openmoat", || false),
+        layout.state(&root, "codex", &[spec], &crate::GuardCommand::new("/bin/openmoat"), || false),
         crate::HookFileState::Stale { .. }
     ));
     layout
@@ -73,13 +77,13 @@ fn legacy_entries_are_recognised_but_stale() {
             "hooks.json",
             "codex",
             &[spec],
-            "/bin/openmoat",
+            &crate::GuardCommand::new("/bin/openmoat"),
             || false,
         )
         .unwrap();
     assert_eq!(root["hooks"]["PreToolUse"][1], unrelated);
     assert_eq!(
-        layout.state(&root, "codex", &[spec], "/bin/openmoat", || false),
+        layout.state(&root, "codex", &[spec], &crate::GuardCommand::new("/bin/openmoat"), || false),
         crate::HookFileState::Installed
     );
 }

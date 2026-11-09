@@ -59,7 +59,7 @@ pub fn render(
         &mut doc,
         config.host.id(),
         config.hooks,
-        &binary.to_string_lossy(),
+        &config.guard(binary),
         &now,
     ) {
         Ok(changed) => changed,
@@ -76,12 +76,7 @@ pub fn render(
 pub fn missing(config: &HostConfig, binary: &Path) -> Option<String> {
     let (path, consent) = of(config)?;
     let approved = read(&path).is_ok_and(|doc| {
-        consent.holds(
-            &doc,
-            config.host.id(),
-            config.hooks,
-            &binary.to_string_lossy(),
-        )
+        consent.holds(&doc, config.host.id(), config.hooks, &config.guard(binary))
     });
     (!approved).then(|| {
         format!(

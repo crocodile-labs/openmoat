@@ -79,6 +79,11 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
+# The guard hashes its own binary once per change (ADR-071); unoptimised,
+# SHA-256 of a debug binary takes seconds, which every test home would pay.
+[profile.dev.package.sha2]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
