@@ -434,8 +434,11 @@ bubblewrap.
   state). That temp directory is new for each run: `openmoat-run-<random>` (mode `0700`)
   inside the system's, given to the agent as `TMPDIR` and removed with everything in it
   when the run ends. The shared temp directory (`/tmp` on Linux, `/var/folders/…/T` on
-  macOS) holds other programs' state and other sessions' files, so it is no longer
-  writable; it stays readable where `sandbox.read_roots` lists it. A tool that honours
+  macOS) holds other programs' state and other sessions' files, so commands can neither
+  write nor read it, whatever `sandbox.read_roots` lists for the host sandboxes (on macOS
+  the per-user caches `/var/folders/…/C` and `/var/folders/…/0` stay readable, which
+  system libraries read whatever `TMPDIR` says). To let a run read a file there, copy it
+  into the project or name it with `--write`. A tool that honours
   `TMPDIR` (compilers, `npm`, `pip`, `cargo`, `go`, `mktemp`) works as before; a
   command that writes a fixed `/tmp/<name>` fails with "permission denied", as it did on
   macOS already:
@@ -443,14 +446,16 @@ bubblewrap.
   ```bash
   openmoat run -- sh -c 'echo x > "$TMPDIR/f" && echo ok'   # ok
   openmoat run -- sh -c 'echo x > /tmp/f'                    # Permission denied
+  openmoat run -- sh -c 'cat /tmp/other-programs-file'       # Permission denied
   ```
 
   Kerberos ticket caches stay closed: `kerberos-tickets` denies `/tmp/krb5cc_*`, where MIT
   Kerberos and Heimdal keep them by default (`hook_only` for the host sandboxes), and
   `openmoat run` applies it in its sandbox and adds the cache `KRB5CCNAME` names
-  (`FILE:` or `DIR:`) for the run. On Linux the network namespace
-  hides each cache that exists in a read root when the agent starts; without one,
-  Landlock cannot deny inside the read root `/tmp`, and they stay readable there.
+  (`FILE:` or `DIR:`) for the run. On Linux `/tmp` is no read root of the run, so Landlock
+  refuses a cache there with or without a network namespace. A cache that is no file is
+  closed as well: `KCM:` (the `sssd-kcm` socket) and `KEYRING:` by the seccomp filter on
+  Linux, `KCM:` and `API:` on macOS because the profile allows no ticket service.
   Deny rules still win (`~/.claude/settings.json` stays unwritable; on Linux only where
   the agent gets a network namespace, above).
 - **Agent logins.** The agent reads its own login inside the sandbox, so `openmoat run`

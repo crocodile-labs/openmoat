@@ -1471,7 +1471,7 @@ something OpenMoat claims to stop.
   the lock, `hosts.json`, the approvals, the trust records and the MCP pins, and the host
   sandboxes and `openmoat run` carry those denies. Landlock (`openmoat run` on Linux) only
   grants and cannot deny inside a granted tree, so there `openmoat run` refuses to start
-  when a tree it grants (the project, a read root such as `/tmp`, a `--write` path,
+  when a tree it grants (the project, a read root, a `--write` path,
   the temp directory) holds the state directory or lies inside it, symlinks resolved,
   and says to move `MOAT_HOME` out of it. `openmoat run --isolate` starts only where its
   mounts hide the state directory: below the temp directory, which it covers with an

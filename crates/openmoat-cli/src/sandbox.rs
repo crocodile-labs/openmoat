@@ -40,6 +40,7 @@ pub(crate) use patterns::RUNS_LATER;
 pub mod seatbelt;
 #[cfg(any(target_os = "linux", test))]
 pub mod seccomp;
+pub mod shared_temp;
 
 use openmoat_core::ir::{Access, Allowance, Effect, Enforcement, Loss};
 use openmoat_core::{EvalContext, Policy, PolicyError};

@@ -73,13 +73,19 @@ Each agent's gaps and the reasons are in
   the agent gets a network namespace, missing ones by a read-only `{}` placeholder for the
   session; without a namespace a command can create one that turns the next session's
   hook off, and `openmoat run` only names it when the agent exits.
-- **The shared temp directory stays readable under `openmoat run`.** The run writes only
-  its own temp directory (`TMPDIR`), but `/tmp` and `/var/folders` stay read roots, so a
-  command can read what other programs left there, except the Kerberos ticket caches
-  `kerberos-tickets` names (`/tmp/krb5cc_*` and the `KRB5CCNAME` file). On Linux without a
-  network namespace those caches stay readable too, and one created after the agent
-  starts is not hidden. A ticket cache that is no file (`KCM:`, the `sssd-kcm` socket) is
-  not covered; the kernel keyring (`KEYRING:`) is closed by the seccomp filter.
+- **macOS's per-user caches stay readable under `openmoat run`.** Commands read and write
+  only the run's own temp directory (`TMPDIR`); `/tmp` and macOS's temp folder
+  (`/var/folders/…/T`) are not read roots there, nor the Kerberos ticket caches in them. On
+  macOS `/var/folders/…/C` and `/var/folders/…/0` stay readable: system libraries and
+  Apple's tools read them whatever `TMPDIR` says (compilers' module caches, the Launch
+  Services database). They hold caches, not your files. Seatbelt also still lets commands
+  read Claude Code's own `/tmp/claude-*`, which the default policy's `agent-temp` rule
+  allows. A ticket cache that is no file
+  is closed too: on Linux the seccomp filter refuses Unix sockets (`KCM:`, `sssd-kcm`) and
+  the kernel keyring (`KEYRING:`), and on macOS the profile allows no ticket service.
+  The host sandboxes (Claude Code's, Codex's, Cursor's) still read `/tmp` and
+  `/var/folders`, as `sandbox.read_roots` lists them: they use those as their temp
+  directory.
 - **Allowed scripts and hosts.** An allowed `npm test` runs whatever it contains; the
   sandbox bounds it, OpenMoat does not inspect it. Without a sandbox, a script the
   session wrote needs review before an interpreter runs it, but a test runner, build tool

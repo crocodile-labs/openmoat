@@ -3,7 +3,7 @@
 //!
 //! Landlock only grants ([`super::landlock`]): `kernel-self` denies reading the
 //! audit log, the policy lock and the other state files, but inside a granted
-//! tree (the project, a read root such as `/tmp`, a `--write` path, the temp
+//! tree (the project, a read root, a `--write` path, the temp
 //! directory) that deny cannot hold, and a write grant there would let
 //! commands change them. So on Linux `moat run` refuses to start where a grant
 //! holds the state directory or lies inside it.

@@ -26,6 +26,29 @@ fn generated_with(yaml: &str, grants: &Grants) -> Generated {
     generated_on(yaml, grants, false)
 }
 
+/// Ticket caches that are no file (`KCM:`, `API:`) sit behind system services:
+/// the profile lets a command look up the two user-and-group services and no
+/// other, whatever the policy says.
+#[test]
+fn only_the_name_lookup_services_are_allowed() {
+    let profile = generated(DEFAULT_POLICY, Some(18080)).profile;
+    let allowed = profile
+        .split("(allow mach-lookup")
+        .skip(1)
+        .collect::<Vec<_>>();
+    assert_eq!(allowed.len(), 1, "{profile}");
+    let rule = allowed[0].split("))").next().unwrap();
+    let block = rule.split(')').filter(|l| l.contains("global-name"));
+    let names: Vec<&str> = block.filter_map(|l| l.split('"').nth(1)).collect();
+    assert_eq!(
+        names,
+        [
+            "com.apple.system.opendirectoryd.libinfo",
+            "com.apple.system.opendirectoryd.membership"
+        ]
+    );
+}
+
 fn generated_on(yaml: &str, grants: &Grants, case_insensitive_paths: bool) -> Generated {
     let policy = Policy::parse(yaml).expect("test policy lints");
     let ctx = EvalContext {

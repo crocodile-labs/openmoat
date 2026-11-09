@@ -101,3 +101,5 @@ goes to `/tmp` when the temp directory would make the socket too long
   `stock linux` job may report NOT TESTED HERE, with its reason.
 - Where the test accepts NOT TESTED HERE on Linux it prints a GitHub annotation with the
   promise and the reason, so the Checks API shows it without the job's log.
+- `openmoat run` no longer grants `/tmp` (ADR-018, amendment of 2026-11-09), so a
+  throwaway home there is no longer refused and `--scratch-dir` is not needed on Linux.

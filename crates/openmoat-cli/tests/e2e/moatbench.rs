@@ -142,7 +142,7 @@ fn moatbench_hook_needs_a_host() {
 }
 
 /// `moat bench --report` on one host, with the throwaway home below the
-/// target directory: on Linux the OS rows need it outside `/tmp`.
+/// target directory.
 fn report(sb: &Sandbox, format: &str) -> std::process::Output {
     let scratch = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let dir = scratch.path().to_string_lossy().into_owned();
