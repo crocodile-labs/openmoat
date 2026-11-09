@@ -1,2 +1,0 @@
-### Security
-- A shell command that creates or replaces a project file an agent reads as its hook settings (`.codex/config.toml`, `opencode.json`, `.pi/settings.json`, by a redirect, `tee`, `cp`, `mv` or `sed -i`) is denied (`project-settings`) where that agent would load it and OpenMoat is set up for it, because what it leaves cannot be known before it runs. Reading those files, removing them, moving them away, and same-named files elsewhere keep their verdict; changes through the agent's file tools are judged by their content as before.
