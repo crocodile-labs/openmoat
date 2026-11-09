@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use openmoat_hosts::{HookFile as _, Host};
+use openmoat_hosts::Host;
 use serde_json::{Value, json};
 
 use super::super::{HookState, Outcome, install, remove, state};

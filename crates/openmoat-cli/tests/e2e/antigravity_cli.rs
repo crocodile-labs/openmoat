@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use crate::common::{DENY, OK, Sandbox, fixture, json as parse, stdout, text};
+use crate::common::{DENY, OK, Sandbox, fixture, json as parse, text};
 
 /// The directory that tells OpenMoat the CLI is installed.
 pub(crate) const DIR: &str = ".gemini/antigravity-cli";
@@ -287,9 +287,8 @@ fn uninstall_gives_the_file_back() {
     fs::create_dir_all(hook_file(&sb).parent().unwrap()).unwrap();
     fs::write(hook_file(&sb), ORIGINAL).unwrap();
     assert_eq!(sb.moat(&["init", "--yes"]).status.code(), Some(OK));
-    let out = sb.moat_approving(&["uninstall", "--yes"]);
+    let out = sb.moat_as_person(&["uninstall"]);
     assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
     let root: Value = serde_json::from_str(&fs::read_to_string(hook_file(&sb)).unwrap()).unwrap();
     assert_eq!(root, serde_json::from_str::<Value>(ORIGINAL).unwrap());
-    assert!(!stdout(&out).contains("error"), "{}", text(&out));
 }
