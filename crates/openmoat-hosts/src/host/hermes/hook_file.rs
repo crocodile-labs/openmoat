@@ -13,7 +13,8 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::hook_file::{HookFile, guard_args};
+use crate::wire::guard_command::{GuardCommand, split_guard};
+use crate::wire::hook_file::HookFile;
 
 /// Hermes Agent's `config.yaml` entries.
 #[derive(Debug)]
@@ -22,9 +23,9 @@ pub(crate) struct Hermes;
 impl HookFile for Hermes {
     /// `fail_closed: true` on every entry: without it Hermes runs the call
     /// when the hook cannot start, times out or answers garbage.
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, _block: bool) -> Value {
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
         json!({
-            "command": command_for(binary, id, cfg!(windows)),
+            "command": command_for(guard, id, cfg!(windows)),
             "timeout": spec.timeout,
             "fail_closed": true,
         })
@@ -50,8 +51,8 @@ fn command(entry: &Value) -> Option<&str> {
 }
 
 /// `binary guard --host <id>`, the binary quoted for Windows or for POSIX.
-pub(super) fn command_for(binary: &str, id: &str, windows: bool) -> String {
-    let args = guard_args(id);
+pub(super) fn command_for(guard: &GuardCommand, id: &str, windows: bool) -> String {
+    let (binary, args) = (&guard.binary, guard.shell_args(id));
     if windows {
         format!("\"{binary}\"{args}")
     } else {
@@ -62,7 +63,7 @@ pub(super) fn command_for(binary: &str, id: &str, windows: bool) -> String {
 /// The binary a command written by [`command_for`] runs, or `None` when the
 /// command is not OpenMoat's guard for `id`.
 pub(super) fn binary_of(command: &str, id: &str) -> Option<String> {
-    let quoted = command.trim().strip_suffix(&guard_args(id))?.trim();
+    let (quoted, _) = split_guard(command, id)?;
     if let Some(inner) = quoted.strip_prefix('"').and_then(|q| q.strip_suffix('"')) {
         return Some(inner.to_owned());
     }

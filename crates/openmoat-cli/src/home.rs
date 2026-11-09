@@ -1,4 +1,7 @@
-//! The kernel's own state directory (`~/.moat`, or `$MOAT_HOME`).
+//! The kernel's own state directory (`~/.moat`, or `$MOAT_HOME`; for the
+//! guard, the `--home` its hook command names, [`pinned`]).
+
+mod pinned;
 
 use std::fs;
 use std::io::Write as _;
@@ -10,6 +13,8 @@ use openmoat_core::{DEFAULT_POLICY, Policy};
 
 use crate::context;
 use crate::integrity::Kept;
+
+pub use pinned::{arg_form, pin};
 
 /// The state directory's name under the home directory, and under a project
 /// for its repository policy (`repo.rs`).
@@ -29,10 +34,14 @@ pub struct Home {
 
 impl Home {
     /// Locate the state directory without creating it. Only command entry
-    /// points call this; everything below them takes a `&Home`.
+    /// points call this; everything below them takes a `&Home`. In the guard,
+    /// the directory its hook command names ([`pin`]) wins over everything.
     pub fn locate() -> Result<Self> {
         #[cfg(test)]
         refuse_in_unit_tests();
+        if let Some(root) = pinned::pinned() {
+            return Ok(Self::rooted(root.to_path_buf()));
+        }
         match std::env::var_os(ENV).filter(|v| !v.is_empty()) {
             Some(custom) => Ok(Self::rooted(PathBuf::from(custom))),
             None => Ok(Self::under(&user_home()?)),

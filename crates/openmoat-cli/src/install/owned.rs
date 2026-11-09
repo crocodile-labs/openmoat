@@ -23,9 +23,11 @@ use openmoat_hosts::OwnedFile;
 use super::{HOOK_BACKUP, HookState, HostConfig, Outcome};
 use crate::home::{Home, KeepMode, write_like};
 
-/// `file` as `init` writes it for `binary`.
-pub fn text(file: &OwnedFile, binary: &Path) -> Result<String> {
-    Ok(file.text(&binary.to_string_lossy())?)
+/// `file` as `init` writes it for `binary`, with `config`'s state directory.
+pub fn text(config: &HostConfig, file: &OwnedFile, binary: &Path) -> Result<String> {
+    let guard = config.guard(binary);
+    let home = guard.home.unwrap_or_default();
+    Ok(file.text(&guard.binary, &home)?)
 }
 
 /// Where `file` goes: the hook file, then the host's extra files (Cline's
@@ -45,7 +47,7 @@ pub fn install(
     binary: &Path,
     dry_run: bool,
 ) -> Result<Outcome> {
-    let wanted = text(file, binary)?;
+    let wanted = text(config, file, binary)?;
     let mut outcome = Outcome::Unchanged;
     for path in paths(config) {
         let current = fs::read_to_string(&path).ok();
@@ -82,8 +84,13 @@ pub fn persons_file(config: &HostConfig, file: &OwnedFile) -> Option<std::path::
 
 /// `file` as `init` would write it over `current`; `None` when it would not
 /// change.
-pub fn render(file: &OwnedFile, binary: &Path, current: &str) -> Result<Option<String>> {
-    let wanted = text(file, binary)?;
+pub fn render(
+    config: &HostConfig,
+    file: &OwnedFile,
+    binary: &Path,
+    current: &str,
+) -> Result<Option<String>> {
+    let wanted = text(config, file, binary)?;
     Ok((wanted != current).then_some(wanted))
 }
 
@@ -92,14 +99,14 @@ pub fn render(file: &OwnedFile, binary: &Path, current: &str) -> Result<Option<S
 /// hook file in place, an extra file that is not (Cline's `PostToolUse`,
 /// added in a later release) leaves the hook out of date, for `init` to write.
 pub fn state(config: &HostConfig, file: &OwnedFile, binary: &Path) -> HookState {
-    let state = state_at(&config.settings_path, file, binary);
+    let state = state_at(config, &config.settings_path, file, binary);
     if state != HookState::Installed {
         return state;
     }
     let extra_missing = config
         .extra_files()
         .iter()
-        .any(|path| state_at(path, file, binary) != HookState::Installed);
+        .any(|path| state_at(config, path, file, binary) != HookState::Installed);
     if extra_missing {
         return HookState::Stale {
             command: binary.to_string_lossy().into_owned(),
@@ -109,7 +116,7 @@ pub fn state(config: &HostConfig, file: &OwnedFile, binary: &Path) -> HookState 
 }
 
 /// [`state`] of the one file at `path`.
-fn state_at(path: &Path, file: &OwnedFile, binary: &Path) -> HookState {
+fn state_at(config: &HostConfig, path: &Path, file: &OwnedFile, binary: &Path) -> HookState {
     let current = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return HookState::Missing,
@@ -117,7 +124,7 @@ fn state_at(path: &Path, file: &OwnedFile, binary: &Path) -> HookState {
             return HookState::Unreadable(format!("reading {}: {e}", path.display()));
         }
     };
-    if text(file, binary).is_ok_and(|wanted| wanted == current) {
+    if text(config, file, binary).is_ok_and(|wanted| wanted == current) {
         return HookState::Installed;
     }
     if !file.is_ours(&current) {

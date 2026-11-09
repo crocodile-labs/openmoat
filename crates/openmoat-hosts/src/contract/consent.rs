@@ -12,7 +12,7 @@ use std::fmt::Debug;
 
 use serde_json::Value;
 
-use crate::HookSpec;
+use crate::{GuardCommand, HookSpec};
 
 /// How a host's consent file records OpenMoat's hook commands.
 pub trait ConsentFile: Sync + Debug {
@@ -24,9 +24,10 @@ pub trait ConsentFile: Sync + Debug {
     fn without(&self) -> &'static str;
 
     /// Record consent in `doc` (the file parsed as JSON, `{}` when there is
-    /// none) for the command of each of `hooks` that runs `binary` as
-    /// `guard --host <id>`, at `now` (an RFC 3339 time), replacing consent to
-    /// OpenMoat commands that run another binary; whether that changed `doc`.
+    /// none) for the command of each of `hooks` that runs `guard` for host
+    /// `id`, at `now` (an RFC 3339 time), replacing consent to OpenMoat
+    /// commands that run another binary or name another state directory;
+    /// whether that changed `doc`.
     ///
     /// # Errors
     /// `doc` has a shape the host would not read, which is named.
@@ -35,12 +36,12 @@ pub trait ConsentFile: Sync + Debug {
         doc: &mut Value,
         id: &str,
         hooks: &[HookSpec],
-        binary: &str,
+        guard: &GuardCommand,
         now: &str,
     ) -> Result<bool, String>;
 
     /// Whether `doc` records consent to the command of each of `hooks`.
-    fn holds(&self, doc: &Value, id: &str, hooks: &[HookSpec], binary: &str) -> bool;
+    fn holds(&self, doc: &Value, id: &str, hooks: &[HookSpec], guard: &GuardCommand) -> bool;
 
     /// Take every OpenMoat command for `id` out of `doc`; whether any was there.
     fn remove(&self, doc: &mut Value, id: &str) -> bool;

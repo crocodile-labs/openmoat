@@ -84,7 +84,10 @@ fn the_openclaw_plugin_blocks_on_everything_but_allow_review_and_no_answer() {
     for field in ["configPath", "stateDir", "platform"] {
         assert!(payload[field].is_string(), "{field}: {payload}");
     }
-    assert_eq!(report["argv"], json!(["--host", "openclaw"]));
+    assert_eq!(
+        report["argv"],
+        json!(["--host", "openclaw", "--home", "/h/.moat"])
+    );
 
     let mode = |name| entry(&report, "modes", "name", name);
     assert_eq!(mode("deny")["outcome"], "blocked");

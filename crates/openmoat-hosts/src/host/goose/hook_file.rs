@@ -12,7 +12,8 @@
 use serde_json::{Value, json};
 
 use crate::HookSpec;
-use crate::wire::hook_file::{HookFile, guard_args};
+use crate::wire::guard_command::{GuardCommand, split_guard};
+use crate::wire::hook_file::HookFile;
 
 /// goose's `hooks.json` entries.
 #[derive(Debug)]
@@ -24,11 +25,11 @@ pub(crate) const BLOCK: &str = "block";
 impl HookFile for Goose {
     /// The rule has no `matcher` when the spec's is empty: goose then runs it
     /// for every tool (an empty one is skipped as "none" too).
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, _block: bool) -> Value {
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
         let mut entry = json!({
             "hooks": [{
                 "type": "command",
-                "command": command_for(binary, id),
+                "command": command_for(guard, id),
                 "timeout": spec.timeout,
                 "on_failure": BLOCK,
             }],
@@ -58,14 +59,15 @@ impl HookFile for Goose {
 }
 
 /// `'binary' guard --host <id>`, quoted for `sh`.
-pub(super) fn command_for(binary: &str, id: &str) -> String {
-    format!("'{}'{}", binary.replace('\'', r"'\''"), guard_args(id))
+pub(super) fn command_for(guard: &GuardCommand, id: &str) -> String {
+    let binary = guard.binary.replace('\'', r"'\''");
+    format!("'{binary}'{}", guard.shell_args(id))
 }
 
 /// The binary a command written by [`command_for`] runs, or `None` when the
 /// command is not OpenMoat's guard for `id`.
 pub(super) fn binary_of(command: &str, id: &str) -> Option<String> {
-    let quoted = command.trim().strip_suffix(&guard_args(id))?.trim();
+    let (quoted, _) = split_guard(command, id)?;
     Some(
         match quoted.strip_prefix('\'').and_then(|q| q.strip_suffix('\'')) {
             Some(inner) => inner.replace(r"'\''", "'"),

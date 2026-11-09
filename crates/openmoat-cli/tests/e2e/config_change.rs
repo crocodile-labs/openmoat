@@ -40,7 +40,7 @@ fn init_registers_the_config_change_hook() {
     );
     assert_eq!(
         entries[0]["hooks"][0]["args"],
-        serde_json::json!(["guard", "--host", "claude-code"])
+        serde_json::json!(["guard", "--host", "claude-code", "--home", sb.home_word()])
     );
 }
 

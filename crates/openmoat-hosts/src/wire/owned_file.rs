@@ -1,8 +1,9 @@
 //! Files OpenMoat owns whole: pi's extension, OpenClaw's and OpenCode's plugins,
 //! Cline's hook script. Each is a script in the host's `integration/` folder
-//! with one line naming the binary, which `moat init` fills in with the
-//! binary's path ([`Syntax`]); the CLI writes the result whole, pins it whole
-//! and deletes it on `moat uninstall`.
+//! with one line naming the binary and one naming the state directory the
+//! guard is given as `--home` (ADR-071), which `moat init` fills in
+//! ([`Syntax`]); the CLI writes the result whole, pins it whole and deletes it
+//! on `moat uninstall`.
 
 use std::fmt;
 
@@ -12,10 +13,12 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Syntax {
     /// `const MOAT = __MOAT_BINARY__;`, filled in with the path as a JSON
-    /// string (a JavaScript string literal).
+    /// string (a JavaScript string literal); `const MOAT_HOME = __MOAT_HOME__;`
+    /// likewise with the state directory's word ([`crate::encode_home`]).
     JavaScript,
     /// `MOAT=__MOAT_BINARY__`, filled in with the path in single quotes, each
-    /// `'` in it written `'\''` (a POSIX shell word).
+    /// `'` in it written `'\''` (a POSIX shell word); `MOAT_STATE=__MOAT_HOME__`
+    /// likewise with the state directory's word.
     PosixShell,
 }
 
@@ -36,12 +39,27 @@ impl Syntax {
         }
     }
 
-    /// The binary line for `binary`.
-    fn line(self, binary: &str) -> String {
-        let filled = self.filled();
+    /// The line `init` fills in with the state directory.
+    const fn home_placeholder(self) -> &'static str {
         match self {
-            Self::JavaScript => format!("{filled}{};", serde_json::Value::from(binary)),
-            Self::PosixShell => format!("{filled}'{}'", binary.replace('\'', r"'\''")),
+            Self::JavaScript => "const MOAT_HOME = __MOAT_HOME__;",
+            Self::PosixShell => "MOAT_STATE=__MOAT_HOME__",
+        }
+    }
+
+    /// How a filled-in state directory line begins.
+    const fn home_filled(self) -> &'static str {
+        match self {
+            Self::JavaScript => "const MOAT_HOME = ",
+            Self::PosixShell => "MOAT_STATE=",
+        }
+    }
+
+    /// The line beginning `filled` that holds `value`.
+    fn line(self, filled: &str, value: &str) -> String {
+        match self {
+            Self::JavaScript => format!("{filled}{};", serde_json::Value::from(value)),
+            Self::PosixShell => format!("{filled}'{}'", value.replace('\'', r"'\''")),
         }
     }
 
@@ -87,18 +105,29 @@ impl fmt::Debug for OwnedFile {
 pub struct OwnedFileError(pub &'static str, pub &'static str);
 
 impl OwnedFile {
-    /// The file as `init` writes it for `binary`.
+    /// The file as `init` writes it for `binary`, whose guard is given the
+    /// state directory `home` as `--home` (ADR-071).
     ///
     /// # Errors
-    /// When the source does not hold the binary line exactly once.
-    pub fn text(&self, binary: &str) -> Result<String, OwnedFileError> {
-        let placeholder = self.syntax.placeholder();
-        if self.source.matches(placeholder).count() != 1 {
-            return Err(OwnedFileError(self.name, placeholder));
+    /// When the source does not hold the binary line and the state directory
+    /// line exactly once each.
+    pub fn text(&self, binary: &str, home: &str) -> Result<String, OwnedFileError> {
+        let syntax = self.syntax;
+        let mut text = self.source.to_owned();
+        let lines = [
+            (syntax.placeholder(), syntax.filled(), binary.to_owned()),
+            (
+                syntax.home_placeholder(),
+                syntax.home_filled(),
+                crate::encode_home(home),
+            ),
+        ];
+        for (placeholder, filled, value) in lines {
+            if text.matches(placeholder).count() != 1 {
+                return Err(OwnedFileError(self.name, placeholder));
+            }
+            text = text.replacen(placeholder, &syntax.line(filled, &value), 1);
         }
-        let text = self
-            .source
-            .replacen(placeholder, &self.syntax.line(binary), 1);
         // `sh` reads a `\r` as part of a word: a script checked out with CRLF
         // endings (Windows) is written with LF, as `.gitattributes` keeps it.
         Ok(match self.syntax {
@@ -139,21 +168,21 @@ mod tests {
     fn a_shell_binary_line_is_one_single_quoted_word_read_back_as_written() {
         let sh = file(
             Syntax::PosixShell,
-            "# test\nMOAT=__MOAT_BINARY__\nexec \"$MOAT\"\n",
+            "# test\nMOAT=__MOAT_BINARY__\nMOAT_STATE=__MOAT_HOME__\nexec \"$MOAT\"\n",
         );
         for binary in [
             "/usr/local/bin/openmoat",
             "/Users/o'brien/bin/openmoat",
             "/a b/$x`y`",
         ] {
-            let text = sh.text(binary).unwrap();
+            let text = sh.text(binary, "/h/.moat").unwrap();
             assert!(sh.is_ours(&text));
             assert_eq!(sh.binary(&text).as_deref(), Some(binary), "{text}");
             assert_eq!(text.matches("MOAT=").count(), 1);
         }
         assert_eq!(
-            sh.text("/o'b").unwrap(),
-            "# test\nMOAT='/o'\\''b'\nexec \"$MOAT\"\n"
+            sh.text("/o'b", "/a b/.moat").unwrap(),
+            "# test\nMOAT='/o'\\''b'\nMOAT_STATE='/a+20b/.moat'\nexec \"$MOAT\"\n"
         );
         // A line `init` did not write names no binary.
         assert_eq!(sh.binary("MOAT=/bin/sh\n"), None);
@@ -164,10 +193,13 @@ mod tests {
     fn a_javascript_binary_line_is_a_json_string() {
         let js = file(
             Syntax::JavaScript,
-            "# test\nconst MOAT = __MOAT_BINARY__;\n",
+            "# test\nconst MOAT = __MOAT_BINARY__;\nconst MOAT_HOME = __MOAT_HOME__;\n",
         );
-        let text = js.text("C:\\moat\\openmoat.exe").unwrap();
+        let text = js
+            .text("C:\\moat\\openmoat.exe", "C:/Users/me/.moat")
+            .unwrap();
         assert!(text.contains(r#"const MOAT = "C:\\moat\\openmoat.exe";"#));
+        assert!(text.contains(r#"const MOAT_HOME = "C:/Users/me/.moat";"#));
         assert_eq!(js.binary(&text).as_deref(), Some("C:\\moat\\openmoat.exe"));
     }
 
@@ -178,8 +210,13 @@ mod tests {
             "# test\nconst MOAT = __MOAT_BINARY__;\n",
         );
         assert_eq!(
-            wrong.text("/x"),
+            wrong.text("/x", "/h"),
             Err(OwnedFileError("test file", "MOAT=__MOAT_BINARY__"))
+        );
+        let no_home = file(Syntax::PosixShell, "# test\nMOAT=__MOAT_BINARY__\n");
+        assert_eq!(
+            no_home.text("/x", "/h"),
+            Err(OwnedFileError("test file", "MOAT_STATE=__MOAT_HOME__"))
         );
     }
 }

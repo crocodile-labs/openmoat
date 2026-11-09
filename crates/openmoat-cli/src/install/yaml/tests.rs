@@ -26,6 +26,7 @@ fn config(dir: &Path) -> HostConfig {
         hooks: install.hooks,
         layout: install.hook_file,
         blocks_on_failure: || false,
+        state_dir: std::path::PathBuf::from("/h/.moat"),
     }
 }
 

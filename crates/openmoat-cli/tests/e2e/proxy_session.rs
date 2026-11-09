@@ -416,7 +416,7 @@ fn init_installs_the_entry_and_doctor_and_status_name_each_host() {
     );
     assert_eq!(
         entry["hooks"][0]["args"],
-        json!(["guard", "--host", "claude-code"]),
+        json!(["guard", "--host", "claude-code", "--home", sb.home_word()]),
         "{entry}"
     );
     sb.use_free_proxy_port();

@@ -631,12 +631,18 @@ something OpenMoat claims to stop.
     Seatbelt on macOS, or, on Linux, a lock it cannot open while a seccomp filter holds
     the process (`Seccomp: 2`, which `openmoat run` always applies and no process can
     drop). Anywhere else it decides the call itself and records a `run-guard-outside`
-    row beside it. Not covered: the same hook environment can also set `MOAT_HOME`, which
-    picks the state directory, its policy and its lock; on Linux, inside another
-    seccomp sandbox (a container's default profile) such an environment can still
-    point `MOAT_HOME` at a directory it cannot open and get the relay. The agent's own
-    shell cannot set either (`env-poison` denies `MOAT_*`), and the known hosts'
-    settings files are under `kernel-self`.
+    row beside it.
+  - *The state directory, from the hook's command line (ADR-071).* `openmoat init`
+    writes `--home <state directory>` into every hook it installs, and the lock pins
+    the hook file. The guard decides with that directory whatever `MOAT_HOME` says,
+    and denies a call whose `MOAT_HOME` names another one, so a hook environment
+    cannot point it at another policy and lock, nor (on Linux, inside another seccomp
+    sandbox such as a container's default profile) at a directory it cannot open to
+    get the relay. Not covered: a hook written by a release before ADR-071, which has
+    no `--home` and still reads `MOAT_HOME`; `openmoat status` and `openmoat doctor`
+    report it as out of date until `openmoat init` rewrites it. The agent's own shell
+    cannot set `MOAT_*` (`env-poison`), and the known hosts' settings files are under
+    `kernel-self`.
   - Everything that goes wrong denies in the sandboxed guard, and the sandbox stays
     closed to `~/.moat` (tested in `tests/e2e/run_guard.rs`).
 - **The secrets broker (ADR-020) keeps a value from the agent, nothing more.**

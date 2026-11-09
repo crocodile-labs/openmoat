@@ -232,8 +232,10 @@ Then, in a terminal of your own:
 1. **`openmoat doctor`.** After an upgrade in the same place the hooks keep working, because
    they run `openmoat` by its stable path (ADR-016), and nothing has to be re-pinned. Doctor
    names what is left, if anything:
-   - `hook entry for … is out of date (written by an older OpenMoat); run openmoat init`: the new
-     release writes its hook entry differently (more tools, another timeout, a new event
+   - `hook entry for … is out of date (written by an older OpenMoat, or for another state
+     directory), …; run openmoat init`: the new
+     release writes its hook entry differently (after 0.17.0 every hook names the state
+     directory, `--home`, ADR-071; more tools, another timeout, a new event
      such as Claude Code's `SessionStart`, which from 0.12.0 gives each session
      its credential for `openmoat proxy`, ADR-044, or Claude Code's `PostToolUse`, which
      from 0.16.0 reads what untrusted calls returned for `injected-input`, ADR-057, and
@@ -432,6 +434,15 @@ agent it sets up in `~/.moat/hosts.json` (pinned by the lock), and every later c
 so you do not export the variables again. When a variable in your shell names another
 directory than the record, `openmoat doctor` reports it instead of following it; run
 `openmoat init` with the variable set to move OpenMoat to that directory. `MOAT_HOME` is
-not recorded: it says where the record is.
+not recorded: it says where the record is. `init` writes the state directory into each
+hook instead (`guard --host <id> --home <dir>`), and the hook decides with that
+directory whatever the agent's environment says; a `MOAT_HOME` there that names another
+directory makes the hook deny every call. After you move `MOAT_HOME`, run
+`openmoat init` with the new value:
+
+```bash
+MOAT_HOME=/srv/me/openmoat openmoat init   # rewrites every hook with --home /srv/me/openmoat
+openmoat status                            # a hook written for another directory shows as out of date
+```
 
 Next: [USAGE.md](USAGE.md) for daily use, [SANDBOX.md](SANDBOX.md) for the OS sandboxes.

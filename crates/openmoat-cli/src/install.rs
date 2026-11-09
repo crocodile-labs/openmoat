@@ -85,6 +85,9 @@ pub struct HostConfig {
     /// entry with [`HookSpec::block_on_failure`] lacks the key, so commands
     /// that never compare entries (`uninstall`) never ask.
     pub blocks_on_failure: fn() -> bool,
+    /// The state directory the hook's guard is given on its command line
+    /// (`--home`, ADR-071): the one of the command that located this host.
+    pub state_dir: PathBuf,
 }
 
 /// The environment variable that moves `host`'s configuration directory, and
@@ -135,9 +138,9 @@ impl HostConfig {
                     None => locate.default_for(&user_home()?),
                 },
             };
-            return Self::with_spec(host, located.config, located.dir);
+            return Self::with_spec(home, host, located.config, located.dir);
         }
-        Self::at(host, recorded.dir(host).or(env_config_dir(host)?))
+        Self::at(home, host, recorded.dir(host).or(env_config_dir(host)?))
     }
 
     /// For `moat init`: this shell's environment wins over the record, so a
@@ -146,10 +149,10 @@ impl HostConfig {
         if let Some(locate) = location::custom(host)
             && let Some(located) = location::from_env(locate)?
         {
-            return Self::with_spec(host, located.config, located.dir);
+            return Self::with_spec(home, host, located.config, located.dir);
         }
         match env_config_dir(host)? {
-            Some(dir) => Self::at(host, Some(dir)),
+            Some(dir) => Self::at(home, host, Some(dir)),
             None => Self::for_host(home, host),
         }
     }
@@ -166,19 +169,19 @@ impl HostConfig {
     }
 
     /// `host` with its hook file in `dir`, or in its default directory.
-    fn at(host: Host, dir: Option<PathBuf>) -> Result<Self> {
+    fn at(home: &Home, host: Host, dir: Option<PathBuf>) -> Result<Self> {
         let install = install_spec(host)?;
         let dir = match dir {
             Some(dir) => dir,
             None => user_home()?.join(install.dir_name),
         };
-        Self::with_spec(host, dir.join(install.config_file), dir)
+        Self::with_spec(home, host, dir.join(install.config_file), dir)
     }
 
     /// `host` with its hook file at `settings_path` and `dir` as [`Self::dir`]
     /// (for OpenClaw, `openclaw.json` wherever it is and the state directory),
     /// writing the entries and layout its spec names.
-    fn with_spec(host: Host, settings_path: PathBuf, dir: PathBuf) -> Result<Self> {
+    fn with_spec(home: &Home, host: Host, settings_path: PathBuf, dir: PathBuf) -> Result<Self> {
         let install = install_spec(host)?;
         // Only Claude Code's entries ask for `onFailure`, and whether its
         // version knows the key is asked of the `claude` on `PATH`.
@@ -195,7 +198,15 @@ impl HostConfig {
             hooks: install.hooks,
             layout: install.hook_file,
             blocks_on_failure,
+            state_dir: home.root().to_path_buf(),
         })
+    }
+
+    /// What OpenMoat's hook runs: `binary guard --host <id> --home <state
+    /// directory>`, the one place each layout's command comes from (ADR-071).
+    pub fn guard(&self, binary: &Path) -> openmoat_hosts::GuardCommand {
+        openmoat_hosts::GuardCommand::new(binary.to_string_lossy())
+            .with_home(crate::home::arg_form(&self.state_dir))
     }
 
     /// The configuration directory, the one `hosts.json` records.

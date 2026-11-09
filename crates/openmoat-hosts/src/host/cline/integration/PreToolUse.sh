@@ -13,13 +13,16 @@
 # `openmoat guard` answers: Cline would stop the whole run on a `cancel` after
 # the call, which has already run. A failure goes to standard error only.
 MOAT=__MOAT_BINARY__
+# The state directory the guard decides with, from its command line and never
+# from the environment Cline gives this script (ADR-071).
+MOAT_STATE=__MOAT_HOME__
 case ${0##*/} in
 PostToolUse)
-    "$MOAT" guard --host cline >/dev/null || echo "openmoat: guard could not keep what this call returned; run openmoat doctor in a terminal" >&2
+    "$MOAT" guard --host cline --home "$MOAT_STATE" >/dev/null || echo "openmoat: guard could not keep what this call returned; run openmoat doctor in a terminal" >&2
     exit 0
     ;;
 esac
-reply=$("$MOAT" guard --host cline)
+reply=$("$MOAT" guard --host cline --home "$MOAT_STATE")
 status=$?
 case $status in
 0)

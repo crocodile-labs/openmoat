@@ -245,7 +245,7 @@ fn legacy_codex_hook_is_reported_and_migrated_by_each_upgrade_path() {
             hook["command"]
                 .as_str()
                 .unwrap()
-                .ends_with(" guard --host codex")
+                .ends_with(&sb.hook_args("codex"))
         );
         assert_eq!(hook["statusMessage"], "OpenMoat");
         assert!(path.with_extension("json.moat-backup").exists());

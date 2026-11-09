@@ -343,9 +343,10 @@ fn replies_are_cancel_an_empty_object_or_nothing() {
 
 #[test]
 fn the_script_is_a_posix_shell_file_naming_the_binary_once() {
-    let text = SCRIPT.text("/opt/o'moat/openmoat").unwrap();
+    let text = SCRIPT.text("/opt/o'moat/openmoat", "/h/.moat").unwrap();
     assert!(text.starts_with("#!/bin/sh\n"));
     assert!(SCRIPT.is_ours(&text));
     assert_eq!(SCRIPT.binary(&text).as_deref(), Some("/opt/o'moat/openmoat"));
-    assert!(text.contains("\"$MOAT\" guard --host cline"));
+    assert!(text.contains("\"$MOAT\" guard --host cline --home \"$MOAT_STATE\""));
+    assert!(text.contains("\nMOAT_STATE='/h/.moat'\n"));
 }

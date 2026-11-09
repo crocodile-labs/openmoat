@@ -154,6 +154,26 @@ impl Sandbox {
         self.moat_stdin(&["guard", "--host", host], payload)
     }
 
+    /// The state directory's word `moat init` writes after `--home` in this
+    /// home's hooks (ADR-071).
+    pub fn home_word(&self) -> String {
+        let dir = self.home.join(".moat").to_string_lossy().replace('\\', "/");
+        openmoat_hosts::encode_home(&dir)
+    }
+
+    /// What a shell-string hook `moat init` writes for `host` ends with:
+    /// ` guard --host <host> --home <state directory>`.
+    pub fn hook_args(&self, host: &str) -> String {
+        format!(" guard --host {host} --home {}", self.home_word())
+    }
+
+    /// Run the hook for `host` with `payload` as `moat init` wrote it, the
+    /// state directory on its command line.
+    pub fn guard_homed(&self, host: &str, payload: &str) -> Output {
+        let word = self.home_word();
+        self.moat_stdin(&["guard", "--host", host, "--home", &word], payload)
+    }
+
     #[cfg(unix)]
     /// Write MCP server `name` into Claude Code's `~/.claude.json` as `moat mcp
     /// wrap` writes it: this binary with `proxy` (everything after `mcp proxy`).

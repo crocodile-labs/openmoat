@@ -37,9 +37,13 @@ pub fn stale_hint(command: &str) -> String {
              with the openmoat hooks should use"
         ),
         // This binary, so what differs is the entry itself: an older release
-        // wrote it with fewer tools, another timeout, or without one of its events.
+        // wrote it with fewer tools, another timeout, without one of its
+        // events, or without the state directory on its command line
+        // (ADR-071), or `init` ran for another state directory.
         Ok(_) => format!(
-            "hook entry for {command} is out of date (written by an older OpenMoat); run `openmoat init`"
+            "hook entry for {command} is out of date (written by an older OpenMoat, or for \
+             another state directory), so it may take its state directory from the \
+             environment; run `openmoat init`"
         ),
     }
 }

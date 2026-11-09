@@ -5,7 +5,8 @@
 //!
 //! Pure document work: the CLI reads the file, backs it up and writes it; the
 //! code here only edits and inspects the parsed document. Our entries are
-//! recognised by the `guard --host <id>` they run, so re-running `init`
+//! recognised by the `guard --host <id>` they run
+//! ([`crate::GuardCommand`]), so re-running `init`
 //! updates the binary path and matcher in place and never duplicates.
 //! Unrelated settings are preserved as JSON values.
 
@@ -13,6 +14,7 @@ use serde_json::{Map, Value, json};
 use thiserror::Error;
 
 use crate::HookSpec;
+use crate::wire::guard_command::GuardCommand;
 
 pub(crate) mod nested;
 pub mod yaml;
@@ -25,10 +27,10 @@ pub trait HookFile: Sync + std::fmt::Debug {
         false
     }
 
-    /// The entry for `spec` that runs `binary` as `guard --host <id>`; with
-    /// `block`, one that asks the host to block the call when the guard fails
-    /// (only where [`Self::knows_on_failure`]).
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, block: bool) -> Value;
+    /// The entry for `spec` that runs `guard` for host `id`; with `block`, one
+    /// that asks the host to block the call when the guard fails (only where
+    /// [`Self::knows_on_failure`]).
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, block: bool) -> Value;
 
     /// Whether `entry` runs OpenMoat's guard for host `id`.
     fn is_ours(&self, entry: &Value, id: &str) -> bool;
@@ -113,13 +115,13 @@ impl dyn HookFile {
         file: &str,
         id: &str,
         hooks: &[HookSpec],
-        binary: &str,
+        guard: &GuardCommand,
         blocks_on_failure: fn() -> bool,
     ) -> Result<HookOutcome, HookFileError> {
         let mut outcome = HookOutcome::Unchanged;
         for spec in hooks {
             outcome =
-                outcome.max(self.upsert_one(root, file, id, spec, binary, blocks_on_failure)?);
+                outcome.max(self.upsert_one(root, file, id, spec, guard, blocks_on_failure)?);
         }
         Ok(outcome)
     }
@@ -130,7 +132,7 @@ impl dyn HookFile {
         file: &str,
         id: &str,
         spec: &HookSpec,
-        binary: &str,
+        guard: &GuardCommand,
         blocks_on_failure: fn() -> bool,
     ) -> Result<HookOutcome, HookFileError> {
         let Value::Object(top) = root else {
@@ -157,13 +159,13 @@ impl dyn HookFile {
         let wants_block = spec.block_on_failure && self.knows_on_failure();
         let Some(existing) = entries.iter_mut().find(|e| self.is_ours(e, id)) else {
             let block = wants_block && blocks_on_failure();
-            entries.push(self.entry(spec, id, binary, block));
+            entries.push(self.entry(spec, id, guard, block));
             return Ok(HookOutcome::Installed);
         };
         let desired = self.entry(
             spec,
             id,
-            binary,
+            guard,
             self.block(spec, existing, blocks_on_failure),
         );
         if *existing == desired {
@@ -182,14 +184,15 @@ impl dyn HookFile {
     }
 
     /// Whether `root` holds our entry for each of `hooks`, each running
-    /// `binary` with the matcher and timeout it should have.
+    /// `guard` with the matcher and timeout it should have. An entry that
+    /// names no state directory, or another one, is stale (ADR-071).
     #[must_use]
     pub fn state(
         &self,
         root: &Value,
         id: &str,
         hooks: &[HookSpec],
-        binary: &str,
+        guard: &GuardCommand,
         blocks_on_failure: fn() -> bool,
     ) -> HookFileState {
         let mut found = 0;
@@ -201,7 +204,7 @@ impl dyn HookFile {
                         == self.entry(
                             spec,
                             id,
-                            binary,
+                            guard,
                             self.block(spec, entry, blocks_on_failure),
                         ) =>
                 {
@@ -220,7 +223,7 @@ impl dyn HookFile {
             (0, None) => HookFileState::Missing,
             (_, Some(command)) => HookFileState::Stale { command },
             (_, None) => HookFileState::Stale {
-                command: binary.to_owned(),
+                command: guard.binary.clone(),
             },
         }
     }
@@ -288,9 +291,4 @@ impl dyn HookFile {
 
 fn has_block(entry: &Value) -> bool {
     entry.pointer("/hooks/0/onFailure") == Some(&json!("block"))
-}
-
-/// ` guard --host <id>`, which every shell-string command of ours ends with.
-pub(crate) fn guard_args(id: &str) -> String {
-    format!(" guard --host {id}")
 }

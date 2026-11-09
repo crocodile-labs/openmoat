@@ -2,3 +2,5 @@
 // `host/<module>/integration/` holds until `openmoat init` writes the
 // binary's path, as a JSON string, in its place (`wire/owned_file.rs`).
 declare const __MOAT_BINARY__: string;
+// The state directory's word (`encode_home`), likewise.
+declare const __MOAT_HOME__: string;

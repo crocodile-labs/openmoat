@@ -1,15 +1,16 @@
 use serde_json::{Value, json};
 
 use super::{YamlHookError, parse, remove, upsert};
-use crate::HookSpec;
 use crate::wire::hook_file::{HookFile, HookOutcome};
+use crate::{GuardCommand, HookSpec};
 
 /// An entry `{command, timeout}` recognised by its command's ending.
 #[derive(Debug)]
 struct Plain;
 
 impl HookFile for Plain {
-    fn entry(&self, spec: &HookSpec, id: &str, binary: &str, _block: bool) -> Value {
+    fn entry(&self, spec: &HookSpec, id: &str, guard: &GuardCommand, _block: bool) -> Value {
+        let binary = &guard.binary;
         json!({ "command": format!("{binary} guard --host {id}"), "timeout": spec.timeout })
     }
 
@@ -31,7 +32,14 @@ static PLAIN: Plain = Plain;
 const HOOKS: &[HookSpec] = &[HookSpec::new("pre_tool_call", "", 60, false)];
 
 fn install(text: &str) -> Result<(HookOutcome, String), YamlHookError> {
-    upsert(&PLAIN, text, "config.yaml", "x", HOOKS, "/bin/om")
+    upsert(
+        &PLAIN,
+        text,
+        "config.yaml",
+        "x",
+        HOOKS,
+        &GuardCommand::new("/bin/om"),
+    )
 }
 
 fn ours(doc: &str) -> Value {

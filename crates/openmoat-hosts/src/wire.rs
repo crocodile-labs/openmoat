@@ -2,6 +2,7 @@
 
 use openmoat_core::Verdict;
 
+pub(crate) mod guard_command;
 pub(crate) mod hook_file;
 pub(crate) mod mcp;
 pub(crate) mod mcp_call;

@@ -110,7 +110,7 @@ fn init_adds_one_fail_closed_entry_and_approves_it() {
     assert_eq!(entries[0]["timeout"], json!(60));
     assert!(entries[0].get("matcher").is_none());
     let command = entries[0]["command"].as_str().unwrap().to_owned();
-    assert!(command.ends_with(" guard --host hermes"), "{command}");
+    assert!(command.ends_with(&sb.hook_args("hermes")), "{command}");
     let approvals: Value =
         serde_json::from_str(&fs::read_to_string(allowlist(&sb)).unwrap()).unwrap();
     let approved = &approvals["approvals"][0];

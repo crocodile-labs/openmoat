@@ -65,7 +65,7 @@ fn edit(
         &config.settings_path.display().to_string(),
         config.host.id(),
         config.hooks,
-        &binary.to_string_lossy(),
+        &config.guard(binary),
     )?)
 }
 
@@ -96,8 +96,8 @@ pub fn state(config: &HostConfig, layout: &'static dyn HookFile, binary: &Path) 
         Err(e) => return HookState::Unreadable(format!("{e:#}")),
     };
     let id = config.host.id();
-    let binary_text = binary.to_string_lossy();
-    let state = match layout.state(&root, id, config.hooks, &binary_text, || false) {
+    let guard = config.guard(binary);
+    let state = match layout.state(&root, id, config.hooks, &guard, || false) {
         HookFileState::Missing => HookState::Missing,
         HookFileState::Stale { command } => HookState::Stale { command },
         HookFileState::Installed => match consent::missing(config, binary) {

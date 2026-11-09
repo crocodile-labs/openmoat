@@ -196,6 +196,11 @@ impl Service {
             // holds the commands it runs (ADR-039). An argument, not a variable,
             // so a host's settings cannot claim it for a hook outside the run.
             .args(["guard", "--host", host.id(), "--relayed"])
+            // The run's own state directory, as a hook outside names it (ADR-071).
+            .args([
+                openmoat_hosts::HOME_FLAG.to_owned(),
+                openmoat_hosts::encode_home(&crate::home::arg_form(self.home.root())),
+            ])
             .env(RUN_SESSION_ENV, &self.run)
             .env_remove(SOCKET_ENV)
             .env_remove(TOKEN_ENV)

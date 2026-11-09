@@ -209,8 +209,11 @@ checked in the fixtures `README.md`.
 matcher, timeout) of the spec's `install.hooks` to the agent's hook file, in the
 layout `install.hook_file` names. It must stay idempotent (invariant 8):
 
-- Our entries are recognised by their command, `guard --host <id>`; re-running `init`
-  updates them in place and never adds a second one.
+- Our entries are recognised by their command, `guard --host <id>` and then
+  `--home <state directory>` (ADR-071); re-running `init` updates them in place and
+  never adds a second one. Build the command from `GuardCommand`
+  (`wire/guard_command.rs`) and recognise it with its functions, never by hand: the
+  guard trusts the state directory on its command line, not its environment.
 - Other keys and other hooks in the file are kept.
 - The file is copied to `<file>.moat-backup` before the first edit.
 - The matcher must name every tool the adapter maps. A tool missing from it never

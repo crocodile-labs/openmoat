@@ -39,7 +39,10 @@ fn the_opencode_plugin_blocks_on_everything_but_allow_and_no_answer() {
     assert_eq!(payload["worktree"], report["dir"]);
     assert_eq!(payload["mcpServers"], serde_json::json!(["github"]));
     assert!(payload["platform"].is_string(), "{payload}");
-    assert_eq!(report["argv"], serde_json::json!(["--host", "opencode"]));
+    assert_eq!(
+        report["argv"],
+        serde_json::json!(["--host", "opencode", "--home", "/h/.moat"])
+    );
     assert_eq!(
         report["cwdIsDirectory"], true,
         "the guard runs in the directory"
@@ -81,7 +84,7 @@ fn the_opencode_plugin_reports_loading_from_both_apis() {
     let Some(report) = opencode() else {
         return;
     };
-    let beat = serde_json::json!([["--heartbeat", "--host", "opencode"]]);
+    let beat = serde_json::json!([["--heartbeat", "--host", "opencode", "--home", "/h/.moat"]]);
     assert_eq!(report["heartbeats"]["server"], beat, "{report}");
     assert_eq!(report["heartbeats"]["setup"], beat, "{report}");
 }
