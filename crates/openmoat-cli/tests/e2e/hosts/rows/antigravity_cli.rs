@@ -56,6 +56,7 @@ pub fn row() -> Row {
                 )
             },
         }),
+        defer_answers_allow: true,
         ..DECISION
     }
 }

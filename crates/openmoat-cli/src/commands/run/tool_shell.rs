@@ -223,7 +223,8 @@ fn without_dir(path: &OsStr, dir: &Path) -> OsString {
     std::env::join_paths(kept).unwrap_or_else(|_| path.to_owned())
 }
 
-#[cfg(test)]
+// `openmoat run` and its wrapper exist only on macOS and Linux.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

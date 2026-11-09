@@ -195,7 +195,7 @@ fn a_switched_off_entry_is_not_protected_and_init_turns_it_back_on() {
         "{reply}"
     );
 
-    let init = sb.moat(&["init", "--yes"]);
+    let init = sb.moat_as_person(&["init", "--yes"]);
     assert_eq!(init.status.code(), Some(OK), "{}", text(&init));
     let root: Value = serde_json::from_str(&fs::read_to_string(hook_file(&sb)).unwrap()).unwrap();
     assert_eq!(root["openmoat"]["enabled"], true, "{root}");
