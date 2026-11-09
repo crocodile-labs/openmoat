@@ -430,6 +430,7 @@ table is generated from each agent's `HostSpec` (`OPENMOAT_TEST_UPDATE_DOCS=1 ca
 | Hermes Agent | `~/.hermes` | `HERMES_HOME` | `config.yaml` | `pre_tool_call` (60 s) |
 | Cline CLI | `~/.cline` | `CLINE_DIR` | `hooks/PreToolUse` | `PreToolUse` (120 s) |
 | goose | `~/.config/goose` | `GOOSE_PATH_ROOT` | `~/.agents/plugins/openmoat/hooks/hooks.json` | `PreToolUse` (60 s) |
+| Antigravity CLI | `~/.gemini/antigravity-cli` | `HOME` | `~/.gemini/config/hooks.json` | `PreToolUse` (600 s) |
 <!-- /generated -->
 
 If you start Claude Code with `CLAUDE_CONFIG_DIR`

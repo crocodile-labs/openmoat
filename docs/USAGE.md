@@ -142,7 +142,7 @@ Agents
   ! Codex               hook + OS sandbox
   ! OpenClaw            hook only
   ✔ GitHub Copilot CLI  hook only
-  – Not installed: Cursor, pi, OpenCode, Hermes Agent, Cline CLI, goose
+  – Not installed: Cursor, pi, OpenCode, Hermes Agent, Cline CLI, goose, Antigravity CLI
 
 OpenMoat
   ✔ Policy     16 deny · 20 allow · 12 review rules
@@ -173,7 +173,7 @@ exit code as the text:
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
-| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
+| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose and the Antigravity CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
 | `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or its entry lacks the agent's fail-closed key (`fail_closed: true` for Hermes Agent, `failClosed: true` for Cursor: the agent would run a call whose hook failed; run `openmoat init`), or the agent ran without loading OpenMoat's plugin (below), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
 An agent not set up gets a `·` line; the agents not found share the `Not installed` line. `openmoat status --format
@@ -274,7 +274,7 @@ openmoat allow --last --always --for 3d   # or a rule that ends after three days
 ```
 
 On an agent without an OS sandbox from OpenMoat (OpenClaw, GitHub Copilot CLI, pi,
-Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, and Claude Code and Cursor on native Windows or
+Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, the Antigravity CLI, and Claude Code and Cursor on native Windows or
 with their sandbox not in place), running a script the same session wrote needs review
 (`session-written-code`: `moat: review [session-written-code] — runs code this session
 wrote, with no OS sandbox below the hook: /p/x.py`). Look at the script, then approve
@@ -960,6 +960,13 @@ these takes one command in your own terminal (agents are denied all of them):
   `openmoat allow --last`. A `disabledPlugins` list naming `openmoat` in
   `~/.config/goose/settings.json`, or in a project's `.config/goose/`, turns it off, and
   `openmoat status` reports goose as not protected.
+- **Antigravity CLI**: `openmoat init --hosts antigravity-cli` adds one `PreToolUse` entry,
+  under the name `openmoat`, to `~/.gemini/config/hooks.json`, shared with the
+  Antigravity app and IDE; start a new `agy` session so it loads the hook. A `review` is
+  Antigravity CLI's own prompt, sent as `force_ask` so a saved "Always Allow" cannot
+  answer it. `"enabled": false` under that entry shows as not protected in
+  `openmoat status` until `openmoat init` turns it back on. What `agy` does when the
+  hook fails is not documented: treat a failing hook as letting the call run.
 - **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
   file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). A
   `review` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which

@@ -37,7 +37,8 @@ Each agent's gaps and the reasons are in
 ## Sandboxes and allowed code
 
 - **Outside an OS sandbox, the hook decides alone.** For hook-only agents (OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, and
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, the
+  Antigravity CLI, and
   Claude Code and Cursor on native Windows), an allowed call runs with your permissions,
   so a classifier mistake is a bypass. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
@@ -144,7 +145,12 @@ Each agent's gaps and the reasons are in
   hooks. goose runs calls unchecked when it does not load OpenMoat's plugin
   (`disabledPlugins`, `enabled: false` under `plugins` in `config.yaml`, or a project
   plugin named `openmoat`); `openmoat status` and `doctor` report both, for the directory
-  they run in.
+  they run in. The Antigravity CLI does not document what happens when a hook cannot start,
+  crashes, times out or prints bad JSON, and has no documented setting that blocks then, so
+  OpenMoat assumes the call runs there; `--dangerously-skip-permissions` approves its
+  requests unseen, which OpenMoat cannot see, and a `review` under a saved
+  `toolPermission: always-proceed` is a deny. It is checked from its documentation only,
+  not against a running `agy`.
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you
   trust it in its `/hooks` view, and settings such as `disableAllHooks` (Claude Code,
   Copilot CLI) or `[features] hooks = false` (Codex) turn hooks off. `openmoat status`

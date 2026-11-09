@@ -369,6 +369,17 @@ fails when an adapter matches a tool name its rows do not mention; do not edit i
 | goose | extension tool (`<extension>__<tool>`), the built-in ones (`todo__…`, `extensionmanager__…`) included | tool name and `tool_input`, recorded as `mcp__<extension>__<tool>` | `McpTool` |
 | goose | `list_functions`, `get_function_details` | — | none: `ungoverned` |
 | goose | any other unprefixed tool | tool name and arguments | `UnknownTool` (`tool.unknown`) |
+| Antigravity CLI | `run_command` | `CommandLine`, after a `cd` to `Cwd`; needs review when it names an earlier terminal (`RequestedTerminalID`); the Windows shell is not documented | `Shell`, `Unchecked`; `ForeignShell` on Windows |
+| Antigravity CLI | `view_file`, `list_dir` / `write_to_file`, `replace_file_content`, `multi_replace_file_content` | `AbsolutePath`, `DirectoryPath` / `TargetFile` | `FsRead` / `FsWrite` |
+| Antigravity CLI | `find_by_name`, `grep_search` | `SearchDirectory`, `SearchPath`, and the directory `Pattern` or `Includes` names before its first wildcard and where a `..` climbs to | `FsRead`, `ReadFiles` |
+| Antigravity CLI | `read_url_content` / `search_web` | `Url` / `query` | `Fetch` / `WebSearch` |
+| Antigravity CLI | `generate_image` | each of `ImagePaths`, read and sent to the model; with none, the tool itself | `ReadFiles`; `UnknownTool` |
+| Antigravity CLI | `manage_task` with `send_input` | `Input` typed into a running shell | `Unchecked` around `Shell` (needs review) |
+| Antigravity CLI | `schedule`, `define_subagent`, `invoke_subagent` | tool name and arguments; whether a subagent's calls reach the hook is not documented | `Unchecked` around `UnknownTool` (needs review) |
+| Antigravity CLI | `call_mcp_tool` | `ServerName`, `ToolName`, `Arguments` | `McpTool` as `mcp__<server>__<tool>` |
+| Antigravity CLI | MCP tool (`mcp_<server>_<tool>`) | tool name and arguments; the name cannot be split, and the hook payload's name is not documented | `McpTool` as written |
+| Antigravity CLI | `ask_question`, `list_permissions`, `ask_permission`, `manage_task` with `list`, `status` or `kill`, `manage_subagents` with `list`, `kill` or `kill_all` | — | none: `ungoverned` |
+| Antigravity CLI | `send_message` and any other tool (a `browser_*` tool, one the documentation does not list) | tool name and arguments | `UnknownTool` (`tool.unknown`) |
 <!-- /generated -->
 
 OpenClaw has no command hook. OpenMoat's plugin (`crates/openmoat-hosts/src/host/openclaw/integration/openmoat.mjs`,
@@ -557,6 +568,7 @@ a grant must be denied, not only reported.
 | OpenCode 2 `execute.before` (OpenMoat's plugin) | `{"decision":…,"reason":…}`; nothing for a `defer` | 0, or 2 on deny |
 | Hermes Agent `pre_tool_call` | `{}` for `allow`, nothing for a `defer`, `{"action":"approve","message":…,"rule_key":…}` for a `review` (Hermes's own approval prompt), `{"decision":"block","reason":…}` for a deny | 0, or 2 on deny |
 | Cline CLI `PreToolUse` (OpenMoat's script) | `{}` for `allow`, nothing for a `defer`, `{"cancel":true,"errorMessage":…}` for a `review` and a deny | Cline reads stdout only, never the exit code |
+| Antigravity CLI `PreToolUse` | `{"decision":"allow"}` for `allow` and a `defer` (`decision` is required), `{"decision":"force_ask","reason":…}` for a `review`, `{"decision":"deny","reason":…}` for a deny | 0, or 2 on deny |
 | goose `PreToolUse` (OpenMoat's plugin) | `{"decision":"allow"}` for `allow`, nothing for a `defer`, `{"decision":"block","reason":…}` for a `review` and a deny | 0, or 2 on deny |
 | Claude Code `ConfigChange` | `{}` or `{"decision":"block","reason":…}` | 0, or 2 on block |
 | Claude Code `SessionStart` | nothing; the session's credential for `openmoat proxy` is appended to `CLAUDE_ENV_FILE` (ADR-044) | 0, or 2 when no credential could be written |
