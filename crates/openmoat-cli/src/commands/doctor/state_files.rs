@@ -29,10 +29,6 @@ use unix as platform;
 
 /// What [`platform::inspect`] found of one file.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(unix),
-    expect(dead_code, reason = "only Unix reads modes and owners")
-)]
 pub(super) struct Found {
     /// `mode 600, owner you`, as the verbose row shows it.
     pub shown: String,

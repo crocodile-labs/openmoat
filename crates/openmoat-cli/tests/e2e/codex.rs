@@ -117,7 +117,7 @@ fn codex_windows_command_forwards_stdin_and_preserves_guard_exit_codes() {
     let entry = spec.hook_file.entries().unwrap().entry(
         &spec.hooks[0],
         "codex",
-        &missing.to_string_lossy(),
+        &openmoat_hosts::GuardCommand::new(missing.to_string_lossy()),
         false,
     );
     let out = run(
