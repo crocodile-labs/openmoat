@@ -349,7 +349,11 @@ fn a_shell_write_of_a_hook_settings_file_is_denied() {
         assert!(denied(&r), "{command}: {r:?}");
         assert!(r.1.reasons[0].contains("cannot tell"), "{command}: {r:?}");
     }
-    let abs = format!("printf x > {}", p.file(".codex/config.toml"));
+    // Slash-separated: a shell reads a Windows backslash as an escape.
+    let abs = format!(
+        "printf x > {}",
+        p.file(".codex/config.toml").replace('\\', "/")
+    );
     assert!(denied(&shell(&p, &abs)));
     #[cfg(unix)]
     {
