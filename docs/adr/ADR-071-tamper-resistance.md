@@ -73,6 +73,35 @@ proxy key and the proxy CA's key (`commands/doctor/state_files.rs`).
 The user the process runs as is the owner of a file it creates in the temp directory
 (std has no `getuid`, and the crate forbids `unsafe`).
 
+### 3. The guard checks its own binary
+
+Every re-pin by a person (`init`, `doctor --accept`, `allow`, …) records in the lock
+the SHA-256 of the binary the hooks run (`binary_sha256`) and the release it reports
+(`binary_version`). The guard compares the file it runs from with that record on every
+call, inside the lock check (`integrity/binary.rs`), where it runs the very file the
+lock names:
+
+- **Same release, other bytes:** the file was changed in place (patched, truncated,
+  replaced by another build of the same version). Every call is denied
+  (`kernel-integrity`), and `status` and `doctor` show it with the fix,
+  `openmoat init`.
+- **Another release:** an upgrade in place. The hooks keep working, as ADR-016
+  promises, and `status` and `doctor` say to run `openmoat init` to record it.
+- **Not judged:** a lock from before this ADR (reported until `init`), a lock that
+  names another file than the one running (a versioned path a package manager is
+  replacing, a copy; the existing path checks report those), and a running file that
+  no longer resolves (replaced while it started).
+- **Latency.** The digest is kept in `binary-hash.json` beside the lock, keyed by the
+  file's size, modification time and, on Unix, device and inode; the binary is hashed
+  again only when one of those changes. The cache is not pinned: it only saves work,
+  and whoever can write the state directory can rewrite the lock too. Debug builds
+  compile `sha2` optimised so a test home does not pay seconds per hash.
+
+What this cannot do: a binary changed to skip the check skips it, and a binary
+replaced by an older genuine release has no such check. It catches a file changed in
+place by something other than a release, and tells a person who upgraded to record the
+new binary.
+
 ## Consequences
 
 - A host's hook environment no longer picks the state directory of an installed
@@ -80,5 +109,8 @@ The user the process runs as is the owner of a file it creates in the temp direc
   `init` runs.
 - The plugins' files and every hook entry change once, so after upgrading, `status`
   shows each agent's hook as out of date until `openmoat init` runs.
+- After an upgrade in place, `status` and `doctor` show one note until `openmoat init`
+  records the new binary; a binary changed under its own release denies every call
+  until then.
 - A person who moves the state directory (`MOAT_HOME`) runs `openmoat init` with the
   new one; the hooks name the directory they were installed for.

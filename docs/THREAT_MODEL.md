@@ -82,6 +82,14 @@ sandboxes and `openmoat run` add today, or the planned answer from the
 These hold for the current code. Each is a design consequence or a tracked gap, not
 something OpenMoat claims to stop.
 
+- **The guard's check of its own binary catches a file changed in place, not a binary
+  built to skip it (ADR-071).** Each re-pin records the binary's SHA-256 and release;
+  the guard denies every call when the file it runs from has other bytes under the
+  same release, and only reports an upgrade to another release. A binary changed to
+  skip the check, or an older genuine release put in its place, does not check. The
+  digest is cached beside the lock by size, modification time and inode; whoever can
+  write the state directory can rewrite the lock as well.
+
 - **Injected input is linked only where the host reports output, and only for the same
   request.**
   - Claude Code (and the Continue CLI, which runs Claude Code's hooks) and the Cline CLI

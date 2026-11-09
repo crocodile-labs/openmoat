@@ -304,6 +304,15 @@ fn lock(shown: &mut Shown, home: &Home, binary: &Path) -> Result<bool> {
             shown.attention.push(row);
         }
     }
+    // The guard's own file against the lock's record (ADR-071).
+    let own = crate::integrity::binary::check(home, &lock);
+    if let Some(reason) = own.deny_reason() {
+        healthy = false;
+        let row = Row::new(Mark::Broken, "Binary", reason).fix("openmoat init");
+        shown.attention.push(row);
+    } else if let Some(note) = own.note() {
+        shown.state(Mark::Info, "Binary", note);
+    }
     let installed = crate::integrity::installed_hook_files(home, binary)?;
     let gap = HookPinGap::new(&lock, home, &installed);
     for path in gap.unpinned {

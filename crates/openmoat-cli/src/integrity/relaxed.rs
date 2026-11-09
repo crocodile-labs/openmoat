@@ -13,7 +13,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Result, bail};
-use openmoat_core::Decision;
+use openmoat_core::{Decision, Verdict};
 use serde_json::{Map, Value};
 
 use super::digest::is_claude_settings;
@@ -149,7 +149,17 @@ pub fn check(home: &Home) -> Result<Verified> {
     }
     let lock = Lock::load(&lock_path)?;
     let (drift, home) = super::verify_state(home, &lock);
-    let checked = split(&home, &lock, drift);
+    let mut checked = split(&home, &lock, drift);
+    // The guard's own file, against the digest the lock recorded (ADR-071).
+    if checked.deny.is_none()
+        && let Some(reason) = super::binary::check(&home, &lock).deny_reason()
+    {
+        checked.deny = Some(Decision::single(
+            Verdict::Deny,
+            super::INTEGRITY_RULE,
+            reason,
+        ));
+    }
     Ok(Verified {
         lock,
         home,

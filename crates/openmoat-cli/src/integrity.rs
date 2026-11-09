@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::home::{Home, write_private};
 use crate::install::{HookState, HostConfig};
 
+pub mod binary;
 mod checkpoint;
 mod digest;
 mod forms;
@@ -46,6 +47,15 @@ pub struct Lock {
     pub pinned_at_ms: i64,
     /// Absolute path of the `moat` binary the hooks point at.
     pub binary: String,
+    /// SHA-256 of that binary when the lock was written, which the guard
+    /// compares its own file with (`binary.rs`, ADR-071). `None` in a lock
+    /// from before ADR-071.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binary_sha256: Option<String>,
+    /// The release that binary reported, which tells an upgrade in place
+    /// from a file changed under the same release.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binary_version: Option<String>,
     /// Canonical path → lowercase hex SHA-256 of the file contents (of a Claude
     /// Code `settings.json`, without its cosmetic `theme` key; see `digest.rs`).
     pub entries: BTreeMap<String, String>,
@@ -150,6 +160,9 @@ pub fn repin_with(
             .or_insert_with(|| kept::ABSENT.to_owned());
     }
     lock.mcp_servers = mcp_servers;
+    // What the guard compares its own file with (ADR-071); a person's re-pin
+    // is what records it.
+    (lock.binary_sha256, lock.binary_version) = binary::record(home, binary).unzip();
     for path in profiles.iter().filter(|p| p.is_file()) {
         let digest = crate::sandbox::install::codex_part_digest(path)?;
         lock.codex_profiles.insert(key(path), digest);
@@ -408,6 +421,8 @@ impl Lock {
             version: LOCK_VERSION,
             pinned_at_ms: crate::time::now_ms(),
             binary: binary.to_string_lossy().into_owned(),
+            binary_sha256: None,
+            binary_version: None,
             entries,
             codex_profiles: BTreeMap::new(),
             keys,

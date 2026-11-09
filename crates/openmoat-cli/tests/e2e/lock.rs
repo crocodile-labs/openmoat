@@ -6,6 +6,8 @@ use serde_json::Value;
 
 use crate::common::{DENY, OK, Sandbox, USAGE, fixture, hook_output, text};
 
+mod binary;
+
 fn sandbox() -> Sandbox {
     Sandbox::installed(&[".claude"])
 }

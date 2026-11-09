@@ -248,6 +248,11 @@ Then, in a terminal of your own:
      install method, another Cargo `--root`). Run `openmoat init` with the `openmoat` the hooks
      should use, and `openmoat proxy install` again if the proxy runs as a service
      ([Upgrade note](#upgrade-note)).
+   - `binary is release …, the lock recorded …; run openmoat init to record it`: the lock
+     keeps a digest of the binary (ADR-071); the hooks keep working, and `openmoat init`
+     records the new one. `the openmoat binary … changed since the lock recorded it`
+     instead means the file changed under the same release, and every call is denied
+     until you check it and run `openmoat init`.
    - a sandbox line ending `run openmoat sandbox sync`: the new release writes the agents'
      sandbox settings differently. Run `openmoat sandbox sync`.
    - `Policy  N changes from the OpenMoat … default to review → openmoat policy upgrade`:
