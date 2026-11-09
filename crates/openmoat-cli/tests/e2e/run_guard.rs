@@ -151,9 +151,9 @@ fn the_sandbox_still_cannot_touch_the_home_or_take_the_port() {
     let (sb, project) = installed_with_secret();
     let lock = std::fs::read(sb.home.join(".moat/policy.lock")).unwrap();
     // `kernel-self` denies writing OpenMoat's home wherever it is, and reading
-    // the audit log and the lock. On macOS this test's home is in the temp
-    // directory, a read root, so only that read deny keeps them from the
-    // agent; on Linux it is outside every grant, where `moat run` must keep it.
+    // the audit log and the lock. This test's home is in the shared temp
+    // directory, which is no read root of a run: outside every grant, as a
+    // home is on Linux, where `moat run` must keep it.
     let script = r#"echo forged >> "$HOME/.moat/audit.db" 2>/dev/null; echo "audit=$?"
          echo forged > "$HOME/.moat/policy.lock" 2>/dev/null; echo "lock=$?"
          cat "$HOME/.moat/audit.db" > /dev/null 2>&1; echo "read_audit=$?"
@@ -185,12 +185,9 @@ except OSError:
         "lock=0",
         "read_audit=0",
         "read_lock=0",
+        "read_policy=0",
     ] {
         assert!(!stdout(&out).contains(refused), "{refused}: {shown}");
-    }
-    // Seatbelt keeps the policy readable; outside every Landlock grant it is not.
-    if cfg!(target_os = "macos") {
-        assert!(stdout(&out).contains("read_policy=0"), "{shown}");
     }
     assert_eq!(
         std::fs::read(sb.home.join(".moat/policy.lock")).unwrap(),

@@ -480,6 +480,21 @@ fn escaped_separator_words_do_not_break_pipelines() {
 }
 
 #[test]
+fn a_decoder_flag_written_as_a_redirect_target_still_feeds_the_interpreter() {
+    for input in [
+        "echo x | base64 <-d | sh",
+        "echo x | base64 <-d | sh ; true",
+    ] {
+        let atoms = parsed(input);
+        let tail = ["base64", "-d", "|", "sh"].map(str::to_owned).to_vec();
+        assert!(
+            atoms.contains(&AtomicAction::Pipeline { argv: tail }),
+            "{input}: {atoms:?}"
+        );
+    }
+}
+
+#[test]
 fn copies_into_a_directory_write_the_entry() {
     let a = parsed("cp -t ~ f");
     assert!(has_write(&a, "/Users/me/f") && has_read(&a, "/p/f") && !has_write(&a, "/p/f"));
