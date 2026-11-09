@@ -1119,7 +1119,7 @@ What each module holds. The rules for each path are in `AGENTS.md` §2.
 |---|---|---|
 | Unit | next to the code (`#[cfg(test)]`, `tests.rs` modules) | every PR, all OS |
 | Architecture invariants | `crates/openmoat-core/tests/architecture.rs` | every PR |
-| Conformance (decide) | `tests/conformance/` through `crates/openmoat-core/tests/conformance.rs`; generates `docs/COVERAGE.md` and fails on a threat class without an attack fixture | every PR, all OS |
+| Conformance (decide) | `tests/conformance/` through `crates/openmoat-core/tests/conformance/main.rs`; generates `docs/COVERAGE.md` and fails on a threat class without an attack fixture | every PR, all OS |
 | Policy compiler | `crates/openmoat-core/tests/ir_consistency.rs` (IR against the engine on the conformance fixtures), `ir_never_widens.rs` (generated policies) | every PR, all OS |
 | Golden host payloads | `crates/openmoat-hosts/src/host/<module>/fixtures` | every PR |
 | End to end | `crates/openmoat-cli/tests/e2e/` (real binary, isolated `HOME`/`MOAT_HOME`) | every PR, all OS |
