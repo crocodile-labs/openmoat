@@ -1,0 +1,2 @@
+### Security
+- The lock records the SHA-256 and release of the binary the hooks run, and `openmoat guard` compares the file it runs from with it (hashed once per change of the file, cached beside the lock): other bytes under the same release deny every call until `openmoat init`, and `openmoat status` and `openmoat doctor` show it; an upgrade to another release keeps working and is only reported until `openmoat init` records it (ADR-071) ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

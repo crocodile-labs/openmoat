@@ -234,7 +234,7 @@ Then, in a terminal of your own:
    names what is left, if anything:
    - `hook entry for … is out of date (written by an older OpenMoat, or for another state
      directory), …; run openmoat init`: the new
-     release writes its hook entry differently (after 0.17.0 every hook names the state
+     release writes its hook entry differently (after 0.18.0 every hook names the state
      directory, `--home`, ADR-071; more tools, another timeout, a new event
      such as Claude Code's `SessionStart`, which from 0.12.0 gives each session
      its credential for `openmoat proxy`, ADR-044, or Claude Code's `PostToolUse`, which
