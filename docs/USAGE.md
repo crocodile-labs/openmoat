@@ -581,7 +581,21 @@ moat: deny [kernel-integrity] — /Users/you/.moat/policy.yaml was modified;
 ```
 
 `openmoat doctor` lists what drifted. If it was not you, you caught what this tool exists
-for. The policy language, the full default policy and recipes are in
+for.
+
+The lock pins what the state files hold, not who may change them, so `openmoat doctor`
+also checks the mode and owner of each one (the state directory, the lock, the policy,
+the approvals, the trust and host records, the audit log, the keys). A file other users
+may write, or one another user owns, is a problem with its fix; one they may only read
+is a warning; `--verbose` lists every file's mode and owner:
+
+```
+openmoat doctor            # ✗ policy           ~/.moat/policy.yaml has mode 666: other users may change it under the lock; `chmod go-rwx ~/.moat/policy.yaml`, then check what it holds
+openmoat doctor --verbose  #   lock             ~/.moat/policy.lock mode 600, owner you
+```
+
+On Windows files have access control lists, not Unix modes, and doctor says the check
+does not run there. The policy language, the full default policy and recipes are in
 [POLICY.md](POLICY.md).
 
 ### Keep a token from the agent

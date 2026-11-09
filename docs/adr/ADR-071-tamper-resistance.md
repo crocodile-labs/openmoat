@@ -50,6 +50,29 @@ so the argument is pinned with it: changing it is drift.
   with, `MOAT_HOME` included, so a test home works as before. A guard started by hand
   without `--home` reads `MOAT_HOME` as before.
 
+### 2. `doctor` shows who may change the state files
+
+The lock pins what the state files hold, not who may change them. `openmoat doctor`
+reads the mode and owner of the state directory and of each file in it that decides
+or records a call: the lock, the policy and its base, the approvals and allow rules,
+the trust, host and environment records, the signers and packs, the audit log, the
+proxy key and the proxy CA's key (`commands/doctor/state_files.rs`).
+
+- A file other users may write, or one another user owns, is a problem (exit 64),
+  with the `chmod` or `chown` that fixes it: such a file can be replaced under the
+  lock by someone who is not the person.
+- A file other users may only read is a warning: it gives away the policy or the log.
+  So is a symbolic link: whoever may re-point it chooses the file (the lock's digests
+  hash the link's target too, so a new target is drift).
+  The keys' own refusal rows (`key_file`, ADR-044, ADR-043) already cover readable
+  keys, so they get no second warning.
+- `--verbose` lists every file's mode and owner (`you`, or the other user's id).
+- On Windows the files have access control lists, not Unix modes: one note says the
+  check does not run there.
+
+The user the process runs as is the owner of a file it creates in the temp directory
+(std has no `getuid`, and the crate forbids `unsafe`).
+
 ## Consequences
 
 - A host's hook environment no longer picks the state directory of an installed

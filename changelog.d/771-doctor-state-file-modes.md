@@ -1,0 +1,2 @@
+### Security
+- `openmoat doctor` checks the mode and owner of the state directory and each file in it that decides or records a call (lock, policy, approvals, trust and host records, audit log, keys): a file other users may write, or one another user owns, is a problem with the `chmod` or `chown` that fixes it, one they may read or a symbolic link is a warning, and `--verbose` lists every file's mode and owner. Not checked on Windows (ADR-071) ([#771](https://github.com/crocodile-labs/openmoat/pull/771)).

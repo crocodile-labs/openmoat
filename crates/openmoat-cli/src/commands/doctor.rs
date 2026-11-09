@@ -24,6 +24,7 @@ mod json;
 mod mcp;
 mod rows;
 mod sandboxes;
+mod state_files;
 mod warnings;
 
 /// What a check is about, so accepting changes clears exactly the problems a
@@ -82,6 +83,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         .map(|lock| verify_lock(&mut report, lock, &binary))
         .unwrap_or_default();
     environment(&mut report, &home);
+    state_files::rows(&mut report, &home);
     let hook_files = hooks::hooks(&mut report, &home, &binary)?;
     if let Some(lock) = &lock {
         hook_pins(&mut report, lock, &home, &hook_files);
