@@ -119,12 +119,16 @@ Each agent's gaps and the reasons are in
 
 ## When an agent skips or changes the check
 
-- **Inside `openmoat run`, any program can send hook calls for the run's own agent.**
-  The run's relay token is in the environment of everything in the sandbox, so a script
-  or a test runner can send the run calls the agent never made. They are decided by the
-  policy as the agent's would be and recorded in the run's own sessions only (no other
-  agent, no session from outside the run, no MCP ticket, no proxy credential). Read those
-  rows as what was asked from inside the run (ADR-070, ADR-071).
+- **Inside `openmoat run`, tool commands of some agents still receive the relay token.**
+  Under Codex, Cursor, GitHub Copilot CLI, Gemini CLI and the Cline CLI, no way was found
+  to tell tool commands from hooks, so a script or a test runner can send the run calls
+  the agent never made. Under Claude Code, OpenCode, goose, Hermes Agent, OpenClaw, the
+  Continue CLI and pi, tool commands do not receive it; MCP servers those agents start
+  themselves may (`openmoat doctor` names the groups, ADR-075 has each agent's limits).
+  Where the token is held, calls are decided by the policy as the agent's would be and
+  recorded in the run's own sessions only (no other agent, no session from outside the
+  run, no MCP ticket, no proxy credential). Read those rows as what was asked from inside
+  the run (ADR-070, ADR-071, ADR-075).
 
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
   2.1.295, run a call unchecked if `openmoat` is missing. Codex also skips untrusted

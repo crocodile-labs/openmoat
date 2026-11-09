@@ -710,9 +710,25 @@ claude-code)
         --tools-log "$out/claude-tools.json"
     # What the installed version says of itself, for the artefact.
     bounded 60 "$bin" --help </dev/null >"$out/claude-help.txt" 2>&1 || true
-    claude_interrupted
+    # A shell that records each start, in the variables `openmoat run` points at
+    # its wrapper (ADR-075): the Bash tool must start through it and hooks must
+    # not, which no fixture can show. `CLAUDE_CODE_SHELL` is documented to be
+    # ignored silently when Claude Code does not accept the value.
+    tool_shell="$root/tool-shell"
+    mkdir -p "$tool_shell"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/tool-shell.log"\nexec /bin/bash "$@"\n' "$out" >"$tool_shell/bash"
+    chmod +x "$tool_shell/bash"
+    CLAUDE_CODE_SHELL="$tool_shell/bash" SHELL="$tool_shell/bash" claude_interrupted
     cat "$out/agent.txt"
     expect_denied "$out/agent.txt"
+    if ! grep -q 'curl -s' "$out/tool-shell.log" 2>/dev/null; then
+        echo "FAIL  the Bash tool did not start through the shell CLAUDE_CODE_SHELL names (ADR-075)"
+        exit 1
+    fi
+    if grep -q 'guard --host' "$out/tool-shell.log"; then
+        echo "FAIL  a hook started through the tool shell, so it would lose the relay token (ADR-075)"
+        exit 1
+    fi
     check session-start "$host" "$out/audit-before.json" "$out/audit-after.json"
     check injected "$host" "$out/audit-before.json" "$out/audit-after.json" "$injected_host"
     claude_resumed

@@ -617,8 +617,11 @@ something OpenMoat claims to stop.
 
     Within those bounds, code in the sandbox can still add rows to the run's own
     sessions with payloads it chose, each decided by the policy as if the agent had made
-    the call. The token cannot be bound more tightly on any OS (ADR-071 §4): every host
-    starts its hooks and its tool commands the same way, so a descriptor reaches both,
+    the call. ADR-075 takes the token from tool commands where a host starts them apart
+    from its hooks, and keeps a command from reading it out of its parent (`kern.procargs*`
+    denied on macOS; no `/proc` grant, and a Landlock layer of the command's own, on Linux);
+    the agents and children it does not reach are named there. It is not bound any more
+    tightly than that on any OS (ADR-071 §4): a descriptor reaches hooks and commands alike,
     a script that runs `openmoat guard` itself is the same program with the same parent
     as a hook, and a per-run secret in the hook command would be readable by every
     process of the user in the sandbox. The run's link row for each agent session says

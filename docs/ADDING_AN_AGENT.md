@@ -118,6 +118,11 @@ The spec in `host/<module>.rs` holds every fact about the agent that is not code
     gets a Node harness in `crates/openmoat-hosts/tests/js_plugins/`: a `<module>.mjs`
     against the stand-ins for the host and the guard in `common.mjs`, which give the
     stand-in guard 5 s, and a `<module>.rs` module listed in its `main.rs`.
+- **`tool_token`:** how `openmoat run` keeps its relay token from the host's tool commands
+  (`ToolToken`, ADR-075): a `Wrapper` with the variables the host reads its tool shell
+  from, only when its hooks start another way; `Integration` when an in-process hook takes
+  the variables out of its own environment; `NotWithheld` with the reason otherwise. Name
+  the source in ADR-075 and add the host to the table in `tests/contract.rs`.
 - **`advisories`:** the host's published security advisories with their fixed versions
   (`Advisories`, `host/<module>/advisories.rs`), which `openmoat status` and
   `openmoat doctor` warn about for the version on the search path (`Advisories::BASE` is

@@ -1,6 +1,6 @@
 # ADR-075: tool commands do not receive the relay token
 
-Status: proposed · Date: 2026-11-09 · Amends ADR-028, ADR-070, ADR-071
+Status: accepted · Date: 2026-11-09 · Amends ADR-028, ADR-070, ADR-071
 
 ## Context
 
@@ -108,4 +108,75 @@ exclude).
 
 ## Decision
 
-To be filled in by the build.
+Tool commands do not receive the relay token where the host gives a way to tell them
+from its hooks. Where it does not, nothing changes and OpenMoat says so.
+
+### The sandbox rule
+
+- **macOS:** the run's Seatbelt profile denies `sysctl-read` of `kern.procargs*`, for
+  every process in the run, the hook's included. A process's own arguments come from
+  the C runtime, so programs do not need this call; `ps` still lists processes.
+- **Linux:** nothing is added to the run's policy. A policy that grants `/proc` is still
+  covered for a command the wrapper started, by the nested Landlock layer below.
+
+### The wrapper
+
+`openmoat run` makes a directory of its own (`openmoat-tools-<random>`) in the system's
+temp directory, holding links named `bash` and `zsh` to the `openmoat` binary, and
+points the host's tool shell at one of them (`commands/run/tool_shell.rs`). Started
+under one of those names with `MOAT_TOOL_SHELL_DIR` set, the binary:
+
+1. drops `MOAT_GUARD_SOCKET`, `MOAT_GUARD_TOKEN` and its own variables, and puts back
+   the person's `SHELL`;
+2. on Linux, when it held the token, adds one Landlock layer that restricts nothing but
+   hides the agent's `/proc/<pid>/environ` and `mem` from the command. Failing to add it
+   refuses the command. Signals stay allowed: a later command must be able to stop what
+   an earlier one left running;
+3. replaces itself with the real shell, looked up by name.
+
+The wrapper never reads the command it is given, so a tool command cannot keep the token
+by writing a hook's command line. The directory is read-only to commands: a run whose
+write grants (the project, `--write`, the run's temp directory) hold it gets no wrapper,
+because a command could then replace it. MCP servers `openmoat mcp proxy` starts lose the
+two variables too.
+
+### Each host (`HostSpec::tool_token`)
+
+| Host | Result | How | Limits |
+|---|---|---|---|
+| Claude Code | Withheld | `CLAUDE_CODE_SHELL`, `SHELL` | A value Claude Code does not accept is ignored silently, so the weekly real-agent job checks that the Bash tool starts through the shell it names. MCP servers it starts inherit the token. |
+| OpenCode | Withheld | `SHELL` | A `shell` in the person's config outranks it. MCP servers and PTY sessions inherit the token. OpenCode 2's tool path was read from `dev`, not a release. |
+| goose | Withheld | `GOOSE_SHELL` | MCP servers inherit the token. |
+| Hermes Agent | Withheld | `bash` first on `PATH`, `SHELL` | Its MCP servers already get an allowlist. |
+| OpenClaw | Withheld | `SHELL` | Only for a gateway started by `openmoat run`. MCP servers: not known. |
+| Continue CLI | Withheld | `SHELL` | MCP servers inherit the token. |
+| pi | Withheld | The extension takes the variables out of `process.env` and hands them to the guard alone | MCP servers started before the extension loads keep them. A second pi started inside the run gets no token, so its hook denies every call. |
+| Codex | Not withheld | | Codex reads its shell from the login record. Its `shell_environment_policy` could do this, but a `-c` array may replace the person's own exclusions, and `filters` was not confirmed at the release checked. |
+| Cursor | Not withheld | | Its documentation says neither how tool commands start nor how to change their environment. |
+| GitHub Copilot CLI | Not withheld | | `--secret-env-vars` might do this; whether hooks lose the variables too is not documented. |
+| Gemini CLI | Not withheld | | Tool commands and hooks both run `bash` from `PATH`. |
+| Cline CLI | Not withheld | | `/bin/bash`, absolute, with no CLI setting. |
+
+A host OpenMoat does not recognise gets no wrapper.
+
+### What is reported
+
+`openmoat doctor` names the hosts in each group and says the row is not tested on the
+machine. `openmoat bench --report` runs the attack of step 0 under the sandbox and shows
+NOT TESTED HERE where it cannot. The weekly real-agent job checks Claude Code's routing;
+the others need the fake model to serve an allowed command, which it does not yet.
+
+## Consequences
+
+- A tool command of a withheld host cannot add rows to the run's sessions or probe
+  decisions through the relay. ADR-070's bindings stay.
+- Described as "tool commands do not receive the token", never as binding it to the
+  hook process: an MCP server or a plugin on the host's side still can hold it.
+- Every process in the run's sandbox on macOS loses `KERN_PROCARGS2`. `ps` shows other
+  processes without their arguments; a tool that needs another process's argument list
+  fails.
+- Inside the run on macOS, the check for an agent among a command's parents reads `ps`
+  and so no longer sees an interpreter's script name. It guards commands that write the
+  state directory, which the sandbox refuses anyway.
+- Where the attack test cannot run (a Linux kernel without Landlock ABI 4, macOS before
+  13), `openmoat run` refuses anyway.

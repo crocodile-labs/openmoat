@@ -11,6 +11,12 @@ loopback only. CONTRIBUTING "Latest agents, weekly" describes the workflow.
 
 ## What each agent's run proves
 
+Claude Code's run also sets `CLAUDE_CODE_SHELL` and `SHELL` to a shell that records each
+start, and fails unless the Bash tool started through it and no hook did: the fact
+ADR-075's wrapper depends on, which Claude Code would otherwise ignore silently. The other
+agents' fake model serves one call, the denied one, so a shell never starts there and
+their routing is not proven by this job.
+
 "Real load" means the real agent read OpenMoat's hook or plugin from the file `init`
 wrote, ran it for a tool call, and OpenMoat's decision held: the audit log has the
 agent's `cat ~/.ssh/id_rsa` denied by `secrets-paths`, and the fake key is in none of
