@@ -136,6 +136,8 @@ opencode) mkdir -p "$XDG_CONFIG_HOME/opencode" ;;
 cline) mkdir -p "$CLINE_DIR" ;;
 # goose's configuration directory (`config.yaml`); its plugins go in ~/.agents.
 goose) mkdir -p "$XDG_CONFIG_HOME/goose" ;;
+# The directory that tells OpenMoat the CLI is installed; the hook goes beside it.
+antigravity-cli) mkdir -p "$HOME/.gemini/antigravity-cli" ;;
 esac
 throwaway_refuse
 
@@ -331,6 +333,18 @@ install_goose() {
     goose_tag=$tag
 }
 
+install_agy() {
+    # The installer URL is from third-party guides (the official install page
+    # names the script's `--skip-path` and `--skip-aliases` flags, not its URL);
+    # `--skip-path` keeps it out of the throwaway home's shell profile. The
+    # script is printed by its sha256 before it runs.
+    local script="$root/agy-install.sh"
+    curl -fsSL --retry 3 -o "$script" https://antigravity.google/cli/install.sh
+    if command -v sha256sum >/dev/null; then sha256sum "$script"; else shasum -a 256 "$script"; fi
+    bash "$script" --skip-path --skip-aliases
+    bin="$HOME/.local/bin/agy"
+}
+
 # ---- the Continue CLI: a canary, not an install -----------------------------
 
 continue_canary() {
@@ -373,6 +387,7 @@ npm) install_npm ;;
 hermes-installer) install_hermes ;;
 cursor-installer) install_cursor ;;
 goose-release) install_goose ;;
+agy-installer) install_agy ;;
 *)
     echo "latest-agents: unknown install kind $install" >&2
     exit 64
@@ -432,6 +447,15 @@ openclaw)
         >"$port_file.in"
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_openai.py" \
         --call exec="{\"command\": \"$denied\"}"
+    ;;
+antigravity-cli)
+    # The Gemini API at the fake server (`GOOGLE_GEMINI_BASE_URL` below), with
+    # `modelProvider: gemini` so no sign-in is asked, and the project trusted;
+    # unverified: taken from the documentation, the first run proves it.
+    printf '{"modelProvider": "gemini", "trustedWorkspaces": ["%s"]}\n' "$project" \
+        >"$HOME/.gemini/antigravity-cli/settings.json"
+    start_fake "$out/fake-api.log" python3 -I "$lib/fake_gemini.py" \
+        --call run_command="{\"CommandLine\": \"$denied\"}"
     ;;
 opencode-1)
     # OpenCode 1's opencode.json: an OpenAI-compatible provider (its SDK is
@@ -815,6 +839,14 @@ goose)
         GOOSE_DISABLE_KEYRING=1 OPENAI_API_KEY=fake-key OPENAI_HOST="http://127.0.0.1:$fake_port" \
         OPENAI_BASE_PATH=v1/chat/completions \
         bounded 180 "$bin" run --no-session -t "run it") </dev/null >"$out/agent.txt" 2>&1 || true
+    cat "$out/agent.txt"
+    expect_denied "$out/agent.txt"
+    ;;
+antigravity-cli)
+    # One headless turn (`-p`) against the fake Gemini API; `--dangerously-skip-permissions`
+    # so no prompt waits for a person (the hook still runs before it).
+    (cd "$project" && GEMINI_API_KEY=fake-key GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:$fake_port" \
+        bounded 180 "$bin" -p "run it" --dangerously-skip-permissions) </dev/null >"$out/agent.txt" 2>&1 || true
     cat "$out/agent.txt"
     expect_denied "$out/agent.txt"
     ;;

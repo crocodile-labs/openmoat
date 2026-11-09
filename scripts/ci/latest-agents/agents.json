@@ -132,6 +132,18 @@
                 "verdict": "goose", "allow_is_silent": true},
     "runners": ["ubuntu-latest", "macos-15"]
   },
+  "antigravity-cli": {
+    "host": "antigravity-cli",
+    "name": "Antigravity CLI",
+    "install": "agy-installer",
+    "binary": "{HOME}/.local/bin/agy",
+    "checked": {"version": null, "source": "crates/openmoat-hosts/src/host/antigravity_cli/HOST.md",
+                "note": "built from the documentation, which states no version; the first run of this job gives the first real payload"},
+    "config": [["{HOME}/.gemini/config/hooks.json", "json"]],
+    "payload": {"fixture": "antigravity_cli/fixtures/run_command.json", "command": "/toolCall/args/CommandLine",
+                "verdict": "/decision"},
+    "runners": ["ubuntu-latest", "macos-15"]
+  },
   "cursor": {
     "host": "cursor",
     "name": "Cursor",
