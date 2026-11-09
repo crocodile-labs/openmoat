@@ -73,6 +73,8 @@ mod repo_policy;
 mod required_level;
 mod run;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod relay_token;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod run_guard;
 mod sandbox;
 #[cfg(unix)]
