@@ -23,6 +23,9 @@ mod agent_logins;
 /// `--isolate` never runs a `bwrap` found through `PATH`.
 #[cfg(target_os = "linux")]
 mod isolate_path;
+/// What an MCP server can reach under `openmoat mcp proxy --sandbox`, on disk.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod mcp_boundary;
 /// Linux without bubblewrap: the port-only path a stock system takes.
 #[cfg(target_os = "linux")]
 mod stock_linux;

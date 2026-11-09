@@ -111,6 +111,15 @@ Each agent's gaps and the reasons are in
   with your permissions. A wrapped server starts only from a definition you accepted, in
   `openmoat run`'s sandbox where it can sandbox. `openmoat status` lists the servers that
   start outside OpenMoat.
+- **The hook sees an MCP call's arguments, not what the server then does.** A server
+  started without `--sandbox` runs with your permissions: a tool that takes no path can
+  still read any file you can and write anywhere, and neither the hook nor the gateway
+  sees it. `openmoat mcp wrap` starts a server with `--sandbox` where `openmoat run` can
+  sandbox (or `openmoat mcp proxy --sandbox` directly); there the operating system refuses
+  what the policy's sandbox does not grant, whichever way the server names the file
+  (relative path, absolute path, a symbolic link out of its folder), and a write outside
+  the project. CI proves this by the files on disk, not by a verdict. A server you start
+  with `--no-sandbox`, or where no sandbox is available, has none of this.
 - **A browser goes where the page sends it.** A browser MCP call that only opens a page
   defers like `WebFetch`, and OpenMoat checks the URL it names, but not where the page's
   scripts, links and redirects lead next, nor where its name resolves. What the page says
