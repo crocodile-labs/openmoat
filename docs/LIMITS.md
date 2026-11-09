@@ -152,11 +152,20 @@ Each agent's gaps and the reasons are in
   project's `.codex/config.toml`, `.pi/settings.json` or `opencode.json` that turns the
   hook off is denied (`project-settings`) when OpenMoat knows the content the write
   leaves: a whole-file write, an edit whose text is found in the file as it is, or an
-  `apply_patch` that replays on it. Any other write of those files (a shell redirect,
-  an edit or patch that does not replay exactly, a tool that sends no content) needs
-  review, as every other change there does; an agent that answers reviews on its own
-  (OpenCode 2 `--auto`) lets it through, and the next session started there runs
-  without OpenMoat until `openmoat status` reports it.
+  `apply_patch` that replays on it. A shell command that creates or replaces one of
+  those files where the agent would load it (a redirect, `tee`, `cp` or `mv` onto it,
+  `sed -i`, in the working directory or at the project root, for an agent OpenMoat is
+  set up for) is denied too (`project-settings`): what it leaves cannot be known
+  before it runs, so make that change with the agent's file tools or by hand. Reading
+  those files, removing them, moving them away and a same-named file elsewhere (a
+  template or test fixture) keep their verdict. Any other write of them needs review,
+  as every other change there does: an edit or patch that does not replay exactly, a
+  tool that sends no content, a shell command that writes a file in a subfolder a later
+  session might start in, copies a whole directory over them, names them by a glob or
+  a variable it cannot resolve, or is a program OpenMoat cannot read (a script, a
+  PowerShell command). An agent that answers reviews on its own (OpenCode 2 `--auto`)
+  lets those through, and the next session started there runs without OpenMoat until
+  `openmoat status` reports it.
 - **Other plugins share the agent's process.** OpenCode loads other plugins and a
   project's `.opencode/plugins/` at start, with no prompt, and they can change what
   OpenMoat's plugin does; `openmoat status` and `openmoat doctor` warn about a

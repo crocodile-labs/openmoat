@@ -18,7 +18,7 @@ the agent's output.
 
 | Agent | Install | Real load | Not proven |
 |---|---|---|---|
-| Claude Code (`claude-code`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `claude -p` against `tests/differential/fake_api.py`: three `Bash` calls in one session. The denied read; a read of an unknown page whose output names another host; then a call to that host, held for review as `injected-input`, which proves the `PostToolUse` hook kept that output. The log also holds the session's start, which proves the `SessionStart` hook ran | interactive prompts; the `ConfigChange` hook |
+| Claude Code (`claude-code`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `claude -p` against `tests/differential/fake_api.py`: three `Bash` calls in one session. The denied read; a read of an unknown page whose output names another host; then a call to that host, held for review as `injected-input`, which proves the `PostToolUse` hook kept that output. The log also holds the session's start, which proves the `SessionStart` hook ran. A fourth call fails, for the `PostToolUseFailure` capture; the run is then interrupted and `--resume`d, and the denied call, asked for again, must be denied again. The resumed run calls a tool of `fake_mcp.py`, which must be decided by `PreToolUse` (see "Lifecycle checks") | interactive prompts; the `ConfigChange` hook; a background MCP task (below) |
 | Codex (`codex`) | npm, scripts off | `codex exec` with a custom Responses-API provider at `fake_openai.py`: one shell call | Codex's persisted hook trust (`/hooks`): the run uses `--dangerously-bypass-hook-trust`, as Codex's own hook tests do |
 | OpenCode 1 (`opencode-1`) | npm, scripts off; the platform package's native binary (the postinstall only links it) | `opencode debug info` lists `plugins/openmoat.js`; `opencode run` with an OpenAI-compatible provider in `opencode.json` at `fake_openai.py`: one `bash` call | interactive sessions |
 | OpenCode 2 (`opencode-2`) | npm, scripts off; the platform package's native binary | one `opencode serve`, `GET /api/plugin` polled until the location's plugins have activated: OpenMoat's plugin `active`, a state OpenCode 2 sets only once the plugin's `setup` ran | a tool call: OpenCode 2's provider settings are not driven yet, so the denied call is not proven in the real agent |
@@ -39,6 +39,29 @@ its configuration files parsing (JSON; JavaScript with `node --check`; OpenClaw'
 `config validate`; Hermes Agent's own `hooks list`); and the two payloads. An agent
 whose `payload` sets `allow_is_silent` (Codex, which rejects a bare
 `permissionDecision: allow`) passes the allow payload with exit 0 and no output.
+
+## Lifecycle checks (Claude Code)
+
+- **Interrupt and resume.** The fake API holds its fifth request (`--hold-at`) and the
+  script stops the agent there, then runs `claude -p --resume`. `check.py resumed` fails
+  unless the resumed conversation carries the earlier tool results, and `check.py denied`
+  needs a new `secrets-paths` deny after the resume.
+- **`PostToolUseFailure`.** OpenMoat installs no hook for this event yet. A hook the
+  script writes into the throwaway `settings.json` before `init` copies each payload to
+  `captured/` (`claude-code-event-PostToolUseFailure-*.json`, scrubbed like the rest).
+  `check.py event-captured` reports whether it arrived and never fails: the adapter is
+  to be written from such a capture, not from the documentation.
+- **MCP call and background tasks.** `check.py background-mcp` compares the audit log
+  with `fake_mcp.py`'s log. It **fails** when the server received a call with no
+  `PreToolUse` decision, and when the call neither was decided nor reached the server
+  (a test that proves nothing). A call decided without running in the background passes
+  and prints `background MCP NOT EXERCISED`, also in the job summary: Claude Code's
+  documentation limits MCP tasks to a session that fetches feature flags and is
+  interactive or reads `--input-format stream-json`, which a one-shot `claude -p` with
+  no account is not. Whether `PreToolUse` fires for a background MCP task is therefore
+  not proven by this job; the server already answers a task request so that it would be
+  the day a release makes one here. `claude --help` and the tools the fake API was
+  offered are in the artefact (`claude-help.txt`, `claude-tools.json`).
 
 ## Captured payloads
 

@@ -83,6 +83,7 @@ pub use secret::{
 pub use shell::cwd::leaves_unknown_directory;
 pub use shell::installs::near_miss_atoms as package_near_misses;
 pub use shell::push::Push;
+pub use shell::replaced::replaced_files;
 pub use staging::{DEFAULT_OUTSIDE_FOLDERS, DEFAULT_OUTSIDE_READS, StagingSettings};
 pub use taint::{BUILTIN_METADATA_SERVER, TaintSettings};
 pub use verdict::{Decision, Notice, OLD_REVIEW, UnknownVerdict, Verdict};

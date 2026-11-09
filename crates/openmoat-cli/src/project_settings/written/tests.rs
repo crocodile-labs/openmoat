@@ -281,9 +281,6 @@ fn a_write_whose_outcome_is_unknown_keeps_its_verdict() {
         json!({"file_path": codex, "old_string": "x", "new_string": CODEX_OFF}),
     ));
     kept(p.codex_patch("*** Begin Patch\n*** Update File: .codex/config.toml\n@@\n-absent\n+hooks = false\n*** End Patch\n"));
-    // A shell redirect sends no content.
-    let shell = json!({"command": format!("printf '[features]\\nhooks=false' > {codex}")});
-    kept(p.claude("Bash", shell));
     // A deny stays the policy's.
     let request = Host::ClaudeCode
         .parse_request(
@@ -296,4 +293,122 @@ fn a_write_whose_outcome_is_unknown_keeps_its_verdict() {
     deny.rules.push("kernel-self".to_owned());
     let hook = |h: Host| Some(p.hook_file(h));
     assert_eq!(tightened(&request, &p.ctx(), &hook, deny.clone()), deny);
+}
+
+/// The verdict of a `Bash` `command` when the policy said `review` and every
+/// host's hook file is `hook`.
+fn shell_with_hook(p: &Project, command: &str, hook: &Path) -> (Verdict, Decision) {
+    let payload = json!({
+        "hook_event_name": "PreToolUse", "session_id": "s", "cwd": p.file(""),
+        "tool_name": "Bash", "tool_input": {"command": command},
+    });
+    let request = Host::ClaudeCode
+        .parse_request(&payload.to_string())
+        .unwrap();
+    let hook_file = |_: Host| Some(hook.to_path_buf());
+    let d = tightened(
+        &request,
+        &p.ctx(),
+        &hook_file,
+        Decision::new(Verdict::Review),
+    );
+    (d.verdict, d)
+}
+
+/// `command` for a home where OpenMoat is set up for every host.
+fn shell(p: &Project, command: &str) -> (Verdict, Decision) {
+    let hook = p.home.join("hook-file");
+    fs::write(&hook, "x").unwrap();
+    shell_with_hook(p, command, &hook)
+}
+
+/// Each shell form that creates or replaces a hook settings file is denied:
+/// what it leaves there cannot be known before it runs.
+#[test]
+fn a_shell_write_of_a_hook_settings_file_is_denied() {
+    let p = Project::new();
+    fs::write(p.file("evil.toml"), CODEX_OFF).unwrap();
+    for command in [
+        "printf '[features]\\nhooks=false' > .codex/config.toml",
+        "printf x >> .codex/config.toml",
+        "printf x | tee .codex/config.toml",
+        "printf x | tee -a .codex/config.toml",
+        "cp evil.toml .codex/config.toml",
+        "mv evil.toml .codex/config.toml",
+        "ln -sf evil.toml .codex/config.toml",
+        "sed -i s/true/false/ .codex/config.toml",
+        "dd if=evil.toml of=.codex/config.toml",
+        "cd .codex && printf x > config.toml",
+        "sh -c 'printf x > .codex/config.toml'",
+        "printf x > .Codex/Config.toml",
+        "printf '{}' > opencode.json",
+        "printf '{}' > .opencode/opencode.json",
+        "printf '{}' > .pi/settings.json",
+    ] {
+        let r = shell(&p, command);
+        assert!(denied(&r), "{command}: {r:?}");
+        assert!(r.1.reasons[0].contains("cannot tell"), "{command}: {r:?}");
+    }
+    // Slash-separated: a shell reads a Windows backslash as an escape.
+    let abs = format!(
+        "printf x > {}",
+        p.file(".codex/config.toml").replace('\\', "/")
+    );
+    assert!(denied(&shell(&p, &abs)));
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(p.file(".codex"), p.file("cfg")).unwrap();
+        assert!(denied(&shell(&p, "printf x > cfg/config.toml")));
+    }
+}
+
+/// Ordinary work on a project that merely holds such files keeps its verdict.
+#[test]
+fn other_shell_work_on_those_files_keeps_its_verdict() {
+    let p = Project::new();
+    fs::write(p.file(".codex/config.toml"), "model = \"x\"\n").unwrap();
+    fs::create_dir_all(p.file("templates/.codex")).unwrap();
+    for command in [
+        "cat .codex/config.toml",
+        "grep hooks .codex/config.toml opencode.json",
+        "cp .codex/config.toml backup.toml",
+        "git diff -- .codex/config.toml opencode.json",
+        "git add opencode.json",
+        "jq . opencode.json > formatted.json",
+        "rm -f .codex/config.toml",
+        "mv opencode.json opencode.json.bak",
+        "touch .pi/settings.json",
+        "chmod 600 .codex/config.toml",
+        // The same name where no session started here would load it.
+        "printf x > templates/.codex/config.toml",
+        "cp a.json tests/fixtures/opencode.json",
+        "printf x > docs/config.toml",
+        "printf x > notes.txt",
+    ] {
+        let r = shell(&p, command);
+        assert_eq!(r.0, Verdict::Review, "{command}: {r:?}");
+    }
+}
+
+/// A host OpenMoat is not set up for has no hook a write could turn off.
+#[test]
+fn a_shell_write_for_a_host_not_set_up_keeps_its_verdict() {
+    let p = Project::new();
+    let absent = p.home.join("no-hook-file");
+    let r = shell_with_hook(&p, "printf x > .codex/config.toml", &absent);
+    assert_eq!(r.0, Verdict::Review, "{r:?}");
+}
+
+/// The file tools are checked by the content they leave, as before.
+#[test]
+fn a_file_tool_edit_of_a_set_up_host_is_judged_by_its_content() {
+    let p = Project::new();
+    let codex = p.file(".codex/config.toml");
+    let benign = json!({"file_path": codex, "content": "model = \"x\"\n"});
+    assert_eq!(p.claude("Write", benign).0, Verdict::Review);
+    let off = json!({"file_path": codex, "content": CODEX_OFF});
+    assert!(denied(&p.claude("Write", off)));
+    fs::write(&codex, "model = \"gpt-5\"\n").unwrap();
+    let edit = json!({"file_path": codex, "old_string": "gpt-5", "new_string": "o3"});
+    assert_eq!(p.claude("Edit", edit).0, Verdict::Review);
 }
