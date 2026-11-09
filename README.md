@@ -33,7 +33,7 @@ do harm:
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/overview-dark.svg">
-    <img src="docs/assets/overview-light.svg" width="880" alt="OpenMoat sits between your AI coding agents and your machine. Eleven agents send every tool call through OpenMoat. Its parts: a policy engine, OS sandboxes, an egress proxy, a secret broker, an MCP gateway, an audit trail, a merge check and a policy lock. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors.">
+    <img src="docs/assets/overview-light.svg" width="880" alt="OpenMoat sits between your AI coding agents and your machine. Twelve agents send every tool call through OpenMoat. Its parts: a policy engine, OS sandboxes, an egress proxy, a secret broker, an MCP gateway, an audit trail, a merge check and a policy lock. It guards your files and secrets, shell and programs, network, MCP servers, and git, CI and editors.">
   </picture>
 </p>
 
@@ -158,7 +158,7 @@ and how to change it.
 
 ## Supported agents
 
-Eleven agents, one policy. `openmoat init` finds the ones installed and asks before it
+Twelve agents, one policy. `openmoat init` finds the ones installed and asks before it
 sets up each:
 
 <!-- generated:hosts-agents -->
@@ -175,6 +175,7 @@ sets up each:
 | Hermes Agent | `pre_tool_call` shell hook in `config.yaml`, allowlisted in `shell-hooks-allowlist.json` | hook only | `hermes` |
 | Cline CLI | OpenMoat's `PreToolUse` and `PostToolUse` hook scripts in `~/.cline/hooks` | hook only | `cline` |
 | goose | `PreToolUse` hook in OpenMoat's plugin, `~/.agents/plugins/openmoat/hooks/hooks.json`, with `on_failure: block` | hook only | `goose` |
+| Antigravity CLI | `PreToolUse` hook in `~/.gemini/config/hooks.json` | hook only | `antigravity-cli` |
 | Continue CLI | `cn` runs the Claude Code hook, but the released `cn` runs no hooks yet | not checked yet; use `openmoat run` | none |
 <!-- /generated -->
 

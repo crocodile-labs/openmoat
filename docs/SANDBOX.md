@@ -515,7 +515,11 @@ themselves to the run ([THREAT_MODEL.md](THREAT_MODEL.md) §5, ADR-027).
 The agent's hooks run inside the sandbox too, where `~/.moat` is closed to them. They
 send each tool call to the `openmoat run` process over the proxy's port, with a token made
 for the run (`MOAT_GUARD_SOCKET`, `MOAT_GUARD_TOKEN`), and that process decides and
-records it outside the sandbox (ADR-028). The sandbox gets no new rule for this:
+records it outside the sandbox (ADR-028). Tool commands of the agents ADR-075 names do
+not receive those variables: `openmoat run` starts them through a small wrapper from a
+directory commands cannot write. A command cannot read them from the agent either: the
+macOS profile denies `kern.procargs*` (`ps eww`), and on Linux no grant covers `/proc` and
+a wrapped command gets a Landlock layer of its own. The relay itself needs no new rule:
 
 - macOS: the profile's one way out stays `(allow network-outbound (remote ip
   "localhost:<port>"))`; no Unix socket is allowed.

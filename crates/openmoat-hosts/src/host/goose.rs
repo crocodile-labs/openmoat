@@ -128,6 +128,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     protect: protect::PROTECT,
     process: protect::PROCESS,
     docs: doc::DOCS,
+    // Tools take `GOOSE_SHELL`; hooks are `sh -c` (ADR-075).
+    tool_token: crate::ToolToken::Wrapper {
+        vars: &["GOOSE_SHELL"],
+        on_path: false,
+    },
     ..HostSpec::BASE
 };
 

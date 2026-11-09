@@ -8,7 +8,7 @@
 **On this page:** [Smallest path first](#smallest-path-first) · [What an adapter is](#what-an-adapter-is) · [Before you write code](#before-you-write-code) · [Checklist of files](#checklist-of-files) · [Map the payload to an Action](#map-the-payload-to-an-action) · [Answer allow, defer, review or deny](#answer-allow-defer-review-or-deny) · [Install, uninstall and the lock](#install-uninstall-and-the-lock) · [The config directory variable](#the-config-directory-variable) · [Fixtures](#fixtures) · [End-to-end tests](#end-to-end-tests) · [Be honest about coverage](#be-honest-about-coverage) · [The pull request](#the-pull-request)
 
 How to add support for another AI coding agent: a *host adapter*. Claude Code, Codex,
-Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI and goose are maintained by the project; other agents come from contributors and are
+Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose and the Antigravity CLI are maintained by the project; other agents come from contributors and are
 reviewed by maintainers. `AGENTS.md` ("Add a host adapter") is the short version of
 this guide; this file explains each step.
 
@@ -41,6 +41,7 @@ gaps and the sandbox it gets. Start from the one closest to your agent:
 [Hermes Agent](../crates/openmoat-hosts/src/host/hermes/HOST.md) ·
 [Cline CLI](../crates/openmoat-hosts/src/host/cline/HOST.md) ·
 [goose](../crates/openmoat-hosts/src/host/goose/HOST.md) ·
+[Antigravity CLI](../crates/openmoat-hosts/src/host/antigravity_cli/HOST.md) ·
 [Continue CLI](../crates/openmoat-hosts/src/host/continue_cli/HOST.md).
 
 ## What an adapter is
@@ -117,6 +118,11 @@ The spec in `host/<module>.rs` holds every fact about the agent that is not code
     gets a Node harness in `crates/openmoat-hosts/tests/js_plugins/`: a `<module>.mjs`
     against the stand-ins for the host and the guard in `common.mjs`, which give the
     stand-in guard 5 s, and a `<module>.rs` module listed in its `main.rs`.
+- **`tool_token`:** how `openmoat run` keeps its relay token from the host's tool commands
+  (`ToolToken`, ADR-075): a `Wrapper` with the variables the host reads its tool shell
+  from, only when its hooks start another way; `Integration` when an in-process hook takes
+  the variables out of its own environment; `NotWithheld` with the reason otherwise. Name
+  the source in ADR-075 and add the host to the table in `tests/contract.rs`.
 - **`advisories`:** the host's published security advisories with their fixed versions
   (`Advisories`, `host/<module>/advisories.rs`), which `openmoat status` and
   `openmoat doctor` warn about for the version on the search path (`Advisories::BASE` is

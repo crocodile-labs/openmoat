@@ -144,6 +144,17 @@ pub struct Grants {
         expect(dead_code, reason = "only the Linux `--isolate` tier binds it in")
     )]
     pub trust: Option<String>,
+    /// The tool-shell wrapper of this run (ADR-075), read-only for commands.
+    pub tool_shell: Option<ToolShellGrant>,
+}
+
+/// The paths the tool-shell wrapper needs (`commands/run/tool_shell.rs`).
+#[derive(Debug, Clone)]
+pub struct ToolShellGrant {
+    /// Its directory, resolved.
+    pub dir: String,
+    /// The `openmoat` binary the wrapper's links name, resolved.
+    pub moat: String,
 }
 
 /// The IR of a `moat run` session in `ctx`, and `grants` with this process's

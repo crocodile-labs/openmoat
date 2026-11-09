@@ -37,7 +37,8 @@ Each agent's gaps and the reasons are in
 ## Sandboxes and allowed code
 
 - **Outside an OS sandbox, the hook decides alone.** For hook-only agents (OpenClaw,
-  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, and
+  GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, the
+  Antigravity CLI, and
   Claude Code and Cursor on native Windows), an allowed call runs with your permissions,
   so a classifier mistake is a bypass. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
@@ -118,12 +119,16 @@ Each agent's gaps and the reasons are in
 
 ## When an agent skips or changes the check
 
-- **Inside `openmoat run`, any program can send hook calls for the run's own agent.**
-  The run's relay token is in the environment of everything in the sandbox, so a script
-  or a test runner can send the run calls the agent never made. They are decided by the
-  policy as the agent's would be and recorded in the run's own sessions only (no other
-  agent, no session from outside the run, no MCP ticket, no proxy credential). Read those
-  rows as what was asked from inside the run (ADR-070, ADR-071).
+- **Inside `openmoat run`, tool commands of some agents still receive the relay token.**
+  Under Codex, Cursor, GitHub Copilot CLI, Gemini CLI, the Cline CLI and the Antigravity
+  CLI, no way was found to tell tool commands from hooks, so a script or a test runner can send the run calls
+  the agent never made. Under Claude Code, OpenCode, goose, Hermes Agent, OpenClaw, the
+  Continue CLI and pi, tool commands do not receive it; MCP servers those agents start
+  themselves may (`openmoat doctor` names the groups, ADR-075 has each agent's limits).
+  Where the token is held, calls are decided by the policy as the agent's would be and
+  recorded in the run's own sessions only (no other agent, no session from outside the
+  run, no MCP ticket, no proxy credential). Read those rows as what was asked from inside
+  the run (ADR-070, ADR-071, ADR-075).
 
 - **Some agents run a call when the hook fails.** Codex, and Claude Code before
   2.1.295, run a call unchecked if `openmoat` is missing. Codex also skips untrusted
@@ -144,7 +149,12 @@ Each agent's gaps and the reasons are in
   hooks. goose runs calls unchecked when it does not load OpenMoat's plugin
   (`disabledPlugins`, `enabled: false` under `plugins` in `config.yaml`, or a project
   plugin named `openmoat`); `openmoat status` and `doctor` report both, for the directory
-  they run in.
+  they run in. The Antigravity CLI does not document what happens when a hook cannot start,
+  crashes, times out or prints bad JSON, and has no documented setting that blocks then, so
+  OpenMoat assumes the call runs there; `--dangerously-skip-permissions` approves its
+  requests unseen, which OpenMoat cannot see, and a `review` under a saved
+  `toolPermission: always-proceed` is a deny. It is checked from its documentation only,
+  not against a running `agy`.
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you
   trust it in its `/hooks` view, and settings such as `disableAllHooks` (Claude Code,
   Copilot CLI) or `[features] hooks = false` (Codex) turn hooks off. `openmoat status`

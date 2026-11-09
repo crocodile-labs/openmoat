@@ -45,7 +45,8 @@ fn needs_update(config: &HostConfig, binary: &Path) -> Result<bool> {
         return Ok(false);
     };
     let ours = config.hooks.iter().any(|spec| {
-        root.pointer(&format!("/hooks/{}", spec.event))
+        root.get(layout.section())
+            .and_then(|section| section.get(spec.event))
             .and_then(serde_json::Value::as_array)
             .is_some_and(|entries| {
                 entries

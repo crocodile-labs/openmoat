@@ -101,6 +101,43 @@ pub(super) fn goose_route(intent: &Intent) -> Result<(Value, Action), &'static s
     }
 }
 
+/// Antigravity CLI `PreToolUse` (`crates/openmoat-hosts/src/host/antigravity_cli/fixtures`).
+pub(super) fn antigravity(tool: &str, input: &Value) -> Value {
+    json!({
+        "conversationId": "agy-1", "workspacePaths": [CWD], "transcriptPath": "",
+        "artifactDirectoryPath": "", "modelName": "m", "lastUserInput": "go",
+        "toolCall": { "name": tool, "args": input }, "stepIdx": 0,
+    })
+}
+
+/// The payload Antigravity CLI sends for `intent` and the action its adapter
+/// must read from it.
+pub(super) fn antigravity_route(intent: &Intent) -> Result<(Value, Action), &'static str> {
+    match intent {
+        // The shell on Windows is not documented, and never classified.
+        Intent::Shell(_) if cfg!(windows) => Err("the Windows shell is not classified"),
+        Intent::Shell(c) => Ok((
+            antigravity("run_command", &json!({ "CommandLine": c })),
+            Action::Shell { command: c.clone() },
+        )),
+        Intent::Read(p) => Ok((
+            antigravity("view_file", &json!({ "AbsolutePath": under_cwd(p) })),
+            Action::FsRead { path: under_cwd(p) },
+        )),
+        Intent::Write(p) => Ok((
+            antigravity(
+                "write_to_file",
+                &json!({ "TargetFile": p, "CodeContent": "new" }),
+            ),
+            Action::FsWrite { path: p.clone() },
+        )),
+        Intent::Fetch(u) => Ok((
+            antigravity("read_url_content", &json!({ "Url": u })),
+            Action::Fetch { url: u.clone() },
+        )),
+    }
+}
+
 /// `path` with a relative one placed in the working directory.
 pub(super) fn under_cwd(path: &str) -> String {
     if path.starts_with(['/', '~']) {

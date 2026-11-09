@@ -145,6 +145,10 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         managed_only: Some("allow_managed_hooks_only"),
         hooks_key: "hooks",
     }),
+    tool_token: crate::ToolToken::NotWithheld {
+        why: "Codex picks its shell from the login record, and its tool environment setting is \
+              not yet confirmed to leave the person's own exclusions in place",
+    },
     ..HostSpec::BASE
 };
 

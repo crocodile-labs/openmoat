@@ -11,6 +11,12 @@ loopback only. CONTRIBUTING "Latest agents, weekly" describes the workflow.
 
 ## What each agent's run proves
 
+Claude Code's run also sets `CLAUDE_CODE_SHELL` and `SHELL` to a shell that records each
+start, and fails unless the Bash tool started through it and no hook did: the fact
+ADR-075's wrapper depends on, which Claude Code would otherwise ignore silently. The other
+agents' fake model serves one call, the denied one, so a shell never starts there and
+their routing is not proven by this job.
+
 "Real load" means the real agent read OpenMoat's hook or plugin from the file `init`
 wrote, ran it for a tool call, and OpenMoat's decision held: the audit log has the
 agent's `cat ~/.ssh/id_rsa` denied by `secrets-paths`, and the fake key is in none of
@@ -29,6 +35,7 @@ the agent's output.
 | Hermes Agent (`hermes`) | its own installer, latest tag | `hermes hooks list` (allowlisted), `hermes hooks doctor`, `hermes hooks test pre_tool_call`: OpenMoat's hook run through the code a session uses, and the block it returns | a model turn dispatching to the hook |
 | Cline CLI (`cline`) | npm (`cline`), scripts off | `cline config hooks --json` lists `hooks/PreToolUse`; `cline --json` with its `openai-compatible` provider (`cline auth -b`) at `fake_openai.py`: one `run_commands` call | the VS Code extension, which reads hooks elsewhere |
 | goose (`goose`) | the release archive for the runner (`goose-<arch>-<os>.tar.gz`), latest tag; its sha256 printed | a `goose run` turn against the fake API (its OpenAI provider), whose `shell` call `cat ~/.ssh/id_rsa` the plugin's hook denies (first run unproven: the provider variables are read from goose's source, not a capture) | the desktop app |
+| Antigravity CLI (`antigravity-cli`) | the installer script (URL from third-party guides; its sha256 is printed) | `agy -p` against `fake_gemini.py` (`modelProvider: gemini`, `GOOGLE_GEMINI_BASE_URL`): one `run_command` call, `cat ~/.ssh/id_rsa`, denied by the hook. First run unproven: the installer's URL and the Gemini wire format come from documentation and guides, not a capture | interactive prompts, `force_ask` under `-p`, hook failure behaviour |
 | Cursor (`cursor`) | the package Cursor's install script names (no checksum is published; its sha256 is logged) | none: every `cursor-agent` run needs a Cursor account | that `cursor-agent` loads `hooks.json` at all |
 | Continue CLI (`continue`) | `npm pack`, read only | not set up: the released `cn` runs no hooks | the job fails once `cn` calls its `PreToolUse` hook, so that `continue_cli.rs` can get an install |
 

@@ -2612,3 +2612,7 @@
 - id: benign-openmoat-provenance-verify
   action: { shell: "openmoat provenance --verify" }
   expect: { verdict: defer, rules: [default] }
+- id: benign-agents-dir-notes-file
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.agents/notes.md" }
+  expect: { verdict: allow, rules: [project-fs] }

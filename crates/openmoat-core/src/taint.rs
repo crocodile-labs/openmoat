@@ -47,7 +47,7 @@ const MCP_PREFIX: &str = "mcp__";
 /// written in JavaScript (`jest.config.js`), are not listed: they are code the run
 /// executes like any other file, and the command that runs them is named in a
 /// listed file (`package.json`).
-const PROTECTED_WRITES: [&str; 162] = [
+const PROTECTED_WRITES: [&str; 166] = [
     "**/.github/workflows/**",
     "**/.gitlab-ci.yml",
     "**/.circleci/**",
@@ -250,6 +250,11 @@ const PROTECTED_WRITES: [&str; 162] = [
     "**/.config/goose/**",
     "**/.agents/plugins",
     "**/.agents/plugins/**",
+    // Antigravity CLI: its hook and MCP files, and the plugins it loads
+    "~/.gemini/config",
+    "~/.gemini/config/**",
+    "**/.agents/hooks.json",
+    "**/.agents/mcp_config.json",
     // /generated
     // OpenMoat's own state (`kernel-self` denies it outright)
     "**/.moat/**",

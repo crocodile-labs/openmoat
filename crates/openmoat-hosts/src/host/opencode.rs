@@ -199,6 +199,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    // The hook is a plugin in OpenCode's own process; a `shell` in the person's
+    // config outranks `$SHELL` (ADR-075).
+    tool_token: crate::ToolToken::Wrapper {
+        vars: &["SHELL"],
+        on_path: false,
+    },
     ..HostSpec::BASE
 };
 

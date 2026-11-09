@@ -48,7 +48,12 @@ pub struct Unseen {
     /// Variables of the hook's environment that do it when set to `1`,
     /// `true`, `yes` or `on`, in any case.
     pub env: &'static [&'static str],
-    /// The setting of the host's hook file, parsed, that does it; `None`
+    /// A file of the configuration directory to read for [`Self::config`] in
+    /// place of the hook file (Antigravity CLI's `settings.json`, beside no
+    /// hook); `None` reads the hook file. A file that is not there holds no
+    /// such setting.
+    pub file: Option<&'static str>,
+    /// The setting of that file, parsed, that does it; `None`
     /// when no setting there does.
     pub config: fn(&serde_json::Value) -> Option<&'static str>,
 }

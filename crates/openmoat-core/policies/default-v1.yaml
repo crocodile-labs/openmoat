@@ -197,6 +197,9 @@ deny:
       # goose: the provider keys it keeps in a file when the keyring is off
       # (`GOOSE_DISABLE_KEYRING`; `config/base.rs`)
       - "~/.config/goose/secrets.yaml"
+      # Antigravity CLI: the MCP OAuth tokens (`/docs/mcp`). The account's
+      # sign-in is in the OS keyring (`/docs/install`), not a file
+      - "~/.gemini/antigravity/mcp_oauth_tokens.json"
     fs.write: *agent-credentials
     # the agents' commands that print a stored key or token: pi's, and OpenCode
     # 2's export of every stored credential
@@ -462,6 +465,19 @@ deny:
       - "~/.agents/plugins/**"
       - "**/.agents/plugins"
       - "**/.agents/plugins/**"
+      # Antigravity CLI: the hook file that holds OpenMoat's hook (shared with the
+      # Antigravity app and IDE), its settings (`permissions`, `toolPermission`,
+      # `trustedWorkspaces`, `enableTerminalSandbox`), a project's hook and MCP
+      # files, which load from the repository, and the plugins that can add hooks
+      - "~/.gemini/config"
+      - "~/.gemini/config/hooks.json"
+      - "~/.gemini/config/mcp_config.json"
+      - "~/.gemini/config/plugins"
+      - "~/.gemini/config/plugins/**"
+      - "~/.gemini/antigravity-cli"
+      - "~/.gemini/antigravity-cli/settings.json"
+      - "**/.agents/hooks.json"
+      - "**/.agents/mcp_config.json"
       - "**/.moat/**"
       # the binary every installed hook runs, by its name and by `moat`, the name it
       # had up to 0.7.0, which still runs it

@@ -23,7 +23,7 @@ openmoat bench --hook '<command>' --host claude-code    # against any hook comma
 `openmoat bench` creates a throwaway home under the system temporary directory, runs
 `openmoat init --yes` there, and for each scenario and each host that has a tool for
 every step (Claude Code, Codex, Cursor, OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode,
-Hermes Agent, the Cline CLI, goose;
+Hermes Agent, the Cline CLI, goose, the Antigravity CLI;
 Copilot's payload does not name an MCP tool's server, pi has no fetch tool and goose has
 no file read or fetch tool, so
 scenarios with such a step skip them; on Windows Gemini CLI's shell is PowerShell, goose's `cmd`,
@@ -53,6 +53,9 @@ log and checks:
   prompt, so a `review` must arrive as a `deny`; `decision: allow` and no output are
   `passthrough`, since goose asked for its own approval before the hook ran; anything else
   is `error`, which OpenMoat's `on_failure: block` turns into a block.
+  The Antigravity CLI reads `decision`: `deny` and `deny_unless_prior_grant` are a deny,
+  `ask` and `force_ask` a review, `allow` and `auto_approve` are `passthrough`; anything
+  else is `error`, since what it does with one is not documented.
 
 `--hook <command> --host <host>` sends the same payloads on stdin to any hook command
 instead, run through the system shell the way hosts run hooks (`sh -c`, `cmd /C` on

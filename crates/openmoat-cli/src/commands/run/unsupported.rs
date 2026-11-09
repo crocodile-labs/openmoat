@@ -56,6 +56,25 @@ pub fn bubblewrap() -> Option<bool> {
     None
 }
 
+/// `moat run` refuses here, so no wrapper is ever linked.
+pub fn link_tool_shell(_: &Path, _: &Path) -> std::io::Result<()> {
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
+/// `moat run` refuses here.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every platform: Linux's adds a Landlock layer, which can fail"
+)]
+pub fn seal_tool_shell() -> Result<()> {
+    Ok(())
+}
+
+/// `moat run` refuses here, so the wrapper is never started.
+pub fn exec_tool_shell(_: &mut Command) -> std::io::Error {
+    std::io::ErrorKind::Unsupported.into()
+}
+
 /// None: `moat run` refuses here.
 pub fn terminals() -> Vec<String> {
     Vec::new()

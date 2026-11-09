@@ -144,6 +144,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         effect: "runs on every Cline tool call beside OpenMoat's hook and can rewrite the \
                  call's input (`overrideInput`) after OpenMoat checked it",
     }),
+    tool_token: crate::ToolToken::NotWithheld {
+        why: "Cline starts tool commands with `/bin/bash` and the CLI has no setting for it",
+    },
     ..HostSpec::BASE
 };
 

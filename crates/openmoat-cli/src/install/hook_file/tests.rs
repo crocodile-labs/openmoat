@@ -444,5 +444,6 @@ fn malformed_files_are_reported_not_overwritten() {
     );
 }
 
+mod antigravity;
 mod copilot;
 mod gemini;

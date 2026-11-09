@@ -74,6 +74,9 @@ pub fn isolate(
     let port = grants.proxy_port.context("no proxy port")?;
     // The run's CA files are in the temp directory, which starts empty here.
     let trust = grants.trust.clone();
+    // The tool-shell wrapper, in a directory of its own outside the empty temp
+    // directory (ADR-075).
+    let wrapper = grants.tool_shell.as_ref().map(|w| w.dir.clone());
     let generated = bwrap_mounts(policy, ctx, grants)?;
     // The mounts hide the state directory only under the empty temp directory.
     refuse_exposed(state, &generated.rules, true)?;
@@ -96,6 +99,7 @@ pub fn isolate(
         .args(
             trust
                 .iter()
+                .chain(wrapper.iter())
                 .flat_map(|t| ["--ro-bind", t.as_str(), t.as_str()]),
         )
         .args(["--chdir", &ctx.cwd, "--", &moat, "isolated", "--socket"])

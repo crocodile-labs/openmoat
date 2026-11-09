@@ -24,7 +24,7 @@ pub struct Promise {
     pub fails_closed: bool,
 }
 
-pub const PROMISES: [Promise; 6] = [
+pub const PROMISES: [Promise; 7] = [
     Promise {
         id: "read-ssh-key",
         question: "can an agent read ~/.ssh/id_rsa?",
@@ -97,5 +97,14 @@ pub const PROMISES: [Promise; 6] = [
         os: None,
         network: false,
         fails_closed: true,
+    },
+    Promise {
+        id: "tool-reads-relay-token",
+        question: "can a tool command read the run's relay token from its agent?",
+        scenarios: &[],
+        hook_check: "",
+        os: Some(Probe::ToolReadsToken),
+        network: false,
+        fails_closed: false,
     },
 ];

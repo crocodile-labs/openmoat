@@ -120,6 +120,14 @@ fn refuse(home: Home, args: &McpProxyArgs, why: &str) -> Result<Code> {
     Ok(Code::Failed)
 }
 
+/// An MCP server is not one of the hooks the relay is for (ADR-075), whatever
+/// environment this proxy was started with.
+fn without_relay(command: &mut Command) {
+    command
+        .env_remove(crate::guard_relay::SOCKET_ENV)
+        .env_remove(crate::guard_relay::TOKEN_ENV);
+}
+
 /// Why the relay dropped something, on the proxy's standard error, which the
 /// host shows in its MCP log; the server wrote part of it.
 fn note(why: &str) {
@@ -132,10 +140,12 @@ fn command(args: &McpProxyArgs) -> Result<Command> {
     if !args.sandbox {
         let mut command = Command::new(program);
         command.args(rest);
+        without_relay(&mut command);
         return Ok(command);
     }
     let moat = std::env::current_exe().context("locating the moat binary")?;
     let mut command = Command::new(moat);
+    without_relay(&mut command);
     command.arg("run");
     for write in &args.writes {
         command.arg("--write").arg(write);

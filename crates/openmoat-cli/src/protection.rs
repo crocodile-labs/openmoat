@@ -225,6 +225,7 @@ fn level(
         HookState::Unreadable(_) => not_protected("hook file unreadable"),
         HookState::Unapproved(_) => not_protected("hook not approved by the agent"),
         HookState::FailsOpen(_) => not_protected("hook runs the call when it fails"),
+        HookState::TurnedOff(_) => not_protected("hook turned off in its entry"),
     }
 }
 

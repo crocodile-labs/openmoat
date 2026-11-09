@@ -1,0 +1,24 @@
+{
+  "conversationId": "conv-1",
+  "workspacePaths": [
+    "/p"
+  ],
+  "transcriptPath": "/Users/me/.gemini/antigravity-cli/brain/conv-1/transcript.jsonl",
+  "artifactDirectoryPath": "/Users/me/.gemini/antigravity-cli/brain/conv-1",
+  "modelName": "gemini-3-pro",
+  "lastUserInput": "do it",
+  "stepIdx": 2,
+  "toolCall": {
+    "name": "multi_replace_file_content",
+    "args": {
+      "TargetFile": "/p/a.txt",
+      "Instruction": "fix",
+      "ReplacementChunks": [
+        {
+          "TargetContent": "a",
+          "ReplacementContent": "b"
+        }
+      ]
+    }
+  }
+}

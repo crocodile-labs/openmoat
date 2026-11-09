@@ -7,7 +7,8 @@ use std::path::Path;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
 use openmoat_hosts::{
-    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, reason_line,
+    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, ToolToken,
+    reason_line,
 };
 use serde_json::json;
 
@@ -49,6 +50,40 @@ fn every_spec_is_complete() {
             assert!(install.dir_name.starts_with('.'), "{host:?}");
             assert!(!install.dir_variable.is_empty(), "{host:?}");
             assert!(!install.config_file.is_empty(), "{host:?}");
+        }
+    }
+}
+
+/// Hosts whose tool commands do not receive `openmoat run`'s relay token
+/// (ADR-075, which holds each host's source). Changing a row needs a new source
+/// for that host, and an entry in docs/LIMITS.md for one that loses it.
+const WITHHELD: [&str; 7] = [
+    "claude-code",
+    "opencode",
+    "goose",
+    "pi",
+    "hermes",
+    "openclaw",
+    "continue",
+];
+
+#[test]
+fn every_host_says_whether_tool_commands_get_the_relay_token() {
+    for host in HOSTS {
+        let token = host.spec().tool_token;
+        assert_eq!(
+            token.withheld(),
+            WITHHELD.contains(&host.id()),
+            "{host:?}: {token:?}"
+        );
+        match token {
+            ToolToken::Wrapper { vars, .. } => assert!(!vars.is_empty(), "{host:?}"),
+            ToolToken::NotWithheld { why } => assert!(
+                why != "not checked for this host",
+                "{host:?} needs a reason of its own"
+            ),
+            ToolToken::Integration => {}
+            _ => panic!("{host:?}: a new kind needs a row here"),
         }
     }
 }
@@ -127,7 +162,7 @@ fn relaxed_keys_change_nothing_that_runs_or_decides() {
 /// such key, and GitHub Copilot CLI blocks a failed `preToolUse` hook on its own.
 #[test]
 fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
-    let expected: [(Host, &str, &[&str]); 11] = [
+    let expected: [(Host, &str, &[&str]); 12] = [
         (Host::ClaudeCode, "Entries(Nested)", &["PreToolUse"]),
         (Host::Codex, "Entries(Codex)", &[]),
         (Host::Cursor, "Entries(Cursor)", &[]),
@@ -139,6 +174,7 @@ fn every_hook_outlasts_the_guard_and_blocks_where_the_host_can() {
         (Host::Hermes, "Yaml(Hermes)", &[]),
         (Host::Cline, "Script(OwnedFile(Cline hook script))", &[]),
         (Host::Goose, "Entries(Goose)", &[]),
+        (Host::AntigravityCli, "Entries(Named)", &[]),
     ];
     assert_eq!(expected.len(), Host::ALL.len());
     for (host, layout, blocking) in expected {
@@ -286,6 +322,7 @@ fn every_verdict_reaches_the_host_as_it_must() {
     // commands OpenMoat leaves to Gemini CLI), OpenCode 6 (5 on Windows, whose
     // shell OpenMoat leaves to OpenCode), Hermes Agent 6, Cline 6 (5 on Windows,
     // whose PowerShell commands OpenMoat leaves to Cline), goose 4 (no read or fetch
-    // tool; 3 on Windows, whose `cmd` OpenMoat leaves to goose)
-    assert_eq!(checked, 59 - 4 * usize::from(cfg!(windows)));
+    // tool; 3 on Windows, whose `cmd` OpenMoat leaves to goose), Antigravity CLI 6
+    // (5 on Windows, whose shell OpenMoat does not classify)
+    assert_eq!(checked, 65 - 5 * usize::from(cfg!(windows)));
 }

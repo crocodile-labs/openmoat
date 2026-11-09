@@ -138,6 +138,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    // pi copies `process.env` for each tool command; its extension shares the
+    // process and takes the relay variables out (ADR-075).
+    tool_token: crate::ToolToken::Integration,
     ..HostSpec::BASE
 };
 

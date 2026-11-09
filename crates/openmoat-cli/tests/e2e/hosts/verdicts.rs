@@ -55,7 +55,9 @@ fn an_ungoverned_tool_is_left_to_the_host() {
         for payload in row.ungoverned {
             let out = guard(&row, &sb, &payload(&sb));
             assert_eq!(out.status.code(), Some(OK), "{}: {}", row.id, text(&out));
-            if ungoverned == Verdict::Defer {
+            if ungoverned == Verdict::Defer && row.defer_answers_allow {
+                assert_eq!(verdict(&row, &out), "allow", "{}: {}", row.id, text(&out));
+            } else if ungoverned == Verdict::Defer {
                 assert_eq!(stdout(&out).trim(), "", "{}: defer prints nothing", row.id);
             } else {
                 assert_eq!(ungoverned, Verdict::Allow, "{}", row.id);

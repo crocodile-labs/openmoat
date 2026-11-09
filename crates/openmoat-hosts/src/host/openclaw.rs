@@ -137,6 +137,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    // Exec takes `$SHELL` from the gateway's environment; the hook is a plugin
+    // in the gateway's own process (ADR-075).
+    tool_token: crate::ToolToken::Wrapper {
+        vars: &["SHELL"],
+        on_path: false,
+    },
     ..HostSpec::BASE
 };
 

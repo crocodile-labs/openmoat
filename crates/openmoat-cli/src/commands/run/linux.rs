@@ -251,6 +251,34 @@ pub fn terminals() -> Vec<String> {
     found
 }
 
+/// Link the wrapper of a tool shell (`tool_shell.rs`) to this binary.
+pub fn link_tool_shell(moat: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(moat, link)
+}
+
+/// Put the tool command in a Landlock layer of its own (ADR-075). A process in
+/// a nested layer cannot read `/proc/<pid>/environ` or `mem` of one in the
+/// layer above, whatever the path rules grant, so the command cannot take the
+/// token from the agent where a policy grants `/proc`. The layer handles only
+/// execution, granted everywhere: it adds the hierarchy and restricts nothing
+/// else (each path is still checked by the layers above). No signal scope:
+/// a later command must be able to end what an earlier one left running.
+pub fn seal_tool_shell() -> Result<()> {
+    Ruleset::default()
+        .set_compatibility(CompatLevel::HardRequirement)
+        .handle_access(AccessFs::Execute)?
+        .create()?
+        .add_rules(path_beneath_rules(["/"], AccessFs::Execute))?
+        .restrict_self()
+        .context("adding the tool command's Landlock layer")?;
+    Ok(())
+}
+
+/// Replace this process with `command`, returning only if that failed.
+pub fn exec_tool_shell(command: &mut Command) -> std::io::Error {
+    std::os::unix::process::CommandExt::exec(command)
+}
+
 /// Refuse to start where `rules` would show OpenMoat's state directory `state`
 /// to the agent: Landlock cannot deny inside a grant (`crate::sandbox::exposure`).
 fn refuse_exposed(state: &Path, rules: &Rules, isolated: bool) -> Result<()> {

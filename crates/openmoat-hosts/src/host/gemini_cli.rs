@@ -150,6 +150,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         managed_only: None,
         hooks_key: "hooks",
     }),
+    tool_token: crate::ToolToken::NotWithheld {
+        why: "Gemini CLI starts tool commands and hooks the same way, with `bash` from `PATH`",
+    },
     ..HostSpec::BASE
 };
 

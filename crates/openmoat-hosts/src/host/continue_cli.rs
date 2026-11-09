@@ -63,6 +63,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         protection: "not checked yet; use `openmoat run`",
         ..HostDocs::BASE
     },
+    // `$SHELL -l -c` for tools, `/bin/sh -c` for hooks (ADR-075).
+    tool_token: crate::ToolToken::Wrapper {
+        vars: &["SHELL"],
+        on_path: false,
+    },
     ..HostSpec::BASE
 };
 

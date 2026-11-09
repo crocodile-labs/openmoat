@@ -86,6 +86,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_review_on_no_prompt: false,
         unseen: Some(Unseen {
             env: &["HERMES_YOLO_MODE"],
+            file: None,
             config: settings::approves_unseen,
         }),
         ..Reviews::BASE
@@ -136,6 +137,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    // Foreground commands use `bash` from `PATH`, background ones `$SHELL`; hooks
+    // run in exec form with no shell (ADR-075).
+    tool_token: crate::ToolToken::Wrapper {
+        vars: &["SHELL"],
+        on_path: true,
+    },
     ..HostSpec::BASE
 };
 

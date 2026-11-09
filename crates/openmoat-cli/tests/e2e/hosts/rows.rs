@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use crate::common::Sandbox;
 
+mod antigravity_cli;
 mod claude_code;
 mod cline;
 mod codex;
@@ -101,6 +102,9 @@ pub struct Row {
     pub benign: Option<Payload>,
     /// Calls of tools OpenMoat does not govern.
     pub ungoverned: &'static [Payload],
+    /// Whether a `defer` is an `allow` that hands the call to the host's own
+    /// policy, because the host requires a decision: no output is no answer.
+    pub defer_answers_allow: bool,
     /// A payload whose arguments cannot be checked, and what its reason says.
     pub malformed: Option<(Payload, Option<&'static str>)>,
     /// A call the policy holds for review once its catch-all is `review`.
@@ -119,6 +123,7 @@ const BASE: Row = Row {
     verdict_at: "",
     read_verdict: None,
     reason_at: &[],
+    defer_answers_allow: false,
     persons_file: None,
     owns_file: false,
     extra_dir: None,
@@ -165,6 +170,7 @@ pub fn rows() -> Vec<Row> {
         hermes::row(),
         cline::row(),
         goose::row(),
+        antigravity_cli::row(),
     ]
 }
 

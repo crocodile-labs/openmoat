@@ -38,6 +38,31 @@ pub trait HookFile: Sync + std::fmt::Debug {
     /// The binary one of our entries runs, unquoted from its command.
     fn binary(&self, entry: &Value, id: &str) -> Option<String>;
 
+    /// The top-level key of the object holding the event lists: `hooks`, or
+    /// a name of the layout's own (Antigravity CLI's hook files keep each
+    /// hook under its name).
+    fn section(&self) -> &'static str {
+        "hooks"
+    }
+
+    /// The boolean key of that object that switches the whole of it off when
+    /// it is not `true`; `None` for a layout without one. `init` sets it, and
+    /// [`HookFile::turned_off`] reports a file where something else did.
+    fn section_switch(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Whether `root` holds [`Self::section_switch`] at anything but `true`,
+    /// so the host never runs our entries. Absent means on (the host's default).
+    fn turned_off(&self, root: &Value) -> bool {
+        let Some(key) = self.section_switch() else {
+            return false;
+        };
+        root.get(self.section())
+            .and_then(|section| section.get(key))
+            .is_some_and(|value| *value != Value::Bool(true))
+    }
+
     /// Whether the layout carries `"version": 1` beside `hooks`.
     fn has_version(&self) -> bool {
         false
@@ -89,11 +114,11 @@ pub enum HookFileError {
     /// The document is not a JSON object.
     #[error("{0} is not a JSON object")]
     NotObject(String),
-    /// Its `hooks` is not an object.
-    #[error("`hooks` in {0} is not an object")]
+    /// The object that holds its event lists is not an object.
+    #[error("the hooks object in {0} is not an object")]
     HooksNotObject(String),
     /// The list for an event is not an array.
-    #[error("`hooks.{event}` in {file} is not an array")]
+    #[error("the `{event}` list in {file} is not an array")]
     EventNotArray {
         /// The event.
         event: &'static str,
@@ -142,11 +167,17 @@ impl dyn HookFile {
             top.entry("version").or_insert_with(|| json!(1));
         }
         let hooks = top
-            .entry("hooks")
+            .entry(self.section())
             .or_insert_with(|| Value::Object(Map::new()));
         let Value::Object(hooks) = hooks else {
             return Err(HookFileError::HooksNotObject(file.to_owned()));
         };
+        let switched_on = self.section_switch().is_none_or(|key| {
+            hooks.get(key) == Some(&Value::Bool(true)) || {
+                hooks.insert(key.to_owned(), Value::Bool(true));
+                false
+            }
+        });
         let entries = hooks
             .entry(spec.event)
             .or_insert_with(|| Value::Array(Vec::new()));
@@ -162,6 +193,11 @@ impl dyn HookFile {
             entries.push(self.entry(spec, id, guard, block));
             return Ok(HookOutcome::Installed);
         };
+        let unchanged = if switched_on {
+            HookOutcome::Unchanged
+        } else {
+            HookOutcome::Updated
+        };
         let desired = self.entry(
             spec,
             id,
@@ -169,7 +205,7 @@ impl dyn HookFile {
             self.block(spec, existing, blocks_on_failure),
         );
         if *existing == desired {
-            return Ok(HookOutcome::Unchanged);
+            return Ok(unchanged);
         }
         *existing = desired;
         Ok(HookOutcome::Updated)
@@ -229,7 +265,8 @@ impl dyn HookFile {
     }
 
     fn ours<'v>(&self, root: &'v Value, id: &str, spec: &HookSpec) -> Option<&'v Value> {
-        root.pointer(&format!("/hooks/{}", spec.event))
+        root.get(self.section())
+            .and_then(|section| section.get(spec.event))
             .and_then(Value::as_array)
             .and_then(|entries| entries.iter().find(|e| self.is_ours(e, id)))
     }
@@ -266,7 +303,9 @@ impl dyn HookFile {
         let Value::Object(top) = root else {
             return false;
         };
-        let Some(Value::Object(hooks)) = top.get_mut("hooks") else {
+        let section = self.section();
+        let switch = self.section_switch();
+        let Some(Value::Object(hooks)) = top.get_mut(section) else {
             return false;
         };
         let mut removed = false;
@@ -279,8 +318,8 @@ impl dyn HookFile {
             removed |= list.len() != before;
             list.len() == before || !list.is_empty()
         });
-        if removed && hooks.is_empty() {
-            top.remove("hooks");
+        if removed && hooks.keys().all(|key| Some(key.as_str()) == switch) {
+            top.remove(section);
         }
         if removed && self.has_version() && top.len() == 1 {
             top.retain(|key, value| key != "version" || *value != json!(1));

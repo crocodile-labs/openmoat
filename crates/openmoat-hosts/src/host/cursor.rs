@@ -116,6 +116,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         }),
     },
     docs: doc::DOCS,
+    tool_token: crate::ToolToken::NotWithheld {
+        why: "Cursor documents neither how it starts tool commands nor a setting for them",
+    },
     ..HostSpec::BASE
 };
 

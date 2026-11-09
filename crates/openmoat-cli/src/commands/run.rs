@@ -26,6 +26,7 @@ mod release_age;
 mod required;
 mod temp;
 pub mod tier;
+mod tool_shell;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsupported;
 
@@ -116,6 +117,23 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         })
         .transpose()?;
     let ca_notice = terminating.as_ref().and_then(|t| t.notice.clone());
+    let agent_host = match owner {
+        Owner::Agent(host) => Some(host),
+        Owner::Unknown => None,
+    };
+    // Tool commands do not receive the relay token (ADR-075): what commands
+    // may write must not hold the wrapper that keeps it from them.
+    let write_roots: Vec<String> = ctx
+        .project
+        .iter()
+        .cloned()
+        .chain(run_temp.as_ref().map(RunTemp::path))
+        .chain(args.writes.iter().map(|w| resolved(w)))
+        .collect();
+    let tool_shell = tool_shell::prepare(agent_host, &write_roots)?;
+    if let Some(notice) = tool_shell::off_notice(agent_host, tool_shell.as_ref()) {
+        eprintln!("{notice}");
+    }
     let grants = Grants {
         proxy_port: Some(port),
         tmpdir: run_temp.as_ref().map(RunTemp::path),
@@ -124,6 +142,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         // The person's other terminals stay out of reach of the agent's commands.
         terminals: platform::terminals(),
         trust: trust.as_ref().map(|t| path_string(t.dir())),
+        tool_shell: tool_shell.as_ref().map(tool_shell::ToolShell::grant),
     };
     let state = home.root();
     // The agent runs inside the sandbox and must read its own login there; every
@@ -154,10 +173,6 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // The hooks the agent starts run in its sandbox, without OpenMoat's home:
     // this process decides their calls on the proxy's port (ADR-028).
     // Only the calls of the agent this run starts, in its own sessions (ADR-070).
-    let agent_host = match owner {
-        Owner::Agent(host) => Some(host),
-        Owner::Unknown => None,
-    };
     let (guard, guard_token) = guard_service(&home, &run_session, agent_host)?;
     let exit = Exit::open(&home, policy, ctx, Some(credential))?
         .with_guard(guard)
@@ -185,6 +200,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .command()
         .env(guard_relay::SOCKET_ENV, listener_addr.to_string())
         .env(guard_relay::TOKEN_ENV, guard_token.as_str());
+    if let Some(wrapper) = &tool_shell {
+        wrapper.apply(agent.command());
+    }
     agent
         .command()
         .env_remove("NO_PROXY")
@@ -219,6 +237,12 @@ pub fn run(args: &RunArgs) -> Result<Code> {
 /// the Landlock rules and seccomp filter, and start the agent.
 pub fn inside(args: &IsolatedArgs) -> Result<Code> {
     platform::inside(args)
+}
+
+/// When this process was started as a run's tool-shell wrapper (ADR-075), the
+/// code to exit with once the real shell could not start.
+pub fn tool_shell_entry() -> Option<Code> {
+    tool_shell::entry()
 }
 
 /// A fresh credential for this run's proxy: session `run-<ms>-<8 hex>` and a

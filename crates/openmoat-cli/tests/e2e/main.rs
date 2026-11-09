@@ -11,6 +11,7 @@ mod allow;
 mod allow_expiry;
 mod allow_files;
 mod anchor;
+mod antigravity_cli;
 mod approvals;
 mod audit;
 #[cfg(unix)]
@@ -67,6 +68,8 @@ mod proxy;
 mod proxy_ca;
 mod proxy_session;
 mod push;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod relay_token;
 mod replay_report;
 mod repo_policy;
 mod required_level;

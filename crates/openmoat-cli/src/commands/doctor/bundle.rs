@@ -266,6 +266,7 @@ fn agents(home: &Home, binary: &Path) -> Result<Vec<Agent>> {
                 HookState::Unreadable(_) => "unreadable",
                 HookState::Unapproved(_) => "not approved",
                 HookState::FailsOpen(_) => "fails open",
+                HookState::TurnedOff(_) => "turned off",
             };
             Ok(Agent {
                 host: agent.host,

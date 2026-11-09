@@ -196,7 +196,8 @@ mod tests {
                 "opencode",
                 "hermes",
                 "cline",
-                "goose"
+                "goose",
+                "antigravity-cli"
             ]
         );
         let installs: Vec<Host> = Host::EVERY

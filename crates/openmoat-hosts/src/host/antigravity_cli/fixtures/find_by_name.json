@@ -1,0 +1,19 @@
+{
+  "conversationId": "conv-1",
+  "workspacePaths": [
+    "/p"
+  ],
+  "transcriptPath": "/Users/me/.gemini/antigravity-cli/brain/conv-1/transcript.jsonl",
+  "artifactDirectoryPath": "/Users/me/.gemini/antigravity-cli/brain/conv-1",
+  "modelName": "gemini-3-pro",
+  "lastUserInput": "do it",
+  "stepIdx": 2,
+  "toolCall": {
+    "name": "find_by_name",
+    "args": {
+      "SearchDirectory": "/p",
+      "Pattern": "*.rs",
+      "Type": "file"
+    }
+  }
+}

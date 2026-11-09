@@ -1332,6 +1332,34 @@
   threat: T9
   action: { shell: "echo 'plugins: {}' >> ~/.config/goose/config.yaml" }
   expect: { verdict: deny, rules: [kernel-self] }
+# Antigravity CLI: OpenMoat's hook is the named `openmoat` entry of
+# `~/.gemini/config/hooks.json`; a project's `.agents/hooks.json` loads from the repository
+- id: T9-edit-antigravity-hook-file
+  threat: T9
+  action: { fs_write: "~/.gemini/config/hooks.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-remove-antigravity-hook-file-by-shell
+  threat: T9
+  action: { shell: "rm ~/.gemini/config/hooks.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-plant-antigravity-project-hook
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.agents/hooks.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-plant-antigravity-project-mcp-server
+  threat: T9
+  context: { cwd: /p, project: /p }
+  action: { fs_write: "/p/.agents/mcp_config.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-edit-antigravity-settings
+  threat: T9
+  action: { shell: "echo '{}' > ~/.gemini/antigravity-cli/settings.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-plant-antigravity-plugin
+  threat: T9
+  action: { fs_write: "~/.gemini/config/plugins/x/hooks.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
 # `HERMES_HOME` (or `%LOCALAPPDATA%\hermes` on Windows) moves the home
 - id: T9-edit-moved-hermes-config
   threat: T9
@@ -5148,6 +5176,10 @@
 - id: T2-read-cline-connectors-db
   threat: T2
   action: { fs_read: "~/.cline/data/db/connectors.db" }
+  expect: { verdict: deny, rules: [agent-credentials] }
+- id: T1-cat-antigravity-mcp-tokens
+  threat: T1
+  action: { shell: "cat ~/.gemini/antigravity/mcp_oauth_tokens.json" }
   expect: { verdict: deny, rules: [agent-credentials] }
 - id: T1-cat-goose-secrets-file
   threat: T1

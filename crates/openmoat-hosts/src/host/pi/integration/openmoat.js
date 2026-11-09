@@ -18,6 +18,25 @@
 
 import { spawn } from "node:child_process";
 
+// `openmoat run`'s relay variables, which this extension's guard needs and
+// pi's tool commands must not get (ADR-075): pi copies `process.env` for each
+// child, so they are taken out of it here and passed to the guard alone. Kept
+// on the global object: a reload runs this module again, and by then
+// `process.env` no longer has them.
+const RELAY_KEY = Symbol.for("openmoat.relay-env");
+const RELAY_NAMES = ["MOAT_GUARD_SOCKET", "MOAT_GUARD_TOKEN"];
+const shared = /** @type {Record<symbol, Record<string, string> | undefined>} */ (
+  /** @type {unknown} */ (globalThis)
+);
+/** @type {Record<string, string>} */
+const relayEnv = shared[RELAY_KEY] ?? {};
+shared[RELAY_KEY] = relayEnv;
+for (const name of RELAY_NAMES) {
+  const value = process.env[name];
+  if (value !== undefined) relayEnv[name] = value;
+  delete process.env[name];
+}
+
 /**
  * The call as pi hands it to a `tool_call` handler.
  * @typedef {object} ToolCall
@@ -163,6 +182,7 @@ function guard(payload, cwd, signal) {
     try {
       child = spawn(MOAT, ["guard", "--host", "pi", "--home", MOAT_HOME], {
         cwd,
+        env: { ...process.env, ...relayEnv },
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       });
@@ -198,6 +218,7 @@ function guard(payload, cwd, signal) {
 function heartbeat() {
   try {
     const child = spawn(MOAT, ["guard", "--heartbeat", "--host", "pi", "--home", MOAT_HOME], {
+      env: { ...process.env, ...relayEnv },
       stdio: "ignore",
       windowsHide: true,
     });
