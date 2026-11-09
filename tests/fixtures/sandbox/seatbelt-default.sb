@@ -5,6 +5,7 @@
 (allow signal (target same-sandbox))
 (allow process-info* (target same-sandbox))
 (allow sysctl-read)
+(deny sysctl-read (sysctl-name-prefix "kern.procargs"))
 (allow pseudo-tty)
 (allow file-ioctl)
 (allow ipc-posix-shm* ipc-posix-sem)

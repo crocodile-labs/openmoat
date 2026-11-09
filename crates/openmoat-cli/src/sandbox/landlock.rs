@@ -98,6 +98,14 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> anyhow::Result<Generated> 
         program,
         "the program `openmoat run` starts",
     );
+    if let Some(wrapper) = &grants.tool_shell {
+        g.grant(
+            read,
+            "landlock.tool-shell",
+            vec![wrapper.dir.clone(), wrapper.moat.clone()],
+            "the wrapper that keeps the relay token from tool commands (ADR-075)",
+        );
+    }
     g.allows(&ir.fs.read, read, &checker);
     for allowance in &ir.allowances {
         let roots = allowance.patterns.iter().filter_map(|p| literal_tree(p));

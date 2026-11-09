@@ -73,6 +73,7 @@ fn grants() -> Grants {
         writes: vec!["/home/me/.agent".into()],
         terminals: vec!["/dev/pts/3".into()],
         trust: None,
+        tool_shell: None,
     }
 }
 

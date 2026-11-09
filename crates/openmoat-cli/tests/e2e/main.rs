@@ -68,12 +68,12 @@ mod proxy;
 mod proxy_ca;
 mod proxy_session;
 mod push;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod relay_token;
 mod replay_report;
 mod repo_policy;
 mod required_level;
 mod run;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-mod relay_token;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod run_guard;
 mod sandbox;

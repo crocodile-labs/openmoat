@@ -173,6 +173,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         managed_only: Some("allowManagedHooksOnly"),
         hooks_key: "hooks",
     }),
+    // The Bash tool's shell; hooks run under `sh -c` or exec form. A value that
+    // is not a working bash or zsh is ignored without a word (ADR-075).
+    tool_token: crate::ToolToken::Wrapper {
+        vars: &["CLAUDE_CODE_SHELL", "SHELL"],
+        on_path: false,
+    },
     ..HostSpec::BASE
 };
 

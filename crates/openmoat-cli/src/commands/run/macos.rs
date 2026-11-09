@@ -160,6 +160,26 @@ impl Confined {
     }
 }
 
+/// Link the wrapper of a tool shell (`tool_shell.rs`) to this binary.
+pub fn link_tool_shell(moat: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(moat, link)
+}
+
+/// Nothing to do here: Seatbelt keeps the agent's environment from every
+/// process in the profile (`kern.procargs`), the wrapper's sandbox included.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature on every platform: Linux's adds a Landlock layer, which can fail"
+)]
+pub fn seal_tool_shell() -> Result<()> {
+    Ok(())
+}
+
+/// Replace this process with `command`, returning only if that failed.
+pub fn exec_tool_shell(command: &mut Command) -> std::io::Error {
+    std::os::unix::process::CommandExt::exec(command)
+}
+
 /// What `moat run` says on a macOS too old for its profile (exit 64).
 fn refusal(reason: &str) -> String {
     format!(

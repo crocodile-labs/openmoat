@@ -7,7 +7,8 @@ use std::path::Path;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
 use openmoat_hosts::{
-    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, reason_line,
+    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, ToolToken,
+    reason_line,
 };
 use serde_json::json;
 
@@ -49,6 +50,40 @@ fn every_spec_is_complete() {
             assert!(install.dir_name.starts_with('.'), "{host:?}");
             assert!(!install.dir_variable.is_empty(), "{host:?}");
             assert!(!install.config_file.is_empty(), "{host:?}");
+        }
+    }
+}
+
+/// Hosts whose tool commands do not receive `openmoat run`'s relay token
+/// (ADR-075, which holds each host's source). Changing a row needs a new source
+/// for that host, and an entry in docs/LIMITS.md for one that loses it.
+const WITHHELD: [&str; 7] = [
+    "claude-code",
+    "opencode",
+    "goose",
+    "pi",
+    "hermes",
+    "openclaw",
+    "continue",
+];
+
+#[test]
+fn every_host_says_whether_tool_commands_get_the_relay_token() {
+    for host in HOSTS {
+        let token = host.spec().tool_token;
+        assert_eq!(
+            token.withheld(),
+            WITHHELD.contains(&host.id()),
+            "{host:?}: {token:?}"
+        );
+        match token {
+            ToolToken::Wrapper { vars, .. } => assert!(!vars.is_empty(), "{host:?}"),
+            ToolToken::NotWithheld { why } => assert!(
+                why != "not checked for this host",
+                "{host:?} needs a reason of its own"
+            ),
+            ToolToken::Integration => {}
+            _ => panic!("{host:?}: a new kind needs a row here"),
         }
     }
 }

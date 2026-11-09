@@ -34,6 +34,7 @@ impl HostSpec {
         other_hooks: None,
         bundled: &[],
         system_settings: None,
+        tool_token: super::ToolToken::BASE,
     };
 }
 

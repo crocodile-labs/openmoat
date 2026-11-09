@@ -65,12 +65,18 @@ const PLATFORM_WRITE: [&str; 5] = [
 /// inspect its own processes, use terminals and shared memory, and look up
 /// users and groups. No other system service: not the keychain
 /// (`SecurityServer`), not DNS (the proxy resolves), not `trustd`, which
-/// fetches certificate status from the network.
+/// fetches certificate status from the network. `kern.procargs` and
+/// `kern.procargs2` are the only way one process reads another's arguments
+/// and environment (`ps eww`) without a debugger: denied, so a tool command
+/// cannot read the relay token out of the agent's environment (ADR-075). The
+/// kernel builds the name a rule sees with the process id at its end
+/// (`kern.procargs2.123`), so the rule names a prefix.
 const PROCESS: &str = "\
 (allow process-exec process-fork)
 (allow signal (target same-sandbox))
 (allow process-info* (target same-sandbox))
 (allow sysctl-read)
+(deny sysctl-read (sysctl-name-prefix \"kern.procargs\"))
 (allow pseudo-tty)
 (allow file-ioctl)
 (allow ipc-posix-shm* ipc-posix-sem)
@@ -156,6 +162,15 @@ pub fn generate(ir: &Enforcement, grants: &Grants) -> Generated {
             "file-read*",
             vec![program.clone()],
             message,
+        );
+    }
+    if let Some(wrapper) = &grants.tool_shell {
+        p.grant(
+            read,
+            "seatbelt.tool-shell",
+            "file-read*",
+            vec![format!("{}/**", wrapper.dir), wrapper.moat.clone()],
+            "the wrapper that keeps the relay token from tool commands (ADR-075)",
         );
     }
     p.allows(&ir.fs.read, "allow file-read*");

@@ -121,6 +121,7 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
     {
         report.warn(&warning);
     }
+    report.note(&warnings::relay_token());
     report.note(warnings::RENAMED);
     // Loaded when a session starts here, where no `ConfigChange` fires.
     for warning in crate::project_settings::warnings_here(&home) {

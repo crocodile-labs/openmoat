@@ -86,6 +86,30 @@ pub(super) fn grant_expiry(home: &Home, now_ms: i64) -> Option<String> {
     Some(format!("approvals        {summary}"))
 }
 
+/// The row that says which agents' tool commands do not receive `openmoat
+/// run`'s relay token (ADR-075). What each host's spec says, from its own
+/// documentation or source: `openmoat bench --report` tries only the sandbox
+/// rule, and the weekly real-agent job the rest.
+pub(super) fn relay_token() -> String {
+    let (withheld, kept): (Vec<_>, Vec<_>) = openmoat_hosts::Host::EVERY
+        .into_iter()
+        .partition(|host| host.spec().tool_token.withheld());
+    let names = |hosts: &[openmoat_hosts::Host]| {
+        hosts
+            .iter()
+            .map(|host| host.spec().display_name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!(
+        "relay token      under `openmoat run`, tool commands do not receive it for {}; \
+         they still do for {} (docs/LIMITS.md). This row is not tested here: it says how those \
+         agents start tool commands, not what this machine did",
+        names(&withheld),
+        names(&kept)
+    )
+}
+
 /// The row that says the `moat` name goes away.
 pub(super) const RENAMED: &str = "command          `moat` is the old name of `openmoat`; it still \
                                   works for now and will be removed in a later release";

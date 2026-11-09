@@ -66,7 +66,12 @@ pub enum Probe {
     BuildScriptReadsAgentLogin,
     /// Appending to OpenMoat's own policy file.
     WritePolicy,
+    /// A command reading the relay token from the agent that started it (ADR-075).
+    ToolReadsToken,
 }
+
+/// Where the stand-in agent writes the relay token it holds, in the project.
+const TOKEN_RECORD: &str = "proof-token.txt";
 
 impl Probe {
     /// The id the report names to reproduce it.
@@ -75,6 +80,7 @@ impl Probe {
             Self::ReadSshKey => "os-read-ssh-key",
             Self::BuildScriptReadsAgentLogin => "os-build-script-reads-agent-login",
             Self::WritePolicy => "os-write-policy",
+            Self::ToolReadsToken => "os-tool-reads-relay-token",
         }
     }
 
@@ -84,6 +90,7 @@ impl Probe {
             Self::ReadSshKey => ".ssh/id_rsa",
             Self::BuildScriptReadsAgentLogin => ".claude/.credentials.json",
             Self::WritePolicy => ".moat/policy.yaml",
+            Self::ToolReadsToken => TOKEN_RECORD,
         }
     }
 
@@ -93,11 +100,23 @@ impl Probe {
             Self::ReadSshKey => format!("cat \"$HOME/{}\"", self.target()),
             Self::WritePolicy => format!("echo PLANTED >> \"$HOME/{}\"", self.target()),
             Self::BuildScriptReadsAgentLogin => format!("sh ./{BUILD_SCRIPT}"),
+            // The stand-in agent records its token, then starts a child that
+            // reads the agent's environment; `true` keeps the shell from
+            // replacing itself with the child.
+            Self::ToolReadsToken => format!(
+                "printf %s \"$MOAT_GUARD_TOKEN\" > {TOKEN_RECORD}; /bin/sh -c '{}'; true",
+                platform::READ_PARENT
+            ),
         }
     }
 
     /// What the row checks, in a few words.
     pub fn check(self) -> String {
+        if self == Self::ToolReadsToken {
+            return "a command started under `openmoat run` cannot read the relay token from \
+                    the agent that started it"
+                .to_owned();
+        }
         format!(
             "`openmoat run -- /bin/sh -c '{}'` is refused by the OS",
             self.command()
@@ -149,8 +168,36 @@ pub fn run(exe: &OsString, scratch: &Scratch, probes: &[Probe]) -> Result<Vec<Ev
         .collect()
 }
 
+/// Whether a command could read the relay token from its parent: nothing to
+/// compare with unless the stand-in agent held one.
+fn attempt_token(exe: &OsString, scratch: &Scratch, name: &str) -> Evidence {
+    let probe = Probe::ToolReadsToken;
+    let reply = in_sandbox(exe, scratch, &probe.command());
+    let record = scratch.project.join(TOKEN_RECORD);
+    let token = std::fs::read_to_string(&record).unwrap_or_default();
+    let _ = std::fs::remove_file(&record);
+    let text = shown(&reply);
+    if token.len() != 64 || !text.contains(IN_SANDBOX) {
+        Evidence::Unexercised(format!(
+            "{} did not run with a relay token under {name}",
+            probe.id()
+        ))
+    } else if text.contains(&token) {
+        // Without the output, which holds the token.
+        Evidence::Broken(format!(
+            "{} read the agent's relay token through {name}",
+            probe.id()
+        ))
+    } else {
+        Evidence::Held
+    }
+}
+
 /// Run `probe` and tell what the OS did, leaving the home as it was.
 fn attempt(exe: &OsString, scratch: &Scratch, probe: Probe, name: &str) -> Result<Evidence> {
+    if probe == Probe::ToolReadsToken {
+        return Ok(attempt_token(exe, scratch, name));
+    }
     let target = scratch.home.join(probe.target());
     let before = std::fs::read(&target).with_context(|| format!("reading {}", target.display()))?;
     let reply = in_sandbox(exe, scratch, &probe.command());
@@ -227,6 +274,9 @@ fn plant(scratch: &Scratch) -> Result<()> {
 /// goes for (`Checker::check_os`): `None` when no rule decides it or the
 /// policy cannot be read.
 pub fn profile(scratch: &Scratch, probe: Probe) -> Option<bool> {
+    if probe == Probe::ToolReadsToken {
+        return None;
+    }
     let policy = Home::under(&scratch.home).load_policy().ok()?;
     let home = crate::context::path_string(&scratch.home);
     let project = crate::context::path_string(&scratch.project);

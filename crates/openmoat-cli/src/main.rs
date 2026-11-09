@@ -53,6 +53,11 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 use clap::Parser;
 
 fn main() -> ExitCode {
+    // Started as the shell an `openmoat run` gives its agent's tool commands
+    // (ADR-075): never a command of its own.
+    if let Some(code) = commands::tool_shell_entry() {
+        return code.into();
+    }
     // A host runs `moat guard` and blocks the tool call only on exit 2; any other
     // failure lets the call through. So a `guard` that cannot even parse its
     // arguments denies (ADR-015), and every other command reports usage errors

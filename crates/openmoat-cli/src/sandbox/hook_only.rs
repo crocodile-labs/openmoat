@@ -45,6 +45,7 @@ fn grants() -> Grants {
         writes: Vec::new(),
         terminals: Vec::new(),
         trust: None,
+        tool_shell: None,
     }
 }
 

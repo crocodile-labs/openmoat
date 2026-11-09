@@ -38,6 +38,8 @@ use crate::cli::{
 };
 use crate::exit::Code;
 
+pub use run::tool_shell_entry;
+
 pub fn run(cli: Cli) -> Result<Code> {
     let Some(command) = cli.command else {
         if miswired_hook::detected() {

@@ -111,6 +111,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     process: protect::PROCESS,
     advisories: advisories::ADVISORIES,
     docs: doc::DOCS,
+    tool_token: crate::ToolToken::NotWithheld {
+        why: "whether `--secret-env-vars` also takes the token from hooks is not documented",
+    },
     ..HostSpec::BASE
 };
 

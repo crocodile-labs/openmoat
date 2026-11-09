@@ -4,6 +4,9 @@ use std::path::Path;
 
 pub const BACKEND: Option<&str> = Some("Landlock + seccomp");
 
+/// A child reading its parent's environment and memory through `/proc`.
+pub const READ_PARENT: &str = "cat /proc/$PPID/environ; cat /proc/$PPID/mem 2>&1 | head -c 4096";
+
 /// Landlock cannot deny inside a tree it grants, and `/tmp` is a read root:
 /// a throwaway home there cannot be protected, so `openmoat run` refuses.
 pub fn hint(home: &Path) -> String {

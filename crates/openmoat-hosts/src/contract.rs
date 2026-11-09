@@ -22,6 +22,7 @@ mod relaxed;
 mod reviews;
 mod settings;
 mod system_settings;
+mod tool_token;
 
 pub use advisory::{Advisories, Advisory, Platform, Version};
 pub use bundle::Bundle;
@@ -42,6 +43,7 @@ pub(crate) use reviews::{answer, decided};
 pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
 pub use system_settings::{SystemFile, SystemSettingsSpec};
+pub use tool_token::ToolToken;
 
 /// The code each host format needs beyond its [`HostSpec`]: reading a payload
 /// and writing the response. One per format; a host that sends another's
@@ -176,6 +178,9 @@ pub struct HostSpec {
     /// The settings an administrator deploys for the whole machine, which
     /// outrank the person's own; `None` for a host OpenMoat reads none of.
     pub system_settings: Option<SystemSettingsSpec>,
+    /// How `openmoat run` keeps its relay token from the host's tool commands
+    /// (ADR-075).
+    pub tool_token: ToolToken,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own
