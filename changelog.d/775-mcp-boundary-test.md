@@ -1,2 +1,0 @@
-### Changed
-- The end-to-end tests run an MCP server that tries to read a planted secret by a relative path, an absolute path and a symbolic link out of its folder and to write outside the project: `openmoat mcp proxy --sandbox` is shown to stop each by the files on disk, and the same calls reach the files without it, as `docs/LIMITS.md` now says ([#775](https://github.com/crocodile-labs/openmoat/pull/775)).
