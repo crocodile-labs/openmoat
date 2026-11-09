@@ -176,6 +176,33 @@ fn why_failed(out: &std::process::Output) -> String {
     )
 }
 
+/// Whether every OS row must have run the attack here.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn os_rows_must_run() -> bool {
+    crate::run::netns_required()
+}
+
+/// No backend: `openmoat run` refuses here, so no OS row can run.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn os_rows_must_run() -> bool {
+    false
+}
+
+/// A GitHub annotation naming a promise whose OS row was not run, so the next
+/// run shows the reason in the Checks API. Written to the stream itself: the
+/// test harness keeps what `println!` prints in a test that passes.
+fn annotate_not_tested(promise: &str, reason: &str) {
+    use std::io::Write as _;
+
+    let reason = reason
+        .replace('%', "%25")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A");
+    let line =
+        format!("::warning title=proof report::{promise}: OS sandbox not tested here: {reason}");
+    let _ = writeln!(std::io::stdout(), "{line}");
+}
+
 /// The rows of `report` for `promise` at `layer`.
 fn rows<'a>(report: &'a Value, promise: &str, layer: &str) -> Vec<&'a Value> {
     report["rows"]
@@ -240,10 +267,10 @@ fn moatbench_report_answers_every_promise_per_layer() {
         "{report:#}"
     );
     // The OS rows ran the attack, or say why not; never a pass without a run.
-    // CI's macOS jobs run Seatbelt, so there they must pass. On Linux a row
-    // may be NOT TESTED HERE with its reason (the runner's namespaces and
-    // Landlock vary), never a pass without a run.
-    let must_run = std::env::var_os("CI").is_some() && cfg!(target_os = "macos");
+    // CI's macOS jobs run Seatbelt and its Linux jobs Landlock in a network
+    // namespace, so there they must pass; the `stock linux` job may report
+    // NOT TESTED HERE with its reason.
+    let must_run = os_rows_must_run();
     for promise in [
         "read-ssh-key",
         "build-script-reads-agent-login",
@@ -263,6 +290,9 @@ fn moatbench_report_answers_every_promise_per_layer() {
             assert_eq!(status, "not-tested-here", "{promise}: {reason}\n{report:#}");
             assert_ne!(os[0]["reason"].as_str().unwrap(), "");
             eprintln!("{promise}: OS sandbox not tested here: {}", os[0]["reason"]);
+            if cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
+                annotate_not_tested(promise, &reason);
+            }
         }
         if cfg!(windows) {
             assert_eq!(status, "not-tested-here");

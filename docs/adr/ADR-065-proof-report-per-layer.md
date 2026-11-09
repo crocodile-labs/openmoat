@@ -87,3 +87,17 @@ with OpenMoat's parser passes on every machine.
   `{"id": …, "evidence": "model"}`, "claude-code (model, not run)" in text. A version
   appears only with evidence from a run of the real agent, which the report does not
   gather; the weekly `latest agents` workflow is where real agents run.
+
+## Amendment 2026-11-09: the OS rows run on Linux CI
+
+On Ubuntu CI the OS rows were NOT TESTED HERE although the sandbox works. The bench's
+temp directory lies under `--scratch-dir`, deep in the build tree, and the network
+namespace's Unix socket was made there: a path longer than a socket address holds, so
+`openmoat run` could not start and no attack was tried. The session's directory now
+goes to `/tmp` when the temp directory would make the socket too long
+(`commands/run/temp.rs`), which fixes `openmoat run` for anyone with a long `TMPDIR`.
+
+- The end-to-end test requires PASS on CI's macOS and Linux jobs again; only the
+  `stock linux` job may report NOT TESTED HERE, with its reason.
+- Where the test accepts NOT TESTED HERE on Linux it prints a GitHub annotation with the
+  promise and the reason, so the Checks API shows it without the job's log.
