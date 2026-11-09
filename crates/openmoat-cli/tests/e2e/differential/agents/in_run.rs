@@ -19,8 +19,7 @@ fn real_codex_starts_inside_moat_run_and_its_hook_is_decided_outside() {
         skip_without_host_binary("codex inside openmoat run (set MOAT_CODEX_BIN)");
         return;
     };
-    // Landlock cannot deny inside a granted tree and `/tmp` is a read root, so
-    // on Linux the home lives elsewhere for its key to be out of reach.
+    // Linux's test homes stay out of the shared temp directory, as a real home is.
     let parent = if cfg!(target_os = "linux") {
         std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
     } else {

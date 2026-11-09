@@ -63,6 +63,7 @@ use crate::sandbox::Report;
 use crate::sandbox::git_env;
 use crate::sandbox::kerberos;
 use crate::sandbox::own_login::{self, Owner};
+use crate::sandbox::shared_temp;
 use crate::taint::run::RUN_SESSION_ENV;
 use temp::RunTemp;
 
@@ -147,7 +148,11 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let state = home.root();
     // The agent runs inside the sandbox and must read its own login there; every
     // other agent's stays denied (ADR-054). The hook decides with the whole policy.
-    let (sandboxed, kept) = own_login::for_session(&policy, &ctx, owner, &grants.writes);
+    let (mut sandboxed, kept) = own_login::for_session(&policy, &ctx, owner, &grants.writes);
+    // Commands have the run's own temp directory, so not the shared ones.
+    if run_temp.is_some() {
+        shared_temp::for_run(&mut sandboxed, cfg!(target_os = "macos"));
+    }
     let mut agent = if args.isolate {
         platform::isolate(&sandboxed, &ctx, grants, &program, state)?
     } else {

@@ -24,6 +24,7 @@ use std::sync::atomic::AtomicBool;
 use anyhow::{Context as _, Result, bail};
 use openmoat_core::{EvalContext, Policy};
 
+use super::super::temp::socket_parent;
 use super::{Confined, Rules, refuse_exposed, restricted};
 use crate::cli::IsolatedArgs;
 use crate::context::path_string;
@@ -229,6 +230,9 @@ fn splice(tcp: &TcpStream, unix: &UnixStream) {
     let _ = back.join();
 }
 
+/// The proxy's socket, in the session's directory.
+const SOCKET: &str = "proxy.sock";
+
 /// A private directory for the session (mode `0700`) with the proxy's socket
 /// and the placeholders hidden paths are covered with (mode `000`), and the
 /// placeholders created in the project. All are removed when it drops, the
@@ -241,13 +245,14 @@ pub struct Session {
 
 impl Session {
     pub(super) fn create(placeholders: &[Placeholder]) -> Result<Self> {
-        let dir = std::env::temp_dir().join(format!("moat-run-{}", std::process::id()));
+        let name = format!("moat-run-{}", std::process::id());
+        let dir = socket_parent(&std::env::temp_dir(), &name, SOCKET).join(name);
         DirBuilder::new()
             .mode(0o700)
             .create(&dir)
             .with_context(|| format!("creating {}", dir.display()))?;
         let mut session = Self {
-            socket: dir.join("proxy.sock"),
+            socket: dir.join(SOCKET),
             dir,
             placeholders: Vec::new(),
         };

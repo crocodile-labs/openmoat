@@ -23,9 +23,15 @@ mod agent_logins;
 /// `--isolate` never runs a `bwrap` found through `PATH`.
 #[cfg(target_os = "linux")]
 mod isolate_path;
+/// What an MCP server can reach under `openmoat mcp proxy --sandbox`, on disk.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod mcp_boundary;
 /// Linux without bubblewrap: the port-only path a stock system takes.
 #[cfg(target_os = "linux")]
 mod stock_linux;
+/// The run's own temp directory, and the shared ones out of reach.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod temp_dirs;
 
 /// Set by CI's `stock linux` job, whose runner has no bubblewrap and keeps
 /// unprivileged user namespaces restricted, as a stock Ubuntu does: there
@@ -87,9 +93,7 @@ pub(crate) fn run_sh_with(
 }
 
 pub(crate) fn installed_with_secret() -> (Sandbox, PathBuf) {
-    // Landlock cannot deny inside a granted tree, and `/tmp` is a read root, so
-    // on Linux the home must live elsewhere for its secrets to be out of reach,
-    // as a real home is.
+    // Linux's test homes stay out of the shared temp directory, as a real home is.
     let parent = if cfg!(target_os = "linux") {
         PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
     } else {
@@ -498,58 +502,6 @@ print("io_uring=" + str(ctypes.get_errno()))
         }
         let own = run_sh_with(&sb, &project, script, &[("UV_EXCLUDE_NEWER", "2026-01-01")]);
         assert!(stdout(&own).contains("uv=2026-01-01\n"), "{}", text(&own));
-    }
-
-    /// The agent gets a temp directory of the run's own as `TMPDIR`, removed
-    /// afterwards; the shared one is no longer writable, and a Kerberos ticket
-    /// cache where Kerberos keeps it by default (`/tmp/krb5cc_<uid>`) cannot
-    /// be read by a command.
-    #[test]
-    fn the_run_has_its_own_temp_directory_and_ticket_caches_stay_closed() {
-        let (sb, project) = installed_with_secret();
-        // As `openmoat run` resolves it (`/private/var/…` on macOS).
-        let shared = sb.home.with_file_name("tmp");
-        std::fs::create_dir_all(&shared).unwrap();
-        let shared = std::fs::canonicalize(&shared).unwrap();
-        // A fake cache under a name of this test's own, never a real one.
-        let id = Command::new("id").arg("-u").output().unwrap();
-        let uid = String::from_utf8_lossy(&id.stdout).trim().to_owned();
-        let cache = format!("/tmp/krb5cc_{uid}_openmoat_e2e_{}", std::process::id());
-        let planted = std::fs::File::create_new(&cache)
-            .and_then(|mut f| std::io::Write::write_all(&mut f, b"FAKE-TICKET"))
-            .is_ok();
-        let script = format!(
-            "case \"$TMPDIR\" in \"{shared}\"/openmoat-run-*) echo private=0;; esac
-             echo x > \"$TMPDIR/f\" && cat \"$TMPDIR/f\" >/dev/null; echo own=$?
-             echo \"$TMPDIR\" > \"{shared}/where\"; echo shared=$?
-             cat \"{cache}\"; echo krb=$?",
-            shared = shared.display()
-        );
-        let out = run_sh(&sb, &project, &script);
-        if planted {
-            let _ = std::fs::remove_file(&cache);
-        }
-        if !ran(&out) {
-            return;
-        }
-        let shown = text(&out);
-        for expected in ["private=0\n", "own=0\n"] {
-            assert!(stdout(&out).contains(expected), "{expected}: {shown}");
-        }
-        assert!(!stdout(&out).contains("shared=0\n"), "{shown}");
-        assert!(!shared.join("where").exists(), "{shown}");
-        let leftovers = std::fs::read_dir(&shared)
-            .unwrap()
-            .flatten()
-            .filter(|e| e.file_name().to_string_lossy().starts_with("openmoat-run-"))
-            .count();
-        assert_eq!(leftovers, 0, "removed when the run ends: {shown}");
-        // Without a network namespace Landlock cannot deny inside the read root.
-        let port_only = stderr(&out).contains("restricted by port only");
-        if planted && !port_only {
-            assert!(!stdout(&out).contains("krb=0\n"), "{shown}");
-            assert!(!shown.contains("FAKE-TICKET"), "{shown}");
-        }
     }
 
     /// The repository's own files cannot switch the cut-off off: a far

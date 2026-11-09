@@ -18,6 +18,25 @@ use crate::guard_relay::random_hex;
 /// The variable programs take their temp directory from.
 pub const TMPDIR: &str = "TMPDIR";
 
+/// The longest path a Unix socket can be bound at on Linux: `sun_path` holds
+/// 108 bytes, the last a NUL.
+#[cfg(any(target_os = "linux", test))]
+const SOCKET_PATH_MAX: usize = 107;
+
+/// Where the directory `name` holding the Unix socket `socket` goes: the
+/// system's temp directory `temp`, or `/tmp` when a path that long could not be
+/// bound (a `TMPDIR` deep in a build tree). The directory is private (`0700`)
+/// and made only if nothing has the name, so `/tmp` serves as well.
+#[cfg(any(target_os = "linux", test))]
+pub fn socket_parent(temp: &Path, name: &str, socket: &str) -> PathBuf {
+    let bytes = temp.join(name).join(socket).as_os_str().len();
+    if bytes <= SOCKET_PATH_MAX {
+        temp.to_path_buf()
+    } else {
+        PathBuf::from("/tmp")
+    }
+}
+
 /// The run's own temp directory; removed with everything in it when dropped.
 #[derive(Debug)]
 pub struct RunTemp {
@@ -66,6 +85,28 @@ impl Drop for RunTemp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A temp directory deep in a build tree left the socket too long to
+    /// bind: `openmoat run` refused on Linux for that reason alone.
+    #[test]
+    fn a_socket_too_long_to_bind_moves_to_the_short_temp_directory() {
+        let (name, socket) = ("moat-run-12345", "proxy.sock");
+        let short = Path::new("/tmp");
+        assert_eq!(socket_parent(short, name, socket), short);
+        // Exactly what fits, and one byte more.
+        let fixed = format!("/{name}/{socket}").len();
+        let fits = format!("/{}", "d".repeat(SOCKET_PATH_MAX - fixed - 1));
+        assert_eq!(
+            Path::new(&fits).join(name).join(socket).as_os_str().len(),
+            SOCKET_PATH_MAX
+        );
+        assert_eq!(
+            socket_parent(Path::new(&fits), name, socket),
+            Path::new(&fits)
+        );
+        let long = format!("{fits}d");
+        assert_eq!(socket_parent(Path::new(&long), name, socket), short);
+    }
 
     #[test]
     fn each_run_gets_a_new_private_directory_removed_afterwards() {

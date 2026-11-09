@@ -53,6 +53,9 @@ BODY = '{"public":false,"files":{"poc.txt":{"content":"adr-062 step 0"}}}'
 CURL_POSTS = [("POST", "/gists"), ("POST", "/gists/"), ("POST", "/GISTS"),
               ("POST", "/gists?per_page=1"), ("POST", "/gists/0/comments"), ("post", "/gists")]
 BATCHES = 3
+# The cells after each row's name, as an annotation names them.
+CLIENT_COLUMNS = ("(a) allowed GET", "terminated", "(b) denied POST", "audit rows")
+LATENCY_COLUMNS = ("median ms", "p95 ms")
 
 NODE = f"""
 const show = (what, r, body) => console.log(what, r.status, body.replace(/\\s+/g, " "));
@@ -112,11 +115,21 @@ def ca_init(g):
         fail("openmoat proxy ca init failed", seen.decode(errors="replace"))
 
 
+def one_line(text):
+    """`text` for an annotation, which is one line: GitHub reads `%0A` as a line break in it."""
+    return text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+
+
+def notice(name, columns, cells):
+    """One table row as an annotation, which the Checks API shows without the job's log."""
+    result = "; ".join(f"{column}: {cell}" for column, cell in zip(columns, cells) if cell)
+    print(f"::notice title=adr-062 step 0::{one_line(name)}: {one_line(result)}")
+
+
 def fail(what, detail=""):
     """Stop with `what` and `detail` as an annotation and in the job summary."""
     detail = detail.strip()
-    # An annotation is one line: GitHub reads `%0A` as a line break in it.
-    escaped = detail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    escaped = one_line(detail)
     print(f"::error title=adr-062 step 0::{what}: {escaped}" if detail else f"::error::{what}")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
@@ -220,6 +233,7 @@ def correctness(g):
     for name, script, extra in clients():
         if script is None:
             table.append(f"| {name} | skipped: {extra} | | | |")
+            notice(name, CLIENT_COLUMNS, [f"skipped: {extra}"])
             continue
         out, session = run(g, script, extra=extra)
         lines = out.splitlines()
@@ -238,10 +252,14 @@ def correctness(g):
             post_cell = f"{sum(p == 'refused' for p in posts)}/{len(posts)} refused; {post_cell}"
         table.append(f"| {name} | {got} | {'yes' if terminated else 'no'} | {post_cell} | "
                      f"{refused} refused, {passed} POST passed |")
+        notice(name, CLIENT_COLUMNS, [got, "yes" if terminated else "no", post_cell,
+                                      f"{refused} refused, {passed} POST passed"])
     out, _ = run(g, "git ls-remote https://github.com/crocodile-labs/openmoat.git HEAD "
                     ">/dev/null 2>&1 && echo 'get 200' || echo 'get error'")
     table.append(f"| git ls-remote (github.com, no rule) | {classify_get(out.strip())} | no | "
                  f"n/a | |")
+    notice("git ls-remote (github.com, no rule)", CLIENT_COLUMNS,
+           [classify_get(out.strip()), "no", "n/a"])
     return table, errors
 
 
@@ -274,6 +292,8 @@ def latency(g, runs):
              "(median / p95)", "", "| path | median | p95 |", "|---|---|---|"]
     table += [f"| {m} | {s[0]:.1f} | {s[1]:.1f} |" for m, s in stat.items()]
     table.append(f"| added by termination | {added[0]:.1f} | {added[1]:.1f} |")
+    for name, (median, p95) in [*stat.items(), ("added by termination", added)]:
+        notice(name, LATENCY_COLUMNS, [f"{median:.1f}", f"{p95:.1f}"])
     warnings = []
     if added[1] > latency_ab.BUDGET_MS:
         warnings.append(f"termination adds {added[1]:.1f} ms at p95, over the "

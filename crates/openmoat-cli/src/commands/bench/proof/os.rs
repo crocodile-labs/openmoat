@@ -13,7 +13,7 @@
 //! never makes a row pass.
 
 // `platform` is this OS's module: `BACKEND`, the sandbox `openmoat run`
-// applies here, and `hint(home)`, what to try when it did not run a command.
+// applies here.
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -156,9 +156,8 @@ pub fn run(exe: &OsString, scratch: &Scratch, probes: &[Probe]) -> Result<Vec<Ev
         && shown(&control).contains(IN_SANDBOX);
     if !ran {
         let why = format!(
-            "{name} did not run a plain command here, so no attack was tried: {}{}",
-            control.cause(),
-            platform::hint(&scratch.home)
+            "{name} did not run a plain command here, so no attack was tried: {}",
+            control.cause()
         );
         return Ok(vec![Evidence::Unexercised(why); probes.len()]);
     }

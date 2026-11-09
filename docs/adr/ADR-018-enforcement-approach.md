@@ -148,3 +148,23 @@ pattern, existing or not.
   exists now. Refusing to start there was weighed and not chosen: the port-only mode
   already warns on every start, and a refusal would stop every run on such machines for a
   file most projects never get.
+
+## Amendment 2026-11-09: `openmoat run` leaves the shared temp directories out
+
+`openmoat run` already gave each run a temp directory of its own and no write to the
+shared ones, so nothing a command wrote could be there to read back. `/tmp` and
+`/var/folders` stayed read roots, which left other programs' files open to commands.
+
+- For the Lightweight tier the sandbox's copy of the policy has `/tmp`, `/private/tmp`,
+  `/var/folders` and `/private/var/folders` out of `sandbox.read_roots`
+  (`sandbox/shared_temp.rs`). The hook still decides with the whole policy.
+- On macOS `/var/folders/*/*/C` and `/var/folders/*/*/0` stay, the per-user cache and
+  per-user directory, which system libraries and Apple's tools read whatever `TMPDIR`
+  says; `/var/folders/*/*/T`, the temp folder, goes.
+- `--isolate` is unchanged: its shared temp directory is an empty `tmpfs` already.
+- The host sandboxes keep both roots, which they use as their temp directory.
+- On Linux this also closes the ticket caches in `/tmp` where there is no network
+  namespace to hide them, since Landlock no longer grants `/tmp`.
+- Ticket caches that are no file stay out of reach by what exists already: the seccomp
+  filter's Unix-socket and `keyctl` refusals on Linux, the profile's two allowed
+  `mach-lookup` services on macOS.

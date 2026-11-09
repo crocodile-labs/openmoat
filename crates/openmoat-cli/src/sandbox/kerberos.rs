@@ -6,9 +6,12 @@
 //! folder they grant. `moat run`'s own sandbox can (Seatbelt by regex, the
 //! Linux network namespace by hiding the caches that exist when it starts), so
 //! for the run the rule is applied there too, with the cache `KRB5CCNAME`
-//! names added wherever it is. Caches that are no file (`KEYRING:`, `KCM:`,
-//! `API:`, `MEMORY:`) are not paths: the kernel keyring is closed to commands
-//! on Linux by the seccomp filter (`keyctl`), the others are in LIMITS.
+//! names added wherever it is. Caches that are no file are not paths, and
+//! commands cannot reach them either: on Linux the seccomp filter refuses
+//! `keyctl` (`KEYRING:`) and every Unix socket, the `sssd-kcm` one (`KCM:`)
+//! among them; on macOS the profile allows two name-lookup services and no
+//! other, so not the ticket services (`KCM:`, `API:`). `MEMORY:` lives in
+//! the process that made it.
 
 use openmoat_core::{Policy, RuleGroup};
 

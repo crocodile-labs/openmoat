@@ -75,7 +75,7 @@ pub(super) fn push(tokens: &[Token], sink: &mut Sink) -> Result<(), ClassifyErro
 
 /// Stages (argv without redirections) of every `a | b | c` chain.
 pub(super) fn pipe_chains(tokens: &[Token]) -> Vec<Vec<Vec<&str>>> {
-    let mut chains = vec![vec![Vec::new()]];
+    let mut chains: Vec<Vec<Vec<&str>>> = vec![vec![Vec::new()]];
     let mut skip_target = false;
     // A newline right after `|` continues the pipe (`curl URL |⏎ruby`), as
     // `pipelines::push` reads it; a `;` there is a syntax error the shell
@@ -90,7 +90,21 @@ pub(super) fn pipe_chains(tokens: &[Token]) -> Vec<Vec<Vec<&str>>> {
         }
         after_pipe = pipe;
         match token {
-            Token::Word(_) if skip_target => skip_target = false,
+            Token::Word(w) if skip_target => {
+                skip_target = false;
+                // `base64 <-d | sh`: the raw line ends in `-d | sh`, so a
+                // decoder's dash-word stays in its stage, and the verdict does
+                // not fall when one more command follows.
+                if let Some(stage) = chains.last_mut().and_then(|c| c.last_mut())
+                    && w.text.starts_with('-')
+                    && stage.first().is_some_and(|p| {
+                        let program = basename(p);
+                        DECODE_FLAGS.iter().any(|(name, _, _)| *name == program)
+                    })
+                {
+                    stage.push(w.text.as_str());
+                }
+            }
             Token::Word(w) => {
                 if let Some(stage) = chains.last_mut().and_then(|c| c.last_mut()) {
                     stage.push(w.text.as_str());
