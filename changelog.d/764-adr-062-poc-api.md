@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-proxy`: `Proxy` has a new public field `requests` (`&Requests`; set it to `&Requests::default()` where you build a proxy yourself), and `Requests` (a host's `deny` request rules, `Requests::deny` and `Requests::hosts`), `RequestRuleError` and `RULE_REQUEST_RULE` (`proxy-request-rule`) are new, for the ADR-062 step 0 proof of concept ([#764](https://github.com/crocodile-labs/openmoat/pull/764)).

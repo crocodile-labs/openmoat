@@ -1,2 +1,0 @@
-### Security
-- The MCP gateway now refuses a wrapped server's sampling request that asks for the session's context (`includeContext` other than `none`), keeps the text of the server's other requests to the agent as untrusted content of the session it serves (`injected-input`, and the session counts as having read untrusted content), and passes the agent's answer to the server only for a request the server sent ([#770](https://github.com/crocodile-labs/openmoat/pull/770)).
