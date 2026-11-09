@@ -592,7 +592,7 @@ opencode_load() {
 # while the fake API holds a request, by SIGINT (a background job ignores it in
 # a non-interactive shell unless the program sets its own handler), then TERM.
 claude_session=00000000-0000-4000-8000-000000000001
-resume_prompt=moat-ci-resume-the-session
+resume_prompt="moat-ci-resume-the-session"
 background_tool=mcp__moatprobe__slow_job
 
 # Both runs: the fake API, no key of the agent's own, and every MCP tool in the
