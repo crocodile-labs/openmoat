@@ -1,2 +1,0 @@
-### Changed
-- **Breaking** `openmoat-hosts`: `HookFile::entry`, `HookFile::upsert`, `HookFile::state`, `yaml_hooks::upsert`, `ConsentFile::upsert` and `ConsentFile::holds` take a `&GuardCommand` (the binary and the state directory the hook names) instead of the binary as `&str`, and `OwnedFile::text` takes the state directory as a second argument; the crate exports `GuardCommand`, `HOME_FLAG`, `encode_home` and `decode_home` ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

@@ -1,2 +1,0 @@
-### Changed
-- The row that ties an agent session to an `openmoat run` now says that the session's rows come through the run's relay, which any program in the run's sandbox can use, so they show what was asked from inside the run, not that the agent asked it. THREAT_MODEL, LIMITS and ADR-071 say why the relay token cannot be bound to the agent's hook process on any OS today, and what the run still refuses (ADR-071) ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).
