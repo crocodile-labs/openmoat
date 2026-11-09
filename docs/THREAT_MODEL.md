@@ -617,7 +617,12 @@ something OpenMoat claims to stop.
 
     Within those bounds, code in the sandbox can still add rows to the run's own
     sessions with payloads it chose, each decided by the policy as if the agent had made
-    the call. It cannot choose the verdict of a row, change the lock or the policy, read
+    the call. The token cannot be bound more tightly on any OS (ADR-071 §4): every host
+    starts its hooks and its tool commands the same way, so a descriptor reaches both,
+    a script that runs `openmoat guard` itself is the same program with the same parent
+    as a hook, and a per-run secret in the hook command would be readable by every
+    process of the user in the sandbox. The run's link row for each agent session says
+    that its rows show what was asked from inside the run, not that the agent asked it. It cannot choose the verdict of a row, change the lock or the policy, read
     a secret source, or make taint looser: link rows only add sessions to the run, and
     taint only tightens.
   - *Nothing in the payload beyond what `openmoat guard` already trusts.* The payload,

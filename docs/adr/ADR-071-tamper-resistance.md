@@ -102,6 +102,32 @@ replaced by an older genuine release has no such check. It catches a file change
 place by something other than a release, and tells a person who upgraded to record the
 new binary.
 
+### 4. The relay capability (ADR-070) stays a bearer token
+
+The relay token of `openmoat run` is in the environment of every process in the run's
+sandbox, not only the agent's hooks. Binding it to the hook process would need
+something the host gives its hooks and not its other children. No supported host does:
+
+- **An inherited descriptor.** Every host starts hooks and tool commands the same way
+  (Node's `child_process`, Python's `subprocess`, Rust's `Command`), so a descriptor
+  the run passes to the agent reaches both or neither.
+- **The peer process.** The run could find which process opened the connection (on
+  Linux by the socket's inode under `/proc`; on macOS only through `libproc`, which
+  needs `unsafe`). It would learn little: a script can `exec openmoat guard` with a
+  payload of its choosing, and is then the same program, with the same parent, as a
+  hook the host runs through `sh -c`.
+- **A per-call nonce in the hook command.** Hook commands are written by `init` into
+  pinned files, not per run; one passed on the command line is readable by every
+  process of the same user in the sandbox.
+
+So on every OS the run keeps the bindings of ADR-070 and fails closed outside them:
+only the run's own agent and its own sessions are decided, a relayed call leaves no
+MCP ticket and no proxy credential, and a guard relays only from the run's sandbox.
+What code in the sandbox can still do is add rows to the run's own sessions, each
+decided by the policy as the agent's call would be. The run's link row for each agent
+session now says so, so a person reading the log knows those rows show what was asked
+from inside the run, not that the agent asked it.
+
 ## Consequences
 
 - A host's hook environment no longer picks the state directory of an installed

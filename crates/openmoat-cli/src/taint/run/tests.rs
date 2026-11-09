@@ -72,6 +72,16 @@ fn a_session_is_linked_to_its_run_once() {
         ),
         (LINK_HOST, "claude-code", Some("s1"))
     );
+    // Any program in the run's sandbox can use the relay: the row says what
+    // the session's rows prove (ADR-071).
+    assert!(
+        rows[0]
+            .reasons
+            .join(" ")
+            .contains("not that the agent asked it"),
+        "{:?}",
+        rows[0].reasons
+    );
 }
 
 #[test]
