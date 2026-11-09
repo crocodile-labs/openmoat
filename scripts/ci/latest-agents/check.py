@@ -22,6 +22,14 @@ read JSON, and the agent records they come from (agents.json beside this file).
                                              a new audit row: <host>'s SessionStart hook ran
     check.py injected <host> <before.json> <after.json> <text>
                                              a new audit row naming <text> held by injected-input
+    check.py resumed <fake api log>          the resumed session carried its earlier tool results
+    check.py background-mcp <host> <before.json> <after.json> <server log> <tool>
+                                             the MCP call was decided by PreToolUse; a call the
+                                             server saw with no decision fails, whether or not
+                                             it ran as a background task
+    check.py capture-event <host> <event>    a hook: copies its payload to OPENMOAT_CAPTURE_DIR
+    check.py event-captured <dir> <host> <event>
+                                             says whether that event sent a payload (never fails)
     check.py scrub <host> <version> <captured dir> <root> <home> <project> <out dir>
                                              each payload `openmoat guard` copied for <host> written
                                              as `captured-<version>-<n>.json`, with the throwaway
@@ -358,6 +366,83 @@ def cmd_injected(host, before, after, text):
     return 0
 
 
+def cmd_resumed(log):
+    """The fake API saw the resumed prompt with the earlier tool results in the
+    conversation: this is the same session, not a new one."""
+    text = Path(log).read_text(encoding="utf-8", errors="replace")
+    earlier = [int(n) for n in re.findall(r"resumed with (\d+) earlier tool results", text)]
+    if not earlier:
+        fail(f"the resumed run never asked the fake API for the resumed conversation: {log}")
+    if max(earlier) == 0:
+        fail("the resumed session holds no earlier tool result: it is a new conversation, "
+             "so the denied call was not asked for again after a resume")
+    print(f"ok    the resumed session carried {max(earlier)} earlier tool results")
+    return 0
+
+
+def server_calls(log, tool):
+    """The `tools/call` requests for `tool`'s short name in the fake MCP server's log."""
+    short = tool.rsplit("__", 1)[-1]
+    try:
+        lines = Path(log).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    entries = [json.loads(line) for line in lines if line.startswith("{")]
+    return [e for e in entries if e.get("method") == "tools/call" and e.get("name") == short]
+
+
+def cmd_background_mcp(host, before, after, log, tool):
+    """An MCP tool call is decided by PreToolUse however it runs. Claude Code runs
+    an MCP task only with feature flags and an interactive or stream-json session
+    (its documentation, "MCP tasks"), so a one-shot `claude -p` with no account
+    cannot make one: that case passes, and says so plainly in the job summary."""
+    decided = [r for r in new_rows(host, before, after) if tool in json.dumps(r)]
+    calls = server_calls(log, tool)
+    tasks = [c for c in calls if c.get("task")]
+    if calls and not decided:
+        kind = "a BACKGROUND TASK" if tasks else "a foreground call"
+        fail(f"{tool} reached its server as {kind} with NO PreToolUse decision in the audit "
+             f"log: OpenMoat never saw a call that ran")
+    if not decided:
+        fail(f"{tool} was never decided and never reached its server: the agent did not make "
+             f"the call (see the fake API's log and agent-resume.txt), so this proves nothing")
+    verdicts = sorted({str(r.get("verdict")) for r in decided})
+    print(f"ok    {tool} reached PreToolUse and was decided: {verdicts}")
+    if tasks:
+        print(f"ok    {tool} ran as a background MCP task and PreToolUse decided it")
+    else:
+        print(f"warn  background MCP NOT EXERCISED: {tool} was not run as a task in this job "
+              f"(server calls: {len(calls)}, none with the tasks extension). A one-shot "
+              f"`claude -p` with no account cannot make one, so whether PreToolUse fires for a "
+              f"background MCP task is NOT proven here")
+    return 0
+
+
+def cmd_capture_event(host, event):
+    """A hook command: the payload of `event`, as it arrived, in the capture
+    directory. It never fails the call it reports."""
+    target = os.environ.get("OPENMOAT_CAPTURE_DIR")
+    try:
+        payload = sys.stdin.read()
+        if target:
+            name = f"{host}-event-{event}-{os.getpid()}.json"
+            with open(Path(target) / name, "x", encoding="utf-8") as out:
+                out.write(payload)
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
+def cmd_event_captured(captured, host, event):
+    found = sorted(Path(captured).glob(f"{host}-event-{event}-*.json"))
+    if found:
+        print(f"ok    {host} sent {event}: {len(found)} payload(s) captured "
+              f"({found[0].name}); no adapter is written from it yet")
+    else:
+        print(f"warn  no {event} payload captured for {host}: the event did not fire in this run")
+    return 0
+
+
 def unlocalise(value, places):
     """`value` with each throwaway path of `places` (longest first) made the
     fixtures' made-up one."""
@@ -477,7 +562,9 @@ COMMANDS = {
     "version": (cmd_version, 2), "configs": (cmd_configs, 1), "json": (cmd_json, 1),
     "payload": (cmd_payload, 4), "reply": (cmd_reply, 4), "protected": (cmd_protected, 3),
     "session-start": (cmd_session_start, 3), "injected": (cmd_injected, 4),
-    "scrub": (cmd_scrub, 7),
+    "scrub": (cmd_scrub, 7), "resumed": (cmd_resumed, 1),
+    "background-mcp": (cmd_background_mcp, 5), "capture-event": (cmd_capture_event, 2),
+    "event-captured": (cmd_event_captured, 3),
 }
 
 
