@@ -131,6 +131,9 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         .chain(args.writes.iter().map(|w| resolved(w)))
         .collect();
     let tool_shell = tool_shell::prepare(agent_host, &write_roots)?;
+    if let Some(notice) = tool_shell::off_notice(agent_host, tool_shell.as_ref()) {
+        eprintln!("{notice}");
+    }
     let grants = Grants {
         proxy_port: Some(port),
         tmpdir: run_temp.as_ref().map(RunTemp::path),

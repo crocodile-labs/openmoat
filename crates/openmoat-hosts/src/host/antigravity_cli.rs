@@ -138,6 +138,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     protect: protect::PROTECT,
     process: protect::PROCESS,
     docs: doc::DOCS,
+    tool_token: crate::ToolToken::NotWithheld {
+        why: "its documentation does not say how tool commands and hooks start",
+    },
     ..HostSpec::BASE
 };
 

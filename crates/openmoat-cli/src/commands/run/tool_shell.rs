@@ -49,6 +49,19 @@ pub struct ToolShell {
     on_path: bool,
 }
 
+/// What to tell the person when `host` has a wrapper and this run has none:
+/// its write grants hold the wrapper's directory ([`prepare`]).
+pub fn off_notice(host: Option<Host>, tools: Option<&ToolShell>) -> Option<&'static str> {
+    let wrapped = matches!(
+        host.map(|h| h.spec().tool_token),
+        Some(ToolToken::Wrapper { .. })
+    );
+    (wrapped && tools.is_none()).then_some(
+        "moat run: tool commands keep the hook relay token in this run: \
+         its write grants include the system temp directory, where the shell wrapper would be",
+    )
+}
+
 /// The wrapper for `host`'s tool commands, when it has one. `write_roots` are
 /// the trees (resolved) commands may write: a directory one of them holds
 /// could be replaced by a command, so such a run gets none.
@@ -244,10 +257,18 @@ mod tests {
             .find(|host| matches!(host.spec().tool_token, ToolToken::Wrapper { .. }));
         assert!(host.is_some());
         let root = std::fs::canonicalize(std::env::temp_dir()).unwrap();
-        assert!(
-            prepare(host, &[crate::context::path_string(&root)])
-                .unwrap()
-                .is_none()
-        );
+        let tools = prepare(host, &[crate::context::path_string(&root)]).unwrap();
+        assert!(tools.is_none());
+        assert!(off_notice(host, tools.as_ref()).is_some());
+    }
+
+    #[test]
+    fn a_host_without_a_wrapper_gets_no_notice() {
+        let host = Host::EVERY
+            .into_iter()
+            .find(|host| !host.spec().tool_token.withheld());
+        assert!(host.is_some());
+        assert_eq!(off_notice(host, None), None);
+        assert_eq!(off_notice(None, None), None);
     }
 }

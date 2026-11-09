@@ -137,7 +137,7 @@ under one of those names with `MOAT_TOOL_SHELL_DIR` set, the binary:
 The wrapper never reads the command it is given, so a tool command cannot keep the token
 by writing a hook's command line. The directory is read-only to commands: a run whose
 write grants (the project, `--write`, the run's temp directory) hold it gets no wrapper,
-because a command could then replace it. MCP servers `openmoat mcp proxy` starts lose the
+because a command could then replace it, and `openmoat run` says so when it starts. MCP servers `openmoat mcp proxy` starts lose the
 two variables too.
 
 ### Each host (`HostSpec::tool_token`)
@@ -156,6 +156,7 @@ two variables too.
 | GitHub Copilot CLI | Not withheld | | `--secret-env-vars` might do this; whether hooks lose the variables too is not documented. |
 | Gemini CLI | Not withheld | | Tool commands and hooks both run `bash` from `PATH`. |
 | Cline CLI | Not withheld | | `/bin/bash`, absolute, with no CLI setting. |
+| Antigravity CLI | Not withheld | | Its documentation does not say how tool commands and hooks start, or which environment they get; nothing was checked on a running `agy` (ADR-074). |
 
 A host OpenMoat does not recognise gets no wrapper.
 
