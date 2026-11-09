@@ -1,0 +1,20 @@
+{
+  "conversationId": "conv-1",
+  "workspacePaths": [
+    "/p"
+  ],
+  "transcriptPath": "/Users/me/.gemini/antigravity-cli/brain/conv-1/transcript.jsonl",
+  "artifactDirectoryPath": "/Users/me/.gemini/antigravity-cli/brain/conv-1",
+  "modelName": "gemini-3-pro",
+  "lastUserInput": "do it",
+  "stepIdx": 2,
+  "toolCall": {
+    "name": "view_file",
+    "args": {
+      "AbsolutePath": "/p/src/main.rs",
+      "StartLine": 1,
+      "EndLine": 10,
+      "IsSkillFile": false
+    }
+  }
+}

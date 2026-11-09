@@ -57,7 +57,8 @@ pub(super) fn hooks(shown: &mut Shown, home: &Home, binary: &Path) -> Result<boo
             (
                 HookState::Unreadable(error)
                 | HookState::Unapproved(error)
-                | HookState::FailsOpen(error),
+                | HookState::FailsOpen(error)
+                | HookState::TurnedOff(error),
                 None,
             ) => Some(Row::new(Mark::Broken, name, error)),
         };

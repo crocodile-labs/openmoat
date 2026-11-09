@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use crate::common::Sandbox;
 
+mod antigravity_cli;
 mod claude_code;
 mod cline;
 mod codex;
@@ -165,6 +166,7 @@ pub fn rows() -> Vec<Row> {
         hermes::row(),
         cline::row(),
         goose::row(),
+        antigravity_cli::row(),
     ]
 }
 

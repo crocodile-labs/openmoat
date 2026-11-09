@@ -11,6 +11,7 @@ mod allow;
 mod allow_expiry;
 mod allow_files;
 mod anchor;
+mod antigravity_cli;
 mod approvals;
 mod audit;
 #[cfg(unix)]

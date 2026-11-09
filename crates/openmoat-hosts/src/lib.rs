@@ -481,7 +481,7 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
-             copilot-cli, pi, gemini-cli, opencode, hermes, cline, goose"
+             copilot-cli, pi, gemini-cli, opencode, hermes, cline, goose, antigravity-cli"
         );
     }
 

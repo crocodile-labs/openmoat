@@ -37,4 +37,6 @@ crate::registry::hosts! {
     Cline => cline,
     /// Block's goose (`PreToolUse` hook in OpenMoat's plugin).
     Goose => goose,
+    /// Google's Antigravity CLI (`agy`, `PreToolUse` hook in `~/.gemini/config/hooks.json`).
+    AntigravityCli => antigravity_cli,
 }

@@ -28,8 +28,8 @@ mod setup;
 mod unknown;
 
 use payloads::{
-    copilot, cursor, cursor_tool, gemini, goose_route, hermes, openclaw, opencode, opencode_path,
-    pi, under_cwd,
+    antigravity_route, copilot, cursor, cursor_tool, gemini, goose_route, hermes, openclaw,
+    opencode, opencode_path, pi, under_cwd,
 };
 use routes::{cline_route, opencode2_route};
 
@@ -106,9 +106,11 @@ enum Route {
     Cline,
     /// goose `PreToolUse`.
     Goose,
+    /// Antigravity CLI `PreToolUse`.
+    AntigravityCli,
 }
 
-const ROUTES: [Route; 15] = [
+const ROUTES: [Route; 16] = [
     Route::ClaudeCode,
     Route::ClaudeCodeNoPrompt,
     Route::Codex,
@@ -124,6 +126,7 @@ const ROUTES: [Route; 15] = [
     Route::Hermes,
     Route::Cline,
     Route::Goose,
+    Route::AntigravityCli,
 ];
 
 impl Route {
@@ -140,6 +143,7 @@ impl Route {
             Self::Hermes => Host::Hermes,
             Self::Cline => Host::Cline,
             Self::Goose => Host::Goose,
+            Self::AntigravityCli => Host::AntigravityCli,
         }
     }
 }
@@ -379,6 +383,7 @@ fn payload(route: Route, intent: &Intent) -> Result<(Value, Action), &'static st
         )),
         (Route::Cline, _) => cline_route(intent),
         (Route::Goose, _) => goose_route(intent),
+        (Route::AntigravityCli, _) => antigravity_route(intent),
         (Route::ClaudeCodeNoPrompt, _) => unreachable!("sends Claude Code's tools"),
     }
 }
@@ -535,6 +540,7 @@ fn routes_use_the_events_the_translation_assumes() {
         (Route::Hermes, &shell, HookEvent::PreToolUse),
         (Route::Cline, &read, HookEvent::PreToolUse),
         (Route::Goose, &write, HookEvent::PreToolUse),
+        (Route::AntigravityCli, &read, HookEvent::PreToolUse),
     ] {
         let (payload, _) = payload(route, intent).expect("route has the tool");
         let request = route.host().parse_request(&payload.to_string()).unwrap();

@@ -86,6 +86,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         defer_is_review_on_no_prompt: false,
         unseen: Some(Unseen {
             env: &["HERMES_YOLO_MODE"],
+            file: None,
             config: settings::approves_unseen,
         }),
         ..Reviews::BASE

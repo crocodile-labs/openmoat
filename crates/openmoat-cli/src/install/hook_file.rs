@@ -36,6 +36,9 @@ pub enum HookState {
     /// ([`openmoat_hosts::HookFile::fail_closed_key`]), so the host runs a
     /// call whose hook failed to start, crashed or timed out; the reason says so.
     FailsOpen(String),
+    /// The layout's switch for its section ([`openmoat_hosts::HookFile::section_switch`])
+    /// is not `true`, so the host never runs our entries; the reason says so.
+    TurnedOff(String),
 }
 
 /// [`HookState::FailsOpen`] for `config` when an entry of ours in `root`
@@ -48,6 +51,15 @@ pub fn unless_fails_open(
 ) -> HookState {
     if matches!(state, HookState::Missing | HookState::Unreadable(_)) {
         return state;
+    }
+    if layout.turned_off(root) {
+        return HookState::TurnedOff(format!(
+            "OpenMoat's hook in {} is switched off (`enabled` under `{}` is not `true`), so {} \
+             never runs it; run `openmoat init`",
+            config.settings_path.display(),
+            layout.section(),
+            config.host.display_name()
+        ));
     }
     match layout.fails_open(root, config.host.id(), config.hooks) {
         Some(key) => HookState::FailsOpen(format!(
