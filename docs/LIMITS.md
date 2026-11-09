@@ -120,8 +120,8 @@ Each agent's gaps and the reasons are in
 ## When an agent skips or changes the check
 
 - **Inside `openmoat run`, tool commands of some agents still receive the relay token.**
-  Under Codex, Cursor, GitHub Copilot CLI, Gemini CLI and the Cline CLI, no way was found
-  to tell tool commands from hooks, so a script or a test runner can send the run calls
+  Under Codex, Cursor, GitHub Copilot CLI, Gemini CLI, the Cline CLI and the Antigravity
+  CLI, no way was found to tell tool commands from hooks, so a script or a test runner can send the run calls
   the agent never made. Under Claude Code, OpenCode, goose, Hermes Agent, OpenClaw, the
   Continue CLI and pi, tool commands do not receive it; MCP servers those agents start
   themselves may (`openmoat doctor` names the groups, ADR-075 has each agent's limits).
