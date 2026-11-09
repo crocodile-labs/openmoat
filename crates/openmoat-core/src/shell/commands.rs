@@ -11,8 +11,8 @@ mod recover;
 mod wrappers;
 
 use super::tables::{
-    ENV_BUILTINS, FILESYSTEM_QUERIES, HOST_PROGRAMS, MAKES, PACKAGE_RUNNERS, RESERVED_CLOSERS,
-    RESERVED_PREFIXES, SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
+    ENV_BUILTINS, FILESYSTEM_QUERIES, HOST_PROGRAMS, MAKES, NO_CONTENT_WRITES, PACKAGE_RUNNERS,
+    RESERVED_CLOSERS, RESERVED_PREFIXES, SHELLS, SOURCE_BUILTINS, WRITE_ALL_PATHS, inline_flags,
 };
 use super::tokens::{
     assignment_name, flag_payload, flag_payload_index, for_variable, program_name, strip_at,
@@ -556,7 +556,11 @@ fn classify_arguments(
         };
         if let Some(file) = file {
             if WRITE_ALL_PATHS.contains(&program) || text_operands.writes.contains(&i) {
-                sink.write(ctx, file)?;
+                if NO_CONTENT_WRITES.contains(&program) {
+                    sink.write_no_content(ctx, file)?;
+                } else {
+                    sink.write(ctx, file)?;
+                }
             } else {
                 sink.read(ctx, file)?;
                 if operands::editor_saves(program, file) {

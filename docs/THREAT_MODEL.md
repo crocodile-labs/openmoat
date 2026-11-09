@@ -996,7 +996,9 @@ something OpenMoat claims to stop.
   a write of `.pi/settings.json` whose content excludes OpenMoat's extension is denied
   (`project-settings`), as are a Codex `.codex/config.toml` with `[features] hooks =
   false` and an OpenCode `opencode.json` that removes OpenMoat's plugin, when the
-  content the write leaves is known ([LIMITS.md](LIMITS.md)).
+  content the write leaves is known, and a shell command that creates or replaces one
+  of those files where the agent would load it, whose content is not
+  ([LIMITS.md](LIMITS.md), ADR-072).
   An extension that fails to load is a diagnostic and the session starts without it.
   The extension reports loading (`openmoat guard --heartbeat --host pi`, ADR-042):
   `openmoat status` and `openmoat doctor` say "plugin not loaded yet", a note, until it

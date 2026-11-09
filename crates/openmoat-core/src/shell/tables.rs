@@ -161,6 +161,13 @@ pub const WRITE_ALL_PATHS: &[&str] = &[
     "cpio",
 ];
 
+/// The programs of [`WRITE_ALL_PATHS`] that put no chosen content in a file they
+/// name: they remove it (`mv` moves it away; its destination is written apart,
+/// `copy.rs`), empty it, or change its metadata. `replaced.rs` leaves these out.
+pub const NO_CONTENT_WRITES: &[&str] = &[
+    "rm", "rmdir", "unlink", "touch", "mkdir", "chmod", "chown", "chgrp", "truncate", "mv",
+];
+
 /// Programs for which the last operand is a write and the others are reads.
 /// `link FILE NEW` makes the hard link `NEW`; macOS `ditto SRC… DST` and
 /// `pax -rw SRC… DIR` copy (`shell/copy.rs`).

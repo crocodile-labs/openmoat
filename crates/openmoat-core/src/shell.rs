@@ -73,6 +73,7 @@ mod operands;
 mod options;
 mod path_options;
 pub(crate) mod push;
+pub(crate) mod replaced;
 mod sed;
 pub(crate) mod tables;
 #[cfg(test)]
@@ -290,6 +291,12 @@ pub(crate) struct Sink {
     /// Files the command runs as code (`executes.rs`), each with whether its
     /// word is a glob the shell expands.
     executed: Vec<(String, bool)>,
+    /// The write being classified puts no chosen content in the file
+    /// ([`tables::NO_CONTENT_WRITES`]).
+    no_content: bool,
+    /// Files a write of the line creates or replaces with content of its own
+    /// (`replaced.rs`).
+    replaced: Vec<String>,
 }
 
 impl Sink {
@@ -333,6 +340,12 @@ impl Sink {
                 .any(|(n, d, v)| n == name && *d == self.depth && v.is_some())
         {
             return Ok(());
+        }
+        if let AtomicAction::FsWrite { path } = &atom
+            && !self.no_content
+            && !self.replaced.contains(path)
+        {
+            self.replaced.push(path.clone());
         }
         if self.atoms.contains(&atom) {
             return Ok(());
@@ -460,6 +473,19 @@ impl Sink {
         word: &str,
     ) -> Result<(), ClassifyError> {
         self.fs(ctx, word, |path| AtomicAction::FsWrite { path })
+    }
+
+    /// [`Self::write`] for a program that puts no chosen content in the file:
+    /// the same atom for the policy, not one of the files [`replaced`] lists.
+    pub(crate) fn write_no_content(
+        &mut self,
+        ctx: &ShellContext<'_>,
+        word: &str,
+    ) -> Result<(), ClassifyError> {
+        self.no_content = true;
+        let written = self.write(ctx, word);
+        self.no_content = false;
+        written
     }
 
     /// An `FsRead` for every path a `<` redirection from `word` may name,

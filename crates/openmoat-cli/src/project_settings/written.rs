@@ -17,9 +17,16 @@
 //! replays them), and when its `apply_patch` envelope replays on the files as
 //! they are (Codex, OpenCode). That content is read as the host reads the file
 //! and handed to the host's own reader (`SettingsReader::project_switched_off`),
-//! the one `moat status` and `moat doctor` use. Any other write (a shell
-//! redirect, an edit or patch that does not replay) keeps the policy's
-//! verdict: its outcome is not known before it runs (`docs/LIMITS.md`).
+//! the one `moat status` and `moat doctor` use. An edit or patch that does not
+//! replay keeps the policy's verdict: it fails, or its outcome is not known
+//! before it runs (`docs/LIMITS.md`).
+//!
+//! A shell command that creates or replaces such a file (a redirect, `tee`,
+//! `cp` or `mv` onto it, `sed -i`) cannot be replayed at all, so it is denied
+//! outright (ADR-072), for the hosts OpenMoat is set up for and only where the
+//! host would load the file: in the working directory or the project root
+//! ([`super::candidates`]). A same-named file elsewhere (a template, a test
+//! fixture) and a read, a removal or a move away keep their verdict.
 
 use std::path::{Path, PathBuf};
 
@@ -65,7 +72,8 @@ fn tightened(
     if decision.verdict == Verdict::Deny {
         return decision;
     }
-    let found = switched_off(&outcomes(request, ctx), hook_file, Path::new(&ctx.home));
+    let mut found = switched_off(&outcomes(request, ctx), hook_file, Path::new(&ctx.home));
+    found.extend(shell_replaced(request, ctx, hook_file));
     if found.is_empty() {
         return decision;
     }
@@ -160,6 +168,50 @@ fn switched_off(
         }
     }
     found
+}
+
+/// One sentence per host whose project settings file `request`'s shell command
+/// creates or replaces, where that host would load it and OpenMoat's hook file
+/// of that host exists (a host OpenMoat is not set up for has no hook to lose).
+fn shell_replaced(
+    request: &HookRequest,
+    ctx: &EvalContext,
+    hook_file: &dyn Fn(Host) -> Option<PathBuf>,
+) -> Vec<String> {
+    let Some(Action::Shell { command }) = request.action.as_ref().map(Action::shown) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for path in openmoat_core::replaced_files(command, &ctx.home, &ctx.cwd) {
+        for (host, spec) in settings_files_at(&path) {
+            if hook_file(host).is_some_and(|hook| hook.exists()) && loaded_here(&path, ctx, spec) {
+                found.push(format!(
+                    "{path} ({} project settings): a shell command writes this file and OpenMoat \
+                     cannot tell what it will hold; it can turn {}'s hook off. Change it with the \
+                     agent's file tools, so the result can be checked, or by hand",
+                    host.display_name(),
+                    host.display_name(),
+                ));
+            }
+        }
+    }
+    found
+}
+
+/// Whether `path` is a settings file `spec`'s host would load for a session in
+/// the working directory or at its project root.
+fn loaded_here(path: &str, ctx: &EvalContext, spec: &ProjectSettingsSpec) -> bool {
+    let written = spellings(path);
+    let (cwd, user_home) = (Path::new(&ctx.cwd), Path::new(&ctx.home));
+    spec.files().into_iter().any(|name| {
+        super::candidates(cwd, user_home, spec, name)
+            .iter()
+            .any(|candidate| {
+                spellings(&candidate.to_string_lossy().replace('\\', "/"))
+                    .iter()
+                    .any(|spelling| written.contains(spelling))
+            })
+    })
 }
 
 /// The hosts whose project settings directory holds a file at `path`, as
