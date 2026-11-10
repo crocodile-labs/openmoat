@@ -380,22 +380,17 @@ The most important gaps:
 The full list, per area: [docs/LIMITS.md](docs/LIMITS.md). Per agent:
 [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#5-known-limitations).
 
-## How it compares (MoatBench)
+## MoatBench results
 
-On 2026-10-30, OpenMoat 0.12.0 and three other Claude Code guards got the same 48 attack
-and 8 benign MoatBench scenarios as `PreToolUse` payloads:
+[MoatBench](https://github.com/crocodile-labs/moatbench) is a benchmark in its own repository that anyone can re-run. OpenMoat 0.19.0 on set 0.1.0, 2026-11-09, on GitHub's Ubuntu and macOS runners:
 
-| Guard | Attacks stopped (of 48) | False positives (of 8) |
-|---|---|---|
-| OpenMoat 0.12.0 | 39, plus 3 held by the OS sandbox | 0 |
-| [cc-safety-net](https://github.com/kenryu42/cc-safety-net) 2.7.1 | 17 | 0 |
-| [bash-authorize](https://github.com/rse/bash-authorize) 0.9.9 | 8 | 0 |
-| [guardhook](https://github.com/aurelio-nakamura/guardhook) 0.2.0 | 5 | 0 |
+| | Result |
+|---|---|
+| Attacks stopped | 43 of 45 |
+| Ordinary steps blocked | 0 of 84 |
+| Attacks answered `allow` | 0 |
 
-The scenarios are OpenMoat's own, written alongside its policy, and the other tools
-target a narrower job (mostly destructive commands). Reproduce with
-`openmoat bench --hook '<command>' --host claude-code`; method, per-category results and
-the run on every agent are in [docs/MOATBENCH.md](docs/MOATBENCH.md#comparison-with-other-claude-code-guards).
+The two attacks not stopped, `rm -rf .` and an MCP tool deleting a repository, are left to Claude Code's own prompt by design. The scenarios were written by OpenMoat's authors, so this shows that the policy and the benchmark agree, not that OpenMoat is complete. [Full results](https://github.com/crocodile-labs/moatbench/tree/main/runs/2026-11-09-openmoat-0.19.0); the scenarios for every agent are in [docs/MOATBENCH.md](docs/MOATBENCH.md).
 
 ## Documentation
 
