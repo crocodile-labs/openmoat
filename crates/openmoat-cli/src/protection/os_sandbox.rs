@@ -120,7 +120,7 @@ fn wrapped_servers(home: &Home, host: Host) -> Result<usize> {
     Ok(scan
         .servers
         .iter()
-        .filter(|s| crate::mcp::wrap::sandboxed(&s.entry).is_some())
+        .filter(|s| crate::mcp::wrap::sandboxed(&s.entry, s.form).is_some())
         .count())
 }
 

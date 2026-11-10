@@ -1,0 +1,2 @@
+### Fixed
+- A wrapped MCP server's variables reach it under `require.run: full-boundary` for OpenCode (`environment`) and goose (`envs`) as they do under `env`, and a definition is read in the form its agent reads it: a stray `cmd` beside `command` and `args` no longer leaves a wrapped server without its `--host` or stops `openmoat mcp unwrap` and `openmoat uninstall` from restoring it ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

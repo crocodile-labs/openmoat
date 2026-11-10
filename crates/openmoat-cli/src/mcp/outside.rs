@@ -102,7 +102,7 @@ pub fn report(home: &Home, binary: &Path, cwd: Option<&Path>) -> Result<Vec<Outs
                     kind,
                 });
             };
-            match wrap::sandboxed(&server.entry) {
+            match wrap::sandboxed(&server.entry, server.form) {
                 Some(false) => push(Kind::Unsandboxed),
                 None if wrap::starts_process(&server.entry) => {
                     push(Kind::Unwrapped { user: in_user });

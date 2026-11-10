@@ -84,6 +84,7 @@ mod tests {
                 pointer: pointer.to_owned(),
                 name: "docs".to_owned(),
                 entry: json!({}),
+                form: source.reader.command_form(),
             },
             entry: wrapped(
                 &json!({"command": "docs"}),

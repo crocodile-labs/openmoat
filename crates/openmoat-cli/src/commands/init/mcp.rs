@@ -95,7 +95,8 @@ fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) 
     let declined = Recorded::load(home)?.mcp_wrap_declined;
     let mut edits = super::super::mcp::wrap_plan(home, binary, hosts, &[], None, out)?;
     edits.retain(|(_, done)| {
-        !declined.contains(&done.server.id) && wrap::sandboxed(&done.server.entry).is_none()
+        !declined.contains(&done.server.id)
+            && wrap::sandboxed(&done.server.entry, done.server.form).is_none()
     });
     super::super::mcp::drop_what_cannot_be_rewritten(&mut edits, out)?;
     if edits.is_empty() {

@@ -243,15 +243,15 @@ pub(super) fn wrap_plan(
         if !names.is_empty() && !names.contains(&server.name) {
             continue;
         }
-        let form = source.reader.command_form();
+        let form = server.form;
         let entry = wrap::wrapped_as(&server.entry, binary, &server.name, new_sandbox, form)
-            .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, on)));
+            .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, form, on)));
         // The proxy takes only the hook decisions of the agent whose file
         // starts it; a definition wrapped before `--host` existed gets it now.
         let host = server.host;
         let entry = match entry {
-            Some(entry) => Some(wrap::with_host(&entry, host).unwrap_or(entry)),
-            None => wrap::with_host(&server.entry, host),
+            Some(entry) => Some(wrap::with_host(&entry, form, host).unwrap_or(entry)),
+            None => wrap::with_host(&server.entry, form, host),
         };
         let Some(entry) = entry else {
             if let Some(why) = wrap::not_wrappable(&server.entry, form) {
@@ -302,7 +302,7 @@ fn sandbox_note(
     let names = |on: bool| -> Vec<String> {
         edits
             .iter()
-            .filter(|(_, d)| wrap::sandboxed(&d.entry) == Some(on))
+            .filter(|(_, d)| wrap::sandboxed(&d.entry, d.server.form) == Some(on))
             .map(|(_, d)| format!("`{}`", d.server.name))
             .collect()
     };
@@ -389,7 +389,7 @@ pub(super) fn unwrap_servers(
         } else {
             names.contains(&server.name)
         };
-        let Some(entry) = wrap::unwrapped(&server.entry).filter(|_| chosen) else {
+        let Some(entry) = wrap::unwrapped(&server.entry, server.form).filter(|_| chosen) else {
             continue;
         };
         if pending.contains(&server.id) {

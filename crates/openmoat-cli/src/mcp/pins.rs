@@ -287,6 +287,7 @@ mod tests {
             pointer: format!("/mcpServers/{name}"),
             name: name.to_owned(),
             entry,
+            form: openmoat_hosts::McpCommandForm::CommandArgs,
         }
     }
 

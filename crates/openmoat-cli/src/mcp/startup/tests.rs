@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use openmoat_hosts::Host;
+use openmoat_hosts::{Host, McpCommandForm};
 use serde_json::{Value, json};
 
 use super::*;
@@ -21,6 +21,7 @@ fn server(file: &str, name: &str, entry: Value) -> Server {
         pointer: format!("/mcpServers/{name}"),
         name: name.to_owned(),
         entry,
+        form: McpCommandForm::CommandArgs,
     }
 }
 
@@ -41,7 +42,7 @@ fn pinned(servers: &[&Server]) -> Pins {
 
 /// What the proxy is started with by the definition `entry`.
 fn launch_of(entry: &Value) -> Launch {
-    Launch::of_entry(entry).unwrap()
+    Launch::of_entry(entry, McpCommandForm::CommandArgs).unwrap()
 }
 
 fn no_env(_: &str) -> bool {
@@ -130,7 +131,7 @@ fn a_command_line_no_definition_gives_never_starts() {
     let found = decide(&scan(vec![gh.clone()]), &pins, &other, no_env);
     assert!(refused(&found).contains("curl evil"), "{found:?}");
     // The sandbox flag is part of the command line.
-    let sandboxed = launch_of(&wrap::with_sandbox(&gh.entry, true).unwrap());
+    let sandboxed = launch_of(&wrap::with_sandbox(&gh.entry, gh.form, true).unwrap());
     let found = decide(&scan(vec![gh]), &pins, &sandboxed, no_env);
     assert!(matches!(found, Startup::Refuse(_)), "{found:?}");
 }
@@ -171,11 +172,52 @@ fn an_unreadable_file_refuses() {
 
 #[test]
 fn only_a_wrapped_definition_has_a_launch() {
-    assert!(Launch::of_entry(&json!({"command": "npx"})).is_none());
+    let form = McpCommandForm::CommandArgs;
+    assert!(Launch::of_entry(&json!({"command": "npx"}), form).is_none());
     let mut odd = wrapped(&json!({"command": "npx"}));
     odd["args"] = json!(["mcp", "proxy", "--unknown", "--", "npx"]);
     assert!(
-        Launch::of_entry(&odd).is_none(),
+        Launch::of_entry(&odd, form).is_none(),
         "the proxy's own grammar decides"
     );
+}
+
+/// OpenCode's `environment` and goose's `envs` are what those agents give a
+/// server: a sandboxed server needs them through `openmoat run`'s allowlist,
+/// and a definition setting one this process lacks did not start it.
+#[test]
+fn the_variables_are_read_under_each_form_s_own_key() {
+    for (form, key, base) in [
+        (
+            McpCommandForm::CommandList,
+            "environment",
+            json!({"type": "local", "command": ["npx", "gh"]}),
+        ),
+        (
+            McpCommandForm::CmdArgs,
+            "envs",
+            json!({"type": "stdio", "cmd": "npx", "args": ["gh"]}),
+        ),
+    ] {
+        let mut entry = wrap::wrapped_as(&base, Path::new(BIN), "gh", false, form).unwrap();
+        entry[key] = json!({"GH_TOKEN": "x"});
+        // A key this form's host does not read gives its server nothing.
+        entry["env"] = json!({"IGNORED": "y"});
+        let mut gh = server("/h/config", "gh", entry);
+        gh.form = form;
+        let launch = Launch::of_entry(&gh.entry, form).unwrap();
+        let pins = pinned(&[&gh]);
+        let both = scan(vec![gh]);
+        assert_eq!(
+            decide(&both, &pins, &launch, |var| var == "GH_TOKEN"),
+            Startup::Start {
+                env: vec!["GH_TOKEN".to_owned()]
+            },
+            "{key}"
+        );
+        assert!(
+            matches!(decide(&both, &pins, &launch, no_env), Startup::Refuse(_)),
+            "{key}: without the variable this definition did not start the proxy"
+        );
+    }
 }

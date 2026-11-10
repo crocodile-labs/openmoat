@@ -28,7 +28,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
-use openmoat_hosts::{Host, McpFile, McpReader, McpSyntax};
+use openmoat_hosts::{Host, McpCommandForm, McpFile, McpReader, McpSyntax};
 use serde_json::{Map, Value};
 use toml_edit::{DocumentMut, Item};
 
@@ -57,6 +57,9 @@ pub struct Server {
     pub pointer: String,
     pub name: String,
     pub entry: Value,
+    /// How the file's reader says this definition names its program and its
+    /// environment.
+    pub form: McpCommandForm,
 }
 
 /// What reading a set of sources found.
@@ -208,6 +211,7 @@ pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
             pointer: server.pointer,
             name: server.name,
             entry: server.entry,
+            form: source.reader.command_form(),
         })
         .collect())
 }

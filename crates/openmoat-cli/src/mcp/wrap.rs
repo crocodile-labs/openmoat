@@ -109,24 +109,26 @@ pub fn wrapped_as(
     ))
 }
 
-/// The arguments `entry` gives `moat mcp proxy` (`mcp`, `proxy`, its flags,
-/// `--` and the server's command); `None` when it is not wrapped.
-pub fn proxy_args(entry: &Value) -> Option<Vec<String>> {
-    let (_, command, args) = form::read(entry)?;
+/// The arguments `entry`, a definition in `form`, gives `moat mcp proxy`
+/// (`mcp`, `proxy`, its flags, `--` and the server's command); `None` when it
+/// is not wrapped. Every question about a definition below reads it in the
+/// form its host's reader names, never guessed from its keys.
+pub fn proxy_args(entry: &Value, form: McpCommandForm) -> Option<Vec<String>> {
+    let (command, args) = form::parts(entry, form)?;
     original(&command, &args)?;
     Some(args)
 }
 
 /// Wrapped `entry` given the arguments `args` for the proxy.
-fn with_proxy_args(entry: &Value, args: Vec<String>) -> Option<Value> {
-    let (form, command, _) = form::read(entry)?;
+fn with_proxy_args(entry: &Value, form: McpCommandForm, args: Vec<String>) -> Option<Value> {
+    let (command, _) = form::parts(entry, form)?;
     Some(form::written(entry, form, command, args))
 }
 
 /// Whether wrapped `entry` starts its server in `moat run`'s sandbox; `None`
 /// when it is not wrapped.
-pub fn sandboxed(entry: &Value) -> Option<bool> {
-    let args = proxy_args(entry)?;
+pub fn sandboxed(entry: &Value, form: McpCommandForm) -> Option<bool> {
+    let args = proxy_args(entry, form)?;
     let split = args.iter().position(|a| a == "--")?;
     Some(args[..split].iter().any(|a| a == "--sandbox"))
 }
@@ -134,11 +136,11 @@ pub fn sandboxed(entry: &Value) -> Option<bool> {
 /// Wrapped `entry` with its sandbox switched to `on`; `None` when it is not
 /// wrapped or already so. Turning it off drops `--write`, which only the
 /// sandbox reads.
-pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
-    if sandboxed(entry)? == on {
+pub fn with_sandbox(entry: &Value, form: McpCommandForm, on: bool) -> Option<Value> {
+    if sandboxed(entry, form)? == on {
         return None;
     }
-    let args = proxy_args(entry)?;
+    let args = proxy_args(entry, form)?;
     let split = args.iter().position(|a| a == "--")?;
     let (flags, rest) = args.split_at(split);
     let mut kept: Vec<String> = Vec::new();
@@ -157,15 +159,15 @@ pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
         kept.push("--sandbox".to_owned());
     }
     kept.extend(rest.iter().cloned());
-    with_proxy_args(entry, kept)
+    with_proxy_args(entry, form, kept)
 }
 
 /// Wrapped `entry` with `--host <host>`, so the proxy takes only `host`'s hook
 /// decisions; `None` when it is not wrapped or names its host already. A
 /// definition wrapped before the proxy took `--host` is given it the next
 /// time it is wrapped.
-pub fn with_host(entry: &Value, host: Host) -> Option<Value> {
-    let args = proxy_args(entry)?;
+pub fn with_host(entry: &Value, form: McpCommandForm, host: Host) -> Option<Value> {
+    let args = proxy_args(entry, form)?;
     let split = args.iter().position(|a| a == "--")?;
     let flags = &args[..split];
     if flags
@@ -177,7 +179,7 @@ pub fn with_host(entry: &Value, host: Host) -> Option<Value> {
     let mut kept = flags.to_vec();
     kept.extend(["--host".to_owned(), host.id().to_owned()]);
     kept.extend(args[split..].iter().cloned());
-    with_proxy_args(entry, kept)
+    with_proxy_args(entry, form, kept)
 }
 
 /// Whether `entry` starts a local process: a `command` (a string, or a list
@@ -199,8 +201,8 @@ pub fn starts_process(entry: &Value) -> bool {
 }
 
 /// `entry` as it was before wrapping; `None` when it is not wrapped.
-pub fn unwrapped(entry: &Value) -> Option<Value> {
-    let (form, command, args) = form::read(entry)?;
+pub fn unwrapped(entry: &Value, form: McpCommandForm) -> Option<Value> {
+    let (command, args) = form::parts(entry, form)?;
     let (command, args) = original(&command, &args)?;
     Some(form::written(entry, form, command, args))
 }
@@ -265,7 +267,10 @@ fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, 
             "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
              then run `openmoat mcp accept`:\n{}",
             path.display(),
-            if dones.iter().any(|d| original_of(&d.entry).is_some()) {
+            if dones
+                .iter()
+                .any(|d| original_of(&d.entry, d.server.form).is_some())
+            {
                 "wrap"
             } else {
                 "unwrap"
@@ -278,8 +283,8 @@ fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, 
 
 /// Whether `entry` (a definition as it is to be written) runs through the
 /// proxy: what it ran before, when it does.
-fn original_of(entry: &Value) -> Option<(String, Vec<String>)> {
-    let (_, command, args) = form::read(entry)?;
+fn original_of(entry: &Value, form: McpCommandForm) -> Option<(String, Vec<String>)> {
+    let (command, args) = form::parts(entry, form)?;
     original(&command, &args)
 }
 
@@ -288,7 +293,7 @@ fn by_hand(dones: &[&Done]) -> String {
     dones
         .iter()
         .map(|done| {
-            let key = form::program_key(&done.entry);
+            let key = form::program_key(done.server.form);
             format!(
                 "  {}: {key}: {}, args: {}",
                 done.server.name,
@@ -357,6 +362,25 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    // These read a definition in the common form of a `command` and `args`.
+    const FORM: McpCommandForm = McpCommandForm::CommandArgs;
+
+    fn unwrapped(entry: &Value) -> Option<Value> {
+        super::unwrapped(entry, FORM)
+    }
+
+    fn sandboxed(entry: &Value) -> Option<bool> {
+        super::sandboxed(entry, FORM)
+    }
+
+    fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
+        super::with_sandbox(entry, FORM, on)
+    }
+
+    fn with_host(entry: &Value, host: Host) -> Option<Value> {
+        super::with_host(entry, FORM, host)
+    }
 
     #[test]
     fn wrapping_keeps_the_original_after_the_separator_and_unwrapping_restores_it() {
@@ -502,6 +526,7 @@ mod tests {
             pointer: "/mcp_servers/docs".to_owned(),
             name: "docs".to_owned(),
             entry: json!({}),
+            form: FORM,
         };
         let done = Done {
             entry: wrapped(

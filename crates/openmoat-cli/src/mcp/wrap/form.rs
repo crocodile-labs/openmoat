@@ -1,10 +1,8 @@
-//! Reading and writing the program a server definition starts, in the host's
-//! own form ([`McpCommandForm`]).
-//!
-//! A definition OpenMoat rewrites is read in the form its host's reader names.
-//! Questions about one already written (is it wrapped, does it start a process)
-//! read its shape from the entry, and an entry with both a `command` and a
-//! `cmd` has none: which of them runs depends on the host.
+//! Reading and writing the program a server definition starts, in the form
+//! its host's reader names ([`McpCommandForm`]). A key the host does not read
+//! is left alone: an entry with both a `command` and a `cmd` starts whichever
+//! its host reads, and goose's and OpenCode's forms refuse the other key
+//! rather than guess.
 
 use openmoat_hosts::McpCommandForm;
 use serde_json::Value;
@@ -63,24 +61,6 @@ pub(super) fn parts(entry: &Value, form: McpCommandForm) -> Option<(String, Vec<
     }
 }
 
-/// The form `entry` is written in, from its own keys; `None` when it has no
-/// program, or both a `command` and a `cmd`.
-fn form_of(entry: &Value) -> Option<McpCommandForm> {
-    match (entry.get("command"), entry.get("cmd")) {
-        (Some(_), Some(_)) | (None, None) => None,
-        (None, Some(_)) => Some(McpCommandForm::CmdArgs),
-        (Some(Value::Array(_)), None) => Some(McpCommandForm::CommandList),
-        (Some(_), None) => Some(McpCommandForm::CommandArgs),
-    }
-}
-
-/// The form of `entry`, its program and its arguments, read from the entry.
-pub(super) fn read(entry: &Value) -> Option<(McpCommandForm, String, Vec<String>)> {
-    let form = form_of(entry)?;
-    let (program, args) = parts(entry, form)?;
-    Some((form, program, args))
-}
-
 /// `entry` starting `program` with `args` in `form`; the rest stays as it was.
 pub(super) fn written(
     entry: &Value,
@@ -129,12 +109,11 @@ pub fn not_wrappable(entry: &Value, form: McpCommandForm) -> Option<&'static str
     }
 }
 
-/// The key `entry` names its program under, for a person setting it by hand.
-pub(super) fn program_key(entry: &Value) -> &'static str {
-    if entry.get("cmd").is_some() {
-        "cmd"
-    } else {
-        "command"
+/// The key `form` names its program under, for a person setting it by hand.
+pub(super) fn program_key(form: McpCommandForm) -> &'static str {
+    match form {
+        McpCommandForm::CmdArgs => "cmd",
+        McpCommandForm::CommandArgs | McpCommandForm::CommandList => "command",
     }
 }
 
