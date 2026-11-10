@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use openmoat_hosts::Host;
 
+mod approvals;
 mod audit;
 mod mcp;
 mod policy;
@@ -14,6 +15,9 @@ mod snapshot;
 
 mod timeline;
 
+pub use approvals::{
+    ApprovalsCommand, ApprovalsStatusArgs, ApproverArgs, ChannelKind, ConnectArgs,
+};
 pub use audit::{
     AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
     EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs,
@@ -88,6 +92,12 @@ pub enum Command {
     Secret {
         #[command(subcommand)]
         command: SecretCommand,
+    },
+    /// Answer reviews from another device: a Telegram bot sends each held call to the
+    /// people you allow, and an approval lets that exact call run once (ADR-078).
+    Approvals {
+        #[command(subcommand)]
+        command: ApprovalsCommand,
     },
     /// Let a repository's .moat/policy.yaml allow, not only deny and review, until the file changes.
     /// Refused unless run from an interactive terminal, and over a drifted lock.

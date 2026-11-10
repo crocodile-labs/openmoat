@@ -2,6 +2,7 @@
 
 mod allow;
 mod allowed;
+mod approvals;
 mod audit;
 mod bench;
 mod demo;
@@ -35,7 +36,7 @@ mod why;
 use anyhow::Result;
 
 use crate::cli::{
-    AuditCommand, CaCommand, Cli, Command, DeliverCommand, McpCommand, PolicyCommand, ProxyCommand,
+    ApprovalsCommand, AuditCommand, CaCommand, Cli, Command, DeliverCommand, McpCommand, PolicyCommand, ProxyCommand,
     SandboxCommand, SecretCommand,
 };
 use crate::exit::Code;
@@ -65,6 +66,15 @@ pub fn run(cli: Cli) -> Result<Code> {
         Command::Secret { command } => match command {
             SecretCommand::Add(args) => secret::add(&args),
             SecretCommand::List(args) => secret::list(&args),
+        },
+        Command::Approvals { command } => match command {
+            ApprovalsCommand::Connect(args) => approvals::connect(&args),
+            ApprovalsCommand::Allow(args) => approvals::allow(&args),
+            ApprovalsCommand::Remove(args) => approvals::remove(&args),
+            ApprovalsCommand::Status(args) => approvals::status(&args),
+            ApprovalsCommand::Test => approvals::test(),
+            ApprovalsCommand::Listen => approvals::listen(),
+            ApprovalsCommand::Disconnect => approvals::disconnect(),
         },
         Command::Trust(args) => trust::run(&args),
         Command::Replay(args) => replay::run(&args),

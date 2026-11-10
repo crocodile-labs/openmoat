@@ -44,6 +44,10 @@ signal-hook.workspace = true
 toml_edit.workspace = true
 zeroize.workspace = true
 similar.workspace = true
+# The Telegram approval channel's HTTPS (ADR-078): the TLS stack and roots
+# the proxy already uses, so no new crate enters the build.
+rustls.workspace = true
+rustls-native-certs.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

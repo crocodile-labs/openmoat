@@ -250,6 +250,11 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     if let Some(r) = &request {
         decision = host.decided(&r.event, decision);
     }
+    // Last: a `review` a person approved from another device runs once, and
+    // one not yet sent is sent (ADR-078); anything else is left as it is.
+    if let Some(r) = &request {
+        decision = crate::remote::gated(r, decision, &out.known);
+    }
     // What the agent and its person read about a deny or review (ADR-059);
     // presentation only, never recorded. A deny that replaces the decision
     // below carries its own, without the call ([`kernel_error`]).
