@@ -18,6 +18,7 @@ fn returned(session: &str, cwd: &Path, tool: &str, input: &Value, response: &Val
     .to_string()
 }
 
+// coverage: ASI01
 #[test]
 fn a_host_a_fetched_page_named_makes_a_later_curl_to_it_need_review() {
     let sb = Sandbox::installed(&[".claude"]);

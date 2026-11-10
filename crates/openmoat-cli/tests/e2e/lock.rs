@@ -58,6 +58,7 @@ fn init_writes_a_lock_covering_policy_and_hooks() {
     assert!(entries.keys().any(|k| k.ends_with("settings.json")));
 }
 
+// coverage: ASI10
 #[test]
 fn edited_policy_makes_guard_fail_closed_until_repinned() {
     let sb = sandbox();
@@ -270,6 +271,7 @@ fn status_reports_lock_state() {
     assert!(text(&out).contains("was modified"));
 }
 
+// coverage: ASI10
 #[cfg(unix)]
 #[test]
 fn planted_binary_earlier_on_the_search_path_is_denied() {

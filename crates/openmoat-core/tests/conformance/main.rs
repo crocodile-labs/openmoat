@@ -22,6 +22,7 @@ use openmoat_core::{
 };
 use serde::Deserialize;
 
+mod evidence;
 mod owasp;
 
 #[derive(Debug, Deserialize)]
@@ -440,6 +441,13 @@ fn threat_coverage_is_complete_and_documented() {
             problems.push(format!("{t} ({name}) has no attack fixture"));
         }
     }
+    let ids: Vec<&str> = owasp::risks().into_iter().map(|(id, _)| id).collect();
+    let e2e = root.join("crates/openmoat-cli/tests/e2e");
+    let tests = evidence::e2e_tests(&e2e, &ids).unwrap_or_else(|wrong| {
+        problems.extend(wrong);
+        evidence::Tests::new()
+    });
+    problems.extend(owasp::untested_claims(&tests));
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 
     let mut doc = String::from(
@@ -465,7 +473,17 @@ fn threat_coverage_is_complete_and_documented() {
             count(t, "benign.yaml")
         );
     }
-    doc.push_str(&owasp::section(count));
+    doc.push_str(&owasp::section(count, &tests));
+    let fixture_ids = |risk: &str| -> Vec<String> {
+        let classes = owasp::classes_of(risk);
+        let of = |t: &&str| by_threat.get(*t).into_iter().flatten();
+        let fixtures = classes
+            .iter()
+            .flat_map(of)
+            .filter(|(f, _)| *f != "benign.yaml");
+        fixtures.map(|(_, f)| f.id.clone()).collect()
+    };
+    doc.push_str(&evidence::section(&owasp::risks(), &tests, fixture_ids));
     for (t, name) in THREATS {
         let _ = write!(doc, "\n## {t}: {name}\n\n");
         for (file, f) in by_threat.get(t).into_iter().flatten() {

@@ -25,6 +25,7 @@ pub(crate) fn decide(sb: &Sandbox, host: &str, payload: &str) -> (String, String
     (verdict.to_owned(), format!("{reason} {}", stderr(&out)))
 }
 
+// coverage: ASI01, ASI06
 #[test]
 fn fetched_content_makes_a_later_workflow_write_need_review() {
     let sb = Sandbox::installed(&[".claude"]);

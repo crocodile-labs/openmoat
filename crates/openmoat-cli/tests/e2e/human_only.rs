@@ -21,6 +21,7 @@ fn stand_in(home: &Path, name: &str) -> PathBuf {
 /// A script named `claude` stands in for the agent: every command it starts
 /// descends from a process named like Claude Code, as a command the agent
 /// runs through a pty wrapper would.
+// coverage: ASI09
 #[test]
 fn a_human_only_command_started_by_an_agent_is_refused() {
     let sb = Sandbox::installed(&[".claude"]);

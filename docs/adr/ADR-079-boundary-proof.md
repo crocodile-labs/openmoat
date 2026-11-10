@@ -1,4 +1,4 @@
-# ADR-079: What each agent does when the hook fails
+# ADR-079: What each agent does when the hook fails, and coverage from tests
 
 Status: accepted · Date: 2026-11-10 · Builds on ADR-004, ADR-033, ADR-064, ADR-076 and ADR-077
 
@@ -82,7 +82,7 @@ was tried against a running agent; the weekly job (Decision 3) is the first to.
 `init` writes the hook naming a copy of the binary in the throwaway root; the step puts a
 stand-in there, starts the agent once per case with one call that reads a probe file and
 copies it into the project, then puts the binary back. The cases: `crash` (exit 1, nothing
-printed), `missing` (no file) and `hang` (a minute past the time limit, only where the
+printed), `missing` (no file) and `hang` (minutes past the time limit, only where the
 limit is 120 s or less). The call ran when the probe's marker reaches the agent's output,
 the fake API or the copy; it was blocked when the marker is nowhere and the hook started or
 the agent sent the model a result of the call.
@@ -95,6 +95,29 @@ the agent sent the model a result of the call.
 - Cursor (an account), Hermes Agent and OpenCode 2 (no model call driven) and `hang` where
   the limit is longer than 120 s are recorded as not run.
 
+## Decision 4: the OWASP table states its evidence
+
+The OWASP agentic table in `docs/COVERAGE.md` (from #777) was generated from the fixtures,
+but a risk's status (`covered`, `partial`) was a hand-written claim: five risks showed no
+evidence at all, and the end-to-end tests that do test some of them were not linked.
+
+1. **Evidence is fixtures and named end-to-end tests.** A risk's evidence is every attack
+   and review fixture whose threat class maps to it (as before), and every end-to-end test
+   of `crates/openmoat-cli/tests/e2e/` marked `// coverage: ASI<nn>` above its `#[test]`.
+   The conformance suite reads both and writes, in `docs/COVERAGE.md`, the test count in
+   the table and a section listing each risk's test names and fixture ids.
+2. **No evidence, no claim.** A risk with neither shows `not tested` in the status column,
+   whatever its declared status. A risk declared `covered` or `partial` with no evidence
+   fails the suite, as does a marker naming an unknown risk or not followed by a test.
+3. **The drift check is the one CI already runs:** the conformance suite (in the quality
+   gate on every platform) fails when `docs/COVERAGE.md` differs from what it generates
+   (`OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance`). It
+   is a Rust test beside the existing generator rather than a separate script, so the
+   fixtures are parsed by the same code that runs them and no workflow changes.
+4. **What a mark claims.** A mark says the test exercises part of the risk, not that the
+   risk is handled; the reason column still says what is left out. ASI07 and ASI08 have no
+   evidence and read `not tested`.
+
 ## Consequences
 
 - A new host cannot be added without saying, with a source, what it does when the hook
@@ -104,5 +127,13 @@ the agent sent the model a result of the call.
 - The hook-failure facts of OpenCode, Hermes Agent, the Cline CLI and goose rest on vendor
   source at a release, and the Antigravity CLI's on documentation that says nothing; only
   the weekly job's runs, read by a person, show what a running agent does.
+- The Antigravity CLI is not recorded as blocking in any case. In a weekly run of
+  Antigravity CLI 1.5.5 the agent ran its tools without starting OpenMoat's hook from
+  `~/.gemini/config/hooks.json` at all, so until that is understood and fixed it is not
+  protected by its hook, whatever the hook would answer; this ADR does not change how
+  its hook is installed.
 - The weekly job takes longer: up to three more agent runs per agent, one of which waits
   past a time limit of up to 120 s.
+- The OWASP table can no longer say more than the tests show: a risk without a fixture
+  class or a marked test reads `not tested`, and a new end-to-end test is linked to a risk
+  only by its mark.
