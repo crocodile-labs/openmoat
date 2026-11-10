@@ -100,8 +100,11 @@ pub fn refuse_all<H: Write>(
         if id.is_null() {
             continue;
         }
-        send(host, &super::error(id, super::REFUSED, message).to_string())
-            .context("writing to the agent")?;
+        send(
+            host,
+            &super::written(&super::error(id, super::REFUSED, message)),
+        )
+        .context("writing to the agent")?;
     }
     Ok(())
 }
