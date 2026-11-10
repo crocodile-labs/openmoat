@@ -344,6 +344,15 @@ docs`); do not edit the table.
   loopback, so a program running as you could read the log file directly anyway; it adds
   nothing for that program, and nothing for another user, a web page or another machine
   without the token ([ADR-066](adr/ADR-066-openmoat-serve.md)).
+- **Live audit delivery sends what the log says, masked, and only when calls are made.**
+  A sink receives the commands, paths and hosts of every call, with known secrets and
+  credential shapes masked; a secret of a shape OpenMoat does not know goes as it was
+  recorded. Delivery runs after hook calls and when a person runs `openmoat audit deliver
+  flush`, so a machine where no agent runs sends nothing new. A sink that falls more than
+  `max_backlog` events behind is told which events it missed, not sent them; they stay in
+  the local log. The OTLP bodies follow the specification's JSON encoding and are tested
+  against a local test server only, not against a vendor's intake
+  ([DELIVERY.md](DELIVERY.md#limits), [ADR-081](adr/ADR-081-live-audit-delivery.md)).
 
 ## Snapshots and restore
 

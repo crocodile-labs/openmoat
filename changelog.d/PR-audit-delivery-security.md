@@ -1,0 +1,2 @@
+### Security
+- `~/.moat/delivery.yaml`, which decides where the audit log is sent, is pinned by the policy lock like the policy: a file no person accepted with `openmoat doctor --accept` stops every hook call and sends nothing. Its keys and tokens must be files inside the state directory or keychain items (`env:` is refused), the background run gets a cleared environment (no `SSL_CERT_FILE`, no proxy variables), plain `http` goes to loopback only, and link-local, cloud metadata and non-unicast addresses are refused on every resolved address.

@@ -534,6 +534,32 @@ When a reviewer asks how you control what the agent does, `openmoat audit eviden
 lists, per framework control, the rules that fired and sample events from the log. It is
 evidence, not a certification: [COMPLIANCE.md](COMPLIANCE.md).
 
+### Deliver the audit log
+
+To have every decision in your SIEM or log collector as it is made, write
+`~/.moat/delivery.yaml` with an OTLP/HTTP logs endpoint or an HTTPS webhook, keep its
+key in a file under `~/.moat`, and accept the file from your terminal:
+
+```yaml
+version: 1
+machine: alice-laptop
+sinks:
+  - id: otelcol
+    otlp: http://127.0.0.1:4318/v1/logs     # an OpenTelemetry Collector on this machine
+```
+
+```bash
+openmoat doctor --accept          # until you do, every agent call is denied
+openmoat audit deliver test       # one test record to each sink
+openmoat audit deliver status     # how far behind each sink is, its last failure
+```
+
+The hook never waits for it: after answering it starts a delivery in the background.
+Every text is masked again before it leaves, a sink that is down is tried again later,
+and one that falls too far behind is told which events it missed, which also go into the
+audit log. Webhook bodies are signed with HMAC-SHA-256. Formats, signatures, collector
+examples and limits: [DELIVERY.md](DELIVERY.md).
+
 ## Change the policy
 
 The common changes are one command each. Each prints the rule it added and the
@@ -1056,6 +1082,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat audit anchor --git <repo>` · `--file <path>` | record the log's head outside it: a commit on `refs/moat/anchors` in that repository, or a line appended to that file; nothing is sent anywhere (terminal only) |
 | `openmoat audit verify --against <repo or file>` | check the log against every anchor recorded there; fails, naming the first anchor whose event is gone or changed |
 | `openmoat audit report <file>…` | one report over verified exports from several machines |
+| `openmoat audit deliver status` · `test [--sink <id>]` · `flush` (each `[--format json]`) | live delivery to the sinks in `~/.moat/delivery.yaml`: each sink's progress and last failure · one test record to each sink · deliver now, resuming a paused sink; exit 64 when the file is not honoured, a test is not accepted or a flush stopped ([DELIVERY.md](DELIVERY.md)) |
 | `openmoat audit evidence [--since …] [--until …] [--host …] [--samples N] [--format json]` | evidence for a window per control of OWASP Top 10 for LLM Applications 2025, SOC 2 and ISO/IEC 27001:2022 Annex A: rules that fired, decisions by verdict, redacted samples, the chain head, and the policy, lock and protections now; evidence, not a certification ([COMPLIANCE.md](COMPLIANCE.md)) |
 | `openmoat allow --last [--always]` | turn the last `review` (a command or a file action) into a session grant (24 h; a command's only in the project it was held in) or a permanent rule for exactly that command or those paths |
 | `openmoat allow "<command>" --host <id> --session <id> [--project <dir>]` | approve one exact command for one agent session, in the project of the current directory or `--project` |

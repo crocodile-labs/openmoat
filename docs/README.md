@@ -25,6 +25,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | [BROKER_LOGINS.md](BROKER_LOGINS.md) | Keeping an agent's API key out of `openmoat run` with `openmoat secret add`: steps, providers' hosts and headers, limits |
 | [MERGE_CHECK.md](MERGE_CHECK.md) | Checking pull requests before merge: `openmoat policy check-diff` and the GitHub Action, the content checks of added lines (supply chain, CI takeover, decoded or downloaded code, keys, new hosts) and `check_diff.levels`, with an example workflow, output and limits |
 | [PROVENANCE.md](PROVENANCE.md) | Agent provenance for commits: which files and lines agent sessions wrote, after reading what, from the audit log; `openmoat provenance`, notes on `refs/notes/openmoat`, `--verify`, what check-diff shows, limits |
+| [DELIVERY.md](DELIVERY.md) | Live audit delivery to a SIEM or log collector: OTLP/HTTP logs and a signed HTTPS webhook, `~/.moat/delivery.yaml`, what is sent and masked, retries and the backlog bound, collector examples, `openmoat audit deliver status`, `test`, `flush` |
 | [COMPLIANCE.md](COMPLIANCE.md) | `openmoat audit evidence`: the audit log as evidence per control of OWASP LLM 2025, SOC 2 and ISO/IEC 27001; the rule → control map and its limits |
 | [SDK.md](SDK.md) | The SDK for your own agent product: Rust and JavaScript, verdict handling, actions, facts, sessions, the stability contract |
 
