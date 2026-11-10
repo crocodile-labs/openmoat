@@ -98,8 +98,8 @@ available, so the person and the agent see it.
 
 ## Decision 5: what is sent, and prompt injection
 
-The text the approver sees is built by OpenMoat, not the agent: the host, the project,
-the rules that held the call and what each one is, the request code, the expiry, and the
+The text the approver sees is built by OpenMoat, not the agent: the host, the session,
+the folder, the ids of the rules that held the call, the request code, the expiry, and the
 call itself under a label that says it came from the agent and may try to persuade.
 The call is passed through `openmoat_audit::redact` (token shapes and the policy's
 brokered values), control and bidirectional characters are shown escaped
@@ -141,12 +141,12 @@ shown as the command it is.
 | Spoofed approver: someone else messages the bot or presses a forwarded button | the sender's id from Telegram's server must be on the allowlist the person set | `remote::tests::an_answer_from_someone_not_allowed_is_refused` |
 | Forged approval file written by the agent | writes under `.moat` denied; answers signed with a key the agent cannot read | `remote::tests::an_answer_signed_with_another_key_is_refused`, conformance `T9-write-remote-answer` |
 | Approval for one call used for another (changed command, content, session, project) | answer bound to the request digest | `remote::tests::an_approval_answers_only_its_own_call` |
-| Replay of a used approval, or two guards racing | create-new `used/<id>` before allowing | `remote::tests::an_approval_is_used_once`, `..._restored_answer_is_not_used_again` |
+| Replay of a used approval, or two guards racing | create-new `used/<id>` before allowing | `remote::tests::an_approval_is_used_once`, `remote::tests::a_restored_answer_is_not_used_again` |
 | Stale approval (late answer, old answer file) | request expiry checked by `listen` and again by the guard | `remote::tests::an_expired_request_is_not_approved` |
 | Agent reads the bot token or the key | `kernel-self` read deny, sandbox deny, owner-only files with mode check | conformance `T9-read-remote-token`, `T9-cat-remote-key`, `T9-read-moved-remote-token` |
 | Agent runs `openmoat approvals allow` or `listen` | `kernel-self` shell deny; ancestry check | conformance `T9-approvals-allow`, `T9-approvals-listen-path`; e2e `approvals_commands_need_a_person` |
 | Agent edits the allowlist file | writes denied; settings signed | `remote::tests::tampered_settings_are_refused` |
-| Prompt injection in the request text | OpenMoat's own framing, plain text, escaping, redaction, length cap, no previews | `remote::tests::the_prompt_escapes_and_labels_the_agents_text` |
+| Prompt injection in the request text | OpenMoat's own framing, plain text, escaping, redaction, length cap, no previews | `remote::tests::text::the_prompt_escapes_and_labels_the_agents_text` |
 | A remote approval lifting a deny | the gate acts on `review` only | `remote::tests::only_a_review_is_sent`, e2e `a_deny_is_never_sent_for_approval` |
 | Channel down, key missing | decision unchanged (`review`) | `remote::tests::without_a_key_the_review_stays` |
 

@@ -312,6 +312,10 @@ An agent may run OpenMoat's read-only commands (`openmoat --help`, `--version`,
 `<command> --help`, `policy lint`, `policy check`, `demo`), which read no state and
 change nothing; everything that sets up, approves or changes OpenMoat stays denied.
 
+To answer reviews from your phone while the agent works alone, connect a Telegram bot:
+`openmoat approvals connect telegram`, then `openmoat approvals listen`
+([APPROVALS.md](APPROVALS.md)). An approval there lets that exact call run once.
+
 ### Session taint
 
 Earlier calls of a session can make later ones stricter (ADR-020), never looser: an
@@ -1089,6 +1093,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 | `openmoat allow --site <host>` · `--dir <path>` · `--remove <id>` | allow a site or a directory until you remove it · take such a rule out again |
 | `openmoat allow … --for <duration>` · `openmoat allow --prune` | end an `--always`, `--site` or `--dir` rule after `30m`, `2h`, `3d`, `1w` (at most 366 days) · remove the rules whose time is up ([Change the policy](#change-the-policy)) |
 | `openmoat allowed [--format json]` | list what you allowed: standing rules (with when each ends, or `EXPIRED`), session grants still in force, trusted repositories, each with how to take it back |
+| `openmoat approvals connect telegram` · `allow <user-id>` · `listen` · `status` · `test` · `remove <user-id>` · `disconnect` | answer reviews from another device: a review is sent to the approvers you allow, and an approval runs that exact call once ([APPROVALS.md](APPROVALS.md)) |
 | `openmoat edit` | edit the policy in your editor; it is checked and the diff shown before anything changes |
 | `openmoat secret add gh` · `openmoat secret add <id> --host <host> --env <NAME>` | keep a token from the agent: it holds a placeholder, and OpenMoat sends the value to that host only (`--file <path>` reads it from a file, `--header <name>` names the request header) |
 | `openmoat secret add <id> … --tls-terminate [--allow 'METHOD /path']…` | also put the value into HTTPS to the host inside `openmoat run`, which decrypts it with its own CA, and only into the requests the rules name; any other request to the host is refused ([ADR-043](adr/ADR-043-tls-termination-for-brokered-secrets.md)) |
