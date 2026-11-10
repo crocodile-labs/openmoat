@@ -29,9 +29,8 @@ package's WebAssembly module imports nothing from its host, so it cannot.
 
 The crate is `openmoat-sdk` in `crates/openmoat-sdk`.
 
-```toml
-[dependencies]
-openmoat-sdk = "0.14"
+```bash
+cargo add openmoat-sdk
 ```
 
 ```rust
@@ -227,7 +226,7 @@ Before 1.0 a minor release may change the stable surface, with a CHANGELOG entry
 Both packages carry the release version: the Rust crate `openmoat-sdk` takes the
 workspace version and goes to crates.io with each release, and `@openmoat/sdk` has the
 same version in `sdk/js/package.json` and is published to npm by the release workflow
-(npm trusted publishing, with provenance). For 0.16.0 both are `0.16.0`.
+(npm trusted publishing, with provenance).
 
 ## Building and testing
 
