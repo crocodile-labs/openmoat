@@ -118,6 +118,14 @@ fn a_server_it_cannot_put_behind_the_proxy_is_named_and_a_remote_one_is_not() {
     }
     let remote = json!({"type": "remote", "url": "https://x"});
     assert_eq!(not_wrappable(&remote, CommandList), None);
+    // OpenCode entries with nothing to wrap are not warned about.
+    for nothing in [
+        json!({"enabled": false}),
+        json!({"url": "https://x"}),
+        json!({"type": "local"}),
+    ] {
+        assert_eq!(not_wrappable(&nothing, CommandList), None, "{nothing}");
+    }
     let ours = json!({"command": ["x"]});
     assert_eq!(not_wrappable(&ours, CommandArgs), None, "as before");
 }

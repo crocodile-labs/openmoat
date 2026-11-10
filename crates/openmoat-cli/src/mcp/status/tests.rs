@@ -52,7 +52,7 @@ fn an_unaccepted_wrapped_server_is_unprotected() {
 #[test]
 fn an_unwrapped_local_server_is_unprotected_and_names_the_fix() {
     let entry = json!({"command": "npx", "args": ["server"]});
-    assert_eq!(shape_of(&entry, FORM), Shape::Local);
+    assert_eq!(shape_of(&entry, FORM), Shape::Local { cannot_wrap: None });
     let (protected, why) = judge(&entry, true, true);
     assert!(!protected, "{why}");
     assert!(why.contains("openmoat mcp wrap gh"), "{why}");
@@ -78,8 +78,44 @@ fn an_unknown_shape_is_unprotected() {
 #[test]
 fn a_goose_command_is_a_local_server() {
     let entry = json!({"type": "stdio", "cmd": "server", "args": []});
-    assert_eq!(shape_of(&entry, McpCommandForm::CmdArgs), Shape::Local);
+    assert_eq!(
+        shape_of(&entry, McpCommandForm::CmdArgs),
+        Shape::Local { cannot_wrap: None }
+    );
     assert!(!judge(&entry, true, true).0);
+}
+
+/// goose's inline Python runs on this machine but has no command to put
+/// behind the proxy: the advice is one a person can follow.
+#[test]
+fn inline_python_is_unprotected_and_not_told_to_wrap() {
+    let entry = json!({"type": "inline_python", "code": "print(1)"});
+    let shape = shape_of(&entry, McpCommandForm::CmdArgs);
+    assert!(
+        matches!(
+            shape,
+            Shape::Local {
+                cannot_wrap: Some(_)
+            }
+        ),
+        "{shape:?}"
+    );
+    let (protected, why) = judged(shape, "snake", true, true, "goose");
+    assert!(!protected, "{why}");
+    assert!(!why.contains("openmoat mcp wrap snake"), "{why}");
+    assert!(
+        why.contains("inline Python") && why.contains("remove it"),
+        "{why}"
+    );
+    let mut snake = server(entry);
+    snake.form = McpCommandForm::CmdArgs;
+    let status = status_of(Host::Goose, snake, true, true);
+    assert!(
+        !status.why.contains("openmoat mcp wrap snake"),
+        "{}",
+        status.why
+    );
+    assert!(status.fails_requirement, "still counted as unprotected");
 }
 
 #[test]

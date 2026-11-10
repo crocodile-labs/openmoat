@@ -88,14 +88,17 @@ pub(super) fn written(
 }
 
 /// Why `entry`, a definition in `form` that runs something on this machine,
-/// cannot be rewritten; `None` for one that can be, and for a remote server,
-/// which runs no command here.
+/// cannot be rewritten; `None` for one that can be, for a remote server, which
+/// runs no command here, and for an entry that names no program at all.
 pub fn not_wrappable(entry: &Value, form: McpCommandForm) -> Option<&'static str> {
     if parts(entry, form).is_some() {
         return None;
     }
     match (form, kind(entry)) {
         (McpCommandForm::CommandList, Some("remote")) | (McpCommandForm::CommandArgs, _) => None,
+        // `{"enabled": false}` turning off a server another file defines, or
+        // a `url` with no `type`: nothing here to put behind the proxy.
+        (McpCommandForm::CommandList, _) if entry.get("command").is_none() => None,
         (McpCommandForm::CommandList, _) => {
             Some("its `command` is not a list of strings under `type: local`")
         }
@@ -107,6 +110,15 @@ pub fn not_wrappable(entry: &Value, form: McpCommandForm) -> Option<&'static str
         }
         (McpCommandForm::CmdArgs, _) => None,
     }
+}
+
+/// What a person can do about a local server [`not_wrappable`] rejects for
+/// `why`, in place of advice to wrap it.
+pub fn cannot_wrap_advice(why: &str) -> String {
+    format!(
+        "`openmoat mcp wrap` cannot change that: {why}; remove it from the agent's configuration \
+         if you do not want it to run"
+    )
 }
 
 /// The key `form` names its program under, for a person setting it by hand.

@@ -59,8 +59,12 @@ enum Shape {
     Wrapped {
         sandboxed: bool,
     },
-    /// Runs a local command, outside `openmoat mcp proxy`.
-    Local,
+    /// Runs a local command, outside `openmoat mcp proxy`; `cannot_wrap`
+    /// says why `openmoat mcp wrap` cannot put it behind the proxy, when it
+    /// cannot (goose's inline Python).
+    Local {
+        cannot_wrap: Option<&'static str>,
+    },
     /// A server at an address, which runs nothing on this machine.
     Remote,
     /// Neither: OpenMoat does not know how the host starts it.
@@ -73,7 +77,9 @@ fn shape_of(entry: &Value, form: McpCommandForm) -> Shape {
         return Shape::Wrapped { sandboxed };
     }
     if wrap::starts_process(entry) {
-        return Shape::Local;
+        return Shape::Local {
+            cannot_wrap: wrap::not_wrappable(entry, form),
+        };
     }
     let declared_remote = entry
         .get("type")
@@ -116,11 +122,14 @@ fn judged(shape: Shape, name: &str, accepted: bool, set_up: bool, agent: &str) -
             false,
             format!("its definition is new or changed, so it does not start; {accept}"),
         ),
-        (Shape::Local, accepted) => (
+        (Shape::Local { cannot_wrap }, accepted) => (
             false,
             format!(
-                "starts outside OpenMoat with your permissions; `openmoat mcp wrap {name}` \
-                 checks it before it starts{}",
+                "starts outside OpenMoat with your permissions; {}{}",
+                cannot_wrap.map_or_else(
+                    || format!("`openmoat mcp wrap {name}` checks it before it starts"),
+                    wrap::cannot_wrap_advice
+                ),
                 if accepted {
                     String::new()
                 } else {
@@ -189,7 +198,10 @@ fn status_of(host: Host, server: servers::Server, accepted: bool, set_up: bool) 
     let shape = shape_of(&server.entry, server.form);
     let agent = host.display_name();
     let (protected, why) = judged(shape, &server.name, accepted, set_up, agent);
-    let local = matches!(shape, Shape::Wrapped { .. } | Shape::Local | Shape::Unknown);
+    let local = matches!(
+        shape,
+        Shape::Wrapped { .. } | Shape::Local { .. } | Shape::Unknown
+    );
     ServerStatus {
         host: host.id(),
         agent,

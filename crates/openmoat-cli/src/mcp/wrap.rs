@@ -35,7 +35,7 @@ use crate::install::Recorded;
 mod form;
 mod preview;
 
-pub use form::not_wrappable;
+pub use form::{cannot_wrap_advice, not_wrappable};
 pub use preview::preview;
 
 /// Suffix of the copy taken before the first wrap changes a file.
