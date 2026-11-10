@@ -93,6 +93,17 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     let audit = audit(&mut shown, &home)?;
     healthy &= audit.is_some();
 
+    // Only when a policy asks for it, so nothing changes without the setting.
+    if let Some(boundary) = protection::run_boundary(&home) {
+        healthy &= boundary.met;
+        let mark = if boundary.met { Mark::Ok } else { Mark::Broken };
+        if boundary.met {
+            shown.state(mark, "Run boundary", boundary.describe());
+        } else {
+            shown.needs(mark, "Run boundary", boundary.describe());
+        }
+    }
+
     let agents = protection::report(&home, &binary)?;
     // An agent below the level the policy requires has every call denied.
     healthy &= agents.iter().all(protection::Protection::meets_required);
@@ -131,6 +142,7 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
         .unwrap_or_default();
     Ok(serde_json::json!({
         "agents": protection::report(home, binary)?,
+        "run_boundary": protection::run_boundary(home),
         "plugins": crate::heartbeat::all(home, binary),
         "hook_warnings": hook_warnings(home, binary)?,
         "policy_update": update,

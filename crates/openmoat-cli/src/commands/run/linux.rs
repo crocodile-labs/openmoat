@@ -214,6 +214,11 @@ pub fn port_only_network() -> Option<String> {
     netns::doctor_warning()
 }
 
+/// Why the agent would get no network of its own here, and how to get one.
+pub fn no_network_namespace() -> Option<String> {
+    netns::missing()
+}
+
 /// Whether the system's bubblewrap, which `moat run --isolate` needs, is
 /// installed; always `Some` here, where plain `moat run`'s Landlock rules
 /// cannot deny a path inside the project (`tier.rs`).

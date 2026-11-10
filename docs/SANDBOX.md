@@ -349,6 +349,8 @@ bubblewrap.
   Landlock and seccomp alone and says on every start that the network is restricted
   by port only, and `openmoat doctor` warns. `openmoat run --netns=require` refuses to
   start there instead (exit 64); the default, `--netns=auto`, is the behaviour above.
+  A policy with `require.run: full-boundary` ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun))
+  refuses there too, whatever `--netns` says.
 - **What Linux does not protect.** Landlock can only grant access to whole directory
   trees, so inside the project the policy's deny rules do not hold for the agent's
   commands: they can read and write `.env`, create `.envrc`, write `.moat/policy.yaml`

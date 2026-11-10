@@ -47,6 +47,11 @@ Each agent's gaps and the reasons are in
   The command is proved with a stand-in program, not the real agent. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
+- **`require.run: full-boundary` is about `openmoat run`.** It refuses a run without an OS
+  sandbox or, on Linux, without a network of the agent's own. An agent started without
+  `openmoat run` is not refused, and on Linux the setting does not imply `--isolate`, so
+  paths inside the project stay open to commands under plain `openmoat run`
+  ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
 - **A required protection level is checked where the hook runs.** With `require:`
   ([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)) the guard denies every
   call of an agent below the level, but it only sees what it can tell from inside one

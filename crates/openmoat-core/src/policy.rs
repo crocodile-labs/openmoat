@@ -75,7 +75,7 @@ mod old_names;
 mod require;
 mod text;
 
-pub use require::{Require, RequiredBy, RequiredLevel, Requirement};
+pub use require::{Require, RequiredBy, RequiredLevel, Requirement, RunBoundary};
 pub use text::{TITLE_MAX_CHARS, WHY_MAX_CHARS};
 
 pub use old_names::OldNames;

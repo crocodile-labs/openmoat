@@ -134,3 +134,9 @@ pub fn run_port_only_network() -> Option<String> {
 pub fn run_unavailable() -> Option<String> {
     run::unavailable()
 }
+
+/// What `openmoat run` lacks here for its full boundary (ADR-077); `None` when
+/// it has all of it.
+pub fn run_full_boundary_gap() -> Option<String> {
+    run::full_boundary_gap()
+}

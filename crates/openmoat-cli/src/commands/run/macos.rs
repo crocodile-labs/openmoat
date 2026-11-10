@@ -89,6 +89,11 @@ pub fn port_only_network() -> Option<String> {
     None
 }
 
+/// None: Seatbelt holds the network without a namespace.
+pub fn no_network_namespace() -> Option<String> {
+    None
+}
+
 /// None: Seatbelt denies paths inside the project, so plain `moat run` has
 /// no Linux-only gap to name (`tier.rs`).
 pub fn bubblewrap() -> Option<bool> {

@@ -51,6 +51,11 @@ pub fn port_only_network() -> Option<String> {
     None
 }
 
+/// None: [`unavailable`] already says why there is no boundary here.
+pub fn no_network_namespace() -> Option<String> {
+    None
+}
+
 /// None: `moat run` refuses here, so it has no Linux-only gap to name.
 pub fn bubblewrap() -> Option<bool> {
     None

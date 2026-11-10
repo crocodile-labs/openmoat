@@ -91,7 +91,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     let program = resolve(name)?;
     let owner = Owner::of(&name.to_string_lossy(), &path_string(&program));
     // Before anything starts: the level the policy requires of this program.
-    required::check(&home, &ctx, owner, &name.to_string_lossy())?;
+    let strict = required::check(&home, &ctx, owner, &name.to_string_lossy())?;
     // A bare repository a command plants (no `.git` name) is used only when named.
     let git = git_env::add(&|var| std::env::var(var).ok())?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -159,7 +159,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
         platform::confine(&sandboxed, &ctx, grants, &program, state)?
     };
     own_login::report(agent.report_mut(), &kept, &ctx);
-    refuse_port_only(args.netns, agent.warning())?;
+    refuse_port_only(args.netns, strict.as_deref(), agent.warning())?;
     agent.command().args(rest);
     let release_age = package_release_age(&policy, ctx.project.as_deref());
     agent.command().envs(release_age.vars);
@@ -353,11 +353,24 @@ pub fn bubblewrap() -> Option<bool> {
     platform::bubblewrap()
 }
 
-/// Refuse to start, under `--netns=require`, an agent whose network is
-/// restricted by port only (`port_only`, the platform's warning).
-fn refuse_port_only(netns: Netns, port_only: Option<&str>) -> Result<()> {
-    match (netns, port_only) {
-        (Netns::Require, Some(why)) => bail!(
+/// What this system lacks for the run's full boundary (ADR-077): no sandbox at
+/// all, or on Linux no network of the agent's own; `None` when it has both.
+pub fn full_boundary_gap() -> Option<String> {
+    platform::unavailable().or_else(platform::no_network_namespace)
+}
+
+/// Refuse to start an agent whose network is restricted by port only
+/// (`port_only`, the platform's warning) under `--netns=require`, or whatever
+/// the flag says when a policy requires the full boundary (`strict`, which
+/// policy asks): a flag cannot lower what a policy requires.
+fn refuse_port_only(netns: Netns, strict: Option<&str>, port_only: Option<&str>) -> Result<()> {
+    match (strict, netns, port_only) {
+        (Some(asks), _, Some(why)) => bail!(
+            "{asks} requires `openmoat run` to start with its full boundary \
+             (`require.run: full-boundary`), and the agent cannot get a network of its own here, \
+             so it does not start; no `--netns` value lowers this.\n{why}"
+        ),
+        (None, Netns::Require, Some(why)) => bail!(
             "`openmoat run --netns=require`: the agent cannot get a network of its own here, so \
              it does not start.\n{why}"
         ),
@@ -427,14 +440,27 @@ mod tests {
     #[test]
     fn require_refuses_a_port_only_network() {
         let why = "moat run: the network is restricted by port only";
-        let refused = refuse_port_only(Netns::Require, Some(why)).unwrap_err();
+        let refused = refuse_port_only(Netns::Require, None, Some(why)).unwrap_err();
         assert!(format!("{refused:#}").contains("--netns=require"));
         assert!(format!("{refused:#}").contains(why));
-        assert!(refuse_port_only(Netns::Require, None).is_ok());
+        assert!(refuse_port_only(Netns::Require, None, None).is_ok());
         assert!(
-            refuse_port_only(Netns::Auto, Some(why)).is_ok(),
+            refuse_port_only(Netns::Auto, None, Some(why)).is_ok(),
             "the default"
         );
-        assert!(refuse_port_only(Netns::Auto, None).is_ok());
+        assert!(refuse_port_only(Netns::Auto, None, None).is_ok());
+    }
+
+    #[test]
+    fn a_policy_that_requires_the_boundary_refuses_whatever_the_flag_says() {
+        let why = "moat run: the network is restricted by port only";
+        for netns in [Netns::Auto, Netns::Require] {
+            let refused = refuse_port_only(netns, Some("your policy"), Some(why)).unwrap_err();
+            let shown = format!("{refused:#}");
+            assert!(shown.contains("your policy"), "{shown}");
+            assert!(shown.contains("require.run: full-boundary"), "{shown}");
+            assert!(shown.contains(why), "{shown}");
+            assert!(refuse_port_only(netns, Some("your policy"), None).is_ok());
+        }
     }
 }

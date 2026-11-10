@@ -38,6 +38,15 @@ impl RequiredLevel {
     }
 }
 
+/// What a policy can require of `openmoat run` itself (ADR-077).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RunBoundary {
+    /// `openmoat run` starts only with its whole boundary: an OS sandbox and,
+    /// where the system has one, a network of the agent's own.
+    FullBoundary,
+}
+
 /// The `require:` section of a policy, a repository policy or a pack.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,6 +54,10 @@ pub struct Require {
     /// The least level of every agent; absent, none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protection: Option<RequiredLevel>,
+    /// What `openmoat run` must have before it starts anything; absent, what
+    /// it can get. Applies to every program it starts, agent or not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunBoundary>,
     /// The least level of one agent, by its host id (as `openmoat status` names it), in
     /// place of [`Self::protection`] for that agent in this file. Another
     /// source's higher level still applies ([`Policy::required_for`]).
@@ -106,6 +119,17 @@ impl Policy {
                     _ => Some(next),
                 },
             )
+    }
+
+    /// Which policy requires `openmoat run` to start only with its full
+    /// boundary, or `None` when none does. Any one source is enough, so a
+    /// repository or a pack can turn it on and none can turn it off.
+    #[must_use]
+    pub fn run_boundary_required(&self) -> Option<RequiredBy> {
+        let own = self.require.iter().map(|r| (RequiredBy::Policy, r));
+        let added = self.require_added.iter().map(|(by, r)| (by.clone(), r));
+        own.chain(added)
+            .find_map(|(by, r)| r.run.map(|RunBoundary::FullBoundary| by))
     }
 
     /// Add the requirement `require` of `by` (a repository policy or a pack)

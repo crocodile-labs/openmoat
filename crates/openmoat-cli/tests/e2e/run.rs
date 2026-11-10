@@ -29,6 +29,9 @@ mod mcp_boundary;
 /// Linux without bubblewrap: the port-only path a stock system takes.
 #[cfg(target_os = "linux")]
 mod stock_linux;
+/// `require.run: full-boundary`: the run starts whole or not at all.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod strict;
 /// The run's own temp directory, and the shared ones out of reach.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod temp_dirs;

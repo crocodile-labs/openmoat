@@ -22,6 +22,10 @@ use crate::home::Home;
 use crate::integrity::Drift;
 use crate::sandbox::install as host_sandbox;
 
+pub mod boundary;
+
+pub use boundary::Boundary;
+
 /// The rule id of the guard's deny for an agent below the required level.
 pub const RULE: &str = "protection-required";
 

@@ -60,6 +60,7 @@ staging:                            # optional, since 0.17.0: when a session cou
 require_signed_repo_policy: false   # optional: trust a repository policy only when signed by a trusted key (§10)
 
 require:                            # optional: the least protection level of each agent; below it every call is denied (§9.2)
+  run: full-boundary                #   `openmoat run` starts only with its full boundary (§9.3)
   protection: hook-and-os-sandbox   #   every agent: hook-only or hook-and-os-sandbox
   agents:                           #   per agent, by host id, in place of `protection` for it
     gemini-cli: hook-only
@@ -1681,6 +1682,29 @@ openmoat status              # each agent's level and whether it meets it
 openmoat sandbox sync        # put OpenMoat's sandbox settings back for Claude Code, Codex, Cursor
 openmoat run -- gemini       # start an agent OpenMoat writes no sandbox for in an OS sandbox
 ```
+
+### 9.3 Requiring `openmoat run`'s full boundary (`require.run`)
+
+Where it cannot get all of its boundary, `openmoat run` normally starts anyway and warns.
+With `require.run: full-boundary` it refuses instead (ADR-077):
+
+```yaml
+require:
+  run: full-boundary
+```
+
+| On this system | Without the setting | With it |
+|---|---|---|
+| No OS sandbox: macOS before 13, a missing backend, Windows | refused | refused, naming the policy that asks |
+| Linux with no network namespace (bubblewrap missing or blocked) | starts, network restricted by port only, warns | refused; install bubblewrap |
+
+No `--netns` value lowers it. Your policy, a repository policy (§10) and a pack (§11) can
+each turn it on; none can turn it off. It applies to every program `openmoat run` starts.
+`openmoat status` and `openmoat doctor` say whether it holds here, and an unmet
+requirement is a problem (exit 64).
+
+It is about `openmoat run`, so an agent started without it is not refused: use
+`require.protection` for that (§9.2). On Linux it does not imply `--isolate`.
 
 ## 10. Repository policy
 
