@@ -1,6 +1,7 @@
 //! The `moat doctor` lines for MCP servers (ADR-026): definitions that differ
 //! from the lock's pins, and tools `moat mcp proxy` holds.
 
+use std::io::Write as _;
 use std::path::Path;
 
 use anyhow::Result;
@@ -10,7 +11,22 @@ use crate::home::Home;
 use crate::integrity::Lock;
 use crate::mcp::{self, pins::Kind, tools};
 
+/// The start of the line naming values an older version kept in clear.
+const CLEAR_VALUES: &str = "mcp servers      the lock keeps";
+
 pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path) {
+    let clear = lock.mcp_servers.as_ref().map_or(0, mcp::pins::clear_values);
+    if clear > 0 {
+        report.line(
+            Area::Mcp,
+            false,
+            format!(
+                "{CLEAR_VALUES} {clear} MCP server variable or header value(s) in clear, written \
+                 by an older OpenMoat: `openmoat doctor --accept` rewrites it without them; every \
+                 definition stays pinned as it is, so nothing needs accepting again"
+            ),
+        );
+    }
     let cwd = std::env::current_dir().ok();
     let found = match mcp::review(home, lock, &mcp::set_up_hosts(home, binary), cwd.as_deref()) {
         Ok(found) => found,
@@ -113,6 +129,17 @@ pub(super) fn servers(report: &mut Report, home: &Home, binary: &Path) {
 
 /// `--accept` for MCP: show the changes and ask; on yes the MCP problems clear.
 pub(super) fn accept(report: &mut Report, home: &Home, binary: &Path) -> Result<()> {
+    let scrubbed = mcp::scrub_lock(home)?;
+    if scrubbed > 0 {
+        writeln!(
+            report.out,
+            "✔ mcp servers      {scrubbed} value(s) an older OpenMoat kept in clear removed from \
+             the lock; every definition stays pinned as it was"
+        )?;
+        report
+            .problems
+            .retain(|(area, line)| !(*area == Area::Mcp && line.starts_with(CLEAR_VALUES)));
+    }
     if !super::super::mcp::review_and_accept(home, binary, None, &mut report.out)? {
         return Ok(());
     }

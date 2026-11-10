@@ -1,0 +1,2 @@
+### Security
+- The policy lock's copy of a pinned MCP server definition no longer keeps the values of OpenCode's `environment` or goose's `envs` in clear, and `openmoat mcp accept` and `openmoat doctor` never show them: they are hidden like `env`. A lock an older version wrote keeps every server pinned as it was, so nothing is accepted again; `openmoat doctor` names one that still holds such a value, `openmoat doctor --accept` rewrites it, and so does any other change to the lock ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

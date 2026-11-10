@@ -4,22 +4,100 @@
 //! A definition is pinned by the SHA-256 of its entry in canonical JSON (keys
 //! sorted at every level), not by its file: `~/.claude.json` changes all the
 //! time, its servers rarely. The pin also keeps a copy to show a person what
-//! changed, with the values of `env` and header maps replaced by digests and
-//! token-shaped text redacted, so the lock holds no secret a definition names.
+//! changed (`shown`), with token-shaped text redacted and the values of the
+//! maps [`hidden_keys`] names replaced by digests, so the lock holds no secret
+//! a definition names: the variables the host gives the server, under the key
+//! its form reads them from ([`McpCommandForm::env_key`]: `env`, OpenCode's
+//! `environment`, goose's `envs`), and HTTP headers.
+//!
+//! Older versions hid only `env`, so a lock may keep OpenCode's and goose's
+//! values in clear in `shown`. What a pin trusts is its `digest`, of the whole
+//! entry, which never depended on `shown`: hiding more changes no digest, so
+//! no definition is re-trusted unseen and none has to be accepted again. What
+//! is left is the clear copy on disk: every save of the lock writes `shown`
+//! without it ([`scrub`]), a comparison hashes an old clear value the same way
+//! before comparing, so it shows only names and only real changes, and
+//! `openmoat doctor` names a lock that still holds one, which `openmoat
+//! doctor --accept` rewrites.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use openmoat_hosts::{Host, McpCommandForm};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::servers::{Scan, Server};
 use crate::integrity::sha256_hex;
 
-/// The keys whose values are shown only as digests: environment variables and
-/// HTTP headers often hold tokens.
-const HIDDEN_MAPS: &[&str] = &["env", "headers", "http_headers"];
+/// The keys whose values are shown only as digests in a definition its host
+/// reads in `form`: the variables it gives the server, and HTTP headers, which
+/// often hold tokens.
+fn hidden_keys(form: McpCommandForm) -> [&'static str; 3] {
+    [form.env_key(), "headers", "http_headers"]
+}
+
+/// The form `pin`'s host reads its definitions in; `None` for a host this
+/// build does not know, whose pin is hidden in every form.
+fn form_of_pin(pin: &ServerPin) -> Option<McpCommandForm> {
+    let host: Host = pin.host.parse().ok()?;
+    Some(host.spec().mcp.as_ref()?.user_reader.command_form())
+}
+
+const EVERY_FORM: [McpCommandForm; 3] = [
+    McpCommandForm::CommandArgs,
+    McpCommandForm::CommandList,
+    McpCommandForm::CmdArgs,
+];
+
+/// What a hidden value is shown as.
+fn mask(value: &Value) -> Value {
+    let digest = sha256_hex(format!("openmoat-mcp\0{}", canonical(value)).as_bytes());
+    Value::String(format!("sha256:{}", &digest[..16]))
+}
+
+/// Whether `value` is already what [`mask`] shows.
+fn is_mask(value: &Value) -> bool {
+    value.as_str().is_some_and(|s| {
+        s.strip_prefix("sha256:")
+            .is_some_and(|hex| hex.len() == 16 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+    })
+}
+
+/// Mask every value under `form`'s hidden keys in `shown` that is not masked
+/// yet; how many it masked.
+fn hide(shown: &mut Value, form: McpCommandForm) -> usize {
+    let Value::Object(map) = shown else {
+        return 0;
+    };
+    let mut masked = 0;
+    for key in hidden_keys(form) {
+        if let Some(Value::Object(values)) = map.get_mut(key) {
+            for value in values.values_mut().filter(|v| !is_mask(v)) {
+                *value = mask(value);
+                masked += 1;
+            }
+        }
+    }
+    masked
+}
+
+/// Mask what an older version kept in clear in each pin's `shown`; how many
+/// values. The digests, what the pins trust, are left as they are.
+pub fn scrub(pins: &mut Pins) -> usize {
+    pins.values_mut()
+        .map(|pin| match form_of_pin(pin) {
+            Some(form) => hide(&mut pin.shown, form),
+            None => EVERY_FORM.iter().map(|f| hide(&mut pin.shown, *f)).sum(),
+        })
+        .sum()
+}
+
+/// How many values `pins` keep in clear that [`scrub`] would mask.
+pub fn clear_values(pins: &Pins) -> usize {
+    scrub(&mut pins.clone())
+}
 
 /// One pinned server definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +124,7 @@ impl ServerPin {
             name: server.name.clone(),
             file: server.file.display().to_string(),
             digest: sha256_hex(canonical(&server.entry).as_bytes()),
-            shown: shown(&server.entry),
+            shown: shown(&server.entry, server.form),
         }
     }
 }
@@ -121,7 +199,13 @@ pub fn changes(pins: &Pins, scan: &Scan) -> Vec<Change> {
         let kind = match pins.get(&server.id) {
             None => Kind::Added,
             Some(old) if old.digest == now.digest => continue,
-            Some(old) => Kind::Changed(differences(&old.shown, &now.shown)),
+            Some(old) => {
+                // A pin an older version wrote may keep a hidden value in
+                // clear: hashed the same way, it is compared, never shown.
+                let mut before = old.shown.clone();
+                hide(&mut before, server.form);
+                Kind::Changed(differences(&before, &now.shown, server.form))
+            }
         };
         out.push(Change {
             id: server.id.clone(),
@@ -187,25 +271,15 @@ pub fn canonical(value: &Value) -> String {
     openmoat_hosts::canonical_json(value)
 }
 
-/// The entry as a person is shown it.
-fn shown(entry: &Value) -> Value {
+/// The entry, read in `form`, as a person is shown it.
+fn shown(entry: &Value, form: McpCommandForm) -> Value {
     let mut shown = entry.clone();
-    if let Value::Object(map) = &mut shown {
-        for key in HIDDEN_MAPS {
-            if let Some(Value::Object(values)) = map.get_mut(*key) {
-                for value in values.values_mut() {
-                    let digest =
-                        sha256_hex(format!("openmoat-mcp\0{}", canonical(value)).as_bytes());
-                    *value = Value::String(format!("sha256:{}", &digest[..16]));
-                }
-            }
-        }
-    }
+    hide(&mut shown, form);
     openmoat_audit::redact_value(shown)
 }
 
 /// One line per top-level key whose shown value differs.
-fn differences(old: &Value, new: &Value) -> Vec<String> {
+fn differences(old: &Value, new: &Value, form: McpCommandForm) -> Vec<String> {
     let empty = serde_json::Map::new();
     let (old_map, new_map) = (
         old.as_object().unwrap_or(&empty),
@@ -218,7 +292,7 @@ fn differences(old: &Value, new: &Value) -> Vec<String> {
         if before == after {
             continue;
         }
-        if HIDDEN_MAPS.contains(&key.as_str()) {
+        if hidden_keys(form).contains(&key.as_str()) {
             lines.extend(hidden_differences(key, before, after));
         } else {
             lines.push(format!(
@@ -392,6 +466,121 @@ mod tests {
             "{}",
             found[0].describe()
         );
+    }
+
+    /// `server` read by `host` in its own form.
+    fn read_by(host: Host, name: &str, entry: Value) -> Server {
+        let mut found = server(name, entry);
+        found.host = host;
+        found.form = host.spec().mcp.as_ref().unwrap().user_reader.command_form();
+        found
+    }
+
+    /// The variables each form gives its server: `env`, OpenCode's
+    /// `environment`, goose's `envs`. A secret there is never stored in the
+    /// lock's copy and never shown, new or changed.
+    #[test]
+    fn a_secret_under_each_form_s_variables_is_never_stored_or_shown() {
+        let secret = "first-secret-value";
+        for (host, base) in [
+            (Host::ClaudeCode, json!({"command": "npx"})),
+            (Host::OpenCode, json!({"type": "local", "command": ["npx"]})),
+            (Host::Goose, json!({"type": "stdio", "cmd": "npx"})),
+        ] {
+            let key = read_by(host, "gh", json!({})).form.env_key();
+            let mut entry = base;
+            entry[key] = json!({"API_KEY": secret});
+            let added = changes(
+                &Pins::new(),
+                &scan(vec![read_by(host, "gh", entry.clone())]),
+            );
+            let said = added[0].describe();
+            assert!(!said.contains(secret), "{key}: {said}");
+            let mut pins = Pins::new();
+            apply(&mut pins, &added);
+            let stored = serde_json::to_string(&pins).unwrap();
+            assert!(!stored.contains(secret), "{key}: {stored}");
+
+            entry[key] = json!({"API_KEY": "second-secret-value"});
+            let found = changes(&pins, &scan(vec![read_by(host, "gh", entry)]));
+            let said = found[0].describe();
+            assert!(
+                said.contains(&format!("{key}.API_KEY: changed (value not shown)")),
+                "{said}"
+            );
+            assert!(!said.contains("secret-value"), "{key}: {said}");
+        }
+    }
+
+    /// An older version kept OpenCode's and goose's values in clear in the
+    /// copy it shows. The pin still trusts exactly what it trusted, so the
+    /// same definition needs no new acceptance; a planted change is still
+    /// held and shows no value; and every save writes the copy without them.
+    #[test]
+    fn a_value_an_older_lock_kept_in_clear_is_never_shown_and_saved_away() {
+        for (host, key, entry) in [
+            (
+                Host::OpenCode,
+                "environment",
+                json!({"type": "local", "command": ["npx"], "environment": {"API_KEY": "kept-secret-value"}}),
+            ),
+            (
+                Host::Goose,
+                "envs",
+                json!({"type": "stdio", "cmd": "npx", "envs": {"API_KEY": "kept-secret-value"}}),
+            ),
+        ] {
+            let now = read_by(host, "db", entry.clone());
+            let mut old = ServerPin::of(&now);
+            old.shown = entry.clone();
+            let mut pins = Pins::from([(now.id.clone(), old.clone())]);
+            assert_eq!(clear_values(&pins), 1, "{key}");
+            assert_eq!(
+                changes(&pins, &scan(vec![now])),
+                Vec::<Change>::new(),
+                "{key}: nothing to accept again"
+            );
+
+            let mut planted = entry.clone();
+            planted[key]["NODE_OPTIONS"] = json!("--require planted-secret-value");
+            let found = changes(&pins, &scan(vec![read_by(host, "db", planted)]));
+            assert!(found[0].blocks(), "{key}");
+            let said = found[0].describe();
+            assert!(
+                said.contains(&format!("{key}.NODE_OPTIONS: added")),
+                "{said}"
+            );
+            assert!(!said.contains("secret-value"), "{key}: {said}");
+            assert!(!said.contains("API_KEY"), "unchanged, so not named: {said}");
+
+            let dir = tempfile::tempdir().unwrap();
+            let policy = dir.path().join("policy.yaml");
+            std::fs::write(&policy, "version: 1\n").unwrap();
+            let path = dir.path().join("policy.lock");
+            let mut lock =
+                crate::integrity::Lock::pin(std::path::Path::new("/x/openmoat"), &[policy])
+                    .unwrap();
+            lock.mcp_servers = Some(pins.clone());
+            lock.save(&path).unwrap();
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(!text.contains("kept-secret-value"), "{key}: {text}");
+            let saved = crate::integrity::Lock::load(&path)
+                .unwrap()
+                .mcp_servers
+                .unwrap();
+            assert_eq!(
+                saved[&old_id(&pins)].digest,
+                old.digest,
+                "trusts what it did"
+            );
+            assert_eq!(clear_values(&saved), 0);
+            assert_eq!(scrub(&mut pins), 1);
+            assert_eq!(pins, saved);
+        }
+    }
+
+    fn old_id(pins: &Pins) -> String {
+        pins.keys().next().unwrap().clone()
     }
 
     #[test]
