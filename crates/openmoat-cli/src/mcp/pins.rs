@@ -468,6 +468,19 @@ mod tests {
         );
     }
 
+    /// A host whose user-level reader names `form`, found by its spec.
+    fn reading(form: McpCommandForm) -> Host {
+        Host::ALL
+            .into_iter()
+            .find(|h| {
+                h.spec()
+                    .mcp
+                    .as_ref()
+                    .is_some_and(|m| m.user_reader.command_form() == form)
+            })
+            .unwrap()
+    }
+
     /// `server` read by `host` in its own form.
     fn read_by(host: Host, name: &str, entry: Value) -> Server {
         let mut found = server(name, entry);
@@ -482,11 +495,18 @@ mod tests {
     #[test]
     fn a_secret_under_each_form_s_variables_is_never_stored_or_shown() {
         let secret = "first-secret-value";
-        for (host, base) in [
-            (Host::ClaudeCode, json!({"command": "npx"})),
-            (Host::OpenCode, json!({"type": "local", "command": ["npx"]})),
-            (Host::Goose, json!({"type": "stdio", "cmd": "npx"})),
+        for (form, base) in [
+            (McpCommandForm::CommandArgs, json!({"command": "npx"})),
+            (
+                McpCommandForm::CommandList,
+                json!({"type": "local", "command": ["npx"]}),
+            ),
+            (
+                McpCommandForm::CmdArgs,
+                json!({"type": "stdio", "cmd": "npx"}),
+            ),
         ] {
+            let host = reading(form);
             let key = read_by(host, "gh", json!({})).form.env_key();
             let mut entry = base;
             entry[key] = json!({"API_KEY": secret});
@@ -518,18 +538,19 @@ mod tests {
     /// held and shows no value; and every save writes the copy without them.
     #[test]
     fn a_value_an_older_lock_kept_in_clear_is_never_shown_and_saved_away() {
-        for (host, key, entry) in [
+        for (form, key, entry) in [
             (
-                Host::OpenCode,
+                McpCommandForm::CommandList,
                 "environment",
                 json!({"type": "local", "command": ["npx"], "environment": {"API_KEY": "kept-secret-value"}}),
             ),
             (
-                Host::Goose,
+                McpCommandForm::CmdArgs,
                 "envs",
                 json!({"type": "stdio", "cmd": "npx", "envs": {"API_KEY": "kept-secret-value"}}),
             ),
         ] {
+            let host = reading(form);
             let now = read_by(host, "db", entry.clone());
             let mut old = ServerPin::of(&now);
             old.shown = entry.clone();
