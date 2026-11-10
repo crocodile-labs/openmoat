@@ -13,8 +13,10 @@ use super::forms::Form;
 /// it changes only colours (#287).
 pub(super) const COSMETIC_KEY: &str = "theme";
 
-/// Whether `path` is a Claude Code settings file, pinned without [`COSMETIC_KEY`].
-pub(super) fn is_claude_settings(path: &Path) -> bool {
+/// Whether `path` is named `settings.json`, as Claude Code's settings file is.
+/// The test is by name alone, whichever host owns the file: a file with this
+/// name is pinned without [`COSMETIC_KEY`].
+pub(super) fn is_settings_json(path: &Path) -> bool {
     path.file_name().is_some_and(|name| name == "settings.json")
 }
 

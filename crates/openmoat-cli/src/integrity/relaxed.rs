@@ -16,7 +16,7 @@ use anyhow::{Result, bail};
 use openmoat_core::{Decision, Verdict};
 use serde_json::{Map, Value};
 
-use super::digest::is_claude_settings;
+use super::digest::is_settings_json;
 use super::keys::{differing, object_digests};
 use super::spec_keys;
 use super::{Drift, Kept, Lock, deny_for};
@@ -259,7 +259,7 @@ fn is_scalar(value: &Value) -> bool {
 /// The settings object at `path`, read once; `None` unless it is a regular
 /// Claude Code settings file holding a JSON object.
 fn settings_object(path: &Path) -> Option<Map<String, Value>> {
-    if !is_claude_settings(path) || !fs::symlink_metadata(path).ok()?.file_type().is_file() {
+    if !is_settings_json(path) || !fs::symlink_metadata(path).ok()?.file_type().is_file() {
         return None;
     }
     settings_root(path, &fs::read(path).ok()?)
@@ -268,7 +268,7 @@ fn settings_object(path: &Path) -> Option<Map<String, Value>> {
 /// The JSON object in `bytes`, read from `path`; `None` unless `path` is a
 /// Claude Code settings file and `bytes` hold an object.
 fn settings_root(path: &Path, bytes: &[u8]) -> Option<Map<String, Value>> {
-    if !is_claude_settings(path) {
+    if !is_settings_json(path) {
         return None;
     }
     match serde_json::from_slice(bytes).ok()? {

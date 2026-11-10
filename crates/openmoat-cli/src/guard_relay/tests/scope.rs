@@ -33,7 +33,7 @@ fn payload(event: &str, session: &str) -> String {
 fn call(host: Host, payload: &str) -> super::Request {
     let mut sent = request(token(), payload);
     host.id().clone_into(&mut sent.host);
-    sent.continue_cli = false;
+    sent.caller_set = false;
     sent
 }
 

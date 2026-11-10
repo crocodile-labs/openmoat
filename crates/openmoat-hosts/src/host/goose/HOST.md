@@ -55,7 +55,9 @@ approve it (`openmoat`, or `openmoat allow --last`), and the audit log keeps the
   `~\AppData\Roaming\Block\goose\config`); `GOOSE_PATH_ROOT` moves it to `<root>/config`
   and the plugins to `<root>/.agents/plugins`. OpenMoat finds goose by that directory.
 - MCP servers: `extensions` in `config.yaml`, pinned without their `enabled` switch;
-  their tools are `<extension>__<tool>`.
+  their tools are `<extension>__<tool>`. `openmoat mcp wrap` reads a `stdio` extension's
+  `cmd` and `args`, does not rewrite the YAML and names what to set by hand; an
+  `inline_python` extension has no command to wrap and is named.
 - Plugin settings: `disabledPlugins` in `~/.config/goose/settings.json`, or in a
   project's `.config/goose/settings.json` or `settings.local.json`, turns a plugin off;
   `openmoat status` and `openmoat doctor` report OpenMoat's plugin turned off. goose

@@ -14,6 +14,7 @@ impl HostSpec {
         id: "",
         display_name: "",
         speaks: None,
+        speaks_variable: None,
         reviews: Reviews::BASE,
         on_hook_failure: "",
         gaps: "",

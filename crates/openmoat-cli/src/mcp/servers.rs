@@ -19,6 +19,7 @@
 //! - OpenCode: `mcp.<name>` in its `config.json`, `opencode.json` and
 //!   `opencode.jsonc` (JSON with comments, read as JSON5), and a project's
 //!   `opencode.json[c]` and `.opencode/opencode.json[c]`.
+//! - goose: `extensions` in its `config.yaml`; it reads no project file of servers.
 //!
 //! Project files are looked for in the working directory and each directory above
 //! it up to the project root. A file that does not exist lists no servers.

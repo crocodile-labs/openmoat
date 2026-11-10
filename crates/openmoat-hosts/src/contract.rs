@@ -34,7 +34,8 @@ pub use hook_file::HookLayout;
 pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
 pub use mcp::{
-    AutoStart, McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax,
+    AutoStart, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer, McpSpec,
+    McpSyntax,
 };
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use protect::{Helper, Paths, ProcessSpec, Protect};
@@ -108,6 +109,10 @@ pub struct HostSpec {
     /// The host whose hook format this host sends, when it is another host's
     /// (`cn` sends Claude Code's).
     pub speaks: Option<Host>,
+    /// A variable a host that [`Self::speaks`] another's format sets for each
+    /// hook it runs, and the host it speaks does not: its presence says the
+    /// call is this host's ([`Host::caller_variable`]). `None` for most hosts.
+    pub speaks_variable: Option<&'static str>,
     /// What the host does with a `review` on each kind of tool hook.
     pub reviews: Reviews,
     /// What the host does when its hook is missing, crashes or times out, as

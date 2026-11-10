@@ -97,7 +97,7 @@ fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) 
     edits.retain(|(_, done)| {
         !declined.contains(&done.server.id) && wrap::sandboxed(&done.server.entry).is_none()
     });
-    drop_what_cannot_be_rewritten(&mut edits, out)?;
+    super::super::mcp::drop_what_cannot_be_rewritten(&mut edits, out)?;
     if edits.is_empty() {
         return Ok(());
     }
@@ -141,21 +141,6 @@ fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) 
             _ => return decline(home, &edits, out),
         }
     }
-}
-
-/// Take out the servers in files OpenMoat does not rewrite, saying what to
-/// set by hand: one such file must not stop `init`.
-fn drop_what_cannot_be_rewritten(
-    edits: &mut Vec<(Source, Done)>,
-    out: &mut Deferred,
-) -> Result<()> {
-    for preview in wrap::preview(edits) {
-        if let Err(why) = preview.change {
-            writeln!(out, "! mcp servers      {why}")?;
-            edits.retain(|(source, _)| source.path != preview.path);
-        }
-    }
-    Ok(())
 }
 
 /// The file changes `edits` would make, for the diff.

@@ -13,8 +13,7 @@ use crate::home::Home;
 use crate::install::{HostConfig, read_or_empty};
 use crate::integrity::Lock;
 use crate::report::{Mark, Row};
-use crate::sandbox::backend::SandboxBackend;
-use crate::sandbox::claude::mask::{self, Mask};
+use crate::sandbox::backend::{MaskLevel, SandboxBackend};
 use crate::sandbox::{Plan, install as host_sandbox};
 
 /// The Standard tier: each present host's sandbox settings against the policy,
@@ -79,8 +78,8 @@ pub(super) fn sandboxes(
             }
             Err(e) => report.line(Area::Sandbox, false, format!("{name:<16} sandbox: {e:#}")),
         }
-        if host_sandbox::backend(host).is_some_and(SandboxBackend::masks_secrets) {
-            masks(report, home, host, policy, &plan);
+        if let Some(backend) = host_sandbox::backend(host).filter(|b| b.masks_secrets()) {
+            masks(report, home, (host, backend), policy, &plan);
         }
         if verbose {
             let mut text = Vec::new();
@@ -112,39 +111,38 @@ pub(super) fn sandboxes(
     }
 }
 
-/// One row per policy secret: whether Claude Code's own broker masks it in
-/// the settings on disk (#363). A secret it does not mask keeps the hook's
-/// and `moat proxy`'s handling, so none of these is a problem: a missing
-/// entry is already the "differs from the policy" problem above.
-fn masks(report: &mut Report, home: &Home, host: Host, policy: &Policy, plan: &Plan) {
+/// One row per policy secret: whether the host's own broker masks it in the
+/// settings on disk (#363). A secret it does not mask keeps the hook's and
+/// `moat proxy`'s handling, so none of these is a problem: a missing entry is
+/// already the "differs from the policy" problem above.
+fn masks(
+    report: &mut Report,
+    home: &Home,
+    (host, backend): (Host, &dyn SandboxBackend),
+    policy: &Policy,
+    plan: &Plan,
+) {
     if policy.secrets.is_empty() {
         return;
     }
+    let name = host.display_name();
     let settings = host_sandbox::settings_path(home, host).and_then(|p| read_or_empty(&p));
     let root = match settings {
         Ok(root) => root,
         Err(e) => {
-            report.warn(&format!("Claude Code      secrets: {e:#}"));
+            report.warn(&format!("{name:<16} secrets: {e:#}"));
             return;
         }
     };
-    let states = mask::states(
-        &root,
-        &policy.secrets,
-        &plan.claude.report,
-        host_sandbox::MASK_FILES_DENIED,
-    );
-    for (secret, state) in states {
+    for mask in backend.secret_masks(&root, &policy.secrets, plan) {
         let text = format!(
-            "Claude Code      secret `{}` ({}): {}",
-            secret.id,
-            secret.host,
-            state.describe()
+            "{name:<16} secret `{}` ({}): {}",
+            mask.secret.id, mask.secret.host, mask.text
         );
-        match state {
-            Mask::Active => report.line(Area::Sandbox, true, text),
-            Mask::NotWritten => report.warn(&text),
-            Mask::FileDenied | Mask::Skipped(_) => report.note(&text),
+        match mask.level {
+            MaskLevel::Masked => report.line(Area::Sandbox, true, text),
+            MaskLevel::NotWritten => report.warn(&text),
+            MaskLevel::Unmasked => report.note(&text),
         }
     }
 }

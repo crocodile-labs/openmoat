@@ -46,6 +46,7 @@ use super::patterns::{
 };
 use super::{PROJECT, Report};
 
+pub mod backend;
 mod config;
 mod names;
 mod network;

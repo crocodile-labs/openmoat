@@ -344,3 +344,20 @@ fn a_last_line_without_a_newline_is_checked_like_any() {
     let answered = String::from_utf8(host.lock().unwrap().take().unwrap()).unwrap();
     assert!(answered.contains(r#""id":2"#), "{answered}");
 }
+
+/// A refused call's id comes back as it was sent: a line break JSON leaves raw
+/// must not split the reply for a reader that splits on it.
+#[test]
+fn a_refusal_echoes_an_id_with_line_separators_on_one_line() {
+    let input = json!({"jsonrpc": "2.0", "id": "x\u{2028}y", "method": "tools/list"}).to_string();
+    let host = Mutex::new(Some(Vec::new()));
+    refuse_all(Cursor::new(input), &host, "not started").unwrap();
+    let sent = String::from_utf8(host.lock().unwrap().take().unwrap()).unwrap();
+    assert_eq!(
+        sent.trim_end_matches('\n').split(LINE_BREAKS).count(),
+        1,
+        "{sent:?}"
+    );
+    let answer: Value = serde_json::from_str(sent.trim_end()).unwrap();
+    assert_eq!(answer["id"], "x\u{2028}y");
+}

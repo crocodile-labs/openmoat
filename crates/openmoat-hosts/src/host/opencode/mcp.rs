@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use crate::contract::{McpNames, McpReader, McpServer, McpSyntax, servers_at};
+use crate::contract::{McpCommandForm, McpNames, McpReader, McpServer, McpSyntax, servers_at};
 
 /// `{"mcp": {"<name>": {"type": "local" | "remote", …}}}` (OpenCode 1
 /// `docs/mcp-servers.mdx`, `config/config.ts`), and OpenCode 2's
@@ -18,6 +18,10 @@ pub(crate) struct OpenCodeJson;
 impl McpReader for OpenCodeJson {
     fn syntax(&self) -> McpSyntax {
         McpSyntax::Json5
+    }
+
+    fn command_form(&self) -> McpCommandForm {
+        McpCommandForm::CommandList
     }
 
     fn servers(&self, doc: &Value) -> Result<Vec<McpServer>, String> {

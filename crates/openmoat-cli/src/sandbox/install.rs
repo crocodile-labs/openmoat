@@ -8,10 +8,10 @@ use anyhow::{Context as _, Result};
 use openmoat_hosts::{Host, SandboxFormat};
 use toml_edit::DocumentMut;
 
-use super::backend::SandboxBackend;
-use super::{Plan, Report, codex, codex_config_path, cursor};
+use super::backend::{Pin, SandboxBackend};
+use super::{Plan, Report};
 use crate::home::{Home, write_private};
-use crate::install::{HostConfig, Recorded, SANDBOX_BACKUP, read_or_empty};
+use crate::install::{HostConfig, Recorded, SANDBOX_BACKUP};
 use crate::integrity::Lock;
 
 /// Hosts with a sandbox backend ([`openmoat_hosts::HostSpec::sandbox`]), in
@@ -44,10 +44,6 @@ pub fn host_with(format: SandboxFormat) -> Result<Host> {
 pub fn unavailable(host: Host) -> Option<&'static str> {
     unavailable_on(host, cfg!(windows))
 }
-
-/// Whether Claude Code runs on macOS here, where it applies a `file` mask entry
-/// as a read deny (the sandboxing docs, "Mask credential files").
-pub const MASK_FILES_DENIED: bool = cfg!(target_os = "macos");
 
 /// What `init` and `sandbox sync` print when [`write()`] changed the settings
 /// of a host whose sandbox is [`unavailable`]: Claude Code's deny rules are
@@ -149,34 +145,52 @@ pub fn masks_unavailable() -> bool {
         .any(|h| unavailable(h).is_some())
 }
 
-/// Codex config files under this shell's environment that carry OpenMoat's
-/// profile, which the lock pins by their owned part.
-pub fn codex_profile_files(home: &Home) -> Result<Vec<PathBuf>> {
-    let path = codex_config_path(home)?;
-    if !path.is_file() {
-        return Ok(Vec::new());
+/// Settings files under this shell's environment that the lock pins by the
+/// part OpenMoat owns ([`Pin::Part`]) and that carry that part.
+pub fn part_pinned_settings(home: &Home) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for host in hosts() {
+        if let Some(Pin::Part { carries, .. }) = backend(host).map(SandboxBackend::pin) {
+            files.extend(carrying(home, host, carries)?);
+        }
     }
-    let doc = read_toml(&path)?;
-    let ours = doc.get("permissions").and_then(|p| p.get(codex::PROFILE));
-    Ok(ours.map(|_| path).into_iter().collect())
+    Ok(files)
 }
 
-/// Cursor's `sandbox.json` under this shell's environment when it carries
-/// OpenMoat's keys, which the lock pins whole.
-pub fn cursor_sandbox_files(home: &Home) -> Result<Vec<PathBuf>> {
-    let path = settings_path(home, host_with(SandboxFormat::CursorSandbox)?)?;
-    if !path.is_file() {
-        return Ok(Vec::new());
+/// Settings files under this shell's environment that the lock pins whole
+/// ([`Pin::Whole`]) and that carry OpenMoat's keys.
+pub fn whole_pinned_settings(home: &Home) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for host in hosts() {
+        if let Some(Pin::Whole(carries)) = backend(host).map(SandboxBackend::pin) {
+            files.extend(carrying(home, host, carries)?);
+        }
     }
-    let ours = cursor::remove(&mut read_or_empty(&path)?);
-    Ok(ours.then_some(path).into_iter().collect())
+    Ok(files)
 }
 
-/// SHA-256 of the part of a Codex config OpenMoat owns ([`codex::owned_part`]).
-pub fn codex_part_digest(path: &Path) -> Result<String> {
-    Ok(crate::integrity::sha256_hex(
-        codex::owned_part(&read_toml(path)?).as_bytes(),
-    ))
+/// `host`'s settings file when it exists and `carries` finds OpenMoat's part in it.
+fn carrying(
+    home: &Home,
+    host: Host,
+    carries: fn(&Path) -> Result<bool>,
+) -> Result<Option<PathBuf>> {
+    let path = settings_path(home, host)?;
+    Ok((path.is_file() && carries(&path)?).then_some(path))
+}
+
+/// SHA-256 of the part of the settings file at `path` OpenMoat owns, as the
+/// lock pins it. The backend that pins by part is the only one whose files
+/// are ever handed here.
+pub fn part_digest(path: &Path) -> Result<String> {
+    let digest = hosts()
+        .filter_map(backend)
+        .find_map(|b| match b.pin() {
+            Pin::Part { digest, .. } => Some(digest),
+            Pin::WithHooks | Pin::Whole(_) => None,
+        })
+        .context("no sandbox backend pins a file by part")?;
+    digest(path)
 }
 
 /// Problems with `host`'s sandbox settings for `moat doctor` and `moat status`;

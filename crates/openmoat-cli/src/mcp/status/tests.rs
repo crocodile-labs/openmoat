@@ -66,8 +66,16 @@ fn a_remote_server_depends_on_its_definition_being_accepted() {
 /// A shape OpenMoat cannot read is never called protected.
 #[test]
 fn an_unknown_shape_is_unprotected() {
-    let entry = json!({"cmd": "server", "enabled": true});
+    let entry = json!({"program": "server", "enabled": true});
     assert_eq!(shape_of(&entry), Shape::Unknown);
+    assert!(!judge(&entry, true, true).0);
+}
+
+/// goose's `cmd` starts a process: a local server, not an unknown shape.
+#[test]
+fn a_goose_command_is_a_local_server() {
+    let entry = json!({"cmd": "server", "enabled": true});
+    assert_eq!(shape_of(&entry), Shape::Local);
     assert!(!judge(&entry, true, true).0);
 }
 

@@ -13,10 +13,8 @@ use crate::home::Home;
 use crate::install::{HookState, HostConfig};
 use crate::integrity::{self, HookPins};
 use crate::render::{self, Deferred};
-use crate::sandbox::backend::SandboxBackend;
-use crate::sandbox::{
-    Grants, Plan, Report, claude, install, landlock_rules, own_login, seatbelt_profile,
-};
+use crate::sandbox::backend::{Pin, SandboxBackend, SecretMask};
+use crate::sandbox::{Grants, Plan, Report, install, landlock_rules, own_login, seatbelt_profile};
 
 /// One host's generated settings, ready to print.
 struct Shown<'a> {
@@ -41,8 +39,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
         ("Seatbelt (macOS)", &seatbelt.profile, &seatbelt.report),
         ("Landlock (Linux)", &landlock_text, &landlock.report),
     ];
-    let mut claude_doc = json!({});
-    claude::apply(&mut claude_doc, &plan.claude, &mut Vec::new())?;
+    let masks = shown_masks(&plan, &policy.secrets)?;
     let mut hosts = Vec::new();
     for host in install::hosts() {
         let Some(backend) = install::backend(host) else {
@@ -85,7 +82,7 @@ pub fn show(args: &SandboxShowArgs) -> Result<Code> {
             "note: the policy has no `sandbox.read_roots`; the default policy's list applies"
         )?;
     }
-    write_secrets(&mut out, &policy.secrets, &claude_doc, &plan.claude.report)?;
+    write_secrets(&mut out, &policy.secrets, masks.as_ref())?;
     write_hook_only(&mut out, &policy)?;
     write_agent_logins(&mut out, &policy)?;
     for shown in hosts {
@@ -149,7 +146,7 @@ fn write_all(home: &Home, out: &mut impl io::Write) -> Result<Synced> {
     let plan = Plan::new(home, &home.load_policy()?)?;
     let binary = crate::install::hook_binary()?;
     let mut updated = 0;
-    let (mut files, mut codex_configs) = (Vec::new(), Vec::new());
+    let (mut files, mut by_part) = (Vec::new(), Vec::new());
     if crate::install::migrate_hooks::update(home, &binary)? {
         writeln!(
             out,
@@ -194,15 +191,18 @@ fn write_all(home: &Home, out: &mut impl io::Write) -> Result<Synced> {
             path.display()
         )?;
         write_report(out, install::report(host, &plan))?;
-        // The lock pins a Codex profile by the part OpenMoat owns, any other
-        // sandbox file whole.
-        if install::backend(host).is_some_and(SandboxBackend::pinned_by_part) {
-            codex_configs.push(path);
+        // A file the host also edits is pinned by the part OpenMoat owns, any
+        // other sandbox file whole.
+        if matches!(
+            install::backend(host).map(SandboxBackend::pin),
+            Some(Pin::Part { .. })
+        ) {
+            by_part.push(path);
         } else {
             files.push(path);
         }
     }
-    let lock = integrity::repin_with(home, &binary, HookPins::Keep, &files, &codex_configs)?;
+    let lock = integrity::repin_with(home, &binary, HookPins::Keep, &files, &by_part)?;
     writeln!(
         out,
         "✔ lock             {} files and {} Codex profile(s) pinned",
@@ -223,34 +223,56 @@ fn write_all(home: &Home, out: &mut impl io::Write) -> Result<Synced> {
     Ok(Synced { updated })
 }
 
+/// The host whose own broker masks the policy's secrets, and what it does with
+/// each of `secrets` in the settings as `sync` writes them.
+fn shown_masks<'a>(
+    plan: &Plan,
+    secrets: &'a [openmoat_core::Secret],
+) -> Result<Option<(Host, Vec<SecretMask<'a>>)>> {
+    let masking = install::hosts().find_map(|host| {
+        install::backend(host)
+            .filter(|b| b.masks_secrets())
+            .map(|b| (host, b))
+    });
+    let Some((host, backend)) = masking else {
+        return Ok(None);
+    };
+    let settings = install::parse_json(&backend.shown(plan)?)?;
+    Ok(Some((host, backend.secret_masks(&settings, secrets, plan))))
+}
+
 /// One line per policy secret: where its value is read (never the value) and
-/// whether Claude Code's broker masks it in `claude_doc` (the settings as
-/// `sync` writes them), or why not (the `secrets.<id>` loss).
+/// what `masks` says the host's broker does with it, or why it does not (the
+/// `secrets.<id>` loss).
 fn write_secrets(
     out: &mut impl io::Write,
     secrets: &[openmoat_core::Secret],
-    claude_doc: &Value,
-    claude: &Report,
+    masks: Option<&(Host, Vec<SecretMask<'_>>)>,
 ) -> io::Result<()> {
     if secrets.is_empty() {
         return Ok(());
     }
     writeln!(out, "Secrets  values are never shown")?;
-    let states = claude::mask::states(claude_doc, secrets, claude, install::MASK_FILES_DENIED);
-    for (secret, state) in states {
+    let Some((host, masks)) = masks else {
+        return Ok(());
+    };
+    for SecretMask { secret, text, .. } in masks {
         let source = match &secret.source {
             openmoat_core::SecretSource::Env(name) => format!("env {name}"),
             openmoat_core::SecretSource::File(path) => format!("file {path}"),
             openmoat_core::SecretSource::Keychain { service, .. } => format!("keychain {service}"),
         };
-        let claude = if install::masks_unavailable() {
-            "Claude Code's sandbox is not available here, so it masks nothing".to_owned()
+        let state = if install::masks_unavailable() {
+            format!(
+                "{}'s sandbox is not available here, so it masks nothing",
+                host.display_name()
+            )
         } else {
-            state.describe()
+            text.clone()
         };
         writeln!(
             out,
-            "  {}  {} {} from {source}; {claude}",
+            "  {}  {} {} from {source}; {state}",
             secret.id, secret.host, secret.header
         )?;
     }

@@ -19,7 +19,7 @@ use crate::integrity::{self, Lock};
 use crate::mcp::tools::{self, ToolPins};
 use crate::mcp::wrap::{self, Done};
 use crate::mcp::{self, Change};
-use crate::render::Deferred;
+use crate::render::{Deferred, clean};
 
 mod gate;
 mod proxy;
@@ -148,7 +148,7 @@ pub fn wrap(args: &McpWrapArgs) -> Result<Code> {
     let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
     let hosts = mcp::set_up_hosts(&home, &binary);
-    let done = wrap_servers(
+    let applied = wrap_servers(
         &home,
         &binary,
         &hosts,
@@ -157,18 +157,44 @@ pub fn wrap(args: &McpWrapArgs) -> Result<Code> {
         args.dry_run,
         &mut out,
     )?;
-    if done == 0 {
+    if applied.total() == 0 {
         writeln!(out, "· no stdio MCP server to wrap")?;
     }
     out.finish()?;
-    Ok(Code::Ok)
+    Ok(applied.code(&args.servers))
+}
+
+/// What a wrap or unwrap did.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Applied {
+    done: usize,
+    by_hand: usize,
+}
+
+impl Applied {
+    /// Every server handled, those left to set by hand included.
+    pub(super) fn total(self) -> usize {
+        self.done + self.by_hand
+    }
+
+    /// Asked for by name and left to set by hand: what was asked was not done.
+    /// A sweep of every server goes on past such a file and succeeds.
+    fn code(self, names: &[String]) -> Code {
+        if self.by_hand > 0 && !names.is_empty() {
+            Code::Usage
+        } else {
+            Code::Ok
+        }
+    }
 }
 
 /// Wrap the stdio servers named in `names` (all when empty) in the user
 /// configuration of `hosts`; returns how many. `moat init --mcp-proxy` uses it.
 /// `sandbox` is the person's choice: `None` starts a newly wrapped server in
 /// `moat run`'s sandbox wherever that can sandbox, and leaves a wrapped one as
-/// it is; `Some` also switches a wrapped one (ADR-049).
+/// it is; `Some` also switches a wrapped one (ADR-049). The count includes the
+/// servers in a file OpenMoat does not rewrite, which are named with what to
+/// set by hand: one such file must not stop the others.
 pub(super) fn wrap_servers(
     home: &Home,
     binary: &Path,
@@ -177,9 +203,27 @@ pub(super) fn wrap_servers(
     sandbox: Option<bool>,
     dry_run: bool,
     out: &mut Deferred,
+) -> Result<Applied> {
+    let mut edits = wrap_plan(home, binary, hosts, names, sandbox, out)?;
+    let by_hand = drop_what_cannot_be_rewritten(&mut edits, out)?;
+    let done = apply_wrap(home, hosts, &edits, sandbox, dry_run, out)?;
+    Ok(Applied { done, by_hand })
+}
+
+/// Take out the servers in files OpenMoat does not rewrite, saying what to
+/// set by hand; how many.
+pub(super) fn drop_what_cannot_be_rewritten(
+    edits: &mut Vec<(crate::mcp::servers::Source, Done)>,
+    out: &mut Deferred,
 ) -> Result<usize> {
-    let edits = wrap_plan(home, binary, hosts, names, sandbox, out)?;
-    apply_wrap(home, hosts, &edits, sandbox, dry_run, out)
+    let before = edits.len();
+    for preview in wrap::preview(edits) {
+        if let Err(why) = preview.change {
+            writeln!(out, "! mcp servers      {why}")?;
+            edits.retain(|(source, _)| source.path != preview.path);
+        }
+    }
+    Ok(before - edits.len())
 }
 
 /// What wrapping the stdio servers in `names` (all when empty) of `hosts`
@@ -199,7 +243,8 @@ pub(super) fn wrap_plan(
         if !names.is_empty() && !names.contains(&server.name) {
             continue;
         }
-        let entry = wrap::wrapped(&server.entry, binary, &server.name, new_sandbox)
+        let form = source.reader.command_form();
+        let entry = wrap::wrapped_as(&server.entry, binary, &server.name, new_sandbox, form)
             .or_else(|| sandbox.and_then(|on| wrap::with_sandbox(&server.entry, on)));
         // The proxy takes only the hook decisions of the agent whose file
         // starts it; a definition wrapped before `--host` existed gets it now.
@@ -209,6 +254,14 @@ pub(super) fn wrap_plan(
             None => wrap::with_host(&server.entry, host),
         };
         let Some(entry) = entry else {
+            if let Some(why) = wrap::not_wrappable(&server.entry, form) {
+                writeln!(
+                    out,
+                    "! `{}` ({}) is left as it is: {why}",
+                    clean(&server.name),
+                    server.file.display()
+                )?;
+            }
             continue;
         };
         if pending.contains(&server.id) {
@@ -308,11 +361,12 @@ pub fn unwrap(args: &McpUnwrapArgs) -> Result<Code> {
     let binary = crate::install::hook_binary()?;
     let mut out = Deferred::default();
     let hosts = mcp::set_up_hosts(&home, &binary);
-    if unwrap_servers(&home, &hosts, &args.servers, &mut out)? == 0 {
+    let applied = unwrap_servers(&home, &hosts, &args.servers, &mut out)?;
+    if applied.total() == 0 {
         writeln!(out, "· no wrapped MCP server to unwrap")?;
     }
     out.finish()?;
-    Ok(Code::Ok)
+    Ok(applied.code(&args.servers))
 }
 
 /// Unwrap the servers named in `names`, or every one `hosts.json` records as
@@ -322,7 +376,7 @@ pub(super) fn unwrap_servers(
     hosts: &[Host],
     names: &[String],
     out: &mut Deferred,
-) -> Result<usize> {
+) -> Result<Applied> {
     let recorded = Recorded::load(home)?;
     let pending = pending_ids(home, hosts)?;
     let mut edits = Vec::new();
@@ -344,7 +398,9 @@ pub(super) fn unwrap_servers(
         }
         edits.push((source, Done { server, entry }));
     }
-    finish_edits(home, hosts, &edits, false, false, out)
+    let by_hand = drop_what_cannot_be_rewritten(&mut edits, out)?;
+    let done = finish_edits(home, hosts, &edits, false, false, out)?;
+    Ok(Applied { done, by_hand })
 }
 
 fn skipped(out: &mut Deferred, name: &str) -> Result<()> {

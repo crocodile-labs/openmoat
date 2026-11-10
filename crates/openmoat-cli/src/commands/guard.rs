@@ -225,8 +225,7 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     let (mut request, mut decision) = match read_stdin(installed_for) {
         Ok(payload) => {
             // The Continue CLI runs the Claude Code hook but cannot prompt.
-            let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
-            host = installed_for.sender(&payload, continue_env);
+            host = installed_for.sender(&payload, caller_set());
             *event = host.event_of(&payload);
             // What a call returned: nothing to decide or record (ADR-057).
             if matches!(event, HookEvent::PostToolUse { .. }) {
@@ -295,6 +294,11 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     }
 }
 
+/// Whether this hook has the variable of a host running another host's hook.
+fn caller_set() -> bool {
+    Host::caller_variable().is_some_and(|variable| std::env::var_os(variable).is_some())
+}
+
 /// Under `moat run`: the call goes to the run's process outside the sandbox,
 /// and its answer is printed as it came. Whatever fails denies here, in the
 /// format the payload's hook expects; nothing is recorded from in here.
@@ -306,12 +310,12 @@ fn relayed(installed_for: Host, endpoint: Result<guard_relay::Endpoint>, started
             return respond(installed_for, &HookEvent::default(), &kernel_error(&error));
         }
     };
-    let continue_env = std::env::var_os(openmoat_hosts::CONTINUE_ENV).is_some();
-    let host = installed_for.sender(&payload, continue_env);
+    let caller_set = caller_set();
+    let host = installed_for.sender(&payload, caller_set);
     let event = host.event_of(&payload);
     let budget = Duration::from_secs(GUARD_BUDGET_S).saturating_sub(started.elapsed());
     hangs::enter(Phase::Relay);
-    match endpoint.and_then(|e| e.decide(installed_for, &payload, continue_env, budget)) {
+    match endpoint.and_then(|e| e.decide(installed_for, &payload, caller_set, budget)) {
         Ok(reply) => {
             hangs::enter(Phase::Answer);
             relay_once(&reply)

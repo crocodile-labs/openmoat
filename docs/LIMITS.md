@@ -135,8 +135,10 @@ Each agent's gaps and the reasons are in
   one you declined), a changed or new server's tool calls are denied, but its command can
   already have run once, with your permissions. A wrapped server starts only from a
   definition you accepted, in `openmoat run`'s sandbox where it can sandbox; it does not
-  start inside `openmoat run`, and `openmoat init` cannot wrap every agent's files (Hermes
-  Agent's YAML, OpenCode's and goose's own command forms). `openmoat status` lists the
+  start inside `openmoat run`, and `openmoat init` and `openmoat mcp wrap` cannot rewrite every
+  agent's files: Hermes Agent's and goose's YAML, and an OpenCode file with comments, are
+  named with what to set by hand; a goose extension of inline Python has no command to
+  wrap. `openmoat status` lists the
   servers that start outside OpenMoat.
 - **The hook sees an MCP call's arguments, not what the server then does.** A server
   started without `--sandbox` runs with your permissions: a tool that takes no path can

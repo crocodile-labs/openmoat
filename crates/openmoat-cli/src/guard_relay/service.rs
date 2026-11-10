@@ -136,7 +136,7 @@ impl Service {
     /// Whether `request`, a call `host`'s hook sent, is the run's to decide;
     /// a payload the guard cannot parse is, and it denies it.
     fn admit(&self, host: Host, request: &Request) -> Result<Result<(), Refused>> {
-        let sender = host.sender(&request.payload, request.continue_cli);
+        let sender = host.sender(&request.payload, request.caller_set);
         let mut scope = self.scope.lock().unwrap_or_else(PoisonError::into_inner);
         match scope.host {
             None => scope.host = Some(host),
@@ -207,10 +207,12 @@ impl Service {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if request.continue_cli {
-            command.env(openmoat_hosts::CONTINUE_ENV, "1");
-        } else {
-            command.env_remove(openmoat_hosts::CONTINUE_ENV);
+        if let Some(variable) = Host::caller_variable() {
+            if request.caller_set {
+                command.env(variable, "1");
+            } else {
+                command.env_remove(variable);
+            }
         }
         // Where a payload that names no directory ran.
         let cwd = Path::new(&request.cwd);

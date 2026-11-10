@@ -134,22 +134,16 @@ fn check_only_shrinks(
 /// host (`openclaw::`, `mod codex;`). Only `openmoat-cli/src/sandbox/` and what
 /// reaches its per-format backends is to stay; the list only shrinks.
 const ALLOWED_MODULES: &[(&str, usize)] = &[
-    // Claude Code's secret masking, which only its backend has, as `sandbox show`
-    // and `doctor` report it.
-    ("openmoat-cli/src/commands/doctor/sandboxes.rs", 1),
-    ("openmoat-cli/src/commands/sandbox.rs", 2),
     // The per-format sandbox backends and the plan that holds one output each
     // ([`openmoat_hosts::SandboxFormat`]), which stay in the CLI.
     ("openmoat-cli/src/sandbox.rs", 16),
-    ("openmoat-cli/src/sandbox/backend.rs", 16),
+    ("openmoat-cli/src/sandbox/backend.rs", 3),
     ("openmoat-cli/src/sandbox/codex/own_binary.rs", 1),
     ("openmoat-cli/src/sandbox/differential.rs", 1),
     ("openmoat-cli/src/sandbox/differential/hosts.rs", 2),
     ("openmoat-cli/src/sandbox/hook_only.rs", 4),
-    ("openmoat-cli/src/sandbox/install.rs", 4),
-    // Re-exports the guard needs: Claude Code's `ConfigChange` helpers, and the
-    // variable that says the Continue CLI runs the hook.
-    ("openmoat-hosts/src/lib.rs", 3),
+    // Re-exports the guard needs: Claude Code's `ConfigChange` helpers.
+    ("openmoat-hosts/src/lib.rs", 2),
 ];
 
 /// Each host's module name, and its first word for the short forms the CLI

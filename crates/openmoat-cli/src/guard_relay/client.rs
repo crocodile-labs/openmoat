@@ -48,7 +48,7 @@ impl Endpoint {
         &self,
         host: Host,
         payload: &str,
-        continue_cli: bool,
+        caller_set: bool,
         budget: Duration,
     ) -> Result<Reply> {
         let deadline = Instant::now() + budget;
@@ -66,7 +66,7 @@ impl Endpoint {
             nonce: random_hex(NONCE_LEN / 2)?.to_string(),
             host: host.id().to_owned(),
             cwd,
-            continue_cli,
+            caller_set,
             payload: payload.to_owned(),
         };
         exchange(stream, &request, deadline)

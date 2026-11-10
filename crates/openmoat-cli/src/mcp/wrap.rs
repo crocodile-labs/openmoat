@@ -1,26 +1,29 @@
 //! `moat mcp wrap` and `unwrap`: point a stdio server's definition at
 //! `moat mcp proxy`, and back.
 //!
-//! Wrapping replaces `command` and `args` and nothing else:
+//! Wrapping replaces the program and its arguments and nothing else:
 //! `{"command": "npx", "args": ["-y", "pkg"]}` becomes
 //! `{"command": "<moat>", "args": ["mcp", "proxy", "--server", "<name>", "--host", "<agent>", "--", "npx", "-y", "pkg"]}`,
 //! where `<agent>` is the agent whose file it is: the proxy takes only that
-//! agent's hook decisions for its calls.
+//! agent's hook decisions for its calls. Each host's reader names its form
+//! (`form.rs`): OpenCode's one `command` list, goose's `cmd` and `args`.
 //! The original stays in the arguments after `--`, so unwrapping needs no other
 //! record, and `env`, `cwd` and the rest stay as they were. Only user-level files
 //! are changed (`~/.claude.json`, Cursor's `mcp.json`, Codex's `config.toml`,
 //! OpenClaw's `openclaw.json`, Copilot's `mcp-config.json`, pi's `mcp.json`,
-//! Gemini CLI's `settings.json`): a
-//! project's `.mcp.json` is shared through its repository, where the path of this
-//! machine's `moat` means nothing. Each file is backed up before its first change,
-//! and `hosts.json` records every wrapped definition for `moat uninstall`.
+//! Gemini CLI's `settings.json`, OpenCode's `config.json`, `opencode.json` and
+//! `opencode.jsonc`): a project's `.mcp.json` is shared through its repository,
+//! where the path of this machine's `moat` means nothing. A YAML file (Hermes
+//! Agent's and goose's `config.yaml`) is not rewritten: what to set by hand is
+//! named. Each file is backed up before its first change, and `hosts.json`
+//! records every wrapped definition for `moat uninstall`.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use openmoat_hosts::{Host, McpSyntax};
+use openmoat_hosts::{Host, McpCommandForm, McpSyntax};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use toml_edit::{Array, DocumentMut, value};
@@ -29,8 +32,10 @@ use super::servers::{self, Server, Source};
 use crate::home::{Home, write_private};
 use crate::install::Recorded;
 
+mod form;
 mod preview;
 
+pub use form::not_wrappable;
 pub use preview::preview;
 
 /// Suffix of the copy taken before the first wrap changes a file.
@@ -53,29 +58,6 @@ pub struct Done {
     pub entry: Value,
 }
 
-/// `entry`'s `command` and `args` when it is a stdio server: a `command`
-/// string, and no `type` other than `stdio` (`local` in GitHub Copilot CLI's
-/// `mcp-config.json`).
-fn stdio(entry: &Value) -> Option<(String, Vec<String>)> {
-    if entry
-        .get("type")
-        .and_then(Value::as_str)
-        .is_some_and(|t| t != "stdio" && t != "local")
-    {
-        return None;
-    }
-    let command = entry.get("command")?.as_str()?.to_owned();
-    let args = match entry.get("args") {
-        None | Some(Value::Null) => Vec::new(),
-        Some(Value::Array(items)) => items
-            .iter()
-            .map(|a| a.as_str().map(str::to_owned))
-            .collect::<Option<Vec<_>>>()?,
-        Some(_) => return None,
-    };
-    Some((command, args))
-}
-
 /// The original command and arguments of a wrapped definition.
 fn original(command: &str, args: &[String]) -> Option<(String, Vec<String>)> {
     let program = Path::new(command).file_stem()?.to_str()?;
@@ -88,10 +70,25 @@ fn original(command: &str, args: &[String]) -> Option<(String, Vec<String>)> {
     Some((first.clone(), rest.to_vec()))
 }
 
-/// `entry` running through the proxy at `binary`; `None` when it is not a
-/// stdio server or is wrapped already.
+/// `entry` running through the proxy at `binary`, in the common form of a
+/// `command` and `args`; `None` when it is not a stdio server or is wrapped
+/// already.
+#[cfg(test)]
 pub fn wrapped(entry: &Value, binary: &Path, name: &str, sandbox: bool) -> Option<Value> {
-    let (command, args) = stdio(entry)?;
+    wrapped_as(entry, binary, name, sandbox, McpCommandForm::CommandArgs)
+}
+
+/// `entry` in `form`, its host's reader's form, running through the proxy at
+/// `binary`; `None` when it is not a local server in that form or is wrapped
+/// already.
+pub fn wrapped_as(
+    entry: &Value,
+    binary: &Path,
+    name: &str,
+    sandbox: bool,
+    form: McpCommandForm,
+) -> Option<Value> {
+    let (command, args) = form::parts(entry, form)?;
     if original(&command, &args).is_some() {
         return None;
     }
@@ -104,18 +101,26 @@ pub fn wrapped(entry: &Value, binary: &Path, name: &str, sandbox: bool) -> Optio
     proxy.push("--".to_owned());
     proxy.push(command);
     proxy.extend(args);
-    let mut out = entry.clone();
-    out["command"] = Value::String(binary.display().to_string());
-    out["args"] = Value::from(proxy);
-    Some(out)
+    Some(form::written(
+        entry,
+        form,
+        binary.display().to_string(),
+        proxy,
+    ))
 }
 
 /// The arguments `entry` gives `moat mcp proxy` (`mcp`, `proxy`, its flags,
 /// `--` and the server's command); `None` when it is not wrapped.
 pub fn proxy_args(entry: &Value) -> Option<Vec<String>> {
-    let (command, args) = stdio(entry)?;
+    let (_, command, args) = form::read(entry)?;
     original(&command, &args)?;
     Some(args)
+}
+
+/// Wrapped `entry` given the arguments `args` for the proxy.
+fn with_proxy_args(entry: &Value, args: Vec<String>) -> Option<Value> {
+    let (form, command, _) = form::read(entry)?;
+    Some(form::written(entry, form, command, args))
 }
 
 /// Whether wrapped `entry` starts its server in `moat run`'s sandbox; `None`
@@ -152,9 +157,7 @@ pub fn with_sandbox(entry: &Value, on: bool) -> Option<Value> {
         kept.push("--sandbox".to_owned());
     }
     kept.extend(rest.iter().cloned());
-    let mut out = entry.clone();
-    out["args"] = Value::from(kept);
-    Some(out)
+    with_proxy_args(entry, kept)
 }
 
 /// Wrapped `entry` with `--host <host>`, so the proxy takes only `host`'s hook
@@ -174,35 +177,32 @@ pub fn with_host(entry: &Value, host: Host) -> Option<Value> {
     let mut kept = flags.to_vec();
     kept.extend(["--host".to_owned(), host.id().to_owned()]);
     kept.extend(args[split..].iter().cloned());
-    let mut out = entry.clone();
-    out["args"] = Value::from(kept);
-    Some(out)
+    with_proxy_args(entry, kept)
 }
 
 /// Whether `entry` starts a local process: a `command` (a string, or a list
-/// as OpenCode writes it) and no remote `type`. Such a server runs its
-/// command when the host starts, before any tool call reaches a hook.
+/// as OpenCode writes it) or goose's `cmd`, and no remote `type`; or goose's
+/// inline Python, which it runs itself. Such a server runs its command when
+/// the host starts, before any tool call reaches a hook.
 pub fn starts_process(entry: &Value) -> bool {
-    let local = entry
-        .get("type")
-        .and_then(Value::as_str)
-        .is_none_or(|t| matches!(t, "stdio" | "local"));
-    let command = match entry.get("command") {
+    let kind = entry.get("type").and_then(Value::as_str);
+    if kind == Some("inline_python") {
+        return true;
+    }
+    let local = kind.is_none_or(|t| matches!(t, "stdio" | "local"));
+    let names = |key: &str| match entry.get(key) {
         Some(Value::String(s)) => !s.is_empty(),
         Some(Value::Array(items)) => !items.is_empty(),
         _ => false,
     };
-    local && command
+    local && (names("command") || names("cmd"))
 }
 
-/// `entry` as it was before [`wrapped`]; `None` when it is not wrapped.
+/// `entry` as it was before wrapping; `None` when it is not wrapped.
 pub fn unwrapped(entry: &Value) -> Option<Value> {
-    let (command, args) = stdio(entry)?;
+    let (form, command, args) = form::read(entry)?;
     let (command, args) = original(&command, &args)?;
-    let mut out = entry.clone();
-    out["command"] = Value::String(command);
-    out["args"] = Value::from(args);
-    Some(out)
+    Some(form::written(entry, form, command, args))
 }
 
 /// The user-level files of `hosts` and the servers they define.
@@ -279,19 +279,20 @@ fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, 
 /// Whether `entry` (a definition as it is to be written) runs through the
 /// proxy: what it ran before, when it does.
 fn original_of(entry: &Value) -> Option<(String, Vec<String>)> {
-    let (command, args) = stdio(entry)?;
+    let (_, command, args) = form::read(entry)?;
     original(&command, &args)
 }
 
-/// Each server's `command` and `args` as they are to be written, one line each.
+/// Each server's program and `args` as they are to be written, one line each.
 fn by_hand(dones: &[&Done]) -> String {
     dones
         .iter()
         .map(|done| {
+            let key = form::program_key(&done.entry);
             format!(
-                "  {}: command: {}, args: {}",
+                "  {}: {key}: {}, args: {}",
                 done.server.name,
-                done.entry["command"],
+                done.entry[key],
                 done.entry.get("args").unwrap_or(&Value::Null)
             )
         })

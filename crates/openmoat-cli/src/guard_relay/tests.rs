@@ -45,7 +45,7 @@ fn request(token: &str, payload: &str) -> Request {
         nonce: fresh_nonce(),
         host: Host::ClaudeCode.id().to_owned(),
         cwd: "/p".to_owned(),
-        continue_cli: true,
+        caller_set: true,
         payload: payload.to_owned(),
     }
 }

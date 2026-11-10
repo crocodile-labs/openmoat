@@ -39,6 +39,7 @@
 //! nothing the policy allows (#434). Claude Code keeps its own `.claude`
 //! settings read-only itself, so `.claude` gets no rule.
 
+pub mod backend;
 mod credentials;
 mod deny_list;
 mod git_env;
