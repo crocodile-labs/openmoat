@@ -750,7 +750,7 @@ time, as the server receives it ([ADR-045](adr/ADR-045-mcp-gateway.md)). Turn it
 server, in your own terminal:
 
 ```bash
-openmoat mcp wrap github          # or: openmoat init --mcp-proxy, for every stdio server
+openmoat mcp wrap github          # or: openmoat init, which offers to at a terminal
 openmoat mcp accept github        # after the agent first starts it: read each tool, accept
 ```
 
@@ -1005,7 +1005,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 |---|---|
 | `openmoat` | see which agents are protected and today's decisions; answer drift, a policy update or the last review (terminal only) |
 | `openmoat demo [--format json]` | see what your policy (or the default one) decides for a fixed list of example agent calls; nothing runs, no hook or file is touched |
-| `openmoat init [--hosts …] [--yes] [--dry-run] [--verbose] [--mcp-proxy [--mcp-no-sandbox]]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions), but not about an agent whose files already have everything; `--verbose` also prints each file written with its hook entries, the backups and the files the lock pins. Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
+| `openmoat init [--hosts …] [--yes] [--dry-run] [--verbose] [--mcp-proxy [--mcp-no-sandbox] \| --no-mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions), but not about an agent whose files already have everything; at a terminal also offers to run the stdio MCP servers through OpenMoat, showing the change first ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)); `--no-mcp-proxy` opts out; `--verbose` also prints each file written with its hook entries, the backups and the files the lock pins. Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
 | `openmoat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists every check with its paths, each agent's known gaps and where each sandbox is stricter or wider than the policy) |
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |

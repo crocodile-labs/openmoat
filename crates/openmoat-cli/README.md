@@ -19,7 +19,7 @@ Installers, Homebrew and the full guide: the
 | Command | Purpose |
 |---|---|
 | `openmoat` | which agents are protected, today's decisions; answer a drifted policy or the last review (terminal only) |
-| `openmoat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy [--mcp-no-sandbox]]` | create `~/.moat`, write the default policy, create the audit log, install hooks idempotently, configure the host sandboxes |
+| `openmoat init [--hosts …] [--yes] [--dry-run] [--mcp-proxy [--mcp-no-sandbox] \| --no-mcp-proxy]` | create `~/.moat`, write the default policy, create the audit log, install hooks idempotently, configure the host sandboxes |
 | `openmoat uninstall [--hosts …] [--purge]` | remove the hooks and sandbox settings, restoring the backups (terminal only) |
 | `openmoat status` · `openmoat doctor [--accept]` | installation health and each agent's protection level (exit 64 when unhealthy) · verify and re-pin (terminal only) |
 | `openmoat show [<id> \| --session <id> \| --since … \| --recent N]` | inspect audit events |

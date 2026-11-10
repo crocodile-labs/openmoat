@@ -38,6 +38,10 @@ pub struct Recorded {
     /// `moat uninstall` restores those and no other.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mcp_wrapped: Vec<crate::mcp::wrap::Wrapped>,
+    /// The MCP server definitions (`<file>#<pointer>`) a person said no to
+    /// wrapping when `moat init` asked, so it does not ask about them again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_wrap_declined: Vec<String>,
     /// Host id → the further directories `moat init` found that the host
     /// reads laid out like its configuration directory (OpenCode's
     /// `OPENCODE_CONFIG_DIR`, Hermes Agent's profiles: `InstallSpec::also_dirs`),

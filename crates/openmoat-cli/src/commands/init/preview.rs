@@ -22,6 +22,18 @@ pub(super) struct Change {
     parts: Vec<Part>,
 }
 
+impl Change {
+    /// The change wrapping MCP servers would make to `path`, for its diff.
+    pub(super) fn mcp_servers(path: PathBuf, before: String, after: String) -> Self {
+        Self {
+            path,
+            before,
+            after,
+            parts: Vec::new(),
+        }
+    }
+}
+
 /// What of OpenMoat's a changed file gets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Part {

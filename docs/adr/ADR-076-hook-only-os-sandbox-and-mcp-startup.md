@@ -59,3 +59,72 @@ before any check, and wrapping every server was opt-in.
   by the policy, as for any agent under `openmoat run`.
 - goose records each plugin it finds in `config.yaml`, which the policy keeps unwritable;
   what goose does when that write is refused is not known.
+
+## Decision 2: `init` offers to wrap, and a later definition is held and reported
+
+### When a host runs a server's command
+
+No hook runs before a host starts a server, so this decides what a check can do. From the
+hosts' documentation, as read for this decision; "not stated" means the page read does not
+say, not that it never happens.
+
+| Host | When the command runs | A project's servers |
+|---|---|---|
+| Claude Code | no general rule stated; the docs state session start for plugin servers and a restart on the next tool call in `claude -p` | prompts in an interactive session first; `claude -p` and the SDK load them without asking; committed `enabledMcpjsonServers` is ignored in an untrusted folder |
+| Codex | not stated exactly; the docs imply startup, when it first lists the tools | trusted projects only |
+| Cursor | not stated | no approval described before start |
+| Gemini CLI | at startup ("When Gemini CLI starts, it performs MCP server discovery") | stdio servers are connected only in a trusted folder |
+| GitHub Copilot CLI | not stated | a folder trust prompt at session start; whether it gates the servers is not stated |
+| OpenCode | "Servers connect automatically", time not stated | no approval step described |
+| Hermes Agent | at startup, and on `/reload-mcp`; `lazy: true` waits for the first tool call after the first run | no project file |
+| OpenClaw | the Gateway owns the connections; the first is made on demand | no project file |
+| goose | not stated | no project file read |
+| Cline CLI | not stated | no project file read |
+| pi | not stated by pi; community MCP adapters differ and several default to first use | a trusted project's `.pi/mcp.json` |
+| Antigravity CLI | not stated | no approval described |
+| Continue CLI | `cn` reads its own configuration; OpenMoat reads none of it | |
+
+Nothing above was checked against a running host.
+
+### What is built, in the order of preference asked for
+
+1. **`init` wraps by default, when a person says so.** At a terminal, after the agents
+   are set up, `init` lists the stdio servers in the agents' user configuration that are
+   not wrapped, says what wrapping does and how to undo it, and asks
+   `Run them through OpenMoat? [Y/n/d]` (`d` shows the diff; Enter is yes, as for every
+   `init` question). Yes wraps them as `--mcp-proxy` does: backed up, recorded for
+   `uninstall`, re-pinned as a person's change, sandboxed where `openmoat run` can
+   sandbox. **Opt-out:** `--no-mcp-proxy`, or `n`, remembered per definition in
+   `hosts.json`, so a person who said no is not asked again about it; a new definition
+   is asked about. Without a person (`--yes`, a script, an `init` an agent starts, or
+   over an existing lock without a terminal) nothing is rewritten: `status` and `doctor`
+   keep reporting each server, as before. An existing unwrapped server is therefore never
+   rewritten without its owner answering.
+2. **A definition that appears later** (a project's `.mcp.json`, one added to a file
+   after `init`) is not wrapped: OpenMoat does not rewrite a project's files, whose path
+   of this machine's binary would mean nothing to the rest of the repository (ADR-049).
+   Its tool calls are denied (`mcp-server-changed`) until a person runs `openmoat mcp
+   accept` (ADR-026), and `status` and `doctor`, run in that project, name it as new and
+   as starting outside OpenMoat. OpenMoat reads the definition and never starts it.
+
+### What cannot be closed
+
+- **The host starts the server itself, and a hook cannot stop that.** A definition that
+  is not wrapped (a project's, one added after `init`, one the person declined, or any
+  host's file `init` cannot rewrite) can run its command once before any check, with the
+  person's permissions. Under `openmoat run` that command runs inside the agent's own
+  sandbox instead (decision 1), but it still runs.
+- **Wrapping and `openmoat run` do not combine.** A wrapped server refuses to start
+  inside `openmoat run` (ADR-049), so a person who uses both loses that server there.
+- **Not every host can be wrapped by `init`.** Hermes Agent's `config.yaml` is named with
+  what to set by hand and left alone, as `openmoat mcp wrap` does. `wrap` does not read
+  OpenCode's `"command": [...]` or goose's `cmd` as a stdio command: OpenCode's servers
+  stay reported as starting outside OpenMoat, and goose's are not reported at all, which
+  is a gap of the existing report that this does not close.
+
+## Consequences of decision 2
+
+- `init` at a terminal asks one more question when there is an unwrapped server to ask
+  about. A wrapped server's tools stay hidden until `openmoat mcp accept` after its first
+  start (ADR-032), which the question says.
+- Amends ADR-049, where wrapping was opt-in only.

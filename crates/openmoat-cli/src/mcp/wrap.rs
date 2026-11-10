@@ -29,6 +29,10 @@ use super::servers::{self, Server, Source};
 use crate::home::{Home, write_private};
 use crate::install::Recorded;
 
+mod preview;
+
+pub use preview::preview;
+
 /// Suffix of the copy taken before the first wrap changes a file.
 pub const MCP_BACKUP: &str = "moat-mcp-backup";
 
@@ -231,32 +235,7 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
             .push(done);
     }
     for (path, (syntax, dones)) in by_file {
-        let text =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let new = match syntax {
-            McpSyntax::Json => edit_json(&text, &dones)?,
-            McpSyntax::Toml => edit_toml(&text, &dones)?,
-            McpSyntax::Json5 => {
-                // JSON5 is written back as JSON, so a file with comments is not.
-                let parsed = crate::install::openclaw::parse(&text)
-                    .with_context(|| format!("parsing {}", path.display()))?;
-                crate::install::openclaw::refuse_comments(&parsed, &path)?;
-                edit_value(parsed.value, &dones)?
-            }
-            // The host rewrites it and people keep comments in it; OpenMoat
-            // edits only its own hook lines there.
-            McpSyntax::Yaml => bail!(
-                "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
-                 then run `openmoat mcp accept`:\n{}",
-                path.display(),
-                if dones.iter().any(|d| original_of(&d.entry).is_some()) {
-                    "wrap"
-                } else {
-                    "unwrap"
-                },
-                by_hand(&dones)
-            ),
-        };
+        let (_, new) = rendered(&path, syntax, &dones)?;
         if dry_run {
             continue;
         }
@@ -264,6 +243,37 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
         write_private(&path, new.as_bytes())?;
     }
     Ok(())
+}
+
+/// The text of the file at `path` and what `dones` would make it; `Err` when
+/// OpenMoat does not rewrite such a file, with what to set by hand.
+fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, String)> {
+    let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let new = match syntax {
+        McpSyntax::Json => edit_json(&text, dones)?,
+        McpSyntax::Toml => edit_toml(&text, dones)?,
+        McpSyntax::Json5 => {
+            // JSON5 is written back as JSON, so a file with comments is not.
+            let parsed = crate::install::openclaw::parse(&text)
+                .with_context(|| format!("parsing {}", path.display()))?;
+            crate::install::openclaw::refuse_comments(&parsed, path)?;
+            edit_value(parsed.value, dones)?
+        }
+        // The host rewrites it and people keep comments in it; OpenMoat
+        // edits only its own hook lines there.
+        McpSyntax::Yaml => bail!(
+            "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
+             then run `openmoat mcp accept`:\n{}",
+            path.display(),
+            if dones.iter().any(|d| original_of(&d.entry).is_some()) {
+                "wrap"
+            } else {
+                "unwrap"
+            },
+            by_hand(dones)
+        ),
+    };
+    Ok((text, new))
 }
 
 /// Whether `entry` (a definition as it is to be written) runs through the

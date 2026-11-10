@@ -178,9 +178,22 @@ pub(super) fn wrap_servers(
     dry_run: bool,
     out: &mut Deferred,
 ) -> Result<usize> {
+    let edits = wrap_plan(home, binary, hosts, names, sandbox, out)?;
+    apply_wrap(home, hosts, &edits, sandbox, dry_run, out)
+}
+
+/// What wrapping the stdio servers in `names` (all when empty) of `hosts`
+/// would write; a definition with a change nobody accepted is named and left.
+pub(super) fn wrap_plan(
+    home: &Home,
+    binary: &Path,
+    hosts: &[Host],
+    names: &[String],
+    sandbox: Option<bool>,
+    out: &mut Deferred,
+) -> Result<Vec<(crate::mcp::servers::Source, Done)>> {
     let pending = pending_ids(home, hosts)?;
-    let unavailable = super::run::unavailable();
-    let new_sandbox = sandbox.unwrap_or(unavailable.is_none());
+    let new_sandbox = sandbox.unwrap_or(super::run::unavailable().is_none());
     let mut edits = Vec::new();
     for (source, server) in wrap::user_servers(home, hosts)? {
         if !names.is_empty() && !names.contains(&server.name) {
@@ -204,10 +217,23 @@ pub(super) fn wrap_servers(
         }
         edits.push((source, Done { server, entry }));
     }
-    let done = finish_edits(home, hosts, &edits, dry_run, true, out)?;
+    Ok(edits)
+}
+
+/// Write `edits` from [`wrap_plan`] and say what they mean; how many.
+pub(super) fn apply_wrap(
+    home: &Home,
+    hosts: &[Host],
+    edits: &[(crate::mcp::servers::Source, Done)],
+    sandbox: Option<bool>,
+    dry_run: bool,
+    out: &mut Deferred,
+) -> Result<usize> {
+    let unavailable = super::run::unavailable();
+    let done = finish_edits(home, hosts, edits, dry_run, true, out)?;
     let unavailable = unavailable.filter(|_| sandbox.is_none_or(|on| on));
-    sandbox_note(&edits, unavailable.as_deref(), out)?;
-    first_sight_note(home, &edits, out)?;
+    sandbox_note(edits, unavailable.as_deref(), out)?;
+    first_sight_note(home, edits, out)?;
     Ok(done)
 }
 
