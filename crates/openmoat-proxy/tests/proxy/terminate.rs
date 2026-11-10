@@ -23,7 +23,7 @@ const VALUE: &str = "fake-tls-wired-8d41c07a2e9b";
 const PLACEHOLDER: &str = "moat-secret:svc:placeholder";
 
 /// A CA of the upstream's own (PEM) and a TLS server for owner.test it signed.
-fn upstream_tls() -> (String, Arc<ServerConfig>) {
+pub(super) fn upstream_tls() -> (String, Arc<ServerConfig>) {
     let ca_key = KeyPair::generate().unwrap();
     let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -50,7 +50,7 @@ fn upstream_tls() -> (String, Arc<ServerConfig>) {
 
 /// An HTTPS upstream on loopback that reports each request head it reads and
 /// answers `ok`.
-fn https_upstream(config: Arc<ServerConfig>) -> (SocketAddr, Receiver<Vec<u8>>) {
+pub(super) fn https_upstream(config: Arc<ServerConfig>) -> (SocketAddr, Receiver<Vec<u8>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let (tx, rx) = mpsc::channel();

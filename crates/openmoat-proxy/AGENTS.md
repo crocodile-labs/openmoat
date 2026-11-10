@@ -9,10 +9,11 @@ The default-deny egress proxy behind `openmoat proxy` and `openmoat run` (ADR-02
 - A connection that cannot be recorded is refused; recording goes through the `Recorder` trait the CLI implements (`Recorder::unrecorded`), never by printing.
 - A brokered secret's placeholder or value sent to any host other than its own is refused. Secret buffers are zeroised.
 - An open tunnel is checked again against its session's taint at every recheck; a cached taint is reused only while `TaintLookup::version` is unchanged.
+- Live audit delivery's `POST` (`post.rs`, ADR-081) is the one outbound request that is not the agent's: https verified against the system's roots or the person's CA, plain http only to loopback, link-local, metadata and non-unicast addresses refused on every resolved address, no redirect, only the answer's head read.
 - Typed `thiserror` errors; every public item has a doc comment.
 
 ## Test
-- `cargo test -p openmoat-proxy`: unit tests and `tests/proxy/` (`broker`, `http`, `limits`, `private`, `sessions`, `terminate`, `tunnel`). `src/exchange/tests` runs terminated tunnels over socket pairs, which need no port. The tests bind loopback sockets; a sandbox that forbids binding fails them for that reason only.
+- `cargo test -p openmoat-proxy`: unit tests and `tests/proxy/` (`broker`, `http`, `limits`, `post`, `private`, `sessions`, `terminate`, `tunnel`). `src/exchange/tests` runs terminated tunnels over socket pairs, which need no port. The tests bind loopback sockets; a sandbox that forbids binding fails them for that reason only.
 - Every widening (a new allowed address class, a relaxed SNI check) carries an attack test for the skipped case as a host, an address and a redirect.
 
 ## Do not

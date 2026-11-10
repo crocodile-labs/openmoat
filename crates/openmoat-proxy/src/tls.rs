@@ -243,7 +243,9 @@ fn server_name(host: &str) -> Result<ServerName<'static>, TlsError> {
     ServerName::try_from(host.to_owned()).map_err(|_| TlsError::Host(host.to_owned()))
 }
 
-fn upstream_config(
+/// The client configuration for upstream TLS, also audit delivery's
+/// (`post.rs`): `roots` only, safe protocol versions, `http/1.1`.
+pub(crate) fn upstream_config(
     roots: &Roots,
     provider: &Arc<CryptoProvider>,
 ) -> Result<ClientConfig, TlsError> {

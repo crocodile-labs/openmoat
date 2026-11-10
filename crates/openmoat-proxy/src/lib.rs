@@ -27,6 +27,8 @@
 //!   no session holds more than half the connections.
 //! - A connection that starts with a [`LocalService`]'s prefix goes to that
 //!   service of the proxy's own process (ADR-028), not upstream.
+//! - Apart from the proxy, [`Poster`] makes live audit delivery's one `POST`
+//!   (ADR-081) with the same upstream TLS and address checks.
 //!
 //! Plain `std::net` and one thread per connection, capped by [`Limits`]; the
 //! choice is explained in `docs/ARCHITECTURE.md` §12.
@@ -42,6 +44,7 @@ pub mod coalesce;
 mod decide;
 mod exchange;
 mod local;
+mod post;
 mod request;
 mod requests;
 mod server;
@@ -61,6 +64,7 @@ pub use decide::{
     port_policy, tainted as decide_tainted,
 };
 pub use local::LocalService;
+pub use post::{Answer, Endpoint, PostError, Poster, Scheme};
 pub use request::{
     MAX_HEADERS, ProxyCredential, Request, RequestError, Target, parse as parse_request,
 };
