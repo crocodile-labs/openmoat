@@ -7,22 +7,27 @@ documents; this shape is unverified against a real `agy`.
 
 The first request that offers the `--call` tool gets that tool call; once the
 conversation holds a function response, the reply is a text that ends the turn.
-A request that offers no such tool gets a short text. The conversation carries the
-step, so the server keeps no state.
+With `--then`, one function response gets that second call first, and two end the
+turn. A request that offers no such tool gets a short text. The conversation
+carries the step, so the server keeps no state.
 
     fake_gemini.py --call run_command='{"CommandLine": "cat ~/.ssh/id_rsa"}'
+                   [--then run_command='{"CommandLine": "echo ok"}']
 
 With no --port the OS picks a free loopback port; the bound port is printed as the
 first line of standard output once the socket listens. Every request is logged to
-standard error, one line each.
+standard error, one line each, with its time and the function responses it holds
+(`at=<epoch seconds> results=<n>`, read by after_call.py).
 """
 
 import argparse
 import json
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CALL = None
+THEN = None
 
 
 def offered(request):
@@ -36,19 +41,22 @@ def offered(request):
 
 
 def answered(request):
-    """Whether the conversation already holds a function response."""
-    for content in request.get("contents") or []:
-        for part in (content or {}).get("parts") or []:
-            if isinstance(part, dict) and "functionResponse" in part:
-                return True
-    return False
+    """How many function responses the conversation holds."""
+    return sum(
+        1
+        for content in request.get("contents") or []
+        for part in (content or {}).get("parts") or []
+        if isinstance(part, dict) and "functionResponse" in part
+    )
 
 
 def reply(request):
     """The candidate for this turn."""
-    name, args = CALL
-    if name in offered(request) and not answered(request):
-        part = {"functionCall": {"name": name, "args": args}}
+    results = answered(request)
+    print(f"model request at={time.time():.3f} results={results}", file=sys.stderr, flush=True)
+    planned = CALL if results == 0 else THEN if results == 1 else None
+    if planned is not None and planned[0] in offered(request):
+        part = {"functionCall": {"name": planned[0], "args": planned[1]}}
     else:
         part = {"text": "done"}
     return {
@@ -64,6 +72,15 @@ def reply(request):
 
 
 class Handler(BaseHTTPRequestHandler):
+    # The job's readiness probe (`start_fake`) is a GET, which curl -f must see succeed.
+    def do_GET(self):
+        text = json.dumps({"models": []}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(text)))
+        self.end_headers()
+        self.wfile.write(text)
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         try:
@@ -89,14 +106,20 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def call_spec(text):
+    name, _, raw = text.partition("=")
+    return (name, json.loads(raw))
+
+
 def main():
-    global CALL
+    global CALL, THEN
     parser = argparse.ArgumentParser()
-    parser.add_argument("--call", required=True, help="tool=json-arguments")
+    parser.add_argument("--call", required=True, type=call_spec, help="tool=json-arguments")
+    parser.add_argument("--then", type=call_spec, help="tool=json-arguments, after one response")
     parser.add_argument("--port", type=int, default=0)
     args = parser.parse_args()
-    name, _, raw = args.call.partition("=")
-    CALL = (name, json.loads(raw))
+    CALL = args.call
+    THEN = args.then
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(server.server_address[1], flush=True)
     server.serve_forever()

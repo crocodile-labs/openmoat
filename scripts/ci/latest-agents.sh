@@ -22,7 +22,9 @@
 #      the fake key never to appear in what the agent printed;
 #   5. sends one allowed (`git status`) and one denied (`cat ~/.ssh/id_rsa`)
 #      payload, in the agent's own format (its golden fixture), through
-#      `openmoat guard`, and checks the reply.
+#      `openmoat guard`, and checks the reply;
+#   6. records what the agent's after-call event sends, where it runs with no
+#      account (after_call.py): reported in the job's annotations, never failed.
 #
 # No account, key or secret is used; the fake API listens on loopback only.
 # With LATEST_AGENTS_OUT set, result.json (agent, version, checked version,
@@ -74,6 +76,9 @@ finish() {
     [ -z "$fake_pid" ] || kill "$fake_pid" 2>/dev/null || true
     # The fake API's log is in the artefact too; the job log shows it at once.
     [ "$rc" -eq 0 ] || show_fake
+    # Also on a failed run: what arrived before it is what a reader needs.
+    [ -z "${after_call_dir:-}" ] ||
+        python3 -I "$lib/after_call.py" report "$agent" "$after_call_dir" "${fake_log:--}" "$step" || true
     local outcome=passed
     [ "$rc" -eq 0 ] || outcome=failed
     printf '{"agent":"%s","host":"%s","name":"%s","os":"%s","version":"%s","checked":"%s","relation":"%s","outcome":"%s","step":"%s"}\n' \
@@ -147,6 +152,8 @@ printf '%s\n' "$marker" >"$HOME/.ssh/id_rsa"
 chmod 600 "$HOME/.ssh/id_rsa"
 git -C "$project" init -q
 denied='cat ~/.ssh/id_rsa'
+# Runs after the denied call, so the after-call event has a call that ran.
+harmless='echo moat-ci-after-call-output'
 # The host Claude Code's second call reads from "a page" and its third calls.
 injected_host=collect.moat-ci.example
 
@@ -455,7 +462,8 @@ antigravity-cli)
     printf '{"modelProvider": "gemini", "trustedWorkspaces": ["%s"]}\n' "$project" \
         >"$HOME/.gemini/antigravity-cli/settings.json"
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_gemini.py" \
-        --call run_command="{\"CommandLine\": \"$denied\"}"
+        --call run_command="{\"CommandLine\": \"$denied\"}" \
+        --then run_command="{\"CommandLine\": \"$harmless\"}"
     ;;
 opencode-1)
     # OpenCode 1's opencode.json: an OpenAI-compatible provider (its SDK is
@@ -480,6 +488,10 @@ if [ -n "$port_file" ]; then
     printf '%s\n' "${template//FAKE_PORT/$fake_port}" >"$port_file"
     rm -f "$port_file.in"
 fi
+# The recording hook goes beside OpenMoat's, and likewise before init pins the
+# file. A capture never fails the job; only the agents after_call.py names get one.
+after_call_dir="$out/after-call"
+python3 -I "$lib/after_call.py" install "$agent" "$after_call_dir" "$root" "$HOME" "$project" || true
 
 begin init
 (cd "$HOME" && "$moat" init --hosts "$host" --yes) </dev/null >"$out/init.txt" 2>&1 || {
@@ -737,7 +749,10 @@ codex)
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_openai.py" \
         --call exec_command="{\"cmd\": \"$denied\"}" \
         --call shell_command="{\"command\": \"$denied\"}" \
-        --call shell="{\"command\": [\"bash\", \"-lc\", \"$denied\"]}"
+        --call shell="{\"command\": [\"bash\", \"-lc\", \"$denied\"]}" \
+        --then exec_command="{\"cmd\": \"$harmless\"}" \
+        --then shell_command="{\"command\": \"$harmless\"}" \
+        --then shell="{\"command\": [\"bash\", \"-lc\", \"$harmless\"]}"
     # The hook is run without Codex's persisted trust (`/hooks` is interactive):
     # what Codex's own exec tests do. A custom provider has no login and no
     # websocket; it is given on the command line, since init pinned config.toml.
@@ -752,11 +767,13 @@ codex)
     ;;
 gemini-cli)
     # Gemini CLI's own test double for the model (`--fake-responses`): the
-    # first turn calls run_shell_command, the second ends the session. A
-    # folder Gemini CLI does not trust runs no settings hooks at all, so the
-    # project is trusted for this run (`--skip-trust`).
+    # first turn calls run_shell_command, the second makes the harmless call
+    # for the after-call capture, the third ends the session. A folder Gemini
+    # CLI does not trust runs no settings hooks at all, so the project is
+    # trusted for this run (`--skip-trust`).
     printf '%s\n' \
         "{\"method\":\"generateContentStream\",\"response\":[{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"run_shell_command\",\"args\":{\"command\":\"$denied\",\"description\":\"probe\"}}}]},\"finishReason\":\"STOP\",\"index\":0}]}]}" \
+        "{\"method\":\"generateContentStream\",\"response\":[{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"run_shell_command\",\"args\":{\"command\":\"$harmless\",\"description\":\"after-call capture\"}}}]},\"finishReason\":\"STOP\",\"index\":0}]}]}" \
         '{"method":"generateContentStream","response":[{"candidates":[{"content":{"role":"model","parts":[{"text":"done"}]},"finishReason":"STOP","index":0}]}]}' \
         >"$root/gemini-responses.jsonl"
     # A named model: with the default (`auto`) Gemini CLI first asks the model
@@ -769,7 +786,8 @@ gemini-cli)
     ;;
 copilot-cli)
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_openai.py" \
-        --call bash="{\"command\": \"$denied\", \"description\": \"probe\"}"
+        --call bash="{\"command\": \"$denied\", \"description\": \"probe\"}" \
+        --then bash="{\"command\": \"$harmless\", \"description\": \"after-call capture\"}"
     # Copilot CLI's own provider (BYOK): no GitHub sign-in with a base URL set.
     (cd "$project" && COPILOT_OFFLINE=true COPILOT_PROVIDER_TYPE=openai \
         COPILOT_PROVIDER_BASE_URL="http://127.0.0.1:$fake_port/v1" COPILOT_PROVIDER_API_KEY=fake-key \

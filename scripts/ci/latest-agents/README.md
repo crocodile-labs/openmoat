@@ -85,6 +85,45 @@ file with its agent's adapter and refuses one that still holds a runner path. An
 that clears its hook's environment leaves `captured/` empty, and the run says so
 without failing.
 
+## After-call payloads
+
+Linking a later call to what an earlier call's output said (ADR-063) needs to know what
+each agent's after-call event carries, and only a real payload shows that. For the agents
+this job runs with no account and whose event has no real payload yet, `after_call.py`
+adds a recording hook beside OpenMoat's own, in the throwaway home, before `init`:
+
+| Agent | Event | The harmless call comes from | Blocking observable |
+|---|---|---|---|
+| Codex | `PostToolUse` | `fake_openai.py --then` | yes |
+| Antigravity CLI | `PostToolUse` (its documentation shows no output field; this finds out) | `fake_gemini.py --then` | yes |
+| GitHub Copilot CLI | `postToolUse` | `fake_openai.py --then` | yes |
+| Gemini CLI | `AfterTool` | a second call in the `--fake-responses` file | no: there is no model request to time |
+
+After the denied call, each makes one call that runs, `echo moat-ci-after-call-output`, so
+that the event has a result to report. Not captured here: Cursor (every run needs an
+account); MCP calls (of these agents, none is given the fake MCP server yet); the other
+agents, whose event a plugin or script of OpenMoat's would have to send.
+
+- **Stored** in the artefact as `after-call/<agent>-<event>-<pid>.json`, with the throwaway
+  paths made the fixtures' made-up ones and the value under any key naming a token, key
+  or authorisation replaced by `[redacted <type>]`, also inside a string that holds JSON. A
+  payload that is not JSON is stored as its length only.
+- **Reported** as one `::notice` per agent and event, because annotations can be read
+  where the logs of a job cannot: the field names and the type of each value, merged over
+  the payloads, and never a value. A key that is not a plain name prints as `<key>`.
+- **Blocking.** The hook sleeps 1.5 s after storing the payload. If the next model request
+  holding a tool result arrives after the hook finished, the agent waited for it. Whether a
+  hook's answer or exit code can stop anything is not tried: the hook always exits 0
+  silently.
+- **Never fails the job.** An event that does not fire gives `NOT CAPTURED` and the reason
+  the job can see (the job stopped earlier, `init` dropped the entry, the harmless call
+  never came back, or it ran and the hook did not start). Everything asserted above still
+  fails as before: the denied call is made first, so the capture cannot get in its way.
+
+`python3 -I scripts/ci/latest-agents/test_after_call.py` (in the quality gate) tests the
+redaction, the notice and each `NOT CAPTURED` reason; only a run of this job can show what
+an agent sends.
+
 ## When it fails
 
 The `report` job opens or updates one issue per agent, `latest <agent> <version> breaks
