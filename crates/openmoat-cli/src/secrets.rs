@@ -33,15 +33,23 @@ pub fn broker(secrets: &[Secret], home: &str) -> Result<(Broker, KnownSecrets)> 
 /// would start a program on every tool call; a secret that cannot be read is
 /// skipped, since the proxy, which needs it, refuses to start without it.
 pub fn known(secrets: &[Secret], home: &str) -> Result<KnownSecrets> {
-    let values: Vec<Zeroizing<String>> = secrets
-        .iter()
-        .filter(|s| !matches!(s.source, SecretSource::Keychain { .. }))
-        .filter_map(|s| read(&s.source, home).ok())
-        .collect();
+    let values = known_values(secrets, home);
     Ok(KnownSecrets::new(values.iter().map(|v| v.as_str()))?)
 }
 
-fn read(source: &SecretSource, home: &str) -> Result<Zeroizing<String>> {
+/// The values [`known`] masks, for a caller that masks more besides (audit
+/// delivery, ADR-081).
+pub fn known_values(secrets: &[Secret], home: &str) -> Vec<Zeroizing<String>> {
+    secrets
+        .iter()
+        .filter(|s| !matches!(s.source, SecretSource::Keychain { .. }))
+        .filter_map(|s| read(&s.source, home).ok())
+        .collect()
+}
+
+/// The value at `source`, without its trailing newline; also the keys and
+/// tokens audit delivery sends with (ADR-081).
+pub fn read(source: &SecretSource, home: &str) -> Result<Zeroizing<String>> {
     let mut value = match source {
         SecretSource::File(path) => {
             let path = match path.strip_prefix("~/") {

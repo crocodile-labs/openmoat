@@ -14,7 +14,10 @@ mod snapshot;
 
 mod timeline;
 
-pub use audit::{AnchorArgs, AuditCommand, EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs};
+pub use audit::{
+    AnchorArgs, AuditCommand, DeliverCommand, DeliverFlushArgs, DeliverStatusArgs, DeliverTestArgs,
+    EvidenceArgs, ExportArgs, TeamReportArgs, VerifyArgs,
+};
 pub use mcp::{McpAcceptArgs, McpCommand, McpProxyArgs, McpUnwrapArgs, McpWrapArgs};
 pub use policy::{
     ActionKind, CheckArgs, CheckDiffArgs, CompileArgs, DiffFormat, InstallArgs, LintArgs,

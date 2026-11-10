@@ -25,7 +25,8 @@
 //! a reader of the file could test guesses against without the key. A person
 //! who replaces the key revokes credentials and forgets those fingerprints.
 
-mod hmac;
+/// Also signs audit delivery's webhook bodies (`delivery/sign.rs`, ADR-081).
+pub mod hmac;
 
 use std::fmt::{self, Write as _};
 use std::path::{Path, PathBuf};

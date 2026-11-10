@@ -13,6 +13,7 @@ use crate::render;
 use crate::time;
 
 mod anchor;
+pub mod deliver;
 mod evidence;
 
 pub use anchor::run as anchor;

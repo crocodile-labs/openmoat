@@ -55,6 +55,10 @@ openmoat-audit = { workspace = true, features = ["test-support"] }
 globset.workspace = true
 regex.workspace = true
 tempfile.workspace = true
+# A local HTTPS collector for the audit delivery tests (ADR-081): the same
+# TLS stack the proxy already builds with.
+rcgen.workspace = true
+rustls.workspace = true
 
 [lints]
 workspace = true

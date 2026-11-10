@@ -288,10 +288,16 @@ fn decide_and_respond(installed_for: Host, by_run: bool, event: &mut HookEvent) 
     // What the host receives can be stricter than what was decided and recorded
     // (Codex and the Continue CLI cannot prompt, so a `review` reaches them as a `deny`).
     let decision = host.answer(&event, &decision);
-    match &request {
+    let code = match &request {
         Some(request) => answer_once(host, &Answer::For(request), &decision).unwrap_or(Code::Deny),
         None => respond(host, &event, &decision),
+    };
+    // Only once the host has its answer (ADR-081): live audit delivery runs
+    // detached and changes nothing above.
+    if let Ok(home) = Home::locate() {
+        crate::delivery::kick(&home);
     }
+    code
 }
 
 /// Whether this hook has the variable of a host running another host's hook.

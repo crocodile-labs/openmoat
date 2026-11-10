@@ -10,6 +10,7 @@ mod cli;
 mod commands;
 mod compliance;
 mod context;
+mod delivery;
 mod environment;
 mod exit;
 mod guard_relay;

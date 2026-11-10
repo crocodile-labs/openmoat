@@ -28,6 +28,7 @@ mod continue_cli;
 mod copilot_cli;
 mod cursor;
 mod cursor_sandbox;
+mod deliver;
 mod differential;
 mod edit;
 mod escapes;

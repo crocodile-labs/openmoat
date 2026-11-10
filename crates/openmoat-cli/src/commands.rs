@@ -35,8 +35,8 @@ mod why;
 use anyhow::Result;
 
 use crate::cli::{
-    AuditCommand, CaCommand, Cli, Command, McpCommand, PolicyCommand, ProxyCommand, SandboxCommand,
-    SecretCommand,
+    AuditCommand, CaCommand, Cli, Command, DeliverCommand, McpCommand, PolicyCommand, ProxyCommand,
+    SandboxCommand, SecretCommand,
 };
 use crate::exit::Code;
 
@@ -86,6 +86,11 @@ pub fn run(cli: Cli) -> Result<Code> {
             AuditCommand::Report(args) => team::run(&args),
             AuditCommand::Evidence(args) => audit::evidence(&args),
             AuditCommand::Anchor(args) => audit::anchor(&args),
+            AuditCommand::Deliver { command } => match command {
+                DeliverCommand::Status(args) => audit::deliver::status(&args),
+                DeliverCommand::Test(args) => audit::deliver::test(&args),
+                DeliverCommand::Flush(args) => audit::deliver::flush(&args),
+            },
         },
         Command::Run(args) => run::run(&args),
         Command::Snapshot(args) => snapshot::run(&args),
