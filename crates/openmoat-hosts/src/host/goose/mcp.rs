@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use crate::contract::{McpNames, McpReader, McpServer, McpSyntax, escape, server};
+use crate::contract::{McpCommandForm, McpNames, McpReader, McpServer, McpSyntax, escape, server};
 
 /// `extensions: {<key>: {enabled, type, name, cmd, args, envs, uri, …}}` in
 /// YAML (`ExtensionEntry` in `config/extensions.rs`, `ExtensionConfig` in
@@ -16,6 +16,10 @@ pub(crate) struct Extensions;
 impl McpReader for Extensions {
     fn syntax(&self) -> McpSyntax {
         McpSyntax::Yaml
+    }
+
+    fn command_form(&self) -> McpCommandForm {
+        McpCommandForm::CmdArgs
     }
 
     fn servers(&self, doc: &Value) -> Result<Vec<McpServer>, String> {

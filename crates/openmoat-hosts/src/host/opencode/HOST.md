@@ -115,7 +115,9 @@ by default.
   `opencode.json[c]` and `.opencode/opencode.json[c]` (JSON with comments, read as JSON5);
   each is pinned. Servers from `~/.opencode`, `OPENCODE_CONFIG`,
   `OPENCODE_CONFIG_CONTENT`, a remote `.well-known/opencode`, the parent directories
-  OpenCode 2 also reads or managed configuration are not.
+  OpenCode 2 also reads or managed configuration are not. `openmoat mcp wrap` rewrites a
+  `type: local` server's one `command` list in the global files; a file with comments is
+  named, not rewritten.
 - Project settings: a project's `opencode.json[c]` and `.opencode/opencode.json[c]` add
   plugins, MCP servers and permission rules, and its `.opencode/plugins/` and
   `.opencode/plugin/` load at start, with no prompt; `openmoat status` and `openmoat

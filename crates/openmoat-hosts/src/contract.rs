@@ -34,7 +34,8 @@ pub use hook_file::HookLayout;
 pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
 pub use mcp::{
-    AutoStart, McpAutoStart, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax,
+    AutoStart, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer, McpSpec,
+    McpSyntax,
 };
 pub(crate) use mcp::{McpServersJson, Prefixed, escape, server, servers_at, spelled};
 pub use protect::{Helper, Paths, ProcessSpec, Protect};

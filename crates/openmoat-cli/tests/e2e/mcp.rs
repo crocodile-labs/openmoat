@@ -275,6 +275,54 @@ fn wrap_points_a_server_at_the_proxy_and_uninstall_restores_it() {
     );
 }
 
+/// OpenCode's definition is one `command` list: wrap keeps that form, the
+/// status line stops naming it, and uninstall restores it.
+#[test]
+fn wrap_rewrites_an_opencode_command_list_and_uninstall_restores_it() {
+    let sb = Sandbox::bare(&[".config/opencode"]);
+    let file = sb.home.join(".config/opencode/opencode.json");
+    let original = json!({"type": "local", "command": ["db-server", "--flag"],
+        "environment": {"A": "1"}});
+    let config = json!({"mcp": {"db": original}, "theme": "x"}).to_string();
+    std::fs::write(&file, config).unwrap();
+    let out = sb.moat(&["init", "--yes", "--hosts", "opencode"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let out = sb.moat_as_person(&["mcp", "wrap", "--no-sandbox", "db"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("wrapped `db`"), "{}", text(&out));
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(doc["theme"], "x", "the rest of the file stays");
+    let line = doc["mcp"]["db"]["command"].as_array().unwrap();
+    assert!(line[0].as_str().unwrap().contains("moat"), "{line:?}");
+    assert_eq!(line[line.len() - 2..], ["db-server", "--flag"]);
+    assert_eq!(doc["mcp"]["db"].get("args"), None);
+    let out = sb.moat_as_person(&["uninstall"]);
+    assert!(text(&out).contains("unwrapped `db`"), "{}", text(&out));
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(doc["mcp"]["db"], original);
+}
+
+/// goose's `cmd` is reported, and its YAML file is named and left alone.
+#[test]
+fn wrap_names_a_goose_extension_and_leaves_its_yaml_file() {
+    let dir = crate::hosts::dir_of(openmoat_hosts::Host::Goose);
+    let sb = Sandbox::bare(&[&dir]);
+    let file = sb.home.join(&dir).join("config.yaml");
+    let config = "extensions:\n  gh:\n    enabled: true\n    type: stdio\n    name: gh\n    \
+                  cmd: npx\n    args: [\"-y\", \"pkg\"]\n";
+    std::fs::write(&file, config).unwrap();
+    let out = sb.moat(&["init", "--yes", "--hosts", "goose"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let status = sb.moat(&["status"]);
+    assert!(text(&status).contains("`gh`"), "{}", text(&status));
+    let before = std::fs::read_to_string(&file).unwrap();
+    let out = sb.moat_as_person(&["mcp", "wrap", "--no-sandbox", "gh"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert!(text(&out).contains("is YAML"), "{}", text(&out));
+    assert!(text(&out).contains("gh: cmd:"), "{}", text(&out));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+}
+
 /// The stand-in server's command line after `mcp proxy`: it answers
 /// `tools/list` with what `MOAT_TEST_LISTING` holds, and nothing else.
 #[cfg(unix)]

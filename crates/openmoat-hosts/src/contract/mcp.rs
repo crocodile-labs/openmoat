@@ -125,6 +125,23 @@ pub trait McpReader: Sync + Debug {
     /// The servers `doc`, the file parsed as JSON, defines; `Err` with the
     /// reason when the file hides servers OpenMoat cannot see.
     fn servers(&self, doc: &Value) -> Result<Vec<McpServer>, String>;
+    /// How a definition in this file names the program it starts.
+    fn command_form(&self) -> McpCommandForm {
+        McpCommandForm::CommandArgs
+    }
+}
+
+/// How a host's MCP server definition names the program it starts, which is
+/// what `openmoat mcp wrap` reads and rewrites.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpCommandForm {
+    /// A `command` string and an `args` list; `type`, when there is one, is
+    /// `stdio` or `local`.
+    CommandArgs,
+    /// One `command` list, the program first, with `type: local` (OpenCode).
+    CommandList,
+    /// A `cmd` string and an `args` list, with `type: stdio` (goose).
+    CmdArgs,
 }
 
 /// How a host names an MCP server's tools in the hook payload, so a tool call

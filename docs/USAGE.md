@@ -754,9 +754,11 @@ openmoat mcp wrap github          # or: openmoat init, which offers to at a term
 openmoat mcp accept github        # after the agent first starts it: read each tool, accept
 ```
 
-`openmoat mcp wrap` changes only that server's `command` and `args` in the agent's user
-configuration (backed up first); `openmoat mcp unwrap github` and `openmoat uninstall` put
-them back. The server itself runs under `openmoat run` (`--sandbox`) wherever that can
+`openmoat mcp wrap` changes only that server's program and arguments in the agent's user
+configuration, in the agent's own form (OpenCode's one `command` list included; backed up
+first); `openmoat mcp unwrap github` and `openmoat uninstall` put them back. A YAML file
+(Hermes Agent's, goose's) or an OpenCode file with comments is not rewritten: the command
+names the server and what to set by hand. The server itself runs under `openmoat run` (`--sandbox`) wherever that can
 sandbox (macOS 13 or later, Linux); `--no-sandbox` starts it with your permissions
 (`openmoat init --mcp-proxy --mcp-no-sandbox` for every server). Wrapping a wrapped server
 again keeps its choice unless you give one of the flags.
