@@ -199,7 +199,7 @@ and the standalone half (5 and 6) starts only if it holds.
 
 ## Step 0 results
 
-Status: built; measurements pending the first run of the CI job.
+Status: measured 2026-11-09 by the CI job on GitHub's `ubuntu-latest` and `macos-15` runners. The exit criteria below hold for every client measured.
 
 ### What is built
 
@@ -240,30 +240,32 @@ Status: built; measurements pending the first run of the CI job.
   lower-case `post`. A `POST` answered by anyone but OpenMoat fails the job, as does a
   refusal without its audit row or a `POST` recorded as passed. No token is sent.
 
-### Results (to fill from the job summary)
+### Results
 
 Clients, per OS:
 
 | client | OS | (a) allowed GET | terminated | (b) denied POST | audit rows |
 |---|---|---|---|---|---|
-| curl | Linux | | | | |
-| curl | macOS | | | | |
-| gh | Linux, macOS | | | | |
-| git ls-remote (github.com, no rule) | Linux | | | | |
-| git ls-remote (github.com, no rule) | macOS | | | | |
-| node fetch (NODE_USE_ENV_PROXY=1) | Linux | | | | |
-| node fetch (NODE_USE_ENV_PROXY=1) | macOS | | | | |
-| node fetch (default) | Linux | | | | |
-| node fetch (default) | macOS | | | | |
-| python requests | Linux | | | | |
-| python requests | macOS | | | | |
+| curl | Linux | ok | yes | 6 of 6 refused | 6 refused, 0 POST passed |
+| curl | macOS | ok | yes | 6 of 6 refused | 6 refused, 0 POST passed |
+| gh | Linux, macOS | skipped | | not run | |
+| git ls-remote (github.com, no rule) | Linux | ok | no | n/a | |
+| git ls-remote (github.com, no rule) | macOS | ok | no | n/a | |
+| node fetch (NODE_USE_ENV_PROXY=1) | Linux | ok | yes | refused | 1 refused, 0 POST passed |
+| node fetch (NODE_USE_ENV_PROXY=1) | macOS | ok | yes | refused | 1 refused, 0 POST passed |
+| node fetch (default) | Linux | fails closed: `EAI_AGAIN`, it ignores the proxy | no | fails closed, same error | 0 refused |
+| node fetch (default) | macOS | fails closed: `ENOTFOUND`, it ignores the proxy | no | fails closed, same error | 0 refused |
+| python requests | Linux | ok | yes | refused | 1 refused, 0 POST passed |
+| python requests | macOS | skipped: `requests` not installed on the runner | | not run | |
 
 Latency of `curl GET https://api.github.com/rate_limit`, 30 requests per path, ms:
 
 | OS | direct median / p95 | tunnel median / p95 | terminated median / p95 | added median / p95 | within 15 ms p95 |
 |---|---|---|---|---|---|
-| Linux | | | | | |
-| macOS | | | | | |
+| Linux | 90.4 / 111.1 | 138.4 / 188.4 | 140.0 / 169.6 | 1.6 / -18.8 | yes |
+| macOS | 161.3 / 178.7 | 211.9 / 250.6 | 213.9 / 225.3 | 2.0 / -25.4 | yes |
+
+"Added" is terminated minus tunnel. A negative p95 is noise of 30 requests over the network, not a saving; the median is the figure to read.
 
 Not measured by the job:
 
