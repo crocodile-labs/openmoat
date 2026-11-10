@@ -9,6 +9,7 @@
 // A library reports to its caller; only the `moat` binary prints.
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod delivery;
 mod query;
 mod redact;
 mod store;
