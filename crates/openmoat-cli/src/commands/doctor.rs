@@ -137,7 +137,8 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         report.warn(&format!("{:<16} git config {warning}", "Repository"));
     }
     protections(&mut report, &home, &binary)?;
-    let boundary = protection::run_boundary(&home);
+    mcp::servers(&mut report, &home, &binary);
+    let boundary = protection::run_boundary(&home, &binary);
     if let Some(boundary) = &boundary {
         let text = format!("run boundary     {}", boundary.describe());
         report.line(Area::Sandbox, boundary.met, text);

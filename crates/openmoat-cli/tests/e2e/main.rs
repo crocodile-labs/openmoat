@@ -53,6 +53,7 @@ mod mcp;
 mod mcp_gateway;
 mod mcp_init_wrap;
 mod mcp_startup;
+mod mcp_status;
 mod moatbench;
 mod openclaw;
 mod opencode;

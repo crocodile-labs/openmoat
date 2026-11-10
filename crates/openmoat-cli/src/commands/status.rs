@@ -94,7 +94,8 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     healthy &= audit.is_some();
 
     // Only when a policy asks for it, so nothing changes without the setting.
-    if let Some(boundary) = protection::run_boundary(&home) {
+    mcp_servers(&mut shown, &home, &binary);
+    if let Some(boundary) = protection::run_boundary(&home, &binary) {
         healthy &= boundary.met;
         let mark = if boundary.met { Mark::Ok } else { Mark::Broken };
         if boundary.met {
@@ -142,7 +143,14 @@ fn report(home: &Home, binary: &Path, update: Option<&String>) -> Result<serde_j
         .unwrap_or_default();
     Ok(serde_json::json!({
         "agents": protection::report(home, binary)?,
-        "run_boundary": protection::run_boundary(home),
+        "run_boundary": protection::run_boundary(home, binary),
+        "mcp_servers": crate::mcp::status::report(
+            home,
+            binary,
+            std::env::current_dir().ok().as_deref(),
+        )
+        .map(|found| found.servers)
+        .unwrap_or_default(),
         "plugins": crate::heartbeat::all(home, binary),
         "hook_warnings": hook_warnings(home, binary)?,
         "policy_update": update,
@@ -229,6 +237,29 @@ fn mcp_outside(home: &Home, binary: &Path) -> Vec<String> {
         Err(e) => vec![format!(
             "cannot list the servers that start outside OpenMoat: {e:#}"
         )],
+    }
+}
+
+/// One row per MCP server OpenMoat can read, protected or not and why
+/// (ADR-077); `require.run` counts the failures, in its own row.
+fn mcp_servers(shown: &mut Shown, home: &Home, binary: &Path) {
+    let cwd = std::env::current_dir().ok();
+    match crate::mcp::status::report(home, binary, cwd.as_deref()) {
+        Ok(found) => {
+            for server in &found.servers {
+                let mark = if server.protected {
+                    Mark::Ok
+                } else {
+                    Mark::Attention
+                };
+                shown.state(mark, "MCP server", server.describe());
+            }
+        }
+        Err(error) => shown.needs(
+            Mark::Attention,
+            "MCP servers",
+            format!("cannot list them: {error:#}"),
+        ),
     }
 }
 

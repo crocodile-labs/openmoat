@@ -1737,6 +1737,13 @@ Amazon Bedrock or Google Cloud, add those names yourself.
 Without the setting everything is inherited, as before, and one line says how many
 variables look like credentials and names the first few.
 
+**MCP servers.** `openmoat status` and `openmoat doctor` show every MCP server OpenMoat can
+read as protected or unprotected, with why, whether or not the setting is on. Under the
+setting a local server left unprotected (not run through `openmoat mcp proxy`, or a
+definition you have not accepted) fails the requirement, for the agents OpenMoat is set up
+for. This is a report: the agent starts its servers itself, so `openmoat run` cannot refuse
+one (ADR-077).
+
 ## 10. Repository policy
 
 A project can commit rules for everyone who works in it: `<project>/.moat/policy.yaml`,

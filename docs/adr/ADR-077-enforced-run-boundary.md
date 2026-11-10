@@ -84,6 +84,46 @@ Cloud account credentials are left out on purpose, Amazon Bedrock's and Google C
 included, even where an agent can use them: they are what the list exists to withhold. A
 person who runs Claude Code on Bedrock adds those names.
 
+## Decision 3: each MCP server is shown as protected or unprotected
+
+1. **`status` and `doctor` list every server OpenMoat can read,** for every agent with an
+   MCP file, set up or not, as protected or unprotected, with why (`mcp/status.rs`;
+   `mcp_servers` in `status --format json`). They read the definitions and the lock and
+   start nothing.
+2. **What counts.**
+
+   | Server | Shown as |
+   |---|---|
+   | Through `openmoat mcp proxy`, definition accepted, in the OS sandbox | protected |
+   | The same without the sandbox | protected, and it says it runs with your permissions |
+   | Through the proxy, definition new or changed | unprotected: it does not start |
+   | A local command not through the proxy | unprotected |
+   | At an address, definition accepted | protected: it runs nothing here |
+   | At an address, definition new or changed | unprotected: its calls are refused |
+   | A shape OpenMoat cannot read | unprotected: never assumed safe |
+   | Of an agent OpenMoat is not set up for | unprotected |
+
+3. **Under `require.run: full-boundary`,** a local server left unprotected, of an agent
+   OpenMoat is set up for, fails the requirement: `status` and `doctor` show it and exit
+   64. A file that hides which servers there are fails it too.
+
+## What decision 3 cannot enforce
+
+- **The agent starts its servers itself.** No hook runs first and `openmoat run` does not
+  start them (ADR-076), so an unprotected server is reported, and `openmoat run` does not
+  refuse for it. The requirement failing means `status` and `doctor` say so, not that the
+  server was stopped.
+- **Under `openmoat run` an unwrapped server still runs inside the sandbox,** and a wrapped
+  one does not start there at all (ADR-049). So a person who starts an agent only under
+  `openmoat run` and uses MCP servers sees this requirement failed until they wrap them,
+  and a wrapped server then does not start under the run. The two do not combine yet.
+- **An agent not set up does not fail it.** Its servers are shown as unprotected, but the
+  requirement speaks for agents OpenMoat is set up for: an agent installed and never used
+  with OpenMoat would otherwise fail it for good.
+- **Protected describes what is in place,** from the definitions and the lock. Plugin
+  servers are not covered: a plugin brings its own definitions, and how plugins are handled
+  is not settled here.
+
 ## Limits of decision 2
 
 - **It is the environment at the start.** A value the agent reads from a file, a keychain

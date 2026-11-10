@@ -124,6 +124,10 @@ Each agent's gaps and the reasons are in
   background git starts; `openmoat status` and `openmoat doctor` name such keys but
   cannot stop them. In the editors, the selection and open file Claude Code adds to a
   prompt are no tool call and are not checked ([IDE.md](IDE.md#not-covered)).
+- **`require.run: full-boundary` reports an unprotected MCP server; it cannot stop one.**
+  `openmoat status` and `openmoat doctor` show each server as protected or unprotected and
+  count an unprotected local one against the setting, but the agent starts its own servers
+  ([ADR-077](adr/ADR-077-enforced-run-boundary.md)).
 - **Unwrapped MCP servers start before any call is checked.** The agent starts them
   itself, and no hook runs first; when differs per agent and most do not document it
   ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)). For a server not
