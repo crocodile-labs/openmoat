@@ -36,7 +36,7 @@ protect) are on [openmoat.dev/docs](https://openmoat.dev/docs/).
 | [THREAT_MODEL.md](THREAT_MODEL.md) | What is defended, how the hook and the OS layers answer each threat class, and the known limits |
 | [EVIDENCE.md](EVIDENCE.md) | What the OS layer stops in an allowed project script, per OS (generated; do not edit) |
 | [COVERAGE.md](COVERAGE.md) | The conformance fixtures per threat class (generated; do not edit) |
-| [MOATBENCH.md](MOATBENCH.md) | The attack and everyday scenarios per agent, the scorecard, and a comparison with other Claude Code guards |
+| [MOATBENCH.md](MOATBENCH.md) | The attack and everyday scenarios per agent, and the scorecard |
 | [ROADMAP.md](ROADMAP.md) | What exists, what comes next and what is not planned; the live order is issue [#562](https://github.com/crocodile-labs/openmoat/issues/562) |
 
 ## Contribute

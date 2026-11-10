@@ -17,8 +17,6 @@ extend-ignore-re = [
     "\\$!ba;",     # a sed branch to label `a`
     "\"-nd\"",     # wget's `-nd` (no directories)
     "`-oout`",     # curl's `-o` with its value attached
-    "bash-authorize",  # the npm package compared in docs/MOATBENCH.md, spelt as its author spells it
-    "\\./ba\\b",   # its install directory in the MoatBench comparison
     "--inh-caps",  # setpriv's option for the inheritable capabilities
     "vision_analyze",  # Hermes Agent's tool, spelt as Hermes spells it
     "\\banalyze\\b",  # goose's `analyze` tool and extension, spelt as goose spells them
