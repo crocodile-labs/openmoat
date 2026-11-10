@@ -23,8 +23,8 @@ pub const MAX_OUTPUT: usize = 4 * 1024 * 1024;
 const MAX_TOKEN: usize = 256;
 const MAX_HOST: usize = 64;
 const MAX_CWD: usize = 4096;
-/// Bit of the flags field: the Continue CLI runs the hook (`CONTINUE_ENV`).
-const FLAG_CONTINUE: u8 = 1;
+/// Bit of the flags field: `Host::caller_variable` is set for the hook.
+const FLAG_CALLER_SET: u8 = 1;
 
 /// One hook call, as the sandboxed guard read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,8 +37,8 @@ pub struct Request {
     pub host: String,
     /// The guard's working directory: where a payload without one ran.
     pub cwd: String,
-    /// Whether the Continue CLI started the hook.
-    pub continue_cli: bool,
+    /// Whether the variable of a host running another host's hook is set.
+    pub caller_set: bool,
     /// The hook payload, unchanged.
     pub payload: String,
 }
@@ -58,7 +58,7 @@ pub struct Reply {
 
 impl Request {
     pub fn write_to(&self, out: &mut impl Write) -> Result<()> {
-        let flags = if self.continue_cli { FLAG_CONTINUE } else { 0 };
+        let flags = if self.caller_set { FLAG_CALLER_SET } else { 0 };
         let mut frame = Zeroizing::new(REQUEST_MAGIC.to_vec());
         for field in [
             &self.token[..],
@@ -96,7 +96,7 @@ impl Request {
             nonce,
             host,
             cwd,
-            continue_cli: flags[0] & FLAG_CONTINUE != 0,
+            caller_set: flags[0] & FLAG_CALLER_SET != 0,
             payload: text(payload, "payload")?,
         })
     }

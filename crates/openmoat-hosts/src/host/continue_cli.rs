@@ -18,6 +18,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     id: "continue",
     display_name: "Continue CLI",
     speaks: Some(Host::ClaudeCode),
+    speaks_variable: Some(CONTINUE_ENV),
     reviews: Reviews {
         on_pre_tool_use: Some("the Continue CLI runs a call its hook holds for review"),
         on_no_prompt: None,
@@ -76,20 +77,28 @@ pub(crate) static SPEC: HostSpec = HostSpec {
 
 /// Set by `cn` for every command hook it runs, next to `CLAUDE_PROJECT_DIR`
 /// (`executeCommandHook` in `hookRunner.ts`); Claude Code never sets it.
-pub const CONTINUE_ENV: &str = "CONTINUE_PROJECT_DIR";
+const CONTINUE_ENV: &str = "CONTINUE_PROJECT_DIR";
 
 impl Host {
+    /// The variable a host running another host's hook sets for it
+    /// ([`HostSpec::speaks_variable`]), which the guard reads and passes to
+    /// [`Self::sender`] and `openmoat run` forwards.
+    #[must_use]
+    pub fn caller_variable() -> Option<&'static str> {
+        Self::EVERY.iter().find_map(|h| h.spec().speaks_variable)
+    }
+
     /// The host that really sent `payload` to the hook installed for `self`;
-    /// `continue_env` says whether [`CONTINUE_ENV`] is set for the hook.
+    /// `caller_set` says whether [`Self::caller_variable`] is set for the hook.
     ///
     /// Only the Claude Code hook is shared. `cn` is recognised by
-    /// [`CONTINUE_ENV`] or by the empty `transcript_path` it sends (it keeps no
+    /// `CONTINUE_ENV` or by the empty `transcript_path` it sends (it keeps no
     /// transcript file), where Claude Code always sends a path. Either signal is
     /// enough: a Claude Code call taken for `cn` has its review turned into a deny,
     /// while a `cn` call taken for Claude Code would run on a review.
     #[must_use]
-    pub fn sender(self, payload: &str, continue_env: bool) -> Self {
-        if self == Self::ClaudeCode && (continue_env || has_empty_transcript(payload)) {
+    pub fn sender(self, payload: &str, caller_set: bool) -> Self {
+        if self == Self::ClaudeCode && (caller_set || has_empty_transcript(payload)) {
             Self::Continue
         } else {
             self
@@ -166,6 +175,17 @@ mod tests {
         assert!(crate::reason_line(&cn).contains("openmoat allow --last"));
         let allow = Decision::new(Verdict::Allow);
         assert_eq!(Host::Continue.answer(&HookEvent::PreToolUse, &allow), allow);
+    }
+
+    /// The only host that runs another's hook names the one variable the
+    /// guard reads and `openmoat run` forwards.
+    #[test]
+    fn the_variable_that_says_cn_runs_the_hook_comes_from_its_spec() {
+        assert_eq!(Host::caller_variable(), Some("CONTINUE_PROJECT_DIR"));
+        let specs = Host::EVERY
+            .iter()
+            .filter(|h| h.spec().speaks_variable.is_some());
+        assert_eq!(specs.count(), 1);
     }
 
     #[test]

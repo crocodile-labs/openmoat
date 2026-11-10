@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::digest::{ReadOnce, is_claude_settings};
+use super::digest::{ReadOnce, is_settings_json};
 use super::{Drift, Lock, key, keys, spec_keys};
 use crate::home::Home;
 
@@ -112,7 +112,7 @@ impl Lock {
                 Err((found, read)) => {
                     if let (Drift::KeysChanged(path, _), Some(read)) = (&found, read)
                         && read.regular
-                        && (is_claude_settings(path) || spec_keys::listed(path).is_some())
+                        && (is_settings_json(path) || spec_keys::listed(path).is_some())
                     {
                         kept.drifted.insert(path.clone(), read.contents);
                     }
@@ -120,12 +120,12 @@ impl Lock {
                 }
             }
         }
-        drift.extend(self.codex_drift());
+        drift.extend(self.part_drift());
         (drift, kept)
     }
 
-    /// Drift of the Codex profiles the lock pins.
-    fn codex_drift(&self) -> impl Iterator<Item = Drift> + '_ {
+    /// Drift of the files the lock pins by the part OpenMoat owns.
+    fn part_drift(&self) -> impl Iterator<Item = Drift> + '_ {
         self.codex_profiles.iter().filter_map(|(stored, expected)| {
             let path = PathBuf::from(stored);
             if key(&path) != *stored {
@@ -134,7 +134,7 @@ impl Lock {
             if fs::symlink_metadata(&path).is_err() {
                 return Some(Drift::Missing(path));
             }
-            match crate::sandbox::install::codex_part_digest(&path) {
+            match crate::sandbox::install::part_digest(&path) {
                 Ok(actual) if &actual == expected => None,
                 Ok(_) => Some(Drift::Modified(path)),
                 Err(e) => Some(Drift::Unreadable(path, format!("{e:#}"))),
@@ -163,7 +163,7 @@ impl Lock {
             )
         })?;
         if read
-            .digests(is_claude_settings(path), self.form(&key(path)))
+            .digests(is_settings_json(path), self.form(&key(path)))
             .iter()
             .any(|d| d == expected)
         {

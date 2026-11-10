@@ -16,7 +16,7 @@ use std::path::Path;
 use openmoat_hosts::{Host, RelaxedKey};
 use serde_json::{Map, Value};
 
-use super::digest::{COSMETIC_KEY, is_claude_settings};
+use super::digest::{COSMETIC_KEY, is_settings_json};
 use super::sha256_hex;
 
 /// The relaxed keys of the host whose hook file is at `path`, found by its
@@ -55,7 +55,7 @@ fn rest_digest(path: &Path, bytes: &[u8], keys: &[RelaxedKey]) -> Option<String>
     let Value::Object(mut root) = serde_json::from_slice(bytes).ok()? else {
         return None;
     };
-    if is_claude_settings(path) {
+    if is_settings_json(path) {
         root.remove(COSMETIC_KEY);
     }
     for key in keys {

@@ -33,7 +33,7 @@ mod spec_keys;
 
 pub use checkpoint::{Checkpoint, repin_after};
 pub use digest::sha256_hex;
-use digest::{digest, digests, is_claude_settings};
+use digest::{digest, digests, is_settings_json};
 pub use kept::{Kept, verify_state};
 pub use relaxed::{check, split};
 
@@ -108,18 +108,18 @@ pub fn repin(home: &Home, binary: &Path, hooks: HookPins) -> Result<Lock> {
     repin_with(home, binary, hooks, &[], &[])
 }
 
-/// [`repin`], also pinning `files` whole and the Codex profiles in
-/// `codex_configs`: the files `moat sandbox sync` just wrote.
+/// [`repin`], also pinning `files` whole and `by_part` by the part OpenMoat
+/// owns: the files `moat sandbox sync` just wrote.
 pub fn repin_with(
     home: &Home,
     binary: &Path,
     hooks: HookPins,
     files: &[PathBuf],
-    codex_configs: &[PathBuf],
+    by_part: &[PathBuf],
 ) -> Result<Lock> {
     let mut paths = state_files(home);
     paths.extend_from_slice(files);
-    let mut profiles = codex_configs.to_vec();
+    let mut profiles = by_part.to_vec();
     let lock_path = home.lock_path();
     let had_lock = lock_path.exists();
     let mut mcp_servers = None;
@@ -147,8 +147,8 @@ pub fn repin_with(
         let installed = installed_hooks(home, binary)?;
         owners.extend(installed.iter().map(|c| (c.settings_path.clone(), c.host)));
         paths.extend(installed.iter().flat_map(pinned_with));
-        profiles.extend(crate::sandbox::install::codex_profile_files(home)?);
-        paths.extend(crate::sandbox::install::cursor_sandbox_files(home)?);
+        profiles.extend(crate::sandbox::install::part_pinned_settings(home)?);
+        paths.extend(crate::sandbox::install::whole_pinned_settings(home)?);
     }
     let mut lock = Lock::pin_owned(binary, &paths, &owners)?;
     // A state file that is missing (one a person accepted as deleted) is
@@ -164,7 +164,7 @@ pub fn repin_with(
     // is what records it.
     (lock.binary_sha256, lock.binary_version) = binary::record(home, binary).unzip();
     for path in profiles.iter().filter(|p| p.is_file()) {
-        let digest = crate::sandbox::install::codex_part_digest(path)?;
+        let digest = crate::sandbox::install::part_digest(path)?;
         lock.codex_profiles.insert(key(path), digest);
     }
     lock.save(&lock_path)?;
@@ -231,10 +231,10 @@ pub struct HookPinGap {
 
 impl HookPinGap {
     pub fn new(lock: &Lock, home: &Home, installed: &[PathBuf]) -> Self {
-        // This shell's Cursor `sandbox.json` is pinned whole, but is no hook file.
+        // A sandbox settings file pinned whole here is pinned, but is no hook file.
         let mut state = state_files(home);
         state.extend(signing_files(home));
-        state.extend(crate::sandbox::install::cursor_sandbox_files(home).unwrap_or_default());
+        state.extend(crate::sandbox::install::whole_pinned_settings(home).unwrap_or_default());
         let state: Vec<String> = state.iter().map(|p| key(p)).collect();
         let here: Vec<String> = installed.iter().map(|p| key(p)).collect();
         Self {
@@ -405,7 +405,7 @@ impl Lock {
                     pinned_forms.insert(key(path), host.id().to_owned());
                 }
                 let form = owner.and_then(forms::form_of);
-                entries.insert(key(path), digest(path, is_claude_settings(path), form)?);
+                entries.insert(key(path), digest(path, is_settings_json(path), form)?);
                 if let Some(digests) = keys::key_digests(path) {
                     keys.insert(key(path), digests);
                 }
@@ -479,8 +479,8 @@ impl Lock {
             .map(String::as_str)
     }
 
-    /// Whether the lock pins the moat profile in the Codex config at `path`.
-    pub fn pins_codex_profile(&self, path: &Path) -> bool {
+    /// Whether the lock pins the part OpenMoat owns of the settings file at `path`.
+    pub fn pins_owned_part(&self, path: &Path) -> bool {
         self.codex_profiles.contains_key(&key(path))
     }
 
@@ -500,11 +500,7 @@ impl Lock {
         if let Some(drift) = self.verify_one(target) {
             return Some(drift);
         }
-        match digests(
-            proposal,
-            is_claude_settings(target),
-            self.form(&key(target)),
-        ) {
+        match digests(proposal, is_settings_json(target), self.form(&key(target))) {
             Ok(actual) if actual.contains(expected) => None,
             Ok(_) => Some(Drift::Proposed {
                 proposal: proposal.to_path_buf(),

@@ -18,6 +18,7 @@
 //! - a project's own `.cursor/sandbox.json` replaces `readBoundary` and
 //!   `additionalReadPaths` and adds to the paths and network allowlist.
 
+pub mod backend;
 mod settings;
 
 use anyhow::Result;

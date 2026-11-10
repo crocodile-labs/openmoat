@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use super::digest::{COSMETIC_KEY, is_claude_settings};
+use super::digest::{COSMETIC_KEY, is_settings_json};
 use super::sha256_hex;
 
 /// Top-level key → SHA-256 of its value, for a `.json` file holding an object or
@@ -21,7 +21,7 @@ pub(super) fn key_digests_of(path: &Path, contents: &[u8]) -> Option<BTreeMap<St
     match path.extension()?.to_str()? {
         "json" => {
             let value: serde_json::Value = serde_json::from_str(text).ok()?;
-            object_digests(value.as_object()?, is_claude_settings(path))
+            object_digests(value.as_object()?, is_settings_json(path))
         }
         "toml" => {
             let doc: toml_edit::DocumentMut = text.parse().ok()?;
