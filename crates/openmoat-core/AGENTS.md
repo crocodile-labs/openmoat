@@ -11,7 +11,7 @@ The trusted core: the policy model and lint, the POSIX lexer (`lexer/`), the she
 - `thiserror` errors; no `unwrap`/`expect`/`panic!` outside tests.
 
 ## Test
-- `cargo test -p openmoat-core`: unit tests, `tests/conformance.rs` over `tests/conformance/*.yaml`, `doc_tables.rs` (README and USAGE verdict tables), `ir_consistency.rs`, `ir_never_widens.rs`, `lexer_vs_bash.rs`, `architecture.rs`.
+- `cargo test -p openmoat-core`: unit tests, `tests/conformance/main.rs` (and `owasp.rs` beside it, the OWASP agentic table) over `tests/conformance/*.yaml`, `doc_tables.rs` (README and USAGE verdict tables), `ir_consistency.rs`, `ir_never_widens.rs`, `lexer_vs_bash.rs`, `architecture.rs`.
 - `OPENMOAT_TEST_UPDATE_COVERAGE=1 cargo test -p openmoat-core --test conformance` regenerates `docs/COVERAGE.md`.
 - A policy change carries one attack that must be denied or held for review and one benign action that must stay allowed.
 

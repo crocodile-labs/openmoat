@@ -2,7 +2,7 @@
 //! engine itself (ADR-046).
 //!
 //! For each fixture the engine's decision is made the way
-//! `openmoat-core/tests/conformance.rs` makes it, straight from the core; the
+//! `openmoat-core/tests/conformance/main.rs` makes it, straight from the core; the
 //! SDK's decision is made through its public API alone (`Policy`, `Context`,
 //! `Facts`, `Session`, `Engine`). The two must be identical (verdict, rules,
 //! reasons and context), and the fixture's own expectation must hold.
