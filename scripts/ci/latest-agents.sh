@@ -341,14 +341,13 @@ install_goose() {
 }
 
 install_agy() {
-    # The installer URL is from third-party guides (the official install page
-    # names the script's `--skip-path` and `--skip-aliases` flags, not its URL);
-    # `--skip-path` keeps it out of the throwaway home's shell profile. The
+    # The installer URL is from third-party guides. Its only install option is
+    # `-d <dir>`; `HOME` is a throwaway, so a profile it edits goes with it. The
     # script is printed by its sha256 before it runs.
     local script="$root/agy-install.sh"
     curl -fsSL --retry 3 -o "$script" https://antigravity.google/cli/install.sh
     if command -v sha256sum >/dev/null; then sha256sum "$script"; else shasum -a 256 "$script"; fi
-    bash "$script" --skip-path --skip-aliases
+    bash "$script" -d "$HOME/.local/bin"
     bin="$HOME/.local/bin/agy"
 }
 
@@ -728,22 +727,32 @@ claude-code)
     # ignored silently when Claude Code does not accept the value.
     tool_shell="$root/tool-shell"
     mkdir -p "$tool_shell"
-    printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/tool-shell.log"\nexec /bin/bash "$@"\n' "$out" >"$tool_shell/bash"
+    # Claude Code's own sandbox holds its Bash tool to the project, so the record
+    # is kept there, where the shell can write it.
+    tool_shell_log="$project/.moat-tool-shell.log"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec /bin/bash "$@"\n' "$tool_shell_log" >"$tool_shell/bash"
     chmod +x "$tool_shell/bash"
     CLAUDE_CODE_SHELL="$tool_shell/bash" SHELL="$tool_shell/bash" claude_interrupted
     cat "$out/agent.txt"
     expect_denied "$out/agent.txt"
-    if ! grep -q 'curl -s' "$out/tool-shell.log" 2>/dev/null; then
-        echo "FAIL  the Bash tool did not start through the shell CLAUDE_CODE_SHELL names (ADR-075)"
-        exit 1
-    fi
-    if grep -q 'guard --host' "$out/tool-shell.log"; then
-        echo "FAIL  a hook started through the tool shell, so it would lose the relay token (ADR-075)"
-        exit 1
+    # Reported at the end, so the checks below still run and say what they find.
+    tool_shell_failure=
+    if [ ! -s "$tool_shell_log" ]; then
+        tool_shell_failure="the shell CLAUDE_CODE_SHELL names never started (ADR-075)"
+    elif ! grep -q 'curl -s' "$tool_shell_log"; then
+        echo "-- what the named shell was started with:"
+        cut -c1-200 "$tool_shell_log"
+        tool_shell_failure="the named shell started, but not for the Bash tool's command (ADR-075)"
+    elif grep -q 'guard --host' "$tool_shell_log"; then
+        tool_shell_failure="a hook started through the tool shell, so it would lose the relay token (ADR-075)"
     fi
     check session-start "$host" "$out/audit-before.json" "$out/audit-after.json"
     check injected "$host" "$out/audit-before.json" "$out/audit-after.json" "$injected_host"
     claude_resumed
+    if [ -n "$tool_shell_failure" ]; then
+        echo "FAIL  $tool_shell_failure"
+        exit 1
+    fi
     ;;
 codex)
     start_fake "$out/fake-api.log" python3 -I "$lib/fake_openai.py" \
