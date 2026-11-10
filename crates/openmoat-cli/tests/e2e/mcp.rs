@@ -317,7 +317,7 @@ fn wrap_names_a_goose_extension_and_leaves_its_yaml_file() {
     assert!(text(&status).contains("`gh`"), "{}", text(&status));
     let before = std::fs::read_to_string(&file).unwrap();
     let out = sb.moat_as_person(&["mcp", "wrap", "--no-sandbox", "gh"]);
-    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    assert_eq!(out.status.code(), Some(USAGE), "{}", text(&out));
     assert!(text(&out).contains("is YAML"), "{}", text(&out));
     assert!(text(&out).contains("gh: cmd:"), "{}", text(&out));
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);

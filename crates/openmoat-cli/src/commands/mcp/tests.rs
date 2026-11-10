@@ -32,11 +32,15 @@ fn an_opencode_list_is_wrapped_backed_up_shown_and_undone() {
 
     let mut out = Deferred::default();
     let names = ["db".to_owned()];
-    let shown = wrap_servers(&home, binary, &hosts, &names, Some(false), true, &mut out).unwrap();
+    let shown = wrap_servers(&home, binary, &hosts, &names, Some(false), true, &mut out)
+        .unwrap()
+        .total();
     assert_eq!(shown, 1);
     assert_eq!(fs::read_to_string(&file).unwrap(), text, "a dry run");
 
-    let done = wrap_servers(&home, binary, &hosts, &names, Some(false), false, &mut out).unwrap();
+    let done = wrap_servers(&home, binary, &hosts, &names, Some(false), false, &mut out)
+        .unwrap()
+        .total();
     assert_eq!(done, 1);
     let doc: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(doc["theme"], "x", "the rest of the file stays");
@@ -52,7 +56,12 @@ fn an_opencode_list_is_wrapped_backed_up_shown_and_undone() {
         .collect();
     assert_eq!(backups.len(), 1, "{backups:?}");
 
-    assert_eq!(unwrap_servers(&home, &hosts, &[], &mut out).unwrap(), 1);
+    assert_eq!(
+        unwrap_servers(&home, &hosts, &[], &mut out)
+            .unwrap()
+            .total(),
+        1
+    );
     let doc: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(
         doc["mcp"]["db"],
@@ -77,7 +86,9 @@ fn a_goose_server_is_named_with_what_to_set_by_hand_and_the_file_stays() {
     let said = previews[0].change.as_ref().unwrap_err();
     assert!(said.contains("is YAML"), "{said}");
     assert!(said.contains("gh: cmd: \"/x/openmoat\""), "{said}");
-    let named = wrap_servers(&home, binary, &hosts, &[], Some(false), false, &mut out).unwrap();
+    let named = wrap_servers(&home, binary, &hosts, &[], Some(false), false, &mut out)
+        .unwrap()
+        .total();
     assert_eq!(named, 1, "named, not wrapped");
     assert_eq!(fs::read_to_string(&file).unwrap(), text);
     assert_eq!(Recorded::load(&home).unwrap().mcp_wrapped, Vec::new());
@@ -133,7 +144,8 @@ fn wrapping_re_pins_what_it_wrote_and_nothing_else_drifts() {
         false,
         &mut out,
     )
-    .unwrap();
+    .unwrap()
+    .total();
     assert_eq!(done, 1);
     assert!(fs::read_to_string(&file).unwrap().contains("proxy"));
     assert!(
@@ -153,4 +165,20 @@ fn wrapping_re_pins_what_it_wrote_and_nothing_else_drifts() {
             "{tool}"
         );
     }
+}
+
+#[test]
+fn a_server_asked_for_by_name_and_left_to_set_by_hand_is_not_a_success() {
+    let names = ["docs".to_owned()];
+    let left = Applied {
+        done: 0,
+        by_hand: 1,
+    };
+    assert_eq!(left.code(&names), Code::Usage);
+    assert_eq!(left.code(&[]), Code::Ok);
+    let done = Applied {
+        done: 1,
+        by_hand: 0,
+    };
+    assert_eq!(done.code(&names), Code::Ok);
 }
