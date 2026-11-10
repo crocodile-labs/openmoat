@@ -4,9 +4,9 @@
 //! Cursor, GitHub Copilot CLI, Gemini CLI) are pure code in the hosts crate
 //! ([`openmoat_hosts::HookFile`]); this module reads, backs up and writes the
 //! file. A file OpenMoat owns whole (pi's extension, OpenCode's plugin) is written by [`owned`],
-//! a plugin configuration (OpenClaw's `openclaw.json`) by [`openclaw`], a YAML
-//! file (Hermes Agent's `config.yaml`) by [`yaml`]; the host's spec says which
-//! ([`HookLayout`]).
+//! a plugin configuration (OpenClaw's `openclaw.json`) by [`plugin_config`], a
+//! YAML file (Hermes Agent's `config.yaml`) by [`yaml`]; the host's spec says
+//! which ([`HookLayout`]).
 
 use std::fs;
 use std::path::Path;
@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::HookFileState;
 use serde_json::{Map, Value};
 
-use super::{HOOK_BACKUP, HookLayout, HostConfig, openclaw, owned, yaml};
+use super::{HOOK_BACKUP, HookLayout, HostConfig, owned, plugin_config, yaml};
 use crate::home::{Home, KeepMode, write_like};
 
 pub use openmoat_hosts::HookOutcome as Outcome;
@@ -95,7 +95,7 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
         crate::json5::read_for_edit(path)?;
     }
     // The plugin is a file of its own in the configuration directory.
-    let plugin = plugin.filter(|plugin| !openclaw::plugin_current(config, plugin, binary));
+    let plugin = plugin.filter(|plugin| !plugin_config::plugin_current(config, *plugin, binary));
     let outcome = if plugin.is_some() {
         edited.max(Outcome::Updated)
     } else {
@@ -105,7 +105,7 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
         return Ok(outcome);
     }
     if let Some(plugin) = plugin {
-        openclaw::write_plugin(config, plugin, binary)?;
+        plugin_config::write_plugin(config, plugin, binary)?;
     }
     if edited != Outcome::Unchanged {
         super::back_up(home, path, HOOK_BACKUP)?;
@@ -144,8 +144,8 @@ pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Optio
 }
 
 fn upsert_all(root: &mut Value, config: &HostConfig, binary: &Path) -> Result<Outcome> {
-    if let HookLayout::Plugin(_) = config.layout {
-        return openclaw::upsert(root, config);
+    if let HookLayout::Plugin(plugin) = config.layout {
+        return plugin_config::upsert(root, config, plugin);
     }
     let Some(layout) = config.layout.entries() else {
         bail!("{} is not a JSON hook file", config.settings_path.display());
@@ -200,7 +200,7 @@ fn state_for(config: &HostConfig, binary: &Path) -> HookState {
         Err(e) => return HookState::Unreadable(format!("{e:#}")),
     };
     let layout = match config.layout {
-        HookLayout::Plugin(plugin) => return openclaw::state(config, plugin, binary, &root),
+        HookLayout::Plugin(plugin) => return plugin_config::state(config, plugin, binary, &root),
         HookLayout::Owned(_) | HookLayout::Script(_) | HookLayout::Yaml(_) => {
             return HookState::Missing;
         }
@@ -233,7 +233,7 @@ pub fn lacks_on_failure(config: &HostConfig) -> bool {
 /// nothing else remains. Returns whether anything was removed.
 pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
     match config.layout {
-        HookLayout::Plugin(_) => openclaw::remove(root),
+        HookLayout::Plugin(plugin) => plugin.remove(root),
         HookLayout::Entries(layout) | HookLayout::Yaml(layout) => {
             layout.remove(root, config.host.id())
         }
@@ -241,8 +241,8 @@ pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
     }
 }
 
-/// `config`'s hook file parsed, an empty object when there is none; OpenClaw's
-/// as JSON5, a YAML one as YAML.
+/// `config`'s hook file parsed, an empty object when there is none; a plugin
+/// configuration as JSON5, a YAML one as YAML.
 pub fn read_host(config: &HostConfig) -> Result<Value> {
     match config.layout {
         HookLayout::Plugin(_) => crate::json5::read(&config.settings_path),

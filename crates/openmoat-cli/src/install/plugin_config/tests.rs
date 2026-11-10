@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use openmoat_hosts::{HookLayout, Host, OwnedFile};
+use openmoat_hosts::{HookLayout, Host, OwnedFile, PluginConfig};
 use serde_json::{Value, json};
 
 use super::*;
@@ -11,12 +11,21 @@ use crate::install::{HookSpec, hook_file, owned};
 const SPECS: &[HookSpec] = &[HookSpec::new("before_tool_call", "", 60, false)];
 const BINARY_LINE: &str = "const MOAT = __MOAT_BINARY__;";
 
-/// OpenMoat's plugin, from OpenClaw's spec.
-fn plugin() -> &'static OwnedFile {
+/// The layout of OpenClaw's configuration, from its spec.
+fn layout() -> &'static dyn PluginConfig {
     match Host::OpenClaw.spec().install.as_ref().unwrap().hook_file {
-        HookLayout::Plugin(file) => file,
+        HookLayout::Plugin(layout) => layout,
         other => panic!("OpenClaw's hook file is {other:?}"),
     }
+}
+
+/// OpenMoat's plugin, from OpenClaw's spec.
+fn plugin() -> &'static OwnedFile {
+    layout().plugin()
+}
+
+fn path(config: &HostConfig) -> std::path::PathBuf {
+    plugin_path(config, layout())
 }
 
 fn config(dir: &Path) -> HostConfig {
@@ -25,7 +34,7 @@ fn config(dir: &Path) -> HostConfig {
         settings_path: dir.join("openclaw.json"),
         dir: dir.to_path_buf(),
         hooks: SPECS,
-        layout: HookLayout::Plugin(plugin()),
+        layout: HookLayout::Plugin(layout()),
         blocks_on_failure: || false,
         state_dir: std::path::PathBuf::from("/h/.moat"),
     }
@@ -71,7 +80,7 @@ fn init_writes_the_plugin_and_its_entries_once() {
     assert_eq!(install(&cfg, binary), Outcome::Unchanged);
     assert_eq!(hook_file::state(&cfg, binary), HookState::Installed);
     let doc = root(&cfg);
-    let ours = crate::context::path_string(&plugin_path(&cfg));
+    let ours = crate::context::path_string(&path(&cfg));
     assert_eq!(doc["plugins"]["load"]["paths"], json!([ours]));
     assert_eq!(
         doc["plugins"]["entries"]["openmoat"],
@@ -80,7 +89,7 @@ fn init_writes_the_plugin_and_its_entries_once() {
     assert_eq!(doc["plugins"]["allow"], json!(["memory", "openmoat"]));
     assert_eq!(doc["plugins"]["deny"], json!([]));
     assert_eq!(doc["agents"]["defaults"]["workspace"], "~/w");
-    let plugin = fs::read_to_string(plugin_path(&cfg)).unwrap();
+    let plugin = fs::read_to_string(path(&cfg)).unwrap();
     assert!(plugin.contains(r#"const MOAT = "/usr/local/bin/moat";"#));
 
     // Another binary, or a changed plugin file, is out of date until `init`.
@@ -89,7 +98,7 @@ fn init_writes_the_plugin_and_its_entries_once() {
         hook_file::state(&cfg, other),
         HookState::Stale { .. }
     ));
-    fs::write(plugin_path(&cfg), "export default {};").unwrap();
+    fs::write(path(&cfg), "export default {};").unwrap();
     assert!(matches!(
         hook_file::state(&cfg, binary),
         HookState::Stale { .. }
@@ -112,8 +121,8 @@ fn remove_gives_back_the_file_init_found() {
         assert!(hook_file::remove(&mut doc, &cfg));
         assert_eq!(doc, original);
         assert!(!hook_file::remove(&mut doc, &cfg), "nothing left to remove");
-        assert_eq!(remove_plugin(&cfg).unwrap(), Some(plugin_path(&cfg)));
-        assert!(!plugin_path(&cfg).parent().unwrap().exists());
+        assert_eq!(remove_plugin(&cfg, layout()).unwrap(), Some(path(&cfg)));
+        assert!(!path(&cfg).parent().unwrap().exists());
     }
 }
 
@@ -136,7 +145,7 @@ fn a_file_openmoat_cannot_load_its_plugin_from_is_refused() {
     assert!(format!("{refused:#}").contains("comments"), "{refused:#}");
     let preview = hook_file::render(&cfg, Path::new("/x/moat"), commented).unwrap_err();
     assert!(format!("{preview:#}").contains("comments"), "{preview:#}");
-    assert!(!plugin_path(&cfg).exists(), "nothing written");
+    assert!(!path(&cfg).exists(), "nothing written");
     assert_eq!(fs::read_to_string(&cfg.settings_path).unwrap(), commented);
 }
 
@@ -174,10 +183,10 @@ fn a_configuration_outside_the_state_directory_keeps_the_plugin_in_it() {
     fs::create_dir_all(dir.path().join("state")).unwrap();
     assert_eq!(install(&cfg, Path::new("/x/moat")), Outcome::Installed);
     assert_eq!(
-        plugin_path(&cfg),
+        path(&cfg),
         dir.path().join("state/openmoat/openmoat.mjs")
     );
-    assert!(plugin_path(&cfg).is_file());
-    let ours = crate::context::path_string(&plugin_path(&cfg));
+    assert!(path(&cfg).is_file());
+    let ours = crate::context::path_string(&path(&cfg));
     assert_eq!(root(&cfg)["plugins"]["load"]["paths"], json!([ours]));
 }

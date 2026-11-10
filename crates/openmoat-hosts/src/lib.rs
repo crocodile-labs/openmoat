@@ -31,10 +31,6 @@ pub use contract::{
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
 pub use host::continue_cli::CONTINUE_ENV;
-pub use host::openclaw::{
-    CONFIG_FILE as OPENCLAW_CONFIG_FILE, PLUGIN_ID as OPENCLAW_PLUGIN_ID,
-    STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
-};
 pub use wire::guard_command::{GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
@@ -43,6 +39,7 @@ pub use wire::mcp_call::{
     mcp_tools_list_request,
 };
 pub use wire::owned_file::{OwnedFile, OwnedFileError, Syntax};
+pub use wire::plugin_config::PluginConfig;
 
 use std::fmt;
 use std::str::FromStr;

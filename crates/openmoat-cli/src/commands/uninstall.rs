@@ -104,9 +104,12 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             }
             Some(Undo::WithHooks(_)) | None => {}
         }
-        // OpenClaw's hook is the plugin file `init` wrote, which nothing else owns.
-        if plugin && let Some(plugin) = install::openclaw::remove_plugin(&config)? {
-            files.push((plugin, Some(Undone::Deleted)));
+        // A plugin configuration's hook is the plugin file `init` wrote, which
+        // nothing else owns.
+        if let HookLayout::Plugin(layout) = config.layout
+            && let Some(file) = install::plugin_config::remove_plugin(&config, layout)?
+        {
+            files.push((file, Some(Undone::Deleted)));
         }
         if files.iter().all(|(_, done)| done.is_none()) {
             writeln!(out, "· {:<16} not set up", host.display_name())?;
@@ -210,9 +213,9 @@ fn undo_json(
     undo_host_json(path, ours, strip, false)
 }
 
-/// [`undo_json`]; `plugin` (OpenClaw's `openclaw.json`) reads the file and its
-/// backups as JSON5 and refuses to write back a file whose comments that would
-/// drop.
+/// [`undo_json`]; `plugin` (a plugin configuration, [`HookLayout::Plugin`]) reads
+/// the file and its backups as JSON5 and refuses to write back a file whose
+/// comments that would drop.
 fn undo_host_json(
     path: &Path,
     ours: &[PathBuf],

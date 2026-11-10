@@ -3,6 +3,7 @@
 
 use crate::wire::hook_file::HookFile;
 use crate::wire::owned_file::OwnedFile;
+use crate::wire::plugin_config::PluginConfig;
 
 /// The layout of a host's hook file.
 #[derive(Debug, Clone, Copy)]
@@ -24,8 +25,8 @@ pub enum HookLayout {
     Script(&'static OwnedFile),
     /// A JSON5 configuration that loads a plugin OpenMoat owns whole, the
     /// host's first [`super::InstallSpec::extra_files`] (OpenClaw's
-    /// `openclaw.json` and plugin).
-    Plugin(&'static OwnedFile),
+    /// `openclaw.json` and plugin), with the code that edits it.
+    Plugin(&'static dyn PluginConfig),
 }
 
 impl HookLayout {

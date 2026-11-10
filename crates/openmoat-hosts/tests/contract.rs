@@ -235,7 +235,8 @@ fn every_plugin_reports_that_it_loaded() {
     for host in Host::ALL {
         let install = host.spec().install.as_ref().unwrap();
         let plugin = match install.hook_file {
-            HookLayout::Owned(file) | HookLayout::Plugin(file) => Some(file),
+            HookLayout::Owned(file) => Some(file),
+            HookLayout::Plugin(config) => Some(config.plugin()),
             HookLayout::Entries(_) | HookLayout::Yaml(_) | HookLayout::Script(_) => None,
         };
         assert_eq!(install.heartbeat.is_some(), plugin.is_some(), "{host:?}");
