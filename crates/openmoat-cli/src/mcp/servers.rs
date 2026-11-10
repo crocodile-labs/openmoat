@@ -189,7 +189,7 @@ pub fn parse(source: &Source, text: &str) -> Result<Vec<Server>> {
             toml_to_json(doc.as_item())
         }
         McpSyntax::Json5 => {
-            crate::install::openclaw::parse(text)
+            crate::json5::parse_or_empty(text)
                 .context("parsing JSON5")?
                 .value
         }
