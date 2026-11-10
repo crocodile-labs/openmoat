@@ -237,7 +237,10 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
             .push(done);
     }
     for (path, (syntax, dones)) in by_file {
-        let (_, new) = rendered(&path, syntax, &dones)?;
+        let new = match rendered(&path, syntax, &dones)? {
+            Rendered::Text { after, .. } => after,
+            Rendered::ByHand(why) => bail!("{why}"),
+        };
         if dry_run {
             continue;
         }
@@ -247,38 +250,58 @@ pub fn write(home: &Home, edits: &[(Source, Done)], dry_run: bool) -> Result<()>
     Ok(())
 }
 
-/// The text of the file at `path` and what `dones` would make it; `Err` when
-/// OpenMoat does not rewrite such a file, with what to set by hand.
-fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, String)> {
+/// What rewriting one file comes to.
+#[derive(Debug)]
+enum Rendered {
+    /// The text of the file and what the edits make it.
+    Text { before: String, after: String },
+    /// A file OpenMoat deliberately does not rewrite (YAML, JSON5 with
+    /// comments): what a person sets by hand instead.
+    ByHand(String),
+}
+
+/// What `dones` would make the file at `path`. A file OpenMoat does not
+/// rewrite is [`Rendered::ByHand`]; any other failure (the file cannot be
+/// read or parsed, a server is no longer where it was) is an error.
+fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<Rendered> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let new = match syntax {
+    let after = match syntax {
         McpSyntax::Json => edit_json(&text, dones)?,
         McpSyntax::Toml => edit_toml(&text, dones)?,
         McpSyntax::Json5 => {
             // JSON5 is written back as JSON, so a file with comments is not.
             let parsed = crate::install::json5_file::parse_or_empty(&text)
                 .with_context(|| format!("parsing {}", path.display()))?;
-            crate::install::json5_file::refuse_comments(&parsed, path)?;
+            if parsed.comments {
+                return Ok(Rendered::ByHand(
+                    crate::install::json5_file::comments_refusal(path),
+                ));
+            }
             edit_value(parsed.value, dones)?
         }
         // The host rewrites it and people keep comments in it; OpenMoat
         // edits only its own hook lines there.
-        McpSyntax::Yaml => bail!(
-            "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
-             then run `openmoat mcp accept`:\n{}",
-            path.display(),
-            if dones
-                .iter()
-                .any(|d| original_of(&d.entry, d.server.form).is_some())
-            {
-                "wrap"
-            } else {
-                "unwrap"
-            },
-            by_hand(dones)
-        ),
+        McpSyntax::Yaml => {
+            return Ok(Rendered::ByHand(format!(
+                "{} is YAML, which `openmoat mcp {}` does not rewrite; set these by hand, \
+                 then run `openmoat mcp accept`:\n{}",
+                path.display(),
+                if dones
+                    .iter()
+                    .any(|d| original_of(&d.entry, d.server.form).is_some())
+                {
+                    "wrap"
+                } else {
+                    "unwrap"
+                },
+                by_hand(dones)
+            )));
+        }
     };
-    Ok((text, new))
+    Ok(Rendered::Text {
+        before: text,
+        after,
+    })
 }
 
 /// Whether `entry` (a definition as it is to be written) runs through the

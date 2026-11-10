@@ -80,16 +80,20 @@ fn a_goose_server_is_named_with_what_to_set_by_hand_and_the_file_stays() {
     let mut out = Deferred::quiet();
     let binary = Path::new("/x/openmoat");
     let hosts = [Host::Goose];
-    let edits = wrap_plan(&home, binary, &hosts, &[], Some(false), &mut out).unwrap();
+    let edits = wrap_plan(&home, binary, &hosts, &[], Some(false), &mut out)
+        .unwrap()
+        .edits;
     assert_eq!(edits.len(), 1, "the stdio extension, not the inline Python");
-    let previews = wrap::preview(&edits);
+    let previews = wrap::preview(&edits).unwrap();
     let said = previews[0].change.as_ref().unwrap_err();
     assert!(said.contains("is YAML"), "{said}");
     assert!(said.contains("gh: cmd: \"/x/openmoat\""), "{said}");
-    let named = wrap_servers(&home, binary, &hosts, &[], Some(false), false, &mut out)
-        .unwrap()
-        .total();
-    assert_eq!(named, 1, "named, not wrapped");
+    let named = wrap_servers(&home, binary, &hosts, &[], Some(false), false, &mut out).unwrap();
+    assert_eq!(
+        (named.done, named.by_hand, named.left),
+        (0, 1, 1),
+        "the stdio extension named to set by hand, the inline Python named and left"
+    );
     assert_eq!(fs::read_to_string(&file).unwrap(), text);
     assert_eq!(Recorded::load(&home).unwrap().mcp_wrapped, Vec::new());
 }
@@ -173,12 +177,63 @@ fn a_server_asked_for_by_name_and_left_to_set_by_hand_is_not_a_success() {
     let left = Applied {
         done: 0,
         by_hand: 1,
+        left: 0,
     };
     assert_eq!(left.code(&names), Code::Usage);
     assert_eq!(left.code(&[]), Code::Ok);
     let done = Applied {
         done: 1,
         by_hand: 0,
+        left: 0,
     };
     assert_eq!(done.code(&names), Code::Ok);
+}
+
+/// A server asked for by name that OpenMoat cannot put behind the proxy is
+/// named, counted and not a success; a sweep goes on past it.
+#[test]
+fn a_server_asked_for_by_name_that_cannot_be_wrapped_is_not_a_success() {
+    let text = "extensions:\n  snake:\n    enabled: true\n    type: inline_python\n    \
+                name: snake\n    code: print(1)\n";
+    let (_dir, home, file) = host_with_file(Host::Goose, "config.yaml", text);
+    let mut out = Deferred::quiet();
+    let binary = Path::new("/x/openmoat");
+    let hosts = [Host::Goose];
+    let names = ["snake".to_owned()];
+    let applied =
+        wrap_servers(&home, binary, &hosts, &names, Some(false), false, &mut out).unwrap();
+    assert_eq!(applied.total(), 1, "named, so not `no stdio MCP server`");
+    assert_eq!(applied.code(&names), Code::Usage);
+    let swept = wrap_servers(&home, binary, &hosts, &[], Some(false), false, &mut out).unwrap();
+    assert_eq!(swept.code(&[]), Code::Ok);
+    assert_eq!(fs::read_to_string(&file).unwrap(), text);
+}
+
+/// Only a file OpenMoat deliberately does not rewrite is left to set by hand:
+/// a file that no longer holds the server, no longer parses or is gone fails
+/// the command, as it did before such files were named.
+#[test]
+fn a_file_that_changed_under_the_plan_fails_the_command() {
+    let text = r#"{"mcpServers": {"gh": {"command": "npx"}}}"#;
+    let (_dir, home, file) = host_with_file(Host::ClaudeCode, ".claude.json", text);
+    let binary = Path::new("/x/openmoat");
+    let hosts = [Host::ClaudeCode];
+    let mut out = Deferred::quiet();
+    let plan = wrap_plan(&home, binary, &hosts, &[], Some(false), &mut out)
+        .unwrap()
+        .edits;
+    assert_eq!(plan.len(), 1);
+    for (now, what) in [
+        (Some(r#"{"mcpServers": {}}"#), "no server"),
+        (Some("{not json"), "parsing"),
+        (None, "reading"),
+    ] {
+        match now {
+            Some(now) => fs::write(&file, now).unwrap(),
+            None => fs::remove_file(&file).unwrap(),
+        }
+        let mut edits = plan.clone();
+        let failed = drop_what_cannot_be_rewritten(&mut edits, &mut out).unwrap_err();
+        assert!(format!("{failed:#}").contains(what), "{what}: {failed:#}");
+    }
 }

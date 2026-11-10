@@ -40,14 +40,19 @@ pub fn read(path: &Path) -> Result<Value> {
 /// none, so writing it would drop them.
 pub fn refuse_comments(parsed: &Parsed, file: &Path) -> Result<()> {
     if parsed.comments {
-        bail!(
-            "{} has comments (JSON5), and OpenMoat writes it back as plain JSON, which would \
-             drop them; move the comments out of the file (or delete them), then run the \
-             command again. No file was changed",
-            file.display()
-        );
+        bail!("{}", comments_refusal(file));
     }
     Ok(())
+}
+
+/// Why `file`, a JSON5 file with comments, is not written back, and what to do.
+pub fn comments_refusal(file: &Path) -> String {
+    format!(
+        "{} has comments (JSON5), and OpenMoat writes it back as plain JSON, which would drop \
+         them; move the comments out of the file (or delete them), then run the command again. \
+         No file was changed",
+        file.display()
+    )
 }
 
 /// The JSON5 file at `path` parsed for an edit: refused when writing it back

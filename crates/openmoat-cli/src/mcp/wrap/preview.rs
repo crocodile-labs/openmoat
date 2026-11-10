@@ -4,9 +4,10 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use anyhow::Result;
 use openmoat_hosts::McpSyntax;
 
-use super::{Done, Source, rendered};
+use super::{Done, Rendered, Source, rendered};
 
 /// One file `edits` would change, or why OpenMoat would not rewrite it.
 #[derive(Debug)]
@@ -17,7 +18,9 @@ pub struct Preview {
 }
 
 /// What [`super::write`] would do to each file `edits` touch, writing nothing.
-pub fn preview(edits: &[(Source, Done)]) -> Vec<Preview> {
+/// A file OpenMoat does not rewrite is named in its preview; a file that
+/// cannot be read or parsed, or no longer holds a server, is an error.
+pub fn preview(edits: &[(Source, Done)]) -> Result<Vec<Preview>> {
     let mut by_file: BTreeMap<PathBuf, (McpSyntax, Vec<&Done>)> = BTreeMap::new();
     for (source, done) in edits {
         by_file
@@ -28,9 +31,12 @@ pub fn preview(edits: &[(Source, Done)]) -> Vec<Preview> {
     }
     by_file
         .into_iter()
-        .map(|(path, (syntax, dones))| Preview {
-            change: rendered(&path, syntax, &dones).map_err(|e| format!("{e:#}")),
-            path,
+        .map(|(path, (syntax, dones))| {
+            let change = match rendered(&path, syntax, &dones)? {
+                Rendered::Text { before, after } => Ok((before, after)),
+                Rendered::ByHand(why) => Err(why),
+            };
+            Ok(Preview { path, change })
         })
         .collect()
 }
@@ -101,7 +107,7 @@ mod tests {
             (json_file.clone(), done(&json_file, "/mcpServers/docs")),
             (yaml_file.clone(), done(&yaml_file, "/mcp_servers/docs")),
         ];
-        let previews = preview(&edits);
+        let previews = preview(&edits).unwrap();
         let shown = |path: &Path| previews.iter().find(|p| p.path == path).unwrap();
         let (before, after) = shown(&json_file.path).change.as_ref().unwrap();
         assert_eq!(before, text);

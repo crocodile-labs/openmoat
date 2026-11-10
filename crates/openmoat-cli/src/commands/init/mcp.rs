@@ -93,7 +93,7 @@ pub(super) fn servers(
 /// Show the stdio servers not yet wrapped and ask; wrap them on yes.
 fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) -> Result<()> {
     let declined = Recorded::load(home)?.mcp_wrap_declined;
-    let mut edits = super::super::mcp::wrap_plan(home, binary, hosts, &[], None, out)?;
+    let mut edits = super::super::mcp::wrap_plan(home, binary, hosts, &[], None, out)?.edits;
     edits.retain(|(_, done)| {
         !declined.contains(&done.server.id)
             && wrap::sandboxed(&done.server.entry, done.server.form).is_none()
@@ -123,7 +123,7 @@ fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) 
          after a server's first start, and wrapped servers do not start inside `openmoat run`. \
          `openmoat mcp unwrap` or `openmoat uninstall` undoes this."
     )?;
-    let changes = changes_of(&edits);
+    let changes = changes_of(&edits)?;
     loop {
         write!(out, "Run them through OpenMoat? [Y/n/d] ")?;
         out.flush()?;
@@ -145,14 +145,14 @@ fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) 
 }
 
 /// The file changes `edits` would make, for the diff.
-fn changes_of(edits: &[(Source, Done)]) -> Vec<Change> {
-    wrap::preview(edits)
+fn changes_of(edits: &[(Source, Done)]) -> Result<Vec<Change>> {
+    Ok(wrap::preview(edits)?
         .into_iter()
         .filter_map(|preview| {
             let (before, after) = preview.change.ok()?;
             Some(Change::mcp_servers(preview.path, before, after))
         })
-        .collect()
+        .collect())
 }
 
 /// Remember the person's no, so `init` does not ask about these definitions
