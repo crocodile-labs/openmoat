@@ -39,15 +39,34 @@ pub struct Deferred {
     error: Option<io::Error>,
     /// Discard everything: the command prints one JSON document instead.
     quiet: bool,
+    /// What a test's `Deferred` was given, kept instead of printed.
+    #[cfg(test)]
+    captured: Option<Vec<u8>>,
 }
 
 impl Deferred {
     /// A `Deferred` that writes nothing, for a command's `--format json`.
     pub fn quiet() -> Self {
         Self {
-            error: None,
             quiet: true,
+            ..Self::default()
         }
+    }
+
+    /// A `Deferred` that keeps what it is given, for a test to read.
+    #[cfg(test)]
+    pub fn capturing() -> Self {
+        Self {
+            quiet: true,
+            captured: Some(Vec::new()),
+            ..Self::default()
+        }
+    }
+
+    /// What a [`Self::capturing`] `Deferred` was given.
+    #[cfg(test)]
+    pub fn captured(&self) -> String {
+        String::from_utf8_lossy(self.captured.as_deref().unwrap_or_default()).into_owned()
     }
 
     /// The first write error, if any, now that the command has done its work.
@@ -62,6 +81,10 @@ impl Deferred {
 
 impl Write for Deferred {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        #[cfg(test)]
+        if let Some(captured) = self.captured.as_mut() {
+            captured.extend_from_slice(buf);
+        }
         if !self.quiet
             && self.error.is_none()
             && let Err(error) = io::stdout().write_all(buf)
@@ -379,6 +402,18 @@ pub fn clean(text: &str) -> Cow<'_, str> {
         )
     } else {
         Cow::Borrowed(text)
+    }
+}
+
+/// A name read from a file or a host (an MCP server's, say), as a command
+/// prints it: in backticks, through [`clean`]. Formatting one is the only way
+/// a command prints such a name, so no print can leave out the cleaning.
+#[derive(Debug, Clone, Copy)]
+pub struct Named<'a>(pub &'a str);
+
+impl std::fmt::Display for Named<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "`{}`", clean(self.0))
     }
 }
 

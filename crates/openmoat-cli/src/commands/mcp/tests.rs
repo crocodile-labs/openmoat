@@ -189,6 +189,36 @@ fn a_server_asked_for_by_name_and_left_to_set_by_hand_is_not_a_success() {
     assert_eq!(done.code(&names), Code::Ok);
 }
 
+/// A server's name comes from the agent's file: every line `mcp wrap` prints
+/// about it (wrapped, without the sandbox, tools held) shows it through
+/// `render::clean`, never with its escape sequences.
+#[test]
+fn every_line_naming_a_server_is_printed_without_its_escape_sequences() {
+    let text = r#"{"mcpServers": {"gh\u001b[2J": {"command": "npx"}}}"#;
+    let (_dir, home, _file) = host_with_file(Host::ClaudeCode, ".claude.json", text);
+    let mut out = Deferred::capturing();
+    let applied = wrap_servers(
+        &home,
+        Path::new("/x/openmoat"),
+        &[Host::ClaudeCode],
+        &[],
+        Some(false),
+        false,
+        &mut out,
+    )
+    .unwrap();
+    assert_eq!(applied.total(), 1);
+    let said = out.captured();
+    assert!(!said.contains('\u{1b}'), "{said:?}");
+    for line in [
+        "✔ wrapped `gh?[2J`",
+        "! `gh?[2J` run without",
+        "the tools of `gh?[2J`",
+    ] {
+        assert!(said.contains(line), "{line}: {said:?}");
+    }
+}
+
 /// A server asked for by name that OpenMoat cannot put behind the proxy is
 /// named, counted and not a success; a sweep goes on past it.
 #[test]

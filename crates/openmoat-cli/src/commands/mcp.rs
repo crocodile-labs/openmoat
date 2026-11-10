@@ -19,7 +19,7 @@ use crate::integrity::{self, Lock};
 use crate::mcp::tools::{self, ToolPins};
 use crate::mcp::wrap::{self, Done};
 use crate::mcp::{self, Change};
-use crate::render::{Deferred, clean};
+use crate::render::{Deferred, Named, clean};
 
 mod gate;
 mod proxy;
@@ -109,10 +109,10 @@ pub(super) fn review_and_accept(
         if takes_name {
             writeln!(
                 out,
-                "! `{}` is the name of Claude in Chrome, which Claude Code provides itself; this \
+                "! {} is the name of Claude in Chrome, which Claude Code provides itself; this \
                  server is another program, so all its results mark the session untrusted, its \
                  tab lists too",
-                crate::render::clean(&change.name)
+                Named(&change.name)
             )?;
         }
     }
@@ -276,8 +276,8 @@ pub(super) fn wrap_plan(
             if let Some(why) = wrap::not_wrappable(&server.entry, form) {
                 writeln!(
                     out,
-                    "! `{}` ({}) is left as it is: {why}",
-                    clean(&server.name),
+                    "! {} ({}) is left as it is: {why}",
+                    Named(&server.name),
                     server.file.display()
                 )?;
                 left += 1;
@@ -324,7 +324,7 @@ fn sandbox_note(
         edits
             .iter()
             .filter(|(_, d)| wrap::sandboxed(&d.entry, d.server.form) == Some(on))
-            .map(|(_, d)| format!("`{}`", d.server.name))
+            .map(|(_, d)| Named(&d.server.name).to_string())
             .collect()
     };
     let (unconfined, confined) = (names(false), names(true));
@@ -340,7 +340,8 @@ fn sandbox_note(
     if let (Some(why), false) = (unavailable, confined.is_empty()) {
         writeln!(
             out,
-            "! {} cannot start in `openmoat run`'s sandbox here ({why}); run              `openmoat mcp wrap --no-sandbox` to start them unconfined",
+            "! {} cannot start in `openmoat run`'s sandbox here ({why}); run \
+             `openmoat mcp wrap --no-sandbox` to start them unconfined",
             confined.join(", ")
         )?;
     }
@@ -368,7 +369,7 @@ fn first_sight_note(
     if new.is_empty() {
         return Ok(());
     }
-    let names: Vec<String> = new.iter().map(|n| format!("`{n}`")).collect();
+    let names: Vec<String> = new.iter().map(|n| Named(n).to_string()).collect();
     writeln!(
         out,
         "· the tools of {} wait for `openmoat mcp accept <server>` after the server's first start",
@@ -433,8 +434,10 @@ pub(super) fn unwrap_servers(
 fn skipped(out: &mut Deferred, name: &str) -> Result<()> {
     writeln!(
         out,
-        "! skipped `{name}`: its definition changed since it was accepted; \
-         run `openmoat mcp accept {name}` first"
+        "! skipped {}: its definition changed since it was accepted; \
+         run `openmoat mcp accept {}` first",
+        Named(name),
+        clean(name)
     )?;
     Ok(())
 }
@@ -477,8 +480,8 @@ fn finish_edits(
     for (_, done) in edits {
         writeln!(
             out,
-            "{verb} `{}` in {}",
-            done.server.name,
+            "{verb} {} in {}",
+            Named(&done.server.name),
             done.server.file.display()
         )?;
     }

@@ -15,7 +15,7 @@ use crate::install::Recorded;
 use crate::integrity;
 use crate::mcp::servers::Source;
 use crate::mcp::wrap::{self, Done};
-use crate::render::{Deferred, clean};
+use crate::render::{Deferred, Named};
 
 /// What `init` does about wrapping the agents' stdio MCP servers.
 #[derive(Debug, Clone, Copy)]
@@ -110,8 +110,8 @@ fn ask_and_wrap(home: &Home, binary: &Path, hosts: &[Host], out: &mut Deferred) 
     for (source, done) in &edits {
         writeln!(
             out,
-            "  `{}` ({}, {})",
-            clean(&done.server.name),
+            "  {} ({}, {})",
+            Named(&done.server.name),
             source.host.display_name(),
             done.server.file.display()
         )?;
