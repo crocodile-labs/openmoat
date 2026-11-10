@@ -82,6 +82,9 @@ pub(super) fn push(tokens: &[Token], sink: &mut Sink) -> Result<(), ClassifyErro
     // Separators pushed since the last word. Counted from the tokens, not by
     // comparing text: an escaped word `\&` has the same text as the operator.
     let mut trailing_separators = 0;
+    // Where each list item ends (`;`, `&&`, `||`, `&`, a newline): a `|` does
+    // not end one.
+    let mut list_ends: Vec<usize> = Vec::new();
     for token in tokens {
         match token {
             Token::Word(w) => {
@@ -94,6 +97,9 @@ pub(super) fn push(tokens: &[Token], sink: &mut Sink) -> Result<(), ClassifyErro
             }
             Token::Operator(op) if op.is_separator() => {
                 if !at_command_start {
+                    if *op != Operator::Pipe {
+                        list_ends.push(flat.len());
+                    }
                     flat.push(op.symbol().to_owned());
                     trailing_separators += 1;
                 }
@@ -114,6 +120,19 @@ pub(super) fn push(tokens: &[Token], sink: &mut Sink) -> Result<(), ClassifyErro
         sink.push(AtomicAction::Pipeline {
             argv: flat[start..].to_vec(),
         })?;
+    }
+    // A rule ending in `$` matches where a pipeline ends. Each pipeline of a
+    // list is also reported alone, so a command after it cannot move that end
+    // and lower the verdict (`curl URL | x ; true`).
+    for (index, &start) in starts.iter().enumerate() {
+        let end = list_ends.iter().copied().find(|&end| end > start);
+        if let Some(end) = end.filter(|&end| end < flat.len())
+            && starts.get(index + 1).is_some_and(|&next| next < end)
+        {
+            sink.push(AtomicAction::Pipeline {
+                argv: flat[start..end].to_vec(),
+            })?;
+        }
     }
     push_stdin_consumers(tokens, sink)
 }
