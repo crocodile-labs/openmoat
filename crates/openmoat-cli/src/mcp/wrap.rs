@@ -496,7 +496,7 @@ mod tests {
         let text = "# mine\nmodel = \"x\"\n\n[mcp_servers.docs]\ncommand = \"docs\"\nenv = { A = \"1\" }\n";
         let server = Server {
             id: String::new(),
-            host: Host::Codex,
+            host: Host::EVERY[0],
             file: PathBuf::from("/c/config.toml"),
             pointer: "/mcp_servers/docs".to_owned(),
             name: "docs".to_owned(),

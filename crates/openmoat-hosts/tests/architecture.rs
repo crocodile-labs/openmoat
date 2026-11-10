@@ -1,8 +1,9 @@
 //! Nothing outside a host's own module under `openmoat-hosts/src/host/` should
 //! name a host: what differs between hosts belongs in its `HostSpec` or its
-//! adapter. The code that still does is listed below with how many lines name
-//! one; the list only shrinks. A file that names a host on fewer lines than
-//! listed fails too, so the list is lowered with the change that fixes it.
+//! adapter. No `Host::<Variant>` is left outside them; the code that still
+//! names a host's id, directory or module is listed below with how many lines
+//! do. Those lists only shrink. A file that names a host on fewer lines than
+//! listed fails too, so a list is lowered with the change that fixes it.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -10,17 +11,15 @@ use std::path::{Path, PathBuf};
 
 use openmoat_hosts::Host;
 
-/// Lines naming a `Host` variant, per file (relative to `crates/`), outside
-/// `openmoat-hosts/src/host/` and test files. The host list in `host.rs` names
-/// each host without the `Host::` prefix and is checked on its own below; the
-/// rest is to move.
-const ALLOWED: &[(&str, usize)] = &[
-    ("openmoat-cli/src/hangs.rs", 1),
-    ("openmoat-cli/src/mcp/pins.rs", 1),
-    ("openmoat-cli/src/mcp/servers.rs", 2),
-    ("openmoat-cli/src/mcp/wrap.rs", 1),
-    // An inline test of what Claude Code, Codex and the Continue CLI answer.
-    ("openmoat-hosts/src/lib.rs", 1),
+/// Every crate's sources, relative to `crates/`.
+const SOURCE_ROOTS: &[&str] = &[
+    "openmoat-audit/src",
+    "openmoat-cli/src",
+    "openmoat-core/src",
+    "openmoat-hosts/src",
+    "openmoat-proxy/src",
+    "openmoat-sdk/src",
+    "openmoat-wasm/src",
 ];
 
 /// `Host::<Variant>` for every host, from the host list itself.
@@ -59,21 +58,16 @@ fn names_a_host(line: &str, variants: &[String]) -> bool {
 fn only_host_modules_name_a_host() {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut files = Vec::new();
-    for root in ["openmoat-hosts/src", "openmoat-cli/src"] {
+    for root in SOURCE_ROOTS {
         rust_files(&crates.join(root), &mut files);
     }
+    assert!(files.len() > 100, "the scan found too little: {files:?}");
     let variants = variants();
+    assert!(names_a_host(&format!("x({})", variants[0]), &variants));
     let mut found = BTreeMap::new();
     for file in files {
-        let relative = file
-            .strip_prefix(&crates)
-            .unwrap()
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative.starts_with("openmoat-hosts/src/host/")
-            || relative.ends_with("/tests.rs")
-            || relative.contains("/tests/")
-        {
+        let relative = relative_to(&file, &crates);
+        if is_host_or_test_file(&relative) {
             continue;
         }
         let lines = fs::read_to_string(&file)
@@ -85,26 +79,145 @@ fn only_host_modules_name_a_host() {
             found.insert(relative, lines);
         }
     }
-    let allowed: BTreeMap<String, usize> = ALLOWED
+    assert_eq!(
+        found,
+        BTreeMap::new(),
+        "these files name a host: move what differs into the host's spec or adapter"
+    );
+}
+
+fn relative_to(file: &Path, crates: &Path) -> String {
+    file.strip_prefix(crates)
+        .unwrap()
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+/// Whether `relative` is below a host's own module, or a test file.
+fn is_host_or_test_file(relative: &str) -> bool {
+    relative.starts_with("openmoat-hosts/src/host/")
+        || relative.ends_with("/tests.rs")
+        || relative.contains("/tests/")
+}
+
+/// `found` against `allowed`: nothing over its count, no entry above what the
+/// code now has.
+fn check_only_shrinks(
+    found: &BTreeMap<String, usize>,
+    allowed: &[(&str, usize)],
+    what: &str,
+    list: &str,
+) {
+    let allowed: BTreeMap<String, usize> = allowed
         .iter()
         .map(|(file, lines)| ((*file).to_owned(), *lines))
         .collect();
-    assert!(found.len() > 3, "the scan found too little: {found:?}");
-    for (file, lines) in &found {
+    for (file, lines) in found {
         let limit = allowed.get(file).copied().unwrap_or(0);
         assert!(
             *lines <= limit,
-            "{file} names a host on {lines} lines (allowed {limit}): move what differs \
-             into the host's spec or adapter"
+            "{file} names {what} on {lines} lines (allowed {limit}): take it from the \
+             host's spec"
         );
     }
     for (file, limit) in &allowed {
         let lines = found.get(file).copied().unwrap_or(0);
         assert_eq!(
             lines, *limit,
-            "{file} now names a host on {lines} lines: lower its entry in ALLOWED"
+            "{file} now names {what} on {lines} lines: lower its entry in {list}"
         );
     }
+}
+
+/// Lines of every crate's source (relative to `crates/`, outside the host
+/// modules and test files) with a module path or module declaration naming a
+/// host (`openclaw::`, `mod codex;`). Only `openmoat-cli/src/sandbox/` and what
+/// reaches its per-format backends is to stay; the list only shrinks.
+const ALLOWED_MODULES: &[(&str, usize)] = &[
+    // Claude Code's secret masking, which only its backend has, as `sandbox show`
+    // and `doctor` report it.
+    ("openmoat-cli/src/commands/doctor/sandboxes.rs", 1),
+    ("openmoat-cli/src/commands/sandbox.rs", 2),
+    // The per-format sandbox backends and the plan that holds one output each
+    // ([`openmoat_hosts::SandboxFormat`]), which stay in the CLI.
+    ("openmoat-cli/src/sandbox.rs", 16),
+    ("openmoat-cli/src/sandbox/backend.rs", 16),
+    ("openmoat-cli/src/sandbox/codex/own_binary.rs", 1),
+    ("openmoat-cli/src/sandbox/differential.rs", 1),
+    ("openmoat-cli/src/sandbox/differential/hosts.rs", 2),
+    ("openmoat-cli/src/sandbox/hook_only.rs", 4),
+    ("openmoat-cli/src/sandbox/install.rs", 4),
+    // Re-exports the guard needs: Claude Code's `ConfigChange` helpers, and the
+    // variable that says the Continue CLI runs the hook.
+    ("openmoat-hosts/src/lib.rs", 3),
+];
+
+/// Each host's module name, and its first word for the short forms the CLI
+/// uses (`claude` for `claude_code`).
+fn module_names() -> Vec<String> {
+    let mut names = Vec::new();
+    for host in Host::EVERY {
+        let module = host.module();
+        names.push(module.to_owned());
+        names.extend(module.split_once('_').map(|(first, _)| first.to_owned()));
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
+/// Whether `line` names `name` as a whole path segment (`x::name::y`, `name::y`,
+/// not `other_name::`), or declares it as a module (`pub mod name;`).
+fn names_module(line: &str, name: &str) -> bool {
+    let starts_word = |at: usize| {
+        !line[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+    };
+    let path = format!("{name}::");
+    if line.match_indices(&path).any(|(at, _)| starts_word(at)) {
+        return true;
+    }
+    let declared = format!("mod {name}");
+    line.match_indices(&declared).any(|(at, _)| {
+        starts_word(at)
+            && line[at + declared.len()..]
+                .chars()
+                .next()
+                .is_some_and(|c| c == ';' || c == ' ')
+    })
+}
+
+#[test]
+fn only_host_modules_name_a_hosts_module() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    for root in SOURCE_ROOTS {
+        rust_files(&crates.join(root), &mut files);
+    }
+    let names = module_names();
+    assert!(names.contains(&"openclaw".to_owned()), "{names:?}");
+    assert!(names.contains(&"claude".to_owned()), "{names:?}");
+    assert!(names_module("crate::install::openclaw::parse(x)", "openclaw"));
+    assert!(names_module("pub mod codex;", "codex"));
+    assert!(!names_module("x::claude_version::y()", "claude"));
+    let mut found = BTreeMap::new();
+    for file in files {
+        let relative = relative_to(&file, &crates);
+        if is_host_or_test_file(&relative) {
+            continue;
+        }
+        let lines = fs::read_to_string(&file)
+            .unwrap()
+            .lines()
+            .filter(|l| names.iter().any(|n| names_module(l, n)))
+            .count();
+        if lines > 0 {
+            found.insert(relative, lines);
+        }
+    }
+    check_only_shrinks(&found, ALLOWED_MODULES, "a host's module", "ALLOWED_MODULES");
 }
 
 /// The host list in `host.rs` is the one place that names every host: one
@@ -140,23 +253,17 @@ fn the_host_list_names_every_host_once_with_its_module() {
     assert_eq!(modules, files, "a file under host/ is not on the list");
 }
 
-/// Lines of CLI and core source (relative to `crates/`, outside test files and
-/// generated blocks) that name a host's id or configuration directory as a
-/// string (`"copilot-cli"`, `".copilot"`). The list only shrinks, as
-/// [`ALLOWED`] does.
+/// Lines of source outside `openmoat-hosts` (relative to `crates/`, outside
+/// test files and generated blocks) that name a host's id or configuration
+/// directory as a string (`"copilot-cli"`, `".copilot"`); the hosts crate's
+/// shared code takes ids as data. The list only shrinks, as
+/// [`ALLOWED_MODULES`] does.
 const ALLOWED_NAMES: &[(&str, usize)] = &[
-    // A test record's host.
-    ("openmoat-cli/src/approvals/reviewed.rs", 1),
-    // Inline tests of each host's MCP reader.
-    ("openmoat-cli/src/mcp/servers.rs", 5),
-    // A test record's host.
-    ("openmoat-cli/src/protection.rs", 1),
     // The sandbox backends, which stay in the CLI, and their inline tests.
     ("openmoat-cli/src/sandbox/claude.rs", 1),
     ("openmoat-cli/src/sandbox/codex/names.rs", 1),
     ("openmoat-cli/src/sandbox/codex/own_binary.rs", 1),
     ("openmoat-cli/src/sandbox/hook_only.rs", 2),
-    ("openmoat-cli/src/sandbox/patterns.rs", 1),
     // The download tools' `--continue` option, not the host.
     ("openmoat-core/src/shell/commands/fetch.rs", 1),
     ("openmoat-core/src/shell/options/transfer.rs", 1),
@@ -192,19 +299,15 @@ fn quoted_names() -> Vec<String> {
 fn only_host_modules_name_a_hosts_id_or_directory() {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut files = Vec::new();
-    for root in ["openmoat-cli/src", "openmoat-core/src"] {
+    for root in SOURCE_ROOTS.iter().filter(|r| **r != "openmoat-hosts/src") {
         rust_files(&crates.join(root), &mut files);
     }
     let names = quoted_names();
     assert!(names.contains(&"\".copilot\"".to_owned()), "{names:?}");
     let mut found = BTreeMap::new();
     for file in files {
-        let relative = file
-            .strip_prefix(&crates)
-            .unwrap()
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative.ends_with("/tests.rs") || relative.contains("/tests/") {
+        let relative = relative_to(&file, &crates);
+        if is_host_or_test_file(&relative) {
             continue;
         }
         let mut generated = false;
@@ -223,24 +326,5 @@ fn only_host_modules_name_a_hosts_id_or_directory() {
             found.insert(relative, lines);
         }
     }
-    let allowed: BTreeMap<String, usize> = ALLOWED_NAMES
-        .iter()
-        .map(|(file, lines)| ((*file).to_owned(), *lines))
-        .collect();
-    for (file, lines) in &found {
-        let limit = allowed.get(file).copied().unwrap_or(0);
-        assert!(
-            *lines <= limit,
-            "{file} names a host's id or directory on {lines} lines (allowed {limit}): \
-             take it from the host's spec"
-        );
-    }
-    for (file, limit) in &allowed {
-        let lines = found.get(file).copied().unwrap_or(0);
-        assert_eq!(
-            lines, *limit,
-            "{file} now names a host's id or directory on {lines} lines: lower its entry \
-             in ALLOWED_NAMES"
-        );
-    }
+    check_only_shrinks(&found, ALLOWED_NAMES, "a host's id or directory", "ALLOWED_NAMES");
 }

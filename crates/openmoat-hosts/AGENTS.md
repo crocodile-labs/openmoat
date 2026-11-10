@@ -5,7 +5,7 @@ Host adapters: each supported agent's `HostSpec` (`host/<module>.rs`) and `HostA
 ## Rules
 - Translate, never decide: verdicts come from `openmoat-core`.
 - No file, environment or process access outside tests; the CLI reads and writes host files.
-- What differs per host goes in its spec or its folder. `tests/architecture.rs` keeps shrink-only allowlists of lines naming `Host::<Variant>`, a host id or a host's directory outside the host modules; never raise an entry.
+- What differs per host goes in its spec or its folder. `tests/architecture.rs` allows no `Host::<Variant>` outside the host modules and keeps shrink-only allowlists of lines naming a host's module, id or directory there; never raise an entry.
 - A new spec field gets a default in `HostSpec::BASE` / `InstallSpec::BASE`; specs end with `..HostSpec::BASE`.
 - An adapter error is a deny in `guard`. A malformed or unknown payload never becomes an `allow`.
 - Every tool name an adapter matches has a `ToolRow` in its `doc.rs` (the docs test fails otherwise); ungoverned tools are listed, and `gaps` and `on_hook_failure` say what the host does not cover.

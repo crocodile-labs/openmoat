@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn the_folders_above_agent_configuration_are_named() {
         assert_eq!(folders_above("**/.github/hooks/**"), [".github"]);
-        assert_eq!(folders_above("**/.cursor/mcp.json"), [".cursor"]);
+        assert_eq!(folders_above("**/.an-agent/mcp.json"), [".an-agent"]);
         assert_eq!(
             folders_above("**/.github/copilot/settings.json"),
             [".github", ".github/copilot"]

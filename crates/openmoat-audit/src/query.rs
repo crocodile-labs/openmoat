@@ -235,12 +235,12 @@ mod tests {
             command: "x".into(),
         };
         let rows: [(&str, &str, &Decision, i64); 6] = [
-            ("claude-code", "s1", &allow, 1_000),
-            ("claude-code", "s1", &deny, 2_000),
-            ("claude-code", "s2", &review, MS_PER_HOUR + 1_000),
-            ("cursor", "c1", &deny, MS_PER_HOUR + 2_000),
-            ("cursor", "c1", &allow, 2 * MS_PER_HOUR),
-            ("codex", "k1", &review, 3 * MS_PER_HOUR),
+            ("host-a", "s1", &allow, 1_000),
+            ("host-a", "s1", &deny, 2_000),
+            ("host-a", "s2", &review, MS_PER_HOUR + 1_000),
+            ("host-c", "c1", &deny, MS_PER_HOUR + 2_000),
+            ("host-c", "c1", &allow, 2 * MS_PER_HOUR),
+            ("host-b", "k1", &review, 3 * MS_PER_HOUR),
         ];
         for (host, session, d, ts) in rows {
             store
@@ -267,7 +267,7 @@ mod tests {
         seed(&store);
         assert_eq!(store.since(0, None).unwrap().len(), 6);
         assert_eq!(store.since(MS_PER_HOUR, None).unwrap().len(), 4);
-        assert_eq!(store.since(0, Some("cursor")).unwrap().len(), 2);
+        assert_eq!(store.since(0, Some("host-c")).unwrap().len(), 2);
         let first = &store.since(0, None).unwrap()[0];
         assert_eq!(first.ts_ms, 1_000, "oldest first");
     }
@@ -294,7 +294,7 @@ mod tests {
         let held = store.latest_held().unwrap().unwrap();
         assert_eq!(
             (held.host.as_str(), held.verdict),
-            ("codex", Verdict::Review)
+            ("host-b", Verdict::Review)
         );
         let hour = store.between(MS_PER_HOUR, 2 * MS_PER_HOUR).unwrap();
         assert_eq!(hour.len(), 2, "the end is not included");
@@ -320,7 +320,7 @@ mod tests {
         let s = store.summary(0, None).unwrap();
         assert_eq!((s.total, s.allowed, s.reviewed, s.denied), (6, 2, 2, 2));
         assert_eq!(s.sessions, 4);
-        assert_eq!(s.by_host["claude-code"], 3);
+        assert_eq!(s.by_host["host-a"], 3);
         assert_eq!(s.top_rules[0], ("default.net".to_owned(), 2));
         assert!(
             s.top_rules.iter().all(|(r, _)| r != "dev-shell"),
@@ -328,7 +328,7 @@ mod tests {
         );
         assert_eq!(s.active_hours, 4);
         assert_eq!(s.reviews_per_active_hour_centi(), 50);
-        let cursor = store.summary(0, Some("cursor")).unwrap();
+        let cursor = store.summary(0, Some("host-c")).unwrap();
         assert_eq!(cursor.total, 2);
         assert_eq!(cursor.by_host.len(), 1);
         let empty = Store::open_in_memory().unwrap().summary(0, None).unwrap();

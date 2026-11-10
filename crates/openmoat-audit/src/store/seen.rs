@@ -44,12 +44,12 @@ mod tests {
             decision: &decision,
             latency_us: 1,
         };
-        store.record_at(&event("pi"), 100).unwrap();
-        store.record_at(&event("pi"), 200).unwrap();
-        store.record_at(&event("codex"), 300).unwrap();
-        assert_eq!(store.host_seen_since("pi", 0).unwrap(), Some(200));
-        assert_eq!(store.host_seen_since("pi", 200).unwrap(), Some(200));
-        assert_eq!(store.host_seen_since("pi", 201).unwrap(), None);
-        assert_eq!(store.host_seen_since("openclaw", 0).unwrap(), None);
+        store.record_at(&event("host-a"), 100).unwrap();
+        store.record_at(&event("host-a"), 200).unwrap();
+        store.record_at(&event("host-b"), 300).unwrap();
+        assert_eq!(store.host_seen_since("host-a", 0).unwrap(), Some(200));
+        assert_eq!(store.host_seen_since("host-a", 200).unwrap(), Some(200));
+        assert_eq!(store.host_seen_since("host-a", 201).unwrap(), None);
+        assert_eq!(store.host_seen_since("host-c", 0).unwrap(), None);
     }
 }
