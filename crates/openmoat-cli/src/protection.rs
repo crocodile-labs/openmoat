@@ -537,8 +537,8 @@ mod tests {
     #[test]
     fn summary_skips_agents_with_their_own_line() {
         let protection = |level, reason: Option<&str>| Protection {
-            host: "codex",
-            name: "Codex",
+            host: "some-host",
+            name: "Some Host",
             level,
             reason: reason.map(str::to_owned),
             gaps: "",

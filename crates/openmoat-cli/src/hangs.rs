@@ -289,8 +289,9 @@ mod tests {
 
     #[test]
     fn a_line_names_the_time_host_phase_and_elapsed_ms() {
-        let line = line(1_700, Host::Codex, Phase::Record, 30_012);
-        assert_eq!(line, "1700 codex record 30012\n");
+        let host = Host::EVERY[0];
+        let line = line(1_700, host, Phase::Record, 30_012);
+        assert_eq!(line, format!("1700 {} record 30012\n", host.id()));
         assert_eq!(parse(line.trim_end()), Some((1_700, Some(Phase::Record))));
         assert_eq!(parse("1700 codex"), Some((1_700, None)), "an older line");
         assert_eq!(parse("1700 codex later 5"), Some((1_700, None)));

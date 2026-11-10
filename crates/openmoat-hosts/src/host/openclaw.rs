@@ -72,6 +72,7 @@ mod bench;
 mod doc;
 mod location;
 mod mcp;
+mod plugin_config;
 mod protect;
 mod tools;
 
@@ -105,11 +106,11 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         dir_name: STATE_DIR_NAME,
         config_file: CONFIG_FILE,
         hooks: HOOKS,
-        hook_file: HookLayout::Plugin(&PLUGIN),
+        hook_file: HookLayout::Plugin(&plugin_config::OpenClawConfig),
         location: Location::Custom(&location::LOCATE),
         pinned_form: Some(location::pinned_form),
         // OpenMoat's plugin, which OpenClaw loads from `plugins.load.paths`.
-        extra_files: &[ExtraFile::InConfigDir(&["openmoat", "openmoat.mjs"])],
+        extra_files: &[ExtraFile::InConfigDir(plugin_config::PLUGIN_PATH)],
         // The Gateway loads its plugins when it starts and keeps running when
         // one fails (`status: "error"`, `src/plugins/loader-records.ts`;
         // `throwOnLoadError` only for a reload, `src/gateway/server-plugins.ts`).

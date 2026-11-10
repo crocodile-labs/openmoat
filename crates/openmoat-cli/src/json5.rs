@@ -1,5 +1,6 @@
-//! Reading JSON5 (<https://spec.json5.org/>), the format OpenClaw reads its
-//! `openclaw.json` in (<https://docs.openclaw.ai/gateway/configuration>).
+//! Reading JSON5 (<https://spec.json5.org/>), the format some hosts read their
+//! configuration in (a host's spec says which: `McpSyntax::Json5`,
+//! `HookLayout::Plugin`).
 //!
 //! OpenMoat reads JSON5 into a [`Value`] and never writes it: a caller that
 //! edits a file writes plain JSON, which JSON5 readers read too. Comments have

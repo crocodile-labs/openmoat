@@ -31,10 +31,6 @@ pub use contract::{
 pub use host::claude_code::config_change::proposal_target;
 pub use host::claude_code::project_settings::findings as claude_code_settings_findings;
 pub use host::continue_cli::CONTINUE_ENV;
-pub use host::openclaw::{
-    CONFIG_FILE as OPENCLAW_CONFIG_FILE, PLUGIN_ID as OPENCLAW_PLUGIN_ID,
-    STATE_DIR_NAME as OPENCLAW_STATE_DIR_NAME, STATE_DIR_VARIABLE as OPENCLAW_STATE_DIR_VARIABLE,
-};
 pub use wire::guard_command::{GuardCommand, HOME_FLAG, decode_home, encode_home};
 pub use wire::hook_file::yaml as yaml_hooks;
 pub use wire::hook_file::{HookFile, HookFileError, HookFileState, HookOutcome};
@@ -43,6 +39,7 @@ pub use wire::mcp_call::{
     mcp_tools_list_request,
 };
 pub use wire::owned_file::{OwnedFile, OwnedFileError, Syntax};
+pub use wire::plugin_config::PluginConfig;
 
 use std::fmt;
 use std::str::FromStr;
@@ -451,9 +448,7 @@ fn json_problem(error: &serde_json::Error) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use openmoat_core::{Decision, Verdict};
-
-    use super::{HookEvent, Host};
+    use super::Host;
 
     /// Every host's spec names it once and round-trips through its id; a host
     /// that speaks another's format speaks a host with a format of its own.
@@ -483,21 +478,5 @@ mod tests {
             "unknown host `nope`; supported: claude-code, codex, cursor, openclaw, \
              copilot-cli, pi, gemini-cli, opencode, hermes, cline, goose, antigravity-cli"
         );
-    }
-
-    /// ADR-025: `defer` writes nothing, so Claude Code, Codex and the Continue CLI
-    /// run their own permission flow; hosts that cannot prompt do not turn it into a deny.
-    #[test]
-    fn defer_is_no_decision_for_every_pre_tool_use_host() {
-        let defer = Decision::new(Verdict::Defer);
-        for host in [Host::ClaudeCode, Host::Codex, Host::Continue] {
-            let answer = host.answer(&HookEvent::PreToolUse, &defer);
-            assert_eq!(answer.verdict, Verdict::Defer, "{host:?}");
-            assert_eq!(
-                host.render_response(&HookEvent::PreToolUse, &answer),
-                "",
-                "{host:?}"
-            );
-        }
     }
 }

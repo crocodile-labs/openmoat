@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(read("notes.md", None), None, "relative without a cwd");
         let mut g = Grants::default();
         let c1 = Scope {
-            host: "cursor",
+            host: "some-host",
             session_id: "c1",
             project: "/p",
         };

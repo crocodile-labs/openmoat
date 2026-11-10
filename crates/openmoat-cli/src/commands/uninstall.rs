@@ -104,9 +104,12 @@ pub fn run(args: &UninstallArgs) -> Result<Code> {
             }
             Some(Undo::WithHooks(_)) | None => {}
         }
-        // OpenClaw's hook is the plugin file `init` wrote, which nothing else owns.
-        if plugin && let Some(plugin) = install::openclaw::remove_plugin(&config)? {
-            files.push((plugin, Some(Undone::Deleted)));
+        // A plugin configuration's hook is the plugin file `init` wrote, which
+        // nothing else owns.
+        if let HookLayout::Plugin(layout) = config.layout
+            && let Some(file) = install::plugin_config::remove_plugin(&config, layout)?
+        {
+            files.push((file, Some(Undone::Deleted)));
         }
         if files.iter().all(|(_, done)| done.is_none()) {
             writeln!(out, "· {:<16} not set up", host.display_name())?;
@@ -210,9 +213,9 @@ fn undo_json(
     undo_host_json(path, ours, strip, false)
 }
 
-/// [`undo_json`]; `plugin` (OpenClaw's `openclaw.json`) reads the file and its
-/// backups as JSON5 and refuses to write back a file whose comments that would
-/// drop.
+/// [`undo_json`]; `plugin` (a plugin configuration, [`HookLayout::Plugin`]) reads
+/// the file and its backups as JSON5 and refuses to write back a file whose
+/// comments that would drop.
 fn undo_host_json(
     path: &Path,
     ours: &[PathBuf],
@@ -224,7 +227,7 @@ fn undo_host_json(
     }
     let read = |p: &Path| {
         if plugin {
-            install::openclaw::read(p)
+            install::json5_file::read(p)
         } else {
             read_or_empty(p)
         }
@@ -242,7 +245,7 @@ fn undo_host_json(
     let original = originals.iter().find(|(_, v)| *v == root).map(|(b, _)| *b);
     let created = originals.is_empty() && root == json!({});
     if plugin && original.is_none() && !created {
-        install::openclaw::read_for_edit(path)?;
+        install::json5_file::read_for_edit(path)?;
     }
     let text = serde_json::to_string_pretty(&root)? + "\n";
     finish(path, &owned(&backups, ours), original, created, &text).map(Some)

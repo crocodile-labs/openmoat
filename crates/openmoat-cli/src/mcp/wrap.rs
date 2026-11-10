@@ -254,9 +254,9 @@ fn rendered(path: &Path, syntax: McpSyntax, dones: &[&Done]) -> Result<(String, 
         McpSyntax::Toml => edit_toml(&text, dones)?,
         McpSyntax::Json5 => {
             // JSON5 is written back as JSON, so a file with comments is not.
-            let parsed = crate::install::openclaw::parse(&text)
+            let parsed = crate::install::json5_file::parse_or_empty(&text)
                 .with_context(|| format!("parsing {}", path.display()))?;
-            crate::install::openclaw::refuse_comments(&parsed, path)?;
+            crate::install::json5_file::refuse_comments(&parsed, path)?;
             edit_value(parsed.value, dones)?
         }
         // The host rewrites it and people keep comments in it; OpenMoat
@@ -496,7 +496,7 @@ mod tests {
         let text = "# mine\nmodel = \"x\"\n\n[mcp_servers.docs]\ncommand = \"docs\"\nenv = { A = \"1\" }\n";
         let server = Server {
             id: String::new(),
-            host: Host::Codex,
+            host: Host::EVERY[0],
             file: PathBuf::from("/c/config.toml"),
             pointer: "/mcp_servers/docs".to_owned(),
             name: "docs".to_owned(),

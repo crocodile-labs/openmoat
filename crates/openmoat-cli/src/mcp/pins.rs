@@ -282,7 +282,7 @@ mod tests {
     fn server(name: &str, entry: Value) -> Server {
         Server {
             id: format!("/h/.claude.json#/mcpServers/{name}"),
-            host: Host::ClaudeCode,
+            host: Host::EVERY[0],
             file: PathBuf::from("/h/.claude.json"),
             pointer: format!("/mcpServers/{name}"),
             name: name.to_owned(),

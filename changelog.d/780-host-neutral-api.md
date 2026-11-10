@@ -1,0 +1,2 @@
+### Changed
+- **Breaking** `openmoat-hosts`: `HookLayout::Plugin` holds a `&'static dyn PluginConfig`, the new trait that edits a host's plugin configuration, instead of the plugin's `&'static OwnedFile` (`PluginConfig::plugin` returns that file); the `OPENCLAW_CONFIG_FILE`, `OPENCLAW_PLUGIN_ID`, `OPENCLAW_STATE_DIR_NAME` and `OPENCLAW_STATE_DIR_VARIABLE` exports are gone, since what they named is in the host's spec ([#780](https://github.com/crocodile-labs/openmoat/pull/780)).
