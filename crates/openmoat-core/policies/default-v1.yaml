@@ -341,10 +341,14 @@ deny:
       # token, which `delivery.yaml` may read from here only
       - "~/.moat/delivery/**"
       - "**/.moat/delivery/**"
+      # remote approvals (ADR-078): the channel's credential and the key every
+      # request, answer and approver list is signed with
+      - "~/.moat/remote/**"
       - "**/.moat/audit.db*"
       - "**/.moat/policy.lock"
       - "**/.moat/proxy.key"
       - "**/.moat/proxy-ca/**"
+      - "**/.moat/remote/**"
     fs.write:
       # the state and host directories themselves: renaming, deleting or replacing
       # one with a link removes every pinned file and hook inside it at once
@@ -527,6 +531,9 @@ deny:
       # a brokered secret's host is where its value goes
       - "{moat,openmoat} secret*"
       - "*/{moat,openmoat} secret*"
+      # a channel, an approver or an answer from another device is the person's (ADR-078)
+      - "{moat,openmoat} approvals*"
+      - "*/{moat,openmoat} approvals*"
       # an audit anchor is the person's record of the log, kept outside it (ADR-031)
       - "{moat,openmoat} audit anchor*"
       - "*/{moat,openmoat} audit anchor*"
@@ -558,22 +565,22 @@ deny:
       # (`*moat` inside a quoted command line covers `openmoat` too)
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * {moat,openmoat} sandbox sync*"
       - "{script,*/script,unbuffer,tmux,*/tmux,screen,*/screen} * */{moat,openmoat} sandbox sync*"
-      - "script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "script * '*moat {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "expect * '*moat {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "unbuffer * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "unbuffer * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "*/script * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "*/script * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "*/script * '*moat {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "*/expect * '*moat {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "script * {moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "script * */{moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "unbuffer * {moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "unbuffer * */{moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "*/script * {moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "*/script * */{moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "*/script * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "*/expect * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # Python's pty module, terminal multiplexers and macOS Terminal scripting (ADR-014)
-      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
-      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
-      - "{osascript,*/osascript} * '*moat {allow,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{python*,*/python*} * '*pty*spawn*(*moat*{allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{tmux,*/tmux,screen,*/screen} * {moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * */{moat,openmoat} {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall}*"
+      - "{tmux,*/tmux,screen,*/screen} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
+      - "{osascript,*/osascript} * '*moat {allow,approvals,doctor,edit,init,mcp,policy,restore,secret,snapshot,trust,uninstall,sandbox*sync,proxy*ca,proxy*install,proxy*uninstall}*'"
       # a bare `openmoat` or `moat` (the home screen asks to accept drift or approve a
       # review) under the same wrappers; patterns are prefixes, so these deny any command
       # of either name run in them

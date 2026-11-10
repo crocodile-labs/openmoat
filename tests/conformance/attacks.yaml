@@ -893,6 +893,41 @@
   threat: T9
   action: { fs_read: "~/.moat/delivery/collector.token" }
   expect: { verdict: deny, rules: [kernel-self] }
+# Remote approvals (ADR-078): with the bot's token an agent could read and
+# answer its own requests' messages; with the key it could sign an approval
+- id: T9-read-remote-token
+  threat: T9
+  action: { fs_read: "~/.moat/remote/telegram.token" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-cat-remote-key
+  threat: T9
+  action: { shell: "cat ~/.moat/remote/approval.key" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-read-moved-remote-token
+  threat: T9
+  context: { cwd: /p, project: /p, moved_dirs: { "~/.moat": /srv/moat } }
+  action: { fs_read: "/srv/moat/remote/telegram.token" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-remote-answer
+  threat: T9
+  action: { fs_write: "~/.moat/remote/answers/0123456789abcdef0123456789abcdef.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-write-remote-settings-shell
+  threat: T9
+  action: { shell: "echo '{}' > ~/.moat/remote/channel.json" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-approvals-allow
+  threat: T9
+  action: { shell: "openmoat approvals allow 12345" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-approvals-listen-path
+  threat: T9
+  action: { shell: "/opt/homebrew/bin/moat approvals listen" }
+  expect: { verdict: deny, rules: [kernel-self] }
+- id: T9-approvals-connect-under-script
+  threat: T9
+  action: { shell: "script -q /dev/null openmoat approvals connect telegram" }
+  expect: { verdict: deny, rules: [kernel-self] }
 - id: T9-read-mcp-pins
   threat: T9
   action: { fs_read: "~/.moat/mcp/tools.json" }
