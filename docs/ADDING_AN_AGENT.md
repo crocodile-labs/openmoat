@@ -107,7 +107,9 @@ The spec in `host/<module>.rs` holds every fact about the agent that is not code
   - `hooks`: one `HookSpec` per event, with its matcher, timeout and whether it sets
     Claude Code's `onFailure`.
   - `hook_file`: the `HookLayout` of the file. `Entries` with a `HookFile` layout; or
-    `Owned`/`Plugin` with an `OwnedFile` from `host/<module>/integration/` for an agent
+    `Owned` with an `OwnedFile` from `host/<module>/integration/`, or `Plugin` with a
+    `PluginConfig` (`host/<module>/plugin_config.rs`) naming that file and editing the
+    configuration that loads it, for an agent
     without a command hook, whose plugin runs `openmoat guard --heartbeat --host <id>` as
     it loads and whose spec says how to tell it loaded
     (`heartbeat: Some(Heartbeat { program, activity })`, ADR-042); or `Script` with an
