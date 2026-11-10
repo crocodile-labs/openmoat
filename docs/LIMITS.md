@@ -40,7 +40,11 @@ Each agent's gaps and the reasons are in
   GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, the
   Antigravity CLI, and
   Claude Code and Cursor on native Windows), an allowed call runs with your permissions,
-  so a classifier mistake is a bypass. Claude Code's sandbox covers only `Bash`,
+  so a classifier mistake is a bypass. `openmoat status` and `openmoat doctor` name the
+  `openmoat run` command that puts each of them in an OS sandbox, or say why there is none
+  (macOS before 13, Windows, Linux without bubblewrap; OpenClaw's Gateway and the Continue
+  CLI have no command, [SANDBOX.md](SANDBOX.md#agents-openmoat-writes-no-sandbox-for)).
+  The command is proved with a stand-in program, not the real agent. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
 - **A required protection level is checked where the hook runs.** With `require:`
@@ -111,12 +115,16 @@ Each agent's gaps and the reasons are in
   background git starts; `openmoat status` and `openmoat doctor` name such keys but
   cannot stop them. In the editors, the selection and open file Claude Code adds to a
   prompt are no tool call and are not checked ([IDE.md](IDE.md#not-covered)).
-- **Unwrapped MCP servers start before any call is checked.** An agent starts its MCP
-  servers when a session begins; for a server not wrapped with `openmoat mcp wrap`, a
-  changed or new server's tool calls are denied, but its command has already run once,
-  with your permissions. A wrapped server starts only from a definition you accepted, in
-  `openmoat run`'s sandbox where it can sandbox. `openmoat status` lists the servers that
-  start outside OpenMoat.
+- **Unwrapped MCP servers start before any call is checked.** The agent starts them
+  itself, and no hook runs first; when differs per agent and most do not document it
+  ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)). For a server not
+  wrapped (`openmoat init` offers to at a terminal; a project's own, one added later or
+  one you declined), a changed or new server's tool calls are denied, but its command can
+  already have run once, with your permissions. A wrapped server starts only from a
+  definition you accepted, in `openmoat run`'s sandbox where it can sandbox; it does not
+  start inside `openmoat run`, and `openmoat init` cannot wrap every agent's files (Hermes
+  Agent's YAML, OpenCode's and goose's own command forms). `openmoat status` lists the
+  servers that start outside OpenMoat.
 - **The hook sees an MCP call's arguments, not what the server then does.** A server
   started without `--sandbox` runs with your permissions: a tool that takes no path can
   still read any file you can and write anywhere, and neither the hook nor the gateway

@@ -141,7 +141,10 @@ To choose without questions, name the agents: `openmoat init --hosts claude-code
 `codex`, `cursor`, `openclaw`, `copilot-cli`, `pi`, `gemini-cli`, `opencode`, `hermes`, `cline`, `goose`; comma-separated). `openmoat init --yes` sets up every agent found, for
 scripts. Without a terminal and without `--yes` or `--hosts`, `init` changes no agent's
 files and says how to go on. `openmoat init --dry-run` prints what would change first.
-`openmoat init --mcp-proxy` also runs every stdio MCP server in the agents' user
+At a terminal, `openmoat init` lists the stdio MCP servers in the agents' user
+configuration, shows what would change (`d`) and asks before it runs them through OpenMoat;
+`--no-mcp-proxy` skips the question, `n` is remembered for that definition, and `--yes` or
+no terminal changes none of them. `openmoat init --mcp-proxy` runs every stdio MCP server in the agents' user
 configuration through `openmoat mcp proxy`, which starts a server only from a definition a
 person accepted, in `openmoat run`'s sandbox where it can sandbox (`--mcp-no-sandbox` opts
 out), and pins each tool's description, schemas and annotations

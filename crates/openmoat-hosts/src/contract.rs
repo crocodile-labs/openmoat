@@ -20,6 +20,7 @@ mod mcp;
 mod protect;
 mod relaxed;
 mod reviews;
+mod run_facts;
 mod settings;
 mod system_settings;
 mod tool_token;
@@ -40,6 +41,7 @@ pub use protect::{Helper, Paths, ProcessSpec, Protect};
 pub use relaxed::{KeyShape, RelaxedKey};
 pub use reviews::{Reviews, Unseen};
 pub(crate) use reviews::{answer, decided};
+pub use run_facts::{RunFacts, RunWrite};
 pub(crate) use settings::set;
 pub use settings::{SettingsFile, SettingsReader};
 pub use system_settings::{SystemFile, SystemSettingsSpec};
@@ -181,6 +183,9 @@ pub struct HostSpec {
     /// How `openmoat run` keeps its relay token from the host's tool commands
     /// (ADR-075).
     pub tool_token: ToolToken,
+    /// What `openmoat run` needs to start the host, for a host with no OS
+    /// sandbox of its own (ADR-076).
+    pub run: RunFacts,
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

@@ -16,8 +16,10 @@ use crate::install::{HookState, HostConfig, Recorded};
 use crate::integrity::{Drift, Lock};
 use crate::sandbox::{Plan, install as host_sandbox};
 
+pub mod os_sandbox;
 pub mod required;
 
+pub use os_sandbox::OsSandbox;
 pub use required::Required;
 
 /// How much of the policy is enforced for one agent.
@@ -73,6 +75,10 @@ pub struct Protection {
     /// required or the agent is not on this machine.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<Required>,
+    /// How an agent at `hook only`, which OpenMoat writes no sandbox for here,
+    /// can get one (ADR-076).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_sandbox: Option<OsSandbox>,
 }
 
 impl Protection {
@@ -102,11 +108,14 @@ struct Inputs {
     /// The policy for the current directory, repository policy included,
     /// whose `require:` the report shows.
     policy: Option<Policy>,
+    /// What `openmoat run` can do here, found for the first agent that needs it.
+    run_here: std::cell::OnceCell<os_sandbox::RunHere>,
 }
 
 impl Inputs {
     fn load(home: &Home) -> Self {
         Self {
+            run_here: std::cell::OnceCell::new(),
             plan: home
                 .load_policy()
                 .ok()
@@ -180,6 +189,12 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
         .filter(|_| level != Level::NotFound)
         .and_then(|p| p.required_for(Some(host.id())))
         .map(|requirement| Required::of(host, level, &requirement));
+    let os_sandbox = (level == Level::HookOnly && !writes_sandbox(host))
+        .then(|| {
+            let here = inputs.run_here.get_or_init(os_sandbox::RunHere::detect);
+            os_sandbox::of(home, host, here)
+        })
+        .transpose()?;
     Ok(Protection {
         host: host.id(),
         name: host.display_name(),
@@ -188,7 +203,14 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
         gaps: host.spec().gaps,
         limit: host.spec().limit,
         required,
+        os_sandbox,
     })
+}
+
+/// The row for `host`, which OpenMoat found but cannot hook (`moat status`
+/// and `moat doctor`'s "found" rows), on how to reach an OS sandbox.
+pub fn os_sandbox_line(home: &Home, host: Host) -> Result<String> {
+    Ok(os_sandbox::of(home, host, &os_sandbox::RunHere::detect())?.line())
 }
 
 /// Whether OpenMoat puts an OS sandbox from the host's own settings around
@@ -522,6 +544,7 @@ mod tests {
             gaps: "",
             limit: None,
             required: None,
+            os_sandbox: None,
         };
         assert_eq!(
             protection(Level::HookOnly, Some("why"))

@@ -187,4 +187,6 @@ OpenCode with the first two); a failed or slow hook blocks the call.
 
 ## Sandbox
 
-None: hook only. Run OpenCode under `openmoat run` for an OS sandbox.
+None: hook only. `openmoat status` names the command that gives it one:
+`openmoat run --write ~/.local/share/opencode -- opencode` (ADR-076); a directory its
+documentation does not name shows up as a refused write.

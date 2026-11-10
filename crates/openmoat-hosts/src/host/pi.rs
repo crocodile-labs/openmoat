@@ -141,6 +141,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     // pi copies `process.env` for each tool command; its extension shares the
     // process and takes the relay variables out (ADR-075).
     tool_token: crate::ToolToken::Integration,
+    // The agent directory, where pi keeps its sessions, settings and logins
+    // (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "pi",
+        args: &[],
+        writes: &[crate::RunWrite::ConfigDir],
+    },
     ..HostSpec::BASE
 };
 

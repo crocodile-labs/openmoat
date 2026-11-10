@@ -103,6 +103,10 @@ pub(super) fn hooks(shown: &mut Shown, home: &Home, binary: &Path) -> Result<boo
         shown
             .agents
             .push(Row::new(Mark::Attention, host.display_name(), text));
+        let line = crate::protection::os_sandbox_line(home, host)?;
+        shown
+            .agents
+            .push(Row::new(Mark::Info, host.display_name(), line));
     }
     Ok(healthy)
 }

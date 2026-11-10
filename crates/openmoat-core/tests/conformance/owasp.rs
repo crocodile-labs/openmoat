@@ -71,8 +71,8 @@ const ASI: [Risk; 10] = [
         status: Status::Covered,
         reason: "Downloads piped into a shell, near-miss package names, MCP server definitions \
                  and the hook binary are checked. Not covered: other installs, left to the \
-                 agent's own prompt, and an unwrapped MCP server's command, which runs once \
-                 before any check.",
+                 agent's own prompt, and the command of an MCP server `openmoat init` was not \
+                 allowed to wrap, or a project's own, which runs before any check.",
     },
     Risk {
         id: "ASI05",
@@ -117,9 +117,9 @@ const ASI: [Risk; 10] = [
         name: "Rogue Agents",
         status: Status::Partial,
         reason: "Self-protection, the OS sandbox where one applies and the audit log bound and \
-                 record a misbehaving agent. Not covered: judging behaviour over time, and \
-                 hook-only agents, which have no OS sandbox to stop a program rewriting the \
-                 policy.",
+                 record a misbehaving agent. Not covered: judging behaviour over time, and a \
+                 hook-only agent not started under `openmoat run`, which has no OS sandbox to \
+                 stop a program rewriting the policy.",
     },
 ];
 

@@ -600,6 +600,47 @@ Limits:
 - A project with more than a million files and directories is refused: each is looked
   at to find what to hide.
 
+### Agents OpenMoat writes no sandbox for
+
+`openmoat status` and `openmoat doctor` print the command for each agent at `hook only`
+that OpenMoat writes no sandbox for, with the directories that agent writes
+(`os_sandbox` in `--format json`, ADR-076). On Linux `run` is `run --isolate`:
+
+```text
+OS sandbox: openmoat run --write ~/.gemini -- gemini (docs/SANDBOX.md)
+```
+
+| Agent | Command (macOS 13 or later; Linux adds `--isolate`) |
+|---|---|
+| GitHub Copilot CLI | `openmoat run --write ~/.copilot --write ~/Library/Caches/copilot -- copilot` (`~/.cache/copilot` on Linux) |
+| Gemini CLI | `openmoat run --write ~/.gemini -- gemini` |
+| pi | `openmoat run --write ~/.pi/agent -- pi` |
+| OpenCode | `openmoat run --write ~/.local/share/opencode -- opencode` |
+| Hermes Agent | `openmoat run --write ~/.hermes -- hermes` |
+| Cline CLI | `openmoat run --write ~/.cline -- cline` |
+| goose | `openmoat run --write ~/.local/share/goose --write ~/.local/state/goose -- goose` |
+| Antigravity CLI | `openmoat run --write ~/.gemini/antigravity-cli -- agy` |
+
+On macOS before 13, on Windows, and on Linux without a network namespace (where
+`openmoat run` refuses a `--write` path outside the project) those commands name why
+there is none. OpenClaw and the Continue CLI get no command: OpenClaw's Gateway serves a
+local port, which the sandbox does not allow, and which directories `cn` writes was not
+checked.
+
+What the command does not do for you:
+
+- The agent's install directory must be readable (`sandbox.read_roots`) and its API host
+  allowed by the policy, as for the Cursor CLI below.
+- A login kept in the system keychain or keyring (GitHub Copilot CLI, Gemini CLI, the
+  Antigravity CLI) cannot be read inside; use an API key.
+- These directories come from each agent's documentation. A directory it does not name
+  shows up as a refused write when the agent runs; add it with another `--write`.
+- CI starts a stand-in named as each agent with exactly this command; no real agent has
+  been run under it here. The Antigravity CLI has not been run at all.
+- A wrapped MCP server does not start inside `openmoat run` (ADR-049); its calls could not
+  be checked there. `openmoat status` says so when the agent has one. An unwrapped server
+  runs inside the agent's own sandbox.
+
 ### Cursor CLI under `openmoat run`
 
 Cursor's CLI (`agent`, formerly `cursor-agent`) needs three things the default policy

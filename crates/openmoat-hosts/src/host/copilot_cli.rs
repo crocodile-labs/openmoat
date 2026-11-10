@@ -114,6 +114,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     tool_token: crate::ToolToken::NotWithheld {
         why: "whether `--secret-env-vars` also takes the token from hooks is not documented",
     },
+    // The configuration directory and the cache directory of the CLI's
+    // configuration directory reference (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "copilot",
+        args: &[],
+        writes: &[crate::RunWrite::ConfigDir, crate::RunWrite::Cache("copilot")],
+    },
     ..HostSpec::BASE
 };
 

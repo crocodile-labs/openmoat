@@ -199,5 +199,6 @@ hook can see or stop it.
 
 ## Sandbox
 
-None: hook only. Under `openmoat run`, Hermes cannot write the files `kernel-self`
-protects, its own `config.yaml` included.
+None: hook only. `openmoat status` names the command that gives it one:
+`openmoat run --write ~/.hermes -- hermes` (ADR-076). Under `openmoat run`, Hermes cannot
+write the files `kernel-self` protects, its own `config.yaml` included.

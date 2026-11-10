@@ -133,6 +133,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["GOOSE_SHELL"],
         on_path: false,
     },
+    // The session and log directories of its logging page (ADR-076); its
+    // configuration directory is not listed: `config.yaml` is `kernel-self`'s.
+    run: crate::RunFacts::Known {
+        program: "goose",
+        args: &[],
+        writes: &[
+            crate::RunWrite::Home(".local/share/goose"),
+            crate::RunWrite::Home(".local/state/goose"),
+        ],
+    },
     ..HostSpec::BASE
 };
 

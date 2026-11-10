@@ -173,7 +173,7 @@ exit code as the text:
 | Level | Means |
 |---|---|
 | `hook + OS sandbox` | the hook is installed and current, and the sandbox `openmoat init` generated is in place and matches the policy (Claude Code, Codex, Cursor) |
-| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose and the Antigravity CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which) |
+| `hook only` | the hook is installed, but no OS sandbox from OpenMoat is in force: OpenClaw, GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose and the Antigravity CLI, which get none, Claude Code or Cursor on native Windows, or a sandbox that is missing, weakened or out of date (the line says which); `status` and `doctor` print the `openmoat run` command that gives such an agent an OS sandbox, or why there is none |
 | `not protected` | the hook is missing, out of date or unreadable, or Hermes Agent's `shell-hooks-allowlist.json` does not approve it (run `openmoat init`), or its entry lacks the agent's fail-closed key (`fail_closed: true` for Hermes Agent, `failClosed: true` for Cursor: the agent would run a call whose hook failed; run `openmoat init`), or the agent ran without loading OpenMoat's plugin (below), or the agent's own settings file turns it off: `disableAllHooks` in Claude Code's or Copilot's `settings.json`, `[features] hooks = false` in Codex's `config.toml`, `hooksConfig` in Gemini CLI's, an `extensions` entry in pi's that excludes OpenMoat's extension, `-openmoat` (or `-*`) in OpenCode's `plugins` or a `policies` entry denying its plugin (the line names the file and the setting; remove it), or the agent's version does not load OpenMoat's hook (OpenCode before 1.3.4) |
 
 An agent not set up gets a `·` line; the agents not found share the `Not installed` line. `openmoat status --format
@@ -750,7 +750,7 @@ time, as the server receives it ([ADR-045](adr/ADR-045-mcp-gateway.md)). Turn it
 server, in your own terminal:
 
 ```bash
-openmoat mcp wrap github          # or: openmoat init --mcp-proxy, for every stdio server
+openmoat mcp wrap github          # or: openmoat init, which offers to at a terminal
 openmoat mcp accept github        # after the agent first starts it: read each tool, accept
 ```
 
@@ -1005,7 +1005,7 @@ reads `~`. The file must not exist yet, and an agent cannot run it.
 |---|---|
 | `openmoat` | see which agents are protected and today's decisions; answer drift, a policy update or the last review (terminal only) |
 | `openmoat demo [--format json]` | see what your policy (or the default one) decides for a fixed list of example agent calls; nothing runs, no hook or file is touched |
-| `openmoat init [--hosts …] [--yes] [--dry-run] [--verbose] [--mcp-proxy [--mcp-no-sandbox]]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions), but not about an agent whose files already have everything; `--verbose` also prints each file written with its hook entries, the backups and the files the lock pins. Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
+| `openmoat init [--hosts …] [--yes] [--dry-run] [--verbose] [--mcp-proxy [--mcp-no-sandbox] \| --no-mcp-proxy]` | install policy, lock and audit log, and pin the agents' MCP server definitions; asks before hooking each agent found (`--hosts`, `--yes` skip the questions), but not about an agent whose files already have everything; at a terminal also offers to run the stdio MCP servers through OpenMoat, showing the change first ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)); `--no-mcp-proxy` opts out; `--verbose` also prints each file written with its hook entries, the backups and the files the lock pins. Over an existing lock without a person at a terminal, new and changed MCP servers are listed and left for `openmoat mcp accept`, the recorded binary, agent directories and search path are kept, and drift is refused |
 | `openmoat uninstall [--hosts …] [--purge]` | remove OpenMoat's hooks and sandbox settings, restoring the backups (`--purge` also deletes `~/.moat`) |
 | `openmoat status [--format json]` · `openmoat doctor [--accept] [--verbose]` | check the installation and each agent's protection level · list drift and re-pin (`--verbose` lists every check with its paths, each agent's known gaps and where each sandbox is stricter or wider than the policy) |
 | `openmoat doctor --bundle <file> [--bundle-events N]` | write one local file for a bug report: version, system, agents, policy findings, the checks and the last N decisions without their commands or paths; nothing is sent ([Report a bug](#report-a-bug)) |

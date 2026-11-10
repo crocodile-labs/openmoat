@@ -38,6 +38,7 @@ mod guard;
 mod heartbeat;
 mod hermes;
 mod home_screen;
+mod hook_only;
 mod host_failures;
 mod hosts;
 #[cfg(unix)]
@@ -50,6 +51,7 @@ mod lock;
 mod lock_settings;
 mod mcp;
 mod mcp_gateway;
+mod mcp_init_wrap;
 mod mcp_startup;
 mod moatbench;
 mod openclaw;

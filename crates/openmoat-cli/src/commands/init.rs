@@ -120,10 +120,8 @@ pub fn run(args: &InitArgs) -> Result<Code> {
             home.lock_path().display(),
             lock.entries.len()
         )?;
-        let proxy = args.mcp.mcp_proxy.then(|| mcp::Proxy {
-            sandbox: args.mcp.sandbox(),
-        });
-        mcp::servers(&home, &binary, proxy, &hosts, unattended, &mut files)?;
+        let wrap = mcp::Wrap::of(args, unattended);
+        mcp::servers(&home, &binary, wrap, &hosts, unattended, &mut files)?;
         let backups = if hosts.is_empty() {
             0
         } else {

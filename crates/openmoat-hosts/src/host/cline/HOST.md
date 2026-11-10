@@ -109,7 +109,8 @@ malformed (a deny). The full table is in
 
 ## Known gaps
 
-- No OS sandbox from OpenMoat (`openmoat run` sandboxes the whole agent).
+- No OS sandbox from OpenMoat: `openmoat status` names the command that gives it one,
+  `openmoat run --write ~/.cline -- cline` (ADR-076).
 - `--yolo` runs no hooks; `--config`, `--hooks-dir` or a moved `CLINE_DIR` that OpenMoat
   did not install into skip OpenMoat's script.
 - Reviews become denies, and a deny ends Cline's run; the person approves with

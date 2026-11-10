@@ -86,4 +86,6 @@ with `--include-directories` or `/directory add`; a hook that times out lets the
 
 ## Sandbox
 
-None: hook only.
+None: hook only. `openmoat status` names the command that gives it one:
+`openmoat run --write ~/.gemini -- gemini`; its login must then be an API key, not the
+keychain (ADR-076).

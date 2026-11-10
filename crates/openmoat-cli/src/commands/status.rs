@@ -102,6 +102,7 @@ pub fn run(args: &StatusArgs) -> Result<Code> {
     printer.title("status")?;
     printer.attention(&shown.attention)?;
     let mut table = table;
+    table.rows.extend(crate::report::os_sandbox_rows(&agents));
     table.rows.append(&mut shown.agents);
     printer.agents(&table)?;
     printer.heading("OpenMoat")?;

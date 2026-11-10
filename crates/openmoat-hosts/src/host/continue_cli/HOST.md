@@ -49,3 +49,5 @@ run it under `openmoat run` ([SANDBOX.md](../../../../../docs/SANDBOX.md)).
 ## Sandbox
 
 None from OpenMoat's hook path; `openmoat run` runs the whole agent in an OS sandbox.
+`openmoat status` offers no command for it: which directories `cn` writes was not checked
+(ADR-076).

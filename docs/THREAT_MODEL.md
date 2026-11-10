@@ -125,9 +125,10 @@ something OpenMoat claims to stop.
   message as if it were OpenMoat's; its `reason` reaches the agent in the `rule` line, as
   before.
 
-- **MCP servers start before OpenMoat sees a call.** A host starts its MCP servers when
-  a session begins, outside every sandbox. For a server not run through `openmoat mcp
-  proxy`, when a definition changed or was added and no person accepted it, OpenMoat
+- **MCP servers start before OpenMoat sees a call.** A host starts its MCP servers
+  itself, outside every sandbox, at a time that differs per host and is often not
+  documented (ADR-076, which also says what `openmoat init` now offers). For a server not
+  run through `openmoat mcp proxy`, when a definition changed or was added and no person accepted it, OpenMoat
   denies that server's tool calls, but the command has already run once; `openmoat status`
   and `openmoat doctor` list these servers, and the project servers an agent starts
   without asking (Claude Code's `enableAllProjectMcpServers`, `enabledMcpjsonServers`).

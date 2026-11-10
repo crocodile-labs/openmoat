@@ -121,4 +121,5 @@ blocks the call.
 
 ## Sandbox
 
-None: hook only.
+None: hook only. `openmoat status` names none: OpenClaw's Gateway serves a local port, and
+`openmoat run`'s sandbox allows no listening socket (ADR-076).

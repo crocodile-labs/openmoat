@@ -7,8 +7,8 @@ use std::path::Path;
 use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::bench::{Call, Exit, Place};
 use openmoat_hosts::{
-    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, ToolToken,
-    reason_line,
+    Activity, GUARD_BUDGET_S, HEARTBEAT_FLAG, HOME_FLAG, HookLayout, Host, HostError, RunFacts,
+    ToolToken, reason_line,
 };
 use serde_json::json;
 
@@ -84,6 +84,27 @@ fn every_host_says_whether_tool_commands_get_the_relay_token() {
             ),
             ToolToken::Integration => {}
             _ => panic!("{host:?}: a new kind needs a row here"),
+        }
+    }
+}
+
+/// A host with no OS sandbox of its own has a sourced answer for `openmoat
+/// run`, and its program is one the run can tell is that host (ADR-076).
+#[test]
+fn every_hook_only_host_says_what_openmoat_run_needs() {
+    for host in HOSTS.into_iter().filter(|h| h.spec().sandbox.is_none()) {
+        let spec = host.spec();
+        match spec.run {
+            RunFacts::Known {
+                program, writes, ..
+            } => {
+                assert!(spec.process.names.contains(&program), "{host:?}: {program}");
+                assert!(!writes.is_empty(), "{host:?}");
+            }
+            RunFacts::Unknown { why } => assert!(
+                why != "not checked for this host",
+                "{host:?} needs a reason of its own"
+            ),
         }
     }
 }

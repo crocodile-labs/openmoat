@@ -211,6 +211,12 @@ pub struct InitMcpArgs {
     /// (`openmoat mcp wrap --no-sandbox`).
     #[arg(long, requires = "mcp_proxy")]
     pub mcp_no_sandbox: bool,
+
+    /// Do not offer to run the agents' stdio MCP servers through `openmoat mcp
+    /// proxy`, and leave them as they are. At a terminal `init` offers it by default;
+    /// `openmoat mcp wrap` does it later.
+    #[arg(long, conflicts_with = "mcp_proxy")]
+    pub no_mcp_proxy: bool,
 }
 
 impl InitMcpArgs {

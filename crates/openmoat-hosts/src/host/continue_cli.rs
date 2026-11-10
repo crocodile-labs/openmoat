@@ -68,6 +68,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["SHELL"],
         on_path: false,
     },
+    run: crate::RunFacts::Unknown {
+        why: "which directories `cn` writes outside the project was not checked",
+    },
     ..HostSpec::BASE
 };
 
