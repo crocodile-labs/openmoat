@@ -1,0 +1,2 @@
+### Security
+- Under `require.run: full-boundary`, only an allowlist of inherited environment variables reaches what `openmoat run` starts, so a cloud credential in the shell does not; add a name with `sandbox.env_allow` or `--env NAME`, and `openmoat doctor` and `openmoat run --verbose` name what is withheld, never a value. Without the setting, one line says how many inherited variables look like credentials (ADR-077) ([#PR](https://github.com/crocodile-labs/openmoat/pull/PR)).

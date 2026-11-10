@@ -71,7 +71,7 @@ pub use pattern::literal_shell_pattern;
 pub use policy::{
     BrowserOpen, Defaults, McpSettings, OldNames, Policy, PolicyError, Require, RequiredBy,
     RequiredLevel, Requirement, RuleGroup, RunBoundary, SUPPORTED_VERSION, SandboxSettings,
-    TITLE_MAX_CHARS, WHY_MAX_CHARS,
+    TITLE_MAX_CHARS, WHY_MAX_CHARS, env_name_problem,
 };
 pub use programs::{MapResolver, NoResolver, ProgramResolver};
 pub use realpath::{MapPathResolver, PathResolver};

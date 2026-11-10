@@ -36,6 +36,7 @@ impl HostSpec {
         system_settings: None,
         tool_token: super::ToolToken::BASE,
         run: super::RunFacts::BASE,
+        run_env: &[],
     };
 }
 

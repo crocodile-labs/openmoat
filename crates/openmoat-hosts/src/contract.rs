@@ -186,6 +186,12 @@ pub struct HostSpec {
     /// What `openmoat run` needs to start the host, for a host with no OS
     /// sandbox of its own (ADR-076).
     pub run: RunFacts,
+    /// The inherited environment variables the host needs under `openmoat
+    /// run`'s allowlist (ADR-077, which names the source of each), beside the
+    /// variable that moves its configuration directory. Names the host's own
+    /// documentation states; never a cloud provider's credentials, which the
+    /// allowlist exists to withhold and a person can add by name.
+    pub run_env: &'static [&'static str],
 }
 
 /// Where a host finds hook files for OpenMoat's event besides OpenMoat's own

@@ -70,11 +70,13 @@ use crate::staging::{self, StagingSettings};
 use crate::taint::{self, TaintSettings};
 use crate::verdict::Verdict;
 
+mod env_name;
 mod hook_only;
 mod old_names;
 mod require;
 mod text;
 
+pub use env_name::env_name_problem;
 pub use require::{Require, RequiredBy, RequiredLevel, Requirement, RunBoundary};
 pub use text::{TITLE_MAX_CHARS, WHY_MAX_CHARS};
 
@@ -423,6 +425,12 @@ pub struct SandboxSettings {
     /// absent is 7 days ([`Policy::package_min_release_age_days`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_min_release_age_days: Option<u16>,
+    /// Names of inherited environment variables `openmoat run` passes on
+    /// under `require.run: full-boundary`, beyond its own list and the
+    /// agent's (ADR-077). Names only, never a pattern. Read from the person's
+    /// own policy alone: a repository policy or a pack has no `sandbox:`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_allow: Vec<String>,
 }
 
 /// The `mcp:` section (ADR-032).
@@ -565,6 +573,14 @@ impl Policy {
         }
         for root in self.sandbox.iter().flat_map(|s| &s.read_roots) {
             lint_read_root(root)?;
+        }
+        for name in self.sandbox.iter().flat_map(|s| &s.env_allow) {
+            if let Some(problem) = env_name_problem(name) {
+                return Err(PolicyError::Rule {
+                    rule: "sandbox.env_allow".to_owned(),
+                    problem: format!("`{name}` {problem}"),
+                });
+            }
         }
         taint::check(self.taint.as_ref())?;
         staging::check(self.staging.as_ref())?;

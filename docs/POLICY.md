@@ -42,6 +42,7 @@ sandbox:                            # optional: what the host sandboxes may read
   proxy_port: 18080                 # optional, opt-in: send host sandbox traffic through `openmoat proxy` (§9)
   proxy_allow_ech: false            # optional: let `openmoat proxy` forward encrypted server names (ECH) (§9)
   proxy_serve_without_credential: false  # optional: let `openmoat proxy` serve requests with no session credential (§9)
+  env_allow: []                     # optional, your own policy only: variables `openmoat run` passes on under `require.run` (§9.3)
   package_min_release_age_days: 7   # optional: `openmoat run` keeps npm and uv off versions newer than this; 0 is off (§9.1)
 
 secrets:    [ <secret>, … ]         # values OpenMoat keeps from the agent (§2.1)
@@ -1705,6 +1706,36 @@ requirement is a problem (exit 64).
 
 It is about `openmoat run`, so an agent started without it is not refused: use
 `require.protection` for that (§9.2). On Linux it does not imply `--isolate`.
+
+**Environment.** Under the setting only an allowlist of inherited variables reaches the
+program, so a cloud credential in your shell does not reach the agent:
+
+| Reaches the program | Where it comes from |
+|---|---|
+| `PATH`, `HOME`, `TERM`, locale, temp directories and similar | built in |
+| The agent's own API key names and configuration directory variable | the agent's spec (ADR-077 lists them and their sources) |
+| Names you add | `sandbox.env_allow` in your policy, or `--env NAME` for one run |
+| What `openmoat run` sets itself | the proxy, the temp directory, the CA files |
+
+```yaml
+sandbox:
+  env_allow: [JAVA_HOME, CARGO_HOME]
+```
+
+```bash
+openmoat run --env NPM_TOKEN -- claude     # for this run only
+openmoat run --verbose -- claude           # names what it withheld, never a value
+openmoat doctor                            # lists the names it would withhold here
+```
+
+Names only: `NAME=value` and patterns such as `AWS_*` are errors. `env_allow` is read from
+your own policy, which the lock pins; a repository policy or pack can turn the requirement
+on but cannot add a name. A brokered secret (§2.1) never reaches the agent even if you name
+it. Cloud account credentials are not on any agent's list: if you run an agent through
+Amazon Bedrock or Google Cloud, add those names yourself.
+
+Without the setting everything is inherited, as before, and one line says how many
+variables look like credentials and names the first few.
 
 ## 10. Repository policy
 

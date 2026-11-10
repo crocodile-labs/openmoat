@@ -30,9 +30,10 @@ use crate::mcp::tools::{self, ToolPins};
 pub fn run(args: &McpProxyArgs) -> Result<Code> {
     let home = Home::locate()?;
     let cwd = std::env::current_dir().ok();
-    if let Startup::Refuse(why) = startup::check(&home, &Launch::of(args), cwd.as_deref()) {
-        return refuse(home, args, &why);
-    }
+    let env = match startup::check(&home, &Launch::of(args), cwd.as_deref()) {
+        Startup::Refuse(why) => return refuse(home, args, &why),
+        Startup::Start { env } => env,
+    };
     let path = tools::path(&home, &args.server);
     let pins = ToolPins::load(&path)?;
     // A policy that cannot be read, or one the lock no longer matches, trusts
@@ -52,7 +53,7 @@ pub fn run(args: &McpProxyArgs) -> Result<Code> {
         crate::time::now_ms,
     ));
 
-    let mut child = command(args)?
+    let mut child = command(args, &env)?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -134,8 +135,9 @@ fn note(why: &str) {
     eprintln!("openmoat mcp proxy: {}", crate::render::clean(why));
 }
 
-/// The server's command, or `moat run` around it with `--sandbox`.
-fn command(args: &McpProxyArgs) -> Result<Command> {
+/// The server's command, or `moat run` around it with `--sandbox`, passing on
+/// `env`, the variables its accepted definition sets (ADR-077).
+fn command(args: &McpProxyArgs, env: &[String]) -> Result<Command> {
     let (program, rest) = args.command.split_first().context("no server command")?;
     if !args.sandbox {
         let mut command = Command::new(program);
@@ -149,6 +151,9 @@ fn command(args: &McpProxyArgs) -> Result<Command> {
     command.arg("run");
     for write in &args.writes {
         command.arg("--write").arg(write);
+    }
+    for name in env {
+        command.arg("--env").arg(name);
     }
     command.arg("--").arg(program).args(rest);
     Ok(command)

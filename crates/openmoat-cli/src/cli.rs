@@ -487,9 +487,23 @@ pub struct RunArgs {
     #[arg(long, value_enum, default_value_t = Netns::Auto, value_name = "MODE")]
     pub netns: Netns,
 
+    /// A variable of this environment to pass on for this run under
+    /// `require.run: full-boundary`. A name, never `NAME=value` or a pattern.
+    /// Repeatable.
+    #[arg(long = "env", value_name = "NAME", value_parser = parse_env_name)]
+    pub envs: Vec<String>,
+
     /// The agent and its arguments, after `--`.
     #[arg(required = true, last = true, value_name = "AGENT")]
     pub command: Vec<std::ffi::OsString>,
+}
+
+/// `--env`: the one form the policy's `sandbox.env_allow` takes too.
+fn parse_env_name(name: &str) -> Result<String, String> {
+    match openmoat_core::env_name_problem(name) {
+        Some(problem) => Err(problem.to_owned()),
+        None => Ok(name.to_owned()),
+    }
 }
 
 #[derive(Debug, Args)]

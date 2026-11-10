@@ -212,6 +212,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         args: &[],
         writes: &[crate::RunWrite::Home(".local/share/opencode")],
     },
+    run_env: &["OPENROUTER_API_KEY", "OPENCODE_CONFIG_DIR"],
     ..HostSpec::BASE
 };
 

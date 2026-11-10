@@ -203,6 +203,10 @@ pub fn confine(
     }
 }
 
+/// What a Linux session sets for a process, kept under `openmoat run`'s
+/// environment allowlist (ADR-077).
+pub const BASE_ENV: &[&str] = &["HOSTNAME", "DISPLAY", "WAYLAND_DISPLAY"];
+
 /// None: `moat run` sandboxes on Linux, and refuses at start where the kernel
 /// lacks what it needs, so nothing runs unconfined.
 pub fn unavailable() -> Option<String> {

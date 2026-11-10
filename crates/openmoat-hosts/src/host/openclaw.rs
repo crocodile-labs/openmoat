@@ -147,6 +147,22 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     run: crate::RunFacts::Unknown {
         why: "its Gateway serves a local port, which `openmoat run`'s sandbox does not allow",
     },
+    run_env: &[
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GROQ_API_KEY",
+        "MISTRAL_API_KEY",
+        "XAI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "OLLAMA_API_KEY",
+        "OPENCLAW_HOME",
+        "OPENCLAW_CONFIG_PATH",
+        "OPENCLAW_WORKSPACE_DIR",
+        "OPENCLAW_PROFILE",
+    ],
     ..HostSpec::BASE
 };
 

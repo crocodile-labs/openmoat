@@ -109,6 +109,32 @@ fn every_hook_only_host_says_what_openmoat_run_needs() {
     }
 }
 
+/// What a host's spec lets through `openmoat run`'s allowlist are names, and
+/// never a cloud provider's credentials, which it exists to withhold (ADR-077).
+#[test]
+fn a_hosts_run_environment_names_no_cloud_credentials() {
+    const CLOUD: [&str; 5] = [
+        "AWS_",
+        "AZURE_CLIENT",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GCP_",
+        "CLOUDFLARE_",
+    ];
+    for host in HOSTS {
+        for name in host.spec().run_env {
+            assert_eq!(
+                openmoat_core::env_name_problem(name),
+                None,
+                "{host:?}: {name}"
+            );
+            assert!(
+                !CLOUD.iter().any(|prefix| name.starts_with(prefix)),
+                "{host:?}: {name} is a cloud credential"
+            );
+        }
+    }
+}
+
 /// Keys that run a program, change a hook, the sandbox, tools, MCP servers,
 /// extensions, folder trust, what a session reads, the environment, updates
 /// or telemetry: never a relaxed key, nor below one.

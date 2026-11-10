@@ -153,6 +153,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         args: &[],
         writes: &[crate::RunWrite::ConfigDir],
     },
+    run_env: &["CLINE_DATA_DIR"],
     ..HostSpec::BASE
 };
 

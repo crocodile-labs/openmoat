@@ -18,6 +18,7 @@
 // bubblewrap starts in its sandbox; `port_only_network()` is `moat doctor`'s
 // warning for the same; `terminals()` lists the terminal devices this
 // process's standard streams are on, the only ones the sandbox opens.
+mod env;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -37,7 +38,7 @@ use macos as platform;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use unsupported as platform;
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::Write as _;
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
@@ -161,6 +162,7 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     own_login::report(agent.report_mut(), &kept, &ctx);
     refuse_port_only(args.netns, strict.as_deref(), agent.warning())?;
     agent.command().args(rest);
+    let allowed = env::Allowed::new(platform::BASE_ENV, agent_host, &policy, &args.envs);
     let release_age = package_release_age(&policy, ctx.project.as_deref());
     agent.command().envs(release_age.vars);
     // The proxy reads a brokered secret from this process's environment; the
@@ -219,6 +221,30 @@ pub fn run(args: &RunArgs) -> Result<Code> {
     // Set last, over any the person had: what the agent's clients trust.
     for (var, path) in trust.iter().flat_map(Trust::env) {
         agent.command().env(var, path);
+    }
+    // After every setting above: what the run set or removed is its own.
+    let set_by_run: Vec<OsString> = agent
+        .command()
+        .get_envs()
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    let withheld = env::withheld(
+        std::env::vars_os().map(|(name, _)| name),
+        &allowed,
+        &|name| set_by_run.iter().any(|set| set == name),
+    );
+    if strict.is_some() {
+        for name in &withheld {
+            agent.command().env_remove(name);
+        }
+    }
+    if let Some(line) = env::notice(&withheld, strict.is_some()) {
+        eprintln!("{line}");
+    }
+    if args.verbose
+        && let Some(line) = env::list(&withheld, strict.is_some())
+    {
+        eprintln!("{line}");
     }
     // Ctrl-C at the terminal reaches the agent and OpenMoat alike. The agent decides
     // what it means; OpenMoat keeps running, or the proxy would die under the agent.
@@ -351,6 +377,24 @@ pub fn port_only_network() -> Option<String> {
 /// where plain `moat run` has no gap inside the project to name ([`tier`]).
 pub fn bubblewrap() -> Option<bool> {
     platform::bubblewrap()
+}
+
+/// What `openmoat run` would withhold here under the allowlist (ADR-077), for
+/// `openmoat doctor`: names only, given what `policy` adds and with `hosts`'
+/// own names kept.
+pub fn withheld_names(policy: &Policy, hosts: &[openmoat_hosts::Host]) -> Vec<OsString> {
+    let mut allowed = env::Allowed::new(platform::BASE_ENV, None, policy, &[]);
+    for host in hosts {
+        allowed.add_host(*host);
+    }
+    env::withheld(std::env::vars_os().map(|(name, _)| name), &allowed, &|_| {
+        false
+    })
+}
+
+/// `openmoat doctor`'s row for [`withheld_names`].
+pub fn withheld_line(names: &[OsString], strict: bool) -> String {
+    env::doctor_line(names, strict)
 }
 
 /// What this system lacks for the run's full boundary (ADR-077): no sandbox at

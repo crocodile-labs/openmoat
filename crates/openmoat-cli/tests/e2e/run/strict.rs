@@ -36,6 +36,25 @@ fn run_with(sb: &Sandbox, project: &Path, flags: &[&str]) -> Output {
     )
 }
 
+/// `sb` with `name` in the `sandbox:` section the default policy already has,
+/// re-pinned as a person would.
+fn allow_env(sb: &Sandbox, name: &str) {
+    let path = sb.home.join(".moat/policy.yaml");
+    let policy = std::fs::read_to_string(&path).unwrap();
+    let edited = policy.replacen(
+        "\nsandbox:\n",
+        &format!("\nsandbox:\n  env_allow: [{name}]\n"),
+        1,
+    );
+    assert_ne!(
+        policy, edited,
+        "the default policy has a `sandbox:` section"
+    );
+    std::fs::write(&path, edited).unwrap();
+    let out = sb.moat_as_person(&["doctor", "--accept"]);
+    assert!(text(&out).contains("re-pinned"), "{}", text(&out));
+}
+
 fn boundary(sb: &Sandbox) -> Value {
     let out = sb.moat(&["status", "--format", "json"]);
     parse(&out)["run_boundary"].clone()
@@ -93,6 +112,105 @@ fn a_repository_policy_can_require_it() {
         None,
     );
     assert_eq!(parse(&out)["run_boundary"]["by"], "the repository policy");
+}
+
+/// The attack: a cloud credential in the environment `openmoat run` was
+/// started from. Under the requirement the command does not get it; a
+/// variable the person added does, and the run names what it withheld.
+#[test]
+fn a_planted_credential_does_not_reach_a_command_and_an_added_variable_does() {
+    if stock_linux() {
+        return;
+    }
+    let (sb, project) = installed_with_secret();
+    require(&sb, STRICT);
+    let out = output(
+        sb.command()
+            .current_dir(&project)
+            .env("AWS_SECRET_ACCESS_KEY", "fake-planted-value")
+            .env("MY_BENIGN_VAR", "benign-value")
+            .args([
+                "run",
+                "--verbose",
+                "--env",
+                "MY_BENIGN_VAR",
+                "--",
+                "/bin/sh",
+                "-c",
+                "echo \"secret=[$AWS_SECRET_ACCESS_KEY]\"; echo \"benign=[$MY_BENIGN_VAR]\"",
+            ]),
+        None,
+    );
+    if !ran(&out) {
+        return;
+    }
+    let shown = text(&out);
+    assert_eq!(out.status.code(), Some(OK), "{shown}");
+    assert!(shown.contains("secret=[]"), "{shown}");
+    assert!(shown.contains("benign=[benign-value]"), "{shown}");
+    assert!(stderr(&out).contains("AWS_SECRET_ACCESS_KEY"), "{shown}");
+    assert!(!shown.contains("fake-planted-value"), "{shown}");
+}
+
+/// A name in the person's policy reaches the command without a flag.
+#[test]
+fn a_name_in_the_policy_is_passed_on() {
+    if stock_linux() {
+        return;
+    }
+    let (sb, project) = installed_with_secret();
+    require(&sb, STRICT);
+    allow_env(&sb, "MY_POLICY_VAR");
+    let out = super::run_sh_with(
+        &sb,
+        &project,
+        "echo \"var=[$MY_POLICY_VAR]\"",
+        &[("MY_POLICY_VAR", "from-policy")],
+    );
+    if !ran(&out) {
+        return;
+    }
+    assert!(text(&out).contains("var=[from-policy]"), "{}", text(&out));
+}
+
+/// Without the requirement everything still reaches the command, as before,
+/// and one line names what looks like a credential, never its value.
+#[test]
+fn without_the_requirement_nothing_is_withheld_and_one_line_warns() {
+    let (sb, project) = installed_with_secret();
+    let out = super::run_sh_with(
+        &sb,
+        &project,
+        "echo \"secret=[$AWS_SECRET_ACCESS_KEY]\"",
+        &[("AWS_SECRET_ACCESS_KEY", "fake-planted-value")],
+    );
+    if !ran(&out) {
+        return;
+    }
+    let shown = text(&out);
+    assert!(shown.contains("secret=[fake-planted-value]"), "{shown}");
+    assert!(stderr(&out).contains("AWS_SECRET_ACCESS_KEY"), "{shown}");
+    assert!(stderr(&out).contains("look like credentials"), "{shown}");
+    assert!(!stderr(&out).contains("fake-planted-value"), "{shown}");
+}
+
+/// `doctor` names what is withheld and no value.
+#[test]
+fn doctor_names_what_is_withheld() {
+    let (sb, _project) = installed_with_secret();
+    require(&sb, STRICT);
+    let out = output(
+        sb.command()
+            .env("AWS_SECRET_ACCESS_KEY", "fake-planted-value")
+            .args(["doctor"]),
+        None,
+    );
+    assert!(
+        text(&out).contains("AWS_SECRET_ACCESS_KEY"),
+        "{}",
+        text(&out)
+    );
+    assert!(!text(&out).contains("fake-planted-value"), "{}", text(&out));
 }
 
 #[test]

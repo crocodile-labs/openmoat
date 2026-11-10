@@ -79,6 +79,16 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
     bail!("only `openmoat run --isolate` on Linux starts this")
 }
 
+/// What macOS itself sets for a process, kept under `openmoat run`'s
+/// environment allowlist (ADR-077).
+pub const BASE_ENV: &[&str] = &[
+    "__CF_USER_TEXT_ENCODING",
+    "__CFBundleIdentifier",
+    "COMMAND_MODE",
+    "XPC_FLAGS",
+    "XPC_SERVICE_NAME",
+];
+
 /// Why `moat run` cannot sandbox on this Mac; `None` when it can.
 pub fn unavailable() -> Option<String> {
     os_version::run_floor(os_version::macos().as_deref()).map(|reason| refusal(&reason))

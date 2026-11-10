@@ -159,6 +159,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         args: &[],
         writes: &[crate::RunWrite::ConfigDir],
     },
+    run_env: &[
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+    ],
     ..HostSpec::BASE
 };
 

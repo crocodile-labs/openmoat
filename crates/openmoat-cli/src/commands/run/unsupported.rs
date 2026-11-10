@@ -34,6 +34,9 @@ pub fn inside(_: &IsolatedArgs) -> Result<Code> {
     bail!("only `openmoat run --isolate` on Linux starts this")
 }
 
+/// None: `moat run` refuses here, so nothing starts to need a variable.
+pub const BASE_ENV: &[&str] = &[];
+
 /// Why `moat run` cannot sandbox here: there is no sandbox OpenMoat can generate.
 #[expect(
     clippy::unnecessary_wraps,
