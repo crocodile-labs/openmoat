@@ -63,7 +63,7 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ${{ needs.changes.outputs.code != 'false' && matrix.os || 'ubuntu-latest' }}
     # macos-15-intel is the slowest runner and may take longer.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 45 || 30 }}
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 60 || 30 }}
     env:
       # The same test as `runs-on`: whether this leg has anything to run.
       RUN_LEG: ${{ needs.changes.outputs.code != 'false' }}
