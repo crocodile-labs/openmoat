@@ -199,7 +199,10 @@ fn only_host_modules_name_a_hosts_module() {
     let names = module_names();
     assert!(names.contains(&"openclaw".to_owned()), "{names:?}");
     assert!(names.contains(&"claude".to_owned()), "{names:?}");
-    assert!(names_module("crate::install::openclaw::parse(x)", "openclaw"));
+    assert!(names_module(
+        "crate::install::openclaw::parse(x)",
+        "openclaw"
+    ));
     assert!(names_module("pub mod codex;", "codex"));
     assert!(!names_module("x::claude_version::y()", "claude"));
     let mut found = BTreeMap::new();
@@ -217,7 +220,12 @@ fn only_host_modules_name_a_hosts_module() {
             found.insert(relative, lines);
         }
     }
-    check_only_shrinks(&found, ALLOWED_MODULES, "a host's module", "ALLOWED_MODULES");
+    check_only_shrinks(
+        &found,
+        ALLOWED_MODULES,
+        "a host's module",
+        "ALLOWED_MODULES",
+    );
 }
 
 /// The host list in `host.rs` is the one place that names every host: one
@@ -326,5 +334,10 @@ fn only_host_modules_name_a_hosts_id_or_directory() {
             found.insert(relative, lines);
         }
     }
-    check_only_shrinks(&found, ALLOWED_NAMES, "a host's id or directory", "ALLOWED_NAMES");
+    check_only_shrinks(
+        &found,
+        ALLOWED_NAMES,
+        "a host's id or directory",
+        "ALLOWED_NAMES",
+    );
 }

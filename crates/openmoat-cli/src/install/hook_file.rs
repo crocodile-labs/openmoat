@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, bail};
 use openmoat_hosts::HookFileState;
 use serde_json::{Map, Value};
 
-use super::{HOOK_BACKUP, HookLayout, HostConfig, owned, plugin_config, yaml};
+use super::{HOOK_BACKUP, HookLayout, HostConfig, json5_file, owned, plugin_config, yaml};
 use crate::home::{Home, KeepMode, write_like};
 
 pub use openmoat_hosts::HookOutcome as Outcome;
@@ -92,7 +92,7 @@ pub fn install(home: &Home, config: &HostConfig, binary: &Path, dry_run: bool) -
         | HookLayout::Script(_) => None,
     };
     if edited != Outcome::Unchanged && plugin.is_some() {
-        crate::json5::read_for_edit(path)?;
+        json5_file::read_for_edit(path)?;
     }
     // The plugin is a file of its own in the configuration directory.
     let plugin = plugin.filter(|plugin| !plugin_config::plugin_current(config, *plugin, binary));
@@ -127,13 +127,13 @@ pub fn render(config: &HostConfig, binary: &Path, current: &str) -> Result<Optio
         HookLayout::Entries(_) | HookLayout::Plugin(_) => {}
     }
     if let HookLayout::Plugin(_) = config.layout {
-        let parsed = crate::json5::parse_or_empty(current)
+        let parsed = json5_file::parse_or_empty(current)
             .with_context(|| format!("parsing {}", config.settings_path.display()))?;
         let mut root = parsed.value.clone();
         if upsert_all(&mut root, config, binary)? == Outcome::Unchanged {
             return Ok(None);
         }
-        crate::json5::refuse_comments(&parsed, &config.settings_path)?;
+        json5_file::refuse_comments(&parsed, &config.settings_path)?;
         return Ok(Some(serde_json::to_string_pretty(&root)? + "\n"));
     }
     let mut root = crate::sandbox::install::parse_json(current)?;
@@ -245,7 +245,7 @@ pub fn remove(root: &mut Value, config: &HostConfig) -> bool {
 /// configuration as JSON5, a YAML one as YAML.
 pub fn read_host(config: &HostConfig) -> Result<Value> {
     match config.layout {
-        HookLayout::Plugin(_) => crate::json5::read(&config.settings_path),
+        HookLayout::Plugin(_) => json5_file::read(&config.settings_path),
         HookLayout::Yaml(_) => yaml::read(&config.settings_path),
         HookLayout::Entries(_) | HookLayout::Owned(_) | HookLayout::Script(_) => {
             read_or_empty(&config.settings_path)

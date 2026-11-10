@@ -8,6 +8,7 @@ mod dirs;
 mod hook_file;
 mod hook_trust;
 pub mod host_version;
+pub mod json5_file;
 pub mod location;
 pub mod migrate_hooks;
 pub mod owned;

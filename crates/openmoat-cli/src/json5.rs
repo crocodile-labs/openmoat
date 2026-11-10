@@ -5,16 +5,12 @@
 //! OpenMoat reads JSON5 into a [`Value`] and never writes it: a caller that
 //! edits a file writes plain JSON, which JSON5 readers read too. Comments have
 //! no place in a [`Value`], so [`Parsed::comments`] says whether writing the
-//! file back would drop some; callers then refuse ([`refuse_comments`]).
-//! `Infinity` and `NaN` have no JSON form and are refused. Duplicate keys keep
-//! the last value, as JavaScript objects do. No dependency: the grammar is
-//! small, and a parser here keeps reading in step with what the lock and the
-//! MCP pins see.
+//! file back would drop some; callers then refuse. `Infinity` and `NaN` have no
+//! JSON form and are refused. Duplicate keys keep the last value, as
+//! JavaScript objects do. No dependency: the grammar is small, and a parser
+//! here keeps reading in step with what the lock and the MCP pins see.
 
-use std::fs;
-use std::path::Path;
-
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Result, bail};
 use serde_json::{Map, Number, Value};
 
 /// Nesting deeper than this is refused rather than recursed into.
@@ -45,54 +41,6 @@ pub fn parse(text: &str) -> Result<Parsed> {
         value,
         comments: parser.comments,
     })
-}
-
-/// `text` (a host's file, empty when there is none) as JSON5: an empty object
-/// for no text, where [`parse`] refuses it.
-pub fn parse_or_empty(text: &str) -> Result<Parsed> {
-    if text.trim().is_empty() {
-        return Ok(Parsed {
-            value: Value::Object(Map::new()),
-            comments: false,
-        });
-    }
-    parse(text)
-}
-
-fn read_parsed(path: &Path) -> Result<Parsed> {
-    let text = match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
-    };
-    parse_or_empty(&text).with_context(|| format!("parsing {}", path.display()))
-}
-
-/// The JSON5 file at `path` parsed, an empty object when there is none.
-pub fn read(path: &Path) -> Result<Value> {
-    Ok(read_parsed(path)?.value)
-}
-
-/// Refuse to write `file` back when `parsed` has comments: plain JSON has
-/// none, so writing it would drop them.
-pub fn refuse_comments(parsed: &Parsed, file: &Path) -> Result<()> {
-    if parsed.comments {
-        bail!(
-            "{} has comments (JSON5), and OpenMoat writes it back as plain JSON, which would \
-             drop them; move the comments out of the file (or delete them), then run the \
-             command again. No file was changed",
-            file.display()
-        );
-    }
-    Ok(())
-}
-
-/// The JSON5 file at `path` parsed for an edit: refused when writing it back
-/// would drop comments.
-pub fn read_for_edit(path: &Path) -> Result<Value> {
-    let parsed = read_parsed(path)?;
-    refuse_comments(&parsed, path)?;
-    Ok(parsed.value)
 }
 
 struct Parser {

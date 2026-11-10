@@ -227,7 +227,7 @@ fn undo_host_json(
     }
     let read = |p: &Path| {
         if plugin {
-            crate::json5::read(p)
+            install::json5_file::read(p)
         } else {
             read_or_empty(p)
         }
@@ -245,7 +245,7 @@ fn undo_host_json(
     let original = originals.iter().find(|(_, v)| *v == root).map(|(b, _)| *b);
     let created = originals.is_empty() && root == json!({});
     if plugin && original.is_none() && !created {
-        crate::json5::read_for_edit(path)?;
+        install::json5_file::read_for_edit(path)?;
     }
     let text = serde_json::to_string_pretty(&root)? + "\n";
     finish(path, &owned(&backups, ours), original, created, &text).map(Some)

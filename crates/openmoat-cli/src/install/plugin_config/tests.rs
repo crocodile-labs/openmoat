@@ -182,10 +182,7 @@ fn a_configuration_outside_the_state_directory_keeps_the_plugin_in_it() {
     fs::create_dir_all(dir.path().join("etc")).unwrap();
     fs::create_dir_all(dir.path().join("state")).unwrap();
     assert_eq!(install(&cfg, Path::new("/x/moat")), Outcome::Installed);
-    assert_eq!(
-        path(&cfg),
-        dir.path().join("state/openmoat/openmoat.mjs")
-    );
+    assert_eq!(path(&cfg), dir.path().join("state/openmoat/openmoat.mjs"));
     assert!(path(&cfg).is_file());
     let ours = crate::context::path_string(&path(&cfg));
     assert_eq!(root(&cfg)["plugins"]["load"]["paths"], json!([ours]));

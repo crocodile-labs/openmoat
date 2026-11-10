@@ -131,7 +131,7 @@ fn parse(path: &Path, bytes: &[u8], comments: bool) -> Result<Map<String, Value>
     if comments {
         let text = std::str::from_utf8(bytes)
             .with_context(|| format!("{} is not UTF-8", path.display()))?;
-        let parsed = crate::json5::parse_or_empty(text)
+        let parsed = crate::install::json5_file::parse_or_empty(text)
             .with_context(|| format!("{} is not valid JSON with comments", path.display()))?;
         return match parsed.value {
             Value::Object(root) => Ok(root),

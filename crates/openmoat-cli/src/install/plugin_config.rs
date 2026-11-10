@@ -3,7 +3,7 @@
 //! host's [`PluginConfig`] to edit the parsed configuration.
 //!
 //! The configuration is JSON5 to the host. It is read as JSON5
-//! ([`crate::json5::read`]) and written back as plain JSON, which keeps every
+//! ([`super::json5_file::read`]) and written back as plain JSON, which keeps every
 //! value; a file with comments is not written, since that would drop them.
 //!
 //! [`HookLayout::Plugin`]: openmoat_hosts::HookLayout::Plugin
