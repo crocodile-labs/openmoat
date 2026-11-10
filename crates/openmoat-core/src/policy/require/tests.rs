@@ -105,6 +105,7 @@ fn the_strictest_of_every_source_applies() {
     let mut p = Policy::parse("version: 1\nrequire:\n  protection: hook-only\n").unwrap();
     let pack = Require {
         protection: None,
+        run: None,
         agents: [("codex".to_owned(), RequiredLevel::HookAndOsSandbox)].into(),
     };
     p.add_requirement(RequiredBy::Pack("team".into()), &pack);
@@ -112,4 +113,35 @@ fn the_strictest_of_every_source_applies() {
     assert_eq!(codex.level, RequiredLevel::HookAndOsSandbox);
     assert_eq!(codex.by, RequiredBy::Pack("team".into()));
     assert_eq!(level(&p, Some("cursor")), Some(RequiredLevel::HookOnly));
+}
+
+#[test]
+fn the_run_boundary_is_off_unless_a_source_asks_for_it() {
+    let plain = Policy::parse("version: 1\nrequire:\n  protection: hook-only\n").unwrap();
+    assert_eq!(plain.run_boundary_required(), None);
+    let none = Policy::parse("version: 1\n").unwrap();
+    assert_eq!(none.run_boundary_required(), None);
+    let own = Policy::parse("version: 1\nrequire:\n  run: full-boundary\n").unwrap();
+    assert_eq!(own.run_boundary_required(), Some(RequiredBy::Policy));
+}
+
+#[test]
+fn a_repository_can_turn_the_run_boundary_on_and_never_off() {
+    let strict = Require {
+        run: Some(RunBoundary::FullBoundary),
+        ..Require::default()
+    };
+    let mut p = Policy::parse("version: 1\n").unwrap();
+    p.add_requirement(RequiredBy::Repository, &strict);
+    assert_eq!(p.run_boundary_required(), Some(RequiredBy::Repository));
+
+    // A later source that says nothing leaves the person's requirement.
+    let mut own = Policy::parse("version: 1\nrequire:\n  run: full-boundary\n").unwrap();
+    own.add_requirement(RequiredBy::Repository, &Require::default());
+    assert_eq!(own.run_boundary_required(), Some(RequiredBy::Policy));
+}
+
+#[test]
+fn an_unknown_run_boundary_is_an_error() {
+    assert!(Policy::parse("version: 1\nrequire:\n  run: mostly\n").is_err());
 }

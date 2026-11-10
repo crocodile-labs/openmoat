@@ -137,6 +137,18 @@ pub fn run(args: &DoctorArgs) -> Result<Code> {
         report.warn(&format!("{:<16} git config {warning}", "Repository"));
     }
     protections(&mut report, &home, &binary)?;
+    mcp::servers(&mut report, &home, &binary);
+    let boundary = protection::run_boundary(&home, &binary);
+    if let Some(boundary) = &boundary {
+        let text = format!("run boundary     {}", boundary.describe());
+        report.line(Area::Sandbox, boundary.met, text);
+    }
+    if let Some(policy) = &policy {
+        let hosts = crate::mcp::set_up_hosts(&home, &binary);
+        let names = super::run::withheld_names(policy, &hosts);
+        let line = super::run::withheld_line(&names, boundary.is_some());
+        report.note_at(&line, Place::OpenMoat);
+    }
     match Store::open_read_only(&home.audit_path()).and_then(|store| store.verify_chain()) {
         Ok(chain) => audit_line(&mut report, &chain),
         Err(e) => report.line(Area::Audit, false, format!("audit log        {e}")),

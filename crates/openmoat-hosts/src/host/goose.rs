@@ -143,6 +143,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
             crate::RunWrite::Home(".local/state/goose"),
         ],
     },
+    run_env: &["GOOSE_PROVIDER", "GOOSE_MODEL", "GOOSE_PROVIDER__API_KEY"],
     ..HostSpec::BASE
 };
 

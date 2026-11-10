@@ -30,6 +30,7 @@ pub mod pins;
 pub mod relay;
 pub mod servers;
 pub mod startup;
+pub mod status;
 pub mod tools;
 pub mod wrap;
 

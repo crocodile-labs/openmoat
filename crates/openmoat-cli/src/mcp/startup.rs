@@ -75,7 +75,10 @@ impl Launch {
 /// What the check found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Startup {
-    Start,
+    /// Start it. `env` names the variables the accepted definitions set, which
+    /// the host put in this process's environment, so that `openmoat run`'s
+    /// allowlist passes them on to a sandboxed server (ADR-077).
+    Start { env: Vec<String> },
     /// Do not start it; why, naming what a person must do.
     Refuse(String),
 }
@@ -175,7 +178,15 @@ pub fn decide(
         })
         .collect();
     if pending.is_empty() {
-        return Startup::Start;
+        let mut env: Vec<String> = candidates
+            .iter()
+            .flat_map(|server| env_names(&server.entry))
+            .filter(|name| openmoat_core::env_name_problem(name).is_none())
+            .map(str::to_owned)
+            .collect();
+        env.sort();
+        env.dedup();
+        return Startup::Start { env };
     }
     Startup::Refuse(format!(
         "{}; OpenMoat starts it only once a person has reviewed it: run `openmoat mcp accept \

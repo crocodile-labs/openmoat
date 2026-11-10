@@ -3,6 +3,10 @@
 //! sandbox; what it cannot give is the hook: a program that is no agent
 //! OpenMoat knows has none, and an agent whose hook does not run has none
 //! either. A requirement it cannot check stops the run (fail closed).
+//!
+//! `require.run: full-boundary` (ADR-077) asks more of the run itself: no
+//! sandbox refuses here, and a run left with a port-only network refuses once
+//! the platform has said so ([`super::refuse_port_only`]).
 
 use anyhow::{Result, bail};
 use openmoat_core::{EvalContext, RequiredLevel};
@@ -13,16 +17,26 @@ use crate::protection::required::{self, by, level_of};
 use crate::sandbox::own_login::Owner;
 
 /// `Ok` when the program `typed` (as the person typed it), started as
-/// `owner`, meets the level the policy for `ctx` requires of it under
-/// `openmoat run`, or nothing is required.
-pub fn check(home: &Home, ctx: &EvalContext, owner: Owner, typed: &str) -> Result<()> {
+/// `owner`, meets what the policy for `ctx` requires of it under `openmoat
+/// run`, or nothing is required. The value is which policy requires the full
+/// boundary, for the run's later checks; `None` when none does.
+pub fn check(home: &Home, ctx: &EvalContext, owner: Owner, typed: &str) -> Result<Option<String>> {
     let policy = required::policy_in(home, ctx)?;
+    let strict = policy.run_boundary_required().map(|asks| by(&asks));
+    if let Some(asks) = &strict
+        && let Some(why) = crate::commands::run_unavailable()
+    {
+        bail!(
+            "{asks} requires `openmoat run` to start with its full boundary \
+             (`require.run: full-boundary`), and {why}; `{typed}` does not start"
+        );
+    }
     let host = match owner {
         Owner::Agent(host) => Some(host),
         Owner::Unknown => None,
     };
     let Some(requirement) = policy.required_for(host.map(Host::id)) else {
-        return Ok(());
+        return Ok(strict);
     };
     let level = level_of(requirement.level).label();
     let asks = by(&requirement.by);
@@ -49,5 +63,5 @@ pub fn check(home: &Home, ctx: &EvalContext, owner: Owner, typed: &str) -> Resul
              ({why}), so `openmoat run` cannot meet it{fix}; {name} does not start"
         );
     }
-    Ok(())
+    Ok(strict)
 }

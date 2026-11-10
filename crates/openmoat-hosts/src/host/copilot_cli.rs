@@ -121,6 +121,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         args: &[],
         writes: &[crate::RunWrite::ConfigDir, crate::RunWrite::Cache("copilot")],
     },
+    run_env: &["COPILOT_GITHUB_TOKEN"],
     ..HostSpec::BASE
 };
 

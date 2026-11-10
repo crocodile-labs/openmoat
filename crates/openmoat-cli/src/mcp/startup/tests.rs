@@ -51,7 +51,7 @@ fn no_env(_: &str) -> bool {
 fn refused(found: &Startup) -> &str {
     match found {
         Startup::Refuse(why) => why,
-        Startup::Start => panic!("started"),
+        Startup::Start { .. } => panic!("started"),
     }
 }
 
@@ -66,7 +66,24 @@ fn an_accepted_definition_starts() {
     let pins = pinned(&[&gh]);
     assert_eq!(
         decide(&scan(vec![gh]), &pins, &launch, no_env),
-        Startup::Start
+        Startup::Start { env: Vec::new() }
+    );
+}
+
+/// What the accepted definition sets reaches a sandboxed server through
+/// `openmoat run`'s allowlist; a name that could not be one is left out.
+#[test]
+fn an_accepted_definition_names_the_variables_it_sets() {
+    let mut entry = wrapped(&json!({"command": "npx", "args": ["gh"]}));
+    entry["env"] = json!({"GH_TOKEN": "x", "API_URL": "y", "BAD-NAME": "z"});
+    let gh = server("/h/.claude.json", "gh", entry);
+    let launch = launch_of(&gh.entry);
+    let pins = pinned(&[&gh]);
+    assert_eq!(
+        decide(&scan(vec![gh]), &pins, &launch, |_| true),
+        Startup::Start {
+            env: vec!["API_URL".to_owned(), "GH_TOKEN".to_owned()]
+        }
     );
 }
 
@@ -133,7 +150,10 @@ fn an_unaccepted_twin_refuses_when_it_may_have_started_the_proxy() {
     let found = decide(&both, &pins, &launch, |var| var == "NODE_OPTIONS");
     assert!(refused(&found).contains("is new"), "{found:?}");
     // Without that variable the twin cannot have started this process.
-    assert_eq!(decide(&both, &pins, &launch, no_env), Startup::Start);
+    assert_eq!(
+        decide(&both, &pins, &launch, no_env),
+        Startup::Start { env: Vec::new() }
+    );
 }
 
 #[test]

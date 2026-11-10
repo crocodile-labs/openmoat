@@ -179,6 +179,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["CLAUDE_CODE_SHELL", "SHELL"],
         on_path: false,
     },
+    run_env: &[
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+    ],
     ..HostSpec::BASE
 };
 

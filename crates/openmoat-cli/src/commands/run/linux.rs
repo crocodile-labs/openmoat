@@ -203,6 +203,10 @@ pub fn confine(
     }
 }
 
+/// What a Linux session sets for a process, kept under `openmoat run`'s
+/// environment allowlist (ADR-077).
+pub const BASE_ENV: &[&str] = &["HOSTNAME", "DISPLAY", "WAYLAND_DISPLAY"];
+
 /// None: `moat run` sandboxes on Linux, and refuses at start where the kernel
 /// lacks what it needs, so nothing runs unconfined.
 pub fn unavailable() -> Option<String> {
@@ -212,6 +216,11 @@ pub fn unavailable() -> Option<String> {
 /// Why `moat run` here would restrict the network by port only, for `moat doctor`.
 pub fn port_only_network() -> Option<String> {
     netns::doctor_warning()
+}
+
+/// Why the agent would get no network of its own here, and how to get one.
+pub fn no_network_namespace() -> Option<String> {
+    netns::missing()
 }
 
 /// Whether the system's bubblewrap, which `moat run --isolate` needs, is

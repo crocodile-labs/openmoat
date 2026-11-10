@@ -150,6 +150,18 @@ pub fn doctor_warning() -> Option<String> {
     }
 }
 
+/// Why the agent would have no network of its own here, and how to get one;
+/// `None` when it would.
+pub fn missing() -> Option<String> {
+    match network() {
+        Network::Namespace(_) => None,
+        Network::PortOnly(why) => Some(format!(
+            "the agent cannot get a network of its own: {why}; install bubblewrap \
+             (`apt install bubblewrap`)"
+        )),
+    }
+}
+
 /// `program` under `bwrap` in its own network namespace, `moat isolated`
 /// applying `rules` inside, in `cwd`, with the proxy on `port` relayed in,
 /// `masks` over the denied paths inside the grants and `placeholders` created

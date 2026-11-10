@@ -47,6 +47,15 @@ Each agent's gaps and the reasons are in
   The command is proved with a stand-in program, not the real agent. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
+- **`require.run: full-boundary` is about `openmoat run`.** It refuses a run without an OS
+  sandbox or, on Linux, without a network of the agent's own. An agent started without
+  `openmoat run` is not refused, and on Linux the setting does not imply `--isolate`, so
+  paths inside the project stay open to commands under plain `openmoat run`
+  ([POLICY.md §9.3](POLICY.md#93-requiring-openmoat-runs-full-boundary-requirerun)).
+- **`openmoat run` keeps an inherited variable from the agent only under
+  `require.run: full-boundary`.** Otherwise every variable reaches it except brokered
+  secrets, and one line warns. Under the setting an agent's own key stays on the list, so
+  its commands can read that key, and a value kept in a file or keychain is outside it.
 - **A required protection level is checked where the hook runs.** With `require:`
   ([POLICY.md §9.2](POLICY.md#92-required-protection-level-require)) the guard denies every
   call of an agent below the level, but it only sees what it can tell from inside one
@@ -115,6 +124,10 @@ Each agent's gaps and the reasons are in
   background git starts; `openmoat status` and `openmoat doctor` name such keys but
   cannot stop them. In the editors, the selection and open file Claude Code adds to a
   prompt are no tool call and are not checked ([IDE.md](IDE.md#not-covered)).
+- **`require.run: full-boundary` reports an unprotected MCP server; it cannot stop one.**
+  `openmoat status` and `openmoat doctor` show each server as protected or unprotected and
+  count an unprotected local one against the setting, but the agent starts its own servers
+  ([ADR-077](adr/ADR-077-enforced-run-boundary.md)).
 - **Unwrapped MCP servers start before any call is checked.** The agent starts them
   itself, and no hook runs first; when differs per agent and most do not document it
   ([ADR-076](adr/ADR-076-hook-only-os-sandbox-and-mcp-startup.md)). For a server not

@@ -149,6 +149,7 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         why: "Codex picks its shell from the login record, and its tool environment setting is \
               not yet confirmed to leave the person's own exclusions in place",
     },
+    run_env: &["OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"],
     ..HostSpec::BASE
 };
 

@@ -136,6 +136,16 @@ fn policy_here(home: &Home) -> Option<Policy> {
     merged.or_else(|_| home.load_policy()).ok()
 }
 
+/// The state of `require.run: full-boundary` in the current directory, or
+/// `None` when no policy in force asks for it (ADR-077).
+pub fn run_boundary(home: &Home, binary: &Path) -> Option<required::Boundary> {
+    let policy = policy_here(home)?;
+    required::Boundary::of(&policy, crate::commands::run_full_boundary_gap(), || {
+        let cwd = std::env::current_dir().ok();
+        crate::mcp::status::failed_requirement(home, binary, cwd.as_deref())
+    })
+}
+
 /// Every supported agent's protection, in [`Host::ALL`] order.
 pub fn report(home: &Home, binary: &Path) -> Result<Vec<Protection>> {
     let inputs = Inputs::load(home);

@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::{Area, Report};
+use super::{Area, Place, Report};
 use crate::home::Home;
 use crate::integrity::Lock;
 use crate::mcp::{self, pins::Kind, tools};
@@ -90,6 +90,24 @@ pub(super) fn lines(report: &mut Report, home: &Home, lock: &Lock, binary: &Path
             }
         }
         Err(e) => report.line(Area::Mcp, false, format!("mcp tools        {e:#}")),
+    }
+}
+
+/// Each MCP server OpenMoat can read, protected or not and why (ADR-077).
+pub(super) fn servers(report: &mut Report, home: &Home, binary: &Path) {
+    let cwd = std::env::current_dir().ok();
+    match mcp::status::report(home, binary, cwd.as_deref()) {
+        Ok(found) => {
+            for server in &found.servers {
+                let line = format!("mcp server       {}", server.describe());
+                if server.protected {
+                    report.note_at(&line, Place::OpenMoat);
+                } else {
+                    report.warn(&line);
+                }
+            }
+        }
+        Err(e) => report.warn(&format!("mcp servers      cannot list them: {e:#}")),
     }
 }
 
