@@ -14,7 +14,7 @@ mod tests;
 
 use std::io::{self, Write};
 
-pub use agents::{AgentTable, agent_table, os_sandbox_rows};
+pub use agents::{AgentTable, agent_table, fails_open_rows, os_sandbox_rows};
 pub use paths::Paths;
 pub use style::Style;
 

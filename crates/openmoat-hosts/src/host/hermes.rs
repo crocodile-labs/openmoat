@@ -99,6 +99,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          `shell-hooks-allowlist.json` in a gateway, cron or ACP session, another profile, or \
          `HERMES_SAFE_MODE=1`; runs a call unchecked when Hermes's own hook dispatcher raises \
          an error, which it catches and proceeds past",
+    // `fail_closed: true`, which `openmoat init` sets: a hook that cannot
+    // start, times out or exits without a decision blocks;
+    // `plugins.hook_callback_timeout` (30 s by default) bounds the wait.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Blocks,
+        timeout_s: Some(30),
+        turned_off_by: "the hook missing from `config.yaml` or from `shell-hooks-allowlist.json` \
+                        (gateway, cron and ACP sessions), another profile, or \
+                        `HERMES_SAFE_MODE=1`",
+        sources: &["https://github.com/NousResearch/hermes-agent/blob/v0.22.5/agent/shell_hooks.py"],
+    },
     gaps: "no OS sandbox from OpenMoat; what an `execute_code` script does itself is not \
          checked (its tool calls are); a plugin, another hook's `modify` or tool middleware can \
          rewrite a call's arguments after the check; terminal commands on a remote backend \

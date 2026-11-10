@@ -1,8 +1,9 @@
 //! The host tables in the docs that a [`HostSpec`] fully states are generated
 //! from it, between `<!-- generated:<name> -->` and `<!-- /generated -->`, so a
-//! spec change and its documentation cannot drift apart. Tables that need more
-//! than the spec says (what each hook sees, the per-case "When the hook fails"
-//! table) stay hand-written.
+//! spec change and its documentation cannot drift apart: the per-agent "If
+//! the hook fails" table of `docs/LIMITS.md` among them (ADR-079). Tables that
+//! need more than the spec says (what each hook sees, the detailed per-case
+//! "When the hook fails" table of `docs/THREAT_MODEL.md` §5) stay hand-written.
 //!
 //! Regenerate with `OPENMOAT_TEST_UPDATE_DOCS=1 cargo test -p openmoat-hosts --test docs`.
 
@@ -89,6 +90,48 @@ fn gaps_list() -> Vec<String> {
             )
         })
         .collect()
+}
+
+/// `docs/LIMITS.md` "If the hook fails": what each agent does with a call when
+/// OpenMoat's hook cannot start, crashes or exits non-zero, times out, or is
+/// turned off, from its [`HostSpec::hook_failure`] (ADR-079), with the sources.
+fn hook_failure_table() -> Vec<String> {
+    let mut lines = vec![
+        "| Agent | Hook cannot start, crashes or exits non-zero | Hook times out | Time limit | \
+         Turned off (every call runs unchecked) | Fails open | Source |"
+            .to_owned(),
+        "|---|---|---|---|---|---|---|".to_owned(),
+    ];
+    for host in hosts() {
+        let spec = host.spec();
+        let facts = &spec.hook_failure;
+        let limit = facts
+            .timeout_s
+            .map_or_else(|| "not documented".to_owned(), |s| format!("{s} s"));
+        let (open_now, open_before) = (facts.open_cases(true), facts.open_cases(false));
+        let open = if !open_now.is_empty() {
+            format!("yes: {}", open_now.join("; "))
+        } else if open_before.is_empty() {
+            "no".to_owned()
+        } else {
+            format!("before that version: {}", open_before.join("; "))
+        };
+        let sources = facts
+            .sources
+            .iter()
+            .enumerate()
+            .map(|(i, url)| format!("[{}]({url})", i + 1))
+            .collect::<Vec<_>>()
+            .join(" ");
+        lines.push(format!(
+            "| {} | {} | {} | {limit} | {} | {open} | {sources} |",
+            spec.display_name,
+            facts.fails.words(),
+            facts.times_out.words(),
+            facts.turned_off_by
+        ));
+    }
+    lines
 }
 
 /// `docs/THREAT_MODEL.md` §5: how a call is decided for each agent whose
@@ -212,6 +255,14 @@ fn threat_model_lists_each_agents_gaps_hook_failure_and_working_directory() {
             ("hosts-gaps", gaps_list()),
             ("hosts-workdir", workdir_list()),
         ],
+    );
+}
+
+#[test]
+fn limits_lists_what_each_agent_does_when_the_hook_fails() {
+    check(
+        "docs/LIMITS.md",
+        &[("hosts-hook-failure", hook_failure_table())],
     );
 }
 

@@ -138,8 +138,18 @@ mod tests {
                 ("display_name", spec.display_name),
                 ("on_hook_failure", spec.on_hook_failure),
                 ("gaps", spec.gaps),
+                (
+                    "hook_failure.turned_off_by",
+                    spec.hook_failure.turned_off_by,
+                ),
             ] {
                 assert!(!value.is_empty(), "{host:?} names no {field}");
+            }
+            // Every hook-failure fact names where it comes from (ADR-079).
+            let sources = spec.hook_failure.sources;
+            assert!(!sources.is_empty(), "{host:?} names no hook-failure source");
+            for source in sources {
+                assert!(source.starts_with("https://"), "{host:?}: {source}");
             }
             if let Some(install) = &spec.install {
                 for (field, value) in [

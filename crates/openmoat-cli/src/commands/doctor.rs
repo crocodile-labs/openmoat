@@ -202,6 +202,15 @@ fn protections(report: &mut Report, home: &Home, binary: &Path) -> Result<()> {
             }
             report.note(&format!("{:<16} known gaps: {}", agent.name, agent.gaps));
         }
+        // The text output shows it under the agent's row
+        // (`report::fails_open_rows`); `--format json` has it as a note.
+        if let Some(line) = agent
+            .hook_failure
+            .as_ref()
+            .and_then(protection::Failure::line)
+        {
+            report.note(&format!("{:<16} {line}", agent.name));
+        }
         // Below the level the policy requires, every call is denied (ADR-064):
         // a problem, shown under the agent's row (`report::agent_table`).
         if let Some(required) = &agent.required {

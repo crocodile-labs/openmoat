@@ -16,9 +16,11 @@ use crate::install::{HookState, HostConfig, Recorded};
 use crate::integrity::{Drift, Lock};
 use crate::sandbox::{Plan, install as host_sandbox};
 
+pub mod hook_failure;
 pub mod os_sandbox;
 pub mod required;
 
+pub use hook_failure::Failure;
 pub use os_sandbox::OsSandbox;
 pub use required::Required;
 
@@ -79,6 +81,11 @@ pub struct Protection {
     /// can get one (ADR-076).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub os_sandbox: Option<OsSandbox>,
+    /// What the agent does with a call when the hook fails, for an agent
+    /// whose hook is installed (ADR-079); `fails_open` names the cases in
+    /// which the call runs unchecked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hook_failure: Option<Failure>,
 }
 
 impl Protection {
@@ -205,6 +212,11 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
             os_sandbox::of(home, host, here)
         })
         .transpose()?;
+    // Asked only of an agent whose hook is in place: whether its version
+    // reads the flag that blocks a failed hook can take a `--version` run.
+    let hook_failure = level
+        .hooked()
+        .then(|| hook_failure::of(host, (config.blocks_on_failure)()));
     Ok(Protection {
         host: host.id(),
         name: host.display_name(),
@@ -214,6 +226,7 @@ fn protection(home: &Home, binary: &Path, inputs: &Inputs, host: Host) -> Result
         limit: host.spec().limit,
         required,
         os_sandbox,
+        hook_failure,
     })
 }
 
@@ -555,6 +568,7 @@ mod tests {
             limit: None,
             required: None,
             os_sandbox: None,
+            hook_failure: None,
         };
         assert_eq!(
             protection(Level::HookOnly, Some("why"))

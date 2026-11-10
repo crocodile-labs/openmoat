@@ -52,6 +52,7 @@ if command -v python3 >/dev/null; then
     # checked against; this fails when that file no longer says so.
     run python3 -I scripts/ci/latest-agents/check.py records
     run python3 -I scripts/ci/latest-agents/test_after_call.py
+    run python3 -I scripts/ci/latest-agents/test_check.py
 else
     echo "▷ python3 not installed; Markdown link check skipped (CI runs it)"
 fi

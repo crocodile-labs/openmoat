@@ -29,6 +29,7 @@ fn agents() -> Vec<Protection> {
                 limit: None,
                 required: None,
                 os_sandbox: None,
+                hook_failure: None,
             }
         })
         .collect()

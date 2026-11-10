@@ -81,6 +81,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          crashes, times out, exits non-zero or prints something that is not its JSON is not \
          stated, and no setting to block on failure is documented, so OpenMoat assumes the call \
          runs (the guard itself answers a deny and exits 2 on every error it can catch)",
+    // The hooks page states a 30 s default timeout and `enabled: false`, and
+    // says nothing of what a failed or timed-out hook does to the call.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::NotDocumented,
+        times_out: crate::FailureOutcome::NotDocumented,
+        timeout_s: Some(600),
+        turned_off_by: "`enabled: false` on the entry (a project's `.agents/hooks.json` \
+                        included), or deleting it",
+        sources: &["https://antigravity.google/docs/hooks?tab=cli"],
+    },
     gaps: "hook only: no OS sandbox from OpenMoat (`enableTerminalSandbox` is the person's to \
          set, or `openmoat run`); preview: OpenMoat's hook for Antigravity CLI is new; what \
          the hook sees is taken from the documentation: whether MCP and subagent calls fire hooks, \

@@ -17,6 +17,7 @@ impl HostSpec {
         speaks_variable: None,
         reviews: Reviews::BASE,
         on_hook_failure: "",
+        hook_failure: super::HookFailure::BASE,
         gaps: "",
         install: None,
         mcp: None,

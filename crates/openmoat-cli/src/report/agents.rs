@@ -88,6 +88,19 @@ pub fn os_sandbox_rows(agents: &[Protection]) -> Vec<Row> {
         .collect()
 }
 
+/// One row per agent whose hook is in place but which runs a call when the
+/// hook fails (ADR-079), with what to do about it: `moat status` and `moat
+/// doctor`. Information, not a problem: the hook is what the agent offers.
+pub fn fails_open_rows(agents: &[Protection]) -> Vec<Row> {
+    agents
+        .iter()
+        .filter_map(|agent| {
+            let line = agent.hook_failure.as_ref()?.line()?;
+            Some(Row::new(Mark::Info, agent.name, line))
+        })
+        .collect()
+}
+
 /// The row under an agent's for the level the policy requires of it: met, or
 /// what is missing and the step that brings the agent there.
 fn required_row(name: &str, required: &Required) -> Row {

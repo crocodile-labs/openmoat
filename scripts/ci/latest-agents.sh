@@ -24,7 +24,15 @@
 #      payload, in the agent's own format (its golden fixture), through
 #      `openmoat guard`, and checks the reply;
 #   6. records what the agent's after-call event sends, where it runs with no
-#      account (after_call.py): reported in the job's annotations, never failed.
+#      account (after_call.py): reported in the job's annotations, never failed;
+#   7. where step 4 starts the agent, makes OpenMoat's hook fail in the ways
+#      its guard cannot catch itself (the binary exits 1 with nothing printed,
+#      is gone, or hangs past the agent's time limit), has the agent read a
+#      probe file each time, and compares what the agent did with the host
+#      fact `openmoat status --format json` reports (`hook_failure`, ADR-079):
+#      a call that ran where the fact says the agent blocks fails the job; a
+#      call blocked where it says the agent runs it, or no evidence either
+#      way, is reported. hook-failure.json in the output holds every outcome.
 #
 # No account, key or secret is used; the fake API listens on loopback only.
 # With LATEST_AGENTS_OUT set, result.json (agent, version, checked version,
@@ -504,6 +512,11 @@ after_call_dir="$out/after-call"
 python3 -I "$lib/after_call.py" install "$agent" "$after_call_dir" "$root" "$HOME" "$project" || true
 
 begin init
+# The hook names the binary init runs from: a copy in the throwaway root, so
+# the hook-failure step can make that one fail without touching OPENMOAT_BIN.
+mkdir -p "$root/openmoat-bin"
+cp "$moat" "$root/openmoat-bin/openmoat"
+moat="$root/openmoat-bin/openmoat"
 (cd "$HOME" && "$moat" init --hosts "$host" --yes) </dev/null >"$out/init.txt" 2>&1 || {
     cat "$out/init.txt"
     exit 1
@@ -1027,4 +1040,157 @@ for which in allow deny; do
         >"$out/reply-$which.json" 2>"$out/reply-$which.err" || rc=$?
     check reply "$agent" "$which" "$rc" "$out/reply-$which.json"
 done
+
+# ---- the real agent when OpenMoat's hook fails (ADR-079) -------------------
+
+# What the agent is asked to run while the hook fails: a read of a file with a
+# marker of its own, copied into the project where the agent may write. The
+# marker in what the agent printed or sent the fake API, or the copy, means the
+# call ran.
+probe_marker="OPENMOAT-HOOK-FAILURE-PROBE-$RANDOM$RANDOM"
+printf '%s\n' "$probe_marker" >"$HOME/hook-failure-probe.txt"
+probe_cmd="cat ~/hook-failure-probe.txt | tee hook-failure-ran.txt"
+probe_ran="$project/hook-failure-ran.txt"
+
+# probe_agent <log prefix> <seconds>: the agent, with the hook as it is now,
+# asked once to run the probe; as step 4 starts it, without its checks.
+probe_agent() {
+    local log=$1 limit=$2 calls
+    case "$agent" in
+    claude-code)
+        calls=$(printf '[{"name":"Bash","input":{"command":"%s","description":"probe"}}]' "$probe_cmd")
+        start_fake "$log-api.log" python3 -I "$repo/tests/differential/fake_api.py" --calls "$calls"
+        claude_vars
+        (cd "$project" && env "${claude_env[@]}" bounded "$limit" "$bin" -p "run it" \
+            --permission-mode default --allowedTools Bash) </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    codex)
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" \
+            --call exec_command="{\"cmd\": \"$probe_cmd\"}" \
+            --call shell_command="{\"command\": \"$probe_cmd\"}" \
+            --call shell="{\"command\": [\"bash\", \"-lc\", \"$probe_cmd\"]}"
+        (cd "$project" && FAKE_OPENAI_KEY=fake-key \
+            bounded "$limit" "$bin" exec --skip-git-repo-check --dangerously-bypass-hook-trust \
+            -c 'model_provider="fake"' -c 'model="fake-model"' \
+            -c "model_providers.fake={name=\"fake\",base_url=\"http://127.0.0.1:$fake_port/v1\",wire_api=\"responses\",env_key=\"FAKE_OPENAI_KEY\",request_max_retries=0,stream_max_retries=0}" \
+            "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    gemini-cli)
+        printf '%s\n' \
+            "{\"method\":\"generateContentStream\",\"response\":[{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"run_shell_command\",\"args\":{\"command\":\"$probe_cmd\",\"description\":\"probe\"}}}]},\"finishReason\":\"STOP\",\"index\":0}]}]}" \
+            '{"method":"generateContentStream","response":[{"candidates":[{"content":{"role":"model","parts":[{"text":"done"}]},"finishReason":"STOP","index":0}]}]}' \
+            >"$log-responses.jsonl"
+        (cd "$project" && GEMINI_API_KEY=fake-key \
+            bounded "$limit" "$bin" --skip-trust --approval-mode=yolo --model gemini-2.5-flash \
+            --fake-responses "$log-responses.jsonl" -p "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    copilot-cli)
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" \
+            --call bash="{\"command\": \"$probe_cmd\", \"description\": \"probe\"}"
+        (cd "$project" && COPILOT_OFFLINE=true COPILOT_PROVIDER_TYPE=openai \
+            COPILOT_PROVIDER_BASE_URL="http://127.0.0.1:$fake_port/v1" COPILOT_PROVIDER_API_KEY=fake-key \
+            COPILOT_MODEL=fake-model bounded "$limit" "$bin" -p "run it" --allow-all-tools) \
+            </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    pi)
+        # The port step 4 wrote into pi's pinned models.json.
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" --port "$pinned_port" \
+            --call bash="{\"command\": \"$probe_cmd\"}"
+        (cd "$project" && bounded "$limit" "$bin" --provider fake --model fake-model --no-session \
+            --mode json "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    openclaw)
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" --port "$pinned_port" \
+            --call exec="{\"command\": \"$probe_cmd\"}"
+        (cd "$project" && bounded "$limit" "$bin" agent exec --config "$OPENCLAW_STATE_DIR/openclaw.json" \
+            --state-dir "$OPENCLAW_STATE_DIR" --model fake/fake-model --code-mode direct \
+            --timeout "$limit" --json --cwd "$project" "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    opencode-1)
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" --port "$pinned_port" \
+            --call bash="{\"command\": \"$probe_cmd\", \"description\": \"probe\"}"
+        (cd "$project" && OPENCODE_DISABLE_MODELS_FETCH=1 \
+            bounded "$limit" "$bin" run --print-logs --format json "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    cline)
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" \
+            --call run_commands="{\"commands\": [\"$probe_cmd\"]}"
+        "$bin" auth -p openai-compatible -k fake-key -m fake-model \
+            -b "http://127.0.0.1:$fake_port/v1" </dev/null >"$log-auth.txt" 2>&1 || true
+        (cd "$project" && bounded "$limit" "$bin" --json "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    goose)
+        start_fake "$log-api.log" python3 -I "$lib/fake_openai.py" \
+            --call shell="{\"command\": \"$probe_cmd\"}"
+        (cd "$project" && GOOSE_PROVIDER=openai GOOSE_MODEL=fake-model GOOSE_MODE=auto \
+            GOOSE_DISABLE_KEYRING=1 OPENAI_API_KEY=fake-key OPENAI_HOST="http://127.0.0.1:$fake_port" \
+            OPENAI_BASE_PATH=v1/chat/completions \
+            bounded "$limit" "$bin" run --no-session -t "run it") </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    antigravity-cli)
+        start_fake "$log-api.log" python3 -I "$lib/fake_gemini.py" \
+            --call run_command="{\"CommandLine\": \"$probe_cmd\"}"
+        (cd "$project" && GEMINI_API_KEY=fake-key GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:$fake_port" \
+            bounded "$limit" "$bin" -p "run it" --dangerously-skip-permissions) </dev/null >"$log-agent.txt" 2>&1 || true
+        ;;
+    esac
+    stop_fake
+}
+
+# hook_fails <mode>: the hook binary made to fail as <mode> says, the agent
+# probed, the outcome compared with the host fact, the binary put back.
+#   crash    exits 1 with nothing printed (a crash the guard cannot catch);
+#   missing  is gone (an upgrade or uninstall removed it);
+#   hang     answers nothing until well past the agent's time limit.
+hook_fails() {
+    local mode=$1 fact limit=180 calls="$out/hook-failure-$mode-calls.log"
+    begin "hook fails: $mode"
+    case "$mode" in
+    hang) fact=$(check hook-failure-fact "$host" "$out/status.json" times_out) ;;
+    *) fact=$(check hook-failure-fact "$host" "$out/status.json" fails) ;;
+    esac
+    if [ "$mode" = hang ]; then
+        local seconds
+        seconds=$(check hook-failure-fact "$host" "$out/status.json" timeout_s)
+        # A limit of minutes would hold the runner that long for one answer.
+        if [ "$seconds" = none ] || [ "$seconds" -gt 120 ]; then
+            check hook-failure-skip "$agent" "$mode" "$fact" \
+                "the time limit is ${seconds} s; not waited for" "$out/hook-failure.json"
+            return 0
+        fi
+        limit=$((seconds + 180))
+    fi
+    mv "$moat" "$moat.real"
+    : >"$calls"
+    # shellcheck disable=SC2016 # `$$` and `$*` are the stand-in's own, at run time
+    case "$mode" in
+    crash) printf '#!/bin/sh\necho "$$ $*" >>"%s"\nexit 1\n' "$calls" >"$moat" ;;
+    hang) printf '#!/bin/sh\necho "$$ $*" >>"%s"\nexec sleep %s\n' "$calls" "$((limit + 60))" >"$moat" ;;
+    missing) ;;
+    esac
+    [ ! -f "$moat" ] || chmod +x "$moat"
+    rm -f "$probe_ran"
+    probe_agent "$out/hook-failure-$mode" "$limit"
+    rm -f "$moat"
+    mv "$moat.real" "$moat"
+    cat "$out/hook-failure-$mode-agent.txt"
+    check hook-failure "$agent" "$mode" "$fact" "$probe_marker" "$probe_ran" "$calls" \
+        "$out/hook-failure-$mode-agent.txt" "$out/hook-failure-$mode-api.log" \
+        "$out/hook-failure.json"
+}
+
+: >"$out/hook-failure.json"
+case "$agent" in
+cursor | hermes | opencode-2)
+    # Step 4 drives no model call through these agents (above says why).
+    check hook-failure-skip "$agent" all - "no model call is driven through this agent here" \
+        "$out/hook-failure.json"
+    ;;
+*)
+    pinned_port=${fake_port:-0}
+    for mode in crash missing hang; do
+        hook_fails "$mode"
+    done
+    ;;
+esac
 step="done"

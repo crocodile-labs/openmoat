@@ -60,6 +60,18 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     on_hook_failure: "blocks the call when the hook cannot start, crashes or exits non-zero; \
          runs it when the hook times out (`timeoutSec`, 600 s as `openmoat init` writes it) \
          or its file is gone",
+    // "a crash or non-zero exit (including exit 2) denies the tool call";
+    // "Command hook timeouts are always fail-open, even for preToolUse".
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Runs,
+        timeout_s: Some(600),
+        turned_off_by: "`disableAllHooks: true` in a hook file or in a repository's \
+                        `settings.json`, or deleting the hook file",
+        sources: &[
+            "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference",
+        ],
+    },
     gaps: "a hook that times out lets the call run; `disableAllHooks` in Copilot's user or a \
          repository's `settings.json` turns the hook off (`openmoat status` and `doctor` \
          report it); MCP tools are told apart from built-in ones only by name, so a changed \

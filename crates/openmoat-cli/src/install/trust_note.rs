@@ -49,6 +49,7 @@ mod tests {
             limit: None,
             required: None,
             os_sandbox: None,
+            hook_failure: None,
         }
     }
 

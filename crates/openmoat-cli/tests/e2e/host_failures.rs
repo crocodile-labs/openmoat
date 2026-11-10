@@ -225,6 +225,64 @@ fn a_hook_whose_binary_is_gone_is_not_protected() {
     }
 }
 
+/// What each agent does with a call when the hook fails, from its host facts
+/// (ADR-079): `status --format json` carries them for each agent whose hook is
+/// in place, and `doctor` names the one that runs the call then (Codex), with
+/// what to do; an agent that blocks (Cursor's `failClosed`, Claude Code's
+/// `onFailure` at the version the tests report) gets no such row.
+#[test]
+fn doctor_names_an_agent_that_runs_the_call_when_the_hook_fails() {
+    let sb = Sandbox::installed(&[".claude", ".codex", ".cursor"]);
+    let status = json(&sb.moat(&["status", "--format", "json"]));
+    let agents = status["agents"].as_array().cloned().unwrap_or_default();
+    let of = |id: &str| {
+        agents
+            .iter()
+            .find(|a| a["host"] == id)
+            .map(|a| a["hook_failure"].clone())
+            .unwrap_or_default()
+    };
+    let open = |id: &str| of(id)["fails_open"].as_array().map_or(0, Vec::len);
+    assert_eq!(of("codex")["fails"], "runs", "{status}");
+    assert_eq!(of("codex")["times_out"], "runs", "{status}");
+    assert_eq!(open("codex"), 2, "{status}");
+    for blocking in ["claude-code", "cursor"] {
+        assert_eq!(of(blocking)["fails"], "blocks", "{blocking}: {status}");
+        assert_eq!(of(blocking)["times_out"], "blocks", "{blocking}: {status}");
+        assert_eq!(open(blocking), 0, "{blocking}: {status}");
+    }
+    for id in ["claude-code", "codex", "cursor"] {
+        let sources = of(id)["sources"].as_array().cloned().unwrap_or_default();
+        assert!(!sources.is_empty(), "{id}: {status}");
+    }
+
+    let doctor = crate::common::squash(&text(&sb.moat(&["doctor"])));
+    let row = "Codex fails open: runs the call when the hook cannot start, crashes or exits \
+               non-zero or times out; start it with `openmoat run`";
+    assert!(doctor.contains(row), "{doctor}");
+    assert!(doctor.contains("require.run: full-boundary"), "{doctor}");
+    for blocking in ["Claude Code fails open", "Cursor fails open"] {
+        assert!(!doctor.contains(blocking), "{doctor}");
+    }
+    // Information, not a problem: the footer does not count it.
+    let json_doctor = json(&sb.moat(&["doctor", "--format", "json"]));
+    let checks = json_doctor["checks"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let noted: Vec<_> = checks
+        .iter()
+        .filter(|c| {
+            c["detail"]
+                .as_str()
+                .is_some_and(|d| d.starts_with("fails open"))
+        })
+        .collect();
+    assert_eq!(noted.len(), 1, "{json_doctor}");
+    assert_eq!(noted[0]["name"], "Codex", "{json_doctor}");
+    assert_eq!(noted[0]["status"], "note", "{json_doctor}");
+}
+
 /// An install from before a tool joined the matcher: the hook is out of date
 /// until `moat init` rewrites the matcher in place and re-pins the hook file.
 #[test]

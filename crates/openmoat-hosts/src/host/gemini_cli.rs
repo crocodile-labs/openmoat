@@ -60,6 +60,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     on_hook_failure: "runs the call when the hook times out, is killed by a signal or exits 1 \
          (Gemini CLI has no fail-closed setting); blocks it when the hook exits 2, or exits \
          with any other code and prints something, as a missing `openmoat` does",
+    // Exit 1, a signal or a timeout is a warning and the call runs; another
+    // non-zero exit with output blocks (a missing `openmoat` prints one), a
+    // silent crash does not. Gemini CLI has no fail-closed setting.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Runs,
+        times_out: crate::FailureOutcome::Runs,
+        timeout_s: Some(600),
+        turned_off_by: "`hooks` turned off in the user's or a project's `settings.json`, or a \
+                        folder Gemini CLI does not trust (which runs no settings hooks)",
+        sources: &["https://geminicli.com/docs/hooks/reference/"],
+    },
     gaps: "no OS sandbox from OpenMoat; in a folder Gemini CLI does not trust it runs no \
          settings hooks at all and asks the person before every tool instead; a project's \
          `.gemini/settings.json` can turn hooks off or add a hook that rewrites a call's \

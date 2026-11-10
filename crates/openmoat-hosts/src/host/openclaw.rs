@@ -91,6 +91,16 @@ pub(crate) static SPEC: HostSpec = HostSpec {
          crashes or does not answer; runs the call unchecked when the Gateway does not \
          load the plugin (a load error leaves the plugin `status: \"error\"` and the \
          Gateway running)",
+    // `before_tool_call` fails closed (hook reference), and OpenMoat's plugin
+    // blocks when `openmoat` is missing, crashes or does not answer in 45 s.
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Blocks,
+        timeout_s: Some(45),
+        turned_off_by: "a Gateway that does not load the plugin (disabled in `openclaw.json`, \
+                        or a load error, which leaves the Gateway running)",
+        sources: &["https://docs.openclaw.ai/plugins/hooks/reference"],
+    },
     gaps: "no OS sandbox from OpenMoat; parameters another plugin changes are undone, \
          except where that plugin also asks for approval (OpenClaw then keeps the \
          parameters the person approved) or runs after OpenMoat's last handler, at the \

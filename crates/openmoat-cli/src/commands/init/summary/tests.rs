@@ -15,6 +15,7 @@ fn agent(id: &str, level: Level) -> Protection {
         limit: None,
         required: None,
         os_sandbox: None,
+        hook_failure: None,
     }
 }
 

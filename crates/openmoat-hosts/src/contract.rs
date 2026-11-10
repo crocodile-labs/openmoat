@@ -13,6 +13,7 @@ mod bundle;
 mod consent;
 mod docs;
 mod heartbeat;
+mod hook_failure;
 mod hook_file;
 mod hook_trust;
 mod location;
@@ -30,6 +31,7 @@ pub use bundle::Bundle;
 pub use consent::ConsentFile;
 pub use docs::{HostDocs, ToolRow};
 pub use heartbeat::{Activity, HEARTBEAT_FLAG, Heartbeat};
+pub use hook_failure::{FailureOutcome, HookFailure};
 pub use hook_file::HookLayout;
 pub use hook_trust::HookTrust;
 pub use location::{Locate, Located, Location};
@@ -118,6 +120,10 @@ pub struct HostSpec {
     /// What the host does when its hook is missing, crashes or times out, as
     /// `docs/THREAT_MODEL.md` §5 ("When the hook fails") says; change them together.
     pub on_hook_failure: &'static str,
+    /// The same, case by case, as typed facts with their sources (ADR-079):
+    /// `moat doctor` reports a host that runs the call when the hook fails, and
+    /// `docs/LIMITS.md` "If the hook fails" is generated from it.
+    pub hook_failure: HookFailure,
     /// What the hook and sandbox do not cover for this host, and what it does
     /// when the hook fails, as `moat status` and `moat doctor` report it.
     /// Mirrors `docs/LIMITS.md` and `docs/THREAT_MODEL.md` §5, whose per-host

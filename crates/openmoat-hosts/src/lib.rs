@@ -21,10 +21,11 @@ mod wire;
 pub use block::{NEVER_SUGGESTED, RULE_PAGE, rule_page};
 pub use contract::{
     Activity, Advisories, Advisory, AlsoDir, AutoStart, Bundle, ConsentFile, Detect, ExtraFile,
-    GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookLayout, HookSpec, HookTrust,
-    HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape, Locate, Located, Location,
-    McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader, McpServer, McpSpec, McpSyntax,
-    OtherHooks, Paths, Platform, PluginDir, ProcessSpec, ProjectSettingsSpec, Protect,
+    FailureOutcome, GUARD_BUDGET_S, HEARTBEAT_FLAG, Heartbeat, Helper, HookDir, HookFailure,
+    HookLayout, HookSpec, HookTrust, HookVersions, HostDocs, HostSpec, InstallSpec, KeyShape,
+    Locate, Located, Location, McpAutoStart, McpCommandForm, McpFile, McpNames, McpReader,
+    McpServer, McpSpec, McpSyntax, OtherHooks, Paths, Platform, PluginDir, ProcessSpec,
+    ProjectSettingsSpec, Protect,
     ProxySessions, RelaxedKey, Reviews, RunFacts, RunWrite, SandboxFormat, SandboxSpec, SessionDir,
     SettingsFile, SettingsReader, SystemFile, SystemSettingsSpec, ToolRow, ToolToken, Unseen,
     Version,

@@ -57,6 +57,17 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     },
     on_hook_failure: "runs the call when the hook is missing, crashes or times out, unless \
          the hook entry sets `failClosed: true`; then it blocks the call",
+    // `failClosed: true`, which `openmoat init` sets on every entry: a crash,
+    // timeout, non-zero exit or no output blocks. What a missing command does
+    // is not stated (Cursor runs a shell string, which exits 127).
+    hook_failure: crate::HookFailure {
+        fails: crate::FailureOutcome::Blocks,
+        times_out: crate::FailureOutcome::Blocks,
+        timeout_s: Some(600),
+        turned_off_by: "deleting the entry from `hooks.json`, or an entry without \
+                        `failClosed: true` (`openmoat status` calls that not protected)",
+        sources: &["https://cursor.com/docs/agent/hooks"],
+    },
     gaps: "commands Cursor runs outside its sandbox (a rerun or call its Auto-review \
          classifier approves, Run Everything mode, the CLI without `--sandbox enabled`) \
          are not confined; file-tool reviews become denies; Task and tools that name no path \
