@@ -205,6 +205,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["SHELL"],
         on_path: false,
     },
+    // Its log and database directory, the only writable one its
+    // troubleshooting page names (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "opencode",
+        args: &[],
+        writes: &[crate::RunWrite::Home(".local/share/opencode")],
+    },
     ..HostSpec::BASE
 };
 

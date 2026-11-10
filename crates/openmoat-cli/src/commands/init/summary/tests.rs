@@ -14,6 +14,7 @@ fn agent(id: &str, level: Level) -> Protection {
         gaps: "",
         limit: None,
         required: None,
+        os_sandbox: None,
     }
 }
 

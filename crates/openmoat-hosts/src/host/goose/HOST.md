@@ -96,4 +96,7 @@ the default policy; a changed `hooks.json` is caught on the next call.
 
 ## Sandbox
 
-None: hook only. `openmoat run goose` runs the whole agent in an OS sandbox.
+None: hook only. `openmoat status` names the command that gives it one:
+`openmoat run --write ~/.local/share/goose --write ~/.local/state/goose -- goose`
+(ADR-076). goose's own `config.yaml` stays unwritable there, and what goose does when it
+cannot record a plugin in it is not known.

@@ -54,6 +54,15 @@ pub fn command(bubblewrap: Option<bool>) -> &'static str {
     }
 }
 
+/// [`command`] as a person types it, without the backticks.
+#[must_use]
+pub fn words(bubblewrap: Option<bool>) -> &'static str {
+    match bubblewrap {
+        None => "openmoat run",
+        Some(_) => "openmoat run --isolate",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

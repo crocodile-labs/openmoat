@@ -40,7 +40,11 @@ Each agent's gaps and the reasons are in
   GitHub Copilot CLI, pi, Gemini CLI, OpenCode, Hermes Agent, the Cline CLI, goose, the
   Antigravity CLI, and
   Claude Code and Cursor on native Windows), an allowed call runs with your permissions,
-  so a classifier mistake is a bypass. Claude Code's sandbox covers only `Bash`,
+  so a classifier mistake is a bypass. `openmoat status` and `openmoat doctor` name the
+  `openmoat run` command that puts each of them in an OS sandbox, or say why there is none
+  (macOS before 13, Windows, Linux without bubblewrap; OpenClaw's Gateway and the Continue
+  CLI have no command, [SANDBOX.md](SANDBOX.md#agents-openmoat-writes-no-sandbox-for)).
+  The command is proved with a stand-in program, not the real agent. Claude Code's sandbox covers only `Bash`,
   `PowerShell` and `Monitor`; its file tools, `WebFetch` and MCP servers run outside it.
   Cursor runs some commands outside its sandbox.
 - **A required protection level is checked where the hook runs.** With `require:`

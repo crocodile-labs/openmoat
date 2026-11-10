@@ -147,6 +147,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     tool_token: crate::ToolToken::NotWithheld {
         why: "Cline starts tool commands with `/bin/bash` and the CLI has no setting for it",
     },
+    // `~/.cline` holds all its state, its configuration page says (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "cline",
+        args: &[],
+        writes: &[crate::RunWrite::ConfigDir],
+    },
     ..HostSpec::BASE
 };
 

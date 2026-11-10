@@ -111,6 +111,7 @@ pub(super) fn render(
     }
     let mut table = report::agent_table(agents, &attention, verbose);
     let rows = |place: Place| human.iter().filter(move |p| p.place == place);
+    table.rows.extend(report::os_sandbox_rows(agents));
     table
         .rows
         .extend(rows(Place::Agents).map(|p| p.row.clone()));

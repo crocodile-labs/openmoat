@@ -143,6 +143,13 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["SHELL"],
         on_path: true,
     },
+    // The Hermes home; its own `config.yaml` stays unwritable there, as the
+    // policy says (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "hermes",
+        args: &[],
+        writes: &[crate::RunWrite::ConfigDir],
+    },
     ..HostSpec::BASE
 };
 

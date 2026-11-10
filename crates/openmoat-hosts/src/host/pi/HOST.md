@@ -95,4 +95,5 @@ hook blocks the call.
 
 ## Sandbox
 
-None: hook only.
+None: hook only. `openmoat status` names the command that gives it one:
+`openmoat run --write ~/.pi/agent -- pi` (ADR-076).

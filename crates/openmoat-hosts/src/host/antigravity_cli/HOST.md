@@ -118,5 +118,7 @@ written at 600 s so the guard's own 30 s budget always answers before the host's
 None from OpenMoat: `hook only`. `agy` has its own OS sandbox (`enableTerminalSandbox`,
 `toolPermission: proceed-in-sandbox`, `--sandbox`, off by default, and absent on Windows
 before 11 24H2 and on Linux without unprivileged user namespaces). OpenMoat does not write
-it: the settings name no paths or policy to translate, so `openmoat run -- agy` is the OS
-sandbox OpenMoat offers.
+it: the settings name no paths or policy to translate, so
+`openmoat run --write ~/.gemini/antigravity-cli -- agy` is the OS sandbox OpenMoat offers
+and `openmoat status` names it (ADR-076). It is built from the documentation; `agy` has
+not been run under it, and a sign-in kept in the OS keyring cannot be read inside.

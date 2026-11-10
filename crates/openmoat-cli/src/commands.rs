@@ -119,6 +119,17 @@ pub fn sandboxing_command() -> &'static str {
     run::tier::command(run::bubblewrap())
 }
 
+/// [`sandboxing_command`] as a person types it, without the backticks.
+pub fn sandboxing_words() -> &'static str {
+    run::tier::words(run::bubblewrap())
+}
+
+/// Why `moat run` here would have no network namespace (Linux without a
+/// usable bubblewrap, where it refuses a `--write` path outside the project).
+pub fn run_port_only_network() -> Option<String> {
+    run::port_only_network()
+}
+
 /// Why `openmoat run` cannot sandbox on this machine; `None` when it can.
 pub fn run_unavailable() -> Option<String> {
     run::unavailable()

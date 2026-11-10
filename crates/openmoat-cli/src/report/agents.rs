@@ -75,6 +75,19 @@ pub fn agent_table(agents: &[Protection], attention: &Attention, verbose: bool) 
     table
 }
 
+/// One row per agent at `hook only` that OpenMoat writes no sandbox for here,
+/// on how to reach an OS sandbox (ADR-076): `moat status` and `moat doctor`
+/// only, `moat init` having said enough.
+pub fn os_sandbox_rows(agents: &[Protection]) -> Vec<Row> {
+    agents
+        .iter()
+        .filter_map(|agent| {
+            let sandbox = agent.os_sandbox.as_ref()?;
+            Some(Row::new(Mark::Info, agent.name, sandbox.line()))
+        })
+        .collect()
+}
+
 /// The row under an agent's for the level the policy requires of it: met, or
 /// what is missing and the step that brings the agent there.
 fn required_row(name: &str, required: &Required) -> Row {

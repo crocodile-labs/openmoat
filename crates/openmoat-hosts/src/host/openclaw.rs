@@ -143,6 +143,9 @@ pub(crate) static SPEC: HostSpec = HostSpec {
         vars: &["SHELL"],
         on_path: false,
     },
+    run: crate::RunFacts::Unknown {
+        why: "its Gateway serves a local port, which `openmoat run`'s sandbox does not allow",
+    },
     ..HostSpec::BASE
 };
 

@@ -28,6 +28,7 @@ fn agents() -> Vec<Protection> {
                 gaps: "the agent's own web search is not checked",
                 limit: None,
                 required: None,
+                os_sandbox: None,
             }
         })
         .collect()

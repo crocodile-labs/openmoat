@@ -93,6 +93,8 @@ pub(super) fn hooks(report: &mut Report, home: &Home, binary: &Path) -> Result<V
         // What it means for that agent stays in sight: no hook protects it.
         let text = format!("found at {}; {}", found.display(), host.spec().gaps);
         report.human(Place::Agents, Row::new(Mark::Attention, name, text));
+        let line = crate::protection::os_sandbox_line(home, host)?;
+        report.human(Place::Agents, Row::new(Mark::Info, name, line));
     }
     Ok(hook_files)
 }

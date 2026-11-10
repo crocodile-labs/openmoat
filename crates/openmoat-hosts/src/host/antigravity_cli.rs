@@ -141,6 +141,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     tool_token: crate::ToolToken::NotWithheld {
         why: "its documentation does not say how tool commands and hooks start",
     },
+    // What its MCP page says the CLI writes; `agy` itself was not run (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "agy",
+        args: &[],
+        writes: &[crate::RunWrite::Home(".gemini/antigravity-cli")],
+    },
     ..HostSpec::BASE
 };
 

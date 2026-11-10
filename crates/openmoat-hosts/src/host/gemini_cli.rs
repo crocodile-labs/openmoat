@@ -153,6 +153,12 @@ pub(crate) static SPEC: HostSpec = HostSpec {
     tool_token: crate::ToolToken::NotWithheld {
         why: "Gemini CLI starts tool commands and hooks the same way, with `bash` from `PATH`",
     },
+    // `.gemini` of its configuration reference (ADR-076).
+    run: crate::RunFacts::Known {
+        program: "gemini",
+        args: &[],
+        writes: &[crate::RunWrite::ConfigDir],
+    },
     ..HostSpec::BASE
 };
 

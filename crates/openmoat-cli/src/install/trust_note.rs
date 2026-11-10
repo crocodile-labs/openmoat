@@ -48,6 +48,7 @@ mod tests {
             gaps: "",
             limit: None,
             required: None,
+            os_sandbox: None,
         }
     }
 

@@ -70,4 +70,6 @@ its `<server>-` prefix; reviews become denies in autopilot; no OS sandbox is con
 
 ## Sandbox
 
-None: hook only.
+None: hook only. `openmoat status` names the command that gives it one:
+`openmoat run --write ~/.copilot --write ~/Library/Caches/copilot -- copilot`
+(`~/.cache/copilot` on Linux); its login must then be a key, not the keychain (ADR-076).
