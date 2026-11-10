@@ -311,18 +311,21 @@ fn original_of(entry: &Value, form: McpCommandForm) -> Option<(String, Vec<Strin
     original(&command, &args)
 }
 
-/// Each server's program and `args` as they are to be written, one line each.
+/// Each server's program and `args` as they are to be written, one line each,
+/// for the terminal: a name or argument from the file with control or
+/// hidden characters is shown with `?` in their place.
 fn by_hand(dones: &[&Done]) -> String {
     dones
         .iter()
         .map(|done| {
             let key = form::program_key(done.server.form);
-            format!(
+            let line = format!(
                 "  {}: {key}: {}, args: {}",
                 done.server.name,
                 done.entry[key],
                 done.entry.get("args").unwrap_or(&Value::Null)
-            )
+            );
+            crate::render::clean(&line).into_owned()
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -569,5 +572,28 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("env = { A = \"1\" }"), "{out}");
+    }
+
+    /// A server's name comes from the agent's file: what is set by hand is
+    /// printed without the escape sequences it may hold.
+    #[test]
+    fn what_to_set_by_hand_is_printed_without_escape_sequences() {
+        let name = "gh\u{1b}[2J\u{202e}";
+        let server = Server {
+            id: String::new(),
+            host: Host::EVERY[0],
+            file: PathBuf::from("/c/config.yaml"),
+            pointer: "/mcp_servers/gh".to_owned(),
+            name: name.to_owned(),
+            entry: json!({}),
+            form: FORM,
+        };
+        let entry = wrapped(&json!({"command": "gh"}), Path::new("/b/moat"), name, false).unwrap();
+        let line = by_hand(&[&Done { server, entry }]);
+        assert!(
+            !line.contains('\u{1b}') && !line.contains('\u{202e}'),
+            "{line:?}"
+        );
+        assert!(line.starts_with("  gh?[2J?: command:"), "{line:?}");
     }
 }
