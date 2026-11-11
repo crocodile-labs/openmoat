@@ -5,60 +5,64 @@
 
 use anyhow::{Context as _, Result, bail};
 
-use super::channel::{Channel, Credential, Options, Registry, Spec};
+use super::channel::{Channel, Options, Registry, Secrets, Spec};
 use super::settings::{ChannelSettings, Settings};
 use super::store::Store;
 use crate::proxy_session::Key;
 
-/// Refused unless `options` answers exactly `spec`'s questions, each validly.
-pub fn check_options(spec: &Spec, options: &Options) -> Result<()> {
-    for question in spec.questions {
-        match options.get(question.key) {
-            Some(answer) if (question.valid)(answer) => {}
-            Some(_) => bail!("that is not a valid {} for {}", question.key, spec.title),
-            None => bail!("{} needs {}", spec.title, question.key),
+/// Refused unless `values` holds exactly `spec`'s fields of the kind
+/// `secret`, each one valid. Errors never show a value.
+pub fn check_fields<V: AsRef<str>>(
+    spec: &Spec,
+    secret: bool,
+    values: &std::collections::BTreeMap<String, V>,
+) -> Result<()> {
+    for field in spec.fields.iter().filter(|f| f.secret == secret) {
+        match values.get(field.key) {
+            Some(value) if (field.valid)(value.as_ref()) => {}
+            Some(_) => bail!("that is not a valid {} for {}", field.key, spec.title),
+            None => bail!("{} needs {}", spec.title, field.key),
         }
     }
-    if let Some(extra) = options
-        .keys()
-        .find(|k| !spec.questions.iter().any(|q| q.key == k.as_str()))
-    {
+    if let Some(extra) = values.keys().find(|k| {
+        !spec
+            .fields
+            .iter()
+            .any(|f| f.secret == secret && f.key == k.as_str())
+    }) {
         bail!(
-            "{} has no setting `{}`",
+            "{} has no {} `{}`",
             spec.title,
+            if secret { "secret" } else { "setting" },
             crate::render::clean(extra)
         );
     }
     Ok(())
 }
 
-/// Connect `spec` with `credential` and `options`, requests waiting
-/// `expiry_s`: check the credential's shape and then with the channel's
-/// server, and only then save it, the channel's signed settings and the
+/// Connect `spec` with `secrets` and `options`, requests waiting
+/// `expiry_s`: check every field and then the secrets with the channel's
+/// server, and only then save them, the channel's signed settings and the
 /// settings that make it the connected channel. The account's name.
 pub fn connect(
     store: &Store,
     spec: &'static Spec,
-    credential: &Credential,
+    secrets: &Secrets,
     options: Options,
     expiry_s: u64,
 ) -> Result<String> {
-    if !(spec.valid_credential)(credential) {
-        bail!("that is not a {} credential; nothing was saved", spec.title);
-    }
-    check_options(spec, &options)?;
+    check_fields(spec, true, secrets).context("nothing was saved")?;
+    check_fields(spec, false, &options).context("nothing was saved")?;
     let mut settings = Settings::new(spec.name, expiry_s)?;
-    let account = (spec.open)(credential.clone(), &options)?
-        .account()
-        .with_context(|| {
-            format!(
-                "checking the credential with {}; nothing was saved",
-                spec.title
-            )
-        })?;
+    let account = (spec.open)(secrets, &options)?.account().with_context(|| {
+        format!(
+            "checking the credentials with {}; nothing was saved",
+            spec.title
+        )
+    })?;
     let key = Key::load_or_create_at(&store.key_path())?;
     let files = store.channel(spec);
-    files.put_credential(credential)?;
+    files.put_secrets(secrets)?;
     ChannelSettings::new(spec.name, account.clone(), options).save(&files.settings_path(), &key)?;
     // Approvers stay when the same channel is connected again.
     if let Ok(old) = Settings::load(&store.settings_path(), &key)
@@ -84,10 +88,10 @@ pub fn open(
 ) -> Result<(&'static Spec, Box<dyn Channel>)> {
     let spec = spec(registry, settings)?;
     let files = store.channel(spec);
-    let credential = files.read_credential(spec)?;
+    let secrets = files.read_secrets(spec)?;
     let own = ChannelSettings::load(&files.settings_path(), key, spec.name)?;
-    check_options(spec, &own.options)?;
-    Ok((spec, (spec.open)(credential, &own.options)?))
+    check_fields(spec, false, &own.options)?;
+    Ok((spec, (spec.open)(&secrets, &own.options)?))
 }
 
 /// The connected channel's account name, when its settings read.

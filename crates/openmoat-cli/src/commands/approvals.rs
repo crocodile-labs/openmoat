@@ -17,7 +17,7 @@ use crate::home::Home;
 use crate::proxy_session::Key;
 use crate::remote::{
     AuditRecords, Credential, DEFAULT_EXPIRY_S, Listener, MAX_EXPIRY_S, MIN_EXPIRY_S, Options,
-    REGISTRY, Settings, Spec, Store,
+    REGISTRY, Secrets, Settings, Spec, Store,
 };
 use crate::render::Deferred;
 
@@ -66,21 +66,56 @@ fn ask(ask: &str) -> Result<String> {
     Ok(crate::terminal::read_answer()?.trim().to_owned())
 }
 
-/// The answers to `spec`'s questions: from `--set`, else asked.
-fn options(spec: &Spec, given: &[String]) -> Result<Options> {
+/// `spec`'s fields: settings from `--set`, the one secret from
+/// `--credential-file`, and every other one asked at the terminal. A secret
+/// is never taken from the command line, which other programs can read.
+fn fields(spec: &Spec, args: &ConnectArgs) -> Result<(Secrets, Options)> {
+    let mut secrets = Secrets::new();
     let mut options = Options::new();
-    for pair in given {
+    for pair in &args.options {
         let (key, value) = pair
             .split_once('=')
             .with_context(|| format!("--set {pair} is not KEY=VALUE"))?;
-        options.insert(key.trim().to_owned(), value.trim().to_owned());
+        let key = key.trim();
+        if spec.fields.iter().any(|f| f.secret && f.key == key) {
+            bail!(
+                "`{key}` is a secret: it is asked at the terminal or read with \
+                 --credential-file, never given on the command line"
+            );
+        }
+        options.insert(key.to_owned(), value.trim().to_owned());
     }
-    for question in spec.questions {
-        if !options.contains_key(question.key) {
-            options.insert(question.key.to_owned(), ask(question.ask)?);
+    if let Some(path) = &args.credential_file {
+        let mut secret = spec.fields.iter().filter(|f| f.secret);
+        let (Some(only), None) = (secret.next(), secret.next()) else {
+            bail!(
+                "--credential-file reads one secret; {} takes another number, asked at \
+                 the terminal",
+                spec.title
+            );
+        };
+        let text = Credential::new(
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?,
+        );
+        secrets.insert(only.key.to_owned(), Credential::new(text.trim().to_owned()));
+    }
+    for field in spec.fields {
+        let have = if field.secret {
+            secrets.contains_key(field.key)
+        } else {
+            options.contains_key(field.key)
+        };
+        if have {
+            continue;
+        }
+        let answer = Credential::new(ask(field.ask)?);
+        if field.secret {
+            secrets.insert(field.key.to_owned(), answer);
+        } else {
+            options.insert(field.key.to_owned(), answer.to_string());
         }
     }
-    Ok(options)
+    Ok((secrets, options))
 }
 
 /// `openmoat approvals connect <channel>`.
@@ -97,18 +132,8 @@ pub fn connect(args: &ConnectArgs) -> Result<Code> {
             })?,
     };
     let (_home, store) = store()?;
-    let credential = if let Some(path) = &args.credential_file {
-        Credential::new(
-            std::fs::read_to_string(path)
-                .with_context(|| format!("reading {}", path.display()))?
-                .trim()
-                .to_owned(),
-        )
-    } else {
-        Credential::new(ask(spec.ask_credential)?)
-    };
-    let options = options(spec, &args.options)?;
-    let account = crate::remote::connect(&store, spec, &credential, options, expiry_s)?;
+    let (secrets, options) = fields(spec, args)?;
+    let account = crate::remote::connect(&store, spec, &secrets, options, expiry_s)?;
     let mut out = Deferred::default();
     writeln!(
         out,

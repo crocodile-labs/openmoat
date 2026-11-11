@@ -32,7 +32,7 @@ use anyhow::Result;
 use openmoat_audit::NewEvent;
 use openmoat_core::Decision;
 
-pub use channel::{Credential, Options, Spec};
+pub use channel::{Credential, Options, Secrets, Spec};
 pub use channels::REGISTRY;
 pub use connect::{account, connect, credential_problem, disconnect, open};
 pub use gate::gate;

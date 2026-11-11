@@ -10,11 +10,15 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use zeroize::Zeroizing;
 
-/// A channel's secret (a bot token, an app token), zeroed on drop.
+/// One secret value (a bot token, an app token), zeroed on drop.
 pub type Credential = Zeroizing<String>;
 
-/// The non-secret answers a person gave at `connect` ([`Spec::questions`]),
-/// by key; signed with the approval key in the channel's own settings.
+/// A channel's secret fields ([`Field::secret`]) by key, kept owner-only in
+/// `<channel>/credential`, never in a signed or readable settings file.
+pub type Secrets = BTreeMap<String, Credential>;
+
+/// A channel's other fields by key; signed with the approval key in the
+/// channel's own settings.
 pub type Options = BTreeMap<String, String>;
 
 /// What a channel can do; the core shapes every message to fit it.
@@ -43,14 +47,18 @@ impl Capabilities {
 /// framing, both reply codes and enough of the call to judge it.
 pub const MIN_TEXT: usize = 1024;
 
-/// A question `connect` asks the person, beyond the credential.
+/// One value `connect` takes for a channel, declared as data so one generic
+/// prompt, one store and one check serve every channel.
 #[derive(Debug, Clone, Copy)]
-pub struct Question {
-    /// The key the answer is kept under in [`Options`].
+pub struct Field {
+    /// The key it is kept under: lowercase letters, digits and `_`.
     pub key: &'static str,
-    /// What the person is asked.
+    /// What the person is asked at the terminal.
     pub ask: &'static str,
-    /// Whether an answer is acceptable.
+    /// A secret: asked at the terminal or read from a file, never taken as a
+    /// command-line argument, stored owner-only in [`Secrets`], never shown.
+    pub secret: bool,
+    /// Whether a value is acceptable; checked at `connect` and every load.
     pub valid: fn(&str) -> bool,
 }
 
@@ -63,20 +71,15 @@ pub struct Spec {
     /// The name people read (`connect`'s output, help).
     pub title: &'static str,
     pub capabilities: Capabilities,
-    /// What `connect` asks for when no credential file is given.
-    pub ask_credential: &'static str,
-    /// Whether text has the shape of this channel's credential; checked
-    /// before anything is saved or sent.
-    pub valid_credential: fn(&str) -> bool,
-    /// Further settings `connect` asks for; none for most channels.
-    pub questions: &'static [Question],
+    /// What `connect` takes, secret or not, in the order it asks.
+    pub fields: &'static [Field],
     /// What a user id on this channel looks like, for errors.
     pub user_id: &'static str,
     /// Whether text is a user id on this channel (without the `name:` prefix).
     pub valid_user: fn(&str) -> bool,
-    /// The channel, ready to use with `credential` and `options`. No network
-    /// I/O happens before a method is called.
-    pub open: fn(Credential, &Options) -> Result<Box<dyn Channel>>,
+    /// The channel, ready to use with its checked secrets and options. No
+    /// network I/O happens before a method is called.
+    pub open: fn(&Secrets, &Options) -> Result<Box<dyn Channel>>,
     /// What the person does after `connect`, given the channel's account name.
     pub next_steps: fn(&str) -> String,
     /// How to revoke the credential after `disconnect`.
@@ -188,10 +191,18 @@ impl Registry {
             if spec.capabilities.max_text < MIN_TEXT {
                 bail!("{name}: messages under {MIN_TEXT} characters cannot hold a prompt");
             }
-            let keys: std::collections::BTreeSet<_> =
-                spec.questions.iter().map(|q| q.key).collect();
-            if keys.len() != spec.questions.len() {
-                bail!("{name}: two questions share a key");
+            let keys: std::collections::BTreeSet<_> = spec.fields.iter().map(|f| f.key).collect();
+            if keys.len() != spec.fields.len() {
+                bail!("{name}: two fields share a key");
+            }
+            if let Some(field) = spec.fields.iter().find(|f| {
+                f.key.is_empty()
+                    || !f
+                        .key
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+            }) {
+                bail!("{name}: `{}` cannot name a field", field.key);
             }
         }
         Ok(())

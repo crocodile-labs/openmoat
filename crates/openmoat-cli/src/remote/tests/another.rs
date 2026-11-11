@@ -13,7 +13,7 @@ use openmoat_core::Verdict;
 
 use super::super::answer::{self, Answer};
 use super::super::channel::{
-    Capabilities, Channel, Credential, Options, Prompt, Question, Registry, Reply, Spec,
+    Capabilities, Channel, Credential, Field, Options, Prompt, Registry, Reply, Secrets, Spec,
 };
 use super::super::listen::Listener;
 use super::super::settings::{DEFAULT_EXPIRY_S, Settings};
@@ -27,7 +27,7 @@ thread_local! {
     static INBOX: RefCell<VecDeque<Reply>> = const { RefCell::new(VecDeque::new()) };
 }
 
-/// A text-only pager: no buttons, short messages, one setting.
+/// A text-only pager: no buttons, short messages, two secrets and one setting.
 static PAGER: Spec = Spec {
     name: "pager",
     title: "Pager",
@@ -36,16 +36,30 @@ static PAGER: Spec = Spec {
         button_bytes: 0,
         max_text: 1200,
     },
-    ask_credential: "Pager key: ",
-    valid_credential: |c| c.starts_with("pk-") && c.len() > 8,
-    questions: &[Question {
-        key: "room",
-        ask: "Room: ",
-        valid: |r| !r.is_empty() && r.bytes().all(|b| b.is_ascii_lowercase()),
-    }],
+    fields: &[
+        Field {
+            key: "key",
+            ask: "Pager key: ",
+            secret: true,
+            valid: |c| c.starts_with("pk-") && c.len() > 8,
+        },
+        Field {
+            key: "signing_secret",
+            ask: "Signing secret: ",
+            secret: true,
+            valid: |c| c.len() >= 16,
+        },
+        Field {
+            key: "room",
+            ask: "Room: ",
+            secret: false,
+            valid: |r| !r.is_empty() && r.bytes().all(|b| b.is_ascii_lowercase()),
+        },
+    ],
     user_id: "a pager number",
     valid_user: |id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()),
-    open: |_: Credential, options: &Options| {
+    open: |secrets: &Secrets, options: &Options| {
+        anyhow::ensure!(secrets.get("key").is_some_and(|k| k.as_str() == KEY));
         anyhow::ensure!(options.get("room").map(String::as_str) == Some("ops"));
         Ok(Box::new(Pager))
     },
@@ -74,6 +88,20 @@ impl Channel for Pager {
     }
 }
 
+/// Made up for the test.
+const KEY: &str = "pk-12345678";
+const SIGNING: &str = "0123456789abcdef";
+
+fn secrets_of(key: &str, signing: &str) -> Secrets {
+    Secrets::from([
+        ("key".to_owned(), Credential::new(key.to_owned())),
+        (
+            "signing_secret".to_owned(),
+            Credential::new(signing.to_owned()),
+        ),
+    ])
+}
+
 /// This build's channels and the pager.
 fn registry() -> Registry {
     let all: Vec<&'static Spec> = REGISTRY.0.iter().copied().chain([&PAGER]).collect();
@@ -97,30 +125,28 @@ fn a_second_channel_works_through_the_unchanged_core() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path().join(DIR));
     let room = |r: &str| Options::from([("room".to_owned(), r.to_owned())]);
-    let key_of = |c: &str| Credential::new(c.to_owned());
 
-    // Nothing is saved for a bad credential or a missing or bad setting.
-    for (credential, options) in [
-        ("nope", room("ops")),
-        ("pk-12345678", Options::new()),
-        ("pk-12345678", room("Ops!")),
+    // Nothing is saved for a bad or missing secret, a missing or bad setting,
+    // or a secret given as a setting.
+    let mut as_setting = room("ops");
+    as_setting.insert("key".to_owned(), KEY.to_owned());
+    for (secrets, options) in [
+        (secrets_of("nope", SIGNING), room("ops")),
+        (
+            Secrets::from([("key".to_owned(), Credential::new(KEY.to_owned()))]),
+            room("ops"),
+        ),
+        (secrets_of(KEY, SIGNING), Options::new()),
+        (secrets_of(KEY, SIGNING), room("Ops!")),
+        (secrets_of(KEY, SIGNING), as_setting),
     ] {
-        assert!(
-            connect(
-                &store,
-                pager,
-                &key_of(credential),
-                options,
-                DEFAULT_EXPIRY_S
-            )
-            .is_err()
-        );
+        assert!(connect(&store, pager, &secrets, options, DEFAULT_EXPIRY_S).is_err());
         assert!(!store.connected());
     }
     let account = connect(
         &store,
         pager,
-        &key_of("pk-12345678"),
+        &secrets_of(KEY, SIGNING),
         room("ops"),
         DEFAULT_EXPIRY_S,
     )
@@ -129,6 +155,24 @@ fn a_second_channel_works_through_the_unchanged_core() {
     let files = store.channel(pager);
     assert!(files.dir().ends_with("remote/pager"));
     assert!(files.credential_path().is_file() && files.settings_path().is_file());
+    // The secrets are in the credential file only, and read back checked.
+    let settings_text = std::fs::read_to_string(files.settings_path()).unwrap();
+    assert!(!settings_text.contains(KEY) && !settings_text.contains(SIGNING));
+    assert!(
+        settings_text.contains("\"room\": \"ops\""),
+        "{settings_text}"
+    );
+    let read = files.read_secrets(pager).unwrap();
+    assert_eq!(
+        read.get("signing_secret").map(|s| s.as_str()),
+        Some(SIGNING)
+    );
+    crate::home::write_private(&files.credential_path(), br#"{"key":"pk-12345678"}"#).unwrap();
+    let missing = format!("{:#}", files.read_secrets(pager).unwrap_err());
+    assert!(!missing.contains(KEY), "{missing}");
+    crate::home::write_private(&files.credential_path(), b"pk-12345678").unwrap();
+    assert!(files.read_secrets(pager).is_err());
+    files.put_secrets(&secrets_of(KEY, SIGNING)).unwrap();
 
     // Approver ids are qualified with the channel; another channel's are refused.
     assert_eq!(registry.approver(pager, "77").unwrap(), "pager:77");
@@ -202,7 +246,7 @@ fn ids_of_two_channels_never_collide() {
     connect(
         &store,
         pager,
-        &Credential::new("pk-12345678".to_owned()),
+        &secrets_of(KEY, SIGNING),
         options,
         DEFAULT_EXPIRY_S,
     )

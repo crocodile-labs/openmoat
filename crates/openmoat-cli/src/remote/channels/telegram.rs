@@ -16,7 +16,9 @@ use anyhow::{Context as _, Result, bail};
 use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
-use crate::remote::channel::{Capabilities, Channel, Credential, Options, Prompt, Reply, Spec};
+use crate::remote::channel::{
+    Capabilities, Channel, Credential, Field, Options, Prompt, Reply, Secrets, Spec,
+};
 use crate::remote::https;
 
 /// The channel, as the registry lists it.
@@ -28,9 +30,12 @@ pub const SPEC: Spec = Spec {
         button_bytes: 64,
         max_text: MAX_TEXT,
     },
-    ask_credential: "Paste the bot's token from @BotFather, then Enter: ",
-    valid_credential: valid_token,
-    questions: &[],
+    fields: &[Field {
+        key: TOKEN,
+        ask: "Paste the bot's token from @BotFather, then Enter: ",
+        secret: true,
+        valid: valid_token,
+    }],
     user_id: "a Telegram user id (a number)",
     valid_user,
     open,
@@ -38,14 +43,17 @@ pub const SPEC: Spec = Spec {
     revoke: "revoke the bot's token with @BotFather if it may have been seen",
 };
 
+/// The one secret: the bot's token.
+const TOKEN: &str = "token";
 const API_HOST: &str = "api.telegram.org";
 /// What a request may take beyond the long poll it asks for.
 const SLACK: Duration = Duration::from_secs(15);
 /// Telegram's longest message text.
 const MAX_TEXT: usize = 4096;
 
-fn open(token: Credential, _: &Options) -> Result<Box<dyn Channel>> {
-    Ok(Box::new(Telegram::new(Https::new(token)?)))
+fn open(secrets: &Secrets, _: &Options) -> Result<Box<dyn Channel>> {
+    let token = secrets.get(TOKEN).context("the bot's token is missing")?;
+    Ok(Box::new(Telegram::new(Https::new(token.clone())?)))
 }
 
 fn next_steps(bot: &str) -> String {

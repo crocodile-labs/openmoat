@@ -159,15 +159,25 @@ fn a_token_file_others_may_read_is_refused() {
     let files = crate::remote::Store::at(dir.path().join("remote")).channel(&SPEC);
     let path = files.credential_path();
     assert!(path.ends_with("remote/telegram/credential"), "{path:?}");
-    files.put_credential(&Credential::new(token())).unwrap();
-    assert_eq!(files.read_credential(&SPEC).unwrap().as_str(), token());
+    let secrets = Secrets::from([(TOKEN.to_owned(), Credential::new(token()))]);
+    files.put_secrets(&secrets).unwrap();
+    let read = files.read_secrets(&SPEC).unwrap();
+    assert_eq!(read.get(TOKEN).map(|t| t.as_str()), Some(token().as_str()));
+    assert!(open(&read, &Options::new()).is_ok());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-        let error = files.read_credential(&SPEC).unwrap_err();
+        let error = files.read_secrets(&SPEC).unwrap_err();
         assert!(!format!("{error:#}").contains(&token()));
     }
-    crate::home::write_private(&path, b"not a token").unwrap();
-    assert!(files.read_credential(&SPEC).is_err());
+    for bad in [
+        &b"not json"[..],
+        br#"{"token":"not a token"}"#,
+        br#"{"token":1}"#,
+    ] {
+        crate::home::write_private(&path, bad).unwrap();
+        let error = files.read_secrets(&SPEC).unwrap_err();
+        assert!(!format!("{error:#}").contains("not a token"), "{error:#}");
+    }
 }

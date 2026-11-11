@@ -88,6 +88,10 @@ fn every_channel_folder_is_registered() {
     for entry in fs::read_dir(channels_dir()).unwrap() {
         let path = entry.unwrap().path();
         let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
+        // A file manager's hidden files (`.DS_Store`) are not source.
+        if stem.starts_with('.') {
+            continue;
+        }
         assert!(
             names.contains(&stem),
             "{} is not a channel: a folder needs its `<name>.rs` and a registry row",

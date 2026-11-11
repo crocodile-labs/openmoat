@@ -67,7 +67,9 @@ trait Signed: Serialize + DeserializeOwned + Clone {
     }
 }
 
+/// Read strictly: a field this release does not know is refused at load.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Settings {
     pub version: u32,
     /// The connected channel's name, as its [`super::channel::Spec`] gives it.
@@ -150,7 +152,10 @@ impl Settings {
 }
 
 /// A channel's own settings, beside its credential.
+/// Read strictly, and its options checked against the channel's fields
+/// whenever the channel is opened.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ChannelSettings {
     pub version: u32,
     /// The channel's name, so one channel's file never serves another.

@@ -19,7 +19,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, bail};
 
 use super::answer::Answer;
-use super::channel::{Credential, Spec};
+use zeroize::Zeroizing;
+
+use super::channel::{Credential, Secrets, Spec};
 use super::request::Request;
 use crate::home::{Home, write_private, write_private_new};
 
@@ -51,7 +53,7 @@ impl ChannelFiles {
         &self.dir
     }
 
-    /// Where the channel's secret is kept.
+    /// Where the channel's secrets are kept.
     pub fn credential_path(&self) -> PathBuf {
         self.dir.join(CREDENTIAL_FILE)
     }
@@ -61,25 +63,44 @@ impl ChannelFiles {
         self.dir.join(SETTINGS_FILE)
     }
 
-    /// The credential, refused when others may read it (`key_file::read`) or
-    /// when it is not shaped as `spec`'s.
-    pub fn read_credential(&self, spec: &Spec) -> Result<Credential> {
+    /// The channel's secrets, refused when others may read the file
+    /// (`key_file::read`), when it is not a JSON object of strings, or when
+    /// it does not hold exactly `spec`'s secret fields, each valid. No error
+    /// shows a byte of it.
+    pub fn read_secrets(&self, spec: &Spec) -> Result<Secrets> {
         let path = self.credential_path();
         let text = crate::key_file::read(&path)?;
-        let credential = Credential::new(text.trim().to_owned());
-        if !(spec.valid_credential)(&credential) {
-            bail!(
-                "{} does not hold a {} credential",
+        let refused = || {
+            format!(
+                "{} does not hold {} credentials",
                 path.display(),
                 spec.title
-            );
+            )
+        };
+        let Ok(serde_json::Value::Object(map)) = serde_json::from_str(&text) else {
+            bail!(refused());
+        };
+        let mut secrets = Secrets::new();
+        for (key, value) in map {
+            let serde_json::Value::String(value) = value else {
+                bail!(refused());
+            };
+            secrets.insert(key, Credential::new(value));
         }
-        Ok(credential)
+        super::connect::check_fields(spec, true, &secrets).with_context(refused)?;
+        Ok(secrets)
     }
 
-    /// Write `credential`, owner-only.
-    pub fn put_credential(&self, credential: &Credential) -> Result<()> {
-        write_private(&self.credential_path(), credential.as_bytes())
+    /// Write `secrets`, owner-only, as one JSON object.
+    pub fn put_secrets(&self, secrets: &Secrets) -> Result<()> {
+        let object: serde_json::Map<String, serde_json::Value> = secrets
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.to_string())))
+            .collect();
+        let text = Zeroizing::new(
+            serde_json::to_string(&object).context("encoding the channel's credentials")?,
+        );
+        write_private(&self.credential_path(), text.as_bytes())
     }
 
     /// Remove the folder; whether there was one.

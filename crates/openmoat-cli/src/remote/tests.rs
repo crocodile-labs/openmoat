@@ -9,7 +9,7 @@ use openmoat_core::{Decision, Verdict};
 use openmoat_hosts::{HookRequest, Host};
 
 use super::answer::{self, Answer};
-use super::channel::{Capabilities, Channel, Credential, Options, Prompt, Reply, Spec};
+use super::channel::{Capabilities, Channel, Options, Prompt, Reply, Secrets, Spec};
 use super::listen::{Listener, Records, Row};
 use super::request::Request;
 use super::settings::{DEFAULT_EXPIRY_S, Settings};
@@ -36,12 +36,10 @@ static FAKE: Spec = Spec {
         button_bytes: 64,
         max_text: 4096,
     },
-    ask_credential: "",
-    valid_credential: |c| c == "fake-credential",
-    questions: &[],
+    fields: &[],
     user_id: "a number",
     valid_user: |id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()),
-    open: |_: Credential, _: &Options| Ok(Box::new(Fake::default())),
+    open: |_: &Secrets, _: &Options| Ok(Box::new(Fake::default())),
     next_steps: |_| String::new(),
     revoke: "",
 };

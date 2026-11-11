@@ -41,12 +41,12 @@ pub struct ConnectArgs {
     /// The channel (docs/APPROVALS.md describes each).
     #[arg(value_parser = channel_names())]
     pub channel: String,
-    /// Read the channel's credential (a bot or app token) from this file instead of the
-    /// terminal (delete it afterwards).
+    /// Read the channel's secret (a bot token) from this file instead of the terminal, for
+    /// a channel with one secret (delete the file afterwards).
     #[arg(long, value_name = "FILE", alias = "token-file")]
     pub credential_file: Option<PathBuf>,
-    /// A setting the channel asks for at `connect`, as KEY=VALUE; asked at the terminal
-    /// when not given. Most channels have none.
+    /// A setting the channel takes at `connect`, as KEY=VALUE; asked at the terminal when
+    /// not given. Never a secret. Most channels have none.
     #[arg(long = "set", value_name = "KEY=VALUE")]
     pub options: Vec<String>,
     /// How long a request waits for an answer: 1 to 60 minutes (`5m`, `90s`, `1h`);
