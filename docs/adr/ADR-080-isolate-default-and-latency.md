@@ -143,3 +143,32 @@ time (34 ms at best on the development Mac, an older and loaded machine; the spl
 measured on a runner, where a whole call takes 15 to 20 ms on Linux). Keeping a
 compiled policy between calls would need its own integrity binding to the lock and is not
 part of this decision.
+
+## Decision 3: a long-session bench in the weekly job
+
+`scripts/ci/guard-long-session.py` runs 3,000 hook decisions in one Claude Code session,
+each recorded in the audit log: reads and writes of distinct files, `git status` and a
+denied exfiltration in turn (a wrong decision stops the bench, since its timings would
+mean nothing). It reports per window of 500 calls:
+
+1. **Hook processes**, one `openmoat guard` per call as a host runs it: end to end and the
+   guard's own time (median / p95), each process's peak resident memory from the kernel
+   (`wait4`), and the audit log's size.
+2. **A directory change.** The same session then goes on for one window from the project's
+   `src/`, as an agent's `cd` does. Its first call and the window are reported on their
+   own and not judged: the session's taint is folded per working directory, so the first
+   call from a new one may fold the whole session once. What it measures is how much that
+   costs late in a long session.
+3. **A long-lived `openmoat run`.** A driver started as the run's program sends the same
+   calls through `openmoat guard` inside the sandbox, which relays each to the run
+   (ADR-028); the run process lives for the whole session and its resident memory is
+   sampled from outside (`ps`). It runs `--no-isolate`, so the process measured is the
+   run itself. Where `openmoat run` cannot start it says so; the weekly Linux job passes
+   `--require-run`, which makes that an error.
+
+It fails only on a clear trend: the last window's own p95 above 1.5 times the first's and
+5 ms over it, a hook process's median peak memory grown by more than 8 MiB, or the run
+process grown by more than 32 MiB after its first window. It runs weekly on
+`ubuntu-latest` and `macos-15` (not a required check). Only that job can show the numbers;
+nothing of it ran on the development machine, whose `openmoat init` refuses to run under an
+agent.
