@@ -31,7 +31,8 @@ fn a_grant_without_a_row_is_ordered_by_time() {
     assert!(!after_read(1_000, None, 2_000, Some(5)));
 }
 
-const POLICY: &str = "version: 1\ndefaults: { \"*\": allow }\n";
+const POLICY: &str = "version: 1\ndefaults: { \"*\": allow }\nreview:\n  - { id: secrets-paths, \
+                      fs.read: [\"~/.ssh/**\"] }\n";
 const CWDS: [&str; 2] = ["/p/a", "/p/b"];
 
 fn ctx(cwd: &str) -> EvalContext {
@@ -47,13 +48,19 @@ fn ctx(cwd: &str) -> EvalContext {
 }
 
 fn record(store: &Store, cwd: &str, action: &Action) {
+    record_in(store, Some(cwd), action);
+}
+
+/// Record a call that ran in `cwd`, or, with `None`, one recorded without a
+/// working directory, as some hosts' calls and older builds' rows are.
+fn record_in(store: &Store, cwd: Option<&str>, action: &Action) {
     let decision = Decision::new(Verdict::Allow);
     store
         .record(&NewEvent {
             host: Host::ClaudeCode.id(),
             session_id: "s1",
             call_id: None,
-            cwd: Some(cwd),
+            cwd,
             tool: "tool",
             action: Some(action),
             decision: &decision,
@@ -135,6 +142,106 @@ fn alternating_directories_fold_each_event_a_bounded_number_of_times() {
     );
 }
 
+/// A directory change reads on from the row every directory shares, as long
+/// as no call of the session was recorded without a directory: the first call
+/// in the new directory folds only what came since, and answers what a full
+/// fold there would.
+#[test]
+fn a_directory_change_reads_on_from_the_shared_row() {
+    const EVENTS: usize = 2_000;
+    let store = Store::open_in_memory().unwrap();
+    for i in 0..EVENTS {
+        record(&store, CWDS[0], &read(format!("/p/a/f{i}.rs")));
+    }
+    let (_, folded) = call(&store, CWDS[0], far()).unwrap();
+    assert_eq!(folded, EVENTS);
+    record(&store, CWDS[0], &read("/p/a/next.rs".to_owned()));
+    let (taint, folded) = call(&store, CWDS[1], far()).unwrap();
+    assert_eq!(folded, 1, "the call in the new directory read on");
+    assert_eq!(taint, reference(&store, CWDS[1]));
+    assert!(!taint.cwdless);
+}
+
+/// A call recorded without a directory is taken to have run where the call
+/// being decided runs, so once the session has one, a directory reads on only
+/// from its own row: the first call in another directory folds the session
+/// from its first event, and the shared row is never moved on with it.
+#[test]
+fn a_call_without_a_directory_keeps_each_directory_to_its_own_row() {
+    let store = Store::open_in_memory().unwrap();
+    for i in 0..10 {
+        record(&store, CWDS[0], &read(format!("/p/a/f{i}.rs")));
+    }
+    record_in(&store, None, &read("rel.rs".to_owned()));
+    let (taint, folded) = call(&store, CWDS[0], far()).unwrap();
+    assert_eq!(folded, 11);
+    assert!(taint.cwdless);
+    let (taint, folded) = call(&store, CWDS[1], far()).unwrap();
+    assert_eq!(folded, 11, "another directory folds from the first event");
+    assert_eq!(taint, reference(&store, CWDS[1]));
+    record(&store, CWDS[1], &read("/p/b/next.rs".to_owned()));
+    for cwd in CWDS {
+        let (taint, folded) = call(&store, cwd, far()).unwrap();
+        assert_eq!(folded, 1, "{cwd} read on from its own row");
+        assert_eq!(taint, reference(&store, cwd));
+    }
+}
+
+/// The cached fold answers what a fold of the whole session from its first
+/// event answers, in every directory, at every call: over a session whose
+/// calls ran in several directories, some recorded without one, read files by
+/// a path relative to their directory (a secret only from one of them) and
+/// fetched untrusted content, decided from directories in turn, with calls
+/// stopped by their deadline and `PostToolUse` catch-ups between them.
+#[test]
+fn the_cached_fold_is_a_full_fold_in_every_directory() {
+    const DIRS: [&str; 3] = ["/p/a", "/p/b", "/home/u/work"];
+    let store = Store::open_in_memory().unwrap();
+    let policy = Policy::parse(POLICY).unwrap();
+    // a fixed pseudo-random sequence, so a failure replays
+    let mut seed: u64 = 0x5eed;
+    let mut next = |n: usize| {
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        usize::try_from(seed >> 33).unwrap() % n
+    };
+    let mut differed = false;
+    for step in 0..400 {
+        let recorded = match next(5) {
+            4 => None,
+            d => Some(DIRS[d % DIRS.len()]),
+        };
+        let action = match next(20) {
+            0 => Action::Fetch {
+                url: format!("https://example.com/{step}"),
+            },
+            1..=3 => read("../.ssh/id_rsa".to_owned()),
+            4..=6 => read(format!("f{step}.rs")),
+            _ => read(format!("/p/a/f{step}.rs")),
+        };
+        // Untrusted content late, so most of the session is folded clean.
+        if step > 40 || !matches!(action, Action::Fetch { .. }) {
+            record_in(&store, recorded, &action);
+        }
+        let cwd = DIRS[next(DIRS.len())];
+        match next(6) {
+            0 => assert!(call(&store, cwd, Instant::now()).is_err(), "step {step}"),
+            1 => {
+                let compiled = CompiledPolicy::compile(&policy, &ctx(cwd)).unwrap();
+                catch_up(&store, Host::ClaudeCode, "s1", &compiled, cwd, far());
+            }
+            _ => {
+                let (taint, _) = call(&store, cwd, far()).unwrap();
+                assert_eq!(taint, reference(&store, cwd), "step {step} in {cwd}");
+            }
+        }
+        let folds: Vec<SessionTaint> = DIRS.iter().map(|d| reference(&store, d)).collect();
+        differed |= folds.iter().any(|f| f.taint != folds[0].taint);
+    }
+    assert!(differed, "no step's fold depended on the directory");
+}
+
 /// A session that read untrusted content in one directory is tainted for a
 /// protected write in another, with or without the cache, at every call.
 #[test]
@@ -205,9 +312,21 @@ fn an_interrupted_fold_never_answers_cleaner() {
     assert!(tainted.taint.untrusted.is_some());
     assert_eq!(tainted, reference(&store, CWDS[0]));
 
-    // A row saved part way through another directory's fold.
+    // A row saved part way through a fold, read on from another directory
+    // (the same session in a log where no call was decided yet).
+    let store = Store::open_in_memory().unwrap();
+    for n in 0..10 {
+        record(&store, CWDS[0], &read(format!("/p/a/f{n}.rs")));
+    }
+    record(
+        &store,
+        CWDS[0],
+        &Action::Fetch {
+            url: "https://example.com/page".to_owned(),
+        },
+    );
     let policy = Policy::parse(POLICY).unwrap();
-    let compiled = CompiledPolicy::compile(&policy, &ctx(CWDS[1])).unwrap();
+    let compiled = CompiledPolicy::compile(&policy, &ctx(CWDS[0])).unwrap();
     let events = store.session_after("s1", EventId(0)).unwrap();
     let (head, _) = events.split_at(5);
     let mut partial = SessionTaint::default();
@@ -216,7 +335,7 @@ fn an_interrupted_fold_never_answers_cleaner() {
         head,
         Host::ClaudeCode,
         &compiled,
-        CWDS[1],
+        CWDS[0],
         &mut Pass::default(),
     )
     .unwrap();
@@ -225,7 +344,7 @@ fn an_interrupted_fold_never_answers_cleaner() {
         session: "s1".to_owned(),
         host: Host::ClaudeCode,
         cached: openmoat_audit::Cached {
-            digest: digest(Host::ClaudeCode, &compiled, CWDS[1]).unwrap(),
+            digest: digest(Host::ClaudeCode, &compiled).unwrap(),
             upto: head[4].id,
             state: serde_json::to_string(&partial).unwrap(),
         },

@@ -6,7 +6,7 @@
 //! the fold depends on and folds from the first event when there is none, and
 //! a cache that cannot be read is treated as absent. A session keeps one row
 //! per digest (up to `ROWS_PER_SESSION`), so calls of one session that fold
-//! under different digests, such as calls from two working directories, each
+//! under different digests, such as calls under two policies, each
 //! read on from their own row instead of replacing each other's. The table is
 //! created on first write, so the schema version (and older builds' view of
 //! the database) is unchanged; the `session_cache` table older builds wrote,
@@ -30,8 +30,9 @@ const TABLE: &str = "CREATE TABLE IF NOT EXISTS session_folds (
 )";
 
 /// The rows one session keeps on one host; the least recently written goes
-/// first. Each digest is a working directory or a policy the session's calls
-/// were decided under, so a handful covers a session.
+/// first. Each digest is a policy (or, for a fold that holds a call recorded
+/// without a directory, a working directory) the session's calls were decided
+/// under, so a handful covers a session.
 const ROWS_PER_SESSION: i64 = 16;
 
 /// A session's folded state as of event `upto`, computed under `digest`.
