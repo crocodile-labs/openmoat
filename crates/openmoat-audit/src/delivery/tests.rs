@@ -200,3 +200,47 @@ fn otlp_logs_follow_the_json_protobuf_encoding() {
         serde_json::json!({"intValue": "2"})
     );
 }
+
+/// A collector's success names the records it rejected in either spelling
+/// and either number form; a count of zero, an empty body or another
+/// document names none.
+#[test]
+fn an_otlp_partial_success_names_the_rejected_records() {
+    let rejected = |body: &str| otlp_rejected(body.as_bytes());
+    assert_eq!(
+        rejected(r#"{"partialSuccess":{"rejectedLogRecords":"3","errorMessage":"too old"}}"#),
+        Some(Rejected {
+            count: 3,
+            message: "too old".to_owned()
+        })
+    );
+    assert_eq!(
+        rejected(r#"{"partial_success":{"rejected_log_records":2}}"#),
+        Some(Rejected {
+            count: 2,
+            message: String::new()
+        })
+    );
+    for none in [
+        "",
+        "{}",
+        "not json",
+        r#"{"partialSuccess":{}}"#,
+        r#"{"partialSuccess":{"rejectedLogRecords":"0","errorMessage":"a warning"}}"#,
+        r#"{"partialSuccess":{"rejectedLogRecords":"-1"}}"#,
+        r#"{"partialSuccess":{"rejectedLogRecords":true}}"#,
+    ] {
+        assert_eq!(rejected(none), None, "{none}");
+    }
+    let gap = Gap {
+        first: EventId(1),
+        last: EventId(0x1f),
+        count: 3,
+        reason: GapReason::Rejected,
+    };
+    assert!(
+        gap.describe().starts_with("3 log record(s)"),
+        "{}",
+        gap.describe()
+    );
+}

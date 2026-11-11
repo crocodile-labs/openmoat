@@ -12,7 +12,9 @@
 //!   name pointed at the metadata service gets no audit log. Private and
 //!   loopback addresses pass: a collector usually lives there.
 //! - No redirect is followed, no proxy variable is read, and only the
-//!   response's status line and headers are read, up to a limit.
+//!   response's status line and headers are read, up to a limit, and the
+//!   body of an accepted answer, up to [`MAX_BODY`]: an OTLP collector says
+//!   there which records it rejected.
 //!
 //! Plain `std::net` and rustls, one connection per request with deadlines,
 //! as the rest of this crate.
@@ -24,6 +26,11 @@ use std::time::Duration;
 
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
+
+mod body;
+
+use body::Framing;
+pub use body::MAX_BODY;
 
 use crate::decide::{self, Forbidden};
 use crate::tls::{Roots, TlsError};
@@ -195,12 +202,16 @@ fn split_port(authority: &str, default: u16) -> Option<(String, u16)> {
 }
 
 /// What the endpoint answered.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Answer {
     /// The HTTP status code.
     pub status: u16,
     /// `Retry-After` in seconds, when it gave one in that form.
     pub retry_after_s: Option<u64>,
+    /// The body of a `2xx` answer, read whole, at most [`MAX_BODY`] bytes;
+    /// `None` for any other answer and for a body longer, cut off, badly
+    /// chunked or not read in time.
+    pub body: Option<Vec<u8>>,
 }
 
 impl Answer {
@@ -353,7 +364,8 @@ fn request_head(
     Ok(head.into_bytes())
 }
 
-/// Write the request and read the answer's head from `stream`.
+/// Write the request and read the answer's head from `stream`, and the body
+/// of an accepted answer ([`Answer::body`]).
 pub(crate) fn exchange(
     mut stream: impl Read + Write,
     head: &[u8],
@@ -365,7 +377,11 @@ pub(crate) fn exchange(
     let mut buf = Vec::with_capacity(1024);
     let mut chunk = [0u8; 2048];
     loop {
-        if let Some(answer) = parse_head(&buf)? {
+        if let Some((mut answer, end, framing)) = parse_head(&buf)? {
+            if answer.accepted() {
+                let after = buf.split_off(end);
+                answer.body = body::read(&mut stream, after, framing);
+            }
             return Ok(answer);
         }
         if buf.len() >= MAX_HEAD {
@@ -383,25 +399,44 @@ pub(crate) fn exchange(
     }
 }
 
-fn parse_head(buf: &[u8]) -> Result<Option<Answer>, PostError> {
+/// The answer in `buf` once its head is whole, where the head ends, and how
+/// the body after it is framed.
+fn parse_head(buf: &[u8]) -> Result<Option<(Answer, usize, Framing)>, PostError> {
     let mut headers = [httparse::EMPTY_HEADER; MAX_RESPONSE_HEADERS];
     let mut response = httparse::Response::new(&mut headers);
     match response.parse(buf) {
         Ok(httparse::Status::Partial) => Ok(None),
-        Ok(httparse::Status::Complete(_)) => {
+        Ok(httparse::Status::Complete(end)) => {
             let status = response
                 .code
                 .ok_or_else(|| PostError::Response("no status".to_owned()))?;
-            let retry_after_s = response
-                .headers
-                .iter()
-                .find(|h| h.name.eq_ignore_ascii_case("retry-after"))
-                .and_then(|h| std::str::from_utf8(h.value).ok())
-                .and_then(|v| v.trim().parse::<u64>().ok());
-            Ok(Some(Answer {
+            let value = |name: &str| {
+                response
+                    .headers
+                    .iter()
+                    .find(|h| h.name.eq_ignore_ascii_case(name))
+                    .and_then(|h| std::str::from_utf8(h.value).ok())
+                    .map(str::trim)
+            };
+            let retry_after_s = value("retry-after").and_then(|v| v.parse::<u64>().ok());
+            let chunked = value("transfer-encoding")
+                .is_some_and(|v| v.to_ascii_lowercase().ends_with("chunked"));
+            // Chunked wins over a length (RFC 9112 §6.3); a length that does
+            // not read leaves the body unread.
+            let framing = match (status, chunked, value("content-length")) {
+                (204 | 304, _, _) => Framing::Empty,
+                (_, true, _) => Framing::Chunked,
+                (_, false, Some(length)) => length
+                    .parse::<usize>()
+                    .map_or(Framing::Length(usize::MAX), Framing::Length),
+                (_, false, None) => Framing::Close,
+            };
+            let answer = Answer {
                 status,
                 retry_after_s,
-            }))
+                body: None,
+            };
+            Ok(Some((answer, end, framing)))
         }
         Err(e) => Err(PostError::Response(e.to_string())),
     }

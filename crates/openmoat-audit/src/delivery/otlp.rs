@@ -97,6 +97,46 @@ fn gap(g: &Gap, observed: &str) -> Value {
     })
 }
 
+/// Log records a collector took the request without: its answer was a
+/// success, and its body an `ExportLogsServiceResponse` whose
+/// `partial_success` counts them. The OTLP specification says a sender must
+/// not send such a request again; the records are lost to that collector.
+/// <https://opentelemetry.io/docs/specs/otlp/#partial-success-1>
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rejected {
+    /// `rejected_log_records`, more than zero.
+    pub count: u64,
+    /// `error_message`, as the collector wrote it (empty when it gave none):
+    /// text from the network, to be masked and cleaned before it is shown
+    /// or recorded.
+    pub message: String,
+}
+
+/// The [`Rejected`] records a success's `body` names, `None` when it names
+/// none: no body, not JSON, no `partial_success`, or a count of zero (a
+/// warning, which loses nothing). Both the lowerCamelCase field names the
+/// JSON encoding writes and the proto names are read, and the count as a
+/// decimal string or a number.
+#[must_use]
+pub fn rejected(body: &[u8]) -> Option<Rejected> {
+    let response: Value = serde_json::from_slice(body).ok()?;
+    let field = |value: &Value, camel: &str, snake: &str| -> Option<Value> {
+        value.get(camel).or_else(|| value.get(snake)).cloned()
+    };
+    let partial = field(&response, "partialSuccess", "partial_success")?;
+    let count = match field(&partial, "rejectedLogRecords", "rejected_log_records")? {
+        Value::String(text) => text.trim().parse::<u64>().ok()?,
+        number => number.as_u64()?,
+    };
+    if count == 0 {
+        return None;
+    }
+    let message = field(&partial, "errorMessage", "error_message")
+        .and_then(|m| m.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    Some(Rejected { count, message })
+}
+
 /// `deny Bash [rule, rule]`: what a person scanning a log view needs first.
 fn summary(r: &Delivered) -> String {
     format!("{} {} [{}]", r.verdict, r.tool, r.rules.join(", "))

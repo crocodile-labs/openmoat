@@ -206,6 +206,14 @@ pub fn test(args: &DeliverTestArgs) -> Result<Code> {
             Ok(Sent::Accepted) => (true, "accepted".to_owned()),
             Ok(Sent::Retry { why, .. } | Sent::Refused { why }) => (false, why),
             Ok(Sent::TooLarge) => (false, "HTTP 413".to_owned()),
+            // The collector's message is not shown: it may echo a header.
+            Ok(Sent::Partial(rejected)) => (
+                false,
+                format!(
+                    "accepted without {} log record(s) (OTLP partial success)",
+                    rejected.count
+                ),
+            ),
             Err(error) => (false, format!("{error:#}")),
         };
         results.push(TestResult {

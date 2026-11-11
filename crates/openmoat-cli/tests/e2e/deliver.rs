@@ -53,17 +53,27 @@ fn collector(
     statuses: &[u16],
     tls: Option<Arc<rustls::ServerConfig>>,
 ) -> (u16, Receiver<Received>) {
+    let answers = statuses.iter().map(|s| (*s, String::new())).collect();
+    collector_answering(answers, tls)
+}
+
+/// [`collector`] answering each request with the next status and body.
+fn collector_answering(
+    answers: Vec<(u16, String)>,
+    tls: Option<Arc<rustls::ServerConfig>>,
+) -> (u16, Receiver<Received>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    let statuses = statuses.to_vec();
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         for (i, stream) in listener.incoming().enumerate() {
             let Ok(stream) = stream else { return };
             stream.set_read_timeout(Some(WAIT)).unwrap();
-            let status = statuses[i.min(statuses.len() - 1)];
-            let answer =
-                format!("HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            let (status, body) = &answers[i.min(answers.len() - 1)];
+            let answer = format!(
+                "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
             // Each request is passed on before it is answered: once the
             // sender has its answer, the test has the request.
             if let Some(config) = &tls {
@@ -268,6 +278,45 @@ fn a_local_collector_receives_every_event_as_otlp_logs_redacted() {
     let status: Value = serde_json::from_str(&stdout(&status)).unwrap();
     assert_eq!(status["sinks"][0]["behind"], 0, "{status}");
     assert_eq!(status["sinks"][0]["failures"], 0, "{status}");
+}
+
+/// A collector that answers `200` but rejects a record (OTLP
+/// `partial_success`) is not sent it again: the loss is in the audit log,
+/// with the collector's message masked, and the collector is told of it as
+/// a gap with the next request.
+#[test]
+fn records_a_collector_rejects_are_recorded_and_sent_as_a_gap() {
+    let sb = Sandbox::installed(&[".claude"]);
+    calls(&sb);
+    let partial = format!(
+        r#"{{"partialSuccess":{{"rejectedLogRecords":"1","errorMessage":"too old: {}"}}}}"#,
+        token()
+    );
+    let (port, received) = collector_answering(vec![(200, partial), (200, String::new())], None);
+    configure(&sb, &otlp_config(port, ""));
+    let out = sb.moat_as_person(&["audit", "deliver", "flush"]);
+    assert_eq!(out.status.code(), Some(OK), "{}", text(&out));
+    let first = received.recv_timeout(WAIT).unwrap();
+    assert!(log_records(&first.json()).len() >= 2);
+    let second = received.recv_timeout(WAIT).unwrap();
+    let gap = log_records(&second.json())
+        .into_iter()
+        .find(|r| r["severityNumber"] == 17)
+        .expect("the next request has the gap");
+    let said = gap["body"]["stringValue"].as_str().unwrap();
+    assert!(said.contains("rejected by the collector"), "{gap}");
+    let export = stdout(&sb.moat(&["audit", "export"]));
+    let row = export
+        .lines()
+        .find(|l| l.contains("audit-delivery-partial"))
+        .unwrap_or_else(|| panic!("no row of the loss: {export}"));
+    assert!(row.contains("too old"), "{row}");
+    assert!(!export.contains(&token()), "{row}");
+    let status = sb.moat(&["audit", "deliver", "status", "--format", "json"]);
+    let status: Value = serde_json::from_str(&stdout(&status)).unwrap();
+    assert_eq!(status["sinks"][0]["behind"], 0, "{status}");
+    assert_eq!(status["sinks"][0]["skipped"], 1, "{status}");
+    assert_eq!(status["sinks"][0]["paused"], Value::Null, "{status}");
 }
 
 /// The guard answers as before and starts the delivery detached; the

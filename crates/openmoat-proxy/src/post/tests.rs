@@ -122,6 +122,7 @@ fn the_answer_head_gives_status_and_retry_after() {
         let a = Answer {
             status: permanent,
             retry_after_s: None,
+            body: None,
         };
         assert!(!a.retryable() && !a.accepted(), "{permanent}");
     }
@@ -129,6 +130,72 @@ fn the_answer_head_gives_status_and_retry_after() {
     assert!(answer("SSH-2.0-OpenSSH\r\n\r\n").is_err());
     let endless = format!("HTTP/1.1 200 OK\r\nX: {}\r\n", "a".repeat(MAX_HEAD));
     assert!(answer(&endless).is_err());
+}
+
+/// An accepted answer's body is read whole however it is framed, up to
+/// `MAX_BODY`; any other answer's body, and one that is not whole, is not.
+#[test]
+fn an_accepted_answer_gives_its_body_whole_or_none() {
+    let partial = r#"{"partialSuccess":{"rejectedLogRecords":"2"}}"#;
+    let body = |reply: &str| answer(reply).unwrap().body;
+    let length = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{partial}",
+        partial.len()
+    );
+    assert_eq!(body(&length).as_deref(), Some(partial.as_bytes()));
+    // Bytes after the length are not part of it.
+    assert_eq!(
+        body("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}junk").as_deref(),
+        Some(&b"{}"[..])
+    );
+    let (a, b) = partial.split_at(10);
+    let chunked = format!(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 1\r\n\r\n\
+         {:x};ext=1\r\n{a}\r\n{:x}\r\n{b}\r\n0\r\n\r\n",
+        a.len(),
+        b.len()
+    );
+    assert_eq!(body(&chunked).as_deref(), Some(partial.as_bytes()));
+    let closed = format!("HTTP/1.1 200 OK\r\n\r\n{partial}");
+    assert_eq!(body(&closed).as_deref(), Some(partial.as_bytes()));
+    assert_eq!(
+        body("HTTP/1.1 204 No Content\r\n\r\n").as_deref(),
+        Some(&b""[..])
+    );
+    // Not whole: cut off, too long, badly chunked, a length that is no number.
+    for reply in [
+        "HTTP/1.1 200 OK\r\nContent-Length: 50\r\n\r\n{}".to_owned(),
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n",
+            MAX_BODY + 1
+        ),
+        format!("HTTP/1.1 200 OK\r\n\r\n{}", "a".repeat(MAX_BODY + 1)),
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n{}\r\n0\r\n\r\n".to_owned(),
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{}".to_owned(),
+        "HTTP/1.1 200 OK\r\nContent-Length: two\r\n\r\n{}".to_owned(),
+    ] {
+        assert_eq!(body(&reply), None, "{reply}");
+    }
+    // A refusal's body is left unread.
+    assert_eq!(
+        body("HTTP/1.1 400 Bad\r\nContent-Length: 2\r\n\r\n{}"),
+        None
+    );
+}
+
+#[test]
+fn chunks_decode_or_say_what_is_missing() {
+    use body::{Chunks, dechunk};
+    assert_eq!(
+        dechunk(b"3\r\nabc\r\n0\r\n\r\n"),
+        Chunks::Done(b"abc".to_vec())
+    );
+    assert_eq!(dechunk(b"3\r\nab"), Chunks::More);
+    assert_eq!(dechunk(b"3\r\nabc"), Chunks::More);
+    assert_eq!(dechunk(b"3\r\nabcX\r\n"), Chunks::Bad);
+    assert_eq!(dechunk(b"ffffffffffffffffffff\r\n"), Chunks::Bad);
+    assert_eq!(dechunk(b"ffffffffffffffff\r\nab"), Chunks::Bad);
+    assert_eq!(dechunk(b"10000\r\nab"), Chunks::More);
 }
 
 #[test]

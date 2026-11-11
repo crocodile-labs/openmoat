@@ -12,6 +12,10 @@
 //! still answers `413` gets half as many events per request; one event alone
 //! that gets `413` is skipped the same way (rule [`TOO_LARGE_RULE`]), so one
 //! event never pauses a sink.
+//!
+//! An OTLP collector that accepts a request but rejects some of its records
+//! (`partial_success`) must not be sent them again: the cursor moves on, and
+//! the loss is recorded (rule [`PARTIAL_RULE`]) and sent as a gap.
 
 use std::time::{Duration, Instant};
 
@@ -31,6 +35,11 @@ pub const OVERFLOW_RULE: &str = "audit-delivery-overflow";
 /// Rule id of the audit event that records an event the sink refused as too
 /// large (`413`) even alone.
 pub const TOO_LARGE_RULE: &str = "audit-delivery-too-large";
+/// Rule id of the audit event that records log records an OTLP collector
+/// accepted the request without (`partial_success`).
+pub const PARTIAL_RULE: &str = "audit-delivery-partial";
+/// The most characters of a collector's own message kept.
+const MAX_MESSAGE_CHARS: usize = 300;
 /// Host id of the events delivery itself records.
 pub const DELIVERY_HOST: &str = "audit-delivery";
 
@@ -170,6 +179,18 @@ impl Sinking<'_> {
                     run.delivered += count;
                     state.save(path)?;
                 }
+                Sent::Partial(rejected) => {
+                    // The collector's count, at most what the request held.
+                    let in_request =
+                        u64::try_from(records.len() + state.gaps.len()).unwrap_or(u64::MAX);
+                    let lost = rejected.count.min(in_request);
+                    let count = u64::try_from(records.len()).unwrap_or(u64::MAX);
+                    let kept = count.saturating_sub(lost);
+                    state.accepted(records.last().map(|r| r.id), kept, now);
+                    run.delivered += kept;
+                    run.skipped += self.rejected(state, &records, lost, &rejected.message, now)?;
+                    state.save(path)?;
+                }
                 Sent::TooLarge => match records.as_slice() {
                     // Only the gaps went, a few hundred bytes: the sink's
                     // limit may be a passing one.
@@ -225,7 +246,7 @@ impl Sinking<'_> {
             count,
             reason: GapReason::BacklogFull,
         };
-        record_skip(self.store, &self.sink.id, OVERFLOW_RULE, &gap)?;
+        record_skip(self.store, &self.sink.id, OVERFLOW_RULE, &gap.describe())?;
         state.cursor = Some(skip_to);
         state.skipped = state.skipped.saturating_add(count);
         state.gaps.push(gap);
@@ -243,19 +264,74 @@ impl Sinking<'_> {
             count: 1,
             reason: GapReason::TooLarge,
         };
-        record_skip(self.store, &self.sink.id, TOO_LARGE_RULE, &gap)?;
+        record_skip(self.store, &self.sink.id, TOO_LARGE_RULE, &gap.describe())?;
         state.cursor = Some(id);
         state.skipped = state.skipped.saturating_add(1);
         state.gaps.push(gap);
         Ok(1)
     }
+
+    /// An OTLP collector accepted the request with `records` but rejected
+    /// `rejected` of its log records, which it says must not be sent again:
+    /// the cursor has moved past them, so record the loss and keep it as a
+    /// gap to send, as a skip is. `message`, the collector's text, is masked
+    /// with the policy's and the sink's own secrets (a collector may echo a
+    /// header), then cut, so no cut leaves part of a secret. A request of
+    /// delivery's own rows alone is counted but not recorded again, so a
+    /// collector that rejects every record cannot make the log grow by
+    /// itself. The number of events lost.
+    fn rejected(
+        &self,
+        state: &mut State,
+        records: &[Delivered],
+        rejected: u64,
+        message: &str,
+        now_ms: i64,
+    ) -> Result<u64> {
+        let flat: String = message
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .collect();
+        let masked: String = self
+            .known
+            .redact(&flat)
+            .trim()
+            .chars()
+            .take(MAX_MESSAGE_CHARS)
+            .collect();
+        let why = if masked.is_empty() {
+            format!("the collector rejected {rejected} log record(s)")
+        } else {
+            format!("the collector rejected {rejected} log record(s): {masked}")
+        };
+        state.last_error = Some(why.clone());
+        state.last_error_ms = Some(now_ms);
+        let (Some(first), Some(newest)) = (records.first(), records.last()) else {
+            // Only gaps went: no event is lost, the gaps' records are.
+            return Ok(0);
+        };
+        let lost = rejected.min(u64::try_from(records.len()).unwrap_or(u64::MAX));
+        let gap = Gap {
+            first: first.id,
+            last: newest.id,
+            count: lost,
+            reason: GapReason::Rejected,
+        };
+        if records.iter().any(|r| r.host != DELIVERY_HOST) {
+            let reason = format!("{} ({why})", gap.describe());
+            record_skip(self.store, &self.sink.id, PARTIAL_RULE, &reason)?;
+        }
+        state.skipped = state.skipped.saturating_add(lost);
+        state.gaps.push(gap);
+        Ok(lost)
+    }
 }
 
 /// A skip as an audit event: host [`DELIVERY_HOST`], the sink as its
-/// session, `rule` ([`OVERFLOW_RULE`] or [`TOO_LARGE_RULE`]). Verdict
-/// `defer`: it decides no call.
-fn record_skip(store: &Store, sink: &str, rule: &str, gap: &Gap) -> Result<()> {
-    let decision = Decision::single(Verdict::Defer, rule, gap.describe());
+/// session, `rule` ([`OVERFLOW_RULE`], [`TOO_LARGE_RULE`] or
+/// [`PARTIAL_RULE`]) and `reason`. Verdict `defer`: it decides no call.
+fn record_skip(store: &Store, sink: &str, rule: &str, reason: &str) -> Result<()> {
+    let decision = Decision::single(Verdict::Defer, rule, reason.to_owned());
     store
         .record(&NewEvent {
             host: DELIVERY_HOST,
@@ -381,5 +457,82 @@ mod tests {
             rules.iter().any(|r| r.contains(TOO_LARGE_RULE)),
             "{rules:?}"
         );
+    }
+
+    /// A collector that accepts every request but rejects one record of each
+    /// (`partial_success`), echoing the sink's token: the cursor moves on,
+    /// the loss is recorded once, masked, and sent as a gap; its own row
+    /// rejected again is counted, not recorded again, so the run ends.
+    #[test]
+    fn records_a_collector_rejects_are_recorded_once_and_sent_as_a_gap() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        let config = super::super::config::parse(
+            "version: 1\nmachine: m\nstart: all\nsinks:\n  - id: c\n    otlp: \
+             http://127.0.0.1:9/v1/logs\n",
+            &home,
+        )
+        .unwrap();
+        let store = Store::open_in_memory().unwrap();
+        for command in ["echo one", "echo two"] {
+            record(&store, command);
+        }
+        // Matches no built-in pattern: only the sink's own values mask it.
+        let token = format!("collector{}token{}", "-plain-", 777);
+        let known = KnownSecrets::new([token.as_str()]).unwrap();
+        let sinking = Sinking {
+            store: &store,
+            config: &config,
+            sink: &config.sinks[0],
+            known: &known,
+        };
+        let requests = RefCell::new(Vec::new());
+        let send = |records: &[Delivered], gaps: &[Gap], _now: i64| {
+            let hosts: Vec<String> = records.iter().map(|r| r.host.clone()).collect();
+            requests.borrow_mut().push((hosts, gaps.to_vec()));
+            Ok(Sent::Partial(delivery::Rejected {
+                count: 1,
+                message: format!("record too old\nAuthorization: Bearer {token}"),
+            }))
+        };
+        let mut state = State {
+            cursor: Some(EventId(0)),
+            ..State::default()
+        };
+        let mut run = SinkRun::default();
+        let path = dir.path().join("c.json");
+        sinking
+            .drain(&mut state, &mut run, &path, || true, send)
+            .unwrap();
+        let requests = requests.into_inner();
+        // The events; the row of the loss with its gap; the gap of that row.
+        assert_eq!(requests.len(), 3, "{requests:?}");
+        assert_eq!(requests[0].0, ["some-agent", "some-agent"]);
+        assert_eq!(requests[1].0, [DELIVERY_HOST]);
+        assert_eq!(requests[1].1.len(), 1);
+        assert_eq!(
+            (requests[1].1[0].reason, requests[1].1[0].count),
+            (GapReason::Rejected, 1)
+        );
+        assert_eq!(
+            (requests[1].1[0].first, requests[1].1[0].last),
+            (EventId(1), EventId(2))
+        );
+        assert!(requests[2].0.is_empty(), "{requests:?}");
+        assert_eq!(state.cursor, Some(EventId(3)), "{state:?}");
+        assert_eq!((state.delivered, state.skipped, run.skipped), (1, 2, 2));
+        assert_eq!(state.paused, None);
+        let events = store.export_after(EventId(0), 10).unwrap();
+        let partial: Vec<String> = events
+            .iter()
+            .filter(|e| e.rules.get().contains(PARTIAL_RULE))
+            .map(|e| e.reasons.get().to_owned())
+            .collect();
+        assert_eq!(partial.len(), 1, "{partial:?}");
+        assert!(partial[0].contains("record too old"), "{partial:?}");
+        assert!(!partial[0].contains(&token), "{partial:?}");
+        assert!(!partial[0].contains('\n'), "{partial:?}");
+        let last_error = state.last_error.unwrap_or_default();
+        assert!(!last_error.contains(&token), "{last_error}");
     }
 }

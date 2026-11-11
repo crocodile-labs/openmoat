@@ -64,7 +64,7 @@ pub use decide::{
     port_policy, tainted as decide_tainted,
 };
 pub use local::LocalService;
-pub use post::{Answer, Endpoint, PostError, Poster, Scheme};
+pub use post::{Answer, Endpoint, MAX_BODY, PostError, Poster, Scheme};
 pub use request::{
     MAX_HEADERS, ProxyCredential, Request, RequestError, Target, parse as parse_request,
 };

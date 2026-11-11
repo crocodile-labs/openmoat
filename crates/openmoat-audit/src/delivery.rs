@@ -20,7 +20,7 @@ use serde_json::Value;
 
 use crate::{EventId, ExportedEvent, KnownSecrets, StoreError};
 
-pub use otlp::logs as otlp_logs;
+pub use otlp::{Rejected, logs as otlp_logs, rejected as otlp_rejected};
 
 /// The `format` of a webhook body; a new body shape gets a new value.
 pub const WEBHOOK_FORMAT: &str = "openmoat-delivery-v1";
@@ -60,6 +60,10 @@ pub enum GapReason {
     /// The sink refused the event as too large (HTTP 413) even sent alone and
     /// trimmed ([`MAX_EVENT_BYTES`]); it stays in the local log.
     TooLarge,
+    /// An OTLP collector accepted the request but rejected this many of its
+    /// log records ([`Rejected`]), which it says must not be sent again; the
+    /// gap spans the request, as the collector does not say which ones.
+    Rejected,
 }
 
 impl Gap {
@@ -76,6 +80,12 @@ impl Gap {
                 "{} audit event(s) ({}–{}) were not delivered: the sink refused the request as \
                  too large even with one trimmed event in it; they are still in the local audit \
                  log (`openmoat audit export`)",
+                self.count, self.first, self.last
+            ),
+            GapReason::Rejected => format!(
+                "{} log record(s) of the request with audit events {}–{} were rejected by the \
+                 collector (OTLP partial success) and are not sent again; the events are still \
+                 in the local audit log (`openmoat audit export`)",
                 self.count, self.first, self.last
             ),
         }

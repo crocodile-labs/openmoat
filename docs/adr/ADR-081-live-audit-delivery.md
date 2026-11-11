@@ -161,7 +161,15 @@ starts the run: it is the crate that touches files, the environment and processe
 
 ## Decision 7: failures
 
-- A `2xx` answer moves the cursor and clears the gaps.
+- A `2xx` answer moves the cursor and clears the gaps. Its body is read, at most 64 KiB:
+  an OTLP collector says there, in `partial_success.rejected_log_records`, that it took
+  the request without some records, which the specification says must not be sent
+  again. The cursor still moves; the loss is recorded (`audit-delivery-partial`, the
+  count and the collector's message masked with the policy's and the sink's secrets and
+  cut to 300 characters) and sent as a gap spanning the request, as the collector does
+  not say which records. A rejected request of delivery's own rows alone is counted, not
+  recorded again, so a collector that rejects every record cannot make the log grow by
+  itself. A body that is longer, cut off or not JSON is read as a whole success.
 - `408`, `429` and every `5xx` except `501` and `505`, and a network or TLS failure,
   wait: 5 s, doubled per failure, at most 15 min, plus up to a fifth more at random so
   machines that failed together do not return together; a longer `Retry-After` in

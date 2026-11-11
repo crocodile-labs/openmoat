@@ -33,6 +33,9 @@ impl std::fmt::Debug for Ready {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sent {
     Accepted,
+    /// An OTLP collector accepted the request without some of its records,
+    /// which it says must not be sent again.
+    Partial(delivery::Rejected),
     /// Try again later; the sink may have said when.
     Retry {
         why: String,
@@ -123,7 +126,7 @@ impl Ready {
         all.extend(self.headers.iter().map(|(n, v)| (n.as_str(), v.as_str())));
         Ok(
             match self.poster.post(&sink.endpoint, &all, &body, STEP_TIMEOUT) {
-                Ok(answer) if answer.accepted() => Sent::Accepted,
+                Ok(answer) if answer.accepted() => accepted(sink.kind, answer.body.as_deref()),
                 Ok(answer) if answer.status == TOO_LARGE => Sent::TooLarge,
                 Ok(answer) if answer.retryable() => Sent::Retry {
                     why: format!("HTTP {}", answer.status),
@@ -146,6 +149,16 @@ impl Ready {
                 },
             },
         )
+    }
+}
+
+/// A success: whole, or, from an OTLP collector whose body names rejected
+/// records, partial. A body that was not read whole names none: the status
+/// is all there is to go by.
+fn accepted(kind: Kind, body: Option<&[u8]>) -> Sent {
+    match (kind, body.and_then(delivery::otlp_rejected)) {
+        (Kind::Otlp, Some(rejected)) => Sent::Partial(rejected),
+        _ => Sent::Accepted,
     }
 }
 
