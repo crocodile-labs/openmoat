@@ -33,6 +33,57 @@ fn the_prompt_escapes_and_labels_the_agents_text() {
     );
 }
 
+/// A call longer than OpenMoat keeps for the approver is cut, and a cut call
+/// offers Deny only on every channel, however long its messages may be.
+#[test]
+fn a_call_too_long_to_keep_whole_can_only_be_denied() {
+    let s = setup();
+    gated(&s, &call("s1", &"x".repeat(5000)), review(), NOW);
+    let request = only_request(&s);
+    assert!(request.cut);
+    let approve = approve_button(&s, &request);
+    for buttons in [true, false] {
+        let capabilities = Capabilities {
+            buttons,
+            button_bytes: 64,
+            max_text: 100_000,
+        };
+        let p = prompt(&s.key, &request, &capabilities);
+        assert!(!p.text.contains(&approve), "{}", p.text);
+        assert!(p.choices.iter().all(|c| c.data != approve));
+        assert!(p.choices.len() <= 1);
+        assert!(p.text.contains("too long to show in full"), "{}", p.text);
+    }
+    // The flag is signed: clearing it breaks the request.
+    let mut cleared = request.clone();
+    cleared.cut = false;
+    assert!(!cleared.verified(&s.key));
+    // And an approval for it, however it was made, is not used.
+    assert_not_approvable(&s, &call("s1", &"x".repeat(5000)), &request);
+}
+
+/// A valid, signed approval of `request` by the approver leaves `call` held
+/// for review, and is not used up.
+fn assert_not_approvable(s: &super::Setup, call: &openmoat_hosts::HookRequest, request: &Request) {
+    let approval = answer::Answer::signed(
+        &s.key,
+        request,
+        (answer::Verdict::Approve, super::APPROVER_ID, "fake"),
+        NOW + 1,
+    )
+    .unwrap();
+    assert!(s.store.put_answer(&approval).unwrap());
+    let d = gated(s, call, review(), NOW + 2);
+    assert_eq!(d.verdict, openmoat_core::Verdict::Review, "{d:?}");
+    assert!(
+        d.reasons
+            .iter()
+            .any(|r| r.contains("hides part of the call")),
+        "{d:?}"
+    );
+    assert!(!s.store.used(&request.id));
+}
+
 /// Requests and buttons each sign under their own domain, so a signature
 /// for one is never valid for another.
 #[test]

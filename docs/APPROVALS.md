@@ -116,8 +116,8 @@ characters. The content of a file write is never sent, only its size.
 
 On a channel without buttons, the message ends with two reply codes instead; send one
 back, alone, to answer. A code is checked exactly as a button press is. When a channel
-cannot show all of the call in one message, it offers Deny only: approve such a call
-where the agent runs.
+cannot show all of the call in one message, or the call is longer than the 1500
+characters kept, it offers Deny only: approve such a call where the agent runs.
 
 ## Files
 

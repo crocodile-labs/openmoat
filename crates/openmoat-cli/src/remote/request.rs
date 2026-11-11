@@ -40,6 +40,10 @@ pub struct Request {
     pub rules: Vec<String>,
     /// What the approver is shown of the call: redacted, cleaned, cut.
     pub shown: String,
+    /// Whether [`Self::shown`] was cut to [`SHOWN_MAX`]: the approver cannot
+    /// read all of the call, so it can only be denied remotely
+    /// ([`Self::deny_only`]). Signed with the rest.
+    pub cut: bool,
     pub created_ms: i64,
     pub expires_ms: i64,
     /// HMAC of every other field under the approval key, hex.
@@ -51,6 +55,17 @@ impl Request {
     /// The short code a person reads in the agent's message and on the phone.
     pub fn code(&self) -> &str {
         self.id.get(..6).unwrap_or(&self.id)
+    }
+
+    /// Why the request can only be denied remotely whatever the channel, or
+    /// `None` when a channel that shows all of [`Self::shown`] may offer
+    /// Approve. The prompt offers no approve then, and the guard uses no
+    /// approval for it.
+    pub fn deny_only(&self) -> Option<&'static str> {
+        self.cut.then_some(
+            "This call is too long to show in full, so it cannot be approved here; approve it \
+             where the agent runs. Deny blocks it until the request expires.",
+        )
     }
 
     /// Whether the request can no longer be answered at `now_ms`.
@@ -122,11 +137,19 @@ pub fn digest(request: &HookRequest, action: &Action, decision: &Decision) -> Re
     Ok(hex(&out.finalize()))
 }
 
+/// What an approver is shown of a call, and whether part of it is hidden.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Shown {
+    pub text: String,
+    /// The text was longer than [`SHOWN_MAX`] and is cut.
+    pub cut: bool,
+}
+
 /// What the approver is shown of `action`: the command or the files, and the
 /// size of what a write carries but never its text; passed through the
 /// audit log's redaction and `known`'s values, control and invisible
 /// characters shown as `?`, cut to [`SHOWN_MAX`] characters.
-pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> String {
+pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> Shown {
     let text = match action {
         Action::Shell { .. }
         | Action::FsRead { .. }
@@ -142,5 +165,9 @@ pub fn shown(request: &HookRequest, action: &Action, known: &KnownSecrets) -> St
     if !request.edits.is_empty() {
         let _ = write!(text, " ({} replacement(s), not shown)", request.edits.len());
     }
-    crate::render::truncate(&crate::render::clean(&text), SHOWN_MAX)
+    let text = crate::render::clean(&text);
+    Shown {
+        cut: text.chars().count() > SHOWN_MAX,
+        text: crate::render::truncate(&text, SHOWN_MAX),
+    }
 }

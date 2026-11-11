@@ -99,6 +99,7 @@ fn decide(
     let mut id = [0u8; 16];
     getrandom::fill(&mut id).map_err(|e| anyhow::Error::msg(e.to_string()))?;
     let expiry_ms = i64::try_from(settings.expiry_s.saturating_mul(1000)).unwrap_or(i64::MAX);
+    let shown = request::shown(request, action, known);
     let mut new = Request {
         version: request::VERSION,
         id: hex(&id),
@@ -108,7 +109,8 @@ fn decide(
         cwd: request.cwd.clone(),
         tool: request.tool.clone(),
         rules: decision.rules.clone(),
-        shown: request::shown(request, action, known),
+        shown: shown.text,
+        cut: shown.cut,
         created_ms: now_ms,
         expires_ms: now_ms.saturating_add(expiry_ms),
         mac: String::new(),
@@ -144,6 +146,18 @@ fn used(store: &Store, open: &Request, answer: &Answer, decision: &Decision) -> 
             format!("{by}; the same call is denied until the request expires"),
         )),
         answer::Verdict::Approve => {
+            // No prompt offers Approve for such a request; an approval for
+            // one anyway is not used.
+            if open.deny_only().is_some() {
+                return Ok(with_reason(
+                    decision.clone(),
+                    format!(
+                        "request {} hides part of the call from the approver, so it can only \
+                         be approved where the agent runs",
+                        open.code()
+                    ),
+                ));
+            }
             // The replay store first: a racing guard, or an answer put back
             // after use, finds the marker and keeps the review.
             if store.used(&open.id) || !store.use_once(&open.id)? {

@@ -8,20 +8,26 @@ use super::channel::{Capabilities, Choice, Prompt};
 use super::request::{Request, SHOWN_MAX};
 use crate::proxy_session::Key;
 
-/// The prompt for `request` on a channel that can do `capabilities`. When the
-/// channel's longest message cannot hold all of the call OpenMoat keeps for
-/// the approver, the prompt offers Deny only: nobody approves a call they
-/// could not read.
+/// The prompt for `request` on a channel that can do `capabilities`. When
+/// part of the call is hidden from the approver ([`Request::deny_only`]), or
+/// the channel's longest message cannot hold all of the call OpenMoat keeps
+/// for the approver, the prompt offers Deny only and carries no approve code:
+/// nobody approves a call they could not read.
 pub fn prompt(key: &Key, request: &Request, capabilities: &Capabilities) -> Prompt {
     let deny = answer::button(key, Verdict::Deny, request);
-    let full = both(key, request, capabilities);
-    if fits_whole(request, &full.text) {
-        return full;
-    }
-    let tail = if capabilities.uses_buttons() {
-        DENY_ONLY.to_owned()
+    let why = if let Some(why) = request.deny_only() {
+        why
     } else {
-        format!("{DENY_ONLY}\nTo deny it, send back this line alone:\n{deny}")
+        let full = both(key, request, capabilities);
+        if fits_whole(request, &full.text) {
+            return full;
+        }
+        DENY_ONLY
+    };
+    let tail = if capabilities.uses_buttons() {
+        why.to_owned()
+    } else {
+        format!("{why}\nTo deny it, send back this line alone:\n{deny}")
     };
     Prompt {
         text: text(request, &tail, capabilities.max_text),
