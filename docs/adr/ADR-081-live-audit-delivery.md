@@ -105,7 +105,9 @@ working directory, tool, action, verdict, rules, reasons, latency, chain hash an
 previous hash). Every text the agent can influence is masked again before sending
 (`openmoat_audit::delivery::Delivered::of`): today's patterns, the values of the
 policy's brokered secrets that have a file source (as the guard masks them), and the
-sink's own key and header values. A row an older build stored is thus masked by
+sink's own key and header values, each as sent and without its prefix (and, for
+`Basic`, decoded, as `user:password` and the password alone), since an event holds the
+bare token far more often than the header. A row an older build stored is thus masked by
 today's patterns. The record keeps the chain hash so a SIEM row can be matched with an
 export, but its cells are no longer the hashed ones; the chain is verified from
 `openmoat audit export`, never from a collector.

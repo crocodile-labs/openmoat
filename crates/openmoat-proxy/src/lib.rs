@@ -72,7 +72,7 @@ pub use requests::{RULE_REQUEST_RULE, RequestRuleError, Requests};
 pub use server::{Limits, Proxy, RULE_CAPACITY};
 pub use session::{
     AuthError, Credential, CredentialError, MIN_TOKEN_LEN, RULE_SESSION, Sessions, TaintLookup,
-    Verify, constant_time_eq,
+    Verify, base64, constant_time_eq,
 };
 pub use sni::{Hello, HelloError, MAX_HELLO, server_name};
 pub use tls::{CA_VALID_DAYS, CaFiles, RULE_TLS, Roots, Tls, TlsError, new_ca};

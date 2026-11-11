@@ -94,7 +94,8 @@ Each event of the audit log becomes one record: its id, time, agent (`host`), se
 call id, working directory, tool, action, verdict, rules, reasons, decision time, and
 its chain hash and the previous one. Every text is masked again before sending: the
 patterns the audit log uses, the values of the policy's brokered secrets with a file
-source, and the sink's own key and header values. After masking, a record over the
+source, and the sink's own key and header values, each with and without its `prefix`
+(and, for `Basic`, decoded, as `user:password` and the password alone). After masking, a record over the
 batch size or 256 KiB has its long texts cut to fit, each ending with `…[openmoat trimmed
 N bytes]`; the whole event stays in `openmoat audit export`. The chain hash lets you match a SIEM
 row with `openmoat audit export`; the chain itself is checked with `openmoat audit

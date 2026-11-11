@@ -21,6 +21,8 @@ pub struct Ready {
     poster: Poster,
     key: Option<Zeroizing<String>>,
     headers: Vec<(String, Zeroizing<String>)>,
+    /// Every form of the header values an event could hold ([`masked`]).
+    masked: Vec<Zeroizing<String>>,
 }
 
 impl std::fmt::Debug for Ready {
@@ -71,9 +73,11 @@ impl Ready {
             .map(|source| crate::secrets::read(source, home).context("reading the webhook key"))
             .transpose()?;
         let mut headers = Vec::new();
+        let mut forms = Vec::new();
         for header in &sink.headers {
             let value = crate::secrets::read(&header.value, home)
                 .with_context(|| format!("reading the value of header {}", header.name))?;
+            forms.extend(masked(&header.prefix, &value));
             let mut full = Zeroizing::new(header.prefix.clone());
             full.push_str(&value);
             headers.push((header.name.clone(), full));
@@ -82,15 +86,15 @@ impl Ready {
             poster,
             key,
             headers,
+            masked: forms,
         })
     }
 
-    /// The values to mask in what this sink is sent, besides the policy's.
+    /// The values to mask in what this sink is sent, besides the policy's:
+    /// the key, and each header value in every form an event could hold it
+    /// ([`masked`]).
     pub fn values(&self) -> impl Iterator<Item = &str> {
-        self.key
-            .iter()
-            .map(|k| k.as_str())
-            .chain(self.headers.iter().map(|(_, v)| v.as_str()))
+        self.key.iter().chain(&self.masked).map(|v| v.as_str())
     }
 
     /// Send `records` and `gaps` to `sink` in its format.
@@ -152,6 +156,32 @@ impl Ready {
     }
 }
 
+/// The forms of a header's secret `value` sent after `prefix` that an event
+/// could hold, to be masked: the header value as sent (`Bearer <token>`),
+/// the bare value (an agent's `curl -H "Authorization: Bearer $TOKEN"`
+/// records only `$TOKEN` expanded), the value with its spaces trimmed, and
+/// for `Basic` credentials what the base64 says, `user:password`, and the
+/// password alone. [`KnownSecrets`](openmoat_audit::KnownSecrets) leaves
+/// out any form too short to mask safely.
+fn masked(prefix: &str, value: &str) -> Vec<Zeroizing<String>> {
+    let mut forms = vec![
+        Zeroizing::new(format!("{prefix}{value}")),
+        Zeroizing::new(value.to_owned()),
+        Zeroizing::new(value.trim().to_owned()),
+    ];
+    if prefix.trim().eq_ignore_ascii_case("basic")
+        && let Some(decoded) = openmoat_proxy::base64(value.trim().as_bytes())
+        && let Ok(pair) = std::str::from_utf8(&decoded)
+    {
+        if let Some((_, password)) = pair.split_once(':') {
+            forms.push(Zeroizing::new(password.to_owned()));
+        }
+        forms.push(Zeroizing::new(pair.to_owned()));
+    }
+    forms.retain(|form| !form.is_empty());
+    forms
+}
+
 /// A success: whole, or, from an OTLP collector whose body names rejected
 /// records, partial. A body that was not read whole names none: the status
 /// is all there is to go by.
@@ -173,4 +203,79 @@ fn batch_name(sink: &Sink, records: &[Delivered], gaps: &[Gap]) -> String {
     let first = ids.iter().map(|id| id.0).min().unwrap_or(0);
     let last = ids.iter().map(|id| id.0).max().unwrap_or(0);
     format!("{}-{:x}-{:x}", sink.id, first, last)
+}
+
+#[cfg(test)]
+mod tests {
+    use openmoat_audit::KnownSecrets;
+
+    use super::*;
+    use crate::home::Home;
+
+    /// A sink's `Authorization: Bearer <token>` header and `Basic`
+    /// credentials: an event holding the bare token, the header, the
+    /// decoded `user:password` or the password alone is masked, though the
+    /// values match no built-in pattern.
+    #[test]
+    fn every_form_of_a_header_secret_is_masked() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::at(dir.path().join("state"));
+        let delivery = home.root().join("delivery");
+        std::fs::create_dir_all(&delivery).unwrap();
+        // Made at run time, shaped like no known token.
+        let token = format!("plain{}words{}", "-and-", 31_337);
+        let password = format!("pass{}word{}", "-phrase-", 4_242);
+        let basic = encode(format!("someone:{password}").as_bytes());
+        std::fs::write(delivery.join("token"), format!("{token}\n")).unwrap();
+        std::fs::write(delivery.join("basic"), &basic).unwrap();
+        let path = |name: &str| delivery.join(name).to_string_lossy().replace('\\', "/");
+        let yaml = format!(
+            "version: 1\nmachine: m\nsinks:\n  - id: c\n    otlp: http://127.0.0.1:9/v1/logs\n    \
+             headers:\n      - name: Authorization\n        prefix: \"Bearer \"\n        \
+             value: {{ file: '{}' }}\n      - name: X-Basic\n        prefix: \"Basic \"\n        \
+             value: {{ file: '{}' }}\n",
+            path("token"),
+            path("basic"),
+        );
+        let config = super::super::config::parse(&yaml, &home).unwrap();
+        let ready = Ready::new(&config.sinks[0], "/home/someone").unwrap();
+        let known = KnownSecrets::new(ready.values()).unwrap();
+        for text in [
+            format!("curl -H \"Authorization: Bearer {token}\" https://x"),
+            format!("echo {token} > /tmp/t"),
+            format!("echo {}", token.to_uppercase()),
+            format!("curl -u someone:{password} https://x"),
+            format!("echo {password}"),
+            format!("curl -H 'X-Basic: Basic {basic}' https://x"),
+        ] {
+            let masked = known.redact(&text);
+            for secret in [&token, &password, &basic] {
+                assert!(
+                    !masked.to_lowercase().contains(&secret.to_lowercase()),
+                    "{masked}"
+                );
+            }
+        }
+    }
+
+    /// Standard base64 with padding, for the test's `Basic` credentials.
+    fn encode(raw: &[u8]) -> String {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in raw.chunks(3) {
+            let n = chunk
+                .iter()
+                .enumerate()
+                .fold(0u32, |acc, (i, b)| acc | u32::from(*b) << (16 - 8 * i));
+            for i in 0..4 {
+                if i <= chunk.len() {
+                    out.push(char::from(ALPHABET[(n >> (18 - 6 * i) & 63) as usize]));
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
 }
