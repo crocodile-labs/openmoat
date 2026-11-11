@@ -9,11 +9,11 @@ Every fact here comes from the official documentation
 [settings](https://antigravity.google/docs/settings?tab=cli),
 [install](https://antigravity.google/docs/install?tab=cli),
 [CLI reference](https://antigravity.google/docs/cli/reference)), read 2026-11-09; those
-pages state no version. **Not yet proven on a real `agy`:** in the weekly `latest agents`
-job of 2026-11-10 (run 42922045984), agy 1.5.5, the newest CLI there is, ran both
-`run_command` calls of its turn without starting OpenMoat's `PreToolUse` entry or the
-job's own `PostToolUse` capture, both in `~/.gemini/config/hooks.json`; see "The first
-real run" below.
+pages state no version. **A preview host.** In the weekly `latest agents` job of
+2026-11-10 (run 42922045984), with agy 1.5.5 (the version the installer's manifest named
+that day), the fake API received tool results for both `run_command` calls of the turn,
+and neither OpenMoat's `PreToolUse` entry nor the job's own `PostToolUse` capture, both
+in `~/.gemini/config/hooks.json`, started; see "The first real run" below.
 Implementation: [`antigravity_cli.rs`](../antigravity_cli.rs) and [`doc.rs`](doc.rs); if
 they disagree, the code wins.
 
@@ -104,8 +104,8 @@ CLI's. So the CLI was not older than the documentation.
 
 In one `agy -p "run it" --dangerously-skip-permissions` turn against a fake Gemini API
 (`modelProvider: gemini`, `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`), the API saw three
-requests holding 0, 1 and 2 function responses: both `run_command` calls came back. No
-hook started, and OpenMoat's audit log stayed empty. What this rules out:
+requests holding 0, 1 and 2 function responses: the fake API received tool results for
+both `run_command` calls. No hook started, and OpenMoat's audit log stayed empty. What this rules out:
 
 - the home directory: the API key is used only with `modelProvider: gemini` in
   `~/.gemini/antigravity-cli/settings.json` (the install page), so `agy` read that file
@@ -121,12 +121,13 @@ what `agy` loads has depended on the sign-in before); or `*` is compiled as a re
 expression after all. None of these is documented. The job now records what tells them
 apart (`scripts/ci/latest-agents/agy_probe.py`, agy's `--log-file`, `agy -p /hooks`, the
 files `agy` opens, what each tool result said, and a second run without the flag), and
-`openmoat status` and `doctor` say "not yet proven on a real agy" until a run passes.
+`openmoat status`, `doctor` and the README show Antigravity CLI as a preview host until
+a run shows the hook deciding a call.
 
 ## Known gaps
 
-- **Not yet proven on a real agent.** Fixtures are documented shapes, not captures, and
-  the one real run started no hook (above).
+- **Preview host.** Fixtures are documented shapes, not captures, and in the one real
+  run no hook started (above).
 - MCP and subagent calls: whether hooks fire for them is not documented; the eager MCP
   tool name and the review of a subagent start are the safe reading of that silence.
 - Injected input (ADR-057, ADR-063): the documented `PostToolUse` payload has `toolCall`,

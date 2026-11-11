@@ -191,8 +191,11 @@ Each agent's gaps and the reasons are in
   crashes, times out or prints bad JSON, and has no documented setting that blocks then, so
   OpenMoat assumes the call runs there; `--dangerously-skip-permissions` approves its
   requests unseen, which OpenMoat cannot see, and a `review` under a saved
-  `toolPermission: always-proceed` is a deny. It is checked from its documentation only,
-  not against a running `agy`.
+  `toolPermission: always-proceed` is a deny. Antigravity CLI is a preview host: its
+  support is built from the documentation, and in the weekly check of 2026-11-10 a
+  headless agy 1.5.5 turn started no hook from `~/.gemini/config/hooks.json` while the
+  fake API received tool results for both of its calls (the host's `HOST.md`, "The first
+  real run").
 - **Agent settings can turn hooks off.** Codex runs a new or changed hook only once you
   trust it in its `/hooks` view, and settings such as `disableAllHooks` (Claude Code,
   Copilot CLI) or `[features] hooks = false` (Codex) turn hooks off. `openmoat status`

@@ -349,7 +349,7 @@ install_agy() {
     # its manifest names (`<its DOWNLOAD_BASE_URL>/manifests/<platform>.json`)
     # and has no channel to choose: on 2026-11-10 that was 1.5.5, newer than
     # the 1.5.3 the changelog's CLI section lists last (its 2.x entries are the
-    # Antigravity app's, not the CLI's), so this is the newest CLI there is.
+    # Antigravity app's, not the CLI's).
     local script="$root/agy-install.sh"
     curl -fsSL --retry 3 -o "$script" https://antigravity.google/cli/install.sh
     if command -v sha256sum >/dev/null; then sha256sum "$script"; else shasum -a 256 "$script"; fi

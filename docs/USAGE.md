@@ -968,11 +968,11 @@ these takes one command in your own terminal (agents are denied all of them):
   Antigravity CLI's own prompt, sent as `force_ask` so a saved "Always Allow" cannot
   answer it. `"enabled": false` under that entry shows as not protected in
   `openmoat status` until `openmoat init` turns it back on. What `agy` does when the
-  hook fails is not documented: treat a failing hook as letting the call run. **Not yet
-  proven on a real `agy`:** in OpenMoat's weekly check, agy 1.5.5 ran its calls without
-  starting the hook (headless `-p`, `--dangerously-skip-permissions`, a `GEMINI_API_KEY`
-  session); `openmoat status` and `doctor` say so until a run shows the hook deciding a
-  call. Run `/hooks` in `agy` to see whether it lists the `openmoat` entry.
+  hook fails is not documented: treat a failing hook as letting the call run.
+  **Preview:** OpenMoat's hook for Antigravity CLI is new; use `openmoat run`
+  (`--isolate` on Linux) for an OS boundary until it leaves preview. `openmoat status`
+  and `doctor` show it as a preview host. Run `/hooks` in `agy` to see whether it lists
+  the `openmoat` entry.
 - **GitHub Copilot CLI**: `openmoat init --hosts copilot-cli` writes OpenMoat's own hook
   file, `~/.copilot/hooks/openmoat.json` (`$COPILOT_HOME/hooks/` when that is set). A
   `review` is Copilot's own prompt; in autopilot Copilot turns it into a deny, which
